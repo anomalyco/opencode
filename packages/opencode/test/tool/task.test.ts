@@ -15,6 +15,7 @@ import { SessionRunState } from "@/session/run-state"
 import { SessionStatus } from "@/session/status"
 
 import { TaskTool, type TaskPromptOps } from "../../src/tool/task"
+import { ToolJsonSchema } from "../../src/tool/json-schema"
 import { Truncate } from "@/tool/truncate"
 import { ToolRegistry } from "@/tool/registry"
 import { RuntimeFlags } from "@/effect/runtime-flags"
@@ -200,6 +201,73 @@ describe("tool.task", () => {
             description: "Zebra agent",
             mode: "subagent",
           },
+          alpha: {
+            description: "Alpha agent",
+            mode: "subagent",
+          },
+        },
+      },
+    },
+  )
+
+  it.instance(
+    "schema limits subagent_type to allowed subagents for the caller",
+    () =>
+      Effect.gen(function* () {
+        const agent = yield* Agent.Service
+        const build = yield* agent.get("build")
+        const registry = yield* ToolRegistry.Service
+        const task = (yield* registry.tools({ ...ref, agent: build })).find((tool) => tool.id === TaskTool.id)
+        if (!task) throw new Error("task tool not found")
+
+        expect(ToolJsonSchema.fromTool(task)).toMatchObject({
+          properties: {
+            subagent_type: { enum: ["alpha"] },
+          },
+        })
+      }),
+    {
+      config: {
+        permission: {
+          task: {
+            "*": "deny",
+            alpha: "allow",
+            zebra: "deny",
+          },
+        },
+        agent: {
+          zebra: {
+            description: "Zebra agent",
+            mode: "subagent",
+          },
+          alpha: {
+            description: "Alpha agent",
+            mode: "subagent",
+          },
+        },
+      },
+    },
+  )
+
+  it.instance(
+    "schema omits task tool when no subagents are allowed for the caller",
+    () =>
+      Effect.gen(function* () {
+        const agent = yield* Agent.Service
+        const build = yield* agent.get("build")
+        const registry = yield* ToolRegistry.Service
+        const task = (yield* registry.tools({ ...ref, agent: build })).find((tool) => tool.id === TaskTool.id)
+
+        expect(task).toBeUndefined()
+      }),
+    {
+      config: {
+        permission: {
+          task: {
+            "*": "deny",
+          },
+        },
+        agent: {
           alpha: {
             description: "Alpha agent",
             mode: "subagent",

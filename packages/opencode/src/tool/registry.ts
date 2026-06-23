@@ -10,6 +10,7 @@ import { GlobTool } from "./glob"
 import { GrepTool } from "./grep"
 import { ReadTool } from "./read"
 import { TaskTool } from "./task"
+import { ToolJsonSchema } from "./json-schema"
 import { Database } from "@opencode-ai/core/database/database"
 import { TodoWriteTool } from "./todo"
 import { WebFetchTool } from "./webfetch"
@@ -249,12 +250,15 @@ export const layer = Layer.effect(
       return (yield* all()).map((tool) => tool.id)
     })
 
+    const allowedTaskAgents = Effect.fn("ToolRegistry.allowedTaskAgents")(function* (agent: Agent.Info) {
+      return (yield* agents.list())
+        .filter((item) => item.mode !== "primary")
+        .filter((item) => Permission.evaluate("task", item.name, agent.permission).action !== "deny")
+        .toSorted((a, b) => a.name.localeCompare(b.name))
+    })
+
     const describeTask = Effect.fn("ToolRegistry.describeTask")(function* (agent: Agent.Info) {
-      const items = (yield* agents.list()).filter((item) => item.mode !== "primary")
-      const filtered = items.filter(
-        (item) => Permission.evaluate("task", item.name, agent.permission).action !== "deny",
-      )
-      const list = filtered.toSorted((a, b) => a.name.localeCompare(b.name))
+      const list = yield* allowedTaskAgents(agent)
       const description = list
         .map(
           (item) =>
@@ -278,7 +282,7 @@ export const layer = Layer.effect(
         return true
       })
 
-      return yield* Effect.forEach(
+      const result = yield* Effect.forEach(
         filtered,
         Effect.fnUntraced(function* (tool: Tool.Def) {
           const output = {
@@ -291,19 +295,42 @@ export const layer = Layer.effect(
             output.parameters === tool.parameters || output.jsonSchema !== tool.jsonSchema
               ? output.jsonSchema
               : undefined
+          const taskAgents = tool.id === TaskTool.id ? yield* allowedTaskAgents(input.agent) : undefined
+          if (taskAgents?.length === 0) return undefined
+          const taskSchema =
+            taskAgents &&
+            ToolJsonSchema.fromTool({
+              ...tool,
+              parameters: output.parameters,
+              jsonSchema,
+            })
+          const taskProperties =
+            taskSchema && isJsonSchemaObject(taskSchema.properties) ? taskSchema.properties : {}
+          const taskSubagentType = taskProperties.subagent_type
+          const taskJsonSchema: JSONSchema7 | undefined = taskSchema && {
+            ...taskSchema,
+            properties: {
+              ...taskProperties,
+              subagent_type: {
+                ...(isJsonSchemaObject(taskSubagentType) ? taskSubagentType : {}),
+                enum: taskAgents.map((item) => item.name),
+              },
+            },
+          }
           return {
             id: tool.id,
             description: [output.description, tool.id === TaskTool.id ? yield* describeTask(input.agent) : undefined]
               .filter(Boolean)
               .join("\n"),
             parameters: output.parameters,
-            jsonSchema,
+            jsonSchema: taskJsonSchema ?? jsonSchema,
             execute: tool.execute,
             formatValidationError: tool.formatValidationError,
           }
         }),
         { concurrency: "unbounded" },
       )
+      return result.filter((tool) => tool !== undefined)
     })
 
     const named: Interface["named"] = Effect.fn("ToolRegistry.named")(function* () {
