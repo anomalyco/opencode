@@ -1,6 +1,5 @@
 import type { Session } from "@opencode-ai/sdk/v2/client"
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import { base64Encode } from "@opencode-ai/core/util/encode"
 import { createStore, produce } from "solid-js/store"
 import { Persist, persisted, removePersisted, draftPersistedKeys } from "@/utils/persist"
 import { ServerConnection, useServer } from "./server"
@@ -9,11 +8,11 @@ import { useLocation, useNavigate, useParams } from "@solidjs/router"
 import { usePlatform } from "./platform"
 import { uuid } from "@/utils/uuid"
 import { SessionTabsRemovedDetail } from "@/components/titlebar-session-events"
+import { sessionHref } from "@/utils/session-route"
 
 export type SessionTab = {
   type: "session"
   server: ServerConnection.Key
-  dirBase64: string
   sessionId: string
 }
 
@@ -34,16 +33,12 @@ type RecentTab = {
 export const draftHref = (draftID: string) => `/new-session?draftId=${encodeURIComponent(draftID)}`
 
 export const tabHref = (tab: Tab) =>
-  tab.type === "draft" ? draftHref(tab.draftID) : `/${tab.dirBase64}/session/${tab.sessionId}`
+  tab.type === "draft" ? draftHref(tab.draftID) : sessionHref(tab.server, tab.sessionId)
 
 export const tabKey = (tab: Tab) => (tab.type === "draft" ? `draft:${tab.draftID}` : `${tab.server}\n${tabHref(tab)}`)
 
 export function sessionHasOpenTab(tabs: Tab[], server: ServerConnection.Key, session: Session) {
-  const dirBase64 = base64Encode(session.directory)
-  return tabs.some(
-    (tab) =>
-      tab.type === "session" && tab.server === server && tab.dirBase64 === dirBase64 && tab.sessionId === session.id,
-  )
+  return tabs.some((tab) => tab.type === "session" && tab.server === server && tab.sessionId === session.id)
 }
 
 export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
@@ -105,14 +100,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
     const navigateTab = (tab: Tab) => {
       const href = tabHref(tab)
       setRecentKey(tabKey(tab))
-      if (tab.server === server.key) {
-        navigate(href)
-        return
-      }
-      void startTransition(() => {
-        server.setActive(tab.server)
-        navigate(href)
-      })
+      navigate(href)
     }
 
     const actions = {
@@ -196,10 +184,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
         const removed = store
           .filter(
             (tab) =>
-              tab.type === "session" &&
-              tab.server === server.key &&
-              atob(tab.dirBase64) === input.directory &&
-              input.sessionIDs.includes(tab.sessionId),
+              tab.type === "session" && tab.server === server.key && input.sessionIDs.includes(tab.sessionId),
           )
           .map(tabKey)
         void startTransition(() => {
@@ -211,7 +196,6 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
                   ? tabHref({
                       type: "session",
                       server: server.key,
-                      dirBase64: params.dir,
                       sessionId: params.id,
                     })
                   : undefined
@@ -224,14 +208,12 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
               const removedCurrent =
                 currentTab?.type === "session" &&
                 currentTab.server === server.key &&
-                atob(currentTab.dirBase64) === input.directory &&
                 sessionIDs.has(currentTab.sessionId)
 
               for (let i = tabs.length - 1; i >= 0; i--) {
                 const tab = tabs[i]
                 if (!tab || tab.type !== "session") continue
                 if (tab.server !== server.key) continue
-                if (atob(tab.dirBase64) !== input.directory) continue
                 if (!sessionIDs.has(tab.sessionId)) continue
                 tabs.splice(i, 1)
               }
