@@ -97,6 +97,7 @@ export function DialogEditProject(props: { project: LocalProject; server: Server
         icon: { color: store.color || undefined, override: store.iconOverride || undefined },
         commands: { start: start || undefined },
       })
+      serverSync().project.icon(props.project.worktree, store.iconOverride || undefined)
       dialog.close()
     },
   }))
