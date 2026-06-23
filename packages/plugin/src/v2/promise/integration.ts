@@ -1,12 +1,11 @@
 import type {
-  IntegrationCredential,
   IntegrationDraft,
-  IntegrationMethod,
   IntegrationMethodRegistration,
 } from "../effect/integration.js"
+import type { CredentialValue } from "@opencode-ai/sdk/v2/types"
 import type { Hooks } from "./registration.js"
 
-export type { IntegrationCredential, IntegrationDraft, IntegrationMethod, IntegrationMethodRegistration }
+export type { IntegrationDraft, IntegrationMethodRegistration }
 
 export interface IntegrationHooks extends Hooks<{ transform: IntegrationDraft }> {
   readonly connection: {
@@ -15,6 +14,6 @@ export interface IntegrationHooks extends Hooks<{ transform: IntegrationDraft }>
     ) => Promise<import("@opencode-ai/sdk/v2/types").ConnectionInfo | undefined>
     readonly resolve: (
       connection: import("@opencode-ai/sdk/v2/types").ConnectionInfo,
-    ) => Promise<IntegrationCredential | undefined>
+    ) => Promise<CredentialValue | undefined>
   }
 }

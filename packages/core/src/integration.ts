@@ -90,7 +90,9 @@ export const EnvMethod = Schema.Struct({
 }).annotate({ identifier: "Integration.EnvMethod" })
 export type EnvMethod = typeof EnvMethod.Type
 
-export const Method = Schema.Union([OAuthMethod, KeyMethod, EnvMethod]).pipe(Schema.toTaggedUnion("type"))
+export const Method = Schema.Union([OAuthMethod, KeyMethod, EnvMethod])
+  .pipe(Schema.toTaggedUnion("type"))
+  .annotate({ identifier: "Integration.Method" })
 export type Method = typeof Method.Type
 
 export class Info extends Schema.Class<Info>("Integration.Info")({
@@ -100,7 +102,8 @@ export class Info extends Schema.Class<Info>("Integration.Info")({
   connections: Schema.mutable(Schema.Array(IntegrationConnection.Info)),
 }) {}
 
-export type Inputs = Readonly<{ [key: string]: string }>
+export const Inputs = Schema.Record(Schema.String, Schema.String).annotate({ identifier: "Integration.Inputs" })
+export type Inputs = typeof Inputs.Type
 
 export type OAuthAuthorization = {
   readonly url: string
@@ -108,11 +111,11 @@ export type OAuthAuthorization = {
 } & (
   | {
       readonly mode: "auto"
-      readonly callback: Effect.Effect<Credential.Value, unknown>
+      readonly callback: Effect.Effect<Credential.OAuth, unknown>
     }
   | {
       readonly mode: "code"
-      readonly callback: (code: string) => Effect.Effect<Credential.Value, unknown>
+      readonly callback: (code: string) => Effect.Effect<Credential.OAuth, unknown>
     }
 )
 
@@ -121,7 +124,7 @@ export interface OAuthImplementation {
   readonly method: OAuthMethod
   readonly authorize: (inputs: Inputs) => Effect.Effect<OAuthAuthorization, unknown, Scope.Scope>
   readonly refresh?: (credential: Credential.OAuth) => Effect.Effect<Credential.OAuth, unknown>
-  readonly label?: (credential: Credential.Value) => string | undefined
+  readonly label?: (credential: Credential.OAuth) => string | undefined
 }
 
 export interface KeyImplementation {
@@ -185,10 +188,11 @@ export const Event = {
   }),
 }
 
-export type Ref = {
-  id: ID
-  name: string
-}
+export const Ref = Schema.Struct({
+  id: ID,
+  name: Schema.String,
+}).annotate({ identifier: "Integration.Ref" })
+export type Ref = typeof Ref.Type
 
 type Entry = {
   ref: Types.DeepMutable<Ref>
@@ -394,7 +398,7 @@ export const locationLayer = Layer.effect(
       return error instanceof Error ? error.message : String(error)
     }
 
-    const settle = Effect.fnUntraced(function* (attemptID: AttemptID, exit: Exit.Exit<Credential.Value, unknown>) {
+    const settle = Effect.fnUntraced(function* (attemptID: AttemptID, exit: Exit.Exit<Credential.OAuth, unknown>) {
       const now = yield* Clock.currentTimeMillis
       const result = yield* SynchronizedRef.modify(attempts, (current) => {
         const attempt = current.get(attemptID)
@@ -410,10 +414,7 @@ export const locationLayer = Layer.effect(
         yield* credentials.create({
           integrationID: result.integrationID,
           label: result.label ?? implementation?.label?.(exit.value),
-          value:
-            exit.value.type === "oauth"
-              ? new Credential.OAuth({ ...exit.value, methodID: result.methodID })
-              : exit.value,
+          value: exit.value,
         })
         yield* events.publish(Event.ConnectionUpdated, { integrationID: result.integrationID })
         yield* events.publish(Event.Updated, {})

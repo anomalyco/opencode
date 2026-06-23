@@ -101,25 +101,9 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
       connection: {
         active: (id) => integration.connection.active(Integration.ID.make(id)),
         resolve: (connection) =>
-          integration.connection
-            .resolve(
-              connection.type === "credential"
-                ? { ...connection, id: Credential.ID.make(connection.id) }
-                : connection,
-            )
-            .pipe(
-              Effect.map((value) =>
-                value?.type === "oauth"
-                  ? {
-                      type: value.type,
-                      refresh: value.refresh,
-                      access: value.access,
-                      expires: value.expires,
-                      metadata: value.metadata,
-                    }
-                  : value,
-              ),
-            ),
+          integration.connection.resolve(
+            connection.type === "credential" ? { ...connection, id: Credential.ID.make(connection.id) } : connection,
+          ),
       },
       transform: (callback) =>
         integration.transform((draft) =>
@@ -144,10 +128,12 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
                             return {
                               ...authorization,
                               callback: authorization.callback.pipe(
-                                Effect.map((value) =>
-                                  value.type === "oauth"
-                                    ? new Credential.OAuth({ ...value, methodID })
-                                    : new Credential.Key(value),
+                                Effect.map(
+                                  (credential) =>
+                                    new Credential.OAuth({
+                                      ...credential,
+                                      methodID: Integration.MethodID.make(credential.methodID),
+                                    }),
                                 ),
                               ),
                             }
@@ -156,10 +142,12 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
                             ...authorization,
                             callback: (code: string) =>
                               authorization.callback(code).pipe(
-                                Effect.map((value) =>
-                                  value.type === "oauth"
-                                    ? new Credential.OAuth({ ...value, methodID })
-                                    : new Credential.Key(value),
+                                Effect.map(
+                                  (credential) =>
+                                    new Credential.OAuth({
+                                      ...credential,
+                                      methodID: Integration.MethodID.make(credential.methodID),
+                                    }),
                                 ),
                               ),
                           }
@@ -168,7 +156,15 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
                     ...(refresh
                       ? {
                           refresh: (value: Credential.OAuth) =>
-                            refresh(value).pipe(Effect.map((next) => new Credential.OAuth({ ...next, methodID }))),
+                            refresh(value).pipe(
+                              Effect.map(
+                                (next) =>
+                                  new Credential.OAuth({
+                                    ...next,
+                                    methodID: Integration.MethodID.make(next.methodID),
+                                  }),
+                              ),
+                            ),
                         }
                       : {}),
                     ...(input.label ? { label: input.label } : {}),

@@ -1,16 +1,19 @@
-import type { IntegrationCredential, IntegrationOAuthMethodRegistration } from "@opencode-ai/plugin/v2/effect"
 import { Duration, Effect, Schema, Stream } from "effect"
 import type { Scope } from "effect"
+import type { IntegrationOAuthMethodRegistration } from "@opencode-ai/plugin/v2/effect/integration"
+import { define } from "@opencode-ai/plugin/v2/effect/plugin"
+import type { CredentialValue } from "@opencode-ai/sdk/v2/types"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { EventV2 } from "../../event"
+import { Credential } from "../../credential"
 import { Integration } from "../../integration"
 import { ModelV2 } from "../../model"
 import { ModelRequest } from "../../model-request"
 import { ProviderV2 } from "../../provider"
-import type { PluginInternal } from "../internal"
 
 const defaultServer = "https://console.opencode.ai"
 const clientID = "opencode-cli"
+const methodID = Integration.MethodID.make("device")
 const RemoteRequest = Schema.Struct({
   headers: Schema.Record(Schema.String, Schema.String).pipe(Schema.optional),
   body: Schema.Record(Schema.String, Schema.Any).pipe(Schema.optional),
@@ -78,9 +81,9 @@ const Org = Schema.Struct({ id: Schema.String, name: Schema.String })
 
 function oauth(http: HttpClient.HttpClient) {
   return {
-    integrationID: "opencode",
+    integrationID: Integration.ID.make("opencode"),
     method: {
-      id: "device",
+      id: methodID,
       type: "oauth",
       label: "Sign in with OpenCode",
       prompts: [
@@ -126,7 +129,7 @@ function oauth(http: HttpClient.HttpClient) {
   } satisfies IntegrationOAuthMethodRegistration
 }
 
-export const OpencodePlugin = {
+export const OpencodePlugin = define<HttpClient.HttpClient | EventV2.Service | Scope.Scope>({
   id: "opencode",
   effect: Effect.fn(function* (ctx) {
     const events = yield* EventV2.Service
@@ -239,9 +242,9 @@ export const OpencodePlugin = {
       Effect.forkScoped({ startImmediately: true }),
     )
   }),
-} satisfies PluginInternal.Plugin<PluginInternal.Requirements | Scope.Scope>
+})
 
-function fetchProviders(http: HttpClient.HttpClient, value: IntegrationCredential) {
+function fetchProviders(http: HttpClient.HttpClient, value: CredentialValue) {
   const metadata = value.metadata
   const server = typeof metadata?.server === "string" ? metadata.server : defaultServer
   const orgID = typeof metadata?.orgID === "string" ? metadata.orgID : undefined
@@ -266,7 +269,7 @@ function fetchProviders(http: HttpClient.HttpClient, value: IntegrationCredentia
 }
 
 function poll(http: HttpClient.HttpClient, server: string, deviceCode: string, interval: Duration.Duration) {
-  const loop = (wait: Duration.Duration): Effect.Effect<IntegrationCredential, unknown> =>
+  const loop = (wait: Duration.Duration): Effect.Effect<Credential.OAuth, unknown> =>
     Effect.gen(function* () {
       yield* Effect.sleep(wait)
       const result = yield* post(
@@ -300,8 +303,9 @@ function credential(http: HttpClient.HttpClient, server: string, token: typeof T
       { concurrency: 2 },
     )
     const org = orgs.toSorted((a, b) => a.id.localeCompare(b.id))[0]
-    return {
+    return new Credential.OAuth({
       type: "oauth" as const,
+      methodID,
       access: token.access_token,
       refresh: token.refresh_token,
       expires: Date.now() + token.expires_in * 1000,
@@ -312,7 +316,7 @@ function credential(http: HttpClient.HttpClient, server: string, token: typeof T
         orgID: org?.id,
         orgName: org?.name,
       },
-    }
+    })
   })
 }
 
