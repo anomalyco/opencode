@@ -200,9 +200,7 @@ function turn(index: number): Message[] {
     ...(index % 8 === 0
       ? [toolPart(index, 8, "apply_patch", { files: [`src/generated/patch-${index}.ts`] }, 620)]
       : []),
-    ...(index % 7 === 0
-      ? [toolPart(index, 4, "bash", { command: "bun typecheck" }, 620)]
-      : []),
+    ...(index % 7 === 0 ? [toolPart(index, 4, "bash", { command: "bun typecheck" }, 620)] : []),
     ...(index % 10 === 0 ? [toolPart(index, 9, "webfetch", { url: "https://example.com/docs/sample" }, 120)] : []),
     ...(index % 11 === 0 ? [toolPart(index, 10, "websearch", { query: "sample movement notes" }, 240)] : []),
     ...(index % 13 === 0

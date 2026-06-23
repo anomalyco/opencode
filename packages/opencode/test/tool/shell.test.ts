@@ -973,12 +973,9 @@ describe("tool.shell permissions", () => {
         Effect.gen(function* () {
           const err = new Error("stop after permission")
           const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
-          expect(
-            yield* fail(
-              { command: "echo test > output.txt" },
-              capture(requests, err),
-            ),
-          ).toMatchObject({ message: err.message })
+          expect(yield* fail({ command: "echo test > output.txt" }, capture(requests, err))).toMatchObject({
+            message: err.message,
+          })
           const bashReq = requests.find((r) => r.permission === "bash")
           expect(bashReq).toBeDefined()
           expect(bashReq!.patterns).toContain("echo test > output.txt")
