@@ -112,7 +112,9 @@
   color: var(--v2-text-text-base);
 }
 
-[data-component="icon-button-v2"][data-variant="ghost"]:is(:hover, [data-state="hover"]):not(:disabled):not([data-expanded]) {
+[data-component="icon-button-v2"][data-variant="ghost"]:is(:hover, [data-state="hover"]):not(:disabled):not(
+    [data-expanded]
+  ) {
   background-color: var(--v2-overlay-simple-overlay-hover);
 }
 
@@ -131,7 +133,9 @@
   color: var(--v2-icon-icon-muted);
 }
 
-[data-component="icon-button-v2"][data-variant="ghost-muted"]:is(:hover, [data-state="hover"]):not(:disabled):not([data-expanded]) {
+[data-component="icon-button-v2"][data-variant="ghost-muted"]:is(:hover, [data-state="hover"]):not(:disabled):not(
+    [data-expanded]
+  ) {
   background-color: var(--v2-overlay-simple-overlay-hover);
 }
 
