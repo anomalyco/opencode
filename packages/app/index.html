@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" style="background-color: var(--background-base)">
+<html lang="en" style="background-color: var(--v2-background-bg-deep, #fafafa)">
   <head>
     <meta charset="utf-8" />
     <meta
@@ -12,14 +12,17 @@
     <link rel="shortcut icon" href="/favicon-v3.ico" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon-v3.png" />
     <link rel="manifest" href="/site.webmanifest" />
-    <meta name="theme-color" content="#F8F7F7" />
+    <meta name="theme-color" content="#fafafa" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta property="og:image" content="/social-share.png" />
     <meta property="twitter:image" content="/social-share.png" />
     <script id="oc-theme-preload-script" src="/oc-theme-preload.js"></script>
   </head>
-  <body class="antialiased overscroll-none text-12-regular overflow-hidden">
+  <body class="antialiased overscroll-none text-12-regular overflow-hidden bg-v2-background-bg-deep">
     <noscript>You need to enable JavaScript to run this app.</noscript>
-    <div id="root" class="flex flex-col h-dvh p-px"></div>
+    <div id="root" class="flex flex-col h-dvh bg-v2-background-bg-deep p-px"></div>
     <script src="/src/entry.tsx" type="module"></script>
   </body>
 </html>
