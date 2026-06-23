@@ -1450,7 +1450,7 @@ export const layer = Layer.effect(
               options: mergeDeep(existingModel?.options ?? {}, model.options ?? {}),
               limit: {
                 context: model.limit?.context ?? existingModel?.limit?.context ?? 0,
-                input: model.limit?.input ?? existingModel?.limit?.input,
+                input: model.limit?.input ?? (model.limit?.context === undefined ? existingModel?.limit?.input : undefined),
                 output: model.limit?.output ?? existingModel?.limit?.output ?? 0,
               },
               headers: mergeDeep(existingModel?.headers ?? {}, model.headers ?? {}),

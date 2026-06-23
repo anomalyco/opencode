@@ -235,6 +235,45 @@ describe("ModelsDev Service", () => {
     }),
   )
 
+  it.live("refresh(true) preserves seven-figure OpenAI limits across cache read", () =>
+    Effect.gen(function* () {
+      const refreshed: Record<string, ModelsDev.Provider> = {
+        openai: {
+          id: "openai",
+          name: "OpenAI",
+          env: ["OPENAI_API_KEY"],
+          api: "https://api.openai.com/v1",
+          npm: "@ai-sdk/openai",
+          models: {
+            "gpt-5.5": {
+              id: "gpt-5.5",
+              name: "GPT-5.5",
+              release_date: "2026-04-23",
+              attachment: true,
+              reasoning: true,
+              temperature: false,
+              tool_call: true,
+              limit: { context: 1_050_000, input: 922_000, output: 128_000 },
+            },
+          },
+        },
+      }
+      yield* writeCache(fixture)
+      const state = yield* Ref.make({ ...initialState, body: JSON.stringify(refreshed) })
+      const result = yield* provided(
+        state,
+        Effect.gen(function* () {
+          const svc = yield* ModelsDev.Service
+          yield* svc.refresh(true)
+          return yield* svc.get()
+        }),
+      )
+      const fromDisk = yield* provided(yield* Ref.make(initialState), ModelsDev.Service.use((s) => s.get()))
+      expect(result.openai.models["gpt-5.5"].limit).toEqual({ context: 1_050_000, input: 922_000, output: 128_000 })
+      expect(fromDisk.openai.models["gpt-5.5"].limit).toEqual({ context: 1_050_000, input: 922_000, output: 128_000 })
+    }),
+  )
+
   it.live("refresh(false) skips fetch when on-disk file is fresh", () =>
     Effect.gen(function* () {
       // Fresh: mtime within the 5-minute TTL.

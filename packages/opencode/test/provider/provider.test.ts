@@ -1190,6 +1190,29 @@ it.instance(
 )
 
 it.instance(
+  "custom model context override without input does not inherit catalog input",
+  Effect.gen(function* () {
+    yield* set("OPENAI_API_KEY", "test-api-key")
+    const providers = yield* list
+    const model = providers[ProviderV2.ID.openai].models["gpt-5.4"]
+    expect(model.limit).toEqual({ context: 1_050_000, input: undefined, output: 128_000 })
+  }),
+  {
+    config: {
+      provider: {
+        openai: {
+          models: {
+            "gpt-5.4": {
+              limit: { context: 1_050_000, output: 128_000 },
+            },
+          },
+        },
+      },
+    },
+  },
+)
+
+it.instance(
   "custom model inherits api.url from models.dev provider",
   Effect.gen(function* () {
     yield* set("OPENROUTER_API_KEY", "test-api-key")

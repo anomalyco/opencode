@@ -268,4 +268,55 @@ describe("ConfigProviderPlugin.Plugin", () => {
       }),
     ),
   )
+
+  it.effect("context limit override without input clears inherited catalog input", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      const providerID = ProviderV2.ID.make("custom")
+      const modelID = ModelV2.ID.make("chat")
+      const config = Config.Service.of({
+        entries: () =>
+          Effect.succeed([
+            new Config.Document({
+              type: "document",
+              info: decode({
+                providers: {
+                  custom: {
+                    api: { type: "aisdk", package: "custom-sdk", url: "https://example.test" },
+                    models: {
+                      chat: {
+                        capabilities: { tools: true, input: ["text"], output: ["text"] },
+                        limit: { context: 400_000, input: 272_000, output: 128_000 },
+                      },
+                    },
+                  },
+                },
+              }),
+            }),
+            new Config.Document({
+              type: "document",
+              info: decode({
+                providers: {
+                  custom: {
+                    models: {
+                      chat: {
+                        limit: { context: 1_050_000, output: 128_000 },
+                      },
+                    },
+                  },
+                },
+              }),
+            }),
+          ]),
+      })
+
+      yield* addPlugin(config)
+
+      expect(required(yield* catalog.model.get(providerID, modelID)).limit).toEqual({
+        context: 1_050_000,
+        input: undefined,
+        output: 128_000,
+      })
+    }),
+  )
 })
