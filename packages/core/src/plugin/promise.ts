@@ -67,8 +67,11 @@ export function fromPromise(plugin: Plugin) {
             reload: () => run(host.integration.reload()),
           },
           plugin: {
-            transform: transform(host.plugin),
-            reload: () => run(host.plugin.reload()),
+            add: (input) => {
+              const child = fromPromise(input)
+              return run(host.plugin.add(child))
+            },
+            remove: (id) => run(host.plugin.remove(id)),
           },
           reference: {
             transform: transform(host.reference),

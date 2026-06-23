@@ -1,7 +1,7 @@
 export * as PluginV2 from "./plugin"
 
 import { Context, Effect, Exit, Layer, Schema, Scope } from "effect"
-import type { Plugin, PluginDraft } from "@opencode-ai/plugin/v2/effect"
+import type { Plugin } from "@opencode-ai/plugin/v2/effect"
 import { AgentV2 } from "./agent"
 import { AISDK } from "./aisdk"
 import { Catalog } from "./catalog"
@@ -27,8 +27,8 @@ export const Event = {
 }
 
 export interface Interface {
-  readonly transform: State.Transform<PluginDraft>
-  readonly reload: State.Reload
+  readonly add: (id: ID, effect: Plugin["effect"]) => Effect.Effect<void>
+  readonly remove: (id: ID) => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Plugin") {}
@@ -40,57 +40,49 @@ export const layer = Layer.effect(
     const locks = KeyedMutex.makeUnsafe<ID>()
     const scope = yield* Scope.make()
     const active = new Map<ID, Scope.Closeable>()
+    const loading = new Set<ID>()
     let host: Parameters<Plugin["effect"]>[0]
 
-    const attach = Effect.fn("Plugin.attach")(function* (plugin: Plugin, host: Parameters<Plugin["effect"]>[0]) {
-      const id = ID.make(plugin.id)
-      yield* locks.withLock(id)(
-        Effect.gen(function* () {
-          const existing = active.get(id)
-          if (existing) yield* Scope.close(existing, Exit.void).pipe(Effect.ignore)
+    const add = Effect.fn("Plugin.add")(function* (id: ID, effect: Plugin["effect"]) {
+      if (loading.has(id)) return yield* Effect.die(`Plugin load cycle detected for ${id}`)
 
-          const child = yield* Scope.fork(scope)
-          yield* plugin.effect(host).pipe(
-            Scope.provide(child),
-            Effect.withSpan("Plugin.load", { attributes: { "plugin.id": id } }),
-            Effect.onExit((exit) => (Exit.isFailure(exit) ? Scope.close(child, exit) : Effect.void)),
-          )
-          active.set(id, child)
-          yield* events.publish(Event.Added, { id })
-        }),
+      yield* locks.withLock(id)(
+        Effect.sync(() => loading.add(id)).pipe(
+          Effect.andThen(
+            State.batch(
+              Effect.gen(function* () {
+                const existing = active.get(id)
+                active.delete(id)
+                if (existing) yield* Scope.close(existing, Exit.void).pipe(Effect.ignore)
+
+                const child = yield* Scope.fork(scope)
+                yield* effect(host).pipe(
+                  Scope.provide(child),
+                  Effect.withSpan("Plugin.load", { attributes: { "plugin.id": id } }),
+                  Effect.onExit((exit) => (Exit.isFailure(exit) ? Scope.close(child, exit) : Effect.void)),
+                )
+                active.set(id, child)
+                yield* events.publish(Event.Added, { id })
+              }),
+            ),
+          ),
+          Effect.ensuring(Effect.sync(() => loading.delete(id))),
+        ),
       )
     })
 
-    const detach = Effect.fn("Plugin.detach")(function* (id: ID) {
-      yield* locks.withLock(id)(
-        Effect.gen(function* () {
-          const current = active.get(id)
-          active.delete(id)
-          if (current) yield* Scope.close(current, Exit.void).pipe(Effect.ignore)
-        }),
-      )
-    })
+    const remove = Effect.fn("Plugin.remove")(function* (id: ID) {
+      if (loading.has(id)) return yield* Effect.die(`Cannot remove plugin ${id} while it is loading`)
 
-    const state = State.create<Map<ID, Plugin>, PluginDraft>({
-      initial: () => new Map(),
-      draft: (draft) => ({
-        list: () => Array.from(draft.values()),
-        add: (plugin) => draft.set(ID.make(plugin.id), plugin),
-        remove: (id) => draft.delete(ID.make(id)),
-      }),
-      finalize: (draft) =>
+      yield* locks.withLock(id)(
         State.batch(
           Effect.gen(function* () {
-            const desired = new Set<ID>()
-            for (const plugin of draft.list()) desired.add(ID.make(plugin.id))
-
-            for (const id of active.keys()) {
-              if (!desired.has(id)) yield* detach(id)
-            }
-
-            for (const plugin of draft.list()) yield* attach(plugin, host)
-          }).pipe(Effect.withSpan("Plugin.reconcile")),
+            const current = active.get(id)
+            active.delete(id)
+            if (current) yield* Scope.close(current, Exit.void).pipe(Effect.ignore)
+          }),
         ),
+      )
     })
 
     yield* Effect.addFinalizer((exit) =>
@@ -101,8 +93,8 @@ export const layer = Layer.effect(
     )
 
     const service = Service.of({
-      transform: state.transform,
-      reload: state.reload,
+      add,
+      remove,
     })
     host = yield* PluginHost.make(service)
     return service

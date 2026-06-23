@@ -9,35 +9,34 @@ import { PluginTestLayer } from "./plugin/fixture"
 const it = testEffect(PluginTestLayer)
 
 describe("PluginV2", () => {
-  it.effect("reconciles transformed plugins", () =>
+  it.effect("adds, replaces, and removes plugins", () =>
     Effect.gen(function* () {
       const plugins = yield* PluginV2.Service
       const agents = yield* AgentV2.Service
       let description = "first"
 
-      const registration = yield* plugins.transform((draft) => {
-        draft.add(
-          define({
-            id: "managed",
-            effect: (ctx) =>
-              ctx.agent
-                .transform((agents) =>
-                  agents.update("configured", (agent) => {
-                    agent.description = description
-                  }),
-                )
-                .pipe(Effect.asVoid),
-          }),
-        )
-      })
+      const managed = () =>
+        define({
+          id: "managed",
+          effect: (ctx) =>
+            ctx.agent
+              .transform((agents) =>
+                agents.update("configured", (agent) => {
+                  agent.description = description
+                }),
+              )
+              .pipe(Effect.asVoid),
+        })
+
+      yield* plugins.add(PluginV2.ID.make("managed"), managed().effect)
 
       expect((yield* agents.get(AgentV2.ID.make("configured")))?.description).toBe("first")
 
       description = "second"
-      yield* plugins.reload()
+      yield* plugins.add(PluginV2.ID.make("managed"), managed().effect)
       expect((yield* agents.get(AgentV2.ID.make("configured")))?.description).toBe("second")
 
-      yield* registration.dispose
+      yield* plugins.remove(PluginV2.ID.make("managed"))
       expect(yield* agents.get(AgentV2.ID.make("configured"))).toBeUndefined()
     }),
   )

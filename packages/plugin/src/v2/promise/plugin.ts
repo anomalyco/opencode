@@ -1,6 +1,4 @@
 import type { PluginContext } from "./context.js"
-import type { PluginDraft, PluginRef } from "../effect/plugin.js"
-import type { Hooks } from "./registration.js"
 
 export interface Plugin {
   readonly id: string
@@ -11,8 +9,7 @@ export function define(plugin: Plugin) {
   return plugin
 }
 
-export type { PluginDraft, PluginRef }
-
-export type PluginHooks = Hooks<{
-  transform: PluginDraft
-}>
+export interface PluginDomain {
+  readonly add: (plugin: Plugin) => Promise<void>
+  readonly remove: (id: string) => Promise<void>
+}

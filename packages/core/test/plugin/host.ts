@@ -33,8 +33,8 @@ export function host(overrides: Overrides = {}): PluginContext {
       reload: () => Effect.die("unused integration.reload"),
     },
     plugin: overrides.plugin ?? {
-      transform: () => Effect.die("unused plugin.transform"),
-      reload: () => Effect.die("unused plugin.reload"),
+      add: () => Effect.die("unused plugin.add"),
+      remove: () => Effect.die("unused plugin.remove"),
     },
     reference: overrides.reference ?? {
       transform: () => Effect.die("unused reference.transform"),

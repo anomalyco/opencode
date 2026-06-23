@@ -8,7 +8,7 @@ import { Catalog } from "../catalog"
 import { CommandV2 } from "../command"
 import { Integration } from "../integration"
 import { ModelV2 } from "../model"
-import type { PluginV2 } from "../plugin"
+import { PluginV2 } from "../plugin"
 import { ProviderV2 } from "../provider"
 import { Reference } from "../reference"
 import { SkillV2 } from "../skill"
@@ -126,8 +126,8 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
         ),
     },
     plugin: {
-      reload: plugin.reload,
-      transform: plugin.transform,
+      add: (input) => plugin.add(PluginV2.ID.make(input.id), input.effect),
+      remove: (id) => plugin.remove(PluginV2.ID.make(id)),
     },
     reference: {
       reload: reference.reload,

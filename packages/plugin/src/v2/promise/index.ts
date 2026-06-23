@@ -1,7 +1,7 @@
 export type { PluginContext } from "./context.js"
 export type { PluginOptions } from "../options.js"
 export { define } from "./plugin.js"
-export type { Plugin, PluginDraft, PluginHooks, PluginRef } from "./plugin.js"
+export type { Plugin, PluginDomain } from "./plugin.js"
 export type { Registration, Reload } from "./registration.js"
 export type { AgentDraft, AgentHooks } from "./agent.js"
 export type { AISDKHooks } from "./aisdk.js"

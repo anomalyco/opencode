@@ -23,10 +23,8 @@ import { Npm } from "../npm"
 import { PluginV2 } from "../plugin"
 import { Reference } from "../reference"
 import { SkillV2 } from "../skill"
-import { State } from "../state"
 import { AgentPlugin } from "./agent"
 import { CommandPlugin } from "./command"
-import { PluginHost } from "./host"
 import { ModelsDevPlugin } from "./models-dev"
 import { ProviderPlugins } from "./provider"
 import { SkillPlugin } from "./skill"
@@ -73,49 +71,45 @@ export const locationLayer = Layer.effectDiscard(
     const global = yield* Global.Service
     const skill = yield* SkillV2.Service
     const reference = yield* Reference.Service
-    const host = yield* PluginHost.make(plugin)
+    const add = <R>(input: Plugin<R>) => {
+      const loaded = {
+        id: input.id,
+        effect: (context: PluginContext) =>
+          input
+            .effect(context)
+            .pipe(
+              Effect.provideService(Catalog.Service, catalog),
+              Effect.provideService(CommandV2.Service, commands),
+              Effect.provideService(Integration.Service, integration),
+              Effect.provideService(AgentV2.Service, agents),
+              Effect.provideService(Config.Service, config),
+              Effect.provideService(Location.Service, location),
+              Effect.provideService(ModelsDev.Service, modelsDev),
+              Effect.provideService(Npm.Service, npm),
+              Effect.provideService(EventV2.Service, events),
+              Effect.provideService(FSUtil.Service, fs),
+              Effect.provideService(FileSystem.Service, filesystem),
+              Effect.provideService(Global.Service, global),
+              Effect.provideService(SkillV2.Service, skill),
+              Effect.provideService(Reference.Service, reference),
+            ),
+      }
+      return plugin.add(PluginV2.ID.make(loaded.id), loaded.effect)
+    }
 
-    const wrap = <R>(input: Plugin<R>) => ({
-      id: input.id,
-      effect: (context: PluginContext) =>
-        input
-          .effect(context)
-          .pipe(
-            Effect.provideService(Catalog.Service, catalog),
-            Effect.provideService(CommandV2.Service, commands),
-            Effect.provideService(Integration.Service, integration),
-            Effect.provideService(AgentV2.Service, agents),
-            Effect.provideService(Config.Service, config),
-            Effect.provideService(Location.Service, location),
-            Effect.provideService(ModelsDev.Service, modelsDev),
-            Effect.provideService(Npm.Service, npm),
-            Effect.provideService(EventV2.Service, events),
-            Effect.provideService(FSUtil.Service, fs),
-            Effect.provideService(FileSystem.Service, filesystem),
-            Effect.provideService(Global.Service, global),
-            Effect.provideService(SkillV2.Service, skill),
-            Effect.provideService(Reference.Service, reference),
-          ),
-    })
-
-    yield* State.batch(
-      Effect.gen(function* () {
-        yield* plugin.transform((plugins) => {
-          plugins.add(wrap(AgentPlugin.Plugin))
-          plugins.add(wrap(CommandPlugin.Plugin))
-          plugins.add(wrap(SkillPlugin.Plugin))
-          plugins.add(wrap(ModelsDevPlugin))
-          plugins.add(wrap(ConfigProviderPlugin.Plugin))
-          plugins.add(wrap(ConfigAgentPlugin.Plugin))
-          plugins.add(wrap(ConfigCommandPlugin.Plugin))
-          plugins.add(wrap(ConfigSkillPlugin.Plugin))
-          plugins.add(wrap(ConfigReferencePlugin.Plugin))
-          for (const item of ProviderPlugins) plugins.add(wrap(item))
-        })
-
-        yield* wrap(ConfigExternalPlugin.Plugin).effect(host)
-      }),
-    ).pipe(Effect.withSpan("PluginInternal.boot"), Effect.forkScoped({ startImmediately: true }))
+    yield* Effect.gen(function* () {
+      yield* add(AgentPlugin.Plugin)
+      yield* add(CommandPlugin.Plugin)
+      yield* add(SkillPlugin.Plugin)
+      yield* add(ModelsDevPlugin)
+      yield* add(ConfigProviderPlugin.Plugin)
+      yield* add(ConfigAgentPlugin.Plugin)
+      yield* add(ConfigCommandPlugin.Plugin)
+      yield* add(ConfigSkillPlugin.Plugin)
+      yield* add(ConfigReferencePlugin.Plugin)
+      for (const item of ProviderPlugins) yield* add(item)
+      yield* add(ConfigExternalPlugin.Plugin)
+    }).pipe(Effect.withSpan("PluginInternal.boot"), Effect.forkScoped({ startImmediately: true }))
   }),
 ).pipe(
   Layer.provideMerge(PluginV2.locationLayer),

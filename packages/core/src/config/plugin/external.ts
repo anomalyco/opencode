@@ -36,12 +36,6 @@ export const Plugin = define({
     const fs = yield* FSUtil.Service
     const location = yield* Location.Service
     const npm = yield* Npm.Service
-    const loaded: EffectPlugin[] = []
-
-    yield* ctx.plugin.transform((plugins) => {
-      for (const plugin of loaded) plugins.add(plugin)
-    })
-
     yield* Effect.gen(function* () {
       const configured: { package: string; options?: Record<string, any> }[] = []
 
@@ -86,14 +80,12 @@ export const Plugin = define({
           const mod = yield* Effect.promise(() => import(entrypoint))
           const value = (yield* Schema.decodeUnknownEffect(PluginModule)(mod)).default
           const plugin = "effect" in value ? value : PluginPromise.fromPromise(value)
-          loaded.push({
+          yield* ctx.plugin.add({
             id: plugin.id,
             effect: (host) => plugin.effect({ ...host, options: ref.options ?? {} }),
           })
         }).pipe(Effect.ignoreCause)
       }
-
-      yield* ctx.plugin.reload()
     }).pipe(Effect.forkScoped({ startImmediately: true }))
   }),
 })

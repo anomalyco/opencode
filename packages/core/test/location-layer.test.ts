@@ -197,22 +197,19 @@ describe("LocationServiceMap", () => {
       Effect.flatMap((dir) =>
         Effect.gen(function* () {
           const plugins = yield* PluginV2.Service
-          yield* plugins.transform((draft) =>
-            draft.add(
-              define({
-                id: "reviewer",
-                effect: (ctx) =>
-                  ctx.agent
-                    .transform((agent) => {
-                      agent.update("reviewer", (item) => {
-                        item.description = "Reviews code"
-                        item.mode = "subagent"
-                      })
-                    })
-                    .pipe(Effect.asVoid),
-              }),
-            ),
-          )
+          const reviewer = define({
+            id: "reviewer",
+            effect: (ctx) =>
+              ctx.agent
+                .transform((agent) => {
+                  agent.update("reviewer", (item) => {
+                    item.description = "Reviews code"
+                    item.mode = "subagent"
+                  })
+                })
+                .pipe(Effect.asVoid),
+          })
+          yield* plugins.add(PluginV2.ID.make(reviewer.id), reviewer.effect)
 
           expect(yield* (yield* AgentV2.Service).get(AgentV2.ID.make("reviewer"))).toMatchObject({
             description: "Reviews code",
