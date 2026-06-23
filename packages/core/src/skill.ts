@@ -148,7 +148,7 @@ export const layer = Layer.effect(
 
     return Service.of({
       transform: state.transform,
-      rebuild: state.rebuild,
+      reload: state.reload,
       sources: Effect.fn("SkillV2.sources")(function* () {
         return state.get().sources
       }),

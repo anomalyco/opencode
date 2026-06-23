@@ -79,7 +79,7 @@ import { MAX_STEPS_PROMPT } from "./max-steps"
  *   - [ ] Update title, summaries, compaction state, and cleanup in bounded background work.
  *
  * Use `llm.stream(request)` for each provider turn. Keep tool execution and continuation here.
- * Durable activity recovery remains a separate future slice with an explicit retry policy.
+ * Durable continuation recovery remains a separate future slice with an explicit retry policy.
  *
  * The current slice loads V2 history, translates it, resolves a model through a core service, and persists one
  * provider turn. Registry definitions are advertised, local tool calls are settled durably, and an
@@ -142,9 +142,9 @@ export const layer = Layer.effect(
 
     type TurnTransition =
       // Automatic compaction completed; rebuild the request from compacted history.
-      | { readonly _tag: "ContinueAfterCompaction" }
+      | { readonly _tag: "ContinueAfterCompaction"; readonly step: number }
       // Overflow compaction completed; rebuild once through the path without overflow recovery.
-      | { readonly _tag: "ContinueAfterOverflowCompaction" }
+      | { readonly _tag: "ContinueAfterOverflowCompaction"; readonly step: number }
 
     class TurnTransitionError extends Error {
       constructor(readonly transition: TurnTransition) {
@@ -152,10 +152,9 @@ export const layer = Layer.effect(
       }
     }
 
-    const continueAfterCompaction = new TurnTransitionError({ _tag: "ContinueAfterCompaction" })
-    const continueAfterOverflowCompaction = new TurnTransitionError({
-      _tag: "ContinueAfterOverflowCompaction",
-    })
+    const continueAfterCompaction = (step: number) => new TurnTransitionError({ _tag: "ContinueAfterCompaction", step })
+    const continueAfterOverflowCompaction = (step: number) =>
+      new TurnTransitionError({ _tag: "ContinueAfterOverflowCompaction", step })
 
     const loadSystemContext = (agent: AgentV2.Selection) =>
       Effect.all([systemContext.load(), skillGuidance.load(agent), referenceGuidance.load()], {
@@ -175,20 +174,23 @@ export const layer = Layer.effect(
       const initialized = yield* SessionContextEpoch.initialize(db, loadSystemContext(agent), session.id)
       const toolFibers = yield* FiberSet.make<void, ToolOutputStore.Error>()
       let needsContinuation = false
+      let currentStep = step
       if (promotion) {
         const cutoff = yield* EventV2.latestSequence(db, session.id)
-        if (promotion === "steer") yield* SessionInput.promoteSteers(db, events, session.id, cutoff)
+        let promoted = 0
+        if (promotion === "steer") promoted = yield* SessionInput.promoteSteers(db, events, session.id, cutoff)
         if (promotion === "queue") {
-          yield* SessionInput.promoteNextQueued(db, events, session.id)
-          yield* SessionInput.promoteSteers(db, events, session.id, cutoff)
+          promoted += Number(yield* SessionInput.promoteNextQueued(db, events, session.id))
+          promoted += yield* SessionInput.promoteSteers(db, events, session.id, cutoff)
         }
+        if (promoted > 0) currentStep = 1
       }
       const system =
         initialized ?? (yield* SessionContextEpoch.prepare(db, events, loadSystemContext(agent), session.id))
       const model = yield* models.resolve(session)
       const entries = yield* SessionHistory.entriesForRunner(db, session.id, system.baselineSeq)
       const context = entries.map((entry) => entry.message)
-      const isLastStep = agent.info?.steps !== undefined && step >= agent.info.steps
+      const isLastStep = agent.info?.steps !== undefined && currentStep >= agent.info.steps
       const toolMaterialization = isLastStep ? undefined : yield* tools.materialize(agent.info?.permissions)
       const promptCacheKey = /^ses_[0-9a-f]{64}$/.test(session.id) ? session.id.slice(4) : session.id
       const request = LLM.request({
@@ -202,7 +204,7 @@ export const layer = Layer.effect(
         toolChoice: isLastStep ? "none" : undefined,
       })
       if (yield* compaction.compactIfNeeded({ sessionID: session.id, entries, model, request }))
-        return yield* Effect.die(continueAfterCompaction)
+        return yield* Effect.die(continueAfterCompaction(currentStep))
       const publisher = createLLMEventPublisher(events, {
         sessionID: session.id,
         agent: agent.id,
@@ -272,7 +274,7 @@ export const layer = Layer.effect(
             isContextOverflowFailure(overflowFailure ?? failure) &&
             (yield* restore(recoverOverflow({ sessionID: session.id, entries, model, request })))
           )
-            return yield* Effect.die(continueAfterOverflowCompaction)
+            return yield* Effect.die(continueAfterOverflowCompaction(currentStep))
           if (overflowFailure) yield* publish(overflowFailure)
           const llmFailure = failure instanceof LLMError ? failure : undefined
           if (llmFailure && !publisher.hasProviderError()) {
@@ -306,7 +308,7 @@ export const layer = Layer.effect(
             yield* withPublication(publisher.failUnsettledTools("Provider did not return a tool result", true))
           if (stream._tag === "Failure") return yield* Effect.failCause(stream.cause)
           if (settled._tag === "Failure") return yield* Effect.failCause(settled.cause)
-          return !publisher.hasProviderError() && needsContinuation
+          return { needsContinuation: !publisher.hasProviderError() && needsContinuation, step: currentStep }
         }),
       )
     }, Effect.scoped)
@@ -314,7 +316,7 @@ export const layer = Layer.effect(
       sessionID: SessionSchema.ID,
       promotion: SessionInput.Delivery | undefined,
       step: number,
-    ) => Effect.Effect<boolean, RunError>
+    ) => Effect.Effect<{ readonly needsContinuation: boolean; readonly step: number }, RunError>
 
     const runAfterOverflowCompaction: RunTurn = Effect.fnUntraced(function* (sessionID, promotion, step) {
       return yield* runTurnAttempt(sessionID, promotion, step).pipe(
@@ -324,7 +326,7 @@ export const layer = Layer.effect(
             if (defect.transition._tag === "ContinueAfterOverflowCompaction")
               return yield* Effect.die("Post-compaction provider attempt cannot recover another overflow")
             yield* Effect.yieldNow
-            return yield* runAfterOverflowCompaction(sessionID, undefined, step)
+            return yield* runAfterOverflowCompaction(sessionID, undefined, defect.transition.step)
           }),
         ),
       )
@@ -337,8 +339,8 @@ export const layer = Layer.effect(
             if (!(defect instanceof TurnTransitionError)) return yield* Effect.die(defect)
             yield* Effect.yieldNow
             if (defect.transition._tag === "ContinueAfterOverflowCompaction")
-              return yield* runAfterOverflowCompaction(sessionID, undefined, step)
-            return yield* runTurn(sessionID, undefined, step)
+              return yield* runAfterOverflowCompaction(sessionID, undefined, defect.transition.step)
+            return yield* runTurn(sessionID, undefined, defect.transition.step)
           }),
         ),
       )
@@ -353,16 +355,19 @@ export const layer = Layer.effect(
       if (!input.force && !hasSteer && !hasQueue) return
       yield* failInterruptedTools(input.sessionID)
       let promotion: SessionInput.Delivery | undefined = hasSteer ? "steer" : hasQueue ? "queue" : undefined
-      let openActivity = input.force || hasSteer || hasQueue
-      while (openActivity) {
+      let shouldRun = input.force || hasSteer || hasQueue
+      while (shouldRun) {
         let needsContinuation = true
-        for (let step = 1; needsContinuation; step++) {
-          needsContinuation = yield* runTurn(input.sessionID, promotion, step)
+        let step = 1
+        while (needsContinuation) {
+          const result = yield* runTurn(input.sessionID, promotion, step)
+          needsContinuation = result.needsContinuation
+          step = result.step + 1
           promotion = "steer"
           if (!needsContinuation) needsContinuation = yield* SessionInput.hasPending(db, input.sessionID, "steer")
         }
-        openActivity = yield* SessionInput.hasPending(db, input.sessionID, "queue")
-        promotion = openActivity ? "queue" : undefined
+        shouldRun = yield* SessionInput.hasPending(db, input.sessionID, "queue")
+        promotion = shouldRun ? "queue" : undefined
       }
     })
 

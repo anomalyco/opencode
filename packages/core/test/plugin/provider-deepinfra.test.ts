@@ -1,3 +1,4 @@
+import { AISDK } from "@opencode-ai/core/aisdk"
 import { describe, expect, mock } from "bun:test"
 import { Effect } from "effect"
 import { ModelV2 } from "@opencode-ai/core/model"
@@ -14,8 +15,9 @@ const deepinfraLanguageModels: string[] = []
 
 const addPlugin = Effect.fn(function* () {
   const plugin = yield* PluginV2.Service
-  const host = yield* PluginHost.make()
-  yield* plugin.add({ id: DeepInfraPlugin.id, effect: DeepInfraPlugin.effect(host) })
+  const aisdk = yield* AISDK.Service
+  const host = yield* PluginHost.make(plugin)
+  yield* DeepInfraPlugin.effect(host)
 })
 
 void mock.module("@ai-sdk/deepinfra", () => ({
@@ -41,19 +43,16 @@ describe("DeepInfraPlugin", () => {
     Effect.gen(function* () {
       resetDeepInfraMock()
       const plugin = yield* PluginV2.Service
+      const aisdk = yield* AISDK.Service
       yield* addPlugin()
-      const result = yield* plugin.trigger(
-        "aisdk.sdk",
-        {
-          model: new ModelV2.Info({
-            ...ModelV2.Info.empty(ProviderV2.ID.make("deepinfra"), ModelV2.ID.make("model")),
-            api: { id: ModelV2.ID.make("model"), type: "aisdk", package: "@ai-sdk/deepinfra" },
-          }),
-          package: "@ai-sdk/deepinfra",
-          options: { name: "deepinfra" },
-        },
-        {},
-      )
+      const result = yield* aisdk.runSDK({
+        model: new ModelV2.Info({
+          ...ModelV2.Info.empty(ProviderV2.ID.make("deepinfra"), ModelV2.ID.make("model")),
+          api: { id: ModelV2.ID.make("model"), type: "aisdk", package: "@ai-sdk/deepinfra" },
+        }),
+        package: "@ai-sdk/deepinfra",
+        options: { name: "deepinfra" },
+      })
       expect(result.sdk).toBeDefined()
     }),
   )
@@ -62,19 +61,16 @@ describe("DeepInfraPlugin", () => {
     Effect.gen(function* () {
       resetDeepInfraMock()
       const plugin = yield* PluginV2.Service
+      const aisdk = yield* AISDK.Service
       yield* addPlugin()
-      const result = yield* plugin.trigger(
-        "aisdk.sdk",
-        {
-          model: new ModelV2.Info({
-            ...ModelV2.Info.empty(ProviderV2.ID.make("custom-deepinfra"), ModelV2.ID.make("model")),
-            api: { id: ModelV2.ID.make("model"), type: "aisdk", package: "@ai-sdk/deepinfra" },
-          }),
-          package: "@ai-sdk/deepinfra",
-          options: { name: "custom-deepinfra", apiKey: "test" },
-        },
-        {},
-      )
+      const result = yield* aisdk.runSDK({
+        model: new ModelV2.Info({
+          ...ModelV2.Info.empty(ProviderV2.ID.make("custom-deepinfra"), ModelV2.ID.make("model")),
+          api: { id: ModelV2.ID.make("model"), type: "aisdk", package: "@ai-sdk/deepinfra" },
+        }),
+        package: "@ai-sdk/deepinfra",
+        options: { name: "custom-deepinfra", apiKey: "test" },
+      })
       expect(result.sdk.languageModel("model").provider).toBe("custom-deepinfra.chat")
       expect(deepinfraOptions).toEqual([{ name: "custom-deepinfra", apiKey: "test" }])
     }),
@@ -84,19 +80,16 @@ describe("DeepInfraPlugin", () => {
     Effect.gen(function* () {
       resetDeepInfraMock()
       const plugin = yield* PluginV2.Service
+      const aisdk = yield* AISDK.Service
       yield* addPlugin()
-      const result = yield* plugin.trigger(
-        "aisdk.sdk",
-        {
-          model: new ModelV2.Info({
-            ...ModelV2.Info.empty(ProviderV2.ID.make("deepinfra"), ModelV2.ID.make("model")),
-            api: { id: ModelV2.ID.make("model"), type: "aisdk", package: "@ai-sdk/deepinfra" },
-          }),
-          package: "@ai-sdk/deepinfra",
-          options: { name: "deepinfra", apiKey: "test" },
-        },
-        {},
-      )
+      const result = yield* aisdk.runSDK({
+        model: new ModelV2.Info({
+          ...ModelV2.Info.empty(ProviderV2.ID.make("deepinfra"), ModelV2.ID.make("model")),
+          api: { id: ModelV2.ID.make("model"), type: "aisdk", package: "@ai-sdk/deepinfra" },
+        }),
+        package: "@ai-sdk/deepinfra",
+        options: { name: "deepinfra", apiKey: "test" },
+      })
       expect(result.sdk.languageModel("model").provider).toBe("deepinfra.chat")
       expect(deepinfraOptions).toEqual([{ name: "deepinfra", apiKey: "test" }])
     }),
@@ -106,6 +99,7 @@ describe("DeepInfraPlugin", () => {
     Effect.gen(function* () {
       resetDeepInfraMock()
       const plugin = yield* PluginV2.Service
+      const aisdk = yield* AISDK.Service
       yield* addPlugin()
       const packages = [
         "unmatched-package",
@@ -114,33 +108,25 @@ describe("DeepInfraPlugin", () => {
       ]
       yield* Effect.forEach(packages, (item) =>
         Effect.gen(function* () {
-          const ignored = yield* plugin.trigger(
-            "aisdk.sdk",
-            {
-              model: new ModelV2.Info({
-                ...ModelV2.Info.empty(ProviderV2.ID.make("deepinfra"), ModelV2.ID.make("model")),
-                api: { id: ModelV2.ID.make("model"), type: "aisdk", package: "@ai-sdk/deepinfra" },
-              }),
-              package: item,
-              options: { name: "deepinfra" },
-            },
-            {},
-          )
+          const ignored = yield* aisdk.runSDK({
+            model: new ModelV2.Info({
+              ...ModelV2.Info.empty(ProviderV2.ID.make("deepinfra"), ModelV2.ID.make("model")),
+              api: { id: ModelV2.ID.make("model"), type: "aisdk", package: "@ai-sdk/deepinfra" },
+            }),
+            package: item,
+            options: { name: "deepinfra" },
+          })
           expect(ignored.sdk).toBeUndefined()
         }),
       )
-      const result = yield* plugin.trigger(
-        "aisdk.sdk",
-        {
-          model: new ModelV2.Info({
-            ...ModelV2.Info.empty(ProviderV2.ID.make("deepinfra"), ModelV2.ID.make("model")),
-            api: { id: ModelV2.ID.make("model"), type: "aisdk", package: "@ai-sdk/deepinfra" },
-          }),
-          package: "@ai-sdk/deepinfra",
-          options: { name: "deepinfra" },
-        },
-        {},
-      )
+      const result = yield* aisdk.runSDK({
+        model: new ModelV2.Info({
+          ...ModelV2.Info.empty(ProviderV2.ID.make("deepinfra"), ModelV2.ID.make("model")),
+          api: { id: ModelV2.ID.make("model"), type: "aisdk", package: "@ai-sdk/deepinfra" },
+        }),
+        package: "@ai-sdk/deepinfra",
+        options: { name: "deepinfra" },
+      })
       expect(result.sdk).toBeDefined()
       expect(deepinfraOptions).toEqual([{ name: "deepinfra" }])
     }),
@@ -150,31 +136,21 @@ describe("DeepInfraPlugin", () => {
     Effect.gen(function* () {
       resetDeepInfraMock()
       const plugin = yield* PluginV2.Service
+      const aisdk = yield* AISDK.Service
       yield* addPlugin()
-      const sdkEvent = yield* plugin.trigger(
-        "aisdk.sdk",
-        {
-          model: new ModelV2.Info({
-            ...ModelV2.Info.empty(
-              ProviderV2.ID.make("deepinfra"),
-              ModelV2.ID.make("meta-llama/Llama-3.3-70B-Instruct"),
-            ),
-            api: {
-              id: ModelV2.ID.make("meta-llama/Llama-3.3-70B-Instruct"),
-              type: "aisdk",
-              package: "@ai-sdk/deepinfra",
-            },
-          }),
-          package: "@ai-sdk/deepinfra",
-          options: { name: "deepinfra" },
-        },
-        {},
-      )
-      const result = yield* plugin.trigger(
-        "aisdk.language",
-        { model: sdkEvent.model, sdk: sdkEvent.sdk, options: sdkEvent.options },
-        {},
-      )
+      const sdkEvent = yield* aisdk.runSDK({
+        model: new ModelV2.Info({
+          ...ModelV2.Info.empty(ProviderV2.ID.make("deepinfra"), ModelV2.ID.make("meta-llama/Llama-3.3-70B-Instruct")),
+          api: {
+            id: ModelV2.ID.make("meta-llama/Llama-3.3-70B-Instruct"),
+            type: "aisdk",
+            package: "@ai-sdk/deepinfra",
+          },
+        }),
+        package: "@ai-sdk/deepinfra",
+        options: { name: "deepinfra" },
+      })
+      const result = yield* aisdk.runLanguage({ model: sdkEvent.model, sdk: sdkEvent.sdk, options: sdkEvent.options })
       const language = result.language ?? result.sdk.languageModel(result.model.api.id)
       expect(language.provider).toBe("deepinfra.chat")
       expect(deepinfraLanguageModels).toEqual(["meta-llama/Llama-3.3-70B-Instruct"])

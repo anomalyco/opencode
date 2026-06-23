@@ -1,3 +1,4 @@
+import { AISDK } from "@opencode-ai/core/aisdk"
 import { describe, expect, it as bun_it } from "bun:test"
 import { Effect } from "effect"
 import { ModelV2 } from "@opencode-ai/core/model"
@@ -13,8 +14,9 @@ const it = testEffect(PluginTestLayer)
 
 const addPlugin = Effect.fn(function* () {
   const plugin = yield* PluginV2.Service
-  const host = yield* PluginHost.make()
-  yield* plugin.add({ id: SnowflakeCortexPlugin.id, effect: SnowflakeCortexPlugin.effect(host) })
+  const aisdk = yield* AISDK.Service
+  const host = yield* PluginHost.make(plugin)
+  yield* SnowflakeCortexPlugin.effect(host)
 })
 
 function withEnv<A, E, R>(vars: Record<string, string | undefined>, effect: () => Effect.Effect<A, E, R>) {
@@ -50,19 +52,16 @@ describe("SnowflakeCortexPlugin", () => {
   it.effect("ignores non-snowflake-cortex providers", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
+      const aisdk = yield* AISDK.Service
       yield* addPlugin()
-      const result = yield* plugin.trigger(
-        "aisdk.sdk",
-        {
-          model: new ModelV2.Info({
-            ...ModelV2.Info.empty(ProviderV2.ID.make("openai"), ModelV2.ID.make("gpt-4")),
-            api: { id: ModelV2.ID.make("gpt-4"), type: "aisdk", package: "test-provider" },
-          }),
-          package: "@ai-sdk/openai",
-          options: { name: "openai" },
-        },
-        {},
-      )
+      const result = yield* aisdk.runSDK({
+        model: new ModelV2.Info({
+          ...ModelV2.Info.empty(ProviderV2.ID.make("openai"), ModelV2.ID.make("gpt-4")),
+          api: { id: ModelV2.ID.make("gpt-4"), type: "aisdk", package: "test-provider" },
+        }),
+        package: "@ai-sdk/openai",
+        options: { name: "openai" },
+      })
       expect(result.sdk).toBeUndefined()
     }),
   )
@@ -71,19 +70,16 @@ describe("SnowflakeCortexPlugin", () => {
     withEnv({ SNOWFLAKE_CORTEX_PAT: "test-pat" }, () =>
       Effect.gen(function* () {
         const plugin = yield* PluginV2.Service
+        const aisdk = yield* AISDK.Service
         yield* addPlugin()
-        const result = yield* plugin.trigger(
-          "aisdk.sdk",
-          {
-            model: new ModelV2.Info({
-              ...ModelV2.Info.empty(ProviderV2.ID.make("snowflake-cortex"), ModelV2.ID.make("claude-sonnet-4-6")),
-              api: { id: ModelV2.ID.make("claude-sonnet-4-6"), type: "aisdk", package: "test-provider" },
-            }),
-            package: "@ai-sdk/openai-compatible",
-            options: { name: "snowflake-cortex", baseURL: "https://test.snowflakecomputing.com/api/v2/cortex/v1" },
-          },
-          {},
-        )
+        const result = yield* aisdk.runSDK({
+          model: new ModelV2.Info({
+            ...ModelV2.Info.empty(ProviderV2.ID.make("snowflake-cortex"), ModelV2.ID.make("claude-sonnet-4-6")),
+            api: { id: ModelV2.ID.make("claude-sonnet-4-6"), type: "aisdk", package: "test-provider" },
+          }),
+          package: "@ai-sdk/openai-compatible",
+          options: { name: "snowflake-cortex", baseURL: "https://test.snowflakecomputing.com/api/v2/cortex/v1" },
+        })
         expect(result.sdk).toBeDefined()
       }),
     ),
@@ -93,23 +89,20 @@ describe("SnowflakeCortexPlugin", () => {
     withEnv({ SNOWFLAKE_CORTEX_PAT: undefined }, () =>
       Effect.gen(function* () {
         const plugin = yield* PluginV2.Service
+        const aisdk = yield* AISDK.Service
         yield* addPlugin()
-        const result = yield* plugin.trigger(
-          "aisdk.sdk",
-          {
-            model: new ModelV2.Info({
-              ...ModelV2.Info.empty(ProviderV2.ID.make("snowflake-cortex"), ModelV2.ID.make("claude-sonnet-4-6")),
-              api: { id: ModelV2.ID.make("claude-sonnet-4-6"), type: "aisdk", package: "test-provider" },
-            }),
-            package: "@ai-sdk/openai-compatible",
-            options: {
-              name: "snowflake-cortex",
-              baseURL: "https://test.snowflakecomputing.com/api/v2/cortex/v1",
-              apiKey: "options-pat",
-            },
+        const result = yield* aisdk.runSDK({
+          model: new ModelV2.Info({
+            ...ModelV2.Info.empty(ProviderV2.ID.make("snowflake-cortex"), ModelV2.ID.make("claude-sonnet-4-6")),
+            api: { id: ModelV2.ID.make("claude-sonnet-4-6"), type: "aisdk", package: "test-provider" },
+          }),
+          package: "@ai-sdk/openai-compatible",
+          options: {
+            name: "snowflake-cortex",
+            baseURL: "https://test.snowflakecomputing.com/api/v2/cortex/v1",
+            apiKey: "options-pat",
           },
-          {},
-        )
+        })
         expect(result.sdk).toBeDefined()
       }),
     ),
@@ -119,19 +112,16 @@ describe("SnowflakeCortexPlugin", () => {
     withEnv({ SNOWFLAKE_CORTEX_TOKEN: "oauth-token", SNOWFLAKE_CORTEX_PAT: undefined }, () =>
       Effect.gen(function* () {
         const plugin = yield* PluginV2.Service
+        const aisdk = yield* AISDK.Service
         yield* addPlugin()
-        const result = yield* plugin.trigger(
-          "aisdk.sdk",
-          {
-            model: new ModelV2.Info({
-              ...ModelV2.Info.empty(ProviderV2.ID.make("snowflake-cortex"), ModelV2.ID.make("claude-sonnet-4-6")),
-              api: { id: ModelV2.ID.make("claude-sonnet-4-6"), type: "aisdk", package: "test-provider" },
-            }),
-            package: "@ai-sdk/openai-compatible",
-            options: { name: "snowflake-cortex", baseURL: "https://test.snowflakecomputing.com/api/v2/cortex/v1" },
-          },
-          {},
-        )
+        const result = yield* aisdk.runSDK({
+          model: new ModelV2.Info({
+            ...ModelV2.Info.empty(ProviderV2.ID.make("snowflake-cortex"), ModelV2.ID.make("claude-sonnet-4-6")),
+            api: { id: ModelV2.ID.make("claude-sonnet-4-6"), type: "aisdk", package: "test-provider" },
+          }),
+          package: "@ai-sdk/openai-compatible",
+          options: { name: "snowflake-cortex", baseURL: "https://test.snowflakecomputing.com/api/v2/cortex/v1" },
+        })
         expect(result.sdk).toBeDefined()
       }),
     ),
@@ -141,23 +131,20 @@ describe("SnowflakeCortexPlugin", () => {
     withEnv({ SNOWFLAKE_CORTEX_TOKEN: undefined, SNOWFLAKE_CORTEX_PAT: undefined }, () =>
       Effect.gen(function* () {
         const plugin = yield* PluginV2.Service
+        const aisdk = yield* AISDK.Service
         yield* addPlugin()
-        const result = yield* plugin.trigger(
-          "aisdk.sdk",
-          {
-            model: new ModelV2.Info({
-              ...ModelV2.Info.empty(ProviderV2.ID.make("snowflake-cortex"), ModelV2.ID.make("claude-sonnet-4-6")),
-              api: { id: ModelV2.ID.make("claude-sonnet-4-6"), type: "aisdk", package: "test-provider" },
-            }),
-            package: "@ai-sdk/openai-compatible",
-            options: {
-              name: "snowflake-cortex",
-              baseURL: "https://test.snowflakecomputing.com/api/v2/cortex/v1",
-              token: "options-token",
-            },
+        const result = yield* aisdk.runSDK({
+          model: new ModelV2.Info({
+            ...ModelV2.Info.empty(ProviderV2.ID.make("snowflake-cortex"), ModelV2.ID.make("claude-sonnet-4-6")),
+            api: { id: ModelV2.ID.make("claude-sonnet-4-6"), type: "aisdk", package: "test-provider" },
+          }),
+          package: "@ai-sdk/openai-compatible",
+          options: {
+            name: "snowflake-cortex",
+            baseURL: "https://test.snowflakecomputing.com/api/v2/cortex/v1",
+            token: "options-token",
           },
-          {},
-        )
+        })
         expect(result.sdk).toBeDefined()
       }),
     ),
@@ -167,19 +154,16 @@ describe("SnowflakeCortexPlugin", () => {
     withEnv({ SNOWFLAKE_CORTEX_PAT: "test-pat" }, () =>
       Effect.gen(function* () {
         const plugin = yield* PluginV2.Service
+        const aisdk = yield* AISDK.Service
         yield* addPlugin()
-        const result = yield* plugin.trigger(
-          "aisdk.sdk",
-          {
-            model: new ModelV2.Info({
-              ...ModelV2.Info.empty(ProviderV2.ID.make("snowflake-cortex"), ModelV2.ID.make("claude-sonnet-4-6")),
-              api: { id: ModelV2.ID.make("claude-sonnet-4-6"), type: "aisdk", package: "test-provider" },
-            }),
-            package: "@ai-sdk/openai-compatible",
-            options: { name: "snowflake-cortex", baseURL: "https://test.snowflakecomputing.com/api/v2/cortex/v1" },
-          },
-          {},
-        )
+        const result = yield* aisdk.runSDK({
+          model: new ModelV2.Info({
+            ...ModelV2.Info.empty(ProviderV2.ID.make("snowflake-cortex"), ModelV2.ID.make("claude-sonnet-4-6")),
+            api: { id: ModelV2.ID.make("claude-sonnet-4-6"), type: "aisdk", package: "test-provider" },
+          }),
+          package: "@ai-sdk/openai-compatible",
+          options: { name: "snowflake-cortex", baseURL: "https://test.snowflakecomputing.com/api/v2/cortex/v1" },
+        })
         expect(result.options.includeUsage).toBe(true)
       }),
     ),

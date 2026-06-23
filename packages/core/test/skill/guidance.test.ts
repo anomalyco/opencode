@@ -2,7 +2,6 @@ import path from "path"
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { AgentV2 } from "@opencode-ai/core/agent"
-import { PluginBoot } from "@opencode-ai/core/plugin/boot"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SkillV2 } from "@opencode-ai/core/skill"
 import { SystemContext } from "@opencode-ai/core/system-context"
@@ -28,11 +27,8 @@ const denied = new SkillV2.Info({
   content: "Denied guidance",
 })
 
-const layer = (list: () => SkillV2.Info[], wait: () => void = () => {}) =>
-  SkillGuidance.layer.pipe(
-    Layer.provide(Layer.mock(SkillV2.Service, { list: () => Effect.succeed(list()) })),
-    Layer.provide(Layer.mock(PluginBoot.Service, { wait: () => Effect.sync(wait) })),
-  )
+const layer = (list: () => SkillV2.Info[]) =>
+  SkillGuidance.layer.pipe(Layer.provide(Layer.mock(SkillV2.Service, { list: () => Effect.succeed(list()) })))
 
 describe("SkillGuidance", () => {
   it.effect("renders described agent skills and reconciles the complete available list", () => {
@@ -41,14 +37,12 @@ describe("SkillGuidance", () => {
       permissions: [{ action: "skill", resource: "denied", effect: "deny" }],
     })
     let skills = [hidden, denied, effect]
-    let waited = 0
     return Effect.gen(function* () {
       const guidance = yield* SkillGuidance.Service
       const initialized = yield* guidance
         .load({ id: agent.id, info: agent })
         .pipe(Effect.flatMap(SystemContext.initialize))
 
-      expect(waited).toBe(1)
       expect(initialized.baseline).toBe(
         [
           "Skills provide specialized instructions and workflows for specific tasks.",
@@ -71,14 +65,7 @@ describe("SkillGuidance", () => {
         _tag: "Updated",
         text: expect.stringContaining("No skills are currently available."),
       })
-    }).pipe(
-      Effect.provide(
-        layer(
-          () => skills,
-          () => waited++,
-        ),
-      ),
-    )
+    }).pipe(Effect.provide(layer(() => skills)))
   })
 
   it.effect("omits guidance when the selected agent denies all skills", () => {
