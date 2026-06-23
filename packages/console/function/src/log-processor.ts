@@ -132,6 +132,7 @@ function toLakeEvent(time: string, data: Record<string, unknown>) {
     error_cause2: string(data, "error.cause2"),
     api_key: string(data, "api_key"),
     workspace: string(data, "workspace"),
+    user_id: string(data, "user_id"),
     is_subscription: boolean(data, "isSubscription"), // removed
     subscription: string(data, "subscription"),
     response_length: integer(data, "response_length"),
