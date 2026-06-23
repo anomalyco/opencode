@@ -152,7 +152,7 @@ export const SessionGroup = HttpApiGroup.make("server.session")
         OpenApi.annotations({
           identifier: "v2.session.switchAgent",
           summary: "Switch session agent",
-          description: "Switch the agent used by subsequent session activity.",
+          description: "Switch the agent used by subsequent provider turns.",
         }),
       ),
   )
@@ -168,7 +168,7 @@ export const SessionGroup = HttpApiGroup.make("server.session")
         OpenApi.annotations({
           identifier: "v2.session.switchModel",
           summary: "Switch session model",
-          description: "Switch the model used by subsequent session activity.",
+          description: "Switch the model used by subsequent provider turns.",
         }),
       ),
   )

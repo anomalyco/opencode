@@ -1,24 +1,28 @@
 export * as ConfigReferencePlugin from "./reference"
 
-import { define } from "@opencode-ai/plugin/v2/effect"
+import { define } from "../../plugin/internal"
 import path from "path"
 import { Effect } from "effect"
 import { Config } from "../../config"
 import { ConfigReference } from "../reference"
 import { Reference } from "../../reference"
 import { AbsolutePath } from "../../schema"
+import { Global } from "../../global"
+import { Location } from "../../location"
 
 export const Plugin = define({
   id: "core/config-reference",
   effect: Effect.fn(function* (ctx) {
     const config = yield* Config.Service
+    const location = yield* Location.Service
+    const global = yield* Global.Service
     yield* ctx.reference.transform(
       Effect.fn(function* (draft) {
         const entries = new Map<string, Reference.Source>()
         for (const doc of (yield* config.entries()).filter(
           (entry): entry is Config.Document => entry.type === "document",
         )) {
-          const directory = doc.path ? path.dirname(doc.path) : ctx.location.directory
+          const directory = doc.path ? path.dirname(doc.path) : location.directory
           for (const [name, entry] of Object.entries(doc.info.references ?? {})) {
             if (!validAlias(name)) continue
             entries.set(
@@ -27,7 +31,7 @@ export const Plugin = define({
                 ? new Reference.LocalSource({
                     type: "local",
                     path: AbsolutePath.make(
-                      localPath(directory, ctx.path.home, typeof entry === "string" ? entry : entry.path),
+                      localPath(directory, global.home, typeof entry === "string" ? entry : entry.path),
                     ),
                     description: typeof entry === "string" ? undefined : entry.description,
                     hidden: typeof entry === "string" ? undefined : entry.hidden,
