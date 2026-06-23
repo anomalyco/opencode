@@ -16,6 +16,7 @@ import { createPathHelpers } from "./file/path"
 import type { ProjectAvatarVariant } from "@opencode-ai/ui/v2/project-avatar-v2"
 import { migrateLegacySessionStateKeys, ServerScope, SessionStateKey } from "@/utils/server-scope"
 import { createSessionKeyReader, ensureSessionKey, pruneSessionKeys } from "./layout-helpers"
+import { requireServerKey } from "@/utils/session-route"
 
 export { createSessionKeyReader, ensureSessionKey, pruneSessionKeys }
 
@@ -79,7 +80,7 @@ export type LayoutRoute =
   | { type: "home" }
   | { type: "draft"; draftID: string; server?: ServerConnection.Key }
   | { type: "dir-new-sesssion"; dir: string; dirBase64: string; server?: ServerConnection.Key }
-  | { type: "session"; dir: string; dirBase64: string; sessionId: string; server?: ServerConnection.Key }
+  | { type: "session"; sessionId: string; server?: ServerConnection.Key }
 
 function nextSessionTabsForOpen(current: SessionTabs | undefined, tab: string): SessionTabs {
   const all = current?.all ?? []
@@ -131,6 +132,14 @@ const currentRoute = (pathname: string, search: string): LayoutRoute => {
     return { type: "draft", draftID }
   }
 
+  if (parts[0] === "server" && parts[2] === "session" && parts[3]) {
+    return {
+      type: "session",
+      sessionId: parts[3],
+      server: requireServerKey(parts[1]),
+    }
+  }
+
   const dirBase64 = parts[0]
   const dir = decode64(dirBase64)
   if (!dir) return { type: "home" }
@@ -138,7 +147,7 @@ const currentRoute = (pathname: string, search: string): LayoutRoute => {
   if (parts[1] !== "session") return { type: "home" }
 
   const id = parts[2]
-  if (id) return { type: "session", dir, dirBase64, sessionId: id }
+  if (id) return { type: "session", sessionId: id }
   return { type: "dir-new-sesssion", dir, dirBase64 }
 }
 
@@ -154,6 +163,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     const route = createMemo(() => {
       const value = currentRoute(location.pathname, location.search)
       if (value.type === "home") return value
+      if (value.server) return value
       return { ...value, server: server.key }
     })
 
@@ -572,7 +582,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       handoff: {
         tabs: createMemo(() => store.handoff?.tabs),
         setTabs(dir: string, id: string) {
-          setStore("handoff", "tabs", { scope: server.scope(), dir, id, at: Date.now() })
+          setStore("handoff", "tabs", { scope: serverSdk().scope, dir, id, at: Date.now() })
         },
         clearTabs() {
           if (!store.handoff?.tabs) return
