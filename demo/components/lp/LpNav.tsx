@@ -51,16 +51,16 @@ export function LpNav() {
 
           <div className="flex items-center gap-2">
             <a
-              href="#waitlist"
+              href="#apply"
               className="hidden whitespace-nowrap rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-[12.5px] font-semibold text-slate-800 transition-colors hover:border-brand-600 hover:bg-brand-50 hover:text-brand-600 sm:inline-flex"
             >
-              ウェイトリストに登録
+              お問い合わせ
             </a>
             <a
-              href="#apply"
+              href="#waitlist"
               className="whitespace-nowrap rounded-lg bg-brand-600 px-3.5 py-2 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700"
             >
-              お問い合わせ
+              ウェイトリストに登録
             </a>
             <button
               type="button"
