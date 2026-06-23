@@ -44,6 +44,7 @@
     "vite-plugin-solid": "catalog:"
   },
   "dependencies": {
+    "@corvu/drawer": "catalog:",
     "@kobalte/core": "catalog:",
     "@opencode-ai/core": "workspace:*",
     "@opencode-ai/sdk": "workspace:*",
