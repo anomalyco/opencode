@@ -1,6 +1,6 @@
 import type { ContentBlock, ContentChunk, ResourceLink, Role } from "@agentclientprotocol/sdk"
 import path from "node:path"
-import { pathToFileURL } from "node:url"
+import { fileURLToPath, pathToFileURL } from "node:url"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 
 export type PromptPart = SessionV1.TextPartInput | SessionV1.FilePartInput
@@ -76,7 +76,19 @@ export function contentBlockToParts(block: ContentBlock): PromptPart[] {
 
     case "resource":
       if ("text" in block.resource) {
-        return [{ type: "text", text: block.resource.text }]
+        try {
+          const parsed = new URL(block.resource.uri)
+          if (parsed.protocol === "file:") {
+            const line = parsed.hash.match(/^#L(\d+)/)?.[1]
+            return [
+              {
+                type: "text",
+                text: `[${fileURLToPath(parsed)}${line ? `:${line}` : ""}]\n${block.resource.text}`,
+              },
+            ]
+          }
+        } catch {}
+        return [{ type: "text", text: `[${block.resource.uri}]\n${block.resource.text}` }]
       }
       if (block.resource.mimeType) {
         return [
