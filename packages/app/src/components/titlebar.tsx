@@ -1,17 +1,16 @@
 import {
   createEffect,
   createMemo,
+  createResource,
   createSignal,
   For,
   Match,
-  onMount,
   Show,
-  startTransition,
   Switch,
   untrack,
 } from "solid-js"
 import { createStore } from "solid-js/store"
-import { useLocation, useMatch, useNavigate, useParams } from "@solidjs/router"
+import { useLocation, useNavigate, useParams } from "@solidjs/router"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Button } from "@opencode-ai/ui/button"
@@ -19,6 +18,8 @@ import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { useTheme } from "@opencode-ai/ui/theme/context"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
+import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
+import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 
 import { LayoutRoute, useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
@@ -27,13 +28,15 @@ import { useLanguage } from "@/context/language"
 import { useSettings } from "@/context/settings"
 import { WindowsAppMenu } from "./windows-app-menu"
 import { applyPath, backPath, forwardPath } from "./titlebar-history"
-import { useServerSync } from "@/context/server-sync"
-import { base64Encode } from "@opencode-ai/core/util/encode"
 import { TitlebarTabStrip } from "@/components/titlebar-tab-strip"
 import { makeEventListener } from "@solid-primitives/event-listener"
+import { createMediaQuery } from "@solid-primitives/media"
 import { readSessionTabsRemovedDetail, SESSION_TABS_REMOVED_EVENT } from "@/components/titlebar-session-events"
-import { useServer } from "@/context/server"
+import { useGlobal } from "@/context/global"
+import { ServerConnection, useServer } from "@/context/server"
 import { tabHref, tabKey, useTabs, type Tab } from "@/context/tabs"
+import "./titlebar.css"
+import { useServerSDK } from "@/context/server-sdk"
 
 type TauriDesktopWindow = {
   startDragging?: () => Promise<void>
@@ -79,6 +82,8 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
   const location = useLocation()
   const params = useParams()
   const useV2Titlebar = createMemo(() => settings.general.newLayoutDesigns())
+  const mobile = createMediaQuery("(max-width: 767px)")
+  const bottom = createMemo(() => useV2Titlebar() && mobile() && settings.general.mobileTitlebarPosition() === "bottom")
 
   const mac = createMemo(() => platform.platform === "desktop" && platform.os === "macos")
   const windows = createMemo(() => platform.platform === "desktop" && platform.os === "windows")
@@ -90,6 +95,10 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
   const counterZoom = () => (windows() && titlebarZoom() < 1 ? 1 / titlebarZoom() : 1)
   const minHeight = () => {
     const height = useV2Titlebar() ? v2TitlebarHeight : legacyTitlebarHeight
+    if (useV2Titlebar() && mobile()) {
+      const inset = bottom() ? "env(safe-area-inset-bottom, 0px)" : "env(safe-area-inset-top, 0px)"
+      return `calc(${height}px + ${inset})`
+    }
     if (mac()) return `${height / zoom()}px`
     if (windows()) return `${height / Math.min(titlebarZoom(), 1)}px`
     return undefined
@@ -227,10 +236,13 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
         "shrink-0 relative flex flex-row": true,
         "h-9 bg-v2-background-bg-deep overflow-visible": useV2Titlebar(),
         "h-10 bg-background-base overflow-hidden": !useV2Titlebar(),
+        "order-last": bottom(),
       }}
       style={{
         "min-height": minHeight(),
-        "padding-left": mac() ? `${84 / zoom()}px` : 0,
+        "padding-top": useV2Titlebar() && mobile() && !bottom() ? "env(safe-area-inset-top, 0px)" : undefined,
+        "padding-bottom": bottom() ? "env(safe-area-inset-bottom, 0px)" : undefined,
+        "padding-left": mac() && !mobile() ? `${84 / zoom()}px` : 0,
         width: electronWindows() ? `env(titlebar-area-width, calc(100vw - ${windowsControlsWidth()}))` : undefined,
         "max-width": electronWindows()
           ? `env(titlebar-area-width, calc(100vw - ${windowsControlsWidth()}))`
@@ -244,38 +256,30 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
       <Switch>
         <Match when={useV2Titlebar()}>
           {(_) => {
-            const serverSync = useServerSync()
+            const serverSdk = useServerSDK()
             const navigate = useNavigate()
-            const homeMatch = useMatch(() => "/")
             const layout = useLayout()
-
-            const newSessionHref = () => {
-              if (params.dir) return `/${params.dir}/session`
-
-              const project = layout.projects.list()[0]
-              if (!project) return "/"
-
-              return `/${base64Encode(project.worktree)}/session`
-            }
+            const global = useGlobal()
 
             const tabs = useTabs()
             const tabsStore = tabs.store
             const tabsStoreActions = tabs
-            const navigateTab = (tab: Tab) => {
-              const href = tabHref(tab)
-              if (tab.server === server.key) {
-                navigate(href)
-                return
-              }
-              void startTransition(() => {
-                server.setActive(tab.server)
-                navigate(href)
-              })
-            }
+            const [session] = createResource(
+              () => {
+                const route = layout.route()
+                return route.type === "session" ? route : undefined
+              },
+              (route) =>
+                serverSdk()
+                  .client.session.get({ sessionID: route.sessionId })
+                  .then((x) => x.data)
+                  .catch(() => {}),
+            )
 
             const matchRoute = (route: LayoutRoute) => {
               if (route.type === "home") return
-              if (route.type === "dir-new-sesssion") {
+              if (route.type === "draft") {
+                return tabsStore.find((item) => item.type === "draft" && item.draftID === route.draftID)
               }
               if (route.type === "session") {
                 const main = tabsStore.find(
@@ -283,10 +287,9 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                     item.type === "session" && item.server === route.server && item.sessionId === route.sessionId,
                 )
                 if (main) return main
-                const sync = serverSync.createDirSyncContext(route.dir)
-                const session = sync.session.get(route.sessionId)
-                if (session?.parentID) {
-                  const parentID = session.parentID
+                const s = session()
+                if (s?.parentID) {
+                  const parentID = s.parentID
                   const parent = tabsStore.find(
                     (item) => item.type === "session" && item.server === route.server && item.sessionId === parentID,
                   )
@@ -301,18 +304,16 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
               const route = layout.route()
               if (!tabs.ready()) return
               const tab = currentTab()
-              if (tab) return
+              if (tab) {
+                tabs.remember(tab)
+                return
+              }
 
               if (route.type === "session") {
-                const sync = serverSync.createDirSyncContext(route.dir)
-                const session = sync.session.get(route.sessionId)
-                if (!session) return
-                const sessionId = session.parentID ?? session.id
-                const next = {
-                  server: route.server ?? server.key,
-                  dirBase64: route.dirBase64,
-                  sessionId,
-                }
+                const s = session()
+                if (!s) return
+                const sessionId = s.parentID ?? s.id
+                const next = { server: route.server ?? server.key, sessionId }
                 tabsStoreActions.addSessionTab(next)
               }
             })
@@ -323,7 +324,40 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
               tabsStoreActions.removeSessions(detail)
             })
 
-            const openNewTab = () => navigate(newSessionHref())
+            const openNewTab = () => {
+              const route = layout.route()
+              const activeSession = session()
+              if (route.type === "session" && activeSession) {
+                tabs.newDraft({ server: route.server ?? server.key, directory: activeSession.directory }, "")
+                return
+              }
+
+              const current = layout.projects.list()[0]
+              if (current) {
+                tabs.newDraft({ server: server.key, directory: current.worktree }, "")
+                return
+              }
+
+              const fallback = global.servers.list().flatMap((conn) => {
+                const project = global.createServerCtx(conn).projects.list()[0]
+                return project ? [{ server: ServerConnection.key(conn), project }] : []
+              })[0]
+              if (!fallback) return
+
+              tabs.newDraft({ server: fallback.server, directory: fallback.project.worktree }, "")
+            }
+            const toggleHome = () => tabs.toggleHome({ home: layout.route().type === "home", current: currentTab() })
+
+            command.register("titlebar-home", () => [
+              {
+                id: "home.toggle",
+                title: language.t("home.title"),
+                category: language.t("command.category.view"),
+                keybind: "mod+b",
+                hidden: true,
+                onSelect: toggleHome,
+              },
+            ])
 
             command.register("tabs", () => {
               const current = currentTab()
@@ -361,7 +395,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                     if (index === -1) index = tabsStore.length - 1
 
                     const next = tabsStore[index]
-                    if (next) navigateTab(next)
+                    if (next) tabs.select(next)
                   },
                 },
                 {
@@ -378,7 +412,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                     if (index === tabsStore.length) index = 0
 
                     const next = tabsStore[index]
-                    if (next) navigateTab(next)
+                    if (next) tabs.select(next)
                   },
                 },
                 ...Array.from({ length: 9 }, (_, i) => {
@@ -393,7 +427,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                     hidden: true,
                     onSelect: () => {
                       const tab = tabsStore[index]
-                      if (tab) navigateTab(tab)
+                      if (tab) tabs.select(tab)
                     },
                   }
                 }),
@@ -404,25 +438,40 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
 
             return (
               <div
-                class="h-full flex-1 overflow-hidden flex flex-row items-center gap-1.5 pr-3 pt-2"
+                class="h-full flex-1 overflow-hidden flex flex-row items-center gap-1.5 px-2 md:pr-3"
                 classList={{
-                  "pl-2": mac(),
-                  "pl-4": !mac(),
+                  "pt-2": !bottom(),
+                  "pb-2": bottom(),
+                  "md:pl-2": mac(),
+                  "md:pl-4": !mac(),
                 }}
               >
                 <ChannelIndicator />
                 <Show when={windows() || linux()}>
                   <WindowsAppMenu command={command} platform={platform} variant="v2" />
                 </Show>
-                <IconButtonV2
-                  variant="ghost-muted"
-                  size="large"
-                  as="a"
-                  href="/"
-                  class="!w-9 shrink-0"
-                  icon={<IconV2 name="grid-plus" />}
-                  state={!!homeMatch() ? "pressed" : undefined}
-                />
+                <TooltipV2
+                  placement="bottom"
+                  value={
+                    <>
+                      {language.t("home.title")}
+                      <KeybindV2 keys={command.keybindParts("home.toggle")} variant="neutral" />
+                    </>
+                  }
+                  class="shrink-0"
+                >
+                  <IconButtonV2
+                    type="button"
+                    variant="ghost-muted"
+                    size="large"
+                    class="!w-9 shrink-0"
+                    icon={<IconV2 name="grid-plus" />}
+                    state={layout.route().type === "home" ? "pressed" : undefined}
+                    onClick={toggleHome}
+                    aria-label={language.t("home.title")}
+                    aria-pressed={layout.route().type === "home"}
+                  />
+                </TooltipV2>
 
                 <TitlebarTabStrip
                   tabs={tabsStore}
@@ -431,7 +480,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                   forceTruncate={tabsAreOverflowing()}
                   onOverflowChange={setTabsAreOverflowing}
                   onNavigate={(tab, el) => {
-                    navigateTab(tab)
+                    tabs.select(tab)
                     el.scrollIntoView({ behavior: "instant" })
                   }}
                   onClose={(tab) => {
@@ -439,33 +488,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                     if (index !== -1) tabsStoreActions.removeTab(index)
                   }}
                   onReorder={(keys) => tabsStoreActions.reorder(keys)}
-                >
-                  <Show when={creating() && params.dir}>
-                    {(_) => {
-                      let ref!: HTMLDivElement
-
-                      onMount(() => {
-                        ref.scrollIntoView({ behavior: "instant" })
-                      })
-
-                      return (
-                        <>
-                          <div class="ml-1.5 h-3 w-[1.5px] shrink-0 rounded-full bg-[var(--v2-background-bg-layer-02)]" />
-                          <NewSessionTabItem
-                            ref={ref}
-                            href={`/${params.dir}/session`}
-                            title={language.t("command.session.new")}
-                            onClose={() => {
-                              const tab = tabsStore.at(-1)
-                              if (tab) navigateTab(tab)
-                              else navigate("/")
-                            }}
-                          />
-                        </>
-                      )
-                    }}
-                  </Show>
-                </TitlebarTabStrip>
+                />
                 <Show when={!(creating() && params.dir)}>
                   <IconButtonV2
                     type="button"
@@ -473,8 +496,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                     size="large"
                     class="shrink-0"
                     icon={<IconV2 name="plus" />}
-                    as="a"
-                    href={newSessionHref()}
+                    onClick={openNewTab}
                     aria-label={language.t("command.session.new")}
                   />
                 </Show>

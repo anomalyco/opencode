@@ -7,18 +7,20 @@ import { NodeFileSystem } from "@effect/platform-node"
 import { FSUtil } from "./fs-util"
 import { Global } from "./global"
 import { EffectFlock } from "./util/effect-flock"
+import { LayerNode } from "./effect/layer-node"
+import { filesystem } from "./effect/layer-node-platform"
 import { makeRuntime } from "./effect/runtime"
 import { NpmConfig } from "./npm-config"
 
 export class InstallFailedError extends Schema.TaggedErrorClass<InstallFailedError>()("NpmInstallFailedError", {
   add: Schema.Array(Schema.String).pipe(Schema.optional),
   dir: Schema.String,
-  cause: Schema.optional(Schema.Defect),
+  cause: Schema.optional(Schema.Defect()),
 }) {}
 
 export interface EntryPoint {
   readonly directory: string
-  readonly entrypoint: Option.Option<string>
+  readonly entrypoint?: string
 }
 
 export interface Interface {
@@ -32,7 +34,7 @@ export interface Interface {
       }[]
     },
   ) => Effect.Effect<void, EffectFlock.LockError | InstallFailedError>
-  readonly which: (pkg: string, bin?: string) => Effect.Effect<Option.Option<string>>
+  readonly which: (pkg: string, bin?: string) => Effect.Effect<string | undefined>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Npm") {}
@@ -45,12 +47,11 @@ export function sanitize(pkg: string) {
 }
 
 const resolveEntryPoint = (name: string, dir: string): EntryPoint => {
-  let entrypoint: Option.Option<string>
+  let entrypoint: string | undefined
   try {
-    const resolved = typeof Bun !== "undefined" ? import.meta.resolve(name, dir) : import.meta.resolve(dir)
-    entrypoint = Option.some(resolved)
+    entrypoint = typeof Bun !== "undefined" ? import.meta.resolve(name, dir) : import.meta.resolve(dir)
   } catch {
-    entrypoint = Option.none()
+    entrypoint = undefined
   }
   return {
     directory: dir,
@@ -128,7 +129,7 @@ export const layer = Layer.effect(
       const first = tree.edgesOut.values().next().value?.to
       if (!first) {
         const result = resolveEntryPoint(name, path.join(dir, "node_modules", name))
-        if (Option.isSome(result.entrypoint)) return result
+        if (result.entrypoint) return result
         return yield* new InstallFailedError({ add: [pkg], dir })
       }
       return resolveEntryPoint(first.name, first.path)
@@ -217,22 +218,24 @@ export const layer = Layer.effect(
         return Option.some(files[0])
       })
 
-      return yield* Effect.gen(function* () {
-        const bin = yield* pick()
-        if (Option.isSome(bin)) {
-          return Option.some(path.join(binDir, bin.value))
-        }
+      return Option.getOrUndefined(
+        yield* Effect.gen(function* () {
+          const bin = yield* pick()
+          if (Option.isSome(bin)) {
+            return Option.some(path.join(binDir, bin.value))
+          }
 
-        yield* fs.remove(path.join(dir, "package-lock.json")).pipe(Effect.orElseSucceed(() => {}))
+          yield* fs.remove(path.join(dir, "package-lock.json")).pipe(Effect.orElseSucceed(() => {}))
 
-        yield* add(pkg)
+          yield* add(pkg)
 
-        const resolved = yield* pick()
-        if (Option.isNone(resolved)) return Option.none<string>()
-        return Option.some(path.join(binDir, resolved.value))
-      }).pipe(
-        Effect.scoped,
-        Effect.orElseSucceed(() => Option.none<string>()),
+          const resolved = yield* pick()
+          if (Option.isNone(resolved)) return Option.none<string>()
+          return Option.some(path.join(binDir, resolved.value))
+        }).pipe(
+          Effect.scoped,
+          Effect.orElseSucceed(() => Option.none<string>()),
+        ),
       )
     })
 
@@ -250,6 +253,7 @@ export const defaultLayer = layer.pipe(
   Layer.provide(Global.layer),
   Layer.provide(NodeFileSystem.layer),
 )
+export const node = LayerNode.make(layer, [FSUtil.node, Global.node, filesystem, EffectFlock.node])
 
 const { runPromise } = makeRuntime(Service, defaultLayer)
 
@@ -258,14 +262,9 @@ export async function install(...args: Parameters<Interface["install"]>) {
 }
 
 export async function add(...args: Parameters<Interface["add"]>) {
-  const entry = await runPromise((svc) => svc.add(...args))
-  return {
-    directory: entry.directory,
-    entrypoint: Option.getOrUndefined(entry.entrypoint),
-  }
+  return runPromise((svc) => svc.add(...args))
 }
 
 export async function which(...args: Parameters<Interface["which"]>) {
-  const resolved = await runPromise((svc) => svc.which(...args))
-  return Option.getOrUndefined(resolved)
+  return runPromise((svc) => svc.which(...args))
 }

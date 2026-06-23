@@ -1,6 +1,7 @@
 import { test, expect, describe, afterEach, beforeEach, spyOn } from "bun:test"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
-import { Effect, Exit, Layer, Option } from "effect"
+import { Cause, Effect, Exit, Layer } from "effect"
+import { NamedError } from "@opencode-ai/core/util/error"
 import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/unstable/http"
 import { NodeFileSystem, NodePath } from "@effect/platform-node"
 import { Config } from "@/config/config"
@@ -12,7 +13,6 @@ import { InstanceRef } from "../../src/effect/instance-ref"
 import type { InstanceContext } from "../../src/project/instance-context"
 import { Auth } from "../../src/auth"
 import { Account } from "../../src/account/account"
-import { AccessToken, AccountID, OrgID } from "../../src/account/schema"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Env } from "../../src/env"
 import {
@@ -71,6 +71,7 @@ const wellKnownAuth = (url: string) =>
 function remoteConfigClient(input: {
   wellKnown: unknown
   remote?: unknown
+  remoteHtml?: string
   seen: { wellKnown?: string; remote?: string; authorization?: string }
 }) {
   return HttpClient.make((request) => {
@@ -78,9 +79,17 @@ function remoteConfigClient(input: {
       input.seen.wellKnown = request.url
       return Effect.succeed(json(request, input.wellKnown))
     }
-    if (input.remote !== undefined && request.url.includes("config.example.com")) {
+    if (request.url.includes("config.example.com") && (input.remote !== undefined || input.remoteHtml !== undefined)) {
       input.seen.remote = request.url
       input.seen.authorization = request.headers.authorization
+      if (input.remoteHtml !== undefined) {
+        return Effect.succeed(
+          HttpClientResponse.fromWeb(
+            request,
+            new Response(input.remoteHtml, { status: 200, headers: { "content-type": "text/html; charset=utf-8" } }),
+          ),
+        )
+      }
       return Effect.succeed(json(request, input.remote))
     }
     return Effect.succeed(json(request, {}, 404))
@@ -131,7 +140,6 @@ const clear = (wait = false) => Effect.runPromise(clearEffect(wait))
 // Get managed config directory from environment (set in preload.ts)
 const managedConfigDir = process.env.OPENCODE_TEST_MANAGED_CONFIG_DIR!
 const originalTestToken = process.env.TEST_TOKEN
-const originalConsoleToken = process.env.OPENCODE_CONSOLE_TOKEN
 
 beforeEach(async () => {
   await clear(true)
@@ -141,8 +149,6 @@ afterEach(async () => {
   await fs.rm(managedConfigDir, { force: true, recursive: true }).catch(() => {})
   if (originalTestToken === undefined) delete process.env.TEST_TOKEN
   else process.env.TEST_TOKEN = originalTestToken
-  if (originalConsoleToken === undefined) delete process.env.OPENCODE_CONSOLE_TOKEN
-  else process.env.OPENCODE_CONSOLE_TOKEN = originalConsoleToken
   await clear(true)
 })
 
@@ -214,6 +220,7 @@ const wellKnown = (input: {
   config?: unknown
   remoteConfig?: { url: string; headers?: Record<string, string> }
   remote?: unknown
+  remoteHtml?: string
   wellKnown?: unknown
 }) => {
   const seen: { wellKnown?: string; remote?: string; authorization?: string } = {}
@@ -224,6 +231,7 @@ const wellKnown = (input: {
       ...(input.remoteConfig !== undefined ? { remote_config: input.remoteConfig } : {}),
     },
     remote: input.remote,
+    remoteHtml: input.remoteHtml,
   })
   return {
     seen,
@@ -552,49 +560,6 @@ it.instance("handles file inclusion with replacement tokens", () =>
   }),
 )
 
-const accountTokenIt = configIt({
-  account: Layer.mock(Account.Service)({
-    active: () =>
-      Effect.succeed(
-        Option.some({
-          id: AccountID.make("account-1"),
-          email: "user@example.com",
-          url: "https://control.example.com",
-          active_org_id: OrgID.make("org-1"),
-        }),
-      ),
-    activeOrg: () =>
-      Effect.succeed(
-        Option.some({
-          account: {
-            id: AccountID.make("account-1"),
-            email: "user@example.com",
-            url: "https://control.example.com",
-            active_org_id: OrgID.make("org-1"),
-          },
-          org: {
-            id: OrgID.make("org-1"),
-            name: "Example Org",
-          },
-        }),
-      ),
-    config: () =>
-      Effect.succeed(
-        Option.some({
-          provider: { opencode: { options: { apiKey: "{env:OPENCODE_CONSOLE_TOKEN}" } } },
-        }),
-      ),
-    token: () => Effect.succeed(Option.some(AccessToken.make("st_test_token"))),
-  }),
-})
-
-accountTokenIt.instance("resolves env templates in account config with account token", () =>
-  Effect.gen(function* () {
-    const config = yield* Config.use.get()
-    expect(config.provider?.["opencode"]?.options?.apiKey).toBe("st_test_token")
-  }),
-)
-
 it.instance("validates config schema and throws on invalid fields", () =>
   Effect.gen(function* () {
     const test = yield* TestInstance
@@ -718,6 +683,26 @@ it.instance("migrates mode field to agent field", () =>
       mode: "primary",
       options: {},
       permission: {},
+    })
+  }),
+)
+
+it.instance("accepts the deprecated reference field", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* writeConfigEffect(test.directory, {
+      $schema: "https://opencode.ai/config.json",
+      reference: {
+        local: { path: "../library" },
+        sdk: { repository: "github.com/example/sdk", branch: "main" },
+        shorthand: "github.com/example/docs",
+      },
+    })
+    const config = yield* Config.use.get()
+    expect(config.reference).toEqual({
+      local: { path: "../library" },
+      sdk: { repository: "github.com/example/sdk", branch: "main" },
+      shorthand: "github.com/example/docs",
     })
   }),
 )
@@ -1613,6 +1598,24 @@ invalidRemoteWellKnown.it.instance("wellknown remote_config rejects non-object c
     expect(invalidRemoteWellKnown.seen.remote).toBe("https://config.example.com/opencode.json")
     expect(Exit.isFailure(exit)).toBe(true)
   }),
+)
+
+const loginPageWellKnown = wellKnown({
+  remoteConfig: { url: "https://config.example.com/opencode.json" },
+  remoteHtml: "<!DOCTYPE html><html><head><title>Sign in</title></head><body>Login required</body></html>",
+})
+
+loginPageWellKnown.it.instance(
+  "wellknown remote_config surfaces an actionable auth error when the gateway returns an HTML login page",
+  () =>
+    Effect.gen(function* () {
+      const exit = yield* Config.use.get().pipe(Effect.exit)
+      expect(loginPageWellKnown.seen.remote).toBe("https://config.example.com/opencode.json")
+      expect(Exit.isFailure(exit)).toBe(true)
+      const error = Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined
+      expect(NamedError.hasName(error, "ConfigRemoteAuthError")).toBe(true)
+      expect((error as { data?: { url?: string } }).data?.url).toBe("https://example.com")
+    }),
 )
 
 describe("resolvePluginSpec", () => {

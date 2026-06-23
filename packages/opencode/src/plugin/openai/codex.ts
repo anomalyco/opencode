@@ -1,13 +1,11 @@
 import type { Hooks, PluginInput } from "@opencode-ai/plugin"
-import * as Log from "@opencode-ai/core/util/log"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { OAUTH_DUMMY_KEY } from "../../auth"
 import os from "os"
 import { setTimeout as sleep } from "node:timers/promises"
 import { createServer } from "http"
 import { OpenAIWebSocketPool } from "./ws-pool"
-
-const log = Log.create({ service: "plugin.codex" })
+import { escapeHtml } from "@/util/html"
 
 const CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
 const ISSUER = "https://auth.openai.com"
@@ -15,6 +13,7 @@ const CODEX_API_ENDPOINT = "https://chatgpt.com/backend-api/codex/responses"
 const OAUTH_PORT = 1455
 const OAUTH_POLLING_SAFETY_MARGIN_MS = 3000
 const ALLOWED_MODELS = new Set(["gpt-5.5", "gpt-5.3-codex-spark", "gpt-5.4", "gpt-5.4-mini"])
+const DISALLOWED_MODELS = new Set(["gpt-5.5-pro"])
 
 interface PkceCodes {
   verifier: string
@@ -181,7 +180,7 @@ const HTML_SUCCESS = `<!doctype html>
   </body>
 </html>`
 
-const HTML_ERROR = (error: string) => `<!doctype html>
+export const renderOAuthError = (error: string) => `<!doctype html>
 <html>
   <head>
     <title>OpenCode - Codex Authorization Failed</title>
@@ -224,7 +223,7 @@ const HTML_ERROR = (error: string) => `<!doctype html>
     <div class="container">
       <h1>Authorization Failed</h1>
       <p>An error occurred during authorization.</p>
-      <div class="error">${error}</div>
+      <div class="error">${escapeHtml(error)}</div>
     </div>
   </body>
 </html>`
@@ -257,8 +256,8 @@ async function startOAuthServer(): Promise<{ port: number; redirectUri: string }
         const errorMsg = errorDescription || error
         pendingOAuth?.reject(new Error(errorMsg))
         pendingOAuth = undefined
-        res.writeHead(200, { "Content-Type": "text/html" })
-        res.end(HTML_ERROR(errorMsg))
+        res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" })
+        res.end(renderOAuthError(errorMsg))
         return
       }
 
@@ -266,8 +265,8 @@ async function startOAuthServer(): Promise<{ port: number; redirectUri: string }
         const errorMsg = "Missing authorization code"
         pendingOAuth?.reject(new Error(errorMsg))
         pendingOAuth = undefined
-        res.writeHead(400, { "Content-Type": "text/html" })
-        res.end(HTML_ERROR(errorMsg))
+        res.writeHead(400, { "Content-Type": "text/html; charset=utf-8" })
+        res.end(renderOAuthError(errorMsg))
         return
       }
 
@@ -275,8 +274,8 @@ async function startOAuthServer(): Promise<{ port: number; redirectUri: string }
         const errorMsg = "Invalid state - potential CSRF attack"
         pendingOAuth?.reject(new Error(errorMsg))
         pendingOAuth = undefined
-        res.writeHead(400, { "Content-Type": "text/html" })
-        res.end(HTML_ERROR(errorMsg))
+        res.writeHead(400, { "Content-Type": "text/html; charset=utf-8" })
+        res.end(renderOAuthError(errorMsg))
         return
       }
 
@@ -287,7 +286,7 @@ async function startOAuthServer(): Promise<{ port: number; redirectUri: string }
         .then((tokens) => current.resolve(tokens))
         .catch((err) => current.reject(err))
 
-      res.writeHead(200, { "Content-Type": "text/html" })
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" })
       res.end(HTML_SUCCESS)
       return
     }
@@ -306,7 +305,6 @@ async function startOAuthServer(): Promise<{ port: number; redirectUri: string }
 
   await new Promise<void>((resolve, reject) => {
     oauthServer!.listen(OAUTH_PORT, () => {
-      log.info("codex oauth server started", { port: OAUTH_PORT })
       resolve()
     })
     oauthServer!.on("error", reject)
@@ -317,9 +315,7 @@ async function startOAuthServer(): Promise<{ port: number; redirectUri: string }
 
 function stopOAuthServer() {
   if (oauthServer) {
-    oauthServer.close(() => {
-      log.info("codex oauth server stopped")
-    })
+    oauthServer.close(() => {})
     oauthServer = undefined
   }
 }
@@ -375,6 +371,7 @@ export async function CodexAuthPlugin(input: PluginInput, options: CodexAuthPlug
           Object.entries(provider.models)
             .filter(([, model]) => {
               if (ALLOWED_MODELS.has(model.api.id)) return true
+              if (DISALLOWED_MODELS.has(model.api.id)) return false
               const match = model.api.id.match(/^gpt-(\d+\.\d+)/)
               return match ? parseFloat(match[1]) > 5.4 : false
             })
@@ -442,7 +439,6 @@ export async function CodexAuthPlugin(input: PluginInput, options: CodexAuthPlug
 
             if (!currentAuth.access || currentAuth.expires < Date.now()) {
               if (!refreshPromise) {
-                log.info("refreshing codex access token")
                 refreshPromise = refreshAccessToken(currentAuth.refresh, issuer)
                   .then(async (tokens) => {
                     const accountId = extractAccountId(tokens) || authWithAccount.accountId

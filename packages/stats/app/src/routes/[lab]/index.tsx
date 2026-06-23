@@ -6,7 +6,6 @@ import {
   type ModelUsagePoint,
   type StatsLabData,
 } from "@opencode-ai/stats-core/domain/home"
-import { runtime } from "@opencode-ai/stats-core/runtime"
 import { createAsync, query, useParams } from "@solidjs/router"
 import { createMemo, createSignal, For, onMount, Show, type JSX } from "solid-js"
 import { getRequestEvent } from "solid-js/web"
@@ -17,6 +16,7 @@ import {
   type ModelCatalogEntry,
   type ModelCatalogLab,
 } from "../model-catalog"
+import { runStatsEffect } from "../../stats-runtime"
 import {
   applyThemePreference,
   Footer,
@@ -28,14 +28,17 @@ import {
   type ThemePreference,
 } from "../stats-shell"
 
-const statsLabFallbackUrl = "https://stats.opencode.ai"
+const statsCanonicalBaseUrl = "https://opencode.ai/data/"
+const statsUnfurlPath = "banner.png"
+const statsUnfurlAlt = "OpenCode Data wordmark on a dark patterned background"
+const statsUnfurlUrl = new URL(statsUnfurlPath, statsCanonicalBaseUrl).toString()
 const labHeaderLinks: readonly HeaderLink[] = [
   { href: "#overview", label: "Overview" },
   { href: "#usage", label: "Usage" },
   { href: "#models", label: "Models" },
 ]
 const labFooterLinks: readonly HeaderLink[] = [
-  { href: import.meta.env.BASE_URL, label: "Stats Home" },
+  { href: import.meta.env.BASE_URL, label: "Data Home" },
   { href: `${import.meta.env.BASE_URL}#top-models`, label: "Top Models" },
   { href: `${import.meta.env.BASE_URL}#market-share`, label: "Market Share" },
   { href: `${import.meta.env.BASE_URL}#geo-breakdown`, label: "Geo Breakdown" },
@@ -43,7 +46,7 @@ const labFooterLinks: readonly HeaderLink[] = [
 
 const getLabData = query(async (lab: string) => {
   "use server"
-  return runtime.runPromise(getStatsLabData(lab))
+  return runStatsEffect(getStatsLabData(lab))
 }, "getStatsLabData")
 
 export default function StatsLab() {
@@ -66,17 +69,12 @@ export default function StatsLab() {
   const githubStars = createAsync(() => getGitHubStars())
   const [themePreference, setThemePreference] = createSignal<ThemePreference>("system")
   const labName = createMemo(() => lab()?.name ?? formatCatalogLabName(labParam()))
-  const labTitle = createMemo(() => `${labName()} Models`)
+  const labTitle = createMemo(() => `${labName()} AI Model Usage & Rankings | OpenCode Data`)
   const labDescription = createMemo(
     () =>
-      `Explore ${labName()} models used in OpenCode, with recent token usage, context windows, release dates, and model-specific stats.`,
+      `Compare ${labName()} models used in OpenCode Go, including token usage, model rankings, context windows, release dates, costs, and model-specific data.`,
   )
-  const labUrl = createMemo(() =>
-    new URL(
-      `${import.meta.env.BASE_URL}${lab()?.id ?? labParam()}`,
-      event?.request.url ?? (typeof window === "undefined" ? statsLabFallbackUrl : window.location.href),
-    ).toString(),
-  )
+  const labUrl = createMemo(() => new URL(lab()?.id ?? labParam(), statsCanonicalBaseUrl).toString())
   const updateThemePreference = (preference: ThemePreference) => {
     applyThemePreference(preference)
     setThemePreference(preference)
@@ -102,9 +100,16 @@ export default function StatsLab() {
       <Meta property="og:title" content={labTitle()} />
       <Meta property="og:description" content={labDescription()} />
       <Meta property="og:url" content={labUrl()} />
-      <Meta name="twitter:card" content="summary" />
+      <Meta property="og:image" content={statsUnfurlUrl} />
+      <Meta property="og:image:type" content="image/png" />
+      <Meta property="og:image:width" content="1200" />
+      <Meta property="og:image:height" content="630" />
+      <Meta property="og:image:alt" content={statsUnfurlAlt} />
+      <Meta name="twitter:card" content="summary_large_image" />
       <Meta name="twitter:title" content={labTitle()} />
       <Meta name="twitter:description" content={labDescription()} />
+      <Meta name="twitter:image" content={statsUnfurlUrl} />
+      <Meta name="twitter:image:alt" content={statsUnfurlAlt} />
       <Header githubStars={githubStars() ?? "150K"} links={labHeaderLinks} brandHref={import.meta.env.BASE_URL} />
       <div data-component="container">
         <div data-component="content">
@@ -136,7 +141,7 @@ function LabLoading() {
       <div data-slot="model-hero-grid">
         <div data-slot="model-hero-copy">
           <a data-slot="model-back-link" href={import.meta.env.BASE_URL}>
-            Stats
+            Data
           </a>
           <h1>Model Lab</h1>
           <p>Reading model availability and recent OpenCode usage.</p>
@@ -152,7 +157,7 @@ function LabNotFound(props: { lab: string }) {
       <div data-slot="model-hero-grid">
         <div data-slot="model-hero-copy">
           <a data-slot="model-back-link" href={import.meta.env.BASE_URL}>
-            Stats
+            Data
           </a>
           <h1>{formatCatalogLabName(props.lab)}</h1>
           <p>No models matched this lab.</p>
@@ -175,7 +180,7 @@ function LabHero(props: { lab: ModelCatalogLab; stats: StatsLabData | null }) {
   return (
     <section id="overview" data-section="lab-hero">
       <a data-slot="model-back-link" href={import.meta.env.BASE_URL}>
-        Stats
+        Data
       </a>
       <div data-slot="model-hero-grid">
         <div data-slot="model-hero-copy">
@@ -184,7 +189,7 @@ function LabHero(props: { lab: ModelCatalogLab; stats: StatsLabData | null }) {
           <p>
             Explore {props.lab.models.length} {props.lab.name} models used in OpenCode
             <Show when={featuredModels().length > 0}> including {formatList(featuredModels())}</Show>. Compare recent
-            token usage, context windows, release dates, and model-specific stats.
+            token usage, context windows, release dates, and model-specific data.
           </p>
         </div>
         <div data-component="model-rank-panel">

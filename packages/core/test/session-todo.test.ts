@@ -11,10 +11,7 @@ import { SessionTable, TodoTable } from "@opencode-ai/core/session/sql"
 import { SessionTodo } from "@opencode-ai/core/session/todo"
 import { testEffect } from "./lib/effect"
 
-const database = Database.layerFromPath(":memory:")
-const events = EventV2.layer.pipe(Layer.provide(database))
-const todos = SessionTodo.layer.pipe(Layer.provide(database), Layer.provide(events))
-const it = testEffect(Layer.mergeAll(database, events, todos))
+const it = testEffect(Layer.mergeAll(Database.defaultLayer, EventV2.defaultLayer, SessionTodo.defaultLayer))
 const sessionID = SessionV2.ID.make("ses_todo_test")
 
 const setup = Effect.gen(function* () {

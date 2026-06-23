@@ -132,14 +132,11 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
             text: event.data.prompt.text,
             files: event.data.prompt.files,
             agents: event.data.prompt.agents,
-            references: event.data.prompt.references,
             time: { created: event.data.timestamp },
           }),
         )
       },
       "session.next.prompt.admitted": () => Effect.void,
-      "session.next.prompt.promoted": () => Effect.void,
-      "session.next.interrupt.requested": () => Effect.void,
       "session.next.context.updated": (event) =>
         adapter.appendMessage(
           new SessionMessage.System({

@@ -1,11 +1,10 @@
 import { afterEach, describe, expect, test } from "bun:test"
+import { EventV2 } from "@opencode-ai/core/event"
+import { Location } from "@opencode-ai/core/location"
 import { Context, Schema } from "effect"
 import { HttpApiApp } from "../../src/server/routes/instance/httpapi/server"
-import * as Log from "@opencode-ai/core/util/log"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, tmpdir } from "../fixture/fixture"
-
-void Log.init({ print: false })
 
 const context = Context.empty() as Context.Context<unknown>
 
@@ -22,12 +21,9 @@ function request(route: string, directory: string, init: RequestInit = {}) {
 }
 
 const Event = Schema.Struct({
-  id: Schema.String,
+  id: EventV2.ID,
   type: Schema.String,
-  location: Schema.Struct({
-    directory: Schema.String,
-    project: Schema.Struct({ id: Schema.String, directory: Schema.String }),
-  }),
+  location: Schema.optional(Location.Ref),
   data: Schema.Unknown,
 })
 
@@ -51,6 +47,17 @@ afterEach(async () => {
 })
 
 describe("v2 location HttpApi", () => {
+  test("decodes EventV2 location refs without resolved project metadata", () => {
+    expect(
+      Schema.decodeUnknownSync(Event)({
+        id: "evt_test",
+        type: "file.watcher.updated",
+        location: { directory: "/tmp/project" },
+        data: {},
+      }),
+    ).toMatchObject({ location: { directory: "/tmp/project" } })
+  })
+
   test("returns command and skill snapshots with resolved locations", async () => {
     await using tmp = await tmpdir({ git: true })
 
@@ -67,17 +74,20 @@ describe("v2 location HttpApi", () => {
     }
   })
 
-  test("streams native EventV2 payloads with resolved locations", async () => {
-    await using tmp = await tmpdir({ git: true })
-    const response = await request("/api/event", tmp.path)
+  test("streams native EventV2 payloads across locations", async () => {
+    await using subscriber = await tmpdir({ git: true })
+    await using publisher = await tmpdir({ git: true })
+    const response = await request("/api/event", subscriber.path)
     const reader = response.body!.getReader()
-    expect((await readEvent(reader)).type).toBe("server.connected")
+    const connected = await readEvent(reader)
+    expect(connected.type).toBe("server.connected")
+    expect(connected.location).toBeUndefined()
 
-    const created = await request("/session", tmp.path, { method: "POST" })
+    const created = await request("/session", publisher.path, { method: "POST" })
     expect(created.status).toBe(200)
     expect(await readEventType(reader, "session.created")).toMatchObject({
       type: "session.created",
-      location: { directory: tmp.path, project: { directory: tmp.path } },
+      location: { directory: publisher.path },
       data: { sessionID: expect.any(String) },
     })
     await reader.cancel()

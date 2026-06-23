@@ -11,7 +11,7 @@ import { WorkspacePaths } from "../../src/server/routes/instance/httpapi/groups/
 import { EventPaths } from "../../src/server/routes/instance/httpapi/groups/event"
 import { Session } from "@/session/session"
 import { Database } from "@opencode-ai/core/database/database"
-import * as Log from "@opencode-ai/core/util/log"
+import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { Server } from "../../src/server/server"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, provideInstance, tmpdirScoped } from "../fixture/fixture"
@@ -21,8 +21,6 @@ import { Project } from "../../src/project/project"
 import { InstancePaths } from "../../src/server/routes/instance/httpapi/groups/instance"
 import { testEffect } from "../lib/effect"
 import { httpApiLayer, requestInDirectory } from "./httpapi-layer"
-
-void Log.init({ print: false })
 
 const originalWorkspaces = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
 const workspaceLayer = Workspace.defaultLayer.pipe(
@@ -37,7 +35,7 @@ const it = testEffect(
     InstanceStore.defaultLayer.pipe(Layer.provide(InstanceBootstrap.defaultLayer)),
     Database.defaultLayer,
     httpApiLayer,
-  ),
+  ).pipe(Layer.provide(Ripgrep.defaultLayer)),
 )
 
 function request(path: string, directory: string, init: RequestInit = {}) {

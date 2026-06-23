@@ -5,7 +5,7 @@ import { geoEquirectangular, geoPath } from "d3-geo"
 import { scaleSqrt } from "d3-scale"
 import countryCodesSource from "i18n-iso-countries/codes.json?raw"
 import { feature, mesh } from "topojson-client"
-import countriesTopologySource from "world-atlas/countries-110m.json?raw"
+import countriesTopologySource from "world-atlas/countries-50m.json?raw"
 import {
   getStatsModelData,
   type CountryEntry,
@@ -14,13 +14,19 @@ import {
   type StatsModelData,
   type UsageRange,
 } from "@opencode-ai/stats-core/domain/home"
-import { runtime } from "@opencode-ai/stats-core/runtime"
 import { createAsync, query, useParams } from "@solidjs/router"
 import { createMemo, createSignal, For, onMount, Show, type JSX } from "solid-js"
 import { getRequestEvent } from "solid-js/web"
 import type { FeatureCollection, GeometryObject, GeoJsonProperties } from "geojson"
 import type { GeometryCollection, Topology } from "topojson-specification"
-import { findModelCatalogEntry, formatCatalogLabName, getModelCatalog, type ModelCatalogEntry } from "../model-catalog"
+import {
+  findModelCatalogEntry,
+  formatCatalogLabName,
+  getModelCatalog,
+  type ModelCatalogCost,
+  type ModelCatalogEntry,
+} from "../model-catalog"
+import { runStatsEffect } from "../../stats-runtime"
 import {
   applyThemePreference,
   Footer,
@@ -32,16 +38,20 @@ import {
   type ThemePreference,
 } from "../stats-shell"
 
-const statsModelFallbackUrl = "https://stats.opencode.ai"
+const statsCanonicalBaseUrl = "https://opencode.ai/data/"
+const statsUnfurlPath = "banner.png"
+const statsUnfurlAlt = "OpenCode Data wordmark on a dark patterned background"
+const statsUnfurlUrl = new URL(statsUnfurlPath, statsCanonicalBaseUrl).toString()
 const modelHeaderLinks: readonly HeaderLink[] = [
   { href: "#overview", label: "Overview" },
   { href: "#usage", label: "Usage" },
+  { href: "#users", label: "Users" },
   { href: "#efficiency", label: "Efficiency" },
   { href: "#geo-breakdown", label: "Geo Breakdown" },
   { href: "#peers", label: "Peers" },
 ]
 const modelFooterLinks: readonly HeaderLink[] = [
-  { href: import.meta.env.BASE_URL, label: "Stats Home" },
+  { href: import.meta.env.BASE_URL, label: "Data Home" },
   { href: `${import.meta.env.BASE_URL}#top-models`, label: "Top Models" },
   { href: `${import.meta.env.BASE_URL}#leaderboard`, label: "Leaderboard" },
   { href: `${import.meta.env.BASE_URL}#session-cost`, label: "Session Cost" },
@@ -80,12 +90,13 @@ const worldPath = geoPath(worldProjection)
 const worldCountryPaths = worldCountries.features.map((country) => ({
   id: String(country.id ?? "").padStart(3, "0"),
   path: worldPath(country) ?? "",
+  marker: geoCountryMarker(country),
 }))
 const worldBorderPath = worldPath(mesh(worldTopology, worldCountryGeometries, (a, b) => a !== b)) ?? ""
 
 const getModelData = query(async (lab: string, model: string) => {
   "use server"
-  return runtime.runPromise(getStatsModelData(model, lab))
+  return runStatsEffect(getStatsModelData(model, lab))
 }, "getStatsModelData")
 
 export default function StatsModel() {
@@ -110,16 +121,15 @@ export default function StatsModel() {
   const [themePreference, setThemePreference] = createSignal<ThemePreference>("system")
   const modelName = createMemo(() => catalogEntry()?.name ?? stats()?.model ?? modelParam() ?? "Model")
   const labName = createMemo(() => formatCatalogLabName(catalogEntry()?.lab ?? stats()?.provider ?? labParam()))
-  const modelTitle = createMemo(() => `${modelName()} Stats`)
-  const modelDescription = createMemo(() =>
-    stats()
-      ? `${modelName()} usage, rank, token mix, cost, geo breakdown, and peer stats across OpenCode.`
-      : `${modelName()} model facts, limits, and OpenCode usage availability.`,
+  const modelTitle = createMemo(() => `${modelName()} Usage, Cost & Rank | OpenCode Data`)
+  const modelDescription = createMemo(
+    () =>
+      `View ${modelName()} OpenCode Go usage data, including token volume, weekly rank, token mix, costs, cache ratio, sessions, geo breakdowns, and peer models.`,
   )
   const modelUrl = createMemo(() =>
     new URL(
-      `${import.meta.env.BASE_URL}${catalogEntry()?.id ?? `${labParam()}/${stats()?.slug ?? modelParam()}`}`,
-      event?.request.url ?? (typeof window === "undefined" ? statsModelFallbackUrl : window.location.href),
+      catalogEntry()?.id ?? [labParam(), stats()?.slug ?? modelParam()].filter((part) => part.length > 0).join("/"),
+      statsCanonicalBaseUrl,
     ).toString(),
   )
   const updateThemePreference = (preference: ThemePreference) => {
@@ -147,9 +157,16 @@ export default function StatsModel() {
       <Meta property="og:title" content={modelTitle()} />
       <Meta property="og:description" content={modelDescription()} />
       <Meta property="og:url" content={modelUrl()} />
-      <Meta name="twitter:card" content="summary" />
+      <Meta property="og:image" content={statsUnfurlUrl} />
+      <Meta property="og:image:type" content="image/png" />
+      <Meta property="og:image:width" content="1200" />
+      <Meta property="og:image:height" content="630" />
+      <Meta property="og:image:alt" content={statsUnfurlAlt} />
+      <Meta name="twitter:card" content="summary_large_image" />
       <Meta name="twitter:title" content={modelTitle()} />
       <Meta name="twitter:description" content={modelDescription()} />
+      <Meta name="twitter:image" content={statsUnfurlUrl} />
+      <Meta name="twitter:image:alt" content={statsUnfurlAlt} />
       <Header githubStars={githubStars() ?? "150K"} links={modelHeaderLinks} brandHref={import.meta.env.BASE_URL} />
       <div data-component="container">
         <div data-component="content">
@@ -159,7 +176,8 @@ export default function StatsModel() {
                 <ModelHero data={stats() ?? null} catalog={catalogEntry() ?? null} labName={labName()} />
                 <ModelOverview data={stats() ?? null} />
                 <ModelUsageSection data={stats()?.usage ?? []} />
-                <ModelEfficiencySection data={stats() ?? null} />
+                <ModelUsersSection data={stats()?.usage ?? []} />
+                <ModelEfficiencySection data={stats() ?? null} catalog={catalogEntry() ?? null} />
                 <ModelGeoBreakdownSection data={stats()?.country ?? emptyCountryRecord()} />
                 <ModelPeersSection data={stats() ?? null} />
               </>
@@ -183,15 +201,15 @@ function ModelLoading() {
         <div data-slot="model-hero-grid">
           <div data-slot="model-hero-copy">
             <a data-slot="model-back-link" href={import.meta.env.BASE_URL}>
-              Stats
+              Data
             </a>
-            <h1>Model Stats</h1>
+            <h1>Model Data</h1>
             <p>Reading model aggregates from model_stat.</p>
           </div>
         </div>
       </section>
       <section data-section="model-panel">
-        <ModelEmptyState title="Loading model stats" description="Reading the model profile." />
+        <ModelEmptyState title="Loading model data" description="Reading the model profile." />
       </section>
     </>
   )
@@ -204,7 +222,7 @@ function ModelNotFound(props: { lab: string; model: string }) {
         <div data-slot="model-hero-grid">
           <div data-slot="model-hero-copy">
             <a data-slot="model-back-link" href={import.meta.env.BASE_URL}>
-              Stats
+              Data
             </a>
             <h1>{props.model || "Model"}</h1>
             <p>No model facts or model_stat rows matched {props.lab ? `${props.lab}/${props.model}` : props.model}.</p>
@@ -225,7 +243,7 @@ function ModelHero(props: { data: StatsModelData | null; catalog: ModelCatalogEn
   return (
     <section id="overview" data-section="model-hero">
       <a data-slot="model-back-link" href={import.meta.env.BASE_URL}>
-        Stats
+        Data
       </a>
       <div data-slot="model-hero-grid">
         <div data-slot="model-hero-copy">
@@ -240,13 +258,15 @@ function ModelHero(props: { data: StatsModelData | null; catalog: ModelCatalogEn
           <Show
             when={props.data}
             fallback={
-              <p>Model facts from the shared model index. OpenCode usage appears once this model has activity.</p>
+              <p>Model facts from the shared model index. OpenCode Go usage appears once this model has activity.</p>
             }
           >
             {(data) => (
               <p>
-                Ranked #{data().rank} across recent OpenCode token usage with {formatPercent(data().tokenShare)} of
-                observed volume.
+                {data().rank === null
+                  ? "Unranked across last week's OpenCode Go usage"
+                  : `Ranked #${data().rank} across last week's OpenCode Go usage`}{" "}
+                with {formatPercent(data().tokenShare)} of observed 2M volume.
               </p>
             )}
           </Show>
@@ -261,9 +281,9 @@ function ModelHero(props: { data: StatsModelData | null; catalog: ModelCatalogEn
         <Show when={props.data} fallback={<ModelCatalogCallout catalog={props.catalog} />}>
           {(data) => (
             <div data-component="model-rank-panel">
-              <span>Current Rank</span>
-              <strong>#{data().rank}</strong>
-              <p>{formatRankMoveLabel(data().previousRank, data().rank)}</p>
+              <span>7D Rank</span>
+              <strong>{data().rank === null ? "—" : `#${data().rank}`}</strong>
+              <p>{formatModelRankMoveLabel(data())}</p>
             </div>
           )}
         </Show>
@@ -279,7 +299,7 @@ function ModelCatalogCallout(props: { catalog: ModelCatalogEntry | null }) {
     <div data-component="model-rank-panel">
       <span>Model Profile</span>
       <strong>{props.catalog?.releaseDate ? formatCatalogDate(props.catalog.releaseDate) : "Listed"}</strong>
-      <p>No OpenCode usage in the current stats window.</p>
+      <p>No OpenCode Go usage in the current data window.</p>
     </div>
   )
 }
@@ -310,14 +330,17 @@ function CatalogDatum(props: { label: string; value: string }) {
 function ModelOverview(props: { data: StatsModelData | null }) {
   return (
     <section data-section="model-panel">
-      <SectionTitle title="Overview" description="Recent tokens, sessions, and market position." />
+      <SectionTitle title="Overview" description="Recent OpenCode Go tokens, unique users, and market position." />
       <Show
         when={props.data}
-        fallback={<ModelEmptyState title="No usage summary" description="This model has no OpenCode usage rows yet." />}
+        fallback={
+          <ModelEmptyState title="No usage summary" description="This model has no OpenCode Go usage rows yet." />
+        }
       >
         {(data) => (
           <div data-component="model-metric-grid">
             <MetricCard label="Tokens" value={formatTokens(data().totals.tokens)} detail="last two months" />
+            <MetricCard label="Unique Users" value={formatUsers(data().totals.uniqueUsers)} detail="last two months" />
             <MetricCard label="Sessions" value={formatInteger(data().totals.sessions)} detail="completed sessions" />
             <MetricCard
               label="Token Share"
@@ -338,8 +361,41 @@ function ModelOverview(props: { data: StatsModelData | null }) {
 }
 
 function ModelUsageSection(props: { data: ModelUsagePoint[] }) {
+  return (
+    <section id="usage" data-section="model-panel">
+      <SectionTitle title="Usage" description="Daily OpenCode Go token volume over the recent two-month window." />
+      <Show
+        when={props.data.some((item) => item.tokens > 0)}
+        fallback={<ModelEmptyState title="No usage" description="No usage landed in the current window." />}
+      >
+        <ModelColumnChart data={props.data} metric="tokens" ariaLabel="Daily token usage chart" />
+      </Show>
+    </section>
+  )
+}
+
+function ModelUsersSection(props: { data: ModelUsagePoint[] }) {
+  return (
+    <section id="users" data-section="model-panel">
+      <SectionTitle
+        title="Unique Users"
+        description="Daily unique OpenCode Go users over the recent two-month window."
+      />
+      <Show
+        when={props.data.some((item) => item.users > 0)}
+        fallback={
+          <ModelEmptyState title="No user data" description="No user-bearing rows landed in the current window." />
+        }
+      >
+        <ModelColumnChart data={props.data} metric="users" ariaLabel="Daily unique user chart" />
+      </Show>
+    </section>
+  )
+}
+
+function ModelColumnChart(props: { data: ModelUsagePoint[]; metric: "tokens" | "users"; ariaLabel: string }) {
   const [activeIndex, setActiveIndex] = createSignal<number>()
-  const max = createMemo(() => Math.max(0, ...props.data.map((item) => item.tokens)) || 1)
+  const max = createMemo(() => Math.max(0, ...props.data.map((item) => modelUsageMetricValue(item, props.metric))) || 1)
   const activePoint = createMemo(() => {
     const index = activeIndex()
     if (index === undefined) return undefined
@@ -347,112 +403,132 @@ function ModelUsageSection(props: { data: ModelUsagePoint[] }) {
   })
 
   return (
-    <section id="usage" data-section="model-panel">
-      <SectionTitle title="Usage" description="Daily token volume over the recent two-month window." />
-      <Show
-        when={props.data.some((item) => item.tokens > 0)}
-        fallback={<ModelEmptyState title="No usage" description="No usage landed in the current window." />}
-      >
-        <div
-          data-component="model-usage-chart"
-          data-dense-labels={isModelUsageDense(props.data.length) ? "true" : undefined}
-          role="img"
-          aria-label="Daily token usage chart"
-          style={{ "--model-usage-count": props.data.length } as JSX.CSSProperties}
-          onPointerLeave={(event) => {
-            if (event.pointerType === "touch") return
-            setActiveIndex(undefined)
-          }}
-        >
-          <div data-slot="model-usage-axis" aria-hidden="true">
-            <For each={props.data}>
-              {(point, index) => (
-                <div
-                  data-active={activeIndex() === index() ? "true" : undefined}
-                  data-label-hidden={isModelUsageLabelHidden(index(), props.data.length) ? "true" : undefined}
-                >
-                  <span data-slot="model-usage-label">
-                    <span data-slot="model-usage-total">{formatTokens(point.tokens)}</span>
-                    <span data-slot="model-usage-date">{point.date}</span>
-                  </span>
-                </div>
-              )}
-            </For>
-          </div>
-          <div data-slot="model-usage-bars">
-            <For each={props.data}>
-              {(point, index) => (
-                <div
-                  data-slot="model-usage-column"
-                  role="button"
-                  tabIndex={0}
-                  aria-label={`${point.date} ${formatTokens(point.tokens)} tokens`}
-                  data-active={activeIndex() === index() ? "true" : undefined}
-                  data-muted={activeIndex() !== undefined && activeIndex() !== index() ? "true" : undefined}
-                  onPointerDown={(event) => {
-                    if (event.pointerType !== "touch") return
-                    setActiveIndex(index())
-                  }}
-                  onPointerEnter={() => setActiveIndex(index())}
-                  onPointerMove={(event) => {
-                    if (event.pointerType === "touch") return
-                    setActiveIndex(index())
-                  }}
-                  onClick={() => setActiveIndex(index())}
-                  onFocus={() => setActiveIndex(index())}
-                  onBlur={() => setActiveIndex(undefined)}
-                  onKeyDown={(event) => {
-                    if (event.key !== "Enter" && event.key !== " ") return
-                    event.preventDefault()
-                    setActiveIndex(index())
-                  }}
-                >
+    <div
+      data-component="model-usage-chart"
+      data-metric={props.metric}
+      data-dense-labels={isModelUsageDense(props.data.length) ? "true" : undefined}
+      role="img"
+      aria-label={props.ariaLabel}
+      style={{ "--model-usage-count": props.data.length } as JSX.CSSProperties}
+      onPointerLeave={(event) => {
+        if (event.pointerType === "touch") return
+        setActiveIndex(undefined)
+      }}
+    >
+      <div data-slot="model-usage-axis" aria-hidden="true">
+        <For each={props.data}>
+          {(point, index) => (
+            <div
+              data-active={activeIndex() === index() ? "true" : undefined}
+              data-label-hidden={isModelUsageLabelHidden(index(), props.data.length) ? "true" : undefined}
+            >
+              <span data-slot="model-usage-label">
+                <span data-slot="model-usage-total">{formatModelUsageValue(point, props.metric)}</span>
+                <span data-slot="model-usage-date">{point.date}</span>
+              </span>
+            </div>
+          )}
+        </For>
+      </div>
+      <div data-slot="model-usage-bars">
+        <For each={props.data}>
+          {(point, index) => (
+            <div
+              data-slot="model-usage-column"
+              role="button"
+              tabIndex={0}
+              aria-label={`${point.date} ${formatModelUsageValue(point, props.metric)} ${modelUsageLabel(props.metric)}`}
+              data-active={activeIndex() === index() ? "true" : undefined}
+              data-muted={activeIndex() !== undefined && activeIndex() !== index() ? "true" : undefined}
+              onPointerDown={(event) => {
+                if (event.pointerType !== "touch") return
+                setActiveIndex(index())
+              }}
+              onPointerEnter={() => setActiveIndex(index())}
+              onPointerMove={(event) => {
+                if (event.pointerType === "touch") return
+                setActiveIndex(index())
+              }}
+              onClick={() => setActiveIndex(index())}
+              onFocus={() => setActiveIndex(index())}
+              onBlur={() => setActiveIndex(undefined)}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter" && event.key !== " ") return
+                event.preventDefault()
+                setActiveIndex(index())
+              }}
+            >
+              <div
+                data-slot="model-usage-bar"
+                style={
+                  {
+                    "--model-usage-fill": `${modelUsageHeight(modelUsageMetricValue(point, props.metric), max())}%`,
+                  } as JSX.CSSProperties
+                }
+              />
+              <Show when={activeIndex() === index() && activePoint()}>
+                {(active) => (
                   <div
-                    data-slot="model-usage-bar"
-                    style={{ "--model-usage-fill": `${modelUsageHeight(point.tokens, max())}%` } as JSX.CSSProperties}
-                  />
-                  <Show when={activeIndex() === index() && activePoint()}>
-                    {(active) => (
-                      <div
-                        data-component="chart-tooltip"
-                        data-placement={index() > props.data.length * 0.62 ? "left" : "right"}
-                      >
-                        <strong>{active().date}</strong>
-                        <span>{formatTokens(active().tokens)} tokens</span>
-                        <div data-slot="tooltip-divider" />
-                        <p>
-                          <span data-slot="tooltip-label">
-                            <i /> Daily tokens
-                          </span>
-                          <b>{formatTokens(active().tokens)}</b>
-                        </p>
-                      </div>
-                    )}
-                  </Show>
-                </div>
-              )}
-            </For>
-          </div>
-        </div>
-      </Show>
-    </section>
+                    data-component="chart-tooltip"
+                    data-placement={index() > props.data.length * 0.62 ? "left" : "right"}
+                  >
+                    <strong>{active().date}</strong>
+                    <span>
+                      {formatModelUsageValue(active(), props.metric)} {modelUsageLabel(props.metric)}
+                    </span>
+                    <div data-slot="tooltip-divider" />
+                    <p>
+                      <span data-slot="tooltip-label">
+                        <i /> Daily {modelUsageLabel(props.metric)}
+                      </span>
+                      <b>{formatModelUsageValue(active(), props.metric)}</b>
+                    </p>
+                  </div>
+                )}
+              </Show>
+            </div>
+          )}
+        </For>
+      </div>
+    </div>
   )
 }
 
-function ModelEfficiencySection(props: { data: StatsModelData | null }) {
+function modelUsageMetricValue(point: ModelUsagePoint, metric: "tokens" | "users") {
+  if (metric === "users") return point.users
+  return point.tokens
+}
+
+function formatModelUsageValue(point: ModelUsagePoint, metric: "tokens" | "users") {
+  if (metric === "users") return formatUsers(point.users)
+  return formatTokens(point.tokens)
+}
+
+function modelUsageLabel(metric: "tokens" | "users") {
+  if (metric === "users") return "users"
+  return "tokens"
+}
+
+function ModelEfficiencySection(props: { data: StatsModelData | null; catalog: ModelCatalogEntry | null }) {
   return (
     <section id="efficiency" data-section="model-panel">
-      <SectionTitle title="Efficiency" description="Cost, cache behavior, and average session shape." />
+      <SectionTitle title="Efficiency" description="Cost, cache behavior, and average OpenCode Go session shape." />
       <Show
         when={props.data}
         fallback={
-          <ModelEmptyState title="No efficiency data" description="Cost and cache stats appear after usage lands." />
+          <ModelEmptyState title="No efficiency data" description="Efficiency data appears after usage lands." />
         }
       >
         {(data) => (
           <div data-component="model-metric-grid" data-variant="dense">
             <MetricCard label="Cost" value={formatMoney(data().totals.cost)} detail="total spend" />
-            <MetricCard label="Cost / 1M" value={formatMoney(data().totals.costPerMillion)} detail="all tokens" />
+            <MetricCard
+              label="Cost / 1M"
+              value={
+                props.catalog?.cost ? formatCatalogPrice(props.catalog.cost) : formatMoney(data().totals.costPerMillion)
+              }
+              detail={props.catalog?.cost ? "input / output" : "observed all tokens"}
+            />
             <MetricCard
               label="Cost / Session"
               value={formatSessionCost(data().totals.costPerSession)}
@@ -496,10 +572,12 @@ function ModelGeoBreakdownSection(props: { data: Record<UsageRange, CountryEntry
         setActiveCountry(undefined)
       }}
     >
-      <SectionTitle title="Geo Breakdown" description="Model tokens used by country." />
+      <SectionTitle title="Geo Breakdown" description="OpenCode Go model tokens used by country." />
       <Show
         when={data().length > 0}
-        fallback={<ModelEmptyState title="No geo data" description="No geo_stat rows matched this model." />}
+        fallback={
+          <ModelEmptyState title="No geo data" description="No OpenCode Go geo_stat rows matched this model." />
+        }
       >
         <div data-component="geo-breakdown">
           <div data-slot="geo-map-panel">
@@ -563,6 +641,7 @@ function GeoWorldMap(props: {
             return (
               <path
                 d={country.path}
+                data-country-id={country.id}
                 data-has-data={entry() ? "true" : undefined}
                 data-active={entry()?.country === props.activeCountry ? "true" : undefined}
                 style={{ "--geo-country-opacity": String(countryOpacity(entry())) } as JSX.CSSProperties}
@@ -578,6 +657,37 @@ function GeoWorldMap(props: {
                   props.onActiveCountryChange(item.country)
                 }}
               />
+            )
+          }}
+        </For>
+      </g>
+      <g data-slot="geo-country-markers">
+        <For each={worldCountryPaths}>
+          {(country) => {
+            const entry = () => props.countryById.get(country.id)
+            return (
+              <Show when={country.marker && entry() ? country.marker : undefined}>
+                {(marker) => (
+                  <circle
+                    cx={marker().x}
+                    cy={marker().y}
+                    r={entry()?.country === props.activeCountry ? 3.4 : 2.4}
+                    data-active={entry()?.country === props.activeCountry ? "true" : undefined}
+                    style={{ "--geo-country-opacity": String(countryOpacity(entry())) } as JSX.CSSProperties}
+                    aria-hidden="true"
+                    onPointerEnter={() => {
+                      const item = entry()
+                      if (!item) return
+                      props.onActiveCountryChange(item.country)
+                    }}
+                    onClick={() => {
+                      const item = entry()
+                      if (!item) return
+                      props.onActiveCountryChange(item.country)
+                    }}
+                  />
+                )}
+              </Show>
             )
           }}
         </For>
@@ -627,7 +737,7 @@ function GeoCountryList(props: {
 function ModelPeersSection(props: { data: StatsModelData | null }) {
   return (
     <section id="peers" data-section="model-panel">
-      <SectionTitle title="Peers" description="Nearby models by recent token volume." />
+      <SectionTitle title="Peers" description="Nearby models by recent OpenCode Go token volume." />
       <Show
         when={props.data?.peers.length}
         fallback={<ModelEmptyState title="No peers" description="Peer rankings appear after usage lands." />}
@@ -710,6 +820,14 @@ function countryNumericId(country: string) {
   return countryNumericIds.get(country.toUpperCase())?.padStart(3, "0")
 }
 
+function geoCountryMarker(country: (typeof worldCountries.features)[number]) {
+  const bounds = worldPath.bounds(country)
+  const [x, y] = worldPath.centroid(country)
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return undefined
+  if (bounds[1][0] - bounds[0][0] >= 3 && bounds[1][1] - bounds[0][1] >= 3) return undefined
+  return { x, y }
+}
+
 function formatCountryName(country: string) {
   const code = country.toUpperCase()
   if (code === "ZZ") return "Unknown"
@@ -747,8 +865,10 @@ function formatRankMove(previousRank: number, rank: number) {
   return "Even"
 }
 
-function formatRankMoveLabel(previousRank: number | null, rank: number) {
-  return previousRank === null ? "New in window" : `${formatRankMove(previousRank, rank)} vs previous window`
+function formatModelRankMoveLabel(data: StatsModelData) {
+  if (data.rank === null) return "No usage last week"
+  if (data.previousRank === null) return "New this week"
+  return `${formatRankMove(data.previousRank, data.rank)} vs previous week`
 }
 
 function formatTokens(value: number) {
@@ -764,6 +884,12 @@ function formatInteger(value: number) {
   return new Intl.NumberFormat("en").format(value)
 }
 
+function formatUsers(value: number) {
+  if (value >= 1_000_000) return `${trimNumber(value / 1_000_000, value >= 10_000_000 ? 0 : 1)}M`
+  if (value >= 1_000) return `${trimNumber(value / 1_000, value >= 10_000 ? 0 : 1)}K`
+  return formatInteger(Math.round(value))
+}
+
 function formatPercent(value: number) {
   return `${value.toFixed(value > 0 && value < 10 ? 1 : 0)}%`
 }
@@ -772,6 +898,15 @@ function formatMoney(value: number) {
   if (value >= 1_000_000) return `$${trimNumber(value / 1_000_000, value >= 10_000_000 ? 0 : 1)}M`
   if (value >= 1_000) return `$${trimNumber(value / 1_000, value >= 10_000 ? 0 : 1)}K`
   return `$${value.toFixed(value >= 10 ? 0 : 2)}`
+}
+
+function formatCatalogPrice(value: ModelCatalogCost) {
+  return `${formatModelPrice(value.input)} / ${formatModelPrice(value.output)}`
+}
+
+function formatModelPrice(value: number) {
+  if (value > 0 && value < 0.01) return `$${value.toFixed(4)}`
+  return formatMoney(value)
 }
 
 function formatSessionCost(value: number) {

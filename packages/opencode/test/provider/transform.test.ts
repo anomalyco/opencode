@@ -175,6 +175,39 @@ describe("ProviderTransform.options - zai/zhipuai thinking", () => {
   }
 })
 
+describe("ProviderTransform.options - minimax m3 thinking", () => {
+  const createModel = (npm: string) =>
+    ({
+      id: "minimax/minimax-m3",
+      providerID: "minimax",
+      api: {
+        id: "minimax-m3",
+        url: "https://api.minimax.com",
+        npm,
+      },
+      capabilities: { reasoning: true },
+      limit: { output: 64_000 },
+    }) as any
+
+  test("explicitly enables adaptive thinking with the anthropic SDK", () => {
+    expect(
+      ProviderTransform.options({
+        model: createModel("@ai-sdk/anthropic"),
+        sessionID: "test-session-123",
+      }).thinking,
+    ).toEqual({ type: "adaptive" })
+  })
+
+  test("uses the native default with the openai-compatible SDK", () => {
+    expect(
+      ProviderTransform.options({
+        model: createModel("@ai-sdk/openai-compatible"),
+        sessionID: "test-session-123",
+      }).thinking,
+    ).toBeUndefined()
+  })
+})
+
 describe("ProviderTransform.options - google thinkingConfig gating", () => {
   const sessionID = "test-session-123"
 
@@ -824,6 +857,93 @@ describe("ProviderTransform.schema - gemini nested array items", () => {
   })
 })
 
+describe("ProviderTransform.schema - gemini type arrays", () => {
+  // Mirrors @ai-sdk/google's convertJSONSchemaToOpenAPISchema: JSON Schema type
+  // arrays (e.g. `["number","string"]`, common in MCP tool schemas) become an
+  // `anyOf` of single-type schemas, with `null` lifted into `nullable`. Plain
+  // @ai-sdk/google rewrites these, but OpenAI-compatible transports such as
+  // GitHub Copilot (proxying to Gemini) forward them verbatim and the backend
+  // rejects the array form.
+  const geminiModel = {
+    providerID: "google",
+    api: {
+      id: "gemini-3-pro",
+    },
+  } as any
+
+  test("splits a multi-type array into anyOf and drops the type array", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        status: { type: ["number", "string"], description: "status filter" },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(geminiModel, schema) as any
+
+    expect(result.properties.status.type).toBeUndefined()
+    expect(result.properties.status.anyOf).toEqual([{ type: "number" }, { type: "string" }])
+    expect(result.properties.status.nullable).toBeUndefined()
+    // Sibling keywords stay alongside the generated anyOf.
+    expect(result.properties.status.description).toBe("status filter")
+  })
+
+  test("lifts null into nullable for a nullable type array", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        maybe: { type: ["string", "null"], description: "nullable string" },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(geminiModel, schema) as any
+
+    expect(result.properties.maybe.type).toBeUndefined()
+    expect(result.properties.maybe.anyOf).toEqual([{ type: "string" }])
+    expect(result.properties.maybe.nullable).toBe(true)
+  })
+
+  test("collapses an all-null type array to type null", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        nothing: { type: ["null"] },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(geminiModel, schema) as any
+
+    expect(result.properties.nothing.type).toBe("null")
+    expect(result.properties.nothing.anyOf).toBeUndefined()
+  })
+
+  test("rewrites type arrays for gemini served through github-copilot", () => {
+    const copilotGeminiModel = {
+      providerID: "github-copilot",
+      api: {
+        id: "gemini-3.5-flash",
+        npm: "@ai-sdk/github-copilot",
+      },
+    } as any
+
+    const schema = {
+      type: "object",
+      properties: {
+        hook_id: { type: "number", description: "ID of the webhook" },
+        status: { type: ["number", "string"], description: "Filter by response status code" },
+      },
+      required: ["hook_id"],
+      additionalProperties: false,
+    } as any
+
+    const result = ProviderTransform.schema(copilotGeminiModel, schema) as any
+
+    expect(result.properties.status.anyOf).toEqual([{ type: "number" }, { type: "string" }])
+    expect(result.properties.status.type).toBeUndefined()
+    expect(result.properties.hook_id.type).toBe("number")
+  })
+})
+
 describe("ProviderTransform.schema - gemini combiner nodes", () => {
   const geminiModel = {
     providerID: "google",
@@ -1031,6 +1151,207 @@ describe("ProviderTransform.schema - gemini non-object properties removal", () =
     const result = ProviderTransform.schema(openaiModel, schema) as any
 
     expect(result.properties.data.properties).toBeDefined()
+  })
+})
+
+describe("ProviderTransform.schema - openai supported schema subset", () => {
+  const openaiModel = {
+    providerID: "openai",
+    api: {
+      id: "gpt-4.1",
+      npm: "@ai-sdk/openai",
+    },
+  } as any
+
+  test("removes unsupported JSON Schema keywords recursively", () => {
+    const result = ProviderTransform.schema(openaiModel, {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      title: "Search",
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description: "Search query",
+          format: "uri",
+          pattern: "^https://",
+          minLength: 1,
+          maxLength: 100,
+          default: "https://example.com",
+        },
+        count: {
+          type: "integer",
+          minimum: 1,
+          maximum: 10,
+          multipleOf: 1,
+        },
+        createdAt: {
+          format: "date-time",
+        },
+        mode: {
+          const: "fast",
+        },
+        tags: {
+          type: "array",
+          minItems: 1,
+          maxItems: 3,
+          uniqueItems: true,
+        },
+        tuple: {
+          type: "array",
+          items: [
+            { type: "number", minimum: 0 },
+            { type: "string", pattern: "^ok$" },
+          ],
+        },
+        metadata: {
+          type: "object",
+          patternProperties: {
+            "^x-": { type: "string" },
+          },
+          additionalProperties: {
+            type: "string",
+            pattern: "^safe$",
+          },
+        },
+      },
+      patternProperties: {
+        "^extra": { type: "string" },
+      },
+      required: ["query"],
+      additionalProperties: false,
+    } as any) as any
+
+    expect(result).toEqual({
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description: "Search query",
+        },
+        count: {
+          type: "integer",
+        },
+        createdAt: {
+          type: "string",
+        },
+        mode: {
+          enum: ["fast"],
+          type: "string",
+        },
+        tags: {
+          type: "array",
+          items: { type: "string" },
+        },
+        tuple: {
+          type: "array",
+          items: [{ type: "number" }, { type: "string" }],
+        },
+        metadata: {
+          type: "object",
+          properties: {},
+          additionalProperties: {
+            type: "string",
+          },
+        },
+      },
+      required: ["query"],
+      additionalProperties: false,
+    })
+  })
+
+  test("keeps local references and sanitizes definitions", () => {
+    const result = ProviderTransform.schema(openaiModel, {
+      type: "object",
+      properties: {
+        value: {
+          $ref: "#/$defs/Value",
+          description: "Referenced value",
+          examples: ["ignored"],
+        },
+      },
+      $defs: {
+        Value: {
+          type: "string",
+          pattern: "^value$",
+          description: "Definition description",
+        },
+        Unused: {
+          type: "number",
+          minimum: 0,
+        },
+      },
+    } as any) as any
+
+    expect(result.properties.value).toEqual({
+      $ref: "#/$defs/Value",
+      description: "Referenced value",
+    })
+    expect(result.$defs).toEqual({
+      Value: {
+        type: "string",
+        description: "Definition description",
+      },
+      Unused: {
+        type: "number",
+      },
+    })
+  })
+
+  test("does not sanitize non-openai providers", () => {
+    const result = ProviderTransform.schema(
+      {
+        providerID: "anthropic",
+        api: {
+          id: "claude-sonnet-4",
+          npm: "@ai-sdk/anthropic",
+        },
+      } as any,
+      {
+        type: "object",
+        properties: {
+          query: {
+            type: "string",
+            pattern: "^https://",
+          },
+        },
+      } as any,
+    ) as any
+
+    expect(result.properties.query.pattern).toBe("^https://")
+  })
+
+  test.each([
+    ["opencode", "@ai-sdk/openai"],
+    ["custom-openai-compatible", "@ai-sdk/openai"],
+    ["azure", "@ai-sdk/azure"],
+  ])("sanitizes %s models using %s", (providerID, npm) => {
+    expect(
+      ProviderTransform.schema(
+        {
+          providerID,
+          api: {
+            id: "custom-model",
+            npm,
+          },
+        } as any,
+        {
+          type: "object",
+          properties: {
+            query: {
+              type: "string",
+              pattern: "^https://",
+            },
+          },
+        } as any,
+      ),
+    ).toEqual({
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+        },
+      },
+    })
   })
 })
 
@@ -1772,7 +2093,7 @@ describe("ProviderTransform.message - strip openai metadata when store=false", (
     headers: {},
   } as any
 
-  test("preserves itemId and reasoningEncryptedContent when store=false", () => {
+  test("strips OpenAI itemId and preserves reasoningEncryptedContent when store=false", () => {
     const msgs = [
       {
         role: "assistant",
@@ -1803,11 +2124,12 @@ describe("ProviderTransform.message - strip openai metadata when store=false", (
     const result = ProviderTransform.message(msgs, openaiModel, { store: false }) as any[]
 
     expect(result).toHaveLength(1)
-    expect(result[0].content[0].providerOptions?.openai?.itemId).toBe("rs_123")
-    expect(result[0].content[1].providerOptions?.openai?.itemId).toBe("msg_456")
+    expect(result[0].content[0].providerOptions?.openai?.itemId).toBeUndefined()
+    expect(result[0].content[0].providerOptions?.openai?.reasoningEncryptedContent).toBe("encrypted")
+    expect(result[0].content[1].providerOptions?.openai?.itemId).toBeUndefined()
   })
 
-  test("preserves itemId and reasoningEncryptedContent when store=false even when not openai", () => {
+  test("uses the SDK package namespace rather than provider ID", () => {
     const zenModel = {
       ...openaiModel,
       providerID: "zen",
@@ -1842,11 +2164,12 @@ describe("ProviderTransform.message - strip openai metadata when store=false", (
     const result = ProviderTransform.message(msgs, zenModel, { store: false }) as any[]
 
     expect(result).toHaveLength(1)
-    expect(result[0].content[0].providerOptions?.openai?.itemId).toBe("rs_123")
-    expect(result[0].content[1].providerOptions?.openai?.itemId).toBe("msg_456")
+    expect(result[0].content[0].providerOptions?.openai?.itemId).toBeUndefined()
+    expect(result[0].content[0].providerOptions?.openai?.reasoningEncryptedContent).toBe("encrypted")
+    expect(result[0].content[1].providerOptions?.openai?.itemId).toBeUndefined()
   })
 
-  test("preserves other openai options including itemId", () => {
+  test("preserves other OpenAI options", () => {
     const msgs = [
       {
         role: "assistant",
@@ -1867,8 +2190,75 @@ describe("ProviderTransform.message - strip openai metadata when store=false", (
 
     const result = ProviderTransform.message(msgs, openaiModel, { store: false }) as any[]
 
-    expect(result[0].content[0].providerOptions?.openai?.itemId).toBe("msg_123")
+    expect(result[0].content[0].providerOptions?.openai?.itemId).toBeUndefined()
     expect(result[0].content[0].providerOptions?.openai?.otherOption).toBe("value")
+  })
+
+  test("strips Azure itemId from the Azure namespace", () => {
+    const azureModel = {
+      ...openaiModel,
+      providerID: "azure",
+      api: {
+        id: "gpt-5",
+        url: "https://example.openai.azure.com",
+        npm: "@ai-sdk/azure",
+      },
+    }
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "text",
+            text: "Hello",
+            providerOptions: {
+              azure: { itemId: "msg_123", otherOption: "value" },
+              openai: { itemId: "msg_openai" },
+            },
+          },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, azureModel, { store: false }) as any[]
+
+    expect(result[0].content[0].providerOptions?.azure?.itemId).toBeUndefined()
+    expect(result[0].content[0].providerOptions?.azure?.otherOption).toBe("value")
+    expect(result[0].content[0].providerOptions?.openai?.itemId).toBe("msg_openai")
+  })
+
+  test("strips Bedrock Mantle itemId from the OpenAI namespace", () => {
+    const mantleModel = {
+      ...openaiModel,
+      providerID: "amazon-bedrock",
+      api: {
+        id: "openai.gpt-5.5",
+        url: "https://bedrock-mantle.us-east-2.api.aws/openai/v1",
+        npm: "@ai-sdk/amazon-bedrock/mantle",
+      },
+    }
+    const msgs = [
+      {
+        role: "assistant",
+        providerOptions: { openai: { itemId: "msg_root", otherOption: "root-value" } },
+        content: [
+          {
+            type: "reasoning",
+            text: "thinking...",
+            providerOptions: {
+              openai: { itemId: "rs_123", reasoningEncryptedContent: "encrypted" },
+            },
+          },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, mantleModel, { store: false }) as any[]
+
+    expect(result[0].providerOptions?.openai?.itemId).toBeUndefined()
+    expect(result[0].providerOptions?.openai?.otherOption).toBe("root-value")
+    expect(result[0].content[0].providerOptions?.openai?.itemId).toBeUndefined()
+    expect(result[0].content[0].providerOptions?.openai?.reasoningEncryptedContent).toBe("encrypted")
   })
 
   test("preserves metadata for openai package when store is true", () => {
@@ -2381,6 +2771,12 @@ describe("ProviderTransform.message - cache control on gateway", () => {
   })
 })
 
+describe("ProviderTransform.temperature - Cohere North", () => {
+  test("defaults north-mini-code models to 1.0", () => {
+    expect(ProviderTransform.temperature({ id: "cohere/North-Mini-Code-1-0-latest" } as any)).toBe(1.0)
+  })
+})
+
 describe("ProviderTransform.variants", () => {
   const createMockModel = (overrides: Partial<any> = {}): any => ({
     id: "test/test-model",
@@ -2452,6 +2848,39 @@ describe("ProviderTransform.variants", () => {
     expect(result).toEqual({})
   })
 
+  test("minimax m3 using anthropic returns thinking toggles", () => {
+    const model = createMockModel({
+      id: "minimax/minimax-m3",
+      providerID: "minimax",
+      api: {
+        id: "MiniMax-M3",
+        url: "https://api.minimax.com/anthropic/v1",
+        npm: "@ai-sdk/anthropic",
+      },
+    })
+    const result = ProviderTransform.variants(model)
+    expect(result).toEqual({
+      none: { thinking: { type: "disabled" } },
+      thinking: { thinking: { type: "adaptive" } },
+    })
+  })
+
+  test("minimax m3 using openai-compatible returns thinking toggles", () => {
+    const model = createMockModel({
+      id: "minimax/minimax-m3",
+      providerID: "minimax",
+      api: {
+        id: "minimax-m3",
+        url: "https://api.minimax.com/v1",
+        npm: "@ai-sdk/openai-compatible",
+      },
+    })
+    expect(ProviderTransform.variants(model)).toEqual({
+      none: { thinking: { type: "disabled" } },
+      thinking: { thinking: { type: "adaptive" } },
+    })
+  })
+
   test("glm returns empty object", () => {
     const model = createMockModel({
       id: "glm/glm-4",
@@ -2464,6 +2893,102 @@ describe("ProviderTransform.variants", () => {
     })
     const result = ProviderTransform.variants(model)
     expect(result).toEqual({})
+  })
+
+  test("glm-5.2 returns native effort variants for openai-compatible providers", () => {
+    const model = createMockModel({
+      id: "zhipuai/glm-5.2",
+      providerID: "zhipuai",
+      api: {
+        id: "glm-5.2",
+        url: "https://open.bigmodel.cn/api/paas/v4",
+        npm: "@ai-sdk/openai-compatible",
+      },
+    })
+    expect(ProviderTransform.variants(model)).toEqual({
+      high: { reasoningEffort: "high" },
+      max: { reasoningEffort: "max" },
+    })
+  })
+
+  test("recognizes GLM-5.2 provider model IDs", () => {
+    for (const id of ["accounts/fireworks/models/glm-5p2", "zai-org-glm-5-2", "umans-glm-5.2"]) {
+      const model = createMockModel({
+        id: `test/${id}`,
+        api: {
+          id,
+          url: "https://api.test.com",
+          npm: "@ai-sdk/openai-compatible",
+        },
+      })
+      expect(ProviderTransform.variants(model)).toEqual({
+        high: { reasoningEffort: "high" },
+        max: { reasoningEffort: "max" },
+      })
+    }
+  })
+
+  test("recognizes GLM-5.2 from the API ID when the configured model ID is an alias", () => {
+    const model = createMockModel({
+      id: "custom/my-glm",
+      api: {
+        id: "accounts/fireworks/models/glm-5p2",
+        url: "https://api.fireworks.ai/inference/v1",
+        npm: "@ai-sdk/openai-compatible",
+      },
+    })
+    expect(ProviderTransform.variants(model)).toEqual({
+      high: { reasoningEffort: "high" },
+      max: { reasoningEffort: "max" },
+    })
+  })
+
+  test("glm-5.2 returns openrouter effort variants for openrouter", () => {
+    const model = createMockModel({
+      id: "openrouter/z-ai/glm-5.2",
+      providerID: "openrouter",
+      api: {
+        id: "z-ai/glm-5.2",
+        url: "https://openrouter.ai/api/v1",
+        npm: "@openrouter/ai-sdk-provider",
+      },
+    })
+    expect(ProviderTransform.variants(model)).toEqual({
+      high: { reasoning: { effort: "high" } },
+      xhigh: { reasoning: { effort: "xhigh" } },
+    })
+  })
+
+  test("glm-5.2 returns effort variants for anthropic-compatible providers", () => {
+    const model = createMockModel({
+      id: "zai-coding-plan/glm-5.2",
+      providerID: "zai-coding-plan",
+      api: {
+        id: "glm-5.2",
+        url: "https://api.z.ai/api/anthropic",
+        npm: "@ai-sdk/anthropic",
+      },
+    })
+    expect(ProviderTransform.variants(model)).toEqual({
+      high: { effort: "high" },
+      max: { effort: "max" },
+    })
+  })
+
+  test("glm-5.2 falls back to provider defaults for other packages", () => {
+    const model = createMockModel({
+      id: "test/glm-5.2",
+      api: {
+        id: "glm-5.2",
+        url: "https://api.test.com",
+        npm: "@ai-sdk/amazon-bedrock",
+      },
+    })
+    expect(ProviderTransform.variants(model)).toEqual({
+      low: { reasoningConfig: { type: "enabled", maxReasoningEffort: "low" } },
+      medium: { reasoningConfig: { type: "enabled", maxReasoningEffort: "medium" } },
+      high: { reasoningConfig: { type: "enabled", maxReasoningEffort: "high" } },
+    })
   })
 
   test("mistral models with reasoning support return variants", () => {
@@ -2531,7 +3056,7 @@ describe("ProviderTransform.variants", () => {
   })
 
   describe("@openrouter/ai-sdk-provider", () => {
-    test("returns empty object for non-qualifying models", () => {
+    test("returns widely supported efforts for other reasoning models", () => {
       const model = createMockModel({
         id: "openrouter/test-model",
         providerID: "openrouter",
@@ -2542,7 +3067,8 @@ describe("ProviderTransform.variants", () => {
         },
       })
       const result = ProviderTransform.variants(model)
-      expect(result).toEqual({})
+      expect(Object.keys(result)).toEqual(["low", "medium", "high"])
+      expect(result.medium).toEqual({ reasoning: { effort: "medium" } })
     })
 
     test("gpt models return OPENAI_EFFORTS with reasoning", () => {
@@ -2562,6 +3088,7 @@ describe("ProviderTransform.variants", () => {
     })
 
     for (const testCase of [
+      { id: "openai/o3-mini", efforts: ["none", "minimal", "low", "medium", "high", "xhigh"] },
       { id: "openai/gpt-5.4", efforts: ["none", "low", "medium", "high", "xhigh"] },
       { id: "openai/gpt-5-pro", efforts: ["high"] },
       { id: "openai/gpt-5.5-pro", efforts: ["medium", "high", "xhigh"] },
@@ -2587,7 +3114,7 @@ describe("ProviderTransform.variants", () => {
       })
     }
 
-    test("gemini-3 returns OPENAI_EFFORTS with reasoning", () => {
+    test("gemini-3 returns widely supported efforts with reasoning", () => {
       const model = createMockModel({
         id: "openrouter/gemini-3-5-pro",
         providerID: "openrouter",
@@ -2598,7 +3125,7 @@ describe("ProviderTransform.variants", () => {
         },
       })
       const result = ProviderTransform.variants(model)
-      expect(Object.keys(result)).toEqual(["none", "minimal", "low", "medium", "high", "xhigh"])
+      expect(Object.keys(result)).toEqual(["low", "medium", "high"])
     })
 
     test("grok-4 returns empty object", () => {
@@ -3072,6 +3599,23 @@ describe("ProviderTransform.variants", () => {
       expect(result.low).toEqual({ reasoningEffort: "low" })
       expect(result.high).toEqual({ reasoningEffort: "high" })
     })
+
+    test("north-mini-code-1-0 returns only none and high", () => {
+      const model = createMockModel({
+        id: "cohere/north-mini-code-1-0",
+        providerID: "cohere",
+        api: {
+          id: "North-Mini-Code-1-0-latest",
+          url: "https://api.cohere.com/compatibility/v1",
+          npm: "@ai-sdk/openai-compatible",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(result).toEqual({
+        none: { reasoningEffort: "none" },
+        high: { reasoningEffort: "high" },
+      })
+    })
   })
 
   describe("@ai-sdk/azure", () => {
@@ -3323,6 +3867,12 @@ describe("ProviderTransform.variants", () => {
       {
         name: "opus 4.8",
         apiIds: ["claude-opus-4-8", "claude-opus-4.8"],
+        efforts: ["low", "medium", "high", "xhigh", "max"],
+        expectedHigh: { thinking: { type: "adaptive", display: "summarized" }, effort: "high" },
+      },
+      {
+        name: "fable 5",
+        apiIds: ["claude-fable-5"],
         efforts: ["low", "medium", "high", "xhigh", "max"],
         expectedHigh: { thinking: { type: "adaptive", display: "summarized" }, effort: "high" },
       },
@@ -3848,6 +4398,23 @@ describe("ProviderTransform.smallOptions - gpt-5 chat/search", () => {
       expect(ProviderTransform.smallOptions(createModel(testCase.id))).toEqual(testCase.options)
     })
   }
+})
+
+test("ProviderTransform.smallOptions disables OpenRouter reasoning when the weakest effort is low", () => {
+  expect(
+    ProviderTransform.smallOptions({
+      providerID: "openrouter",
+      api: {
+        id: "anthropic/claude-sonnet-4.6",
+        npm: "@openrouter/ai-sdk-provider",
+      },
+      variants: {
+        low: { reasoning: { effort: "low" } },
+        medium: { reasoning: { effort: "medium" } },
+        high: { reasoning: { effort: "high" } },
+      },
+    } as any),
+  ).toEqual({ reasoning: { effort: "none" } })
 })
 
 describe("ProviderTransform.smallOptions - google thinking controls", () => {

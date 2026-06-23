@@ -360,6 +360,64 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("preserves structured tool errors for the model", () =>
+    Effect.gen(function* () {
+      const error = {
+        error: { type: "unknown", message: "Tool execution interrupted" },
+        content: [],
+        structured: {},
+      }
+      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "bash", input: { command: "sleep 10" } })]),
+            Message.tool({
+              id: "call_1",
+              name: "bash",
+              resultType: "error",
+              result: error,
+            }),
+          ],
+        }),
+      )
+
+      expect(expectToolOutput(prepared.body).output).toBe(ProviderShared.encodeJson(error))
+    }),
+  )
+
+  it.effect("keeps primitive tool errors as plain text", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "bash", input: {} })]),
+            Message.tool({ id: "call_1", name: "bash", resultType: "error", result: 503 }),
+          ],
+        }),
+      )
+
+      expect(expectToolOutput(prepared.body).output).toBe("503")
+    }),
+  )
+
+  it.effect("keeps non-JSON tool errors as plain text", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "bash", input: {} })]),
+            Message.tool({ id: "call_1", name: "bash", resultType: "error", result: new Error("boom") }),
+          ],
+        }),
+      )
+
+      expect(expectToolOutput(prepared.body).output).toBe("Error: boom")
+    }),
+  )
+
   // Regression: screenshot/read tool results must stay structured so base64
   // image data is not JSON-stringified into `function_call_output.output`.
   it.effect("lowers image tool-result content as structured input_image items", () =>
@@ -377,7 +435,7 @@ describe("OpenAI Responses route", () => {
               resultType: "content",
               result: [
                 { type: "text", text: "Image read successfully" },
-                { type: "media", mediaType: "image/png", data: "AAECAw==" },
+                { type: "file", uri: "data:image/png;base64,AAECAw==", mime: "image/png" },
               ],
             }),
           ],
@@ -403,7 +461,7 @@ describe("OpenAI Responses route", () => {
               id: "call_1",
               name: "screenshot",
               resultType: "content",
-              result: [{ type: "media", mediaType: "image/png", data: "AAECAw==" }],
+              result: [{ type: "file", uri: "data:image/png;base64,AAECAw==", mime: "image/png" }],
             }),
           ],
         }),
@@ -427,7 +485,7 @@ describe("OpenAI Responses route", () => {
               id: "call_1",
               name: "fetch",
               resultType: "content",
-              result: [{ type: "media", mediaType: "audio/mpeg", data: "AAECAw==" }],
+              result: [{ type: "file", uri: "data:audio/mpeg;base64,AAECAw==", mime: "audio/mpeg" }],
             }),
           ],
         }),

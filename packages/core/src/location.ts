@@ -1,19 +1,18 @@
 import { Context, Effect, Layer, Schema } from "effect"
 import { Project } from "./project"
-import { AbsolutePath } from "./schema"
+import { AbsolutePath, optionalOmitUndefined } from "./schema"
 import { WorkspaceV2 } from "./workspace"
 
 export * as Location from "./location"
 
-export const Ref = Schema.Struct({
+export class Ref extends Schema.Class<Ref>("Location.Ref")({
   directory: AbsolutePath,
-  workspaceID: Schema.optional(WorkspaceV2.ID),
-}).annotate({ identifier: "Location.Ref" })
-export type Ref = typeof Ref.Type
+  workspaceID: Schema.optional(WorkspaceV2.ID).pipe(Schema.withConstructorDefault(Effect.succeed(undefined))),
+}) {}
 
 export class Info extends Schema.Class<Info>("Location.Info")({
   directory: AbsolutePath,
-  workspaceID: WorkspaceV2.ID.pipe(Schema.optional),
+  workspaceID: optionalOmitUndefined(WorkspaceV2.ID),
   project: Schema.Struct({
     id: Project.ID,
     directory: AbsolutePath,

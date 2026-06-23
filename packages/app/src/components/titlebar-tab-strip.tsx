@@ -1,6 +1,7 @@
 import {
   createEffect,
   createMemo,
+  createResource,
   createSignal,
   For,
   onCleanup,
@@ -11,10 +12,11 @@ import {
 import { Portal } from "solid-js/web"
 import { createStore } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
-import { decode64 } from "@/utils/base64"
 import { tabHref, tabKey, type Tab } from "@/context/tabs"
 import { ServerConnection } from "@/context/server"
-import { TabNavItem } from "@/components/titlebar-tab-nav"
+import { DraftTabItem, TabNavItem } from "@/components/titlebar-tab-nav"
+import { useGlobal } from "@/context/global"
+import { useLanguage } from "@/context/language"
 import {
   ACTIVATION_DISTANCE,
   autoscrollSpeed,
@@ -39,6 +41,8 @@ export function TitlebarTabStrip(props: {
   onOverflowChange: (overflowing: boolean) => void
   children?: JSX.Element
 }) {
+  const global = useGlobal()
+  const language = useLanguage()
   const [drag, setDrag] = createStore({
     active: false,
     draggedId: undefined as string | undefined,
@@ -352,21 +356,50 @@ export function TitlebarTabStrip(props: {
                     onPointerDown(id, event)
                   }}
                 >
-                  <TabNavItem
-                    ref={ref}
-                    href={tabHref(tab)}
-                    server={tab.server}
-                    directory={decode64(tab.dirBase64)!}
-                    sessionId={tab.sessionId}
-                    onNavigate={() => props.onNavigate(tab, ref)}
-                    onClose={() => props.onClose(tab)}
-                    active={props.currentTab() === tab}
-                    activeServer={tab.server === props.activeServerKey}
-                    forceTruncate={props.forceTruncate}
-                    suppressNavigation={() => suppressNavigation()}
-                    pressed={pressedId() === id}
-                    hidden={dragged()}
-                  />
+                  {tab.type === "draft" ? (
+                    <DraftTabItem
+                      ref={ref}
+                      href={tabHref(tab)}
+                      title={language.t("command.session.new")}
+                      onNavigate={() => props.onNavigate(tab, ref)}
+                      onClose={() => props.onClose(tab)}
+                      active={props.currentTab() === tab}
+                      pressed={pressedId() === id}
+                      hidden={dragged()}
+                    />
+                  ) : (
+                    <Show
+                      when={createResource(
+                        () => {
+                          const conn = global.servers.list().find((item) => ServerConnection.key(item) === tab.server)
+                          if (!conn) return
+                          return global.createServerCtx(conn).sdk
+                        },
+                        (sdk) =>
+                          sdk.client.session
+                            .get({ sessionID: tab.sessionId })
+                            .then((result) => result.data)
+                            .catch(() => undefined),
+                      )[0]()}
+                    >
+                      {(session) => (
+                        <TabNavItem
+                          ref={ref}
+                          href={tabHref(tab)}
+                          server={tab.server}
+                          session={session()}
+                          onNavigate={() => props.onNavigate(tab, ref)}
+                          onClose={() => props.onClose(tab)}
+                          active={props.currentTab() === tab}
+                          activeServer={tab.server === props.activeServerKey}
+                          forceTruncate={props.forceTruncate}
+                          suppressNavigation={() => suppressNavigation()}
+                          pressed={pressedId() === id}
+                          hidden={dragged()}
+                        />
+                      )}
+                    </Show>
+                  )}
                 </div>
               )
             }}
@@ -378,18 +411,7 @@ export function TitlebarTabStrip(props: {
         {(tab) => (
           <Portal>
             <div style={floaterStyle()}>
-              <TabNavItem
-                href={tabHref(tab())}
-                server={tab().server}
-                directory={decode64(tab().dirBase64)!}
-                sessionId={tab().sessionId}
-                onNavigate={() => {}}
-                onClose={() => {}}
-                active={props.currentTab() === tab()}
-                activeServer={tab().server === props.activeServerKey}
-                forceTruncate={props.forceTruncate}
-                dragging
-              />
+              <div data-titlebar-tab class="h-7 rounded-[6px] bg-v2-background-bg-layer-02" />
             </div>
           </Portal>
         )}

@@ -3,12 +3,9 @@ import { Context, Effect, Layer } from "effect"
 import { HttpApiApp } from "../../src/server/routes/instance/httpapi/server"
 import { McpPaths } from "../../src/server/routes/instance/httpapi/groups/mcp"
 import { Server } from "../../src/server/server"
-import * as Log from "@opencode-ai/core/util/log"
 import { resetDatabase } from "../fixture/db"
 import { TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
-
-void Log.init({ print: false })
 
 const context = Context.empty() as Context.Context<unknown>
 const testStateLayer = Layer.effectDiscard(

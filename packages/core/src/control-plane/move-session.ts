@@ -6,6 +6,7 @@ import { Git } from "../git"
 import { Location } from "../location"
 import { ProjectV2 } from "../project"
 import { SessionV2 } from "../session"
+import { SessionExecution } from "../session/execution"
 import { SessionEvent } from "../session/event"
 import { SessionSchema } from "../session/schema"
 import { AbsolutePath, RelativePath } from "../schema"
@@ -47,7 +48,7 @@ export class ResetSourceChangesError extends Schema.TaggedErrorClass<ResetSource
   {
     directory: AbsolutePath,
     message: Schema.String,
-    cause: Schema.optional(Schema.Defect),
+    cause: Schema.optional(Schema.Defect()),
   },
 ) {}
 
@@ -124,5 +125,6 @@ export const defaultLayer = layer.pipe(
   Layer.provide(Git.defaultLayer),
   Layer.provide(EventV2.defaultLayer),
   Layer.provide(ProjectV2.defaultLayer),
+  Layer.provide(SessionExecution.noopLayer),
   Layer.provide(SessionV2.defaultLayer),
 )

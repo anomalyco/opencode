@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode-ai/cli",
-  "version": "1.16.2",
+  "version": "1.17.9",
   "type": "module",
   "license": "MIT",
   "bin": {
@@ -20,8 +20,12 @@
     "@opencode-ai/core": "workspace:*",
     "@opencode-ai/sdk": "workspace:*",
     "@opencode-ai/server": "workspace:*",
+    "@opencode-ai/tui": "workspace:*",
+    "@opentui/core": "catalog:",
+    "@opentui/solid": "catalog:",
     "@parcel/watcher": "2.5.1",
-    "effect": "catalog:"
+    "effect": "catalog:",
+    "solid-js": "catalog:"
   },
   "devDependencies": {
     "@opencode-ai/script": "workspace:*",

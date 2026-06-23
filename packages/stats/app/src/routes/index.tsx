@@ -5,7 +5,7 @@ import { geoEquirectangular, geoPath } from "d3-geo"
 import { scaleSqrt } from "d3-scale"
 import countryCodesSource from "i18n-iso-countries/codes.json?raw"
 import { feature, mesh } from "topojson-client"
-import countriesTopologySource from "world-atlas/countries-110m.json?raw"
+import countriesTopologySource from "world-atlas/countries-50m.json?raw"
 import ibmPlexMonoRegularLatin1 from "@ibm/plex/IBM-Plex-Mono/fonts/split/woff2/IBMPlexMono-Regular-Latin1.woff2?url"
 import ibmPlexMonoMediumLatin1 from "@ibm/plex/IBM-Plex-Mono/fonts/split/woff2/IBMPlexMono-Medium-Latin1.woff2?url"
 import ibmPlexMonoSemiBoldLatin1 from "@ibm/plex/IBM-Plex-Mono/fonts/split/woff2/IBMPlexMono-SemiBold-Latin1.woff2?url"
@@ -21,12 +21,13 @@ import {
   type TokenCostEntry,
   type UsagePoint,
 } from "@opencode-ai/stats-core/domain/home"
-import { runtime } from "@opencode-ai/stats-core/runtime"
 import { createAsync, query } from "@solidjs/router"
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js"
 import { getRequestEvent } from "solid-js/web"
 import type { FeatureCollection, GeometryObject, GeoJsonProperties } from "geojson"
 import type { GeometryCollection, Topology } from "topojson-specification"
+import { runStatsEffect } from "../stats-runtime"
+import { findModelCatalogEntry, getModelCatalog, type ModelCatalog } from "./model-catalog"
 import {
   applyThemePreference,
   Footer,
@@ -48,11 +49,12 @@ const rangeLabels: Record<UsageRange, string> = {
   "1M": "1 Month",
   "2M": "2 Months",
 }
-const statsHomeTitle = "OpenCode Stats"
-const statsHomeDescription = "OpenCode usage, market share, token cost, and session cost stats."
-const statsHomeFallbackUrl = "https://opencode.ai/stats/"
-const statsUnfurlPath = "banner.png"
-const statsUnfurlAlt = "OpenCode Stats wordmark on a dark patterned background"
+const statsHomeTitle = "AI Model Usage Rankings | OpenCode Data"
+const statsHomeDescription =
+  "Explore OpenCode Go usage across AI models, including token volume, rankings, market share, token pricing, session cost, cache ratio, and geo breakdowns."
+const statsHomeFallbackUrl = "https://opencode.ai/data/"
+const statsUnfurlPath = "banner.jpg"
+const statsUnfurlAlt = "OpenCode Data wordmark on a dark patterned background"
 const usageColors = [
   "#ed6aff",
   "#a684ff",
@@ -101,12 +103,13 @@ const worldPath = geoPath(worldProjection)
 const worldCountryPaths = worldCountries.features.map((country) => ({
   id: String(country.id ?? "").padStart(3, "0"),
   path: worldPath(country) ?? "",
+  marker: geoCountryMarker(country),
 }))
 const worldBorderPath = worldPath(mesh(worldTopology, worldCountryGeometries, (a, b) => a !== b)) ?? ""
 
 const getData = query(async () => {
   "use server"
-  return runtime.runPromise(getStatsHomeData())
+  return runStatsEffect(getStatsHomeData())
 }, "getStatsHomeData")
 
 export default function StatsHome() {
@@ -118,6 +121,7 @@ export default function StatsHome() {
   )
   const statsUnfurlUrl = new URL(statsUnfurlPath, statsHomeUrl).toString()
   const data = createAsync(() => getData())
+  const catalog = createAsync(() => getModelCatalog())
   const githubStars = createAsync(() => getGitHubStars())
   const [themePreference, setThemePreference] = createSignal<ThemePreference>("system")
   const updateThemePreference = (preference: ThemePreference) => {
@@ -146,7 +150,7 @@ export default function StatsHome() {
       <Meta property="og:description" content={statsHomeDescription} />
       <Meta property="og:url" content={statsHomeUrl} />
       <Meta property="og:image" content={statsUnfurlUrl} />
-      <Meta property="og:image:type" content="image/png" />
+      <Meta property="og:image:type" content="image/jpeg" />
       <Meta property="og:image:width" content="1200" />
       <Meta property="og:image:height" content="630" />
       <Meta property="og:image:alt" content={statsUnfurlAlt} />
@@ -167,8 +171,9 @@ export default function StatsHome() {
               <>
                 <Hero updatedAt={stats().updatedAt} />
                 <TopModelsSection data={stats().usage} leaderboard={stats().leaderboard} />
+                <UniqueUsersSection data={stats().users} />
                 <SessionCostSection data={stats().sessionCost} />
-                <TokenCostSection data={stats().tokenCost} />
+                <TokenCostSection data={stats().tokenCost} catalog={catalog() ?? null} />
                 <CacheRatioSection data={stats().cacheRatio} />
                 <MarketShareSection data={stats().market} />
                 <GeoBreakdownSection data={stats().country} />
@@ -184,8 +189,8 @@ export default function StatsHome() {
 
 function getStatsHomeUrl(base: string, requestUrl: string) {
   const url = new URL(base, requestUrl)
-  if (url.hostname === "stats.opencode.ai") return "https://opencode.ai/stats/"
-  if (url.hostname === "stats.dev.opencode.ai") return "https://dev.opencode.ai/stats/"
+  if (url.hostname === "stats.opencode.ai") return "https://opencode.ai/data/"
+  if (url.hostname === "stats.dev.opencode.ai") return "https://dev.opencode.ai/data/"
   return url.toString()
 }
 
@@ -265,7 +270,7 @@ function Hero(props: { updatedAt: string | null }) {
       </p>
       <div data-slot="hero-canvas">
         <div data-slot="hero-pattern" aria-hidden="true" />
-        <h1>Model Stats</h1>
+        <h1>Model Data</h1>
         <p data-slot="hero-copy">
           See which models are winning real usage, how the mix <br data-slot="hero-copy-break" />
           shifts over time, and where momentum is moving each week.
@@ -291,7 +296,7 @@ function StatsLoading() {
     <>
       <Hero updatedAt={null} />
       <ChartSection title="Usage">
-        <EmptyState title="Loading stats" description="Reading model aggregates from model_stat." />
+        <EmptyState title="Loading data" description="Reading model aggregates from model_stat." />
       </ChartSection>
     </>
   )
@@ -356,7 +361,7 @@ function formatUpdatedAtParts(value: string, timeZone: string) {
       timeZone,
     }).format(date),
     time: new Intl.DateTimeFormat("en", {
-      hour: "numeric",
+      hour: "2-digit",
       minute: "2-digit",
       timeZone,
       timeZoneName: "short",
@@ -594,6 +599,8 @@ function FilterPills<T extends string>(props: {
 function TopModelsChart(props: {
   data: UsagePoint[]
   range: UsageRange
+  metric?: "tokens" | "users"
+  ariaLabel?: string
   activeModel: string | undefined
   onActiveModelChange: (model: string | undefined) => void
 }) {
@@ -602,6 +609,7 @@ function TopModelsChart(props: {
   const maxTotal = createMemo(() => getTopModelsMaxTotal(props.data))
   const segmentOrder = createMemo(() => getTopModelsSegmentOrder(props.data))
   const activePoint = createMemo(() => props.data[activeIndex() ?? -1])
+  const metric = createMemo(() => props.metric ?? "tokens")
 
   createEffect(() => scrollDenseChartToEnd(chartRef, props.range, props.data.length))
 
@@ -610,9 +618,10 @@ function TopModelsChart(props: {
       ref={chartRef}
       data-component="top-models-chart"
       data-range={props.range}
+      data-metric={metric()}
       data-dense-labels={isDenseColumnRange(props.range) ? "true" : undefined}
       role="img"
-      aria-label="Stacked top model usage chart"
+      aria-label={props.ariaLabel ?? "Stacked top model usage chart"}
       style={{ "--top-models-count": props.data.length } as JSX.CSSProperties}
       onPointerLeave={(event) => {
         if (event.pointerType === "touch") return
@@ -629,7 +638,7 @@ function TopModelsChart(props: {
               data-mobile-hidden={isTopModelsMobileAxisHidden(index(), props.data.length) ? "true" : undefined}
             >
               <span data-slot="axis-label">
-                <span data-slot="axis-total">{formatTokens(usageTotal(day))}</span>
+                <span data-slot="axis-total">{formatUsageChartValue(usageTotal(day), metric())}</span>
                 <span data-slot="axis-date">
                   <span data-slot="axis-date-full">{day.date}</span>
                   <span data-slot="axis-date-mobile">{formatTopModelsMobileDate(day.date, props.range)}</span>
@@ -653,7 +662,7 @@ function TopModelsChart(props: {
               data-slot="top-models-bar"
               role="button"
               tabIndex={0}
-              aria-label={`${day.date} ${formatTokens(usageTotal(day))}`}
+              aria-label={`${day.date} ${formatUsageChartValue(usageTotal(day), metric())} ${usageChartTotalLabel(metric())}`}
               data-active={activeIndex() === dayIndex() ? "true" : undefined}
               data-muted={activeIndex() !== undefined && activeIndex() !== dayIndex() ? "true" : undefined}
               style={{ "--top-models-bar-height": `${getTopModelsBarHeight(usageTotal(day), maxTotal())}%` }}
@@ -735,8 +744,14 @@ function TopModelsChart(props: {
                     data-placement={dayIndex() > props.data.length * 0.62 ? "left" : "right"}
                   >
                     <strong>{point().date}</strong>
-                    <span>{formatTokens(usageTotal(point()))} total</span>
-                    <div data-slot="tooltip-divider" />
+                    <Show when={metric() === "tokens"}>
+                      <span>
+                        {formatUsageChartValue(usageTotal(point()), metric())} {usageChartTotalLabel(metric())}
+                      </span>
+                    </Show>
+                    <Show when={metric() === "tokens"}>
+                      <div data-slot="tooltip-divider" />
+                    </Show>
                     <For each={visibleTopModelsSegments(point())}>
                       {(item) => (
                         <p
@@ -755,7 +770,7 @@ function TopModelsChart(props: {
                             />{" "}
                             {item.segment.model}
                           </span>
-                          <b>{formatTokens(item.segment.value)}</b>
+                          <b>{formatUsageChartValue(item.segment.value, metric())}</b>
                         </p>
                       )}
                     </For>
@@ -767,6 +782,33 @@ function TopModelsChart(props: {
         </For>
       </div>
     </div>
+  )
+}
+
+function UniqueUsersSection(props: { data: StatsHomeData["users"] }) {
+  const [activeModel, setActiveModel] = createSignal<string>()
+  const data = createMemo(() => props.data.Go["2M"])
+
+  return (
+    <section id="unique-users" data-section="unique-users">
+      <SectionBridge label="TOP MODELS" href="#top-models" />
+      <SectionTitle title="Unique Users" description="Daily unique OpenCode Go users by model." />
+      <Show
+        when={data().some((item) => usageTotal(item) > 0)}
+        fallback={
+          <EmptyState title="No user data" description="No user-bearing model_stat rows matched this window." />
+        }
+      >
+        <TopModelsChart
+          data={data()}
+          range="2M"
+          metric="users"
+          ariaLabel="Stacked unique user chart by model"
+          activeModel={activeModel()}
+          onActiveModelChange={setActiveModel}
+        />
+      </Show>
+    </section>
   )
 }
 
@@ -807,10 +849,8 @@ function stackedTopModelsSegments(point: UsagePoint, order: Map<string, number>)
 }
 
 function getTopModelsSegmentOrder(data: UsagePoint[]) {
-  return getRankOrder(
-    data.flatMap((point) =>
-      point.segments.map((segment, index) => ({ key: segment.model, value: segment.value, index })),
-    ),
+  return new Map(
+    data.find((point) => point.segments.length > 0)?.segments.map((segment, index) => [segment.model, index]) ?? [],
   )
 }
 
@@ -862,15 +902,29 @@ function formatTokens(value: number) {
   return `${Math.round(value * 1000)}B`
 }
 
+function formatUsageChartValue(value: number, metric: "tokens" | "users") {
+  if (metric === "users") return formatUsers(value)
+  return formatTokens(value)
+}
+
+function usageChartTotalLabel(metric: "tokens" | "users") {
+  if (metric === "users") return "model users"
+  return "total"
+}
+
+function formatUsers(value: number) {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(value >= 10_000_000 ? 0 : 1)}M`
+  if (value >= 1_000) return `${(value / 1_000).toFixed(value >= 10_000 ? 0 : 1)}K`
+  return new Intl.NumberFormat("en").format(Math.round(value))
+}
+
 function Leaderboard(props: {
   data: LeaderboardEntry[]
   activeModel: string | undefined
   onActiveModelChange: (model: string | undefined) => void
 }) {
   const featured = createMemo(() => props.data.slice(0, 3))
-  const columns = createMemo(() =>
-    [0, 1, 2].map((index) => props.data.slice(3 + index * 5, 8 + index * 5)).filter((column) => column.length > 0),
-  )
+  const compact = createMemo(() => props.data.slice(3))
 
   return (
     <div id="leaderboard" data-component="leaderboard" role="list" aria-label="Model token leaderboard">
@@ -888,20 +942,14 @@ function Leaderboard(props: {
       </div>
       <div data-slot="leaderboard-pattern" aria-hidden="true" />
       <div data-slot="leaderboard-compact">
-        <For each={columns()}>
-          {(column) => (
-            <div data-slot="leaderboard-column">
-              <For each={column}>
-                {(entry) => (
-                  <LeaderboardCard
-                    entry={entry}
-                    size="compact"
-                    active={props.activeModel === entry.model}
-                    onActiveModelChange={props.onActiveModelChange}
-                  />
-                )}
-              </For>
-            </div>
+        <For each={compact()}>
+          {(entry) => (
+            <LeaderboardCard
+              entry={entry}
+              size="compact"
+              active={props.activeModel === entry.model}
+              onActiveModelChange={props.onActiveModelChange}
+            />
           )}
         </For>
       </div>
@@ -956,7 +1004,11 @@ function LeaderboardCard(props: {
           </div>
           <div>
             <span>{props.entry.author}</span>
-            <span data-slot="delta" data-negative={props.entry.change < 0 ? "true" : undefined}>
+            <span
+              data-slot="delta"
+              data-new={props.entry.change === null ? "true" : undefined}
+              data-negative={props.entry.change !== null && props.entry.change < 0 ? "true" : undefined}
+            >
               {formatChange(props.entry.change)}
             </span>
           </div>
@@ -978,7 +1030,8 @@ function formatBillions(value: number) {
   return `${value}B`
 }
 
-function formatChange(value: number) {
+function formatChange(value: number | null) {
+  if (value === null) return "New"
   if (value > 0) return `+${value}%`
   return `${value}%`
 }
@@ -1288,6 +1341,7 @@ function GeoWorldMap(props: {
             return (
               <path
                 d={country.path}
+                data-country-id={country.id}
                 data-has-data={entry() ? "true" : undefined}
                 data-active={entry()?.country === props.activeCountry ? "true" : undefined}
                 style={{ "--geo-country-opacity": String(countryOpacity(entry())) } as JSX.CSSProperties}
@@ -1303,6 +1357,37 @@ function GeoWorldMap(props: {
                   props.onActiveCountryChange(item.country)
                 }}
               />
+            )
+          }}
+        </For>
+      </g>
+      <g data-slot="geo-country-markers">
+        <For each={worldCountryPaths}>
+          {(country) => {
+            const entry = () => props.countryById.get(country.id)
+            return (
+              <Show when={country.marker && entry() ? country.marker : undefined}>
+                {(marker) => (
+                  <circle
+                    cx={marker().x}
+                    cy={marker().y}
+                    r={entry()?.country === props.activeCountry ? 3.4 : 2.4}
+                    data-active={entry()?.country === props.activeCountry ? "true" : undefined}
+                    style={{ "--geo-country-opacity": String(countryOpacity(entry())) } as JSX.CSSProperties}
+                    aria-hidden="true"
+                    onPointerEnter={() => {
+                      const item = entry()
+                      if (!item) return
+                      props.onActiveCountryChange(item.country)
+                    }}
+                    onClick={() => {
+                      const item = entry()
+                      if (!item) return
+                      props.onActiveCountryChange(item.country)
+                    }}
+                  />
+                )}
+              </Show>
             )
           }}
         </For>
@@ -1353,6 +1438,14 @@ function countryNumericId(country: string) {
   return countryNumericIds.get(country.toUpperCase())?.padStart(3, "0")
 }
 
+function geoCountryMarker(country: (typeof worldCountries.features)[number]) {
+  const bounds = worldPath.bounds(country)
+  const [x, y] = worldPath.centroid(country)
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return undefined
+  if (bounds[1][0] - bounds[0][0] >= 3 && bounds[1][1] - bounds[0][1] >= 3) return undefined
+  return { x, y }
+}
+
 function formatCountryName(country: string) {
   const code = country.toUpperCase()
   if (code === "ZZ") return "Unknown"
@@ -1361,9 +1454,7 @@ function formatCountryName(country: string) {
 }
 
 function formatGeoTokens(value: number) {
-  if (value >= 1) return formatTrillions(value)
-  if (value >= 0.001) return `${Number((value * 1000).toFixed(value >= 0.01 ? 0 : 1))}B`
-  return `${Math.round(value * 1_000_000)}M`
+  return formatTrillions(value)
 }
 
 function formatGeoShare(value: number) {
@@ -1419,6 +1510,9 @@ function formatMarketMobileDate(label: string) {
 }
 
 function formatTrillions(value: number) {
+  if (value === 0) return "0"
+  if (value < 0.001) return `${Number((value * 1_000_000).toFixed(value >= 0.00001 ? 0 : 1))}M`
+  if (value < 1) return `${Number((value * 1_000).toFixed(value >= 0.01 ? 0 : 1))}B`
   return `${value.toFixed(value >= 10 ? 0 : 1)}T`
 }
 
@@ -1449,10 +1543,10 @@ function marketDateParts(label: string) {
   return { start: start ?? label, end: end ?? start ?? label }
 }
 
-function TokenCostSection(props: { data: StatsHomeData["tokenCost"] }) {
+function TokenCostSection(props: { data: StatsHomeData["tokenCost"]; catalog: ModelCatalog | null }) {
   const [product, setProduct] = createSignal<TokenProduct>("Go")
   const [activeIndex, setActiveIndex] = createSignal(2)
-  const data = createMemo(() => props.data[product()])
+  const data = createMemo(() => priceTokenCostFromCatalog(props.data[product()], props.catalog))
   const visible = createMemo(() => data().slice(0, 13))
   const selectedIndex = createMemo(() => Math.min(activeIndex(), Math.max(visible().length - 1, 0)))
 
@@ -1637,7 +1731,7 @@ function formatRatio(value: number) {
 }
 
 function formatDollars(value: number) {
-  return `$${value.toFixed(2)}`
+  return `$${value.toFixed(value > 0 && value < 0.01 ? 4 : 2)}`
 }
 
 function MetricBar(props: { value: number; max: number; active: boolean }) {
@@ -1753,6 +1847,29 @@ function LiveIndicator() {
 function formatTokenCount(value: number) {
   if (value >= 1_000_000) return `${Number((value / 1_000_000).toFixed(1))}M`
   return `${Math.round(value / 1_000)}K`
+}
+
+function priceTokenCostFromCatalog(data: TokenCostEntry[], catalog: ModelCatalog | null) {
+  if (!catalog) return data
+  return data
+    .flatMap((item) => {
+      const cost = catalogModelCost(catalog, item.model)
+      if (!cost) return []
+      return [
+        {
+          ...item,
+          total: cost.output,
+          input: cost.input,
+          output: cost.output,
+          cached: cost.cacheRead ?? cost.input,
+        },
+      ]
+    })
+    .toSorted((a, b) => a.total - b.total || a.model.localeCompare(b.model))
+}
+
+function catalogModelCost(catalog: ModelCatalog, model: string) {
+  return findModelCatalogEntry(catalog, model)?.cost
 }
 
 function formatSessionCost(value: number) {

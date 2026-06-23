@@ -1,37 +1,46 @@
 import fs from "fs/promises"
 import path from "path"
 import { describe, expect } from "bun:test"
-import { Effect, Layer, Schema } from "effect"
+import { DateTime, Effect, Equal, Hash, Layer, Schema } from "effect"
 import { Tool } from "@opencode-ai/core/public"
+import { define } from "@opencode-ai/plugin/v2/effect"
+import { AgentV2 } from "@opencode-ai/core/agent"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { LocationServiceMap } from "@opencode-ai/core/location-layer"
-import { PluginBoot } from "@opencode-ai/core/plugin/boot"
+import { Location } from "@opencode-ai/core/location"
+import { PluginV2 } from "@opencode-ai/core/plugin"
+import { ModelV2 } from "@opencode-ai/core/model"
+import { ProjectV2 } from "@opencode-ai/core/project"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
+import { SessionV2 } from "@opencode-ai/core/session"
+import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
+import { toolDefinitions } from "./lib/tool"
 import { FSUtil } from "../src/fs-util"
-import { Auth } from "../src/auth"
+import { Credential } from "../src/credential"
+import { Database } from "../src/database/database"
 import { EventV2 } from "../src/event"
 import { Global } from "../src/global"
 import { ModelsDev } from "../src/models-dev"
 import { Npm } from "../src/npm"
 import { Project } from "../src/project"
-import { ProjectReference } from "../src/project-reference"
-import { LocationSearch } from "../src/location-search"
+import { Reference } from "../src/reference"
 import { ToolRegistry } from "../src/tool/registry"
 import { ApplicationTools } from "../src/tool/application-tools"
 
 const applicationTools = ApplicationTools.layer
 const it = testEffect(
   Layer.merge(
-    applicationTools,
+    Layer.mergeAll(applicationTools, Database.defaultLayer, EventV2.defaultLayer),
     LocationServiceMap.layer.pipe(
+      Layer.provide(applicationTools),
       Layer.provide(
         Layer.mergeAll(
           Project.defaultLayer,
           EventV2.defaultLayer,
-          Auth.defaultLayer,
+          Credential.defaultLayer.pipe(Layer.fresh),
           Npm.defaultLayer,
           ModelsDev.defaultLayer,
           FSUtil.defaultLayer,
@@ -43,6 +52,16 @@ const it = testEffect(
 )
 
 describe("LocationServiceMap", () => {
+  it.effect("compares equivalent location refs by value", () =>
+    Effect.sync(() => {
+      const directory = AbsolutePath.make("/project")
+      expect(Equal.equals(Location.Ref.make({ directory }), Location.Ref.make({ directory }))).toBe(true)
+      expect(Hash.hash(Location.Ref.make({ directory }))).toBe(
+        Hash.hash(Location.Ref.make({ directory, workspaceID: undefined })),
+      )
+    }),
+  )
+
   it.live("isolates location state while sharing location policy with catalog", () =>
     Effect.acquireRelease(
       Effect.promise(() => Promise.all([tmpdir(), tmpdir()])),
@@ -50,11 +69,11 @@ describe("LocationServiceMap", () => {
     ).pipe(
       Effect.flatMap(([blocked, allowed]) =>
         Effect.gen(function* () {
-          yield* (yield* ApplicationTools.Service).attach({
+          yield* (yield* ApplicationTools.Service).register({
             application_context: Tool.make({
               description: "Read application context",
-              parameters: Schema.Struct({}),
-              success: Schema.Struct({ ok: Schema.Boolean }),
+              input: Schema.Struct({}),
+              output: Schema.Struct({ ok: Schema.Boolean }),
               execute: () => Effect.succeed({ ok: true }),
             }),
           })
@@ -69,17 +88,17 @@ describe("LocationServiceMap", () => {
 
           const update = (directory: string) =>
             Effect.gen(function* () {
-              yield* PluginBoot.Service.use((boot) => boot.wait())
-              yield* ProjectReference.Service
-              yield* LocationSearch.Service
+              yield* Reference.Service
               const catalog = yield* Catalog.Service
-              const transform = yield* catalog.transform()
-              yield* transform((editor) => editor.provider.update(ProviderV2.ID.make("test"), () => {}))
+              yield* catalog.transform((editor) => editor.provider.update(ProviderV2.ID.make("test"), () => {}))
               return {
                 providers: yield* catalog.provider.all(),
-                tools: yield* (yield* ToolRegistry.Service).definitions(),
+                tools: yield* toolDefinitions(yield* ToolRegistry.Service),
               }
-            }).pipe(Effect.scoped, Effect.provide(LocationServiceMap.get({ directory: AbsolutePath.make(directory) })))
+            }).pipe(
+              Effect.scoped,
+              Effect.provide(LocationServiceMap.get(Location.Ref.make({ directory: AbsolutePath.make(directory) }))),
+            )
 
           const blockedState = yield* update(blocked.path)
           expect(blockedState.providers.some((provider) => provider.id === ProviderV2.ID.make("test"))).toBe(false)
@@ -116,6 +135,90 @@ describe("LocationServiceMap", () => {
             "write",
           ])
         }),
+      ),
+    ),
+  )
+
+  it.live("rejects an unavailable selected model during location model resolution", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
+          yield* Effect.promise(() =>
+            fs.writeFile(
+              path.join(dir.path, "opencode.json"),
+              JSON.stringify({
+                providers: {
+                  unavailable: {
+                    name: "Unavailable",
+                    api: { type: "native", settings: {} },
+                    models: { chat: { disabled: true } },
+                  },
+                },
+              }),
+            ),
+          )
+          const failure = yield* SessionRunnerModel.Service.use((models) =>
+            models.resolve(
+              SessionV2.Info.make({
+                id: SessionV2.ID.make("ses_unavailable_model"),
+                projectID: ProjectV2.ID.global,
+                title: "test",
+                model: {
+                  id: ModelV2.ID.make("chat"),
+                  providerID: ProviderV2.ID.make("unavailable"),
+                },
+                cost: 0,
+                tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+                time: { created: DateTime.makeUnsafe(0), updated: DateTime.makeUnsafe(0) },
+                location,
+              }),
+            ),
+          ).pipe(Effect.provide(LocationServiceMap.get(location)), Effect.flip)
+
+          expect(failure).toMatchObject({
+            _tag: "SessionRunnerModel.ModelUnavailableError",
+            providerID: "unavailable",
+            modelID: "chat",
+          })
+        }),
+      ),
+    ),
+  )
+
+  it.live("installs public plugins into a location", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          const plugins = yield* PluginV2.Service
+          const reviewer = define({
+            id: "reviewer",
+            effect: (ctx) =>
+              ctx.agent
+                .transform((agent) => {
+                  agent.update("reviewer", (item) => {
+                    item.description = "Reviews code"
+                    item.mode = "subagent"
+                  })
+                })
+                .pipe(Effect.asVoid),
+          })
+          yield* plugins.add(PluginV2.ID.make(reviewer.id), reviewer.effect)
+
+          expect(yield* (yield* AgentV2.Service).get(AgentV2.ID.make("reviewer"))).toMatchObject({
+            description: "Reviews code",
+            mode: "subagent",
+          })
+        }).pipe(
+          Effect.scoped,
+          Effect.provide(LocationServiceMap.get(Location.Ref.make({ directory: AbsolutePath.make(dir.path) }))),
+        ),
       ),
     ),
   )

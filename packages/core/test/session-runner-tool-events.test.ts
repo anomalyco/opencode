@@ -19,17 +19,17 @@ const capture = () => {
       Effect.sync(() => {
         const event = { id: EventV2.ID.create(), type: definition.type, data } as EventV2.Payload<typeof definition>
         published.push({
-          type: definition.sync ? EventV2.versionedType(definition.type, definition.sync.version) : definition.type,
+          type: definition.durable
+            ? EventV2.versionedType(definition.type, definition.durable.version)
+            : definition.type,
           data,
         })
         return event
       }),
     subscribe: () => Stream.empty,
     all: () => Stream.empty,
-    aggregateEvents: () => Stream.empty,
-    sync: () => Effect.succeed(Effect.void),
+    durable: () => Stream.empty,
     listen: () => Effect.succeed(Effect.void),
-    beforeCommit: () => Effect.void,
     project: () => Effect.void,
     replay: () => Effect.void,
     replayAll: () => Effect.succeed(undefined),
@@ -57,14 +57,14 @@ const result = LLMEvent.toolResult({
     type: "content",
     value: [
       { type: "text", text: "Image read successfully" },
-      { type: "media", mediaType: "image/png", data: base64, filename: "pixel.png" },
+      { type: "file", uri: `data:image/png;base64,${base64}`, mime: "image/png", name: "pixel.png" },
     ],
   },
   output: {
     structured: { type: "media", mime: "image/png" },
     content: [
       { type: "text", text: "Image read successfully" },
-      { type: "file", source: { type: "data", data: base64 }, mime: "image/png", name: "pixel.png" },
+      { type: "file", uri: `data:image/png;base64,${base64}`, mime: "image/png", name: "pixel.png" },
     ],
   },
 })
@@ -83,7 +83,7 @@ test("local tool success serializes media base64 once and reconstructs from stru
   expect(success?.data).toMatchObject({
     content: [
       { type: "text", text: "Image read successfully" },
-      { type: "file", source: { type: "data", data: base64 }, mime: "image/png" },
+      { type: "file", uri: `data:image/png;base64,${base64}`, mime: "image/png" },
     ],
   })
 })
@@ -119,8 +119,8 @@ test("old success event data containing result still decodes", () => {
     assistantMessageID: SessionMessage.ID.create(),
     callID: "call-old",
     structured: { type: "media", mime: "image/png" },
-    content: [{ type: "file", source: { type: "data", data: base64 }, mime: "image/png" }],
-    result: { type: "content", value: [{ type: "media", mediaType: "image/png", data: base64 }] },
+    content: [{ type: "file", uri: `data:image/png;base64,${base64}`, mime: "image/png" }],
+    result: { type: "content", value: [{ type: "file", uri: `data:image/png;base64,${base64}`, mime: "image/png" }] },
     provider: { executed: false },
   })
   expect(decoded.result).toMatchObject({ type: "content" })

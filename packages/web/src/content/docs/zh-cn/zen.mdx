@@ -68,6 +68,7 @@ OpenCode Zen 的工作方式与 OpenCode 中的任何其他提供商相同。
 | GPT 5                  | gpt-5                  | `https://opencode.ai/zen/v1/responses`               | `@ai-sdk/openai`            |
 | GPT 5 Codex            | gpt-5-codex            | `https://opencode.ai/zen/v1/responses`               | `@ai-sdk/openai`            |
 | GPT 5 Nano             | gpt-5-nano             | `https://opencode.ai/zen/v1/responses`               | `@ai-sdk/openai`            |
+| Claude Fable 5         | claude-fable-5         | `https://opencode.ai/zen/v1/messages`                | `@ai-sdk/anthropic`         |
 | Claude Opus 4.8        | claude-opus-4-8        | `https://opencode.ai/zen/v1/messages`                | `@ai-sdk/anthropic`         |
 | Claude Opus 4.7        | claude-opus-4-7        | `https://opencode.ai/zen/v1/messages`                | `@ai-sdk/anthropic`         |
 | Claude Opus 4.6        | claude-opus-4-6        | `https://opencode.ai/zen/v1/messages`                | `@ai-sdk/anthropic`         |
@@ -85,9 +86,11 @@ OpenCode Zen 的工作方式与 OpenCode 中的任何其他提供商相同。
 | Qwen3.7 Plus           | qwen3.7-plus           | `https://opencode.ai/zen/v1/messages`                | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus           | qwen3.6-plus           | `https://opencode.ai/zen/v1/messages`                | `@ai-sdk/anthropic`         |
 | Qwen3.5 Plus           | qwen3.5-plus           | `https://opencode.ai/zen/v1/messages`                | `@ai-sdk/anthropic`         |
+| DeepSeek V4 Pro        | deepseek-v4-pro        | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Flash      | deepseek-v4-flash      | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | MiniMax M2.7           | minimax-m2.7           | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | MiniMax M2.5           | minimax-m2.5           | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
+| GLM 5.2                | glm-5.2                | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | GLM 5.1                | glm-5.1                | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | GLM 5                  | glm-5                  | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | Kimi K2.5              | kimi-k2.5              | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
@@ -95,6 +98,7 @@ OpenCode Zen 的工作方式与 OpenCode 中的任何其他提供商相同。
 | Grok Build 0.1         | grok-build-0.1         | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | Big Pickle             | big-pickle             | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | MiMo-V2.5 Free         | mimo-v2.5-free         | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
+| North Mini Code Free   | north-mini-code-free   | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | Nemotron 3 Ultra Free  | nemotron-3-ultra-free  | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Flash Free | deepseek-v4-flash-free | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 
@@ -121,9 +125,11 @@ https://opencode.ai/zen/v1/models
 | Big Pickle                        | Free   | Free    | Free     | -        |
 | DeepSeek V4 Flash Free            | Free   | Free    | Free     | -        |
 | MiMo-V2.5 Free                    | Free   | Free    | Free     | -        |
+| North Mini Code Free              | Free   | Free    | Free     | -        |
 | Nemotron 3 Ultra Free             | Free   | Free    | Free     | -        |
 | MiniMax M2.7                      | $0.30  | $1.20   | $0.06    | $0.375   |
 | MiniMax M2.5                      | $0.30  | $1.20   | $0.06    | $0.375   |
+| GLM 5.2                           | $1.40  | $4.40   | $0.26    | -        |
 | GLM 5.1                           | $1.40  | $4.40   | $0.26    | -        |
 | GLM 5                             | $1.00  | $3.20   | $0.20    | -        |
 | Kimi K2.5                         | $0.60  | $3.00   | $0.10    | -        |
@@ -132,8 +138,10 @@ https://opencode.ai/zen/v1/models
 | Qwen3.7 Plus                      | $0.40  | $1.60   | $0.04    | $0.50    |
 | Qwen3.6 Plus                      | $0.50  | $3.00   | $0.05    | $0.625   |
 | Qwen3.5 Plus                      | $0.20  | $1.20   | $0.02    | $0.25    |
-| DeepSeek V4 Flash                 | $0.14  | $0.28   | $0.03    | -        |
+| DeepSeek V4 Pro                   | $1.74  | $3.48   | $0.145   | -        |
+| DeepSeek V4 Flash                 | $0.14  | $0.28   | $0.028   | -        |
 | Grok Build 0.1                    | $1.00  | $2.00   | $0.20    | -        |
+| Claude Fable 5                    | $10.00 | $50.00  | $1.00    | $12.50   |
 | Claude Opus 4.8                   | $5.00  | $25.00  | $0.50    | $6.25    |
 | Claude Opus 4.7                   | $5.00  | $25.00  | $0.50    | $6.25    |
 | Claude Opus 4.6                   | $5.00  | $25.00  | $0.50    | $6.25    |
@@ -179,6 +187,7 @@ https://opencode.ai/zen/v1/models
 
 - DeepSeek V4 Flash Free 目前在 OpenCode 上限时免费提供。团队正在利用这段时间收集反馈并改进模型。
 - MiMo-V2.5 Free 目前在 OpenCode 上限时免费提供。团队正在利用这段时间收集反馈并改进模型。
+- North Mini Code Free 目前在 OpenCode 上限时免费提供。团队正在利用这段时间收集反馈并改进模型。
 - Nemotron 3 Ultra Free 目前在 OpenCode 上限时免费提供。团队正在利用这段时间收集反馈并改进模型。
 - Big Pickle 是一个隐身模型，目前在 OpenCode 上限时免费提供。团队正在利用这段时间收集反馈并改进模型。
 
@@ -231,6 +240,7 @@ https://opencode.ai/zen/v1/models
 - Big Pickle：在免费期间，收集的数据可能会被用于改进模型。
 - DeepSeek V4 Flash Free：在免费期间，收集的数据可能会被用于改进模型。
 - MiMo-V2.5 Free：在免费期间，收集的数据可能会被用于改进模型。
+- North Mini Code Free：免费期间，所收集的数据可能会被保留并用于改进模型。请勿提交个人或机密数据。请参阅我们的[使用条款](https://cohere.com/terms-of-use)和[隐私政策](https://cohere.com/privacy)。
 - Nemotron 3 Ultra Free（NVIDIA 免费端点）：仅供试用 — 请勿提交个人或机密数据。出于安全目的以及为改进 NVIDIA 产品和服务，系统会记录你的使用情况。出于改进目的而记录的会话数据不会与你的身份或任何持久标识符相关联。有关我们数据处理实践的更多信息，请参阅我们的[隐私政策](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf)。与此端点进行交互，即表示你同意我们收集、记录和使用此类信息，并同意 [NVIDIA API Trial Terms of Service](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf)。
 - OpenAI APIs：请求会根据 [OpenAI's Data Policies](https://platform.openai.com/docs/guides/your-data) 保留 30 天。
 - Anthropic APIs：请求会根据 [Anthropic's Data Policies](https://docs.anthropic.com/en/docs/claude-code/data-usage) 保留 30 天。

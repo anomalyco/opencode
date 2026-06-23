@@ -6,6 +6,7 @@ import { AgentPlugin } from "@opencode-ai/core/plugin/agent"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { location } from "./fixture/location"
 import { testEffect } from "./lib/effect"
+import { agentHost, host } from "./plugin/host"
 
 const it = testEffect(AgentV2.locationLayer)
 
@@ -23,9 +24,7 @@ describe("AgentV2", () => {
     Effect.gen(function* () {
       const agent = yield* AgentV2.Service
       const id = AgentV2.ID.make("reviewer")
-      const transform = yield* agent.transform()
-
-      yield* transform((editor) =>
+      yield* agent.transform((editor) =>
         editor.update(id, (info) => {
           info.description = "Reviews code"
           info.mode = "subagent"
@@ -41,32 +40,28 @@ describe("AgentV2", () => {
     Effect.gen(function* () {
       const agent = yield* AgentV2.Service
       const id = AgentV2.ID.make("reviewer")
-      const transform = yield* agent.transform()
-
-      yield* transform((editor) =>
+      let description = "Old description"
+      let hidden = true
+      yield* agent.transform((editor) =>
         editor.update(id, (info) => {
-          info.description = "Old description"
-          info.hidden = true
+          info.description = description
+          info.hidden = hidden
         }),
       )
-      yield* transform((editor) =>
-        editor.update(id, (info) => {
-          info.description = "New description"
-        }),
-      )
+      description = "New description"
+      hidden = false
+      yield* agent.reload()
 
       expect(yield* agent.get(id)).toMatchObject({ description: "New description", hidden: false })
     }),
   )
 
-  it.effect("removes a transform contribution when its scope closes", () =>
+  it.effect("removes a transform when its scope closes", () =>
     Effect.gen(function* () {
       const agent = yield* AgentV2.Service
       const id = AgentV2.ID.make("scoped")
       const scope = yield* Scope.make()
-      const transform = yield* agent.transform().pipe(Scope.provide(scope))
-
-      yield* transform((editor) => editor.update(id, () => {}))
+      yield* agent.transform((editor) => editor.update(id, () => {})).pipe(Scope.provide(scope))
       expect(yield* agent.get(id)).toBeDefined()
 
       yield* Scope.close(scope, Exit.void)
@@ -79,7 +74,7 @@ describe("AgentV2", () => {
       const agent = yield* AgentV2.Service
       const id = AgentV2.ID.make("build")
 
-      yield* agent.update((editor) =>
+      yield* agent.transform((editor) =>
         editor.update(id, (info) => {
           info.mode = "primary"
           info.hidden = true
@@ -95,10 +90,10 @@ describe("AgentV2", () => {
       const agent = yield* AgentV2.Service
       const id = AgentV2.ID.make("custom")
 
-      yield* agent.update((editor) => editor.update(id, () => {}))
+      yield* agent.transform((editor) => editor.update(id, () => {}))
       expect(yield* agent.get(id)).toEqual(AgentV2.Info.empty(id))
 
-      yield* agent.update((editor) => editor.remove(id))
+      yield* agent.transform((editor) => editor.remove(id))
       expect(yield* agent.get(id)).toBeUndefined()
     }),
   )
@@ -106,7 +101,11 @@ describe("AgentV2", () => {
   it.effect("does not ambiently opt built-in agents into bash", () =>
     Effect.gen(function* () {
       const agent = yield* AgentV2.Service
-      yield* AgentPlugin.Plugin.effect.pipe(
+      yield* AgentPlugin.Plugin.effect(
+        host({
+          agent: agentHost(agent),
+        }),
+      ).pipe(
         Effect.provideService(
           Location.Service,
           Location.Service.of(location({ directory: AbsolutePath.make("/project") })),

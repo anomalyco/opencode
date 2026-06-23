@@ -64,12 +64,12 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const models = useModels()
 
     const id = createMemo(() => params.id || undefined)
-    const list = createMemo(() => sync.data.agent.filter((item) => item.mode !== "subagent" && !item.hidden))
+    const list = createMemo(() => sync().data.agent.filter((item) => item.mode !== "subagent" && !item.hidden))
     const connected = createMemo(() => new Set(providers.connected().map((item) => item.id)))
 
     const [saved, setSaved] = persisted(
       {
-        ...Persist.serverWorkspace(serverSDK.scope, sdk.directory, "model-selection", ["model-selection.v1"]),
+        ...Persist.serverWorkspace(serverSDK().scope, sdk().directory, "model-selection", ["model-selection.v1"]),
         migrate,
       },
       createStore<Saved>({
@@ -124,14 +124,14 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const scope = createMemo<State | undefined>(() => {
       const session = id()
       if (!session) return store.draft
-      return saved.session[session] ?? handoff.get(handoffKey(serverSDK.scope, sdk.directory, session))
+      return saved.session[session] ?? handoff.get(handoffKey(serverSDK().scope, sdk().directory, session))
     })
 
     createEffect(() => {
       const session = id()
       if (!session) return
 
-      const key = handoffKey(serverSDK.scope, sdk.directory, session)
+      const key = handoffKey(serverSDK().scope, sdk().directory, session)
       const next = handoff.get(key)
       if (!next) return
       if (saved.session[session] !== undefined) {
@@ -144,8 +144,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     })
 
     const configuredModel = () => {
-      if (!sync.data.config.model) return
-      const [providerID, modelID] = sync.data.config.model.split("/")
+      const configured = sync().data.config.model
+      if (!configured) return
+      const [providerID, modelID] = configured.split("/")
       const model = { providerID, modelID }
       if (validModel(model)) return model
     }
@@ -363,7 +364,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     }
 
     const result = {
-      slug: createMemo(() => base64Encode(sdk.directory)),
+      slug: createMemo(() => base64Encode(sdk().directory)),
       model,
       agent,
       session: {
@@ -374,13 +375,13 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           const next = clone(snapshot())
           if (!next) return
 
-          if (dir === sdk.directory) {
+          if (dir === sdk().directory) {
             setSaved("session", session, next)
             setStore("draft", undefined)
             return
           }
 
-          handoff.set(handoffKey(serverSDK.scope, dir, session), next)
+          handoff.set(handoffKey(serverSDK().scope, dir, session), next)
           setStore("draft", undefined)
         },
         restore(msg: { sessionID: string; agent: string; model: ModelKey }) {
@@ -388,7 +389,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           if (!session) return
           if (msg.sessionID !== session) return
           if (saved.session[session] !== undefined) return
-          if (handoff.has(handoffKey(serverSDK.scope, sdk.directory, session))) return
+          if (handoff.has(handoffKey(serverSDK().scope, sdk().directory, session))) return
 
           setSaved("session", session, {
             agent: msg.agent,

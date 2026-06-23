@@ -38,9 +38,8 @@ const toolCall = (tool: SessionMessage.AssistantTool, providerMetadata: Provider
 
 const toolResult = (tool: SessionMessage.AssistantTool, providerMetadata: ProviderMetadata | undefined) => {
   if (tool.state.status === "completed") {
-    // TODO: Materialize remote URL and managed file sources before provider-history lowering.
-    // ToolOutput.toResultValue intentionally rejects unmaterialized sources rather than
-    // guessing whether a provider can fetch them or leaking host-local resource paths.
+    // TODO: Materialize remote and managed URIs before provider-history lowering.
+    // ToolOutput.toResultValue rejects unresolved URIs rather than treating them as media bytes.
     const result =
       tool.provider?.executed === true && tool.state.result !== undefined
         ? tool.state.result
@@ -83,12 +82,21 @@ const assistant = (message: SessionMessage.Assistant, model: Model) => {
     const result = toolResult(item, sameModel ? (item.provider?.resultMetadata ?? item.provider?.metadata) : undefined)
     return item.provider?.executed === true && result ? [call, result] : [call]
   })
+  const meaningful = content.filter((part) => {
+    if (part.type === "text") return part.text !== ""
+    if (part.type !== "reasoning") return true
+    return part.text !== "" || (part.providerMetadata !== undefined && Object.keys(part.providerMetadata).length > 0)
+  })
   const results = message.content
     .filter((item): item is SessionMessage.AssistantTool => item.type === "tool" && item.provider?.executed !== true)
     .map((item) => toolResult(item, sameModel ? (item.provider?.resultMetadata ?? item.provider?.metadata) : undefined))
     .filter((message) => message !== undefined)
     .map(Message.tool)
-  return [Message.make({ id: message.id, role: "assistant", content, metadata: message.metadata }), ...results]
+  if (meaningful.length === 0) return results
+  return [
+    Message.make({ id: message.id, role: "assistant", content: meaningful, metadata: message.metadata }),
+    ...results,
+  ]
 }
 
 function toLLMMessage(message: SessionMessage.Message, model: Model): Message[] {
@@ -105,7 +113,6 @@ function toLLMMessage(message: SessionMessage.Message, model: Model): Message[] 
           metadata: {
             ...message.metadata,
             ...(message.agents?.length ? { agents: message.agents } : {}),
-            ...(message.references?.length ? { references: message.references } : {}),
           },
         }),
       ]

@@ -3,42 +3,20 @@ import { makeEventListener } from "@solid-primitives/event-listener"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
-import { ProjectAvatar } from "@opencode-ai/ui/v2/project-avatar-v2"
-import { getProjectAvatarVariant, type LocalProject } from "@/context/layout"
 import { useGlobal } from "@/context/global"
 import { useLanguage } from "@/context/language"
 import { ServerConnection } from "@/context/server"
-import { displayName, getProjectAvatarSource, projectForSession } from "@/pages/layout/helpers"
-import { useSessionTabAvatarState } from "@/pages/layout/project-avatar-state"
+import { projectForSession } from "@/pages/layout/helpers"
+import { SessionTabAvatar } from "@/pages/layout/session-tab-avatar"
 import { showToast } from "@/utils/toast"
+import type { Session } from "@opencode-ai/sdk/v2"
 import "./titlebar-tab-nav.css"
-
-function ProjectTabAvatar(props: {
-  project?: LocalProject
-  directory: string
-  sessionId: string
-  activeServer: boolean
-}) {
-  const directory = () => props.directory
-  const sessionId = () => props.sessionId
-  const state = useSessionTabAvatarState(directory, sessionId, () => props.activeServer)
-  return (
-    <ProjectAvatar
-      fallback={displayName(props.project ?? { worktree: props.directory })}
-      src={getProjectAvatarSource(props.project?.id, props.project?.icon)}
-      variant={getProjectAvatarVariant(props.project?.icon?.color)}
-      unread={state.unread()}
-      loading={state.loading()}
-    />
-  )
-}
 
 export function TabNavItem(props: {
   ref?: HTMLDivElement
   href: string
   server: ServerConnection.Key
-  directory: string
-  sessionId?: string
+  session: Session
   onClose: () => void
   onNavigate: () => void
   active?: boolean
@@ -66,23 +44,6 @@ export function TabNavItem(props: {
     const conn = global.servers.list().find((item) => ServerConnection.key(item) === props.server)
     if (conn) return global.createServerCtx(conn)
   })
-  const dirSyncCtx = createMemo(() => serverCtx()?.sync.createDirSyncContext(props.directory))
-
-  createEffect(() => {
-    const ctx = dirSyncCtx()
-    const sessionID = props.sessionId
-    if (!ctx || !sessionID) return
-    void ctx.session.sync(sessionID).catch(() => {})
-  })
-
-  const session = createMemo(() => {
-    const ctx = dirSyncCtx()
-    const sessionID = props.sessionId
-    if (!ctx || !sessionID) return
-    const info = ctx.session.get(sessionID)
-    void info?.title
-    return info
-  })
 
   const measureTitleOverflow = () => {
     if (!titleEl || editing()) {
@@ -93,7 +54,7 @@ export function TabNavItem(props: {
   }
 
   createEffect(() => {
-    session()?.title
+    props.session.title
     props.forceTruncate
     editing()
     requestAnimationFrame(measureTitleOverflow)
@@ -114,17 +75,16 @@ export function TabNavItem(props: {
 
   const rename = async (title: string) => {
     const ctx = serverCtx()
-    const sessionID = props.sessionId
-    if (!ctx || !sessionID) return
-    const client = ctx.sdk.createClient({ directory: props.directory, throwOnError: true })
-    await client.session.update({ sessionID, title })
+    if (!ctx) return
+    const client = ctx.sdk.createClient({ directory: props.session.directory, throwOnError: true })
+    await client.session.update({ sessionID: props.session.id, title })
   }
 
   const closeRename = async (save: boolean) => {
     if (committing || !editing()) return
     committing = true
 
-    const original = session()?.title ?? ""
+    const original = props.session.title
     const next = (titleEl.textContent ?? "").trim()
 
     titleEl.scrollLeft = 0
@@ -149,19 +109,15 @@ export function TabNavItem(props: {
 
   createEffect(() => {
     if (editing()) return
-    const title = session()?.title
-    if (title === undefined || !titleEl) return
-    titleEl.textContent = title
+    if (!titleEl) return
+    titleEl.textContent = props.session.title
   })
 
   const openRename = (event: MouseEvent) => {
     event.preventDefault()
     event.stopPropagation()
     if (props.dragging || editing()) return
-    const current = session()
-    if (!current) return
-
-    titleEl.textContent = current.title
+    titleEl.textContent = props.session.title
     setEditing(true)
 
     requestAnimationFrame(() => {
@@ -207,7 +163,7 @@ export function TabNavItem(props: {
         closeTab(event)
       }}
     >
-      <Show when={session()}>
+      <Show when={props.session}>
         {(session) => {
           const project = createMemo(() => projectForSession(session(), serverCtx()?.projects.list() ?? []))
 
@@ -229,9 +185,9 @@ export function TabNavItem(props: {
               class="flex h-full min-w-0 flex-1 flex-row items-center gap-1.5 text-[13px] font-medium text-v2-text-text-faint group-data-[active='true']:text-v2-text-text-base group-data-[editing='true']:text-v2-text-text-base [-webkit-user-drag:none]"
             >
               <span data-slot="project-avatar-slot">
-                <ProjectTabAvatar
+                <SessionTabAvatar
                   project={project()}
-                  directory={props.directory}
+                  directory={session().directory}
                   sessionId={session().id}
                   activeServer={props.activeServer}
                 />
@@ -255,7 +211,7 @@ export function TabNavItem(props: {
                   }
                   if (event.key !== "Escape") return
                   event.preventDefault()
-                  titleEl.textContent = session().title
+                  titleEl.textContent = props.session.title
                   void closeRename(false)
                 }}
                 onBlur={() => void closeRename(true)}
@@ -280,6 +236,66 @@ export function TabNavItem(props: {
           class="relative z-10 opacity-0 group-hover:opacity-100 group-data-[active=true]:opacity-100 group-data-[editing=true]:opacity-100"
           onClick={closeTab}
           icon={<IconV2 name="xmark-small" />}
+        />
+      </div>
+    </div>
+  )
+}
+
+export function DraftTabItem(props: {
+  ref?: HTMLDivElement
+  href: string
+  title: string
+  active?: boolean
+  onNavigate: () => void
+  onClose: () => void
+  dragging?: boolean
+  pressed?: boolean
+  hidden?: boolean
+}) {
+  const closeTab = (event: MouseEvent) => {
+    event.preventDefault()
+    event.stopPropagation()
+    props.onClose()
+  }
+  return (
+    <div
+      ref={props.ref}
+      data-titlebar-tab
+      data-active={props.active}
+      data-dragging={props.dragging}
+      data-pressed={props.pressed}
+      class="group relative shrink-0 flex h-7 max-w-60 flex-row items-center gap-1.5 overflow-hidden rounded-[6px] bg-[var(--tab-bg)] pl-1.5 pr-8 whitespace-nowrap [--tab-bg:var(--v2-background-bg-deep)] hover:[--tab-bg:var(--v2-background-bg-layer-02)] data-[active='true']:[--tab-bg:var(--v2-overlay-simple-overlay-pressed)] data-[dragging='true']:[--tab-bg:var(--v2-background-bg-layer-02)] data-[pressed='true']:[--tab-bg:var(--v2-background-bg-layer-02)] focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[var(--v2-border-border-focus)]"
+      classList={{ invisible: props.hidden }}
+      onMouseDown={(event) => {
+        if (event.button !== 1) return
+        closeTab(event)
+      }}
+    >
+      <a
+        href={props.href}
+        onClick={(event) => {
+          event.preventDefault()
+          props.onNavigate()
+        }}
+        class="flex h-full min-w-0 flex-1 flex-row items-center gap-1.5 overflow-hidden text-[13px] font-medium leading-5 text-v2-text-text-faint group-data-[active='true']:text-[var(--v2-text-text-base)]"
+      >
+        <span class="flex size-4 shrink-0 rotate-90 items-center justify-center">
+          <IconV2 name="edit" />
+        </span>
+        <span class="truncate leading-5">{props.title}</span>
+      </a>
+      <div data-slot="tab-close" class="absolute right-0 inset-y-0 flex w-7 items-center justify-center">
+        <IconButtonV2
+          size="small"
+          variant="ghost-muted"
+          onMouseDown={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+          }}
+          onClick={closeTab}
+          icon={<IconV2 name="xmark-small" />}
+          aria-label="Close tab"
         />
       </div>
     </div>

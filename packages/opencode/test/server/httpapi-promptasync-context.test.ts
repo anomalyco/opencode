@@ -16,6 +16,7 @@ import * as Socket from "effect/unstable/socket/Socket"
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/unstable/httpapi"
 import { mkdir } from "node:fs/promises"
 import { registerAdapter } from "../../src/control-plane/adapters"
+import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import type { WorkspaceAdapter } from "../../src/control-plane/types"
 import { Workspace } from "../../src/control-plane/workspace"
 import { InstanceRef, WorkspaceRef } from "../../src/effect/instance-ref"
@@ -58,7 +59,7 @@ const it = testEffect(
     InstanceLayer.layer,
     Project.defaultLayer,
     workspaceLayer,
-  ),
+  ).pipe(Layer.provide(Ripgrep.defaultLayer)),
 )
 
 const instanceContextTestLayer = Layer.mergeAll(

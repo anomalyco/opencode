@@ -1,5 +1,5 @@
 import { createStore, reconcile } from "solid-js/store"
-import { batch, createEffect, createMemo, onCleanup } from "solid-js"
+import { type Accessor, batch, createEffect, createMemo, onCleanup } from "solid-js"
 import { useParams } from "@solidjs/router"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useServerSDK } from "./server-sdk"
@@ -108,7 +108,7 @@ function buildNotificationIndex(list: Notification[]) {
 export const { use: useNotification, provider: NotificationProvider } = createSimpleContext({
   name: "Notification",
   gate: false,
-  init: () => {
+  init: (props: { directory?: Accessor<string | undefined>; sessionID?: Accessor<string | undefined> }) => {
     const params = useParams()
     const serverSDK = useServerSDK()
     const serverSync = useServerSync()
@@ -119,13 +119,13 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
     const empty: Notification[] = []
 
     const currentDirectory = createMemo(() => {
-      return decode64(params.dir)
+      return props.directory?.() ?? decode64(params.dir)
     })
 
-    const currentSession = createMemo(() => params.id)
+    const currentSession = createMemo(() => props.sessionID?.() ?? params.id)
 
     const [store, setStore, _, ready] = persisted(
-      Persist.serverGlobal(serverSDK.scope, "notification", ["notification.v1"]),
+      Persist.serverGlobal(serverSDK().scope, "notification", ["notification.v1"]),
       createStore({
         list: [] as Notification[],
       }),
@@ -208,11 +208,11 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
 
     const lookup = async (directory: string, sessionID?: string) => {
       if (!sessionID) return undefined
-      const [syncStore] = serverSync.child(directory, { bootstrap: false })
+      const [syncStore] = serverSync().child(directory, { bootstrap: false })
       const match = Binary.search(syncStore.session, sessionID, (s) => s.id)
       if (match.found) return syncStore.session[match.index]
-      return serverSDK.client.session
-        .get({ directory, sessionID })
+      return serverSDK()
+        .client.session.get({ directory, sessionID })
         .then((x) => x.data)
         .catch(() => undefined)
     }
@@ -286,7 +286,7 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
       })
     }
 
-    const unsub = serverSDK.event.listen((e) => {
+    const unsub = serverSDK().event.listen((e) => {
       const event = e.details
       if (event.type !== "session.idle" && event.type !== "session.error") return
 
