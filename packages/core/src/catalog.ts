@@ -170,7 +170,7 @@ export const layer = Layer.effect(
     })
     const result: Interface = {
       transform: state.transform,
-      rebuild: state.rebuild,
+      reload: state.reload,
 
       provider: {
         get: Effect.fn("CatalogV2.provider.get")(function* (providerID) {

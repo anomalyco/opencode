@@ -126,7 +126,7 @@ export const layer = Layer.effect(
 
     return Service.of({
       transform: state.transform,
-      rebuild: state.rebuild,
+      reload: state.reload,
       list: Effect.fn("Reference.list")(function* () {
         return Array.from(materialized.values())
       }),
