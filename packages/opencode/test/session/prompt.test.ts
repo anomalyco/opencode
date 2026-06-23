@@ -1015,7 +1015,8 @@ it.instance("cancel interrupts loop and resolves with an assistant message", () 
     if (Exit.isSuccess(exit)) {
       expect(exit.value.info.role).toBe("assistant")
     }
-  }))
+  }),
+)
 
 it.instance("cancel records MessageAbortedError on interrupted process", () =>
   Effect.gen(function* () {
@@ -1038,7 +1039,8 @@ it.instance("cancel records MessageAbortedError on interrupted process", () =>
         expect(info.error?.name).toBe("MessageAbortedError")
       }
     }
-  }))
+  }),
+)
 
 raceNoLLMServer.instance(
   "finalizes assistant when cancelled before processor creation completes",
@@ -1271,7 +1273,8 @@ it.instance("concurrent loop callers all receive same error result", () =>
     })
     expect(a.info.id).toBe(b.info.id)
     expect(a.info.role).toBe("assistant")
-  }))
+  }),
+)
 
 it.instance("prompt submitted during an active run is included in the next LLM input", () =>
   Effect.gen(function* () {
@@ -1311,9 +1314,7 @@ it.instance("prompt submitted during an active run is included in the next LLM i
       sessions
         .messages({ sessionID: chat.id })
         .pipe(
-          Effect.map((msgs) =>
-            msgs.some((msg) => msg.info.role === "user" && msg.info.id === id) ? true : undefined,
-          ),
+          Effect.map((msgs) => (msgs.some((msg) => msg.info.role === "user" && msg.info.id === id) ? true : undefined)),
         ),
       "timed out waiting for second prompt to save",
     )
@@ -1338,7 +1339,8 @@ it.instance("prompt submitted during an active run is included in the next LLM i
     const messages = inputs.at(-1)?.messages
     if (!Array.isArray(messages)) throw new Error("expected LLM messages")
     expect(messages.at(-1)).toEqual({ role: "user", content: "second" })
-  }))
+  }),
+)
 
 it.instance("assertNotBusy fails with BusyError when loop running", () =>
   Effect.gen(function* () {
@@ -1364,7 +1366,8 @@ it.instance("assertNotBusy fails with BusyError when loop running", () =>
 
     yield* prompt.cancel(chat.id)
     yield* Fiber.await(fiber)
-  }))
+  }),
+)
 
 noLLMServer.instance("assertNotBusy succeeds when idle", () =>
   Effect.gen(function* () {
@@ -1401,7 +1404,8 @@ it.instance("shell rejects with BusyError when loop running", () =>
 
     yield* prompt.cancel(chat.id)
     yield* Fiber.await(fiber)
-  }))
+  }),
+)
 
 unixNoLLMServer(
   "shell captures stdout and stderr in completed tool output",
@@ -2149,7 +2153,8 @@ it.instance("records aborted errors when prompt is cancelled mid-stream", () =>
     if (last?.info.role === "assistant") {
       expect(last.info.error?.name).toBe("MessageAbortedError")
     }
-  }))
+  }),
+)
 
 // Agent variant
 
