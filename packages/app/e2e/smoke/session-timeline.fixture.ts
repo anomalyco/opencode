@@ -295,6 +295,7 @@ export const fixture = {
         .filter(renderable)
         .map((part) => part.id),
     ),
+    expandedShellPartID: targetMessages.flatMap((message) => message.parts).find((part) => part.tool === "bash")!.id,
   },
 }
 

@@ -327,6 +327,11 @@ test.describe("smoke: session timeline", () => {
     const expectedMessageIDs = fixture.expected.targetMessageIDs
     await expectSessionTimelineReady(page, expectedPartIDs, expectedMessageIDs, errors)
     await expectCanScrollToStart(page, expectedPartIDs, expectedMessageIDs, errors)
+
+    const shell = page.locator(`[data-timeline-part-id="${fixture.expected.expandedShellPartID}"]`)
+    await expect(shell.locator('[data-slot="basic-tool-tool-title"]')).toHaveText("Shell")
+    await expect(shell.locator('[data-slot="basic-tool-tool-subtitle"]')).toHaveCount(0)
+    await expect(shell.locator('[data-slot="bash-pre"]')).toContainText("$ bun typecheck")
   })
 })
 
