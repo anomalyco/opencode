@@ -16,6 +16,7 @@ import {
 import { testEffect } from "../lib/effect"
 
 const it = testEffect(Layer.mergeAll(Snapshot.defaultLayer, FSUtil.defaultLayer, testInstanceStoreLayer))
+const literalPathIt = process.platform === "win32" ? it.live.skip : it.live
 
 // Git always outputs /-separated paths internally. Snapshot.patch() joins them
 // with path.join (which produces \ on Windows) then normalizes back to /.
@@ -474,7 +475,7 @@ it.live(
   }),
 )
 
-it.live(
+literalPathIt(
   "subdirectory snapshots treat wildcard characters literally",
   Effect.gen(function* () {
     const dir = yield* scopedGitTmpdir()
@@ -503,7 +504,7 @@ it.live(
   }),
 )
 
-it.live(
+literalPathIt(
   "subdirectory snapshots treat leading colons literally",
   Effect.gen(function* () {
     const dir = yield* scopedGitTmpdir()
