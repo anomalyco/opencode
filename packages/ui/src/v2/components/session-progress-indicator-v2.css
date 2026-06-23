@@ -1,10 +1,7 @@
 [data-component="session-progress-indicator-v2"] {
   --_duration: 1200ms;
-  --_transition: 150ms;
   display: block;
   flex-shrink: 0;
-  width: 16px;
-  height: 16px;
   color: var(--v2-icon-icon-muted, #808080);
 }
 
@@ -417,3 +414,12 @@
   animation-name: session-progress-indicator-v2-dot-24;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  [data-component="session-progress-indicator-v2"] [data-dot] {
+    animation: none;
+  }
+
+  [data-component="session-progress-indicator-v2"] [data-dot="12"] {
+    opacity: 1;
+  }
+}

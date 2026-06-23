@@ -10,7 +10,7 @@ Derived from Figma \`_sessionProgressIndicator\` with 8-frame rotation.
 - Accepts standard SVG props.
 
 ### Behavior
-- CSS keyframes drive per-dot opacity across 8 frames (1.6s loop).
+- CSS keyframes drive per-dot opacity across 8 frames (1.2s loop).
 - Center dot stays at full opacity throughout the cycle.
 
 ### Accessibility
