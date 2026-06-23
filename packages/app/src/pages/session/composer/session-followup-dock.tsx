@@ -9,6 +9,7 @@ export function SessionFollowupDock(props: {
   items: { id: string; text: string }[]
   sending?: string
   onSend: (id: string) => void
+  onRemove: (id: string) => void
   onEdit: (id: string) => void
 }) {
   const language = useLanguage()
@@ -98,6 +99,15 @@ export function SessionFollowupDock(props: {
                   onClick={() => props.onEdit(item.id)}
                 >
                   {language.t("session.followupDock.edit")}
+                </Button>
+                <Button
+                  size="small"
+                  variant="ghost"
+                  class="shrink-0 text-text-weak hover:text-danger-base"
+                  disabled={!!props.sending}
+                  onClick={() => props.onRemove(item.id)}
+                >
+                  {language.t("session.followupDock.remove")}
                 </Button>
               </div>
             )}

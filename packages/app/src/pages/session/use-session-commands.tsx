@@ -26,6 +26,7 @@ export type SessionCommandContext = {
   setActiveMessage: (message: UserMessage | undefined) => void
   focusInput: () => void
   review?: () => boolean
+  clearFollowupQueue: () => void
 }
 
 const withCategory = (category: string) => {
@@ -297,6 +298,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     if (!message) return
 
     await sdk().client.session.revert({ sessionID, messageID: message.id })
+    actions.clearFollowupQueue()
     const parts = sync().data.part[message.id]
     if (parts) {
       const restored = extractPromptFromParts(parts, { directory: sdk().directory })
@@ -317,6 +319,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     const next = userMessages().find((x) => x.id > revertMessageID)
     if (!next) {
       await sdk().client.session.unrevert({ sessionID })
+      actions.clearFollowupQueue()
       prompt.reset()
       const last = findLast(userMessages(), (x) => x.id >= revertMessageID)
       setActiveMessage(last)
@@ -324,6 +327,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     }
 
     await sdk().client.session.revert({ sessionID, messageID: next.id })
+    actions.clearFollowupQueue()
     const prev = findLast(userMessages(), (x) => x.id < next.id)
     setActiveMessage(prev)
   }

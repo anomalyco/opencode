@@ -749,6 +749,10 @@ export default function Page() {
     setActiveMessage,
     focusInput,
     review: reviewTab,
+    clearFollowupQueue: () => {
+      const id = params.id
+      if (id) clearFollowupQueue(id)
+    },
   })
 
   const openReviewFile = createOpenReviewFile({
@@ -1338,6 +1342,13 @@ export default function Page() {
           .catch(() => {})
       : Promise.resolve()
 
+  const clearFollowupQueue = (sessionID: string) => {
+    setFollowup("items", sessionID, [])
+    setFollowup("failed", sessionID, undefined)
+    setFollowup("paused", sessionID, undefined)
+    setFollowup("edit", sessionID, undefined)
+  }
+
   const revertMutation = useMutation(() => ({
     mutationFn: async (input: { sessionID: string; messageID: string }) => {
       const prev = prompt.current().slice()
@@ -1346,6 +1357,7 @@ export default function Page() {
       batch(() => {
         roll(input.sessionID, { messageID: input.messageID })
         prompt.set(value)
+        clearFollowupQueue(input.sessionID)
       })
       await halt(input.sessionID)
         .then(() => sdk().client.session.revert(input))
@@ -1392,6 +1404,7 @@ export default function Page() {
       await task
         .then((result) => {
           if (result.data) merge(result.data)
+          clearFollowupQueue(sessionID)
         })
         .catch((err) => {
           batch(() => {
@@ -1546,6 +1559,12 @@ export default function Page() {
               },
               onSend: (id) => {
                 void sendFollowup(params.id!, id, { manual: true })
+              },
+              onRemove: (id) => {
+                const sessionID = params.id
+                if (!sessionID) return
+                setFollowup("items", sessionID, (items) => (items ?? []).filter((entry) => entry.id !== id))
+                setFollowup("failed", sessionID, (value) => (value === id ? undefined : value))
               },
               onEdit: editFollowup,
               onEditLoaded: clearFollowupEdit,
