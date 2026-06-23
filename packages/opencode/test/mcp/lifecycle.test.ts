@@ -17,6 +17,7 @@ interface MockClientState {
   listToolsCalls: number
   listPromptsCalls: number
   listResourcesCalls: number
+  listResourceTemplatesCalls: number
   getPromptTimeout?: number
   readResourceTimeout?: number
   requestCalls: number
@@ -26,6 +27,7 @@ interface MockClientState {
   listResourcesShouldFail: boolean
   prompts: Array<{ name: string; description?: string }>
   resources: Array<{ name: string; uri: string; description?: string }>
+  resourceTemplates: Array<{ name: string; uriTemplate: string; description?: string }>
   toolPages: Record<
     string,
     {
@@ -37,6 +39,10 @@ interface MockClientState {
   resourcePages: Record<
     string,
     { resources: Array<{ name: string; uri: string; description?: string }>; nextCursor?: string }
+  >
+  resourceTemplatePages: Record<
+    string,
+    { resourceTemplates: Array<{ name: string; uriTemplate: string; description?: string }>; nextCursor?: string }
   >
   closed: boolean
   clientOptions?: { capabilities?: { roots?: { listChanged?: boolean } } }
@@ -67,6 +73,7 @@ function getOrCreateClientState(name?: string): MockClientState {
       listToolsCalls: 0,
       listPromptsCalls: 0,
       listResourcesCalls: 0,
+      listResourceTemplatesCalls: 0,
       requestCalls: 0,
       listToolsShouldFail: false,
       listToolsError: "listTools failed",
@@ -74,9 +81,11 @@ function getOrCreateClientState(name?: string): MockClientState {
       listResourcesShouldFail: false,
       prompts: [],
       resources: [],
+      resourceTemplates: [],
       toolPages: {},
       promptPages: {},
       resourcePages: {},
+      resourceTemplatePages: {},
       closed: false,
       requestHandlers: new Map(),
       notificationHandlers: new Map(),
@@ -224,6 +233,13 @@ void mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
       return { resources: this._state?.resources ?? [] }
     }
 
+    async listResourceTemplates(params?: { cursor?: string }) {
+      if (this._state) this._state.listResourceTemplatesCalls++
+      const page = this._state?.resourceTemplatePages[params === undefined ? "initial" : (params.cursor ?? "")]
+      if (page) return page
+      return { resourceTemplates: this._state?.resourceTemplates ?? [] }
+    }
+
     async getPrompt(_params: unknown, options?: { timeout?: number }) {
       if (this._state) this._state.getPromptTimeout = options?.timeout
       return { messages: [] }
@@ -353,6 +369,13 @@ it.instance(
           initial: { resources: [{ name: "resource-one", uri: "test://one" }], nextCursor: "resources-2" },
           "resources-2": { resources: [{ name: "resource-two", uri: "test://two" }] },
         }
+        serverState.resourceTemplatePages = {
+          initial: {
+            resourceTemplates: [{ name: "template-one", uriTemplate: "test://one/{id}" }],
+            nextCursor: "resource-templates-2",
+          },
+          "resource-templates-2": { resourceTemplates: [{ name: "template-two", uriTemplate: "test://two/{id}" }] },
+        }
 
         yield* mcp.add("paged-server", {
           type: "local",
@@ -362,9 +385,14 @@ it.instance(
         expect(Object.keys(yield* mcp.tools())).toEqual(["mcp__paged-server__tool-one", "mcp__paged-server__tool-two"])
         expect(Object.keys(yield* mcp.prompts())).toEqual(["paged-server:prompt-one", "paged-server:prompt-two"])
         expect(Object.keys(yield* mcp.resources())).toEqual(["paged-server:test://one", "paged-server:test://two"])
+        expect(Object.keys(yield* mcp.resourceTemplates())).toEqual([
+          "paged-server:test://one/{id}",
+          "paged-server:test://two/{id}",
+        ])
         expect(serverState.listToolsCalls).toBe(2)
         expect(serverState.listPromptsCalls).toBe(2)
         expect(serverState.listResourcesCalls).toBe(2)
+        expect(serverState.listResourceTemplatesCalls).toBe(2)
       }),
     ),
   { config: { mcp: {} } },

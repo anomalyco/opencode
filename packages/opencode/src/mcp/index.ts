@@ -125,6 +125,7 @@ const pendingOAuthTransports = new Map<string, TransportWithAuth>()
 // Prompt cache types
 type PromptInfo = Awaited<ReturnType<MCPClient["listPrompts"]>>["prompts"][number]
 type ResourceInfo = Awaited<ReturnType<MCPClient["listResources"]>>["resources"][number]
+type ResourceTemplateInfo = Awaited<ReturnType<MCPClient["listResourceTemplates"]>>["resourceTemplates"][number]
 type McpEntry = NonNullable<ConfigV1.Info["mcp"]>[string]
 
 function isMcpConfigured(entry: McpEntry): entry is ConfigMCPV1.Info {
@@ -162,6 +163,9 @@ export interface Interface {
   readonly tools: () => Effect.Effect<Record<string, Tool>>
   readonly prompts: () => Effect.Effect<Record<string, PromptInfo & { client: string }>>
   readonly resources: (clientName?: string) => Effect.Effect<Record<string, ResourceInfo & { client: string }>>
+  readonly resourceTemplates: (
+    clientName?: string,
+  ) => Effect.Effect<Record<string, ResourceTemplateInfo & { client: string }>>
   readonly add: (name: string, mcp: ConfigMCPV1.Info) => Effect.Effect<{ status: Record<string, Status> | Status }>
   readonly connect: (name: string) => Effect.Effect<void, NotFoundError>
   readonly disconnect: (name: string) => Effect.Effect<void, NotFoundError>
@@ -690,6 +694,16 @@ export const layer = Layer.effect(
       )
     })
 
+    const resourceTemplates = Effect.fn("MCP.resourceTemplates")(function* (clientName?: string) {
+      return yield* collectFromConnected(
+        yield* InstanceState.get(state),
+        McpCatalog.resourceTemplates,
+        "resource templates",
+        (template) => template.uriTemplate,
+        clientName,
+      )
+    })
+
     const withClient = Effect.fnUntraced(function* <A>(
       clientName: string,
       fn: (client: MCPClient, timeout?: number) => Promise<A>,
@@ -931,6 +945,7 @@ export const layer = Layer.effect(
       tools,
       prompts,
       resources,
+      resourceTemplates,
       add,
       connect,
       disconnect,
