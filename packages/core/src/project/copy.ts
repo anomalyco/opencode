@@ -13,7 +13,6 @@ import { Slug } from "../util/slug"
 import { EventV2 } from "../event"
 import { Database } from "../database/database"
 import { Location } from "../location"
-import { PluginBoot } from "../plugin/boot"
 
 export const StrategyID = Schema.Trim.pipe(Schema.check(Schema.isNonEmpty()), Schema.brand("ProjectCopy.StrategyID"))
 export type StrategyID = typeof StrategyID.Type
@@ -125,10 +124,8 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Pr
 
 export const refreshAfterBoot = Effect.gen(function* () {
   const location = yield* Location.Service
-  const boot = yield* PluginBoot.Service
   const copies = yield* Service
   yield* Effect.gen(function* () {
-    yield* boot.wait()
     yield* Effect.logInfo("project copy refresh started", { projectID: location.project.id })
     const result = yield* copies.refresh({ projectID: location.project.id })
     yield* Effect.logInfo("project copy refresh done", {

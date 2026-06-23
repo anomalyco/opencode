@@ -120,7 +120,7 @@ describe("SessionProjector", () => {
     ),
   )
 
-  it.effect("marks an admitted lifecycle row promoted with the PromptPromoted event sequence", () =>
+  it.effect("marks an inbox row promoted with the Prompted event sequence", () =>
     Effect.gen(function* () {
       const { db } = yield* Database.Service
       yield* db
@@ -142,19 +142,20 @@ describe("SessionProjector", () => {
         .pipe(Effect.orDie)
       const events = yield* EventV2.Service
       const id = SessionMessage.ID.make("msg_admitted")
-      yield* SessionInput.admit(db, events, {
+      const admitted = yield* SessionInput.admit(db, events, {
         id,
         sessionID,
         prompt: new Prompt({ text: "promote me" }),
         delivery: "steer",
       })
+      if (!admitted) return yield* Effect.die("Prompt admission failed")
 
-      const event = yield* events.publish(SessionEvent.PromptLifecycle.Promoted, {
+      const event = yield* events.publish(SessionEvent.Prompted, {
         sessionID,
-        timestamp: created,
+        timestamp: admitted.timeCreated,
         messageID: id,
         prompt: new Prompt({ text: "promote me" }),
-        timeCreated: created,
+        delivery: "steer",
       })
 
       expect(

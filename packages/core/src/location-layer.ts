@@ -7,7 +7,7 @@ import { Catalog } from "./catalog"
 import { Integration } from "./integration"
 import { CommandV2 } from "./command"
 import { AgentV2 } from "./agent"
-import { PluginBoot } from "./plugin/boot"
+import { PluginInternal } from "./plugin/internal"
 import { Project } from "./project"
 import { ProjectCopy } from "./project/copy"
 import { ProjectDirectories } from "./project/directories"
@@ -65,7 +65,7 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
       Integration.locationLayer,
       CommandV2.locationLayer,
       AgentV2.locationLayer,
-      PluginBoot.locationLayer,
+      PluginInternal.locationLayer,
       ProjectCopy.locationLayer,
       FileSystem.locationLayer,
       Watcher.locationLayer,

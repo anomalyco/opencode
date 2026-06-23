@@ -20,7 +20,7 @@
 import { test, type TestOptions } from "bun:test"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { AppProcess } from "@opencode-ai/core/process"
-import { Deferred, Duration, Effect, Layer, Queue, Scope, Stream } from "effect"
+import { Deferred, Duration, Effect, Layer, Queue, Schedule, Scope, Stream } from "effect"
 import { FetchHttpClient, HttpClient } from "effect/unstable/http"
 import { ChildProcess } from "effect/unstable/process"
 import path from "node:path"
@@ -192,9 +192,12 @@ export function withCliFixture<A, E>(
     const fs = yield* FSUtil.Service
     const appProc = yield* AppProcess.Service
 
-    // FileSystem.makeTempDirectoryScoped handles both creation and scope-tied
-    // cleanup — replaces the old mkdir + addFinalizer pair.
-    const home = yield* fs.makeTempDirectoryScoped({ prefix: "oc-cli-" })
+    const home = yield* fs.makeTempDirectory({ prefix: "oc-cli-" })
+    yield* Effect.addFinalizer(() =>
+      fs
+        .remove(home, { recursive: true })
+        .pipe(Effect.retry(Schedule.spaced("50 millis").pipe(Schedule.both(Schedule.recurs(20)))), Effect.ignore),
+    )
 
     const configJson = JSON.stringify(testProviderConfig(llm.url))
     const env = isolatedEnv(home, configJson)
@@ -237,8 +240,8 @@ export function withCliFixture<A, E>(
       )
       return {
         exitCode: result.exitCode,
-        stdout: result.stdout.toString(),
-        stderr: result.stderr.toString(),
+        stdout: normalizeLines(result.stdout.toString()),
+        stderr: normalizeLines(result.stderr.toString()),
         durationMs: Date.now() - start,
       }
     })
@@ -299,8 +302,8 @@ export function withCliFixture<A, E>(
         interrupt: () => proc.kill("SIGINT"),
         result: Effect.promise(async () => ({
           exitCode: await proc.exited,
-          stdout: await stdout,
-          stderr: await stderr,
+          stdout: normalizeLines(await stdout),
+          stderr: normalizeLines(await stderr),
           durationMs: Date.now() - start,
         })),
       } satisfies RunHandle
@@ -479,6 +482,10 @@ function parseJsonEvents(stdout: string): Array<Record<string, unknown>> {
     .map((line) => JSON.parse(line) as Record<string, unknown>)
 }
 
+function normalizeLines(value: string) {
+  return value.replaceAll("\r\n", "\n")
+}
+
 // Convenience for the common assertion pattern. Dumps stderr/stdout when
 // the exit code doesn't match — saves debugging time on CI failures.
 function expectExit(result: RunResult, expected: number, label = "opencode") {
@@ -513,5 +520,10 @@ export const cliIt = {
     name: string,
     body: (input: CliFixture) => Effect.Effect<A, E, Scope.Scope | HttpClient.HttpClient>,
     opts?: number | TestOptions,
-  ) => test.concurrent(name, () => Effect.runPromise(Effect.scoped(withCliFixture(body))), opts),
+  ) =>
+    (process.platform === "win32" ? test : test.concurrent)(
+      name,
+      () => Effect.runPromise(Effect.scoped(withCliFixture(body))),
+      opts,
+    ),
 }

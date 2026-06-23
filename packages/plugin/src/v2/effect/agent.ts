@@ -1,6 +1,5 @@
 import type { AgentV2Info } from "@opencode-ai/sdk/v2/types"
-import type { Effect } from "effect"
-import type { Transformable } from "./registration.js"
+import type { Hooks } from "./registration.js"
 
 export interface AgentDraft {
   list(): readonly AgentV2Info[]
@@ -10,8 +9,6 @@ export interface AgentDraft {
   remove(id: string): void
 }
 
-export interface Agent extends Transformable<AgentDraft> {
-  get(id: string): Effect.Effect<AgentV2Info | undefined>
-  default(): Effect.Effect<AgentV2Info | undefined>
-  list(): Effect.Effect<AgentV2Info[]>
-}
+export type AgentHooks = Hooks<{
+  transform: AgentDraft
+}>

@@ -370,7 +370,7 @@ test("settles pending tools when a live failure arrives", async () => {
   }
 })
 
-test("renders admitted prompts only after promotion", async () => {
+test("renders admitted prompts only after they become model-visible", async () => {
   const events = createEventSource()
   const calls = createFetch(undefined, events)
   let sync!: ReturnType<typeof useData>
@@ -413,14 +413,14 @@ test("renders admitted prompts only after promotion", async () => {
     expect(sync.session.message.list("session-1") ?? []).toEqual([])
 
     emitEvent(events, {
-      id: "evt_promoted_1",
-      type: "session.next.prompt.promoted",
+      id: "evt_prompted_1",
+      type: "session.next.prompted",
       properties: {
         sessionID: "session-1",
         messageID: "msg_user_1",
-        timestamp: 1,
+        timestamp: 0,
         prompt: { text: "hello" },
-        timeCreated: 0,
+        delivery: "steer",
       },
     })
 
@@ -429,54 +429,6 @@ test("renders admitted prompts only after promotion", async () => {
     expect(message?.type).toBe("user")
     if (message?.type !== "user") return
     expect(message).toMatchObject({ id: "msg_user_1", text: "hello" })
-  } finally {
-    app.renderer.destroy()
-  }
-})
-
-test("renders a promoted prompt when admission was missed", async () => {
-  const events = createEventSource()
-  const calls = createFetch(undefined, events)
-  let sync!: ReturnType<typeof useData>
-  let ready!: () => void
-  const mounted = new Promise<void>((resolve) => {
-    ready = resolve
-  })
-
-  function Probe() {
-    sync = useData()
-    onMount(ready)
-    return <box />
-  }
-
-  const app = await testRender(() => (
-    <TestTuiContexts>
-      <SDKProvider url="http://test" directory={directory} events={events.source} fetch={calls.fetch}>
-        <ProjectProvider>
-          <DataProvider>
-            <Probe />
-          </DataProvider>
-        </ProjectProvider>
-      </SDKProvider>
-    </TestTuiContexts>
-  ))
-
-  try {
-    await mounted
-    emitEvent(events, {
-      id: "evt_promoted_1",
-      type: "session.next.prompt.promoted",
-      properties: {
-        sessionID: "session-1",
-        messageID: "msg_user_1",
-        timestamp: 1,
-        prompt: { text: "hello" },
-        timeCreated: 0,
-      },
-    })
-
-    await wait(() => sync.session.message.list("session-1")?.length === 1)
-    expect(sync.session.message.list("session-1")?.[0]?.id).toBe("msg_user_1")
   } finally {
     app.renderer.destroy()
   }

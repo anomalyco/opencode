@@ -10,6 +10,7 @@ import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { getFilename } from "@opencode-ai/core/util/path"
 import { createEffect, createMemo, createSignal, For, onMount, Show } from "solid-js"
 import { createStore } from "solid-js/store"
+import { createMediaQuery } from "@solid-primitives/media"
 import { Portal } from "solid-js/web"
 import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
@@ -158,6 +159,7 @@ export function SessionHeader() {
   const isV2 = settings.general.newLayoutDesigns
   const search = settings.visibility.search
   const status = settings.visibility.status
+  const isDesktop = createMediaQuery("(min-width: 768px)")
 
   const [exists, setExists] = createStore<Partial<Record<OpenApp, boolean>>>({
     finder: true,
@@ -236,6 +238,7 @@ export function SessionHeader() {
     statusLabel: language.t("status.popover.trigger"),
     reviewLabel: language.t("command.review.toggle"),
     reviewKeybind: command.keybind("review.toggle"),
+    reviewVisible: isDesktop(),
     reviewOpened: view().reviewPanel.opened(),
     onReviewToggle: () => view().reviewPanel.toggle(),
   }))
@@ -518,6 +521,7 @@ type SessionHeaderV2ActionsState = {
   statusLabel: string
   reviewLabel: string
   reviewKeybind: string
+  reviewVisible: boolean
   reviewOpened: boolean
   onReviewToggle: () => void
 }
@@ -530,20 +534,22 @@ function SessionHeaderV2Actions(props: { state: SessionHeaderV2ActionsState }) {
           <StatusPopoverV2 />
         </Tooltip>
       </Show>
-      <TooltipKeybind title={props.state.reviewLabel} keybind={props.state.reviewKeybind}>
-        <IconButtonV2
-          type="button"
-          variant="ghost-muted"
-          size="large"
-          class="!w-9 shrink-0"
-          state={props.state.reviewOpened ? "pressed" : undefined}
-          onClick={props.state.onReviewToggle}
-          aria-label={props.state.reviewLabel}
-          aria-expanded={props.state.reviewOpened}
-          aria-controls="review-panel"
-          icon={<IconV2 name="sidebar-right" />}
-        />
-      </TooltipKeybind>
+      <Show when={props.state.reviewVisible}>
+        <TooltipKeybind title={props.state.reviewLabel} keybind={props.state.reviewKeybind}>
+          <IconButtonV2
+            type="button"
+            variant="ghost-muted"
+            size="large"
+            class="!w-9 shrink-0"
+            state={props.state.reviewOpened ? "pressed" : undefined}
+            onClick={props.state.onReviewToggle}
+            aria-label={props.state.reviewLabel}
+            aria-expanded={props.state.reviewOpened}
+            aria-controls="review-panel"
+            icon={<IconV2 name="sidebar-right" />}
+          />
+        </TooltipKeybind>
+      </Show>
     </div>
   )
 }

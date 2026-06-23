@@ -225,7 +225,7 @@ describe("SessionV2.create", () => {
         Array.from(yield* session.events({ sessionID: created.id }).pipe(Stream.take(2), Stream.runCollect)),
       ).toMatchObject([
         { durable: { seq: 1 }, type: "session.next.prompt.admitted", data: { prompt: { text: "Hello" } } },
-        { durable: { seq: 2 }, type: "session.next.prompt.promoted" },
+        { durable: { seq: 2 }, type: "session.next.prompted" },
       ])
     }),
   )
@@ -308,8 +308,8 @@ describe("SessionV2.create", () => {
             .pipe(Effect.orDie)).map((event) => [event.seq, event.type]),
         ).toEqual([
           [0, EventV2.versionedType(SessionV1.Event.Created.type, 1)],
-          [1, EventV2.versionedType(SessionEvent.PromptLifecycle.Admitted.type, 1)],
-          [2, EventV2.versionedType(SessionEvent.PromptLifecycle.Promoted.type, 1)],
+          [1, EventV2.versionedType(SessionEvent.PromptAdmitted.type, 1)],
+          [2, EventV2.versionedType(SessionEvent.Prompted.type, 1)],
         ])
       }).pipe(Effect.provide(Layer.fresh(Layer.mergeAll(targetDatabase, targetEvents, targetProjector, targetStore))))
     }),

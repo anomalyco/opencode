@@ -1,5 +1,18 @@
 # V2 Schema Changelog
 
+## 2026-06-22: Simplify Session Input Promotion
+
+- Keep `session.next.prompt.admitted.1` as the durable, client-visible record of pending Session input.
+- Replace `session.next.prompt.promoted.1` with the existing `session.next.prompted.1` event when input becomes model-visible.
+- Preserve the prompt endpoint, admission receipt, idempotency, steer/queue ordering, and atomic user-message projection.
+- Reset experimental V2 events, projections, inputs, Context Epochs, and synchronized workspace state while preserving canonical V1 `session`, `message`, and `part` rows.
+
+## 2026-06-22: Reset Unpublished Compaction Event
+
+- Replace the unpublished `session.next.compaction.ended.1` payload with the current checkpoint payload and remove its legacy decoder.
+- Reset experimental events, sequences, Session inputs, projected Session messages, Context Epochs, synchronized workspace rows, and Session workspace links.
+- Preserve canonical V1 `session`, `message`, and `part` rows.
+
 ## 2026-06-22: Make Session Interruption Process-Local
 
 - Remove the unprojected `session.next.interrupt.requested.1` event from the experimental durable Session event union and generated SDK.
@@ -11,7 +24,7 @@
 - Preserve the existing structured summary contract and update prior summaries with newly compacted history.
 - Store token-bounded recent history as plain serialized text inside the checkpoint instead of replaying provider-native messages.
 - Keep compaction starts durable and progress deltas live-only; activate history cutover only from a durable completed summary.
-- Version the completed event as `session.next.compaction.ended.2` rather than changing the existing synchronized v1 payload in place.
+- Store the completed event with the current checkpoint payload containing stable message identity, reason, summary, and recent context.
 - Reload the replacement Context Epoch and continue the original pending turn after compaction.
 - Preserve full durable history; compaction changes only the active model representation.
 - Defer provider-overflow recovery, explicit manual compaction, and deterministic old tool-result pruning.
@@ -125,7 +138,7 @@ Change:
 Reason:
 
 - Prompt admission and model-visible promotion must be separate durable operations.
-- Steering must promote at safe provider-turn boundaries while queued prompts remain separate FIFO activities.
+- Steering must promote at safe provider-turn boundaries while queued prompts remain pending in FIFO order until continuation would otherwise end.
 
 Compatibility:
 
@@ -700,6 +713,22 @@ Compatibility:
 
 - Foreground V2 bash execution is unchanged.
 - Reintroduce background bash only with durable status observation, completion delivery, and explicit cancellation semantics.
+
+## 2026-06-18: Remove Bash Description Input
+
+Affected schema:
+
+- V1 and Core V2 model-facing `bash` tool parameters.
+
+Change:
+
+- Remove the V1 required and V2 optional `description` parameter.
+- Derive shell presentation from the command or a generic shell label instead of model-authored description metadata.
+
+Compatibility:
+
+- Existing persisted tool calls may still contain `description`, but new tool definitions no longer expose or require it.
+- Shell command execution behavior is unchanged.
 
 ## 2026-06-04: Add Durable Session Context Snapshots
 

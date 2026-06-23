@@ -1,11 +1,16 @@
 import type { Effect, Scope } from "effect"
-import type { PluginHost } from "./host.js"
+import type { PluginContext } from "./context.js"
 
-export interface Plugin<R = never> {
+export interface Plugin {
   readonly id: string
-  readonly effect: (host: PluginHost) => Effect.Effect<void, never, R | Scope.Scope>
+  readonly effect: (context: PluginContext) => Effect.Effect<void, never, Scope.Scope>
 }
 
-export function define<R>(plugin: Plugin<R>) {
+export function define(plugin: Plugin) {
   return plugin
+}
+
+export interface PluginDomain {
+  readonly add: (plugin: Plugin) => Effect.Effect<void>
+  readonly remove: (id: string) => Effect.Effect<void>
 }

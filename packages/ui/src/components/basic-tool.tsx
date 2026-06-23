@@ -1,4 +1,4 @@
-import { createEffect, For, Match, on, onCleanup, onMount, Show, Switch, type JSX } from "solid-js"
+import { createEffect, For, Match, on, onCleanup, onMount, Show, Switch, type Accessor, type JSX } from "solid-js"
 import { animate, type AnimationPlaybackControls } from "motion"
 import { useI18n } from "../context/i18n"
 import { createStore } from "solid-js/store"
@@ -24,7 +24,7 @@ const isTriggerTitle = (val: any): val is TriggerTitle => {
 
 export interface BasicToolProps {
   icon: IconProps["name"]
-  trigger: TriggerTitle | JSX.Element
+  trigger: TriggerTitle | JSX.Element | ((open: Accessor<boolean>) => JSX.Element)
   children?: JSX.Element
   status?: string
   hideDetails?: boolean
@@ -89,6 +89,7 @@ export function BasicTool(props: BasicToolProps) {
   const ready = () => state.ready
   const pending = () => props.status === "pending" || props.status === "running"
   const hasChildren = () => (props.defer ? "children" in props : props.children)
+  const dynamicTrigger = typeof props.trigger === "function" ? props.trigger(open) : undefined
 
   let cancelReady: (() => void) | undefined
 
@@ -187,6 +188,7 @@ export function BasicTool(props: BasicToolProps) {
       <div data-slot="basic-tool-tool-trigger-content">
         <div data-slot="basic-tool-tool-info">
           <Switch>
+            <Match when={dynamicTrigger !== undefined}>{dynamicTrigger}</Match>
             <Match when={isTriggerTitle(props.trigger) && props.trigger}>
               {(title) => (
                 <div data-slot="basic-tool-tool-info-structured">
