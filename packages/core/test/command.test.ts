@@ -11,8 +11,7 @@ describe("CommandV2", () => {
   it.effect("applies command transforms and preserves later overrides", () =>
     Effect.gen(function* () {
       const command = yield* CommandV2.Service
-      const transform = yield* command.transform()
-      yield* transform((editor) => {
+      yield* command.transform((editor) => {
         editor.update("review", (command) => {
           command.template = "First"
           command.description = "Review code"
