@@ -1622,9 +1622,7 @@ export default function Page() {
               "shadow-[var(--v2-elevation-raised)]": settings.general.newLayoutDesigns() && !!params.id,
             }}
           >
-            <Show when={!isDesktop() && !!params.id && settings.general.newLayoutDesigns()}>
-              {mobileTabs(true)}
-            </Show>
+            <Show when={!isDesktop() && !!params.id && settings.general.newLayoutDesigns()}>{mobileTabs(true)}</Show>
             <div class="flex-1 min-h-0 overflow-hidden">
               <Switch>
                 <Match when={params.id && mobileChanges()}>
