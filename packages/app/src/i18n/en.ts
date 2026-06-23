@@ -589,6 +589,8 @@ export const dict = {
   "home.title": "Home",
   "home.projects": "Projects",
   "home.project.add": "Add project",
+  "home.server.collapse": "Collapse server projects",
+  "home.server.expand": "Expand server projects",
   "home.sessions.search.placeholder": "Search sessions",
   "home.sessions.search.sessions": "Sessions",
   "home.sessions.search.noResults": "No sessions found for {{query}}",
