@@ -35,7 +35,7 @@ describe("State", () => {
     }),
   )
 
-  it.effect("runs effectful transforms during every rebuild", () =>
+  it.effect("runs effectful transforms during every reload", () =>
     Effect.gen(function* () {
       let value = "first"
       const state = State.create({
@@ -51,7 +51,7 @@ describe("State", () => {
       expect(state.get().values).toEqual(["first"])
 
       value = "second"
-      yield* state.rebuild()
+      yield* state.reload()
       expect(state.get().values).toEqual(["second"])
     }),
   )

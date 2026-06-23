@@ -1,3 +1,4 @@
+import { AISDK } from "@opencode-ai/core/aisdk"
 import { describe, expect } from "bun:test"
 import type { LanguageModelV3 } from "@ai-sdk/provider"
 import { Effect } from "effect"
@@ -15,12 +16,10 @@ const it = testEffect(PluginTestLayer)
 
 const addPlugin = Effect.fn(function* () {
   const plugin = yield* PluginV2.Service
-  const host = yield* PluginHost.make()
+  const aisdk = yield* AISDK.Service
+  const host = yield* PluginHost.make(plugin)
   const integrations = yield* Integration.Service
-  yield* plugin.add({
-    id: OpenAIPlugin.id,
-    effect: OpenAIPlugin.effect(host).pipe(Effect.provideService(Integration.Service, integrations)),
-  })
+  yield* OpenAIPlugin.effect(host).pipe(Effect.provideService(Integration.Service, integrations))
 })
 
 function required<T>(value: T | undefined): T {
@@ -63,19 +62,16 @@ describe("OpenAIPlugin", () => {
   it.effect("creates an OpenAI SDK for @ai-sdk/openai using the provider ID as SDK name", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
+      const aisdk = yield* AISDK.Service
       yield* addPlugin()
-      const result = yield* plugin.trigger(
-        "aisdk.sdk",
-        {
-          model: new ModelV2.Info({
-            ...ModelV2.Info.empty(ProviderV2.ID.make("custom-openai"), ModelV2.ID.make("gpt-5")),
-            api: { id: ModelV2.ID.make("gpt-5"), type: "aisdk", package: "test-provider" },
-          }),
-          package: "@ai-sdk/openai",
-          options: { name: "custom-openai", apiKey: "test" },
-        },
-        {},
-      )
+      const result = yield* aisdk.runSDK({
+        model: new ModelV2.Info({
+          ...ModelV2.Info.empty(ProviderV2.ID.make("custom-openai"), ModelV2.ID.make("gpt-5")),
+          api: { id: ModelV2.ID.make("gpt-5"), type: "aisdk", package: "test-provider" },
+        }),
+        package: "@ai-sdk/openai",
+        options: { name: "custom-openai", apiKey: "test" },
+      })
       expect(result.sdk?.responses("gpt-5").provider).toBe("custom-openai.responses")
     }),
   )
@@ -83,19 +79,16 @@ describe("OpenAIPlugin", () => {
   it.effect("ignores non-OpenAI SDK packages", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
+      const aisdk = yield* AISDK.Service
       yield* addPlugin()
-      const result = yield* plugin.trigger(
-        "aisdk.sdk",
-        {
-          model: new ModelV2.Info({
-            ...ModelV2.Info.empty(ProviderV2.ID.openai, ModelV2.ID.make("gpt-5")),
-            api: { id: ModelV2.ID.make("gpt-5"), type: "aisdk", package: "test-provider" },
-          }),
-          package: "@ai-sdk/openai-compatible",
-          options: { name: "openai" },
-        },
-        {},
-      )
+      const result = yield* aisdk.runSDK({
+        model: new ModelV2.Info({
+          ...ModelV2.Info.empty(ProviderV2.ID.openai, ModelV2.ID.make("gpt-5")),
+          api: { id: ModelV2.ID.make("gpt-5"), type: "aisdk", package: "test-provider" },
+        }),
+        package: "@ai-sdk/openai-compatible",
+        options: { name: "openai" },
+      })
       expect(result.sdk).toBeUndefined()
     }),
   )
@@ -103,20 +96,17 @@ describe("OpenAIPlugin", () => {
   it.effect("uses the Responses API for language models", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
+      const aisdk = yield* AISDK.Service
       const calls: string[] = []
       yield* addPlugin()
-      const result = yield* plugin.trigger(
-        "aisdk.language",
-        {
-          model: new ModelV2.Info({
-            ...ModelV2.Info.empty(ProviderV2.ID.openai, ModelV2.ID.make("alias")),
-            api: { id: ModelV2.ID.make("gpt-5"), type: "aisdk", package: "test-provider" },
-          }),
-          sdk: fakeSelectorSdk(calls),
-          options: {},
-        },
-        {},
-      )
+      const result = yield* aisdk.runLanguage({
+        model: new ModelV2.Info({
+          ...ModelV2.Info.empty(ProviderV2.ID.openai, ModelV2.ID.make("alias")),
+          api: { id: ModelV2.ID.make("gpt-5"), type: "aisdk", package: "test-provider" },
+        }),
+        sdk: fakeSelectorSdk(calls),
+        options: {},
+      })
       expect(calls).toEqual(["responses:gpt-5"])
       expect(result.language).toBeDefined()
     }),
@@ -125,20 +115,17 @@ describe("OpenAIPlugin", () => {
   it.effect("ignores non-OpenAI providers", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
+      const aisdk = yield* AISDK.Service
       const calls: string[] = []
       yield* addPlugin()
-      const result = yield* plugin.trigger(
-        "aisdk.language",
-        {
-          model: new ModelV2.Info({
-            ...ModelV2.Info.empty(ProviderV2.ID.anthropic, ModelV2.ID.make("gpt-5")),
-            api: { id: ModelV2.ID.make("gpt-5"), type: "aisdk", package: "test-provider" },
-          }),
-          sdk: fakeSelectorSdk(calls),
-          options: {},
-        },
-        {},
-      )
+      const result = yield* aisdk.runLanguage({
+        model: new ModelV2.Info({
+          ...ModelV2.Info.empty(ProviderV2.ID.anthropic, ModelV2.ID.make("gpt-5")),
+          api: { id: ModelV2.ID.make("gpt-5"), type: "aisdk", package: "test-provider" },
+        }),
+        sdk: fakeSelectorSdk(calls),
+        options: {},
+      })
       expect(calls).toEqual([])
       expect(result.language).toBeUndefined()
     }),

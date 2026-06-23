@@ -22,7 +22,7 @@ import { TestLLMServer } from "../lib/llm-server"
 import path from "path"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, TestInstance, tmpdirScoped } from "../fixture/fixture"
-import { awaitWithTimeout, testEffect } from "../lib/effect"
+import { awaitWithTimeout, pollWithTimeout, testEffect } from "../lib/effect"
 import { testProviderConfig } from "../lib/test-provider"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
@@ -389,7 +389,12 @@ describe("HttpApi SDK", () => {
           workspaceID,
           onRequest: (value) => (request = value),
         })
-        const found = yield* call(() => sdk.v2.fs.find({ query: "hello", type: "file" }))
+        const found = yield* pollWithTimeout(
+          call(() => sdk.v2.fs.find({ query: "hello", type: "file" })).pipe(
+            Effect.map((result) => (result.data?.data.length ? result : undefined)),
+          ),
+          "SDK file search index was not ready",
+        )
         const url = new URL(request!.url)
 
         expect(found.response.status).toBe(200)

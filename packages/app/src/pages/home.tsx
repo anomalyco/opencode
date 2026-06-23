@@ -43,7 +43,6 @@ import { sessionTitle } from "@/utils/session-title"
 import { pathKey } from "@/utils/path-key"
 import { useGlobal } from "@/context/global"
 import { useCommand } from "@/context/command"
-import { useSettings } from "@/context/settings"
 import { ServerRowMenu } from "@/components/server/server-row-menu"
 import { ServerHealthIndicator } from "@/components/server/server-row"
 import { type ServerHealth } from "@/utils/server-health"
@@ -113,16 +112,7 @@ function homeSessionSearchKey(record: HomeSessionRecord) {
   return `${pathKey(record.session.directory)}:${record.session.id}`
 }
 
-export default function Home() {
-  const settings = useSettings()
-  return (
-    <Show when={settings.general.newLayoutDesigns()} fallback={<LegacyHome />}>
-      <HomeDesign />
-    </Show>
-  )
-}
-
-function HomeDesign() {
+export function NewHome() {
   const sync = useServerSync()
   const layout = useLayout()
   const platform = usePlatform()
@@ -313,7 +303,7 @@ function HomeDesign() {
     const ctx = global.createServerCtx(conn)
     ctx.projects.open(directory)
     ctx.projects.touch(directory)
-    navigateOnServer(conn, `/${base64Encode(session.directory)}/session/${session.id}`)
+    navigateOnServer(conn, `/server/${base64Encode(ServerConnection.key(conn))}/session/${session.id}`)
   }
 
   function chooseProject(conn: ServerConnection.Any) {
@@ -416,7 +406,7 @@ function HomeDesign() {
                                 record={record}
                                 server={state.selection.server}
                                 activeServer={state.selection.server === server.key}
-                                openSession={openSession}
+                                onClick={() => openSession(record.session)}
                               />
                             )}
                           </For>
@@ -1024,7 +1014,7 @@ function HomeSessionRow(props: {
   record: HomeSessionRecord
   server: ServerConnection.Key
   activeServer: boolean
-  openSession: (session: Session) => void
+  onClick: () => void
 }) {
   const title = createMemo(() => sessionTitle(props.record.session.title) || props.record.session.id)
 
@@ -1033,7 +1023,7 @@ function HomeSessionRow(props: {
       type="button"
       data-component="home-session-row"
       class={`${HOME_ROW} h-10 gap-2 px-6 py-3 pl-4`}
-      onClick={() => props.openSession(props.record.session)}
+      onClick={props.onClick}
     >
       <HomeSessionLeading
         project={props.record.project}
@@ -1093,7 +1083,7 @@ function groupSessions(records: HomeSessionRecord[], language: ReturnType<typeof
   ].filter((group) => group.sessions.length > 0)
 }
 
-function LegacyHome() {
+export function LegacyHome() {
   const sync = useServerSync()
   const platform = usePlatform()
   const pickDirectory = useDirectoryPicker()

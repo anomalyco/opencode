@@ -1,10 +1,11 @@
 export * as AgentPlugin from "./agent"
 
 import path from "path"
-import { define } from "@opencode-ai/plugin/v2/effect"
+import { define } from "./internal"
 import { Effect } from "effect"
 import { AgentV2 } from "../agent"
 import { Global } from "../global"
+import { Location } from "../location"
 import { PermissionV2 } from "../permission"
 
 const TRUNCATION_GLOB = path.join(Global.Path.data, "tool-output", "*")
@@ -99,7 +100,8 @@ Rules:
 export const Plugin = define({
   id: "agent",
   effect: Effect.fn(function* (ctx) {
-    const worktree = ctx.location.directory
+    const location = yield* Location.Service
+    const worktree = location.directory
     const whitelistedDirs = [TRUNCATION_GLOB, path.join(Global.Path.tmp, "*")]
     const readonlyExternalDirectory: PermissionV2.Ruleset = [
       { action: "external_directory", resource: "*", effect: "ask" },

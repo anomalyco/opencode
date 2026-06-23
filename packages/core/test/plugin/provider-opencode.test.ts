@@ -14,8 +14,9 @@ const it = testEffect(PluginTestLayer)
 
 const addPlugin = Effect.fn(function* () {
   const plugin = yield* PluginV2.Service
-  const host = yield* PluginHost.make()
-  yield* plugin.add({ id: OpencodePlugin.id, effect: OpencodePlugin.effect(host) })
+  const host = yield* PluginHost.make(plugin)
+  const integration = yield* Integration.Service
+  yield* OpencodePlugin.effect(host).pipe(Effect.provideService(Integration.Service, integration))
 })
 
 function required<T>(value: T | undefined): T {

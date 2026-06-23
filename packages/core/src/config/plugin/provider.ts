@@ -1,6 +1,6 @@
 export * as ConfigProviderPlugin from "./provider"
 
-import { define } from "@opencode-ai/plugin/v2/effect"
+import { define } from "../../plugin/internal"
 import { Effect } from "effect"
 import { Config } from "../../config"
 import { ModelV2 } from "../../model"
