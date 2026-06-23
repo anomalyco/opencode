@@ -96,8 +96,21 @@ jobs:
             blocked_pr="$(gh pr list --label "$BLOCK_LABEL" --state open \
               --json number --jq '.[0].number' 2>/dev/null || true)"
 
+            # Fallback pause that does NOT depend on PR creation: if a previous run
+            # already pushed an unresolved merge to the sync branch (ahead of the
+            # target), pause until it is resolved/merged. Pushing works even when the
+            # token cannot open the pause PR, so this stops the workflow from
+            # re-failing every run while PR creation is blocked.
+            git fetch origin "$SYNC_BRANCH" >/dev/null 2>&1 || true
+            sync_branch_ahead=0
+            if git rev-parse --verify "origin/$SYNC_BRANCH" >/dev/null 2>&1; then
+              sync_branch_ahead="$(git rev-list --count "origin/${TARGET_BRANCH}..origin/${SYNC_BRANCH}" 2>/dev/null || echo 0)"
+            fi
+
             if [ -n "$blocked_pr" ]; then
               echo "Upstream sync is paused by open PR #$blocked_pr. Merge or close it to resume."
+            elif [ "$sync_branch_ahead" -gt 0 ]; then
+              echo "Upstream sync is paused: unresolved sync branch '$SYNC_BRANCH' is ahead of '$TARGET_BRANCH' by $sync_branch_ahead commit(s). Resolve and merge it (or delete the branch) to resume."
             else
               should_sync=true
               echo "Upstream is $behind_count commits ahead. Sync threshold met."
@@ -118,6 +131,8 @@ jobs:
             echo "- Minimum threshold: \`$MIN_COMMITS\`"
             if [ -n "$blocked_pr" ]; then
               echo "- Status: ⏸️ paused by open PR #$blocked_pr (merge or close it to resume)"
+            elif [ "${sync_branch_ahead:-0}" -gt 0 ]; then
+              echo "- Status: ⏸️ paused by unresolved sync branch \`$SYNC_BRANCH\` (ahead by $sync_branch_ahead) — resolve/merge it or delete the branch to resume"
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
