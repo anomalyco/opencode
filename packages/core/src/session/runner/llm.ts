@@ -23,7 +23,6 @@ import { SkillGuidance } from "../../skill/guidance"
 import { ReferenceGuidance } from "../../reference/guidance"
 import { ToolRegistry } from "../../tool/registry"
 import { ToolOutputStore } from "../../tool-output-store"
-import { causeMessage } from "../../util/error"
 import { SessionContextEpoch } from "../context-epoch"
 import { SessionCompaction } from "../compaction"
 import { SessionEvent } from "../event"
@@ -299,9 +298,9 @@ export const layer = Layer.effect(
               yield* withPublication(publisher.failAssistant("Provider turn interrupted"))
           }
           if (settled._tag === "Failure" && !Cause.hasInterrupts(settled.cause)) {
-            yield* withPublication(
-              publisher.failUnsettledTools(`Tool execution failed: ${causeMessage(settled.cause)}`),
-            )
+            const failure = Cause.squash(settled.cause)
+            const message = failure instanceof Error ? failure.message : String(failure)
+            yield* withPublication(publisher.failUnsettledTools(`Tool execution failed: ${message}`))
           }
           if (publisher.hasProviderError())
             yield* withPublication(publisher.failUnsettledTools("Tool execution interrupted"))

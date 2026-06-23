@@ -1,6 +1,7 @@
 export * as Integration from "./integration"
 
 import {
+  Cause,
   Clock,
   Context,
   Duration,
@@ -20,7 +21,6 @@ import { State } from "./state"
 import { Identifier } from "./util/identifier"
 import { EventV2 } from "./event"
 import { IntegrationConnection } from "./integration/connection"
-import { causeMessage } from "./util/error"
 
 export const ID = IntegrationSchema.ID
 export type ID = IntegrationSchema.ID
@@ -380,6 +380,11 @@ export const locationLayer = Layer.effect(
     const close = (attemptScope: Scope.Closeable) =>
       Scope.close(attemptScope, Exit.void).pipe(Effect.forkIn(scope, { startImmediately: true }), Effect.asVoid)
 
+    const message = (cause: Cause.Cause<unknown>) => {
+      const error = Cause.squash(cause)
+      return error instanceof Error ? error.message : String(error)
+    }
+
     const settle = Effect.fnUntraced(function* (attemptID: AttemptID, exit: Exit.Exit<Credential.Value, unknown>) {
       const now = yield* Clock.currentTimeMillis
       const result = yield* SynchronizedRef.modify(attempts, (current) => {
@@ -387,12 +392,7 @@ export const locationLayer = Layer.effect(
         if (!attempt || attempt.status !== "pending") return [undefined, current]
         const terminal: TerminalAttempt = Exit.isSuccess(exit)
           ? { status: "complete", time: attempt.time, removeAt: now + terminalRetention }
-          : {
-              status: "failed",
-              message: causeMessage(exit.cause),
-              time: attempt.time,
-              removeAt: now + terminalRetention,
-            }
+          : { status: "failed", message: message(exit.cause), time: attempt.time, removeAt: now + terminalRetention }
         return [attempt, new Map(current).set(attemptID, terminal)]
       })
       if (!result) return

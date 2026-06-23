@@ -8,7 +8,6 @@ import { Global } from "./global"
 import { SessionSchema } from "./session/schema"
 import { Identifier } from "./util/identifier"
 import type { ToolOutput } from "@opencode-ai/llm"
-import { errorMessage } from "./util/error"
 
 export const MAX_LINES = 2_000
 export const MAX_BYTES = 50 * 1024
@@ -32,7 +31,8 @@ export class StorageError extends Schema.TaggedErrorClass<StorageError>()("ToolO
   cause: Schema.Defect(),
 }) {
   override get message() {
-    return `Failed to ${this.operation} tool output: ${errorMessage(this.cause)}`
+    const detail = this.cause instanceof Error ? this.cause.message : String(this.cause)
+    return `Failed to ${this.operation} tool output${detail ? `: ${detail}` : ""}`
   }
 }
 

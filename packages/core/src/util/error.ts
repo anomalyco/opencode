@@ -1,29 +1,4 @@
-import { Cause, Schema } from "effect"
-
-export function errorMessage(error: unknown): string {
-  if (typeof error === "object" && error !== null) {
-    if (
-      "data" in error &&
-      typeof error.data === "object" &&
-      error.data !== null &&
-      "message" in error.data &&
-      typeof error.data.message === "string" &&
-      error.data.message
-    )
-      return error.data.message
-    if (error instanceof Error) return error.message || error.name
-    if ("message" in error && typeof error.message === "string" && error.message) return error.message
-  }
-  // oxlint-disable-next-line no-base-to-string -- custom toString values are useful error messages
-  const message = String(error)
-  return message && message !== "[object Object]" && message !== "undefined" && message !== "null"
-    ? message
-    : "Unknown error"
-}
-
-export function causeMessage(cause: Cause.Cause<unknown>): string {
-  return errorMessage(Cause.squash(cause))
-}
+import { Schema } from "effect"
 
 export abstract class NamedError extends Error {
   abstract schema(): Schema.Top

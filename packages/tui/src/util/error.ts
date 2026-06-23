@@ -1,7 +1,4 @@
-import { errorMessage } from "@opencode-ai/core/util/error"
 import { isRecord } from "./record"
-
-export { errorMessage } from "@opencode-ai/core/util/error"
 
 type ConfigIssue = { message: string; path: string[] }
 
@@ -123,6 +120,28 @@ export function errorFormat(error: unknown): string {
   }
 
   return String(error)
+}
+
+export function errorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    if (error.message) return error.message
+    if (error.name) return error.name
+  }
+
+  if (isRecord(error) && typeof error.message === "string" && error.message) {
+    return error.message
+  }
+
+  if (isRecord(error) && isRecord(error.data) && typeof error.data.message === "string" && error.data.message) {
+    return error.data.message
+  }
+
+  const text = String(error)
+  if (text && text !== "[object Object]") return text
+
+  const formatted = errorFormat(error)
+  if (formatted) return formatted
+  return "unknown error"
 }
 
 export function errorData(error: unknown) {

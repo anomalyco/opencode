@@ -4,7 +4,6 @@ import { ChildProcess } from "effect/unstable/process"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
 import { CrossSpawnSpawner } from "./cross-spawn-spawner"
 import { LayerNode } from "./effect/layer-node"
-import { errorMessage } from "./util/error"
 
 export class AppProcessError extends Schema.TaggedErrorClass<AppProcessError>()("AppProcessError", {
   command: Schema.String,
@@ -13,7 +12,8 @@ export class AppProcessError extends Schema.TaggedErrorClass<AppProcessError>()(
   cause: Schema.optional(Schema.Defect()),
 }) {
   override get message() {
-    const detail = this.stderr?.trim() || (this.cause === undefined ? undefined : errorMessage(this.cause))
+    const detail =
+      this.stderr?.trim() || (this.cause instanceof Error ? this.cause.message : this.cause && String(this.cause))
     const status = this.exitCode === undefined ? "" : ` (exit ${this.exitCode})`
     return `Command failed${status}: ${this.command}${detail ? `: ${detail}` : ""}`
   }
