@@ -29,6 +29,7 @@ import { useServer } from "@/context/server"
 import { useTabs } from "@/context/tabs"
 import { useDirectoryPicker } from "@/components/directory-picker"
 import { base64Encode } from "@opencode-ai/core/util/encode"
+import { legacySessionHref, requireServerKey, sessionHref } from "@/utils/session-route"
 
 export function SessionComposerRegion(props: {
   state: SessionComposerState
@@ -200,7 +201,11 @@ export function SessionComposerRegion(props: {
   const openParent = () => {
     const id = parentID()
     if (!id) return
-    navigate(`/${route.params.dir}/session/${id}`)
+    navigate(
+      route.params.serverKey
+        ? sessionHref(requireServerKey(route.params.serverKey), id)
+        : legacySessionHref(sdk().directory, id),
+    )
   }
 
   createEffect(() => {

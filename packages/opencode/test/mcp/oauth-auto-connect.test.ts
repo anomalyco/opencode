@@ -269,7 +269,7 @@ mcpTest.instance(
         const result = yield* mcp.authenticate("test-oauth-resources")
         expect(result.status).toBe("connected")
         expect(listToolsCalls).toBe(0)
-        expect(Object.keys(yield* mcp.resources())).toEqual(["test-oauth-resources:docs"])
+        expect(Object.keys(yield* mcp.resources())).toEqual(["test-oauth-resources:docs://readme"])
       }),
     ),
   { config: config("test-oauth-resources") },

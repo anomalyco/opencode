@@ -38,15 +38,15 @@ import {
   sortedRootSessions,
   toggleHomeProjectSelection,
 } from "@/pages/layout/helpers"
-import { useSessionTabAvatarState } from "@/pages/layout/project-avatar-state"
+import { SessionTabAvatar } from "@/pages/layout/session-tab-avatar"
 import { sessionTitle } from "@/utils/session-title"
 import { pathKey } from "@/utils/path-key"
 import { useGlobal } from "@/context/global"
 import { useCommand } from "@/context/command"
-import { useSettings } from "@/context/settings"
 import { ServerRowMenu } from "@/components/server/server-row-menu"
 import { ServerHealthIndicator } from "@/components/server/server-row"
 import { type ServerHealth } from "@/utils/server-health"
+import { Persist, persisted } from "@/utils/persist"
 
 const HOME_SESSION_LIMIT = 64
 const HOME_ROW_LAYOUT =
@@ -113,16 +113,7 @@ function homeSessionSearchKey(record: HomeSessionRecord) {
   return `${pathKey(record.session.directory)}:${record.session.id}`
 }
 
-export default function Home() {
-  const settings = useSettings()
-  return (
-    <Show when={settings.general.newLayoutDesigns()} fallback={<LegacyHome />}>
-      <HomeDesign />
-    </Show>
-  )
-}
-
-function HomeDesign() {
+export function NewHome() {
   const sync = useServerSync()
   const layout = useLayout()
   const platform = usePlatform()
@@ -313,7 +304,7 @@ function HomeDesign() {
     const ctx = global.createServerCtx(conn)
     ctx.projects.open(directory)
     ctx.projects.touch(directory)
-    navigateOnServer(conn, `/${base64Encode(session.directory)}/session/${session.id}`)
+    navigateOnServer(conn, `/server/${base64Encode(ServerConnection.key(conn))}/session/${session.id}`)
   }
 
   function chooseProject(conn: ServerConnection.Any) {
@@ -339,7 +330,7 @@ function HomeDesign() {
 
   return (
     <div class="rounded-[10px] shadow-[var(--v2-elevation-raised)] m-2 min-h-0 lg:overflow-hidden bg-v2-background-bg-base self-stretch flex-1">
-      <div class="mx-auto grid w-full h-full max-w-[1080px] gap-8 px-6 pb-16 lg:grid-cols-[280px_minmax(0,720px)]">
+      <div class="mx-auto grid h-full w-full max-w-[1080px] grid-rows-[auto_minmax(0,1fr)_auto] gap-4 px-3 pb-3 lg:grid-cols-[280px_minmax(0,720px)] lg:grid-rows-1 lg:gap-8 lg:px-6 lg:pb-16">
         <HomeProjectColumn
           projects={projects()}
           selected={state.selection}
@@ -365,7 +356,7 @@ function HomeDesign() {
         />
 
         <section
-          class="min-h-0 min-w-0 flex-1 flex flex-col pt-12"
+          class="min-h-0 min-w-0 flex-1 flex flex-col pt-6 lg:pt-12"
           aria-label={language.t("sidebar.project.recentSessions")}
         >
           <HomeSessionSearch
@@ -416,7 +407,7 @@ function HomeDesign() {
                                 record={record}
                                 server={state.selection.server}
                                 activeServer={state.selection.server === server.key}
-                                openSession={openSession}
+                                onClick={() => openSession(record.session)}
                               />
                             )}
                           </For>
@@ -429,6 +420,12 @@ function HomeDesign() {
             </div>
           </ScrollView>
         </section>
+        <HomeUtilityNav
+          class="flex lg:hidden"
+          openSettings={openSettings}
+          openHelp={() => platform.openLink("https://opencode.ai/desktop-feedback")}
+          language={language}
+        />
       </div>
     </div>
   )
@@ -452,8 +449,15 @@ function HomeProjectColumn(props: {
   const global = useGlobal()
   const dialog = useDialog()
   const controller = useServerManagementController({ navigateOnAdd: false })
+  const [state, setState] = persisted(
+    Persist.global("home.servers", ["home.servers.v1"]),
+    createStore({ collapsed: {} as Record<string, boolean> }),
+  )
   return (
-    <aside class="flex min-w-0 flex-col lg:pt-[52px] mt-14 gap-4" aria-label={props.language.t("home.projects")}>
+    <aside
+      class="mt-6 flex min-w-0 flex-col gap-4 lg:mt-14 lg:pt-[52px]"
+      aria-label={props.language.t("home.projects")}
+    >
       <div class="flex h-7 min-w-0 items-center justify-between pl-1.5">
         <div class={HOME_SECTION_LABEL}>{props.language.t("home.projects")}</div>
         <Show when={global.servers.list().length === 1}>
@@ -477,20 +481,23 @@ function HomeProjectColumn(props: {
             const key = ServerConnection.key(item)
             const healthy = () => !!global.servers.health[key]?.healthy
             const serverCtx = global.createServerCtx(item)
+            const collapsed = () => !!state.collapsed[key]
             return (
               <div class="flex max-h-[min(572px,calc(100vh_-_300px))] min-w-0 flex-col gap-1 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 <HomeServerRow
                   server={item}
                   selected={props.selected.server === key && !props.selected.directory}
                   healthy={healthy()}
+                  collapsed={collapsed()}
                   health={global.servers.health[key]}
                   controller={controller}
                   focusServer={props.focusServer}
                   chooseProject={props.chooseProject}
                   openEdit={(server) => dialog.show(() => <DialogServerV2 mode="edit" server={server} />)}
+                  toggleCollapsed={() => setState("collapsed", key, !state.collapsed[key])}
                   language={props.language}
                 />
-                <Show when={healthy()}>
+                <Show when={healthy() && !collapsed()}>
                   <div class="mx-3 h-px bg-v2-border-border-base" />
                   <HomeProjectList {...props} server={item} projects={serverCtx.projects.list()} />
                 </Show>
@@ -499,25 +506,41 @@ function HomeProjectColumn(props: {
           }}
         </For>
       </Show>
-      <div class="mt-4 flex min-w-0 flex-col gap-1">
-        <button
-          type="button"
-          class={`${HOME_PROJECT_NAV_ROW} text-v2-text-text-faint [&>[data-slot=icon-svg]]:text-v2-icon-icon-muted`}
-          onClick={props.openSettings}
-        >
-          <IconV2 name="settings-gear" size="small" />
-          <span class={HOME_PROJECT_NAV_LABEL}>{props.language.t("sidebar.settings")}</span>
-        </button>
-        <button
-          type="button"
-          class={`${HOME_PROJECT_NAV_ROW} text-v2-text-text-faint [&>[data-slot=icon-svg]]:text-v2-icon-icon-muted`}
-          onClick={props.openHelp}
-        >
-          <IconV2 name="help" size="small" />
-          <span class={HOME_PROJECT_NAV_LABEL}>{props.language.t("sidebar.help")}</span>
-        </button>
-      </div>
+      <HomeUtilityNav
+        class="mt-4 hidden lg:flex"
+        openSettings={props.openSettings}
+        openHelp={props.openHelp}
+        language={props.language}
+      />
     </aside>
+  )
+}
+
+function HomeUtilityNav(props: {
+  class?: string
+  openSettings: () => void
+  openHelp: () => void
+  language: ReturnType<typeof useLanguage>
+}) {
+  return (
+    <div class={`${props.class ?? ""} min-w-0 flex-col gap-1`}>
+      <button
+        type="button"
+        class={`${HOME_PROJECT_NAV_ROW} text-v2-text-text-faint [&>[data-slot=icon-svg]]:text-v2-icon-icon-muted`}
+        onClick={props.openSettings}
+      >
+        <IconV2 name="settings-gear" size="small" />
+        <span class={HOME_PROJECT_NAV_LABEL}>{props.language.t("sidebar.settings")}</span>
+      </button>
+      <button
+        type="button"
+        class={`${HOME_PROJECT_NAV_ROW} text-v2-text-text-faint [&>[data-slot=icon-svg]]:text-v2-icon-icon-muted`}
+        onClick={props.openHelp}
+      >
+        <IconV2 name="help" size="small" />
+        <span class={HOME_PROJECT_NAV_LABEL}>{props.language.t("sidebar.help")}</span>
+      </button>
+    </div>
   )
 }
 
@@ -525,11 +548,13 @@ function HomeServerRow(props: {
   server: ServerConnection.Any
   selected: boolean
   healthy: boolean
+  collapsed: boolean
   health: ServerHealth | undefined
   controller: ReturnType<typeof useServerManagementController>
   focusServer: (server: ServerConnection.Any) => void
   chooseProject: (server: ServerConnection.Any) => void
   openEdit: (server: ServerConnection.Http) => void
+  toggleCollapsed: () => void
   language: ReturnType<typeof useLanguage>
 }) {
   const [state, setState] = createStore({ menuOpen: false })
@@ -542,7 +567,30 @@ function HomeServerRow(props: {
         disabled={!props.healthy}
         onClick={() => props.focusServer(props.server)}
       >
-        <div class="flex size-4 shrink-0 items-center justify-center">
+        <Show when={props.healthy}>
+          <span
+            data-action="home-server-collapse"
+            class="inline-flex -ml-0.5 -mr-1.5 size-5 shrink-0 items-center justify-center rounded-[4px] text-v2-icon-icon-muted hover:bg-v2-overlay-simple-overlay-hover"
+            aria-label={
+              props.collapsed ? props.language.t("home.server.expand") : props.language.t("home.server.collapse")
+            }
+            aria-expanded={!props.collapsed}
+            onClick={(event) => {
+              event.preventDefault()
+              event.stopPropagation()
+              props.toggleCollapsed()
+            }}
+            onPointerDown={(event) => event.preventDefault()}
+          >
+            <IconV2
+              name="chevron-down"
+              size="small"
+              class="transition-transform duration-150 ease-in-out"
+              style={{ transform: `rotate(${props.collapsed ? -90 : 0}deg)` }}
+            />
+          </span>
+        </Show>
+        <div class="flex size-4 shrink-0 items-center justify-center -mr-0.5">
           <ServerHealthIndicator health={props.health} />
         </div>
         <span class="flex min-w-0 items-center gap-1">
@@ -707,21 +755,6 @@ function HomeProjectAvatar(props: { project: LocalProject }) {
   )
 }
 
-function HomeSessionAvatar(props: { project: LocalProject; session: Session; activeServer: boolean }) {
-  const directory = () => props.session.directory
-  const sessionId = () => props.session.id
-  const state = useSessionTabAvatarState(directory, sessionId, () => props.activeServer)
-  return (
-    <ProjectAvatar
-      fallback={displayName(props.project)}
-      src={getProjectAvatarSource(props.project.id, props.project.icon)}
-      variant={getProjectAvatarVariant(props.project.icon?.color)}
-      unread={state.unread()}
-      loading={state.loading()}
-    />
-  )
-}
-
 function HomeSessionLeading(props: {
   project: LocalProject
   session: Session
@@ -739,7 +772,12 @@ function HomeSessionLeading(props: {
           style={{ right: "calc(100% + 12px)" }}
         />
       </Show>
-      <HomeSessionAvatar project={props.project} session={props.session} activeServer={props.activeServer} />
+      <SessionTabAvatar
+        project={props.project}
+        directory={props.session.directory}
+        sessionId={props.session.id}
+        activeServer={props.activeServer}
+      />
     </div>
   )
 }
@@ -1024,7 +1062,7 @@ function HomeSessionRow(props: {
   record: HomeSessionRecord
   server: ServerConnection.Key
   activeServer: boolean
-  openSession: (session: Session) => void
+  onClick: () => void
 }) {
   const title = createMemo(() => sessionTitle(props.record.session.title) || props.record.session.id)
 
@@ -1033,7 +1071,7 @@ function HomeSessionRow(props: {
       type="button"
       data-component="home-session-row"
       class={`${HOME_ROW} h-10 gap-2 px-6 py-3 pl-4`}
-      onClick={() => props.openSession(props.record.session)}
+      onClick={props.onClick}
     >
       <HomeSessionLeading
         project={props.record.project}
@@ -1093,7 +1131,7 @@ function groupSessions(records: HomeSessionRecord[], language: ReturnType<typeof
   ].filter((group) => group.sessions.length > 0)
 }
 
-function LegacyHome() {
+export function LegacyHome() {
   const sync = useServerSync()
   const platform = usePlatform()
   const pickDirectory = useDirectoryPicker()

@@ -161,7 +161,7 @@ export interface Interface {
   readonly clients: () => Effect.Effect<Record<string, MCPClient>>
   readonly tools: () => Effect.Effect<Record<string, Tool>>
   readonly prompts: () => Effect.Effect<Record<string, PromptInfo & { client: string }>>
-  readonly resources: () => Effect.Effect<Record<string, ResourceInfo & { client: string }>>
+  readonly resources: (clientName?: string) => Effect.Effect<Record<string, ResourceInfo & { client: string }>>
   readonly add: (name: string, mcp: ConfigMCPV1.Info) => Effect.Effect<{ status: Record<string, Status> | Status }>
   readonly connect: (name: string) => Effect.Effect<void, NotFoundError>
   readonly disconnect: (name: string) => Effect.Effect<void, NotFoundError>
@@ -654,17 +654,22 @@ export const layer = Layer.effect(
       s: State,
       listFn: (c: Client, timeout?: number) => Promise<T[]>,
       label: string,
+      key?: (item: T) => string,
+      targetClientName?: string,
     ) {
       return Effect.gen(function* () {
         const cfg = yield* cfgSvc.get()
         return yield* Effect.forEach(
-          Object.entries(s.clients).filter(([name]) => s.status[name]?.status === "connected"),
+          Object.entries(s.clients).filter(
+            ([name]) => s.status[name]?.status === "connected" && (!targetClientName || name === targetClientName),
+          ),
           ([clientName, client]) =>
             McpCatalog.fetch(
               clientName,
               client,
               (c) => listFn(c, requestTimeout(s, clientName, cfg.mcp?.[clientName], cfg.experimental?.mcp_timeout)),
               label,
+              key,
             ).pipe(Effect.map((items) => Object.entries(items ?? {}))),
           { concurrency: "unbounded" },
         ).pipe(Effect.map((results) => Object.fromEntries<T & { client: string }>(results.flat())))
@@ -675,8 +680,14 @@ export const layer = Layer.effect(
       return yield* collectFromConnected(yield* InstanceState.get(state), McpCatalog.prompts, "prompts")
     })
 
-    const resources = Effect.fn("MCP.resources")(function* () {
-      return yield* collectFromConnected(yield* InstanceState.get(state), McpCatalog.resources, "resources")
+    const resources = Effect.fn("MCP.resources")(function* (clientName?: string) {
+      return yield* collectFromConnected(
+        yield* InstanceState.get(state),
+        McpCatalog.resources,
+        "resources",
+        (resource) => resource.uri,
+        clientName,
+      )
     })
 
     const withClient = Effect.fnUntraced(function* <A>(

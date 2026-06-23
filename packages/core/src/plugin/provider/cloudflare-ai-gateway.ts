@@ -1,13 +1,13 @@
 import os from "os"
 import { InstallationVersion } from "../../installation/version"
 import { Effect, Option, Schema } from "effect"
-import { PluginV2 } from "../../plugin"
+import { define } from "../internal"
 
-export const CloudflareAIGatewayPlugin = PluginV2.define({
-  id: PluginV2.ID.make("cloudflare-ai-gateway"),
-  effect: Effect.gen(function* () {
-    return {
-      "aisdk.sdk": Effect.fn(function* (evt) {
+export const CloudflareAIGatewayPlugin = define({
+  id: "cloudflare-ai-gateway",
+  effect: Effect.fn(function* (ctx) {
+    yield* ctx.aisdk.sdk(
+      Effect.fn(function* (evt) {
         if (evt.package !== "ai-gateway-provider") return
         if (evt.options.baseURL) return
 
@@ -31,7 +31,7 @@ export const CloudflareAIGatewayPlugin = PluginV2.define({
           },
         }
       }),
-    }
+    )
   }),
 })
 

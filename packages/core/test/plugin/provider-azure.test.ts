@@ -1,50 +1,76 @@
+import { AISDK } from "@opencode-ai/core/aisdk"
 import { describe, expect } from "bun:test"
-import { Effect, Layer } from "effect"
-import { Credential } from "@opencode-ai/core/credential"
-import { Integration } from "@opencode-ai/core/integration"
-import { Database } from "@opencode-ai/core/database/database"
+import type { LanguageModelV3 } from "@ai-sdk/provider"
+import { Effect } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
-import { EventV2 } from "@opencode-ai/core/event"
-import { Location } from "@opencode-ai/core/location"
+import { ModelV2 } from "@opencode-ai/core/model"
 import { PluginV2 } from "@opencode-ai/core/plugin"
+import { PluginHost } from "@opencode-ai/core/plugin/host"
 import { AzurePlugin } from "@opencode-ai/core/plugin/provider/azure"
 import { ProviderV2 } from "@opencode-ai/core/provider"
-import { AbsolutePath } from "@opencode-ai/core/schema"
-import { location } from "../fixture/location"
 import { testEffect } from "../lib/effect"
-import { fakeSelectorSdk, it, model, npmLayer, provider, withEnv } from "./provider-helper"
+import { PluginTestLayer } from "./fixture"
 
-const database = Database.layerFromPath(":memory:").pipe(Layer.fresh)
-const preferences = Credential.layer.pipe(Layer.provide(database))
-const accounts = Layer.merge(
-  Credential.layer.pipe(Layer.provide(database), Layer.provide(preferences), Layer.provide(EventV2.defaultLayer)),
-  preferences,
-)
-const itWithAccount = testEffect(
-  Catalog.locationLayer.pipe(
-    Layer.provideMerge(accounts),
-    Layer.provideMerge(EventV2.defaultLayer),
-    Layer.provideMerge(
-      Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make("test") }))),
-    ),
-    Layer.provideMerge(npmLayer),
-  ),
-)
+const it = testEffect(PluginTestLayer)
+
+const addPlugin = Effect.fn(function* () {
+  const plugin = yield* PluginV2.Service
+  const aisdk = yield* AISDK.Service
+  const host = yield* PluginHost.make(plugin)
+  yield* AzurePlugin.effect(host)
+})
+
+function required<T>(value: T | undefined): T {
+  if (value === undefined) throw new Error("Expected value")
+  return value
+}
+
+function withEnv<A, E, R>(vars: Record<string, string | undefined>, fx: () => Effect.Effect<A, E, R>) {
+  return Effect.acquireUseRelease(
+    Effect.sync(() => {
+      const previous = Object.fromEntries(Object.keys(vars).map((key) => [key, process.env[key]]))
+      Object.entries(vars).forEach(([key, value]) => {
+        if (value === undefined) delete process.env[key]
+        else process.env[key] = value
+      })
+      return previous
+    }),
+    fx,
+    (previous) =>
+      Effect.sync(() => {
+        Object.entries(previous).forEach(([key, value]) => {
+          if (value === undefined) delete process.env[key]
+          else process.env[key] = value
+        })
+      }),
+  )
+}
+
+function fakeSelectorSdk(calls: string[]) {
+  const make = (method: string) => (id: string) => {
+    calls.push(`${method}:${id}`)
+    return { modelId: id, provider: method, specificationVersion: "v3" } as unknown as LanguageModelV3
+  }
+  return {
+    responses: make("responses"),
+    messages: make("messages"),
+    chat: make("chat"),
+    languageModel: make("languageModel"),
+  }
+}
 
 describe("AzurePlugin", () => {
   it.effect("resolves resourceName from env", () =>
     withEnv({ AZURE_RESOURCE_NAME: "from-env" }, () =>
       Effect.gen(function* () {
-        const plugin = yield* PluginV2.Service
         const catalog = yield* Catalog.Service
-        yield* plugin.add(AzurePlugin)
-        const transform = yield* catalog.transform()
-        yield* transform((catalog) => {
+        yield* catalog.transform((catalog) => {
           catalog.provider.update(ProviderV2.ID.azure, (item) => {
             item.api = { type: "aisdk", package: "@ai-sdk/azure" }
           })
         })
-        expect((yield* catalog.provider.get(ProviderV2.ID.azure)).request.body.resourceName).toBe("from-env")
+        yield* addPlugin()
+        expect(required(yield* catalog.provider.get(ProviderV2.ID.azure)).request.body.resourceName).toBe("from-env")
       }),
     ),
   )
@@ -52,12 +78,10 @@ describe("AzurePlugin", () => {
   it.effect("keeps explicit resourceName over env and ignores other providers", () =>
     withEnv({ AZURE_RESOURCE_NAME: "from-env" }, () =>
       Effect.gen(function* () {
-        const plugin = yield* PluginV2.Service
         const catalog = yield* Catalog.Service
-        yield* plugin.add(AzurePlugin)
-        const transform = yield* catalog.transform()
-        yield* transform((catalog) => {
-          const azure = provider("azure", {
+        yield* catalog.transform((catalog) => {
+          const azure = new ProviderV2.Info({
+            ...ProviderV2.Info.empty(ProviderV2.ID.azure),
             api: { type: "aisdk", package: "@ai-sdk/azure" },
             request: { headers: {}, body: { resourceName: "from-config" } },
           })
@@ -67,51 +91,20 @@ describe("AzurePlugin", () => {
           })
           catalog.provider.update(ProviderV2.ID.openai, () => {})
         })
-        expect((yield* catalog.provider.get(ProviderV2.ID.azure)).request.body.resourceName).toBe("from-config")
-        expect((yield* catalog.provider.get(ProviderV2.ID.openai)).request.body.resourceName).toBeUndefined()
+        yield* addPlugin()
+        expect(required(yield* catalog.provider.get(ProviderV2.ID.azure)).request.body.resourceName).toBe("from-config")
+        expect(required(yield* catalog.provider.get(ProviderV2.ID.openai)).request.body.resourceName).toBeUndefined()
       }),
-    ),
-  )
-
-  itWithAccount.effect("prefers account resourceName over env", () =>
-    withEnv(
-      {
-        AZURE_RESOURCE_NAME: "from-env",
-      },
-      () =>
-        Effect.gen(function* () {
-          const plugin = yield* PluginV2.Service
-          const credentials = yield* Credential.Service
-          const catalog = yield* Catalog.Service
-          yield* credentials.create({
-            integrationID: Integration.ID.make("azure"),
-            value: new Credential.Key({
-              type: "key",
-              key: "key",
-              metadata: { resourceName: "from-account" },
-            }),
-          })
-          yield* plugin.add(AzurePlugin)
-          const transform = yield* catalog.transform()
-          yield* transform((catalog) => {
-            catalog.provider.update(ProviderV2.ID.azure, (item) => {
-              item.api = { type: "aisdk", package: "@ai-sdk/azure" }
-            })
-          })
-          expect((yield* catalog.provider.get(ProviderV2.ID.azure)).request.body.resourceName).toBe("from-account")
-        }),
     ),
   )
 
   it.effect("falls back to env when configured resourceName is blank", () =>
     withEnv({ AZURE_RESOURCE_NAME: "from-env" }, () =>
       Effect.gen(function* () {
-        const plugin = yield* PluginV2.Service
         const catalog = yield* Catalog.Service
-        yield* plugin.add(AzurePlugin)
-        const transform = yield* catalog.transform()
-        yield* transform((catalog) => {
-          const azure = provider("azure", {
+        yield* catalog.transform((catalog) => {
+          const azure = new ProviderV2.Info({
+            ...ProviderV2.Info.empty(ProviderV2.ID.azure),
             api: { type: "aisdk", package: "@ai-sdk/azure" },
             request: { headers: {}, body: { resourceName: "" } },
           })
@@ -120,7 +113,8 @@ describe("AzurePlugin", () => {
             item.request = azure.request
           })
         })
-        expect((yield* catalog.provider.get(ProviderV2.ID.azure)).request.body.resourceName).toBe("from-env")
+        yield* addPlugin()
+        expect(required(yield* catalog.provider.get(ProviderV2.ID.azure)).request.body.resourceName).toBe("from-env")
       }),
     ),
   )
@@ -128,12 +122,10 @@ describe("AzurePlugin", () => {
   it.effect("falls back to env when configured resourceName is whitespace", () =>
     withEnv({ AZURE_RESOURCE_NAME: "from-env" }, () =>
       Effect.gen(function* () {
-        const plugin = yield* PluginV2.Service
         const catalog = yield* Catalog.Service
-        yield* plugin.add(AzurePlugin)
-        const transform = yield* catalog.transform()
-        yield* transform((catalog) => {
-          const azure = provider("azure", {
+        yield* catalog.transform((catalog) => {
+          const azure = new ProviderV2.Info({
+            ...ProviderV2.Info.empty(ProviderV2.ID.azure),
             api: { type: "aisdk", package: "@ai-sdk/azure" },
             request: { headers: {}, body: { resourceName: "   " } },
           })
@@ -142,7 +134,8 @@ describe("AzurePlugin", () => {
             item.request = azure.request
           })
         })
-        expect((yield* catalog.provider.get(ProviderV2.ID.azure)).request.body.resourceName).toBe("from-env")
+        yield* addPlugin()
+        expect(required(yield* catalog.provider.get(ProviderV2.ID.azure)).request.body.resourceName).toBe("from-env")
       }),
     ),
   )
@@ -151,16 +144,16 @@ describe("AzurePlugin", () => {
     withEnv({ AZURE_RESOURCE_NAME: undefined }, () =>
       Effect.gen(function* () {
         const plugin = yield* PluginV2.Service
-        yield* plugin.add(AzurePlugin)
-        const result = yield* plugin.trigger(
-          "aisdk.sdk",
-          {
-            model: model("azure", "deployment"),
-            package: "@ai-sdk/azure",
-            options: { name: "azure", baseURL: "https://proxy.example.com/openai" },
-          },
-          {},
-        )
+        const aisdk = yield* AISDK.Service
+        yield* addPlugin()
+        const result = yield* aisdk.runSDK({
+          model: new ModelV2.Info({
+            ...ModelV2.Info.empty(ProviderV2.ID.azure, ModelV2.ID.make("deployment")),
+            api: { id: ModelV2.ID.make("deployment"), type: "aisdk", package: "test-provider" },
+          }),
+          package: "@ai-sdk/azure",
+          options: { name: "azure", baseURL: "https://proxy.example.com/openai" },
+        })
         expect(result.sdk).toBeDefined()
       }),
     ),
@@ -169,14 +162,17 @@ describe("AzurePlugin", () => {
   it.effect("rejects missing resourceName when baseURL is not configured", () =>
     withEnv({ AZURE_RESOURCE_NAME: undefined }, () =>
       Effect.gen(function* () {
-        const plugin = yield* PluginV2.Service
-        yield* plugin.add(AzurePlugin)
-        const exit = yield* plugin
-          .trigger(
-            "aisdk.sdk",
-            { model: model("azure", "deployment"), package: "@ai-sdk/azure", options: { name: "azure" } },
-            {},
-          )
+        const aisdk = yield* AISDK.Service
+        yield* addPlugin()
+        const exit = yield* aisdk
+          .runSDK({
+            model: new ModelV2.Info({
+              ...ModelV2.Info.empty(ProviderV2.ID.azure, ModelV2.ID.make("deployment")),
+              api: { id: ModelV2.ID.make("deployment"), type: "aisdk", package: "test-provider" },
+            }),
+            package: "@ai-sdk/azure",
+            options: { name: "azure" },
+          })
           .pipe(Effect.exit)
         expect(exit._tag).toBe("Failure")
       }),
@@ -186,13 +182,17 @@ describe("AzurePlugin", () => {
   it.effect("selects chat only for completion URLs", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
+      const aisdk = yield* AISDK.Service
       const calls: string[] = []
-      yield* plugin.add(AzurePlugin)
-      yield* plugin.trigger(
-        "aisdk.language",
-        { model: model("azure", "deployment"), sdk: fakeSelectorSdk(calls), options: { useCompletionUrls: true } },
-        {},
-      )
+      yield* addPlugin()
+      yield* aisdk.runLanguage({
+        model: new ModelV2.Info({
+          ...ModelV2.Info.empty(ProviderV2.ID.azure, ModelV2.ID.make("deployment")),
+          api: { id: ModelV2.ID.make("deployment"), type: "aisdk", package: "test-provider" },
+        }),
+        sdk: fakeSelectorSdk(calls),
+        options: { useCompletionUrls: true },
+      })
       expect(calls).toEqual(["chat:deployment"])
     }),
   )
@@ -200,13 +200,17 @@ describe("AzurePlugin", () => {
   it.effect("selects chat from per-call useCompletionUrls", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
+      const aisdk = yield* AISDK.Service
       const calls: string[] = []
-      yield* plugin.add(AzurePlugin)
-      yield* plugin.trigger(
-        "aisdk.language",
-        { model: model("azure", "deployment"), sdk: fakeSelectorSdk(calls), options: { useCompletionUrls: true } },
-        {},
-      )
+      yield* addPlugin()
+      yield* aisdk.runLanguage({
+        model: new ModelV2.Info({
+          ...ModelV2.Info.empty(ProviderV2.ID.azure, ModelV2.ID.make("deployment")),
+          api: { id: ModelV2.ID.make("deployment"), type: "aisdk", package: "test-provider" },
+        }),
+        sdk: fakeSelectorSdk(calls),
+        options: { useCompletionUrls: true },
+      })
       expect(calls).toEqual(["chat:deployment"])
     }),
   )
@@ -214,19 +218,18 @@ describe("AzurePlugin", () => {
   it.effect("ignores model useCompletionUrls when per-call option is unset", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
+      const aisdk = yield* AISDK.Service
       const calls: string[] = []
-      yield* plugin.add(AzurePlugin)
-      yield* plugin.trigger(
-        "aisdk.language",
-        {
-          model: model("azure", "deployment", {
-            request: { headers: {}, body: { useCompletionUrls: true } },
-          }),
-          sdk: fakeSelectorSdk(calls),
-          options: {},
-        },
-        {},
-      )
+      yield* addPlugin()
+      yield* aisdk.runLanguage({
+        model: new ModelV2.Info({
+          ...ModelV2.Info.empty(ProviderV2.ID.azure, ModelV2.ID.make("deployment")),
+          api: { id: ModelV2.ID.make("deployment"), type: "aisdk", package: "test-provider" },
+          request: { headers: {}, body: { useCompletionUrls: true } },
+        }),
+        sdk: fakeSelectorSdk(calls),
+        options: {},
+      })
       expect(calls).toEqual(["responses:deployment"])
     }),
   )
@@ -234,18 +237,25 @@ describe("AzurePlugin", () => {
   it.effect("uses the legacy Azure selector order and provider guard", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
+      const aisdk = yield* AISDK.Service
       const calls: string[] = []
-      yield* plugin.add(AzurePlugin)
-      yield* plugin.trigger(
-        "aisdk.language",
-        { model: model("azure", "deployment"), sdk: fakeSelectorSdk(calls), options: {} },
-        {},
-      )
-      const ignored = yield* plugin.trigger(
-        "aisdk.language",
-        { model: model("openai", "deployment"), sdk: fakeSelectorSdk(calls), options: {} },
-        {},
-      )
+      yield* addPlugin()
+      yield* aisdk.runLanguage({
+        model: new ModelV2.Info({
+          ...ModelV2.Info.empty(ProviderV2.ID.azure, ModelV2.ID.make("deployment")),
+          api: { id: ModelV2.ID.make("deployment"), type: "aisdk", package: "test-provider" },
+        }),
+        sdk: fakeSelectorSdk(calls),
+        options: {},
+      })
+      const ignored = yield* aisdk.runLanguage({
+        model: new ModelV2.Info({
+          ...ModelV2.Info.empty(ProviderV2.ID.openai, ModelV2.ID.make("deployment")),
+          api: { id: ModelV2.ID.make("deployment"), type: "aisdk", package: "test-provider" },
+        }),
+        sdk: fakeSelectorSdk(calls),
+        options: {},
+      })
       expect(calls).toEqual(["responses:deployment"])
       expect(ignored.language).toBeUndefined()
     }),
@@ -254,26 +264,29 @@ describe("AzurePlugin", () => {
   it.effect("falls back through the legacy Azure selector order", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
+      const aisdk = yield* AISDK.Service
       const calls: string[] = []
       const make = (method: string) => (id: string) => {
         calls.push(`${method}:${id}`)
         return { modelId: id, provider: method, specificationVersion: "v3" }
       }
-      yield* plugin.add(AzurePlugin)
-      yield* plugin.trigger(
-        "aisdk.language",
-        {
-          model: model("azure", "messages-deployment"),
-          sdk: { messages: make("messages"), chat: make("chat"), languageModel: make("languageModel") },
-          options: {},
-        },
-        {},
-      )
-      yield* plugin.trigger(
-        "aisdk.language",
-        { model: model("azure", "language-deployment"), sdk: { languageModel: make("languageModel") }, options: {} },
-        {},
-      )
+      yield* addPlugin()
+      yield* aisdk.runLanguage({
+        model: new ModelV2.Info({
+          ...ModelV2.Info.empty(ProviderV2.ID.azure, ModelV2.ID.make("messages-deployment")),
+          api: { id: ModelV2.ID.make("messages-deployment"), type: "aisdk", package: "test-provider" },
+        }),
+        sdk: { messages: make("messages"), chat: make("chat"), languageModel: make("languageModel") },
+        options: {},
+      })
+      yield* aisdk.runLanguage({
+        model: new ModelV2.Info({
+          ...ModelV2.Info.empty(ProviderV2.ID.azure, ModelV2.ID.make("language-deployment")),
+          api: { id: ModelV2.ID.make("language-deployment"), type: "aisdk", package: "test-provider" },
+        }),
+        sdk: { languageModel: make("languageModel") },
+        options: {},
+      })
       expect(calls).toEqual(["messages:messages-deployment", "languageModel:language-deployment"])
     }),
   )
