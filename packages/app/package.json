@@ -1,6 +1,6 @@
 {
   "name": "@opencode-ai/app",
-  "version": "1.17.4",
+  "version": "1.17.9",
   "description": "",
   "type": "module",
   "exports": {
@@ -17,13 +17,15 @@
     "dev": "vite",
     "build": "vite build",
     "serve": "vite preview",
-    "test": "bun run test:unit",
+    "test": "bun run test:unit && bun run test:virtualizer",
     "test:unit": "bun test --only-failures --preload ./happydom.ts ./src",
+    "test:virtualizer": "bun test --conditions=browser --preload ./happydom.ts ./test-browser/solid-virtual.test.ts",
     "test:unit:watch": "bun test --watch --preload ./happydom.ts ./src",
     "test:e2e": "playwright test",
     "test:e2e:local": "playwright test",
     "test:e2e:ui": "playwright test --ui",
-    "test:e2e:report": "playwright show-report e2e/playwright-report"
+    "test:e2e:report": "playwright show-report e2e/playwright-report",
+    "test:bench": "bun test ./e2e/performance/unit && playwright test --config e2e/performance/playwright.config.ts"
   },
   "license": "MIT",
   "devDependencies": {
@@ -46,6 +48,7 @@
     "@opencode-ai/core": "workspace:*",
     "@opencode-ai/sdk": "workspace:*",
     "@opencode-ai/ui": "workspace:*",
+    "@pierre/trees": "1.0.0-beta.4",
     "@sentry/solid": "catalog:",
     "@shikijs/transformers": "3.9.2",
     "@solid-primitives/active-element": "2.1.3",
@@ -63,6 +66,7 @@
     "@solidjs/meta": "catalog:",
     "@solidjs/router": "catalog:",
     "@tanstack/solid-query": "5.91.4",
+    "@tanstack/solid-virtual": "catalog:",
     "@thisbeyond/solid-dnd": "0.7.5",
     "diff": "catalog:",
     "effect": "catalog:",
@@ -75,7 +79,6 @@
     "shiki": "catalog:",
     "solid-js": "catalog:",
     "solid-list": "catalog:",
-    "tailwindcss": "catalog:",
-    "virtua": "catalog:"
+    "tailwindcss": "catalog:"
   }
 }

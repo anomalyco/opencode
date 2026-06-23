@@ -3,6 +3,7 @@ export * as Ripgrep from "./ripgrep"
 import { Context, Effect, Fiber, Layer, Schema, Stream } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import path from "path"
+import { LayerNode } from "./effect/layer-node"
 import { Entry, Match } from "./filesystem/schema"
 import { FSUtil } from "./fs-util"
 import { AppProcess, collectStream, waitForAbort } from "./process"
@@ -41,7 +42,7 @@ type RawMatchData = (typeof RawMatch.Type)["data"]
 
 export class Error extends Schema.TaggedErrorClass<Error>()("Ripgrep.Error", {
   message: Schema.String,
-  cause: Schema.optional(Schema.Defect),
+  cause: Schema.optional(Schema.Defect()),
 }) {}
 
 export class InvalidPatternError extends Schema.TaggedErrorClass<InvalidPatternError>()("Ripgrep.InvalidPatternError", {
@@ -285,3 +286,4 @@ export const layer = Layer.effect(
 )
 
 export const defaultLayer = layer.pipe(Layer.provide(Layer.merge(RipgrepBinary.defaultLayer, AppProcess.defaultLayer)))
+export const node = LayerNode.make(layer, [RipgrepBinary.node, AppProcess.node])

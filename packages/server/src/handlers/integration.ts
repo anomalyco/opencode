@@ -38,7 +38,7 @@ export const IntegrationHandler = HttpApiBuilder.group(Api, "server.integration"
         Effect.fn(function* (ctx) {
           const service = yield* Integration.Service
           yield* authorize(
-            service.connect.key({
+            service.connection.key({
               integrationID: ctx.params.integrationID,
               key: ctx.payload.key,
               label: ctx.payload.label,
@@ -53,7 +53,7 @@ export const IntegrationHandler = HttpApiBuilder.group(Api, "server.integration"
           const service = yield* Integration.Service
           return yield* response(
             authorize(
-              service.connect.oauth({
+              service.connection.oauth({
                 integrationID: ctx.params.integrationID,
                 methodID: ctx.payload.methodID,
                 inputs: ctx.payload.inputs,

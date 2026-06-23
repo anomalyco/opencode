@@ -223,6 +223,18 @@ const scenarios: Scenario[] = [
     }))
     .json(200, array, "status"),
   http.protected
+    .post("/experimental/project/{projectID}/copy/generate-name", "experimental.projectCopy.generateName")
+    .seeded((ctx) => ctx.project())
+    .at((ctx) => ({
+      path: route("/experimental/project/{projectID}/copy/generate-name", { projectID: ctx.state.id }),
+      headers: ctx.headers(),
+      body: {},
+    }))
+    .json(200, (body) => {
+      object(body)
+      check(typeof body.name === "string" && body.name.length > 0, "generated copy name should be non-empty")
+    }),
+  http.protected
     .post("/experimental/project/{projectID}/copy", "experimental.projectCopy.create")
     .seeded((ctx) => ctx.project())
     .at((ctx) => ({
@@ -566,6 +578,10 @@ const scenarios: Scenario[] = [
     .get("/experimental/session", "experimental.session.list")
     .at((ctx) => ({ path: "/experimental/session?roots=false&archived=false", headers: ctx.headers() }))
     .json(200, array),
+  http.protected.get("/experimental/capabilities", "experimental.capabilities.get").json(200, (body) => {
+    check(typeof body === "object" && body !== null, "capabilities should be an object")
+    check("backgroundSubagents" in body, "capabilities should report background subagents")
+  }),
   http.protected
     .post("/experimental/session/{sessionID}/background", "experimental.session.background")
     .mutating()
@@ -718,11 +734,11 @@ const scenarios: Scenario[] = [
     .stream()
     .status(
       200,
-      (ctx, result) =>
+      (_ctx, result) =>
         Effect.sync(() => {
           check(result.contentType.includes("text/event-stream"), "v2 event should be an SSE stream")
           check(result.text.includes("server.connected"), "v2 event should emit initial connection event")
-          check(!!ctx.directory && result.text.includes(ctx.directory), "v2 event should include the resolved location")
+          check(!result.text.includes('"location"'), "v2 connection event should not be scoped to a location")
         }),
       "status",
     ),
@@ -745,6 +761,44 @@ const scenarios: Scenario[] = [
     .seeded((ctx) => ctx.file("hello.txt", "hello\n"))
     .at((ctx) => ({ path: "/api/fs/find?query=hello&type=file", headers: ctx.headers() }))
     .json(200, locationData(array)),
+  http.protected.get("/api/pty", "v2.pty.list").json(200, locationData(array)),
+  http.protected
+    .post("/api/pty", "v2.pty.create")
+    .mutating()
+    .at((ctx) => ({ path: "/api/pty", headers: ctx.headers(), body: controlledPtyInput("HTTP API V2 PTY") }))
+    .json(200, locationData(object)),
+  http.protected
+    .get("/api/pty/{ptyID}", "v2.pty.get")
+    .at((ctx) => ({ path: route("/api/pty/{ptyID}", { ptyID: "pty_httpapi_missing" }), headers: ctx.headers() }))
+    .json(404, object, "status"),
+  http.protected
+    .put("/api/pty/{ptyID}", "v2.pty.update")
+    .mutating()
+    .at((ctx) => ({
+      path: route("/api/pty/{ptyID}", { ptyID: "pty_httpapi_missing" }),
+      headers: ctx.headers(),
+      body: { title: "missing" },
+    }))
+    .json(404, object, "status"),
+  http.protected
+    .delete("/api/pty/{ptyID}", "v2.pty.remove")
+    .mutating()
+    .at((ctx) => ({ path: route("/api/pty/{ptyID}", { ptyID: "pty_httpapi_missing" }), headers: ctx.headers() }))
+    .json(404, object, "status"),
+  http.protected
+    .post("/api/pty/{ptyID}/connect-token", "v2.pty.connectToken")
+    .at((ctx) => ({
+      path: route("/api/pty/{ptyID}/connect-token", { ptyID: "pty_httpapi_missing" }),
+      headers: { ...ctx.headers(), "x-opencode-ticket": "1" },
+    }))
+    .json(404, object, "status"),
+  http.protected
+    .get("/api/pty/{ptyID}/connect", "v2.pty.connect")
+    .at((ctx) => ({
+      path: route("/api/pty/{ptyID}/connect", { ptyID: "pty_httpapi_missing" }),
+      headers: ctx.headers(),
+    }))
+    .status(404, undefined, "none"),
   http.protected.get("/api/reference", "v2.reference.list").json(200, object),
   http.protected
     .get("/api/provider/{providerID}", "v2.provider.get")
@@ -901,6 +955,24 @@ const scenarios: Scenario[] = [
       headers: ctx.headers(),
     }))
     .json(200, data(object)),
+  http.protected
+    .post("/api/session/{sessionID}/agent", "v2.session.switchAgent")
+    .seeded((ctx) => ctx.session({ title: "Switch agent" }))
+    .at((ctx) => ({
+      path: route("/api/session/{sessionID}/agent", { sessionID: ctx.state.id }),
+      headers: { ...ctx.headers(), "content-type": "application/json" },
+      body: { agent: "plan" },
+    }))
+    .status(204, undefined, "none"),
+  http.protected
+    .post("/api/session/{sessionID}/model", "v2.session.switchModel")
+    .seeded((ctx) => ctx.session({ title: "Switch model" }))
+    .at((ctx) => ({
+      path: route("/api/session/{sessionID}/model", { sessionID: ctx.state.id }),
+      headers: { ...ctx.headers(), "content-type": "application/json" },
+      body: { model: { providerID: "opencode", id: "big-pickle" } },
+    }))
+    .status(204, undefined, "none"),
   http.protected
     .get("/api/session/{sessionID}/context", "v2.session.context")
     .at((ctx) => ({

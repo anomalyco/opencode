@@ -50,8 +50,8 @@ export function convertTool(mcpTool: MCPToolDef, client: Client, timeout?: numbe
   return dynamicTool({
     description: mcpTool.description ?? "",
     inputSchema: jsonSchema(inputSchema),
-    execute: (args: unknown, options) =>
-      client.callTool(
+    execute: async (args: unknown, options) => {
+      const result = await client.callTool(
         {
           name: mcpTool.name,
           arguments: (args || {}) as Record<string, unknown>,
@@ -61,8 +61,23 @@ export function convertTool(mcpTool: MCPToolDef, client: Client, timeout?: numbe
           resetTimeoutOnProgress: true,
           signal: options.abortSignal,
           timeout,
+          // The MCP SDK only sends a progress token when this hook is present, enabling timeout resets.
+          onprogress: () => {},
         },
-      ),
+      )
+      if (result.isError)
+        throw new Error(
+          result.content
+            .flatMap((item) => (item.type === "text" ? [item.text] : []))
+            .filter((text) => text.trim())
+            .join("\n\n") || "MCP tool returned an error",
+        )
+      if (result.structuredContent === undefined || result.structuredContent === null) return result
+      return {
+        ...result,
+        content: [{ type: "text" as const, text: JSON.stringify(result.structuredContent) }],
+      }
+    },
   })
 }
 
@@ -71,6 +86,7 @@ export function fetch<T extends { name: string }>(
   client: Client,
   list: (client: Client) => Promise<T[]>,
   label: string,
+  key?: (item: T) => string,
 ) {
   return Effect.tryPromise({
     try: () => list(client),
@@ -85,7 +101,10 @@ export function fetch<T extends { name: string }>(
     Effect.map((items) => {
       const sanitizedClient = sanitize(clientName)
       return Object.fromEntries(
-        items.map((item) => [sanitizedClient + ":" + sanitize(item.name), { ...item, client: clientName }]),
+        items.map((item) => [
+          key ? clientName + ":" + key(item) : sanitizedClient + ":" + sanitize(item.name),
+          { ...item, client: clientName },
+        ]),
       )
     }),
     Effect.orElseSucceed(() => undefined),

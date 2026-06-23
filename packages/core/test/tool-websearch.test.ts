@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { beforeEach, describe, expect, test } from "bun:test"
 import { Effect, Layer, Schema } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/unstable/http"
 import { PermissionV2 } from "@opencode-ai/core/permission"
@@ -66,7 +66,13 @@ interface Request {
 const requests: Request[] = []
 const assertions: PermissionV2.AssertInput[] = []
 let responseBody = payload("search results")
+let makeResponse = () => new Response(responseBody, { status: 200 })
 let config: WebSearchTool.Config = { enableExa: false, enableParallel: false }
+
+beforeEach(() => {
+  responseBody = payload("search results")
+  makeResponse = () => new Response(responseBody, { status: 200 })
+})
 
 const http = Layer.succeed(
   HttpClient.HttpClient,
@@ -78,7 +84,7 @@ const http = Layer.succeed(
         headers: request.headers,
         body: JSON.parse(new TextDecoder().decode(request.body.body)),
       })
-      return HttpClientResponse.fromWeb(request, new Response(responseBody, { status: 200 }))
+      return HttpClientResponse.fromWeb(request, makeResponse())
     }),
   ),
 )
@@ -270,7 +276,22 @@ describe("WebSearchTool registration", () => {
     Effect.gen(function* () {
       requests.length = 0
       assertions.length = 0
-      responseBody = "x".repeat(WebSearchTool.MAX_RESPONSE_BYTES + 1)
+      let chunksRead = 0
+      let cancelled = false
+      makeResponse = () =>
+        new Response(
+          new ReadableStream({
+            pull(controller) {
+              chunksRead++
+              if (chunksRead === 10) throw new Error("response was not stopped at the byte limit")
+              controller.enqueue(new Uint8Array(64 * 1024))
+            },
+            cancel() {
+              cancelled = true
+            },
+          }),
+          { status: 200 },
+        )
       config = { provider: "exa", enableExa: false, enableParallel: false }
       const registry = yield* ToolRegistry.Service
 
@@ -281,6 +302,8 @@ describe("WebSearchTool registration", () => {
           call: { type: "tool-call", id: "call-large-response", name: "websearch", input: { query: "too much" } },
         }),
       ).toEqual({ type: "error", value: "Unable to search the web for too much" })
+      expect(chunksRead).toBeLessThan(10)
+      expect(cancelled).toBe(true)
     }),
   )
 })

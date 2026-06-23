@@ -26,6 +26,7 @@ function emitEvent(events: ReturnType<typeof createEventSource>, payload: Event)
 }
 
 test("refreshes resources into reactive getters", async () => {
+  const events = createEventSource()
   const location = {
     directory,
     project: { id: "proj_test", directory },
@@ -49,8 +50,7 @@ test("refreshes resources into reactive getters", async () => {
         data: [{ id: "build", request: { headers: {}, body: {} }, mode: "primary", hidden: false, permissions: [] }],
       })
     return undefined
-  })
-  const events = createEventSource()
+  }, events)
   let data!: ReturnType<typeof useData>
   let ready!: () => void
   const mounted = new Promise<void>((resolve) => {
@@ -94,14 +94,22 @@ test("refreshes resources into reactive getters", async () => {
 
 test("refreshes integrations after integration updates", async () => {
   const events = createEventSource()
-  let requests = 0
+  const requests = { integration: 0, model: 0, provider: 0 }
   const calls = createFetch((url) => {
+    if (url.pathname === "/api/model") {
+      requests.model++
+      return json({ location: { directory, project: { id: "proj_test", directory } }, data: [] })
+    }
+    if (url.pathname === "/api/provider") {
+      requests.provider++
+      return json({ location: { directory, project: { id: "proj_test", directory } }, data: [] })
+    }
     if (url.pathname !== "/api/integration") return
-    requests++
+    requests.integration++
     return json({
       location: { directory, project: { id: "proj_test", directory } },
       data:
-        requests === 1
+        requests.integration === 1
           ? []
           : [
               {
@@ -111,7 +119,7 @@ test("refreshes integrations after integration updates", async () => {
               },
             ],
     })
-  })
+  }, events)
   let data!: ReturnType<typeof useData>
   let ready!: () => void
   const mounted = new Promise<void>((resolve) => {
@@ -140,10 +148,48 @@ test("refreshes integrations after integration updates", async () => {
     await mounted
     await wait(() => data.location.integration.list() !== undefined)
     expect(data.location.integration.list()).toEqual([])
+    const before = { ...requests }
 
     emitEvent(events, { id: "evt_integration", type: "integration.updated", properties: {} })
     await wait(() => data.location.integration.list()?.length === 1)
+    await wait(() => requests.model > before.model && requests.provider > before.provider)
     expect(data.location.integration.list()?.[0]).toMatchObject({ id: "openai", name: "OpenAI" })
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("refreshes effective catalog data after catalog updates", async () => {
+  const events = createEventSource()
+  const requests = { model: 0, provider: 0 }
+  const calls = createFetch((url) => {
+    if (url.pathname === "/api/model") {
+      requests.model++
+      return json({ location: { directory, project: { id: "proj_test", directory } }, data: [] })
+    }
+    if (url.pathname === "/api/provider") {
+      requests.provider++
+      return json({ location: { directory, project: { id: "proj_test", directory } }, data: [] })
+    }
+  }, events)
+
+  const app = await testRender(() => (
+    <TestTuiContexts>
+      <SDKProvider url="http://test" directory={directory} events={events.source} fetch={calls.fetch}>
+        <ProjectProvider>
+          <DataProvider>
+            <box />
+          </DataProvider>
+        </ProjectProvider>
+      </SDKProvider>
+    </TestTuiContexts>
+  ))
+
+  try {
+    await wait(() => requests.model > 0 && requests.provider > 0)
+    const before = { ...requests }
+    emitEvent(events, { id: "evt_catalog", type: "catalog.updated", properties: {} })
+    await wait(() => requests.model > before.model && requests.provider > before.provider)
   } finally {
     app.renderer.destroy()
   }
@@ -159,7 +205,7 @@ test("refreshes references after updates", async () => {
       location: { directory, project: { id: "proj_test", directory } },
       data: requests === 1 ? [] : [{ name: "docs", path: "/docs", source: { type: "local", path: "/docs" } }],
     })
-  })
+  }, events)
   let data!: ReturnType<typeof useData>
   let ready!: () => void
   const mounted = new Promise<void>((resolve) => {
@@ -197,7 +243,7 @@ test("refreshes references after updates", async () => {
 
 test("settles pending tools when a live failure arrives", async () => {
   const events = createEventSource()
-  const calls = createFetch()
+  const calls = createFetch(undefined, events)
   let sync!: ReturnType<typeof useData>
   let ready!: () => void
   const mounted = new Promise<void>((resolve) => {
@@ -324,9 +370,9 @@ test("settles pending tools when a live failure arrives", async () => {
   }
 })
 
-test("renders admitted prompts only after promotion", async () => {
+test("renders admitted prompts only after they become model-visible", async () => {
   const events = createEventSource()
-  const calls = createFetch()
+  const calls = createFetch(undefined, events)
   let sync!: ReturnType<typeof useData>
   let ready!: () => void
   const mounted = new Promise<void>((resolve) => {
@@ -367,14 +413,14 @@ test("renders admitted prompts only after promotion", async () => {
     expect(sync.session.message.list("session-1") ?? []).toEqual([])
 
     emitEvent(events, {
-      id: "evt_promoted_1",
-      type: "session.next.prompt.promoted",
+      id: "evt_prompted_1",
+      type: "session.next.prompted",
       properties: {
         sessionID: "session-1",
         messageID: "msg_user_1",
-        timestamp: 1,
+        timestamp: 0,
         prompt: { text: "hello" },
-        timeCreated: 0,
+        delivery: "steer",
       },
     })
 
@@ -388,57 +434,9 @@ test("renders admitted prompts only after promotion", async () => {
   }
 })
 
-test("renders a promoted prompt when admission was missed", async () => {
-  const events = createEventSource()
-  const calls = createFetch()
-  let sync!: ReturnType<typeof useData>
-  let ready!: () => void
-  const mounted = new Promise<void>((resolve) => {
-    ready = resolve
-  })
-
-  function Probe() {
-    sync = useData()
-    onMount(ready)
-    return <box />
-  }
-
-  const app = await testRender(() => (
-    <TestTuiContexts>
-      <SDKProvider url="http://test" directory={directory} events={events.source} fetch={calls.fetch}>
-        <ProjectProvider>
-          <DataProvider>
-            <Probe />
-          </DataProvider>
-        </ProjectProvider>
-      </SDKProvider>
-    </TestTuiContexts>
-  ))
-
-  try {
-    await mounted
-    emitEvent(events, {
-      id: "evt_promoted_1",
-      type: "session.next.prompt.promoted",
-      properties: {
-        sessionID: "session-1",
-        messageID: "msg_user_1",
-        timestamp: 1,
-        prompt: { text: "hello" },
-        timeCreated: 0,
-      },
-    })
-
-    await wait(() => sync.session.message.list("session-1")?.length === 1)
-    expect(sync.session.message.list("session-1")?.[0]?.id).toBe("msg_user_1")
-  } finally {
-    app.renderer.destroy()
-  }
-})
-
 test("projects live context updates with their message ID", async () => {
   const events = createEventSource()
-  const calls = createFetch()
+  const calls = createFetch(undefined, events)
   let sync!: ReturnType<typeof useData>
   let ready!: () => void
   const mounted = new Promise<void>((resolve) => {

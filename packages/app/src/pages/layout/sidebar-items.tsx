@@ -34,7 +34,7 @@ export const ProjectIcon = (props: {
   const hasError = createMemo(() => dirs().some((directory) => notification.project.unseenHasError(directory)))
   const hasPermissions = createMemo(() =>
     dirs().some((directory) => {
-      const [store] = serverSync.child(directory, { bootstrap: false })
+      const [store] = serverSync().child(directory, { bootstrap: false })
       return hasProjectPermissions(store.permission, (item) => !permission.autoResponds(item, directory))
     }),
   )
@@ -150,7 +150,7 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
   const serverSync = useServerSync()
   const unseenCount = createMemo(() => notification.session.unseenCount(props.session.id))
   const hasError = createMemo(() => notification.session.unseenHasError(props.session.id))
-  const [sessionStore] = serverSync.child(props.session.directory)
+  const [sessionStore] = serverSync().child(props.session.directory)
   const hasPermissions = createMemo(() => {
     return !!sessionPermissionRequest(sessionStore.session, sessionStore.permission, props.session.id, (item) => {
       return !permission.autoResponds(item, props.session.directory)

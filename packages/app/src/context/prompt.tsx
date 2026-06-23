@@ -1,5 +1,5 @@
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import { checksum } from "@opencode-ai/core/util/encode"
+import { base64Encode, checksum } from "@opencode-ai/core/util/encode"
 import { useParams, useSearchParams } from "@solidjs/router"
 import { batch, createMemo, createRoot, getOwner, onCleanup } from "solid-js"
 import { createStore, type SetStoreFunction } from "solid-js/store"
@@ -7,6 +7,7 @@ import type { FileSelection } from "@/context/file"
 import { Persist, persisted } from "@/utils/persist"
 import { useServerSDK } from "./server-sdk"
 import type { ServerScope } from "@/utils/server-scope"
+import { useSDK } from "./sdk"
 
 interface PartBase {
   content: string
@@ -33,6 +34,7 @@ export interface ImageAttachmentPart {
   type: "image"
   id: string
   filename: string
+  sourcePath?: string
   mime: string
   dataUrl: string
 }
@@ -153,6 +155,14 @@ const MAX_PROMPT_SESSIONS = 20
 
 type PromptSession = ReturnType<typeof createPromptSession>
 
+type PromptStore = {
+  prompt: Prompt
+  cursor?: number
+  context: {
+    items: (ContextItem & { key: string })[]
+  }
+}
+
 type Scope = { draftID: string } | { dir: string; id?: string }
 
 function scopeKey(scope: Scope) {
@@ -174,25 +184,26 @@ function promptTarget(serverScope: ServerScope, scope: Scope) {
 function createPromptSession(serverScope: ServerScope, scope: Scope) {
   const [store, setStore, _, ready] = persisted(
     promptTarget(serverScope, scope),
-    createStore<{
-      prompt: Prompt
-      cursor?: number
-      context: {
-        items: (ContextItem & { key: string })[]
-      }
-    }>({
-      prompt: clonePrompt(DEFAULT_PROMPT),
-      cursor: undefined,
-      context: {
-        items: [],
-      },
-    }),
+    createStore<PromptStore>(promptStore()),
   )
 
+  return { ready, ...createPromptStateValue(store, setStore) }
+}
+
+function promptStore(): PromptStore {
+  return {
+    prompt: clonePrompt(DEFAULT_PROMPT),
+    cursor: undefined,
+    context: {
+      items: [],
+    },
+  }
+}
+
+function createPromptStateValue(store: PromptStore, setStore: SetStoreFunction<PromptStore>) {
   const actions = createPromptActions(setStore)
 
   return {
-    ready,
     current: () => store.prompt,
     cursor: createMemo(() => store.cursor),
     dirty: () => !isPromptEqual(store.prompt, DEFAULT_PROMPT),
@@ -232,11 +243,21 @@ function createPromptSession(serverScope: ServerScope, scope: Scope) {
   }
 }
 
+export function createPromptState() {
+  const [store, setStore] = createStore<PromptStore>(promptStore())
+  const ready = Object.assign(() => true, { promise: Promise.resolve(true) })
+  return {
+    ready: () => ready,
+    ...createPromptStateValue(store, setStore),
+  }
+}
+
 export const { use: usePrompt, provider: PromptProvider } = createSimpleContext({
   name: "Prompt",
   gate: false,
   init: () => {
     const params = useParams()
+    const sdk = useSDK()
     const [search] = useSearchParams<{ draftId?: string }>()
     const serverSDK = useServerSDK()
     const cache = new Map<string, PromptCacheEntry>()
@@ -272,7 +293,7 @@ export const { use: usePrompt, provider: PromptProvider } = createSimpleContext(
 
       const entry = createRoot(
         (dispose) => ({
-          value: createPromptSession(serverSDK.scope, scope),
+          value: createPromptSession(serverSDK().scope, scope),
           dispose,
         }),
         owner,
@@ -284,7 +305,7 @@ export const { use: usePrompt, provider: PromptProvider } = createSimpleContext(
     }
 
     const session = createMemo(() =>
-      load(search.draftId ? { draftID: search.draftId } : { dir: params.dir!, id: params.id }),
+      load(search.draftId ? { draftID: search.draftId } : { dir: base64Encode(sdk().directory), id: params.id }),
     )
     const pick = (scope?: Scope) => (scope ? load(scope) : session())
 

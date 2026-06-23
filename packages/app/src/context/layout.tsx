@@ -16,6 +16,7 @@ import { createPathHelpers } from "./file/path"
 import type { ProjectAvatarVariant } from "@opencode-ai/ui/v2/project-avatar-v2"
 import { migrateLegacySessionStateKeys, ServerScope, SessionStateKey } from "@/utils/server-scope"
 import { createSessionKeyReader, ensureSessionKey, pruneSessionKeys } from "./layout-helpers"
+import { requireServerKey } from "@/utils/session-route"
 
 export { createSessionKeyReader, ensureSessionKey, pruneSessionKeys }
 
@@ -79,7 +80,7 @@ export type LayoutRoute =
   | { type: "home" }
   | { type: "draft"; draftID: string; server?: ServerConnection.Key }
   | { type: "dir-new-sesssion"; dir: string; dirBase64: string; server?: ServerConnection.Key }
-  | { type: "session"; dir: string; dirBase64: string; sessionId: string; server?: ServerConnection.Key }
+  | { type: "session"; sessionId: string; server?: ServerConnection.Key }
 
 function nextSessionTabsForOpen(current: SessionTabs | undefined, tab: string): SessionTabs {
   const all = current?.all ?? []
@@ -131,6 +132,14 @@ const currentRoute = (pathname: string, search: string): LayoutRoute => {
     return { type: "draft", draftID }
   }
 
+  if (parts[0] === "server" && parts[2] === "session" && parts[3]) {
+    return {
+      type: "session",
+      sessionId: parts[3],
+      server: requireServerKey(parts[1]),
+    }
+  }
+
   const dirBase64 = parts[0]
   const dir = decode64(dirBase64)
   if (!dir) return { type: "home" }
@@ -138,7 +147,7 @@ const currentRoute = (pathname: string, search: string): LayoutRoute => {
   if (parts[1] !== "session") return { type: "home" }
 
   const id = parts[2]
-  if (id) return { type: "session", dir, dirBase64, sessionId: id }
+  if (id) return { type: "session", sessionId: id }
   return { type: "dir-new-sesssion", dir, dirBase64 }
 }
 
@@ -154,6 +163,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     const route = createMemo(() => {
       const value = currentRoute(location.pathname, location.search)
       if (value.type === "home") return value
+      if (value.server) return value
       return { ...value, server: server.key }
     })
 
@@ -246,7 +256,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       }
     }
 
-    const target = Persist.serverGlobal(serverSdk.scope, "layout", ["layout.v6"])
+    const target = Persist.serverGlobal(serverSdk().scope, "layout", ["layout.v6"])
     const [store, setStore, _, ready] = persisted(
       { ...target, migrate },
       createStore({
@@ -409,11 +419,11 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     }
 
     function enrich(project: { worktree: string; expanded: boolean }) {
-      const [childStore] = serverSync.child(project.worktree, { bootstrap: false })
+      const [childStore] = serverSync().child(project.worktree, { bootstrap: false })
       const projectID = childStore.project
       const metadata = projectID
-        ? serverSync.data.project.find((x) => x.id === projectID)
-        : serverSync.data.project.find((x) => x.worktree === project.worktree)
+        ? serverSync().data.project.find((x) => x.id === projectID)
+        : serverSync().data.project.find((x) => x.worktree === project.worktree)
 
       // Preserve local icon override from per-workspace localStorage cache (childStore.icon).
       // Without this, different subdirectories of the same git repo would share the same
@@ -427,7 +437,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
     const roots = createMemo(() => {
       const map = new Map<string, string>()
-      for (const project of serverSync.data.project) {
+      for (const project of serverSync().data.project) {
         const sandboxes = project.sandboxes ?? []
         for (const sandbox of sandboxes) {
           map.set(sandbox, project.worktree)
@@ -493,12 +503,12 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     createEffect(() => {
       const projects = enriched()
       if (projects.length === 0) return
-      if (!serverSync.ready) return
+      if (!serverSync().ready) return
 
       for (const project of projects) {
         if (!project.id) continue
         if (project.id === "global") continue
-        serverSync.project.icon(project.worktree, project.icon?.override)
+        serverSync().project.icon(project.worktree, project.icon?.override)
       }
     })
 
@@ -532,12 +542,12 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         colorRequested.set(worktree, color)
 
         if (project.id === "global") {
-          serverSync.project.meta(worktree, { icon: { color } })
+          serverSync().project.meta(worktree, { icon: { color } })
           continue
         }
 
-        void serverSdk.client.project
-          .update({ projectID: project.id, directory: worktree, icon: { color } })
+        void serverSdk()
+          .client.project.update({ projectID: project.id, directory: worktree, icon: { color } })
           .catch(() => {
             if (colorRequested.get(worktree) === color) colorRequested.delete(worktree)
           })
@@ -554,7 +564,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           sessionTimer = undefined
           void Promise.all(
             server.projects.list().map((project) => {
-              return serverSync.project.loadSessions(project.worktree)
+              return serverSync().project.loadSessions(project.worktree)
             }),
           )
         }, 0)
@@ -572,7 +582,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       handoff: {
         tabs: createMemo(() => store.handoff?.tabs),
         setTabs(dir: string, id: string) {
-          setStore("handoff", "tabs", { scope: server.scope(), dir, id, at: Date.now() })
+          setStore("handoff", "tabs", { scope: serverSdk().scope, dir, id, at: Date.now() })
         },
         clearTabs() {
           if (!store.handoff?.tabs) return
@@ -584,7 +594,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         open(directory: string) {
           const root = rootFor(directory)
           if (server.projects.list().find((x) => x.worktree === root)) return
-          void serverSync.project.loadSessions(root)
+          void serverSync().project.loadSessions(root)
           server.projects.open(root)
         },
         close(directory: string) {
