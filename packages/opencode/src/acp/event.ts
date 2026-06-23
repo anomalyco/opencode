@@ -11,6 +11,7 @@ import type {
 import { Effect } from "effect"
 import { ACPSession } from "./session"
 import { ACPPermission } from "./permission"
+import { ACPQuestion } from "./question"
 import { partsToContentChunks, type ReplayPart } from "./content"
 import {
   duplicateRunningToolUpdate,
@@ -22,7 +23,7 @@ import {
 } from "./tool"
 
 type Connection = Pick<AgentSideConnection, "sessionUpdate"> &
-  Partial<Pick<AgentSideConnection, "requestPermission" | "writeTextFile">>
+  Partial<Pick<AgentSideConnection, "requestPermission" | "writeTextFile" | "extMethod">>
 type GlobalEventEnvelope = {
   payload?: Event
 }
@@ -41,6 +42,7 @@ export class Subscription {
   private readonly shellSnapshots = new Map<string, string>()
   private readonly toolStarts = new Set<string>()
   private readonly permission: ACPPermission.Handler
+  private readonly question: ACPQuestion.Handler
   private started = false
 
   constructor(
@@ -51,6 +53,11 @@ export class Subscription {
     },
   ) {
     this.permission = new ACPPermission.Handler(input)
+    this.question = new ACPQuestion.Handler(input)
+  }
+
+  setQuestionEnabled(enabled: boolean) {
+    this.question.enable(enabled)
   }
 
   start() {
@@ -69,6 +76,9 @@ export class Subscription {
     switch (event.type) {
       case "permission.asked":
         this.permission.handle(event)
+        return
+      case "question.asked":
+        this.question.handle(event)
         return
       case "message.part.updated":
         return this.handlePartUpdated(event)

@@ -49,7 +49,7 @@ export const AuthMethodID = "opencode-login"
 
 export type Error = ACPError.Error
 type ServiceConnection = Pick<AgentSideConnection, "sessionUpdate"> &
-  Partial<Pick<AgentSideConnection, "requestPermission" | "writeTextFile">>
+  Partial<Pick<AgentSideConnection, "requestPermission" | "writeTextFile" | "extMethod">>
 
 export type Interface = {
   readonly initialize: (input: InitializeRequest) => Effect.Effect<InitializeResponse, Error>
@@ -104,6 +104,12 @@ export function make(input: {
           label: "OpenCode Login",
         },
       }
+    }
+
+    // ACP question prompts only bridge to clients that advertise the
+    // `opencode/question` extension; otherwise question requests are rejected.
+    if (events) {
+      events.setQuestionEnabled(hasQuestionCapability(params.clientCapabilities?._meta?.["opencode/question"]))
     }
 
     const response = {
@@ -1003,6 +1009,14 @@ function restoreFromMessages(messages: readonly MessageInfo[]) {
 
 function isSdkResponse<T>(value: T | SdkResponse<T>): value is SdkResponse<T> {
   return typeof value === "object" && value !== null && ("data" in value || "error" in value)
+}
+
+// A client advertises question support either as `true` or `{ version: n }`.
+function hasQuestionCapability(value: unknown): boolean {
+  if (value === true) return true
+  if (!value || typeof value !== "object") return false
+  const version = (value as { version?: unknown }).version
+  return version === undefined || (typeof version === "number" && Number.isInteger(version) && version > 0)
 }
 
 function fromUnknownError(error: unknown, service?: string): Error {
