@@ -32,8 +32,7 @@ export function LpFooter() {
             Acompany セキュアコード
           </div>
           <p className="mt-4 text-xs leading-relaxed text-slate-400">
-            機密ソースコードを Confidential Computing 環境の中だけで処理する、機密プロジェクト
-            向けの AI コーディング支援。
+            機密ソースコードを Confidential Computing 環境の中だけで処理する、機密プロジェクト向けの AI コーディング支援。
           </p>
           <a
             href="#apply"

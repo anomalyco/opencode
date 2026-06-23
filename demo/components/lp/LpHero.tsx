@@ -51,8 +51,7 @@ export function LpHero() {
         </h1>
 
         <p className="mt-7 max-w-[680px] text-[15px] leading-[1.9] text-slate-600 md:text-lg">
-          「セキュリティ上、生成 AI は使えない」を終わらせる。TEE による物理隔離と組織ポリシーで、
-          機密ソースコードを守ったまま AI 開発を解禁します。
+          「セキュリティ上、生成 AI は使えない」を終わらせる。TEE による物理隔離と組織ポリシーで、機密ソースコードを守ったまま AI 開発を解禁します。
         </p>
 
         <div className="mt-9 flex flex-col gap-3.5 sm:flex-row">

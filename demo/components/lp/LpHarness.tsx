@@ -22,9 +22,7 @@ export function LpHarness() {
             AI に自由を、運用に統制を。
           </h2>
           <p className="mt-5 text-[15px] leading-[1.9] text-slate-600 md:text-[17px]">
-            機密コードを丸ごと渡してよい設計だからこそ、AI が出す操作・通信を組織側から縛れることが
-            重要です。OS サンドボックスと送信先の allowlist で、AI と開発者の双方を信頼せずに
-            安全性を担保します。
+            機密コードを丸ごと渡してよい設計だからこそ、AI が出す操作・通信を組織側から縛れることが重要です。OS サンドボックスと送信先の allowlist で、AI と開発者の双方を信頼せずに安全性を担保します。
           </p>
         </div>
 
@@ -96,8 +94,7 @@ export function LpHarness() {
             </div>
             <div className="mt-3 text-[21px] font-bold leading-snug text-slate-900">連携 MCP・接続先は管理者が一元管理</div>
             <p className="mt-3.5 text-[14.5px] leading-[1.85] text-slate-500">
-              接続可能な MCP サーバーや外部通信先を、管理者アカウントで統制できます。ポリシー変更は
-              監査ログ付きで追跡できます。
+              接続可能な MCP サーバーや外部通信先を、管理者アカウントで統制できます。ポリシー変更は監査ログ付きで追跡できます。
             </p>
           </div>
           <div className="min-w-[300px] flex-1 overflow-hidden rounded-xl border border-slate-200 bg-white" style={{ fontFamily: MONO }}>

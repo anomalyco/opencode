@@ -54,8 +54,7 @@ export function LpPain() {
             便利さの裏で、機密コードを抱える組織だけが取り残されている。
           </h2>
           <p className="mt-5 text-[15px] leading-[1.9] text-slate-600 md:text-[17px]">
-            AI コーディングはスタンダードになりつつあります。しかし機密ソースコードを扱う組織にとって、
-            既存ツールの導入には越えられない
+            AI コーディングはスタンダードになりつつあります。しかし機密ソースコードを扱う組織にとって、既存ツールの導入には越えられない
             <strong className="font-bold text-slate-900">3つの壁</strong>
             があります。
           </p>
