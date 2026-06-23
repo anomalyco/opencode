@@ -139,7 +139,6 @@ it.live("tool execution produces non-empty session diff (snapshot race)", () =>
       const command = `echo 'snapshot race test content' > ${path.join(dir, "race-test.txt")}`
       yield* llm.toolMatch((hit) => JSON.stringify(hit.body).includes("create the file"), "bash", {
         command,
-        description: "create test file",
       })
       yield* llm.textMatch((hit) => JSON.stringify(hit.body).includes("bash"), "done")
 

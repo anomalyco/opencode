@@ -41,5 +41,8 @@ export const migrations = (
     import("./migration/20260617164142_clammy_plazm"),
     import("./migration/20260618000001_zero_assistant_tables"),
     import("./migration/20260618000002_add_semantic_cache"),
+    import("./migration/20260622142730_simplify_session_context_epoch"),
+    import("./migration/20260622170816_reset_v2_session_state"),
+    import("./migration/20260622202450_simplify_session_input"),
   ])
 ).map((module) => module.default) satisfies DatabaseMigration.Migration[]

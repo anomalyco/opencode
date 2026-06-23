@@ -103,8 +103,73 @@ export const TuiThreadCommand = cmd({
       .option("agent", {
         type: "string",
         describe: "agent to use",
+      })
+      .option("mini", {
+        type: "boolean",
+        describe: "start the minimal interactive interface",
+        default: false,
+      })
+      .option("replay", {
+        type: "boolean",
+        hidden: true,
+      })
+      .option("no-replay", {
+        type: "boolean",
+        describe: "disable mini session history replay on resume and after resize",
+      })
+      .option("replay-limit", {
+        type: "number",
+        describe: "cap visible mini replay to the newest N messages",
+      })
+      .option("demo", {
+        type: "boolean",
+        hidden: true,
       }),
   handler: async (args) => {
+    if (args.replay === true) {
+      UI.error("--replay is not supported; replay is enabled by default")
+      process.exitCode = 1
+      return
+    }
+    const noReplay = args.replay === false || args.noReplay === true
+
+    if (args.mini) {
+      const network = ["--port", "--hostname", "--mdns", "--no-mdns", "--mdns-domain", "--cors"].find((option) =>
+        process.argv.some((arg) => arg === option || arg.startsWith(option + "=")),
+      )
+      if (network) {
+        UI.error(`${network} cannot be used with --mini`)
+        process.exitCode = 1
+        return
+      }
+
+      const { runMini } = await import("./run")
+      await runMini({
+        directory: resolveThreadDirectory(args.project),
+        continue: args.continue,
+        session: args.session,
+        fork: args.fork,
+        model: args.model,
+        agent: args.agent,
+        prompt: args.prompt,
+        replay: noReplay ? false : undefined,
+        replayLimit: args.replayLimit,
+        demo: args.demo,
+      })
+      return
+    }
+
+    const unsupported = [
+      ["--no-replay", noReplay],
+      ["--replay-limit", args.replayLimit !== undefined],
+      ["--demo", args.demo !== undefined],
+    ].find((entry) => entry[1])?.[0]
+    if (unsupported) {
+      UI.error(`${unsupported} requires --mini`)
+      process.exitCode = 1
+      return
+    }
+
     const unguard = win32InstallCtrlCGuard()
     try {
       const { TuiConfig } = await import("@/config/tui")
