@@ -18,6 +18,7 @@ export interface MockServerConfig {
   project: unknown
   sessions: ({ id: string } & Record<string, unknown>)[]
   pageMessages: (sessionId: string, limit: number, before?: string) => { items: unknown[]; cursor?: string }
+  vcsDiff?: unknown[]
   messageDelay?: number
   onMessages?: (input: { sessionID: string; before?: string; phase: "start" | "end" }) => void
   events?: () => unknown[]
@@ -44,11 +45,15 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
   await page.route("**/*", async (route) => {
     const url = new URL(route.request().url())
     const targetPort = process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"
-    if (url.port !== targetPort) return route.fallback()
+    const appPort = new URL(
+      process.env.PLAYWRIGHT_BASE_URL ?? `http://127.0.0.1:${process.env.PLAYWRIGHT_PORT ?? "3000"}`,
+    ).port
+    if (url.port !== targetPort && url.port !== appPort) return route.fallback()
 
     const path = url.pathname
     if (path === "/global/event" || path === "/event") return sse(route, config.events?.(), config.eventRetry)
     if (path === "/global/health") return json(route, { healthy: true })
+    if (path === "/vcs/diff" && config.vcsDiff) return json(route, config.vcsDiff)
     if (emptyObject.has(path)) return json(route, {})
     if (emptyList.has(path)) return json(route, [])
     if (path in staticRoutes) return json(route, staticRoutes[path])
@@ -72,7 +77,8 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
       return json(route, pageData.items, pageData.cursor ? { "x-next-cursor": pageData.cursor } : undefined)
     }
 
-    return json(route, {})
+    if (url.port === targetPort && targetPort !== appPort) return json(route, {})
+    return route.fallback()
   })
 }
 

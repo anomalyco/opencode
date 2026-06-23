@@ -12,5 +12,5 @@ export const Rule = Schema.Struct({
 }).annotate({ identifier: "PermissionV2.Rule" })
 export type Rule = typeof Rule.Type
 
-export const Ruleset = Schema.Array(Rule).annotate({ identifier: "PermissionV2.Ruleset" })
+export const Ruleset = Schema.mutable(Schema.Array(Rule)).annotate({ identifier: "PermissionV2.Ruleset" })
 export type Ruleset = typeof Ruleset.Type

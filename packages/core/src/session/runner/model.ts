@@ -5,7 +5,7 @@ import * as AnthropicMessages from "@opencode-ai/llm/protocols/anthropic-message
 import * as OpenAICompatibleChat from "@opencode-ai/llm/protocols/openai-compatible-chat"
 import * as OpenAIResponses from "@opencode-ai/llm/protocols/openai-responses"
 import { Auth, type AnyRoute } from "@opencode-ai/llm/route"
-import { Context, Effect, Layer, Option, Schema } from "effect"
+import { Context, Effect, Layer, Schema } from "effect"
 import { produce } from "immer"
 import { Catalog } from "../../catalog"
 import { Credential } from "../../credential"
@@ -13,7 +13,6 @@ import { Integration } from "../../integration"
 import { IntegrationConnection } from "../../integration/connection"
 import { ModelV2 } from "../../model"
 import { ModelRequest } from "../../model-request"
-import { PluginBoot } from "../../plugin/boot"
 import { ProviderV2 } from "../../provider"
 import { SessionSchema } from "../schema"
 
@@ -21,6 +20,23 @@ export class ModelNotSelectedError extends Schema.TaggedErrorClass<ModelNotSelec
   "SessionRunnerModel.ModelNotSelectedError",
   {
     sessionID: SessionSchema.ID,
+  },
+) {}
+
+export class ModelUnavailableError extends Schema.TaggedErrorClass<ModelUnavailableError>()(
+  "SessionRunnerModel.ModelUnavailableError",
+  {
+    providerID: ProviderV2.ID,
+    modelID: ModelV2.ID,
+  },
+) {}
+
+export class VariantUnavailableError extends Schema.TaggedErrorClass<VariantUnavailableError>()(
+  "SessionRunnerModel.VariantUnavailableError",
+  {
+    providerID: ProviderV2.ID,
+    modelID: ModelV2.ID,
+    variant: ModelV2.VariantID,
   },
 ) {}
 
@@ -33,11 +49,7 @@ export class UnsupportedApiError extends Schema.TaggedErrorClass<UnsupportedApiE
   },
 ) {}
 
-export type Error =
-  | Catalog.ProviderNotFoundError
-  | Catalog.ModelNotFoundError
-  | ModelNotSelectedError
-  | UnsupportedApiError
+export type Error = ModelNotSelectedError | ModelUnavailableError | VariantUnavailableError | UnsupportedApiError
 
 export interface Interface {
   readonly resolve: (session: SessionSchema.Info) => Effect.Effect<Model, Error>
@@ -48,7 +60,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/v2
 /** Test or embedding seam for supplying a model resolver directly. */
 export const layerWith = (resolve: Interface["resolve"]) => Layer.succeed(Service, Service.of({ resolve }))
 
-const apiKey = (model: ModelV2.Info, connection?: IntegrationConnection.Info, credential?: Credential.Stored) => {
+const apiKey = (model: ModelV2.Info, connection?: IntegrationConnection.Info, credential?: Credential.Info) => {
   if (credential?.value.type === "key") return Auth.value(credential.value.key)
   if (credential?.value.type === "oauth") return Auth.value(credential.value.access)
   const value = model.request.body.apiKey ?? model.api.settings?.apiKey
@@ -74,13 +86,27 @@ const withDefaults = (model: ModelV2.Info, route: AnyRoute) => {
   })
 }
 
-const withVariant = (model: ModelV2.Info, variantID: ModelV2.VariantID | undefined) => {
+const withVariant = (
+  model: ModelV2.Info,
+  variantID: ModelV2.VariantID | undefined,
+): Effect.Effect<ModelV2.Info, VariantUnavailableError> => {
   const id = variantID === "default" || variantID === undefined ? model.request.variant : variantID
   const variant = model.variants.find((item) => item.id === id)
-  if (!variant) return model
-  return produce(model, (draft) => {
-    ModelRequest.assign(draft.request, variant)
-  })
+  if (!variant && variantID !== undefined && variantID !== "default")
+    return Effect.fail(
+      new VariantUnavailableError({
+        providerID: model.providerID,
+        modelID: model.id,
+        variant: variantID,
+      }),
+    )
+  return Effect.succeed(
+    variant
+      ? produce(model, (draft) => {
+          ModelRequest.assign(draft.request, variant)
+        })
+      : model,
+  )
 }
 
 const apiName = (model: ModelV2.Info) =>
@@ -89,7 +115,7 @@ const apiName = (model: ModelV2.Info) =>
 export const fromCatalogModel = (
   model: ModelV2.Info,
   connection?: IntegrationConnection.Info,
-  credential?: Credential.Stored,
+  credential?: Credential.Info,
 ): Effect.Effect<Model, UnsupportedApiError> => {
   const resolved =
     credential?.value.metadata === undefined
@@ -128,8 +154,15 @@ export const fromCatalogModel = (
   )
 }
 
-export const resolve = (session: SessionSchema.Info, model: ModelV2.Info) =>
-  fromCatalogModel(withVariant(model, session.model?.variant))
+export const resolve = (
+  session: SessionSchema.Info,
+  model: ModelV2.Info,
+  connection?: IntegrationConnection.Info,
+  credential?: Credential.Info,
+) =>
+  withVariant(model, session.model?.variant).pipe(
+    Effect.flatMap((model) => fromCatalogModel(model, connection, credential)),
+  )
 
 export const supported = (model: ModelV2.Info) =>
   model.api.type === "aisdk" &&
@@ -144,19 +177,27 @@ export const locationLayer = Layer.effect(
     const catalog = yield* Catalog.Service
     const credentials = yield* Credential.Service
     const integrations = yield* Integration.Service
-    const boot = yield* PluginBoot.Service
     return Service.of({
       resolve: Effect.fn("SessionRunnerModel.resolve")(function* (session) {
         // Location plugins populate and filter the catalog asynchronously during layer startup.
-        yield* boot.wait()
+        const defaultModel = session.model ? undefined : yield* catalog.model.default()
         const selected = session.model
-          ? yield* catalog.model.get(session.model.providerID, session.model.id)
-          : (Option.getOrUndefined((yield* catalog.model.default()).pipe(Option.filter(supported))) ??
-            (yield* catalog.model.available()).find(supported))
+          ? (yield* catalog.model.available()).find(
+              (model) => model.providerID === session.model?.providerID && model.id === session.model.id,
+            )
+          : defaultModel && supported(defaultModel)
+            ? defaultModel
+            : (yield* catalog.model.available()).find(supported)
+        if (!selected && session.model)
+          return yield* new ModelUnavailableError({
+            providerID: session.model.providerID,
+            modelID: session.model.id,
+          })
         if (!selected) return yield* new ModelNotSelectedError({ sessionID: session.id })
         const connection = yield* integrations.connection.forIntegration(Integration.ID.make(selected.providerID))
-        return yield* fromCatalogModel(
-          withVariant(selected, session.model?.variant),
+        return yield* resolve(
+          session,
+          selected,
           connection,
           connection?.type === "credential" ? yield* credentials.get(connection.id) : undefined,
         )
