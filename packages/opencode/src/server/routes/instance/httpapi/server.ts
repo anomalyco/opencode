@@ -48,6 +48,7 @@ import { Storage } from "@/storage/storage"
 import { ToolRegistry } from "@/tool/registry"
 import { Truncate } from "@/tool/truncate"
 import { Worktree } from "@/worktree"
+import { Workflow } from "@/workflow/workflow"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { MoveSession } from "@opencode-ai/core/control-plane/move-session"
 import { Database } from "@opencode-ai/core/database/database"
@@ -97,6 +98,7 @@ import { tuiHandlers } from "./handlers/tui"
 import { handlers } from "@opencode-ai/server/handlers"
 import { schemaErrorLayer as v2SchemaErrorLayer } from "@opencode-ai/server/middleware/schema-error"
 import { workspaceHandlers } from "./handlers/workspace"
+import { workflowHandlers } from "./handlers/workflow"
 import { instanceContextLayer } from "./middleware/instance-context"
 import { workspaceRoutingLayer } from "./middleware/workspace-routing"
 import { disposeMiddleware } from "./lifecycle"
@@ -159,6 +161,7 @@ const instanceApiRoutes = HttpApiBuilder.layer(InstanceHttpApi).pipe(
     syncHandlers,
     tuiHandlers,
     workspaceHandlers,
+    workflowHandlers,
   ]),
 )
 
@@ -277,6 +280,7 @@ export function createRoutes(
       fenceLayer,
       cors(corsOptions),
       MoveSession.defaultLayer,
+      Workflow.defaultLayer,
       HttpServer.layerServices,
     ]),
     Layer.provide(LayerNode.buildLayer(app)),

@@ -33,7 +33,7 @@ import {
 import { color, printHeader, printResults } from "./report"
 import { coverageResult, parseOptions, routeKey, routeKeys, selectedScenarios } from "./routing"
 import { runScenario } from "./runner"
-import { disposeApps } from "./backend"
+import { disposeApps, request } from "./backend"
 import { runtime } from "./runtime"
 import { type Scenario } from "./types"
 
@@ -55,6 +55,55 @@ function locationData(validate: (value: any) => void) {
     object(body.location.project)
     validate(body.data)
   }
+}
+
+// A minimal, runnable workflow fixture. It declares valid `meta` and a `run`
+// that returns synchronously WITHOUT calling `ctx.agent`, so a started run needs
+// no LLM and settles on its own. Seeded into the scenario project's
+// `.opencode/workflows/<name>.ts`, which is exactly where the engine's discovery
+// globs (`workflows/*.ts`) for the calling workspace.
+const WORKFLOW_FIXTURE_NAME = "httpapi-fixture"
+// The fixture stays running while `args.hang` is set (a long, abort-aware sleep)
+// so the pause scenario can deterministically catch it in the `running` state;
+// without that arg it returns synchronously and settles on its own (no LLM
+// needed), which every other workflow scenario relies on.
+const workflowFixtureSource = [
+  `export const meta = { name: "${WORKFLOW_FIXTURE_NAME}", description: "httpapi exercise fixture" }`,
+  `export async function run(args) {`,
+  `  if (args && args.hang) await new Promise((resolve) => setTimeout(resolve, 30000))`,
+  `  return { ok: true, args }`,
+  `}`,
+  ``,
+].join("\n")
+
+function seedWorkflow(ctx: { file: (name: string, content: string) => Effect.Effect<void> }) {
+  return ctx.file(`.opencode/workflows/${WORKFLOW_FIXTURE_NAME}.ts`, workflowFixtureSource)
+}
+
+const WORKFLOW_QUESTION_NAME = "httpapi-question"
+// Asks a question with a tiny timeout: unanswered, the run PARKS as `paused`
+// with a persisted pending_question, so the answer route's resume branch can be
+// driven deterministically over HTTP. The body returns the answer (no LLM).
+const workflowQuestionSource = [
+  `export const meta = { name: "${WORKFLOW_QUESTION_NAME}", description: "httpapi question fixture", phases: ["run"] }`,
+  `export async function run(args, ctx) {`,
+  `  const a = await ctx.question({ question: "go?", options: ["yes", "no"], timeout: 50 })`,
+  `  return { answer: a.answer }`,
+  `}`,
+  ``,
+].join("\n")
+function seedQuestionWorkflow(ctx: { file: (name: string, content: string) => Effect.Effect<void> }) {
+  return ctx.file(`.opencode/workflows/${WORKFLOW_QUESTION_NAME}.ts`, workflowQuestionSource)
+}
+
+function isWorkflowRun(value: any): { id: string; status: string } {
+  object(value)
+  check(typeof value.id === "string" && value.id.startsWith("job"), `run id should start with "job"`)
+  check(value.workflow === WORKFLOW_FIXTURE_NAME, "run should reference the fixture workflow")
+  check(typeof value.status === "string", "run should carry a status")
+  check(Array.isArray(value.agents), "run should carry an agents array")
+  check(Array.isArray(value.logs), "run should carry a logs array")
+  return { id: value.id, status: value.status }
 }
 
 const scenarios: Scenario[] = [
@@ -1645,6 +1694,279 @@ const scenarios: Scenario[] = [
     .probe({ path: "/global/upgrade", body: { target: 1 } })
     .at(() => ({ path: "/global/upgrade", body: { target: 1 } }))
     .status(400),
+  http.protected
+    .get("/workflow", "workflow.list")
+    .seeded((ctx) => seedWorkflow(ctx))
+    .at((ctx) => ({ path: "/workflow", headers: ctx.headers() }))
+    .json(200, (body) => {
+      array(body)
+      check(
+        body.some((item) => isRecord(item) && item.name === WORKFLOW_FIXTURE_NAME && item.valid === true),
+        "seeded workflow should be listed as valid",
+      )
+    }),
+  http.protected
+    .get("/workflow/run", "workflow.runs")
+    .at((ctx) => ({ path: "/workflow/run", headers: ctx.headers() }))
+    .json(200, (body) => {
+      array(body)
+    }),
+  // Real-run happy path keyed to the start route: seed a runnable workflow,
+  // start it over HTTP (200 + running Run), then drive get/cancel/remove for the
+  // SAME run id over HTTP so every handler success branch is exercised, plus the
+  // budget + permissionSessionID payload fields are forwarded without error.
+  http.protected
+    .post("/workflow/{name}/start", "workflow.start")
+    .mutating()
+    .seeded((ctx) =>
+      Effect.gen(function* () {
+        yield* seedWorkflow(ctx)
+        const session = yield* ctx.session({ title: "Workflow permission owner" })
+        return { session }
+      }),
+    )
+    .at((ctx) => ({
+      path: route("/workflow/{name}/start", { name: WORKFLOW_FIXTURE_NAME }),
+      headers: ctx.headers(),
+      body: { args: { topic: "coverage" }, budget: 1.5, permissionSessionID: ctx.state.session.id },
+    }))
+    .jsonEffect(
+      200,
+      (body, ctx) =>
+        Effect.gen(function* () {
+          const started = isWorkflowRun(body)
+          check(started.status === "running", "freshly started run should report running")
+          const id = started.id
+          const headers = ctx.headers()
+
+          const got = yield* request({ method: "GET", path: route("/workflow/run/{id}", { id }), headers })
+          check(got.status === 200, `get of a started run should be 200, got ${got.status}`)
+          isWorkflowRun(got.body)
+
+          const cancelled = yield* request({
+            method: "POST",
+            path: route("/workflow/run/{id}/cancel", { id }),
+            headers,
+            body: {},
+          })
+          check(cancelled.status === 200, `cancel of a started run should be 200, got ${cancelled.status}`)
+          isWorkflowRun(cancelled.body)
+
+          const removed = yield* request({
+            method: "DELETE",
+            path: route("/workflow/run/{id}", { id }),
+            headers,
+          })
+          check(removed.status === 200, `remove of a known run should be 200, got ${removed.status}`)
+          check(removed.body === true, "removing a known run should report true")
+        }),
+      "status",
+    ),
+  http.protected
+    .post("/workflow/{name}/start", "workflow.start.invalidBudget")
+    .seeded((ctx) => seedWorkflow(ctx))
+    .at((ctx) => ({
+      path: route("/workflow/{name}/start", { name: WORKFLOW_FIXTURE_NAME }),
+      headers: ctx.headers(),
+      body: { budget: -1 },
+    }))
+    .status(400),
+  http.protected
+    .post("/workflow/{name}/start", "workflow.start.missing")
+    .at((ctx) => ({
+      path: route("/workflow/{name}/start", { name: "httpapi-missing" }),
+      headers: ctx.headers(),
+      body: {},
+    }))
+    .status(404),
+  http.protected
+    .get("/workflow/run/{id}", "workflow.get.missing")
+    .at((ctx) => ({ path: route("/workflow/run/{id}", { id: "job_httpapi_missing" }), headers: ctx.headers() }))
+    .status(404),
+  http.protected
+    .get("/workflow/run/{id}", "workflow.get.invalid")
+    .at((ctx) => ({ path: route("/workflow/run/{id}", { id: "not-a-run-id" }), headers: ctx.headers() }))
+    .status(400),
+  http.protected
+    .post("/workflow/run/{id}/cancel", "workflow.cancel.missing")
+    .at((ctx) => ({
+      path: route("/workflow/run/{id}/cancel", { id: "job_httpapi_missing" }),
+      headers: ctx.headers(),
+      body: {},
+    }))
+    .status(404),
+  http.protected
+    .post("/workflow/run/{id}/pause", "workflow.pause.missing")
+    .at((ctx) => ({
+      path: route("/workflow/run/{id}/pause", { id: "job_httpapi_missing" }),
+      headers: ctx.headers(),
+      body: {},
+    }))
+    .status(404),
+  // Pause + resume happy path keyed to the pause route: start a HANGING run (so it
+  // is deterministically `running`), pause it over HTTP (200 + a paused Run), then
+  // resume-start a fresh (non-hanging) run with `resume_of` pointing at the paused
+  // run and drive it to `completed`. Exercises the pause handler's success branch
+  // plus the start handler forwarding `resume_of`.
+  http.protected
+    .post("/workflow/run/{id}/pause", "workflow.pause")
+    .mutating()
+    .seeded((ctx) => seedWorkflow(ctx))
+    .at((ctx) => ({
+      path: route("/workflow/{name}/start", { name: WORKFLOW_FIXTURE_NAME }),
+      headers: ctx.headers(),
+      body: { args: { hang: true } },
+    }))
+    .jsonEffect(
+      200,
+      (body, ctx) =>
+        Effect.gen(function* () {
+          const started = isWorkflowRun(body)
+          check(started.status === "running", "hanging run should report running")
+          const id = started.id
+          const headers = ctx.headers()
+
+          // Poll the pause endpoint until the run is observed `paused` (the body
+          // fork may still be settling the initial state on the first call).
+          let pausedStatus = ""
+          for (let attempt = 0; attempt < 50 && pausedStatus !== "paused"; attempt++) {
+            const paused = yield* request({
+              method: "POST",
+              path: route("/workflow/run/{id}/pause", { id }),
+              headers,
+              body: {},
+            })
+            check(paused.status === 200, `pause of a running run should be 200, got ${paused.status}`)
+            pausedStatus = isRecord(paused.body) && typeof paused.body.status === "string" ? paused.body.status : ""
+            if (pausedStatus !== "paused") yield* Effect.sleep("50 millis")
+          }
+          check(pausedStatus === "paused", `run should be paused, got "${pausedStatus}"`)
+
+          // Resume: start a fresh, non-hanging run referencing the paused source.
+          const resumed = yield* request({
+            method: "POST",
+            path: route("/workflow/{name}/start", { name: WORKFLOW_FIXTURE_NAME }),
+            headers,
+            body: { resume_of: id },
+          })
+          check(resumed.status === 200, `resume start should be 200, got ${resumed.status}`)
+          const resumedId = isRecord(resumed.body) && typeof resumed.body.id === "string" ? resumed.body.id : ""
+          check(resumedId.startsWith("job"), "resumed run should have a run id")
+
+          let resumedStatus = ""
+          for (let attempt = 0; attempt < 50 && resumedStatus !== "completed"; attempt++) {
+            const got = yield* request({
+              method: "GET",
+              path: route("/workflow/run/{id}", { id: resumedId }),
+              headers,
+            })
+            resumedStatus = isRecord(got.body) && typeof got.body.status === "string" ? got.body.status : ""
+            if (resumedStatus !== "completed") yield* Effect.sleep("50 millis")
+          }
+          check(resumedStatus === "completed", `resumed run should complete, got "${resumedStatus}"`)
+        }),
+      "status",
+    ),
+  // Answer happy path keyed to the answer route: seed a question workflow, start
+  // it, let it PARK as `paused` with a persisted pending_question, then answer the
+  // parked run → a NEW resumed run, 200. The answer body carries
+  // permissionSessionID (threaded into workflow.answer so a parked run resumed
+  // here can dispatch its post-question agent steps); the resumed run references
+  // the source via resume_of.
+  http.protected
+    .post("/workflow/run/{id}/answer", "workflow.answer")
+    .mutating()
+    .seeded((ctx) =>
+      Effect.gen(function* () {
+        yield* seedQuestionWorkflow(ctx)
+        const session = yield* ctx.session({ title: "Workflow answer owner" })
+        return { session }
+      }),
+    )
+    .at((ctx) => ({
+      path: route("/workflow/{name}/start", { name: WORKFLOW_QUESTION_NAME }),
+      headers: ctx.headers(),
+      body: { permissionSessionID: ctx.state.session.id },
+    }))
+    .jsonEffect(
+      200,
+      (body, ctx) =>
+        Effect.gen(function* () {
+          const started = isRecord(body) ? body : {}
+          const id = String(started.id)
+          const headers = ctx.headers()
+          // Poll get until the run has parked as paused with a persisted question.
+          let status = ""
+          for (let attempt = 0; attempt < 60 && status !== "paused"; attempt++) {
+            const got = yield* request({ method: "GET", path: route("/workflow/run/{id}", { id }), headers })
+            status = isRecord(got.body) && typeof got.body.status === "string" ? got.body.status : ""
+            // The parked run exposes pending_question on the bare Run payload (no
+            // serializer filtering — Grounding-Delta 3).
+            if (status === "paused")
+              check(
+                isRecord(got.body) && isRecord(got.body.pending_question),
+                "paused run should expose pending_question",
+              )
+            if (status !== "paused") yield* Effect.sleep("50 millis")
+          }
+          check(status === "paused", `question run should park as paused, got "${status}"`)
+          // Answer the parked run → a NEW resumed run, 200. permissionSessionID is
+          // threaded into workflow.answer (mirrors the start route's payload field).
+          const answered = yield* request({
+            method: "POST",
+            path: route("/workflow/run/{id}/answer", { id }),
+            headers,
+            body: { answer: "yes", permissionSessionID: ctx.state.session.id },
+          })
+          check(answered.status === 200, `answer of a parked run should be 200, got ${answered.status}`)
+          const resumed = isRecord(answered.body) ? answered.body : {}
+          check(typeof resumed.id === "string" && resumed.id !== id, "answer should return the NEW resumed run id")
+          check(resumed.resume_of === id, "resumed run should reference the source run")
+        }),
+      "status",
+    ),
+  http.protected
+    .post("/workflow/run/{id}/answer", "workflow.answer.missing")
+    .at((ctx) => ({
+      path: route("/workflow/run/{id}/answer", { id: "job_httpapi_missing" }),
+      headers: ctx.headers(),
+      body: { answer: "x" },
+    }))
+    .status(404),
+  // 409: a known run with NO open question — the non-hanging fixture runs to
+  // `completed` synchronously, so there is nothing to answer.
+  http.protected
+    .post("/workflow/run/{id}/answer", "workflow.answer.noQuestion")
+    .mutating()
+    .seeded((ctx) => seedWorkflow(ctx))
+    .at((ctx) => ({
+      path: route("/workflow/{name}/start", { name: WORKFLOW_FIXTURE_NAME }),
+      headers: ctx.headers(),
+      body: {},
+    }))
+    .jsonEffect(
+      200,
+      (body, ctx) =>
+        Effect.gen(function* () {
+          const id = String((isRecord(body) ? body : {}).id)
+          const headers = ctx.headers()
+          const answered = yield* request({
+            method: "POST",
+            path: route("/workflow/run/{id}/answer", { id }),
+            headers,
+            body: { answer: "x" },
+          })
+          check(answered.status === 409, `answering a run with no open question should be 409, got ${answered.status}`)
+        }),
+      "status",
+    ),
+  http.protected
+    .delete("/workflow/run/{id}", "workflow.remove.missing")
+    .mutating()
+    .at((ctx) => ({ path: route("/workflow/run/{id}", { id: "job_httpapi_missing" }), headers: ctx.headers() }))
+    .json(200, (body) => {
+      check(body === false, "removing a missing run should report false")
+    }),
 ]
 
 const llmScenarios = new Set([

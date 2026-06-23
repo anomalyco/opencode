@@ -6319,6 +6319,10 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "permissionSessionID": {
+                    "type": "string",
+                    "pattern": "^ses"
+                  },
                   "messageID": {
                     "type": "string",
                     "pattern": "^msg"
@@ -6356,6 +6360,24 @@
                   },
                   "variant": {
                     "type": "string"
+                  },
+                  "turnBudget": {
+                    "type": "object",
+                    "properties": {
+                      "usd": {
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      "tokens": {
+                        "type": "number",
+                        "minimum": 0
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "mcp": {
+                    "type": "string",
+                    "enum": ["eager", "lazy"]
                   },
                   "parts": {
                     "type": "array",
@@ -7201,6 +7223,10 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "permissionSessionID": {
+                    "type": "string",
+                    "pattern": "^ses"
+                  },
                   "messageID": {
                     "type": "string",
                     "pattern": "^msg"
@@ -7238,6 +7264,24 @@
                   },
                   "variant": {
                     "type": "string"
+                  },
+                  "turnBudget": {
+                    "type": "object",
+                    "properties": {
+                      "usd": {
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      "tokens": {
+                        "type": "number",
+                        "minimum": 0
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "mcp": {
+                    "type": "string",
+                    "enum": ["eager", "lazy"]
                   },
                   "parts": {
                     "type": "array",
@@ -9816,6 +9860,944 @@
           {
             "lang": "js",
             "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.experimental.workspace.warp({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/workflow": {
+      "get": {
+        "tags": ["workflow"],
+        "operationId": "workflow.list",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of workflows",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/WorkflowInfo"
+                  },
+                  "description": "List of workflows"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "List discovered workflow definitions.",
+        "summary": "List workflows",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.workflow.list({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/workflow/run": {
+      "get": {
+        "tags": ["workflow"],
+        "operationId": "workflow.runs",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of workflow runs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/WorkflowRun"
+                  },
+                  "description": "List of workflow runs"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "List persisted workflow execution runs for this instance, with live in-memory state overlaid for active runs.",
+        "summary": "List workflow runs",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.workflow.runs({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/workflow/save": {
+      "post": {
+        "tags": ["workflow"],
+        "operationId": "workflow.save",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Workflow saved to disk",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowSaveResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "WorkflowApiError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/WorkflowApiError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ConflictError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConflictError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Save a workflow source string as a discoverable workflow file under the project or global workflows directory.",
+        "summary": "Save workflow",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkflowSavePayload"
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.workflow.save({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/workflow/run/{id}": {
+      "get": {
+        "tags": ["workflow"],
+        "operationId": "workflow.get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^job"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Workflow run",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowRun"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "BadRequest | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Get details for a workflow execution run.",
+        "summary": "Get workflow run",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.workflow.get({\n  ...\n})"
+          }
+        ]
+      },
+      "delete": {
+        "tags": ["workflow"],
+        "operationId": "workflow.delete",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^job"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Workflow run deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean",
+                  "description": "Workflow run deleted"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Delete a workflow run from persisted history.",
+        "summary": "Delete workflow run",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.workflow.delete({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/workflow/{name}/source": {
+      "get": {
+        "tags": ["workflow"],
+        "operationId": "workflow.source",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Workflow source",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowSource"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Resolve a single named workflow's module source (file text for an on-disk workflow, the bundled string for a builtin) for the pre-run approval preview.",
+        "summary": "Read workflow source",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.workflow.source({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/workflow/{name}/start": {
+      "post": {
+        "tags": ["workflow"],
+        "operationId": "workflow.start",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Workflow run started",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowRun"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "WorkflowApiError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/WorkflowApiError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Start a workflow execution run.",
+        "summary": "Start workflow",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkflowStartPayload"
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.workflow.start({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/workflow/run/{id}/cancel": {
+      "post": {
+        "tags": ["workflow"],
+        "operationId": "workflow.cancel",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^job"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Workflow run cancelled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowRun"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "BadRequest | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Cancel a running workflow execution run.",
+        "summary": "Cancel workflow run",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.workflow.cancel({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/workflow/run/{id}/pause": {
+      "post": {
+        "tags": ["workflow"],
+        "operationId": "workflow.pause",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^job"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Workflow run paused",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowRun"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "BadRequest | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Pause a running workflow execution run, keeping its journal so it can be resumed.",
+        "summary": "Pause workflow run",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.workflow.pause({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/workflow/run/{id}/agent/{agentId}/skip": {
+      "post": {
+        "tags": ["workflow"],
+        "operationId": "workflow.skip",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^job"
+            },
+            "required": true
+          },
+          {
+            "name": "agentId",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Workflow run after requesting the skip",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowRun"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "BadRequest | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ConflictError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConflictError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Skip one in-flight agent step of a live workflow run; the step's ctx.agent call resolves null and the run continues.",
+        "summary": "Skip workflow agent step",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.workflow.skip({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/workflow/run/{id}/answer": {
+      "post": {
+        "tags": ["workflow"],
+        "operationId": "workflow.answer",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^job"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Workflow run after answering its open question",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowRun"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "BadRequest | WorkflowApiError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+                    },
+                    {
+                      "$ref": "#/components/schemas/WorkflowApiError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ConflictError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConflictError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Answer a run's open human-in-the-loop question. A live run resolves in place; a parked run is resumed.",
+        "summary": "Answer workflow question",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkflowAnswerPayload"
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.workflow.answer({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/workflow/run/{id}/export": {
+      "post": {
+        "tags": ["workflow"],
+        "operationId": "workflow.export",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^job"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Workflow run transcripts exported",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowExportResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "BadRequest | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Export a run's transcripts as JSONL files; returns the directory path.",
+        "summary": "Export workflow run transcripts",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.workflow.export({\n  ...\n})"
           }
         ]
       }
@@ -14888,6 +15870,12 @@
             "$ref": "#/components/schemas/EventWorktreeFailed"
           },
           {
+            "$ref": "#/components/schemas/EventWorkflowRunUpdated"
+          },
+          {
+            "$ref": "#/components/schemas/EventWorkflowRunFinished"
+          },
+          {
             "$ref": "#/components/schemas/EventServerConnected"
           },
           {
@@ -19722,6 +20710,264 @@
                   },
                   "type": {
                     "type": "string",
+                    "enum": ["workflow.run.updated"]
+                  },
+                  "properties": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "workflow": {
+                        "type": "string"
+                      },
+                      "status": {
+                        "type": "string",
+                        "enum": ["running", "completed", "failed", "cancelled", "interrupted", "paused"]
+                      },
+                      "current_phase": {
+                        "type": "string"
+                      },
+                      "directory": {
+                        "type": "string"
+                      },
+                      "agents": {
+                        "type": "object",
+                        "properties": {
+                          "total": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["NaN"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["Infinity"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["-Infinity"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["Infinity", "-Infinity", "NaN"]
+                              }
+                            ]
+                          },
+                          "running": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["NaN"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["Infinity"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["-Infinity"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["Infinity", "-Infinity", "NaN"]
+                              }
+                            ]
+                          },
+                          "failed": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["NaN"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["Infinity"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["-Infinity"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["Infinity", "-Infinity", "NaN"]
+                              }
+                            ]
+                          }
+                        },
+                        "required": ["total", "running", "failed"],
+                        "additionalProperties": false
+                      },
+                      "pending_question": {
+                        "type": "boolean"
+                      },
+                      "error": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "workflow",
+                      "status",
+                      "current_phase",
+                      "directory",
+                      "agents",
+                      "pending_question",
+                      "error"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["id", "type", "properties"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^evt_"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["workflow.run.finished"]
+                  },
+                  "properties": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "workflow": {
+                        "type": "string"
+                      },
+                      "status": {
+                        "type": "string",
+                        "enum": ["running", "completed", "failed", "cancelled", "interrupted", "paused"]
+                      },
+                      "current_phase": {
+                        "type": "string"
+                      },
+                      "directory": {
+                        "type": "string"
+                      },
+                      "agents": {
+                        "type": "object",
+                        "properties": {
+                          "total": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["NaN"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["Infinity"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["-Infinity"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["Infinity", "-Infinity", "NaN"]
+                              }
+                            ]
+                          },
+                          "running": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["NaN"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["Infinity"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["-Infinity"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["Infinity", "-Infinity", "NaN"]
+                              }
+                            ]
+                          },
+                          "failed": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["NaN"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["Infinity"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["-Infinity"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["Infinity", "-Infinity", "NaN"]
+                              }
+                            ]
+                          }
+                        },
+                        "required": ["total", "running", "failed"],
+                        "additionalProperties": false
+                      },
+                      "pending_question": {
+                        "type": "boolean"
+                      },
+                      "error": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "workflow",
+                      "status",
+                      "current_phase",
+                      "directory",
+                      "agents",
+                      "pending_question",
+                      "error"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["id", "type", "properties"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^evt_"
+                  },
+                  "type": {
+                    "type": "string",
                     "enum": ["server.connected"]
                   },
                   "properties": {
@@ -20824,6 +22070,42 @@
               "reserved": {
                 "type": "integer",
                 "minimum": 0
+              }
+            },
+            "additionalProperties": false
+          },
+          "workflows": {
+            "type": "object",
+            "properties": {
+              "ultracode_keyword": {
+                "type": "boolean"
+              },
+              "approval": {
+                "type": "string",
+                "enum": ["always", "first-run", "never"]
+              },
+              "approved": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "foreground_grace_ms": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "budget_directive": {
+                "type": "boolean"
+              },
+              "shell_permission": {
+                "type": "boolean"
+              },
+              "lint": {
+                "type": "string",
+                "enum": ["off", "warn", "deny"]
+              },
+              "lazy_mcp": {
+                "type": "boolean"
               }
             },
             "additionalProperties": false
@@ -22818,6 +24100,516 @@
         "required": ["name", "data"],
         "additionalProperties": false
       },
+      "WorkflowPhase": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          }
+        },
+        "required": ["title"],
+        "additionalProperties": false
+      },
+      "WorkflowArgument": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "default": {},
+          "description": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "WorkflowMeta": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "whenToUse": {
+            "type": "string"
+          },
+          "phases": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "$ref": "#/components/schemas/WorkflowPhase"
+                }
+              ]
+            }
+          },
+          "arguments": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/WorkflowArgument"
+            }
+          }
+        },
+        "required": ["name"],
+        "additionalProperties": false
+      },
+      "WorkflowInfo": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/WorkflowMeta"
+          },
+          "valid": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": "string"
+          },
+          "source_kind": {
+            "type": "string",
+            "enum": ["builtin"]
+          }
+        },
+        "required": ["name", "path", "meta", "valid"],
+        "additionalProperties": false
+      },
+      "WorkflowDefinition": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/WorkflowMeta"
+          },
+          "source": {
+            "type": "string"
+          },
+          "temporary": {
+            "type": "boolean"
+          }
+        },
+        "required": ["name", "path", "meta"],
+        "additionalProperties": false
+      },
+      "WorkflowLogEntry": {
+        "type": "object",
+        "properties": {
+          "time": {
+            "type": "number"
+          },
+          "phase": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["time", "message"],
+        "additionalProperties": false
+      },
+      "WorkflowAgentRun": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["running", "completed", "failed", "skipped"]
+          },
+          "started_at": {
+            "type": "number"
+          },
+          "completed_at": {
+            "type": "number"
+          },
+          "phase": {
+            "type": "string"
+          },
+          "agent": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "session_id": {
+            "type": "string"
+          },
+          "message_id": {
+            "type": "string"
+          },
+          "worktree": {
+            "type": "string"
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "output": {
+            "type": "string"
+          },
+          "cost": {
+            "type": "number"
+          },
+          "tokens": {
+            "type": "object",
+            "properties": {
+              "total": {
+                "type": "number"
+              },
+              "input": {
+                "type": "number"
+              },
+              "output": {
+                "type": "number"
+              },
+              "reasoning": {
+                "type": "number"
+              },
+              "cache": {
+                "type": "object",
+                "properties": {
+                  "read": {
+                    "type": "number"
+                  },
+                  "write": {
+                    "type": "number"
+                  }
+                },
+                "required": ["read", "write"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["input", "output", "reasoning", "cache"],
+            "additionalProperties": false
+          },
+          "error": {
+            "type": "string"
+          },
+          "cached": {
+            "type": "boolean"
+          },
+          "kind": {
+            "type": "string",
+            "enum": ["agent", "question"]
+          },
+          "answer": {
+            "type": "string"
+          }
+        },
+        "required": ["id", "status", "started_at", "prompt"],
+        "additionalProperties": false
+      },
+      "WorkflowRun": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^job"
+          },
+          "session_id": {
+            "type": "string"
+          },
+          "workflow": {
+            "type": "string"
+          },
+          "args": {
+            "type": "object"
+          },
+          "definition": {
+            "$ref": "#/components/schemas/WorkflowDefinition"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["running", "completed", "failed", "cancelled", "interrupted", "paused"]
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "enum": ["NaN"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["-Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity", "-Infinity", "NaN"]
+              }
+            ]
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "enum": ["NaN"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["-Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity", "-Infinity", "NaN"]
+              }
+            ]
+          },
+          "current_phase": {
+            "type": "string"
+          },
+          "logs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkflowLogEntry"
+            }
+          },
+          "agents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkflowAgentRun"
+            }
+          },
+          "result": {},
+          "error": {
+            "type": "string"
+          },
+          "resume_of": {
+            "type": "string",
+            "pattern": "^job"
+          },
+          "pending_question": {
+            "type": "object",
+            "properties": {
+              "question": {
+                "type": "string"
+              },
+              "options": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "asked_at": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["NaN"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["-Infinity"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity", "-Infinity", "NaN"]
+                  }
+                ]
+              }
+            },
+            "required": ["question", "asked_at"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "workflow", "status", "started_at", "logs", "agents"],
+        "additionalProperties": false
+      },
+      "WorkflowSavePayload": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Workflow file base name (becomes /<name>); letters, numbers, underscores, and dashes only."
+          },
+          "source": {
+            "type": "string",
+            "description": "The complete TypeScript/JavaScript workflow module source."
+          },
+          "scope": {
+            "type": "string",
+            "enum": ["project", "global"]
+          }
+        },
+        "required": ["name", "source"],
+        "additionalProperties": false
+      },
+      "WorkflowSaveResult": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": ["path"],
+        "additionalProperties": false
+      },
+      "WorkflowApiError": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["WorkflowApiError"]
+          },
+          "message": {
+            "type": "string"
+          },
+          "workflow": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "message"],
+        "additionalProperties": false
+      },
+      "ConflictError": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["ConflictError"]
+          },
+          "message": {
+            "type": "string"
+          },
+          "resource": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "message"],
+        "additionalProperties": false
+      },
+      "WorkflowSource": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "source_kind": {
+            "type": "string",
+            "enum": ["builtin"]
+          }
+        },
+        "required": ["name", "path", "source"],
+        "additionalProperties": false
+      },
+      "WorkflowStartPayload": {
+        "type": "object",
+        "properties": {
+          "args": {
+            "type": "object"
+          },
+          "budget": {
+            "type": "number",
+            "minimum": 0
+          },
+          "budget_tokens": {
+            "type": "number",
+            "minimum": 0
+          },
+          "permissionSessionID": {
+            "type": "string",
+            "pattern": "^ses"
+          },
+          "resume_of": {
+            "type": "string",
+            "pattern": "^job"
+          },
+          "invalidate_agents": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            }
+          },
+          "replay": {
+            "type": "string",
+            "enum": ["prefix", "keyed"]
+          }
+        },
+        "additionalProperties": false
+      },
+      "WorkflowAnswerPayload": {
+        "type": "object",
+        "properties": {
+          "answer": {
+            "type": "string",
+            "description": "The human answer to the run's open question."
+          },
+          "permissionSessionID": {
+            "type": "string",
+            "pattern": "^ses"
+          }
+        },
+        "required": ["answer"],
+        "additionalProperties": false
+      },
+      "WorkflowExportResult": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": ["path", "files"],
+        "additionalProperties": false
+      },
       "UnauthorizedError": {
         "type": "object",
         "properties": {
@@ -22886,23 +24678,6 @@
           }
         },
         "required": ["_tag", "sessionID", "message"],
-        "additionalProperties": false
-      },
-      "ConflictError": {
-        "type": "object",
-        "properties": {
-          "_tag": {
-            "type": "string",
-            "enum": ["ConflictError"]
-          },
-          "message": {
-            "type": "string"
-          },
-          "resource": {
-            "type": "string"
-          }
-        },
-        "required": ["_tag", "message"],
         "additionalProperties": false
       },
       "ServiceUnavailableError": {
@@ -23228,6 +25003,12 @@
           },
           {
             "$ref": "#/components/schemas/V2EventWorktreeFailed"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventWorkflowRunUpdated"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventWorkflowRunFinished"
           },
           {
             "$ref": "#/components/schemas/V2EventServerConnected"
@@ -32441,6 +34222,308 @@
         "required": ["id", "type", "data"],
         "additionalProperties": false
       },
+      "V2EventWorkflowRunUpdated": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["workflow.run.updated"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "workflow": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": ["running", "completed", "failed", "cancelled", "interrupted", "paused"]
+              },
+              "current_phase": {
+                "type": "string"
+              },
+              "directory": {
+                "type": "string"
+              },
+              "agents": {
+                "type": "object",
+                "properties": {
+                  "total": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["NaN"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["-Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity", "-Infinity", "NaN"]
+                      }
+                    ]
+                  },
+                  "running": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["NaN"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["-Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity", "-Infinity", "NaN"]
+                      }
+                    ]
+                  },
+                  "failed": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["NaN"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["-Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity", "-Infinity", "NaN"]
+                      }
+                    ]
+                  }
+                },
+                "required": ["total", "running", "failed"],
+                "additionalProperties": false
+              },
+              "pending_question": {
+                "type": "boolean"
+              },
+              "error": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "workflow",
+              "status",
+              "current_phase",
+              "directory",
+              "agents",
+              "pending_question",
+              "error"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventWorkflowRunFinished": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["workflow.run.finished"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "workflow": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": ["running", "completed", "failed", "cancelled", "interrupted", "paused"]
+              },
+              "current_phase": {
+                "type": "string"
+              },
+              "directory": {
+                "type": "string"
+              },
+              "agents": {
+                "type": "object",
+                "properties": {
+                  "total": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["NaN"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["-Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity", "-Infinity", "NaN"]
+                      }
+                    ]
+                  },
+                  "running": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["NaN"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["-Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity", "-Infinity", "NaN"]
+                      }
+                    ]
+                  },
+                  "failed": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["NaN"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["-Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity", "-Infinity", "NaN"]
+                      }
+                    ]
+                  }
+                },
+                "required": ["total", "running", "failed"],
+                "additionalProperties": false
+              },
+              "pending_question": {
+                "type": "boolean"
+              },
+              "error": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "workflow",
+              "status",
+              "current_phase",
+              "directory",
+              "agents",
+              "pending_question",
+              "error"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
       "V2EventServerConnected": {
         "type": "object",
         "properties": {
@@ -35428,6 +37511,240 @@
         "required": ["id", "type", "properties"],
         "additionalProperties": false
       },
+      "EventWorkflowRunUpdated": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["workflow.run.updated"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "workflow": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": ["running", "completed", "failed", "cancelled", "interrupted", "paused"]
+              },
+              "current_phase": {
+                "type": "string"
+              },
+              "directory": {
+                "type": "string"
+              },
+              "agents": {
+                "type": "object",
+                "properties": {
+                  "total": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["NaN"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["-Infinity"]
+                      }
+                    ]
+                  },
+                  "running": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["NaN"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["-Infinity"]
+                      }
+                    ]
+                  },
+                  "failed": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["NaN"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["-Infinity"]
+                      }
+                    ]
+                  }
+                },
+                "required": ["total", "running", "failed"],
+                "additionalProperties": false
+              },
+              "pending_question": {
+                "type": "boolean"
+              },
+              "error": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "workflow",
+              "status",
+              "current_phase",
+              "directory",
+              "agents",
+              "pending_question",
+              "error"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventWorkflowRunFinished": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["workflow.run.finished"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "workflow": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": ["running", "completed", "failed", "cancelled", "interrupted", "paused"]
+              },
+              "current_phase": {
+                "type": "string"
+              },
+              "directory": {
+                "type": "string"
+              },
+              "agents": {
+                "type": "object",
+                "properties": {
+                  "total": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["NaN"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["-Infinity"]
+                      }
+                    ]
+                  },
+                  "running": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["NaN"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["-Infinity"]
+                      }
+                    ]
+                  },
+                  "failed": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["NaN"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["-Infinity"]
+                      }
+                    ]
+                  }
+                },
+                "required": ["total", "running", "failed"],
+                "additionalProperties": false
+              },
+              "pending_question": {
+                "type": "boolean"
+              },
+              "error": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "workflow",
+              "status",
+              "current_phase",
+              "directory",
+              "agents",
+              "pending_question",
+              "error"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
       "EventServerConnected": {
         "type": "object",
         "properties": {
@@ -35568,6 +37885,10 @@
     {
       "name": "workspace",
       "description": "Experimental HttpApi workspace routes."
+    },
+    {
+      "name": "workflow",
+      "description": "Workflow routes."
     },
     {
       "name": "opencode HttpApi",
