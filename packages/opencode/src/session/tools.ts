@@ -12,7 +12,8 @@ import { Truncate } from "@/tool/truncate"
 import { Plugin } from "@/plugin"
 import type { TaskPromptOps } from "@/tool/task"
 import { type Tool as AITool, tool, jsonSchema, type ToolExecutionOptions, asSchema } from "ai"
-import { Effect } from "effect"
+import { Cause, Effect } from "effect"
+import { errorMessage } from "@/util/error"
 import { MessageV2 } from "./message-v2"
 import { Session } from "./session"
 import { SessionProcessor } from "./processor"
@@ -71,6 +72,25 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
         .pipe(Effect.orDie),
   })
 
+  // Fires the tool.execute.error observability hook when a tool throws, pairing
+  // with tool.execute.after on success. Observer-only: the original failure is
+  // re-propagated by tapErrorCause; a misbehaving hook is logged and swallowed.
+  const fireToolError = (
+    tool: string,
+    sessionID: string,
+    callID: string | undefined,
+    args: unknown,
+    start: number,
+    cause: Cause.Cause<unknown>,
+  ) =>
+    plugin
+      .trigger(
+        "tool.execute.error",
+        { tool, sessionID, callID, args, error: errorMessage(Cause.squash(cause)), time: { start, end: Date.now() } },
+        {},
+      )
+      .pipe(Effect.catchCause((c) => Effect.logWarning("tool.execute.error hook failed", { cause: c })))
+
   for (const item of yield* registry.tools({
     modelID: ModelV2.ID.make(input.model.api.id),
     providerID: input.model.providerID,
@@ -89,7 +109,10 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
               { tool: item.id, sessionID: ctx.sessionID, callID: ctx.callID },
               { args },
             )
-            const result = yield* item.execute(args, ctx)
+            const start = Date.now()
+            const result = yield* item
+              .execute(args, ctx)
+              .pipe(Effect.tapCause((cause) => fireToolError(item.id, ctx.sessionID, ctx.callID, args, start, cause)))
             const output = {
               ...result,
               attachments: result.attachments?.map((attachment) => ({
@@ -101,7 +124,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
             }
             yield* plugin.trigger(
               "tool.execute.after",
-              { tool: item.id, sessionID: ctx.sessionID, callID: ctx.callID, args },
+              { tool: item.id, sessionID: ctx.sessionID, callID: ctx.callID, args, time: { start, end: Date.now() } },
               output,
             )
             if (options.abortSignal?.aborted) {
@@ -130,6 +153,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
             { tool: key, sessionID: ctx.sessionID, callID: opts.toolCallId },
             { args },
           )
+          const start = Date.now()
           const result: Awaited<ReturnType<NonNullable<typeof execute>>> = yield* Effect.gen(function* () {
             yield* ctx.ask({ permission: key, metadata: {}, patterns: ["*"], always: ["*"] })
             return yield* Effect.promise(() => execute(args, opts))
@@ -142,10 +166,11 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
                 "message.id": input.processor.message.id,
               },
             }),
+            Effect.tapCause((cause) => fireToolError(key, ctx.sessionID, opts.toolCallId, args, start, cause)),
           )
           yield* plugin.trigger(
             "tool.execute.after",
-            { tool: key, sessionID: ctx.sessionID, callID: opts.toolCallId, args },
+            { tool: key, sessionID: ctx.sessionID, callID: opts.toolCallId, args, time: { start, end: Date.now() } },
             result,
           )
 

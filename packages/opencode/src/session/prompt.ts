@@ -43,6 +43,7 @@ import { Image } from "@/image/image"
 import { decodeDataUrl } from "@/util/data-url"
 import { Process } from "@/util/process"
 import { Cause, Effect, Exit, Latch, Layer, Option, Scope, Context, Schema, Types } from "effect"
+import { errorMessage } from "@/util/error"
 import { InstanceState } from "@/effect/instance-state"
 import { TaskTool, type TaskPromptOps } from "@/tool/task"
 import { SessionRunState } from "./run-state"
@@ -288,6 +289,7 @@ export const layer = Layer.effect(
         subagent_type: task.agent,
         command: task.command,
       }
+      const taskStart = Date.now()
       yield* plugin.trigger(
         "tool.execute.before",
         { tool: TaskTool.id, sessionID, callID: part.id },
@@ -370,11 +372,34 @@ export const layer = Layer.effect(
         messageID: assistantMessage.id,
       }))
 
-      yield* plugin.trigger(
-        "tool.execute.after",
-        { tool: TaskTool.id, sessionID, callID: part.id, args: taskArgs },
-        result,
-      )
+      if (error) {
+        yield* plugin
+          .trigger(
+            "tool.execute.error",
+            {
+              tool: TaskTool.id,
+              sessionID,
+              callID: part.id,
+              args: taskArgs,
+              error: errorMessage(error),
+              time: { start: taskStart, end: Date.now() },
+            },
+            {},
+          )
+          .pipe(Effect.catchCause((cause) => Effect.logWarning("tool.execute.error hook failed", { cause })))
+      } else {
+        yield* plugin.trigger(
+          "tool.execute.after",
+          {
+            tool: TaskTool.id,
+            sessionID,
+            callID: part.id,
+            args: taskArgs,
+            time: { start: taskStart, end: Date.now() },
+          },
+          result,
+        )
+      }
 
       assistantMessage.finish = "tool-calls"
       assistantMessage.time.completed = Date.now()
@@ -1131,6 +1156,13 @@ export const layer = Layer.effect(
       throw new Error("Impossible")
     })
 
+    // Tracks the in-flight agent run per session so the lazily-fired
+    // session.run.start (emitted once the run's agent is known, inside runLoop)
+    // can be paired with a guaranteed session.run.end from loop's onExit.
+    // Entries clear when the run settles. Runs are serialized per session and
+    // sub-agent runs use distinct session IDs, so sessionID is a safe key.
+    const runLifecycle = new Map<string, { agent: string; parentSessionID?: string }>()
+
     const runLoop: (sessionID: SessionID) => Effect.Effect<SessionV1.WithParts> = Effect.fn("SessionPrompt.run")(
       function* (sessionID: SessionID) {
         const ctx = yield* InstanceState.context
@@ -1227,6 +1259,12 @@ export const layer = Layer.effect(
             const error = new NamedError.Unknown({ message: `Agent not found: "${lastUser.agent}".${hint}` })
             yield* events.publish(Session.Event.Error, { sessionID, error: error.toObject() })
             throw error
+          }
+          if (!runLifecycle.has(sessionID)) {
+            runLifecycle.set(sessionID, { agent: agent.name, parentSessionID: session.parentID })
+            yield* plugin
+              .trigger("session.run.start", { sessionID, parentSessionID: session.parentID, agent: agent.name }, {})
+              .pipe(Effect.catchCause((cause) => Effect.logWarning("session.run.start hook failed", { cause })))
           }
           const maxSteps = agent.steps ?? Infinity
           const isLastStep = step >= maxSteps
@@ -1389,7 +1427,33 @@ export const layer = Layer.effect(
     const loop: (input: LoopInput) => Effect.Effect<SessionV1.WithParts> = Effect.fn("SessionPrompt.loop")(function* (
       input: LoopInput,
     ) {
-      return yield* state.ensureRunning(input.sessionID, lastAssistant(input.sessionID), runLoop(input.sessionID))
+      // Pair the lazily-fired session.run.start (see runLoop) with a guaranteed
+      // session.run.end that carries the run outcome. Observer-only and
+      // defensive: a failing hook is logged and swallowed.
+      const run = runLoop(input.sessionID).pipe(
+        Effect.onExit((exit) => {
+          const entry = runLifecycle.get(input.sessionID)
+          if (!entry) return Effect.void
+          runLifecycle.delete(input.sessionID)
+          return plugin
+            .trigger(
+              "session.run.end",
+              {
+                sessionID: input.sessionID,
+                parentSessionID: entry.parentSessionID,
+                agent: entry.agent,
+                outcome: Exit.isSuccess(exit) ? "success" : Cause.hasInterruptsOnly(exit.cause) ? "aborted" : "error",
+                error:
+                  Exit.isFailure(exit) && !Cause.hasInterruptsOnly(exit.cause)
+                    ? errorMessage(Cause.squash(exit.cause))
+                    : undefined,
+              },
+              {},
+            )
+            .pipe(Effect.catchCause((cause) => Effect.logWarning("session.run.end hook failed", { cause })))
+        }),
+      )
+      return yield* state.ensureRunning(input.sessionID, lastAssistant(input.sessionID), run)
     })
 
     const shell: (input: ShellInput) => Effect.Effect<SessionV1.WithParts, Session.BusyError> = Effect.fn(

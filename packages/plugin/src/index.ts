@@ -258,6 +258,73 @@ export interface Hooks {
     input: { sessionID: string; agent: string; model: Model; provider: ProviderContext; message: UserMessage },
     output: { headers: Record<string, string> },
   ) => Promise<void>
+  /**
+   * Called once per model call, just before the request is streamed to the
+   * provider. Pairs with `chat.stream.end`. Observability only — the `output`
+   * object is ignored.
+   */
+  "chat.stream.start"?: (
+    input: {
+      sessionID: string
+      messageID: string
+      agent: string
+      model: { providerID: string; modelID: string }
+    },
+    output: {},
+  ) => Promise<void>
+  /**
+   * Called once per model call after the stream settles, whether it succeeded,
+   * errored, or was aborted. Guaranteed to fire if `chat.stream.start` fired.
+   * Carries the response usage, finish reason, timing, and outcome that opencode
+   * observes from the normalized stream. Observability only.
+   */
+  "chat.stream.end"?: (
+    input: {
+      sessionID: string
+      messageID: string
+      agent: string
+      model: { providerID: string; modelID: string }
+      outcome: "success" | "error" | "aborted"
+      /** Milliseconds from stream start to settle. */
+      duration: number
+      /** Milliseconds from stream start to the first streamed event, when any arrived. */
+      timeToFirstByte?: number
+      tokens?: {
+        total?: number
+        input: number
+        output: number
+        reasoning: number
+        cache: { read: number; write: number }
+      }
+      cost?: number
+      finishReason?: string
+      /** Concatenated assistant text emitted during the call. */
+      text?: string
+      /** Present when `outcome` is `"error"`. */
+      error?: string
+    },
+    output: {},
+  ) => Promise<void>
+  /**
+   * Called when an agent run begins — one run per user turn, including nested
+   * sub-agent runs. Pairs with `session.run.end`, which is guaranteed to fire
+   * with the run's outcome. Maps cleanly to an observability scope push/pop.
+   * Observability only.
+   */
+  "session.run.start"?: (
+    input: { sessionID: string; parentSessionID?: string; agent: string },
+    output: {},
+  ) => Promise<void>
+  "session.run.end"?: (
+    input: {
+      sessionID: string
+      parentSessionID?: string
+      agent: string
+      outcome: "success" | "error" | "aborted"
+      error?: string
+    },
+    output: {},
+  ) => Promise<void>
   "permission.ask"?: (input: Permission, output: { status: "ask" | "deny" | "allow" }) => Promise<void>
   "command.execute.before"?: (
     input: { command: string; sessionID: string; arguments: string },
@@ -272,12 +339,29 @@ export interface Hooks {
     output: { env: Record<string, string> },
   ) => Promise<void>
   "tool.execute.after"?: (
-    input: { tool: string; sessionID: string; callID: string; args: any },
+    input: { tool: string; sessionID: string; callID: string; args: any; time: { start: number; end: number } },
     output: {
       title: string
       output: string
       metadata: any
     },
+  ) => Promise<void>
+  /**
+   * Called when a tool execution throws. Complements `tool.execute.after`
+   * (success path) so that exactly one of the two fires after every
+   * `tool.execute.before`, forming a guaranteed paired execution boundary.
+   * Observability only — the error is not suppressed.
+   */
+  "tool.execute.error"?: (
+    input: {
+      tool: string
+      sessionID: string
+      callID: string
+      args: any
+      error: string
+      time: { start: number; end: number }
+    },
+    output: {},
   ) => Promise<void>
   "experimental.chat.messages.transform"?: (
     input: {},

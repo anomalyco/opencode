@@ -83,6 +83,12 @@ interface ProcessorContext extends Input {
   currentTextID: string | undefined
   reasoningMap: Record<string, SessionV1.ReasoningPart>
   v2AssistantMessageID: SessionMessage.ID | undefined
+  // Observability state for the chat.stream.start/end plugin hooks. Set when a
+  // model call starts; read when it settles. `undefined` start means no pending
+  // call (so the end hook is skipped).
+  llmStartedAt: number | undefined
+  llmFirstEventAt: number | undefined
+  llmText: string
 }
 
 type StreamEvent = LLMEvent
@@ -125,6 +131,9 @@ export const layer = Layer.effect(
         currentTextID: undefined,
         reasoningMap: {},
         v2AssistantMessageID: undefined,
+        llmStartedAt: undefined,
+        llmFirstEventAt: undefined,
+        llmText: "",
       }
       const mirrorAssistant = flags.experimentalEventSystem && !input.assistantMessage.summary
       let aborted = false
@@ -369,6 +378,8 @@ export const layer = Layer.effect(
       }
 
       const handleEvent = Effect.fnUntraced(function* (value: StreamEvent) {
+        // Record time-to-first-event for the chat.stream.end observability hook.
+        if (ctx.llmStartedAt !== undefined) ctx.llmFirstEventAt ??= Date.now()
         switch (value.type) {
           case "reasoning-start":
             if (value.id in ctx.reasoningMap) return
@@ -784,6 +795,7 @@ export const layer = Layer.effect(
           case "text-delta":
             if (!ctx.currentText) return
             ctx.currentText.text += value.text
+            ctx.llmText += value.text
             if (value.providerMetadata) ctx.currentText.metadata = value.providerMetadata
             if (mirrorAssistant) {
               yield* events.publish(SessionEvent.Text.Delta, {
@@ -957,6 +969,36 @@ export const layer = Layer.effect(
         yield* status.set(ctx.sessionID, { type: "idle" })
       })
 
+      // Fires the chat.stream.end observability hook exactly once per process()
+      // call, regardless of how the stream settled. Observer-only: a misbehaving
+      // hook is logged and swallowed so it cannot break the session.
+      const fireStreamEnd = Effect.fnUntraced(function* () {
+        if (ctx.llmStartedAt === undefined) return
+        const startedAt = ctx.llmStartedAt
+        ctx.llmStartedAt = undefined
+        const outcome = aborted ? "aborted" : ctx.assistantMessage.error ? "error" : "success"
+        yield* plugin
+          .trigger(
+            "chat.stream.end",
+            {
+              sessionID: ctx.sessionID,
+              messageID: ctx.assistantMessage.id,
+              agent: ctx.assistantMessage.agent,
+              model: { providerID: ctx.assistantMessage.providerID, modelID: ctx.assistantMessage.modelID },
+              outcome,
+              duration: Date.now() - startedAt,
+              timeToFirstByte: ctx.llmFirstEventAt === undefined ? undefined : ctx.llmFirstEventAt - startedAt,
+              tokens: ctx.assistantMessage.tokens,
+              cost: ctx.assistantMessage.cost,
+              finishReason: ctx.assistantMessage.finish,
+              text: ctx.llmText || undefined,
+              error: outcome === "error" ? errorMessage(ctx.assistantMessage.error) : undefined,
+            },
+            {},
+          )
+          .pipe(Effect.catchCause((cause) => Effect.logWarning("chat.stream.end hook failed", { cause })))
+      })
+
       const process = Effect.fn("SessionProcessor.process")(function* (streamInput: LLM.StreamInput) {
         yield* Effect.logInfo("process", {
           "session.id": input.sessionID,
@@ -964,6 +1006,22 @@ export const layer = Layer.effect(
         })
         ctx.needsCompaction = false
         ctx.shouldBreak = (yield* config.get()).experimental?.continue_loop_on_deny !== true
+
+        ctx.llmStartedAt = Date.now()
+        ctx.llmFirstEventAt = undefined
+        ctx.llmText = ""
+        yield* plugin
+          .trigger(
+            "chat.stream.start",
+            {
+              sessionID: ctx.sessionID,
+              messageID: ctx.assistantMessage.id,
+              agent: ctx.assistantMessage.agent,
+              model: { providerID: ctx.assistantMessage.providerID, modelID: ctx.assistantMessage.modelID },
+            },
+            {},
+          )
+          .pipe(Effect.catchCause((cause) => Effect.logWarning("chat.stream.start hook failed", { cause })))
 
         return yield* Effect.gen(function* () {
           yield* Effect.gen(function* () {
@@ -1025,6 +1083,7 @@ export const layer = Layer.effect(
             ),
             Effect.catch(halt),
             Effect.ensuring(cleanup()),
+            Effect.ensuring(fireStreamEnd()),
           )
 
           if (ctx.needsCompaction) return "compact"
