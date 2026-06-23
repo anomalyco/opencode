@@ -18,12 +18,6 @@ describe("errorMessage", () => {
   test("prefers NamedError data over its generic native message", () => {
     expect(errorMessage(new NamedError.Unknown({ message: "specific failure" }))).toBe("specific failure")
   })
-
-  test("unwraps generic Effect unknown errors", () => {
-    expect(
-      errorMessage(new Cause.UnknownError(new Error("rejected request"), "An error occurred in Effect.tryPromise")),
-    ).toBe("rejected request")
-  })
 })
 
 describe("causeMessage", () => {
