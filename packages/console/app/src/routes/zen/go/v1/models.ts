@@ -7,6 +7,12 @@ export async function OPTIONS(_input: APIEvent) {
 }
 
 export async function GET(_input: APIEvent) {
-  const models = Object.keys(ZenData.list("lite").models)
+  const zenData = ZenData.list("lite")
+  const models = Object.entries(zenData.models)
+    .filter(([_, model]) => {
+      if (!Array.isArray(model)) return true
+      return model.some((m) => m.formatFilter === "oa-compat")
+    })
+    .map(([id]) => id)
   return buildModelsResponse(models)
 }
