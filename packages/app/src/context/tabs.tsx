@@ -183,8 +183,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       removeSessions: (input: SessionTabsRemovedDetail) => {
         const removed = store
           .filter(
-            (tab) =>
-              tab.type === "session" && tab.server === server.key && input.sessionIDs.includes(tab.sessionId),
+            (tab) => tab.type === "session" && tab.server === server.key && input.sessionIDs.includes(tab.sessionId),
           )
           .map(tabKey)
         void startTransition(() => {
