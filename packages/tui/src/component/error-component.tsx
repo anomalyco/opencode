@@ -1,4 +1,4 @@
-import { TextAttributes } from "@opentui/core"
+import { TextAttributes, type ScrollBoxRenderable } from "@opentui/core"
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
 import { createSignal, For, Show } from "solid-js"
 import { getScrollAcceleration } from "../util/scroll"
@@ -41,14 +41,7 @@ export function ErrorComponent(props: { error: Error; reset: () => void; mode?: 
 
   const message = props.error.message || "An unknown error occurred."
   const stack = props.error.stack || "No stack trace available."
-
-  const issueURL = new URL("https://github.com/anomalyco/opencode/issues/new?template=bug-report.yml")
-  issueURL.searchParams.set("title", `TUI crash: ${message}`)
-  issueURL.searchParams.set(
-    "description",
-    "```\n" + stack.substring(0, Math.max(0, 6000 - issueURL.toString().length)) + "\n```",
-  )
-  issueURL.searchParams.set("opencode-version", InstallationVersion)
+  const issueURL = buildIssueURL(message, stack)
 
   const copyReport = () => {
     void clipboard.write?.(issueURL.toString()).then(() => setCopied(true))
@@ -57,10 +50,11 @@ export function ErrorComponent(props: { error: Error; reset: () => void; mode?: 
   const actions = [
     { key: "c", label: () => (copied() ? "✓ Copied" : "Copy report"), copy: true, onUse: copyReport },
     { key: "r", label: () => "Restart", onUse: props.reset },
-    { key: "ctrl+c", label: () => "Quit", onUse: () => exit() },
+    { key: "q", label: () => "Quit", onUse: () => exit() },
   ]
   const [selected, setSelected] = createSignal(0)
   const move = (delta: number) => setSelected((prev) => (prev + delta + actions.length) % actions.length)
+  let scroll: ScrollBoxRenderable | undefined
 
   useKeyboard((evt) => {
     if (evt.ctrl && evt.name === "c") return exit()
@@ -69,12 +63,12 @@ export function ErrorComponent(props: { error: Error; reset: () => void; mode?: 
       evt.stopPropagation()
       return actions[selected()].onUse()
     }
-    if (evt.name === "left" || evt.name === "up") {
+    if (evt.name === "left") {
       evt.preventDefault()
       evt.stopPropagation()
       return move(-1)
     }
-    if (evt.name === "right" || evt.name === "down") {
+    if (evt.name === "right") {
       evt.preventDefault()
       evt.stopPropagation()
       return move(1)
@@ -84,6 +78,13 @@ export function ErrorComponent(props: { error: Error; reset: () => void; mode?: 
       evt.stopPropagation()
       return move(evt.shift ? -1 : 1)
     }
+    // Vertical keys scroll the stack trace; buttons navigate horizontally.
+    if (evt.name === "up") return scroll?.scrollBy(-1)
+    if (evt.name === "down") return scroll?.scrollBy(1)
+    if (evt.name === "pageup" && scroll) return scroll.scrollBy(-scroll.height)
+    if (evt.name === "pagedown" && scroll) return scroll.scrollBy(scroll.height)
+    if (evt.name === "home" && scroll) return scroll.scrollTo(0)
+    if (evt.name === "end" && scroll) return scroll.scrollTo(scroll.scrollHeight)
     if (evt.name === "q") return exit()
     if (evt.name === "c") return copyReport()
     if (evt.name === "r") return props.reset()
@@ -175,12 +176,16 @@ export function ErrorComponent(props: { error: Error; reset: () => void; mode?: 
           borderColor={colors.borderSubtle}
           title=" Stack trace "
           titleColor={colors.muted}
-          bottomTitle=" scroll "
+          bottomTitle=" ↑↓ scroll "
           bottomTitleAlignment="right"
           paddingLeft={1}
           paddingRight={1}
         >
-          <scrollbox flexGrow={1} scrollAcceleration={getScrollAcceleration()}>
+          <scrollbox
+            ref={(element: ScrollBoxRenderable) => (scroll = element)}
+            flexGrow={1}
+            scrollAcceleration={getScrollAcceleration()}
+          >
             <text fg={colors.muted}>{stack}</text>
           </scrollbox>
         </box>
@@ -199,4 +204,33 @@ export function ErrorComponent(props: { error: Error; reset: () => void; mode?: 
       </box>
     </box>
   )
+}
+
+function buildIssueURL(message: string, stack: string) {
+  const url = new URL("https://github.com/anomalyco/opencode/issues/new?template=bug-report.yml")
+  url.searchParams.set("title", `TUI crash: ${message}`)
+  url.searchParams.set("opencode-version", InstallationVersion)
+
+  // Budget the stack against the fully URL-encoded length (not the raw length) so
+  // the final link stays under GitHub's practical limit; flag truncation so a
+  // clipped trace is obvious. searchParams.set handles encoding without throwing,
+  // so measuring url.toString() is both correct and safe on any input.
+  const MAX_URL_LENGTH = 6000
+  const marker = "\n... (truncated)"
+  const setBody = (body: string) => url.searchParams.set("description", "```\n" + body + "\n```")
+
+  setBody(stack)
+  if (url.toString().length <= MAX_URL_LENGTH) return url
+
+  // Largest raw prefix whose encoded URL (with the marker) still fits.
+  let lo = 0
+  let hi = stack.length
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2)
+    setBody(stack.slice(0, mid) + marker)
+    if (url.toString().length <= MAX_URL_LENGTH) lo = mid
+    else hi = mid - 1
+  }
+  setBody(stack.slice(0, lo) + marker)
+  return url
 }
