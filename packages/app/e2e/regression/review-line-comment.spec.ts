@@ -74,6 +74,7 @@ test("stages a submitted line comment in the prompt context", async ({ page }) =
   await review.locator('[data-slot="line-comment-action"][data-variant="primary"]').click()
 
   await expect(review.getByText("Use the existing value instead", { exact: true })).toBeVisible()
+  await page.getByRole("tab", { name: "Session" }).click()
   const context = page.getByText("Use the existing value instead", { exact: true }).last()
   await expect(context).toBeVisible()
   await expect(context.locator("..")).toContainText("review.ts:2")
