@@ -46,6 +46,7 @@ import { useCommand } from "@/context/command"
 import { ServerRowMenu } from "@/components/server/server-row-menu"
 import { ServerHealthIndicator } from "@/components/server/server-row"
 import { type ServerHealth } from "@/utils/server-health"
+import { Persist, persisted } from "@/utils/persist"
 
 const HOME_SESSION_LIMIT = 64
 const HOME_ROW_LAYOUT =
@@ -448,6 +449,10 @@ function HomeProjectColumn(props: {
   const global = useGlobal()
   const dialog = useDialog()
   const controller = useServerManagementController({ navigateOnAdd: false })
+  const [state, setState] = persisted(
+    Persist.global("home.servers", ["home.servers.v1"]),
+    createStore({ collapsed: {} as Record<string, boolean> }),
+  )
   return (
     <aside
       class="mt-6 flex min-w-0 flex-col gap-4 lg:mt-14 lg:pt-[52px]"
@@ -476,20 +481,23 @@ function HomeProjectColumn(props: {
             const key = ServerConnection.key(item)
             const healthy = () => !!global.servers.health[key]?.healthy
             const serverCtx = global.createServerCtx(item)
+            const collapsed = () => !!state.collapsed[key]
             return (
               <div class="flex max-h-[min(572px,calc(100vh_-_300px))] min-w-0 flex-col gap-1 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 <HomeServerRow
                   server={item}
                   selected={props.selected.server === key && !props.selected.directory}
                   healthy={healthy()}
+                  collapsed={collapsed()}
                   health={global.servers.health[key]}
                   controller={controller}
                   focusServer={props.focusServer}
                   chooseProject={props.chooseProject}
                   openEdit={(server) => dialog.show(() => <DialogServerV2 mode="edit" server={server} />)}
+                  toggleCollapsed={() => setState("collapsed", key, !state.collapsed[key])}
                   language={props.language}
                 />
-                <Show when={healthy()}>
+                <Show when={healthy() && !collapsed()}>
                   <div class="mx-3 h-px bg-v2-border-border-base" />
                   <HomeProjectList {...props} server={item} projects={serverCtx.projects.list()} />
                 </Show>
@@ -540,11 +548,13 @@ function HomeServerRow(props: {
   server: ServerConnection.Any
   selected: boolean
   healthy: boolean
+  collapsed: boolean
   health: ServerHealth | undefined
   controller: ReturnType<typeof useServerManagementController>
   focusServer: (server: ServerConnection.Any) => void
   chooseProject: (server: ServerConnection.Any) => void
   openEdit: (server: ServerConnection.Http) => void
+  toggleCollapsed: () => void
   language: ReturnType<typeof useLanguage>
 }) {
   const [state, setState] = createStore({ menuOpen: false })
@@ -557,7 +567,30 @@ function HomeServerRow(props: {
         disabled={!props.healthy}
         onClick={() => props.focusServer(props.server)}
       >
-        <div class="flex size-4 shrink-0 items-center justify-center">
+        <Show when={props.healthy}>
+          <span
+            data-action="home-server-collapse"
+            class="inline-flex -ml-0.5 -mr-1.5 size-5 shrink-0 items-center justify-center rounded-[4px] text-v2-icon-icon-muted hover:bg-v2-overlay-simple-overlay-hover"
+            aria-label={
+              props.collapsed ? props.language.t("home.server.expand") : props.language.t("home.server.collapse")
+            }
+            aria-expanded={!props.collapsed}
+            onClick={(event) => {
+              event.preventDefault()
+              event.stopPropagation()
+              props.toggleCollapsed()
+            }}
+            onPointerDown={(event) => event.preventDefault()}
+          >
+            <IconV2
+              name="chevron-down"
+              size="small"
+              class="transition-transform duration-150 ease-in-out"
+              style={{ transform: `rotate(${props.collapsed ? -90 : 0}deg)` }}
+            />
+          </span>
+        </Show>
+        <div class="flex size-4 shrink-0 items-center justify-center -mr-0.5">
           <ServerHealthIndicator health={props.health} />
         </div>
         <span class="flex min-w-0 items-center gap-1">
