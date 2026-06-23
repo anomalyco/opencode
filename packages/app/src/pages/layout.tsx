@@ -529,6 +529,7 @@ export default function Layout(props: ParentProps) {
     const key = pathKey(directory)
 
     const projects = layout.projects.list()
+    const knownRoots = new Set(projects.map((p) => pathKey(p.worktree)))
 
     const sandbox = projects.find((p) => p.sandboxes?.some((item) => pathKey(item) === key))
     if (sandbox) return sandbox
@@ -543,8 +544,9 @@ export default function Layout(props: ParentProps) {
     const meta = serverSync().data.project.find((p) => p.id === id)
     const root = meta?.worktree
     if (!root) return
-
-    return projects.find((p) => p.worktree === root)
+    if (pathKey(root) === key) return
+    if (!knownRoots.has(pathKey(root))) return
+    return projects.find((p) => pathKey(p.worktree) === pathKey(root))
   })
 
   const [autoselecting] = createResource(async () => {
