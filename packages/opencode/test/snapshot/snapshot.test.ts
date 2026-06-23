@@ -448,6 +448,85 @@ it.live(
   }),
 )
 
+it.live(
+  "subdirectory snapshots include scoped changes only",
+  Effect.gen(function* () {
+    const dir = yield* scopedGitTmpdir()
+    const frontend = path.join(dir, "frontend")
+    yield* write(`${frontend}/tracked.txt`, "initial")
+    yield* write(`${dir}/backend/tracked.txt`, "initial")
+    yield* exec(dir, ["git", "add", "."])
+    yield* exec(dir, ["git", "commit", "-m", "init"])
+    yield* Effect.gen(function* () {
+      const snapshot = yield* Snapshot.Service
+      const before = yield* snapshot.track()
+      expect(before).toBeTruthy()
+      yield* write(`${frontend}/tracked.txt`, "changed")
+      yield* write(`${frontend}/untracked.txt`, "new")
+      yield* write(`${dir}/backend/tracked.txt`, "changed")
+      const patch = yield* snapshot.patch(before!)
+      const diff = yield* snapshot.diff(before!)
+      expect(patch.files).toContain(fwd(frontend, "tracked.txt"))
+      expect(patch.files).toContain(fwd(frontend, "untracked.txt"))
+      expect(patch.files).not.toContain(fwd(dir, "backend", "tracked.txt"))
+      expect(diff).not.toContain("backend/tracked.txt")
+    }).pipe(provideInstance(frontend))
+  }),
+)
+
+it.live(
+  "subdirectory snapshots treat wildcard characters literally",
+  Effect.gen(function* () {
+    const dir = yield* scopedGitTmpdir()
+    const subdir = path.join(dir, "src*")
+    yield* write(`${subdir}/file.txt`, "initial")
+    yield* write(`${subdir}/later-ignored.txt`, "initial")
+    yield* write(`${dir}/srca/file.txt`, "initial")
+    yield* exec(dir, ["git", "add", "."])
+    yield* exec(dir, ["git", "commit", "-m", "init"])
+    yield* Effect.gen(function* () {
+      const snapshot = yield* Snapshot.Service
+      const before = yield* snapshot.track()
+      expect(before).toBeTruthy()
+      yield* write(`${subdir}/file.txt`, "changed")
+      yield* write(`${subdir}/later-ignored.txt`, "changed")
+      yield* write(`${subdir}/.gitignore`, "later-ignored.txt\n")
+      yield* write(`${dir}/srca/file.txt`, "changed")
+      const patch = yield* snapshot.patch(before!)
+      const diff = yield* snapshot.diff(before!)
+      expect(patch.files).toContain(fwd(subdir, "file.txt"))
+      expect(patch.files).toContain(fwd(subdir, ".gitignore"))
+      expect(patch.files).not.toContain(fwd(subdir, "later-ignored.txt"))
+      expect(patch.files).not.toContain(fwd(dir, "srca", "file.txt"))
+      expect(diff).not.toContain("srca/file.txt")
+    }).pipe(provideInstance(subdir))
+  }),
+)
+
+it.live(
+  "subdirectory snapshots treat leading colons literally",
+  Effect.gen(function* () {
+    const dir = yield* scopedGitTmpdir()
+    const subdir = path.join(dir, ":src")
+    yield* write(`${subdir}/kept.txt`, "initial")
+    yield* write(`${subdir}/later-ignored.txt`, "initial")
+    yield* exec(dir, ["git", "add", "."])
+    yield* exec(dir, ["git", "commit", "-m", "init"])
+    yield* Effect.gen(function* () {
+      const snapshot = yield* Snapshot.Service
+      const before = yield* snapshot.track()
+      expect(before).toBeTruthy()
+      yield* write(`${subdir}/kept.txt`, "changed")
+      yield* write(`${subdir}/later-ignored.txt`, "changed")
+      yield* write(`${subdir}/.gitignore`, "later-ignored.txt\n")
+      const patch = yield* snapshot.patch(before!)
+      expect(patch.files).toContain(fwd(subdir, "kept.txt"))
+      expect(patch.files).toContain(fwd(subdir, ".gitignore"))
+      expect(patch.files).not.toContain(fwd(subdir, "later-ignored.txt"))
+    }).pipe(provideInstance(subdir))
+  }),
+)
+
 it.instance(
   "gitignore changes",
   withTrackedSnapshot(({ tmp, snapshot, before }) =>
