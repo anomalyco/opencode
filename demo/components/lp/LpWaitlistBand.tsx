@@ -53,13 +53,13 @@ export function LpWaitlistBand() {
         <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-3">
           <div className="flex items-center gap-2.5">
             <span
-              className="text-[11px] font-bold uppercase tracking-[0.12em] text-brand-600"
+              className="inline-flex items-center rounded-full bg-brand-600 px-2.5 py-1 text-[10.5px] font-bold uppercase tracking-[0.12em] text-white"
               style={{ fontFamily: HANKEN }}
             >
               Waitlist
             </span>
             <span className="text-[15px] font-bold text-slate-900">
-              β版のご案内をメールで受け取る
+              β版ウェイトリストに参加する
             </span>
           </div>
 
@@ -99,13 +99,13 @@ export function LpWaitlistBand() {
             </form>
           )}
         </div>
-        <p className="text-center text-[11.5px] leading-relaxed text-slate-500">
+        <p className="text-center text-[12.5px] leading-relaxed text-slate-600">
           ご登録をもって
           <a
             href={PRIVACY_POLICY_URL}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-brand-600 underline underline-offset-2"
+            className="font-medium text-brand-600 underline underline-offset-2 hover:text-brand-700"
           >
             プライバシーポリシー
           </a>

@@ -23,12 +23,14 @@ type Props = {
   cta?: string
   successText?: string
   align?: "center" | "start"
+  size?: "md" | "lg"
 }
 
 export function LpEmailForm({
   cta = "資料・β版の案内を受け取る",
   successText = "登録ありがとうございます。担当より、β版と資料のご案内を順次お送りします。",
   align = "start",
+  size = "md",
 }: Props) {
   const [status, setStatus] = useState<Status>("idle")
   const [emailError, setEmailError] = useState("")
@@ -130,12 +132,16 @@ export function LpEmailForm({
           placeholder="your@company.com"
           aria-label="メールアドレス"
           aria-invalid={!!emailError}
-          className={`w-full flex-1 rounded-lg border bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 ${emailError ? "border-red-400" : "border-slate-300"}`}
+          className={`w-full flex-1 rounded-lg border bg-white text-slate-900 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 ${
+            size === "lg" ? "px-5 py-3.5 text-base" : "px-4 py-3 text-sm"
+          } ${emailError ? "border-red-400" : "border-slate-300"}`}
         />
         <button
           type="submit"
           disabled={status === "submitting"}
-          className="rounded-lg bg-brand-600 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60 sm:shrink-0"
+          className={`rounded-lg bg-brand-600 font-semibold text-white shadow-sm transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60 sm:shrink-0 ${
+            size === "lg" ? "px-8 py-3.5 text-base" : "px-6 py-3 text-sm"
+          }`}
         >
           {status === "submitting" ? "送信中..." : cta}
         </button>
@@ -148,14 +154,14 @@ export function LpEmailForm({
         </p>
       )}
       <p
-        className={`mt-3 text-xs leading-relaxed text-slate-500 ${align === "center" ? "text-center" : ""}`}
+        className={`mt-3 text-[12.5px] leading-relaxed text-slate-600 ${align === "center" ? "text-center" : ""}`}
       >
         ご記入いただいた情報は株式会社Acompanyが取得し、
         <a
           href={PRIVACY_POLICY_URL}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-slate-600 underline underline-offset-2 hover:text-brand-600"
+          className="font-medium text-brand-600 underline underline-offset-2 hover:text-brand-700"
         >
           プライバシーポリシー
         </a>
