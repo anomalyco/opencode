@@ -16,6 +16,7 @@ import {
   type ComponentProps,
   type JSX,
 } from "solid-js"
+import { SpeechProvider, useSpeech } from "@/context/speech"
 import { Popover as KobaltePopover } from "@kobalte/core/popover"
 import { createStore, type SetStoreFunction, type Store } from "solid-js/store"
 import type { useLocal } from "@/context/local"
@@ -217,6 +218,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const permission = usePermission()
   const language = useLanguage()
   const platform = usePlatform()
+  const speech = useSpeech()
   const tabs = () => props.controls.session.tabs
   let editorRef!: HTMLDivElement
   let fileInputRef: HTMLInputElement | undefined
@@ -576,6 +578,20 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       disabled: store.mode === "normal",
       onSelect: () => setMode("normal"),
     },
+    {
+      id: "prompt.voice.toggle",
+      title: language.t("command.prompt.voice.toggle"),
+      category: language.t("command.category.session"),
+      description: language.t("command.prompt.voice.toggle.description"),
+      disabled: store.mode !== "normal" || !speech.isSupported,
+      onSelect: () => {
+        if (speech.status() === "listening") {
+          speech.stop()
+        } else {
+          speech.start()
+        }
+      },
+    },
   ])
 
   const closePopover = () => setStore("popover", null)
@@ -657,6 +673,47 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       reconcile(prompt.current().filter((part) => part.type !== "image"))
     })
   }
+
+  // Handle speech recognition results
+  createEffect(() => {
+    const transcript = speech.transcript()
+    const interim = speech.interimTranscript()
+    const status = speech.status()
+
+    if (status === "listening" && (transcript || interim)) {
+      const fullText = transcript + interim
+      const currentParts = prompt.current()
+      const textParts = currentParts.filter((part) => part.type === "text")
+      const nonTextParts = currentParts.filter((part) => part.type !== "text")
+
+      // Get current text content
+      const currentText = textParts.map((p) => ("content" in p ? p.content : "")).join("")
+
+      // Append voice input to current text
+      const newText = currentText + fullText
+
+      // Update prompt with new text
+      const newParts: Prompt = [
+        { type: "text", content: newText, start: 0, end: newText.length },
+        ...nonTextParts,
+      ]
+
+      prompt.set(newParts, newText.length)
+      speech.reset()
+    }
+  })
+
+  // Handle speech recognition errors
+  createEffect(() => {
+    const error = speech.error()
+    if (error) {
+      showToast({
+        variant: "error",
+        title: language.t("prompt.voice.error"),
+        description: error.message || error.error,
+      })
+    }
+  })
 
   const agentList = createMemo(() =>
     props.controls.agents.available
@@ -1619,6 +1676,40 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       aria-label={language.t("prompt.action.attachFile")}
                     />
                   </TooltipKeybind>
+                  <Show when={speech.isSupported}>
+                    <TooltipKeybind
+                      placement="top"
+                      title={language.t(
+                        speech.status() === "listening"
+                          ? "prompt.action.voice.stop"
+                          : "prompt.action.voice.start",
+                      )}
+                      keybind={command.keybind("prompt.voice.toggle")}
+                    >
+                      <IconButton
+                        data-action="prompt-voice"
+                        type="button"
+                        icon={speech.status() === "listening" ? "stop" : "microphone"}
+                        variant="ghost"
+                        classList={{
+                          "size-7 rounded-md p-[6px] text-v2-icon-icon-muted": true,
+                          "animate-pulse text-v2-icon-icon-active bg-v2-overlay-simple-overlay-hover":
+                            speech.status() === "listening",
+                        }}
+                        style={buttons()}
+                        onClick={() => {
+                          if (speech.status() === "listening") {
+                            speech.stop()
+                          } else {
+                            speech.start()
+                          }
+                        }}
+                        disabled={store.mode !== "normal"}
+                        tabIndex={store.mode === "normal" ? undefined : -1}
+                        aria-label={language.t("prompt.action.voice")}
+                      />
+                    </TooltipKeybind>
+                  </Show>
                   <Show when={showAgentControl()}>
                     <ComposerAgentControl state={agentControlState()} />
                   </Show>
@@ -1845,6 +1936,40 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       <Icon name="plus" class="size-4.5" />
                     </Button>
                   </TooltipKeybind>
+                  <Show when={speech.isSupported}>
+                    <TooltipKeybind
+                      placement="top"
+                      title={language.t(
+                        speech.status() === "listening"
+                          ? "prompt.action.voice.stop"
+                          : "prompt.action.voice.start",
+                      )}
+                      keybind={command.keybind("prompt.voice.toggle")}
+                    >
+                      <Button
+                        data-action="prompt-voice"
+                        type="button"
+                        variant="ghost"
+                        classList={{
+                          "size-8 p-0": true,
+                          "animate-pulse": speech.status() === "listening",
+                        }}
+                        style={buttons()}
+                        onClick={() => {
+                          if (speech.status() === "listening") {
+                            speech.stop()
+                          } else {
+                            speech.start()
+                          }
+                        }}
+                        disabled={store.mode !== "normal"}
+                        tabIndex={store.mode === "normal" ? undefined : -1}
+                        aria-label={language.t("prompt.action.voice")}
+                      >
+                        <Icon name={speech.status() === "listening" ? "stop" : "microphone"} class="size-4.5" />
+                      </Button>
+                    </TooltipKeybind>
+                  </Show>
                 </div>
               </div>
             </div>

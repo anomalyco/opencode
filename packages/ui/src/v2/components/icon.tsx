@@ -65,6 +65,14 @@ const icons = {
     viewBox: "0 0 16 16",
     body: `<path d="M2.5 7.5H3.5V8.5H2.5V7.5Z" stroke="currentColor"/><path d="M7.5 7.5H8.5V8.5H7.5V7.5Z" stroke="currentColor"/><path d="M12.5 7.5H13.5V8.5H12.5V7.5Z" stroke="currentColor"/>`,
   },
+  microphone: {
+    viewBox: "0 0 16 16",
+    body: `<path d="M8 2C6.34315 2 5 3.34315 5 5V8C5 9.65685 6.34315 11 8 11C9.65685 11 11 9.65685 11 8V5C11 3.34315 9.65685 2 8 2Z" stroke="currentColor" stroke-linecap="square"/><path d="M3 8C3 10.7614 5.23858 13 8 13C10.7614 13 13 10.7614 13 8" stroke="currentColor" stroke-linecap="square"/><path d="M8 13V14.5" stroke="currentColor" stroke-linecap="square"/>`,
+  },
+  stop: {
+    viewBox: "0 0 16 16",
+    body: `<rect x="4" y="4" width="8" height="8" fill="currentColor"/>`,
+  },
 }
 
 const spriteID = "opencode-v2-icon-sprite"

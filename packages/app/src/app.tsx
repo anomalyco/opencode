@@ -40,6 +40,7 @@ import { ModelsProvider } from "@/context/models"
 import { NotificationProvider } from "@/context/notification"
 import { PermissionProvider } from "@/context/permission"
 import { PromptProvider } from "@/context/prompt"
+import { SpeechProvider } from "@/context/speech"
 import { ServerConnection, ServerProvider, serverName, useServer } from "@/context/server"
 import { SettingsProvider, useSettings } from "@/context/settings"
 import { TerminalProvider } from "@/context/terminal"
@@ -342,9 +343,11 @@ function SessionProviders(props: ParentProps) {
   return (
     <TerminalProvider>
       <FileProvider>
-        <PromptProvider>
-          <CommentsProvider>{props.children}</CommentsProvider>
-        </PromptProvider>
+        <SpeechProvider>
+          <PromptProvider>
+            <CommentsProvider>{props.children}</CommentsProvider>
+          </PromptProvider>
+        </SpeechProvider>
       </FileProvider>
     </TerminalProvider>
   )
@@ -355,9 +358,11 @@ function SessionProviders(props: ParentProps) {
 function DraftProviders(props: ParentProps) {
   return (
     <FileProvider>
-      <PromptProvider>
-        <CommentsProvider>{props.children}</CommentsProvider>
-      </PromptProvider>
+      <SpeechProvider>
+        <PromptProvider>
+          <CommentsProvider>{props.children}</CommentsProvider>
+        </PromptProvider>
+      </SpeechProvider>
     </FileProvider>
   )
 }
