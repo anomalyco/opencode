@@ -1,3 +1,4 @@
+import { release } from "node:os"
 import { TextAttributes, type ScrollBoxRenderable } from "@opentui/core"
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
 import { createSignal, For, Show } from "solid-js"
@@ -207,9 +208,18 @@ export function ErrorComponent(props: { error: Error; reset: () => void; mode?: 
 }
 
 function buildIssueURL(message: string, stack: string) {
+  // Field keys match the ids in .github/ISSUE_TEMPLATE/bug-report.yml so the issue
+  // form opens pre-filled. Populating os/terminal/reproduce keeps the report past
+  // the contributing-guidelines compliance check, which pushes for system info.
   const url = new URL("https://github.com/anomalyco/opencode/issues/new?template=bug-report.yml")
   url.searchParams.set("title", `TUI crash: ${message}`)
   url.searchParams.set("opencode-version", InstallationVersion)
+  url.searchParams.set("os", describeOS())
+  url.searchParams.set("terminal", describeTerminal())
+  url.searchParams.set(
+    "reproduce",
+    "Reported automatically from the opencode crash screen. If you can, describe what you were doing when it crashed.",
+  )
 
   // Budget the stack against the fully URL-encoded length (not the raw length) so
   // the final link stays under GitHub's practical limit; flag truncation so a
@@ -217,12 +227,13 @@ function buildIssueURL(message: string, stack: string) {
   // so measuring url.toString() is both correct and safe on any input.
   const MAX_URL_LENGTH = 6000
   const marker = "\n... (truncated)"
-  const setBody = (body: string) => url.searchParams.set("description", "```\n" + body + "\n```")
+  const head = `The opencode TUI crashed with an unexpected error.\n\n**Error:** ${message}\n\n**Stack trace:**\n`
+  const setBody = (body: string) => url.searchParams.set("description", head + "```\n" + body + "\n```")
 
   setBody(stack)
   if (url.toString().length <= MAX_URL_LENGTH) return url
 
-  // Largest raw prefix whose encoded URL (with the marker) still fits.
+  // Largest raw stack prefix whose encoded URL (with the marker) still fits.
   let lo = 0
   let hi = stack.length
   while (lo < hi) {
@@ -233,4 +244,23 @@ function buildIssueURL(message: string, stack: string) {
   }
   setBody(stack.slice(0, lo) + marker)
   return url
+}
+
+function describeOS() {
+  const name =
+    process.platform === "darwin"
+      ? "macOS"
+      : process.platform === "win32"
+        ? "Windows"
+        : process.platform === "linux"
+          ? "Linux"
+          : process.platform
+  return `${name} ${release()} (${process.arch})`
+}
+
+function describeTerminal() {
+  const program = process.env.TERM_PROGRAM || process.env.TERM || "unknown"
+  const version = process.env.TERM_PROGRAM_VERSION ? ` ${process.env.TERM_PROGRAM_VERSION}` : ""
+  const multiplexer = process.env.TMUX ? " in tmux" : process.env.STY ? " in screen" : ""
+  return `${program}${version}${multiplexer}`
 }
