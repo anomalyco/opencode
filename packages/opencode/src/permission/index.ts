@@ -33,7 +33,17 @@ interface PendingEntry {
 
 interface State {
   pending: Map<PermissionV1.ID, PendingEntry>
-  approved: PermissionV1.Rule[]
+  /**
+   * Issue 7: `always`-approved rules are scoped to the root of the session
+   * tree that granted them. The key is the request's `sessionID`, which the
+   * task tool routes to the tree root (design-final §4.3:
+   * `permissionSessionID = rootID`, propagated transitively through every
+   * level). Keying by `sessionID` therefore gives tree-wide approval inside one
+   * tree and full isolation between trees — without a Permission→Session
+   * dependency (Session already imports Permission, so a service edge here
+   * would be a cycle). Purely in-memory, no persistence, no schema change.
+   */
+  approved: Map<PermissionV1.Request["sessionID"], PermissionV1.Rule[]>
 }
 
 export function evaluate(permission: string, pattern: string, ...rulesets: PermissionV1.Ruleset[]): PermissionV1.Rule {
@@ -57,9 +67,9 @@ export const layer = Layer.effect(
     const state = yield* InstanceState.make<State>(
       Effect.fn("Permission.state")(function* (ctx) {
         void ctx
-        const state = {
+        const state: State = {
           pending: new Map<PermissionV1.ID, PendingEntry>(),
-          approved: [],
+          approved: new Map<PermissionV1.Request["sessionID"], PermissionV1.Rule[]>(),
         }
 
         yield* Effect.addFinalizer(() =>
@@ -78,10 +88,13 @@ export const layer = Layer.effect(
     const ask = Effect.fn("Permission.ask")(function* (input: PermissionV1.AskInput) {
       const { approved, pending } = yield* InstanceState.get(state)
       const { ruleset, ...request } = input
+      // Issue 7: only the `always`-rules approved within THIS request's root
+      // scope apply; rules granted under another tree's root are invisible here.
+      const scopedApproved = approved.get(request.sessionID) ?? []
       let needsAsk = false
 
       for (const pattern of request.patterns) {
-        const rule = evaluate(request.permission, pattern, ruleset, approved)
+        const rule = evaluate(request.permission, pattern, ruleset, scopedApproved)
         yield* Effect.logInfo("evaluated", { permission: request.permission, pattern, action: rule })
         if (rule.action === "deny") {
           return yield* new PermissionV1.DeniedError({
@@ -153,18 +166,28 @@ export const layer = Layer.effect(
       yield* Deferred.succeed(existing.deferred, undefined)
       if (input.reply === "once") return
 
+      // Issue 7: store the granted `always`-rules under the asking request's
+      // root scope (its sessionID), not in a process-global list.
+      let scopedApproved = approved.get(existing.info.sessionID)
+      if (!scopedApproved) {
+        scopedApproved = []
+        approved.set(existing.info.sessionID, scopedApproved)
+      }
       for (const pattern of existing.info.always) {
-        approved.push({
+        scopedApproved.push({
           permission: existing.info.permission,
           pattern,
           action: "allow",
         })
       }
 
+      // The same-session filter below already restricts auto-resolve to the
+      // granting root scope; evaluating against `scopedApproved` keeps it that
+      // way even if a future change relaxes the filter.
       for (const [id, item] of pending.entries()) {
         if (item.info.sessionID !== existing.info.sessionID) continue
         const ok = item.info.patterns.every(
-          (pattern) => evaluate(item.info.permission, pattern, approved).action === "allow",
+          (pattern) => evaluate(item.info.permission, pattern, scopedApproved).action === "allow",
         )
         if (!ok) continue
         pending.delete(id)

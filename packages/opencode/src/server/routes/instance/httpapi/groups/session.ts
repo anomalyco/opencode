@@ -40,6 +40,12 @@ export const DiffQuery = Schema.Struct({
   ...WorkspaceRoutingQueryFields,
   ...Struct.omit(SessionSummary.DiffInput.fields, ["sessionID"]),
 })
+// `recursive=true` returns the whole descendant subtree (nested-agents Issue 3,
+// depth-ordered shallowest-first) instead of only direct children.
+export const ChildrenQuery = Schema.Struct({
+  ...WorkspaceRoutingQueryFields,
+  recursive: Schema.optional(QueryBoolean),
+})
 export const MessagesQuery = Schema.Struct({
   ...WorkspaceRoutingQueryFields,
   limit: Schema.optional(Schema.NumberFromString.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0))),
@@ -143,14 +149,15 @@ export const SessionApi = HttpApi.make("session")
         ),
         HttpApiEndpoint.get("children", SessionPaths.children, {
           params: { sessionID: SessionID },
-          query: WorkspaceRoutingQuery,
+          query: ChildrenQuery,
           success: described(Schema.Array(Session.Info), "List of children"),
           error: [HttpApiError.BadRequest, ApiNotFoundError],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "session.children",
             summary: "Get session children",
-            description: "Retrieve all child sessions that were forked from the specified parent session.",
+            description:
+              "Retrieve child sessions of the specified parent session. Pass recursive=true to return the entire descendant subtree instead of only direct children.",
           }),
         ),
         HttpApiEndpoint.get("todo", SessionPaths.todo, {

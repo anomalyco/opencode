@@ -325,6 +325,10 @@ exports[`tool parameters JSON Schema (wire shape) task 1`] = `
       "description": "This should only be set if you mean to resume a previous task (you can pass a prior task_id and the task will continue the same subagent session as before instead of creating a fresh one)",
       "type": "string",
     },
+    "timeout": {
+      "description": "Optional timeout in milliseconds for this foreground task. When it elapses the subagent (and its whole subtree) is aborted and this call fails with a timeout error; do the work yourself or retry with a larger value. Overrides experimental.subagent_task_timeout. Ignored for background tasks.",
+      "type": "number",
+    },
   },
   "required": [
     "description",

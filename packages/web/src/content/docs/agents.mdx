@@ -34,7 +34,7 @@ look at these below.
 
 ### Subagents
 
-Subagents are specialized assistants that primary agents can invoke for specific tasks. You can also manually invoke them by **@ mentioning** them in your messages.
+Subagents are specialized assistants that agents can invoke for specific tasks. You can also manually invoke them by **@ mentioning** them in your messages. Subagents can delegate to subagents of their own — see [Nesting](#nesting) for the depth model and limits.
 
 OpenCode comes with three built-in subagents, **General**, **Explore**, and **Scout**. We'll look at this below.
 
@@ -136,6 +136,76 @@ Hidden system agent that creates session summaries. It runs automatically and is
    - `session_parent` (default: **Up**) to return to the parent session
 
    This lets you switch between the main conversation and specialized subagent work.
+
+---
+
+## Nesting
+
+Subagents can spawn subagents of their own. A session tree starts at your main session — that's **depth 1**. Every Task tool call or `@` mention creates a child session one level deeper.
+
+By default, nesting is allowed up to **depth 5**. Sessions at depth 1 through 4 can delegate; sessions at the maximum depth are pure workers — the `task` tool is removed from their tool list entirely, so the model plans around it instead of wasting turns on failed attempts.
+
+---
+
+### Limits
+
+| Limit                      | Default                                                                                            | On violation                                                                                                                       |
+| -------------------------- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Maximum nesting depth      | `5` (root session = depth 1), configurable via `experimental.subagent_max_depth`, clamped to 1–10  | The `task` tool is removed at the last level; any remaining spawn attempt fails with a typed `SubagentDepthError` |
+| Subagents per session tree | `200` started subagents per tree, configurable via `experimental.subagent_tree_limit` (clamped to 1–10000), counted **per OpenCode process** (the counter resets on restart) | Further spawns fail with `SubagentTreeLimitError`                                                                                  |
+| `task_id` resume           | Only tasks the session started itself (direct children)                                            | Other session IDs fail with `SubagentResumeError`; unknown IDs still start a fresh session                                         |
+| Permission prompts         | Raised anywhere in the tree, answered on the **root session** of the tree                          | — see [permissions in nested trees](#permissions-in-nested-trees)                                                                  |
+
+---
+
+### Configure the depth
+
+Set the maximum nesting depth with `experimental.subagent_max_depth`:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {
+    "subagent_max_depth": 5
+  }
+}
+```
+
+- `5` — the default, nesting up to 5 levels.
+- `2` — restores the previous spawn behavior: your main session can spawn subagents, but subagents cannot spawn further subagents. One thing still differs from the old release: custom agents with an explicit `task` allow — which previously nested without limit — are now bounded too.
+- `1` — kill switch: the `task` tool is removed everywhere, including from the main session.
+
+Values are clamped to the range 1–10.
+
+---
+
+### Configure the tree limit
+
+Set the per-tree lifetime cap with `experimental.subagent_tree_limit`:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {
+    "subagent_tree_limit": 200
+  }
+}
+```
+
+The default is `200`. This is an in-memory safety ceiling counted per OpenCode process: resumed subagents do not count against it, and the counter resets on restart. Values are clamped to the range 1–10000; reaching the cap fails further spawns with `SubagentTreeLimitError`.
+
+---
+
+### Permissions in nested trees
+
+- Whether an agent below the depth limit can spawn is governed by its regular [task permissions](#task-permissions). The default wildcard `"*": "allow"` is enough — an exact `task` rule is no longer required.
+- A user-configured `task: deny` stays sticky: it blocks delegation for the entire subtree below it.
+- Permission prompts raised anywhere in the tree appear on the **root session**, so you can answer them without navigating into child sessions. Each prompt carries its origin in `metadata.originSessionID`, `metadata.originAgent`, and `metadata.originDepth`.
+- Answering a prompt with `always` sticks to the **root session** and applies **tree-wide**: it covers every session in that tree (at any depth) for the rest of the OpenCode process, but it does not leak into other session trees in the same instance.
+
+:::note
+Child sessions created before nesting support keep their stored `task` deny — resuming one of these older subagent sessions leaves it unable to spawn. The same applies after **raising** `subagent_max_depth`: existing child sessions created at the old limit keep their stored deny. **Lowering** the limit takes effect immediately for all sessions.
+:::
 
 ---
 
@@ -620,6 +690,8 @@ Control which subagents an agent can invoke via the Task tool with `permission.t
 ```
 
 When set to `deny`, the subagent is removed from the Task tool description entirely, so the model won't attempt to invoke it.
+
+Task permissions apply at every level of a [nested](#nesting) session tree. The default wildcard `"*": "allow"` is sufficient for an agent — including a subagent — to spawn subagents; an exact `task` rule is no longer required. A `deny` blocks delegation for the entire subtree below the agent.
 
 :::tip
 Rules are evaluated in order, and the **last matching rule wins**. In the example above, `orchestrator-planner` matches both `*` (deny) and `orchestrator-*` (allow), but since `orchestrator-*` comes after `*`, the result is `allow`.

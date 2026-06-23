@@ -1316,6 +1316,33 @@ it.instance("permission config preserves user key order", () =>
   }),
 )
 
+// T6.4: the single experimental knob for nested subagent spawning. The value
+// must round-trip the parser; non-positive values are rejected by PositiveInt
+// (clamping to 1..10 happens at read time via SubagentLimits.maxDepth).
+test("config parser accepts experimental.subagent_max_depth and rejects non-positive values", () => {
+  const config = ConfigParse.schema(ConfigV1.Info, { experimental: { subagent_max_depth: 5 } }, "test")
+  expect(config.experimental?.subagent_max_depth).toBe(5)
+
+  const legacy = ConfigParse.schema(ConfigV1.Info, { experimental: { subagent_max_depth: 2 } }, "test")
+  expect(legacy.experimental?.subagent_max_depth).toBe(2)
+
+  expect(() => ConfigParse.schema(ConfigV1.Info, { experimental: { subagent_max_depth: 0 } }, "test")).toThrow()
+})
+
+// Phase-2 Issue 2: the tree lifetime cap is now configurable. Same contract as
+// subagent_max_depth — the value must round-trip the parser and non-positive
+// values are rejected by PositiveInt (clamping to 1..10000 happens at read time
+// via SubagentLimits.treeLimit).
+test("config parser accepts experimental.subagent_tree_limit and rejects non-positive values", () => {
+  const config = ConfigParse.schema(ConfigV1.Info, { experimental: { subagent_tree_limit: 200 } }, "test")
+  expect(config.experimental?.subagent_tree_limit).toBe(200)
+
+  const custom = ConfigParse.schema(ConfigV1.Info, { experimental: { subagent_tree_limit: 50 } }, "test")
+  expect(custom.experimental?.subagent_tree_limit).toBe(50)
+
+  expect(() => ConfigParse.schema(ConfigV1.Info, { experimental: { subagent_tree_limit: 0 } }, "test")).toThrow()
+})
+
 test("config parser preserves permission order while rejecting unknown top-level keys", () => {
   const config = ConfigParse.schema(
     ConfigV1.Info,

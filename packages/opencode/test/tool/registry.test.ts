@@ -60,6 +60,18 @@ const withBrokenPlugin = testEffect(
     replacements: [...replacements, LayerNode.replace(Plugin.node, brokenPluginLayer)],
   }),
 )
+// Kill-switch fixture (T6.5 / design-final §2.5): subagent_max_depth = 1
+// removes the task tool even from the ROOT session (which never has a
+// persisted deny), so the resolve-time filter must be config-aware.
+const killSwitchConfigLayer = TestConfig.layer({
+  get: () => Effect.succeed({ experimental: { subagent_max_depth: 1 } }),
+  directories: () => InstanceState.directory.pipe(Effect.map((dir) => [path.join(dir, ".opencode")])),
+})
+const withKillSwitch = testEffect(
+  LayerNode.buildLayer(root, {
+    replacements: [LayerNode.replace(Config.node, killSwitchConfigLayer), replacements[1]!],
+  }),
+)
 
 afterEach(async () => {
   await disposeAllInstances()
@@ -89,6 +101,91 @@ describe("tool.registry", () => {
 
       expect(task?.jsonSchema).toBeDefined()
       expect((task?.jsonSchema?.properties as Record<string, unknown> | undefined)?.background).toBeUndefined()
+    }),
+  )
+
+  // T6.5 (design-final §4.1, defense line 2): the resolve-time depth filter
+  // removes the task tool from the tool list at depth >= maxDepth, and the
+  // task description carries a depth hint on levels 2..max−1.
+  it.instance("filters task from the tool list at the maximum depth", () =>
+    Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+      const agent = yield* Agent.Service
+      const build = yield* agent.get("build")
+      if (!build) throw new Error("build agent not found")
+      const ids = (yield* registry.tools({
+        providerID: ProviderV2.ID.opencode,
+        modelID: ModelV2.ID.make("test"),
+        agent: build,
+        depth: 5,
+      })).map((tool) => tool.id)
+
+      expect(ids).not.toContain("task")
+      expect(ids).toContain("read")
+    }),
+  )
+
+  it.instance("treats an unresolved lineage depth (Infinity) as at-limit", () =>
+    Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+      const agent = yield* Agent.Service
+      const build = yield* agent.get("build")
+      if (!build) throw new Error("build agent not found")
+      const ids = (yield* registry.tools({
+        providerID: ProviderV2.ID.opencode,
+        modelID: ModelV2.ID.make("test"),
+        agent: build,
+        depth: Number.POSITIVE_INFINITY,
+      })).map((tool) => tool.id)
+
+      expect(ids).not.toContain("task")
+    }),
+  )
+
+  it.instance("keeps task below the limit and tells mid-level agents their depth", () =>
+    Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+      const agent = yield* Agent.Service
+      const build = yield* agent.get("build")
+      if (!build) throw new Error("build agent not found")
+      const at = (depth?: number) =>
+        registry.tools({
+          providerID: ProviderV2.ID.opencode,
+          modelID: ModelV2.ID.make("test"),
+          agent: build,
+          ...(depth !== undefined ? { depth } : {}),
+        })
+
+      const level4 = yield* at(4)
+      const ids = level4.map((tool) => tool.id)
+      expect(ids).toContain("task")
+      const task4 = level4.find((tool) => tool.id === "task")
+      expect(task4?.description).toContain("depth 4 of 5")
+
+      // The root's task description stays byte-identical to a depth-less call.
+      const level1 = yield* at(1)
+      const baseline = yield* at(undefined)
+      const task1 = level1.find((tool) => tool.id === "task")
+      expect(task1?.description).not.toContain("depth 1 of 5")
+      expect(task1?.description).toBe(baseline.find((tool) => tool.id === "task")?.description ?? "")
+    }),
+  )
+
+  withKillSwitch.instance("kill switch subagent_max_depth=1 removes task from the root", () =>
+    Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+      const agent = yield* Agent.Service
+      const build = yield* agent.get("build")
+      if (!build) throw new Error("build agent not found")
+      const ids = (yield* registry.tools({
+        providerID: ProviderV2.ID.opencode,
+        modelID: ModelV2.ID.make("test"),
+        agent: build,
+        depth: 1,
+      })).map((tool) => tool.id)
+
+      expect(ids).not.toContain("task")
+      expect(ids).toContain("read")
     }),
   )
 

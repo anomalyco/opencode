@@ -173,10 +173,12 @@ If you don’t specify anything, OpenCode starts from permissive defaults:
 When OpenCode prompts for approval, the UI offers three outcomes:
 
 - `once` — approve just this request
-- `always` — approve future requests matching the suggested patterns (for the rest of the current OpenCode session)
+- `always` — approve future requests matching the suggested patterns (for the rest of the current OpenCode process)
 - `reject` — deny the request
 
 The set of patterns that `always` would approve is provided by the tool (for example, bash approvals typically whitelist a safe command prefix like `git status*`).
+
+When the request comes from a [nested subagent](/docs/agents#nesting), the prompt is attributed to the **root session** of the session tree — you answer it there, without navigating into child sessions. The prompt's `metadata.originSessionID`, `metadata.originAgent`, and `metadata.originDepth` identify the subagent that asked. Answering `always` sticks to that root session and applies tree-wide for the rest of the OpenCode process — it covers every session in the same tree (at any depth), but it does not carry over to other session trees in the same instance.
 
 ---
 

@@ -535,6 +535,8 @@ export type Session = {
   projectID: string
   directory: string
   parentID?: string
+  depth: number
+  rootID?: string
   summary?: {
     additions: number
     deletions: number
@@ -2246,6 +2248,7 @@ export type SessionChildrenData = {
   }
   query?: {
     directory?: string
+    recursive?: "true" | "false"
   }
   url: "/session/{id}/children"
 }

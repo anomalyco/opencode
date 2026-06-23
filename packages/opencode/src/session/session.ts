@@ -36,6 +36,7 @@ import { Snapshot } from "@/snapshot"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { WorkspaceV2 } from "@opencode-ai/core/workspace"
 import { SessionID, MessageID, PartID } from "./schema"
+import { SubagentLimits } from "./subagent-limits"
 
 import type { Provider } from "@/provider/provider"
 import { Permission } from "@/permission"
@@ -79,6 +80,8 @@ export function fromRow(row: SessionRow): Info {
     directory: row.directory,
     path: row.path ?? undefined,
     parentID: row.parent_id ?? undefined,
+    depth: row.depth,
+    rootID: row.root_id ?? undefined,
     title: row.title,
     agent: row.agent ?? undefined,
     model: row.model
@@ -119,6 +122,8 @@ export function toRow(info: Info) {
     project_id: info.projectID,
     workspace_id: info.workspaceID,
     parent_id: info.parentID,
+    depth: info.depth,
+    root_id: info.rootID,
     slug: info.slug,
     directory: info.directory,
     path: info.path,
@@ -218,6 +223,13 @@ export const Info = Schema.Struct({
   directory: Schema.String,
   path: optionalOmitUndefined(Schema.String),
   parentID: optionalOmitUndefined(SessionID),
+  // Convenience wire fields derived from the parentID chain (nested-agents
+  // Issue 3, additive — old clients ignore them safely). `depth` is the 1-based
+  // nesting level (root = 1, always present). `rootID` is the topmost ancestor;
+  // omitted for roots/orphans (a root is its own root, so read `rootID ?? id`).
+  // Both are derived at create time, never client-settable.
+  depth: NonNegativeInt,
+  rootID: optionalOmitUndefined(SessionID),
   summary: optionalOmitUndefined(Summary),
   cost: optionalOmitUndefined(Schema.Finite),
   tokens: optionalOmitUndefined(Tokens),
@@ -489,6 +501,23 @@ export interface Interface {
   readonly diff: (sessionID: SessionID) => Effect.Effect<Snapshot.FileDiff[]>
   readonly messages: (input: { sessionID: SessionID; limit?: number }) => Effect.Effect<SessionV1.WithParts[], NotFound>
   readonly children: (parentID: SessionID) => Effect.Effect<Info[]>
+  /**
+   * The parent chain of a session, ordered self → root: `depth = chain.length`,
+   * `rootID = chain.at(-1)!.id`. A parent row that vanished mid-chain ends the
+   * walk there (orphans count as roots — the safest reading). Fails with
+   * SubagentLineageError once the walk exceeds LINEAGE_ITERATION_CAP (corrupt
+   * or cyclic parent data); callers treat that like "depth ≥ limit" instead of
+   * hanging.
+   */
+  readonly lineage: (
+    sessionID: SessionID,
+  ) => Effect.Effect<Info[], SubagentLimits.SubagentLineageError | NotFound>
+  /**
+   * Every transitive child of a session (the session itself excluded),
+   * collected by iterative BFS over `children`. Cycle-safe via a seen-set and
+   * truncated at a 10 000-node safety cap.
+   */
+  readonly descendants: (sessionID: SessionID) => Effect.Effect<Info[]>
   readonly remove: (sessionID: SessionID) => Effect.Effect<void, NotFound>
   readonly updateMessage: <T extends SessionV1.Info>(msg: T) => Effect.Effect<T>
   readonly removeMessage: (input: { sessionID: SessionID; messageID: MessageID }) => Effect.Effect<MessageID>
@@ -550,6 +579,38 @@ export const layer: Layer.Layer<
       metadata?: typeof Metadata.Type
       permission?: PermissionV1.Ruleset
     }) {
+      // Config-free hard cap on session nesting (design-final §4.1, line 4):
+      // no code path — today's or a future one — may create a session deeper
+      // than HARD_MAX_DEPTH. Every guarded spawn path fails earlier with a
+      // typed error at the (clamped, ≤10) configured limit, so tripping this
+      // is an invariant violation and surfaces as a defect carrying the typed
+      // error; the public create() contract stays Effect<Info>.
+      // Derived wire fields (nested-agents Issue 3). For a root session depth is
+      // 1 and rootID is omitted (a root is its own root: callers read
+      // `rootID ?? id`). For a child we already walk the parent's lineage for
+      // the hard-cap check below, so reuse it: depth = parent chain length + 1,
+      // rootID = the topmost ancestor (the parent chain is ordered self → root).
+      // An orphaned parent (vanished row) yields an empty chain, so the child is
+      // stamped as a fresh root — matching the migration backfill and lineage().
+      let depth = 1
+      let rootID: SessionID | undefined = undefined
+      if (input.parentID !== undefined) {
+        const chain = yield* lineage(input.parentID).pipe(
+          // An unknown parent is an orphan and orphans count as roots.
+          Effect.catchTag("NotFoundError", () => Effect.succeed<Info[]>([])),
+          Effect.catchTag("SubagentLineageError", (error) => Effect.die(error)),
+        )
+        if (chain.length + 1 > SubagentLimits.HARD_MAX_DEPTH)
+          yield* Effect.die(
+            SubagentLimits.depthError({ depth: chain.length + 1, limit: SubagentLimits.HARD_MAX_DEPTH }),
+          )
+        if (chain.length > 0) {
+          depth = chain.length + 1
+          // chain is ordered self → root; the root is its rootID ?? id.
+          const root = chain.at(-1)!
+          rootID = root.rootID ?? root.id
+        }
+      }
       const ctx = yield* InstanceState.context
       const result: Info = {
         id: SessionID.descending(input.id),
@@ -560,6 +621,8 @@ export const layer: Layer.Layer<
         path: input.path,
         workspaceID: input.workspaceID,
         parentID: input.parentID,
+        depth,
+        rootID,
         title: input.title ?? (input.parentID ? childTitlePrefix : parentTitlePrefix) + new Date().toISOString(),
         agent: input.agent,
         model: input.model,
@@ -645,6 +708,43 @@ export const layer: Layer.Layer<
       return rows.map(fromRow)
     })
 
+    const lineage: Interface["lineage"] = Effect.fn("Session.lineage")(function* (sessionID: SessionID) {
+      const chain = [yield* get(sessionID)]
+      while (chain.at(-1)!.parentID !== undefined) {
+        if (chain.length >= SubagentLimits.LINEAGE_ITERATION_CAP)
+          return yield* Effect.fail(SubagentLimits.lineageError({ sessionID }))
+        const parent = yield* get(chain.at(-1)!.parentID!).pipe(Effect.option)
+        // A vanished parent ends the chain: orphans count as roots.
+        if (Option.isNone(parent)) return chain
+        chain.push(parent.value)
+      }
+      return chain
+    })
+
+    // Safety cap for the descendants traversal; legitimate trees stay far
+    // below it (HARD_MAX_DEPTH levels × the per-tree spawn cap).
+    const DESCENDANTS_CAP = 10_000
+
+    // Convergence cap for remove's children re-listing; see remove below.
+    const REMOVE_CHILDREN_PASS_CAP = 5
+
+    const descendants: Interface["descendants"] = Effect.fn("Session.descendants")(function* (sessionID: SessionID) {
+      const seen = new Set<SessionID>([sessionID])
+      const result: Info[] = []
+      const queue = [sessionID]
+      while (queue.length > 0) {
+        const kids = yield* children(queue.shift()!)
+        for (const kid of kids) {
+          if (seen.has(kid.id)) continue
+          seen.add(kid.id)
+          result.push(kid)
+          if (result.length >= DESCENDANTS_CAP) return result
+          queue.push(kid.id)
+        }
+      }
+      return result
+    })
+
     const remove: Interface["remove"] = Effect.fnUntraced(function* (sessionID: SessionID) {
       const session = yield* get(sessionID)
       try {
@@ -656,9 +756,17 @@ export const layer: Layer.Layer<
         )
 
         if (hasInstance) yield* cancelBackgroundJobs(background, sessionID)
-        const kids = yield* children(sessionID)
-        for (const child of kids) {
-          yield* remove(child.id)
+        // Children are re-listed to convergence: a spawn racing the remove
+        // cascade can insert a child after a one-shot children() snapshot,
+        // leaving it behind as an orphan — and orphans count as roots, so
+        // depth/tree limits would reset relative to the leaked subtree. The
+        // cap bounds a pathological spawn loop fighting the removal.
+        for (let pass = 0; pass < REMOVE_CHILDREN_PASS_CAP; pass++) {
+          const kids = yield* children(sessionID)
+          if (kids.length === 0) break
+          for (const child of kids) {
+            yield* remove(child.id)
+          }
         }
 
         yield* events.publish(SessionV1.Event.Deleted, { sessionID, info: session })
@@ -951,6 +1059,8 @@ export const layer: Layer.Layer<
       diff,
       messages,
       children,
+      lineage,
+      descendants,
       remove,
       updateMessage,
       removeMessage,

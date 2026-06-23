@@ -12,6 +12,7 @@ import { useProject } from "../../context/project"
 import { filetype } from "../../util/filetype"
 import { Locale } from "../../util/locale"
 import { webSearchProviderLabel } from "../../util/tool-display"
+import { formatOriginAttribution } from "../../util/lineage"
 import { getScrollAcceleration } from "../../util/scroll"
 import { useTuiConfig } from "../../config"
 import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut } from "../../keymap"
@@ -382,6 +383,13 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
 
           const current = info()
 
+          // Nested subagents route their asks to the root session; without this
+          // line the user would see "Permission required" with no idea WHO is
+          // asking. The origin (asking agent + its depth) is attached to the
+          // request metadata in session/tools.ts whenever the ask is routed away
+          // from the asking session, so it is absent for top-level asks.
+          const origin = formatOriginAttribution(props.request.metadata)
+
           const header = () => (
             <box flexDirection="column" gap={0}>
               <box flexDirection="row" gap={1} flexShrink={0}>
@@ -394,6 +402,11 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
                 </text>
                 <text fg={theme.text}>{current.title}</text>
               </box>
+              <Show when={origin}>
+                <box flexDirection="row" gap={1} paddingLeft={2} flexShrink={0}>
+                  <text fg={theme.textMuted}>{origin}</text>
+                </box>
+              </Show>
             </box>
           )
 

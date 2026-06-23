@@ -865,6 +865,36 @@ The `experimental` key contains options that are under active development.
 Experimental options are not stable. They may change or be removed without notice.
 :::
 
+#### Subagent nesting depth
+
+Use `experimental.subagent_max_depth` to control how deep subagents can [nest](/docs/agents#nesting). The root session is depth 1; values are clamped to 1–10.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {
+    "subagent_max_depth": 5
+  }
+}
+```
+
+The default is `5`. Setting it to `2` restores the previous spawn behavior (the main session spawns subagents, subagents do not); custom agents that previously nested without limit are now bounded. Setting it to `1` is the kill switch: the `task` tool is removed everywhere, including from the main session.
+
+#### Subagent tree limit
+
+Use `experimental.subagent_tree_limit` to control how many subagents a single session tree may start over its lifetime. The cap is an in-memory, per-process safety ceiling against runaway delegation; values are clamped to 1–10000.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {
+    "subagent_tree_limit": 200
+  }
+}
+```
+
+The default is `200`. Resumed subagents do not count against it, and the counter is not persisted — it resets on each OpenCode process restart. Reaching the limit fails further spawns with a typed `SubagentTreeLimitError`.
+
 ---
 
 ## Variables

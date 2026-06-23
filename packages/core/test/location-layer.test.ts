@@ -165,6 +165,7 @@ describe("LocationServiceMap", () => {
             models.resolve(
               SessionV2.Info.make({
                 id: SessionV2.ID.make("ses_unavailable_model"),
+                depth: 1,
                 projectID: ProjectV2.ID.global,
                 title: "test",
                 model: {

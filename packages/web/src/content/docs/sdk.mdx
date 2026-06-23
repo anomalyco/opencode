@@ -103,6 +103,34 @@ All types are generated from the server's OpenAPI specification and available in
 
 ---
 
+### Permission requests in nested session trees
+
+With [subagent nesting](/docs/agents#nesting), the `sessionID` on a permission request refers to the **root session** of the session tree the request came from — not necessarily the session that raised it. For trees of depth ≤ 2 (a main session and its direct subagents) this is identical to previous releases, so most clients are unaffected.
+
+To identify the subagent that actually asked, read the request's `metadata`:
+
+- `metadata.originSessionID` — the session that raised the request
+- `metadata.originAgent` — the agent name of that session
+- `metadata.originDepth` — its depth in the tree (root session = 1)
+
+These fields are only present when the request was raised below the root. There is **no schema change** — `metadata` was already an open record, so existing clients keep working without regenerating. Clients that attribute requests to a session via `sessionID` should switch to `metadata.originSessionID` when it is present.
+
+```javascript
+const events = await client.event.subscribe()
+for await (const event of events.stream) {
+  if (event.type !== "permission.updated") continue
+  const request = event.properties
+  // Session to respond on — the root of the tree
+  const respondOn = request.sessionID
+  // Session that actually asked — falls back to the root itself
+  const askedBy = request.metadata.originSessionID ?? request.sessionID
+}
+```
+
+Respond via `postSessionByIdPermissionsByPermissionId` using the root `sessionID`. An `always` response sticks to that root session and applies tree-wide for the rest of the OpenCode process — it covers every session in the same tree (at any depth), but it does not carry over to other session trees served by the same instance.
+
+---
+
 ## Errors
 
 The SDK can throw errors that you can catch and handle:

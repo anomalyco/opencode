@@ -16,6 +16,7 @@ import contextEpochAgentMigration from "@opencode-ai/core/database/migration/202
 import simplifyIntegrationCredentialsMigration from "@opencode-ai/core/database/migration/20260611192811_lush_chimera"
 import simplifySessionInputMigration from "@opencode-ai/core/database/migration/20260622202450_simplify_session_input"
 import { EventV2 } from "@opencode-ai/core/event"
+import sessionDepthRootMigration from "@opencode-ai/core/database/migration/20260613064154_session_depth_rootid"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
@@ -398,6 +399,60 @@ describe("DatabaseMigration", () => {
           tokens_cache_read: 5,
           tokens_cache_write: 6,
         })
+      }),
+    )
+  })
+
+  test("backfills depth/root_id over a parent chain and treats orphans as roots", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        // Minimal pre-migration session table (no depth/root_id yet).
+        yield* db.run(sql`CREATE TABLE session (id text PRIMARY KEY, parent_id text)`)
+        // A three-level tree: root -> child -> grandchild, plus a second child
+        // under root, plus an orphan whose parent row never existed.
+        yield* db.run(sql`INSERT INTO session (id, parent_id) VALUES ('ses_root', NULL)`)
+        yield* db.run(sql`INSERT INTO session (id, parent_id) VALUES ('ses_child_a', 'ses_root')`)
+        yield* db.run(sql`INSERT INTO session (id, parent_id) VALUES ('ses_child_b', 'ses_root')`)
+        yield* db.run(sql`INSERT INTO session (id, parent_id) VALUES ('ses_grandchild', 'ses_child_a')`)
+        yield* db.run(sql`INSERT INTO session (id, parent_id) VALUES ('ses_orphan', 'ses_gone')`)
+
+        yield* DatabaseMigration.applyOnly(db, [sessionDepthRootMigration])
+
+        const rows = yield* db.all<{ id: string; depth: number; root_id: string | null }>(
+          sql`SELECT id, depth, root_id FROM session ORDER BY id`,
+        )
+        expect(rows).toEqual([
+          { id: "ses_child_a", depth: 2, root_id: "ses_root" },
+          { id: "ses_child_b", depth: 2, root_id: "ses_root" },
+          { id: "ses_grandchild", depth: 3, root_id: "ses_root" },
+          // Orphan (parent row missing) is treated as a root: depth 1, no root_id.
+          { id: "ses_orphan", depth: 1, root_id: null },
+          // Root is its own root: root_id stays NULL (callers read root_id ?? id).
+          { id: "ses_root", depth: 1, root_id: null },
+        ])
+
+        // Idempotent backfill: re-running the recursive CTE stamps the same
+        // values (the migration runner already guards replay via the migration
+        // table; this proves the UPDATE itself converges).
+        yield* db.run(sql`
+          WITH RECURSIVE tree(id, root_id, depth) AS (
+            SELECT id, id, 1 FROM session WHERE parent_id IS NULL
+            UNION ALL
+            SELECT s.id, t.root_id, t.depth + 1
+            FROM session s JOIN tree t ON s.parent_id = t.id
+          )
+          UPDATE session SET
+            depth = (SELECT depth FROM tree WHERE tree.id = session.id),
+            root_id = CASE WHEN session.parent_id IS NULL THEN NULL
+                           ELSE (SELECT root_id FROM tree WHERE tree.id = session.id) END
+          WHERE EXISTS (SELECT 1 FROM tree WHERE tree.id = session.id)
+        `)
+        expect(
+          yield* db.all<{ id: string; depth: number; root_id: string | null }>(
+            sql`SELECT id, depth, root_id FROM session ORDER BY id`,
+          ),
+        ).toEqual(rows)
       }),
     )
   })

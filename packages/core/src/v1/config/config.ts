@@ -179,6 +179,18 @@ export const Info = Schema.Struct({
       mcp_timeout: Schema.optional(PositiveInt).annotate({
         description: "Timeout in milliseconds for model context protocol (MCP) requests",
       }),
+      subagent_max_depth: Schema.optional(PositiveInt).annotate({
+        description:
+          "Maximum subagent nesting depth (the root session is depth 1; clamped to 1..10). Default 5. Set 2 to restore the previous spawn behavior (the root spawns, subagents do not) — custom agents that previously nested without limit are now bounded; 1 is the kill switch that removes the task tool entirely.",
+      }),
+      subagent_tree_limit: Schema.optional(PositiveInt).annotate({
+        description:
+          "In-memory lifetime cap on subagents started per session tree, a per-process safety ceiling against runaway delegation (clamped to 1..10000). Default 200. Resumes do not count against it; the counter is not persisted, so it resets each process run.",
+      }),
+      subagent_task_timeout: Schema.optional(PositiveInt).annotate({
+        description:
+          "Default timeout in milliseconds for foreground subagent tasks (the `task` tool). When it elapses the subtree is aborted via the same cancel path as an explicit cancel (no orphan job) and the spawn fails with a typed timeout error in the parent's transcript. Overridable per call via the task tool's `timeout` parameter. Unset (default) means no timeout.",
+      }),
       policies: Schema.optional(Schema.mutable(Schema.Array(ConfigExperimental.Policy))).annotate({
         description: "Policy statements applied to supported resources, such as provider access",
       }),

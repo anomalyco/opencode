@@ -184,6 +184,8 @@ export default {
           \`project_id\` text NOT NULL,
           \`workspace_id\` text,
           \`parent_id\` text,
+          \`depth\` integer DEFAULT 1 NOT NULL,
+          \`root_id\` text,
           \`slug\` text NOT NULL,
           \`directory\` text NOT NULL,
           \`path\` text,
@@ -268,6 +270,7 @@ export default {
       yield* tx.run(`CREATE INDEX \`session_project_idx\` ON \`session\` (\`project_id\`);`)
       yield* tx.run(`CREATE INDEX \`session_workspace_idx\` ON \`session\` (\`workspace_id\`);`)
       yield* tx.run(`CREATE INDEX \`session_parent_idx\` ON \`session\` (\`parent_id\`);`)
+      yield* tx.run(`CREATE INDEX \`session_root_idx\` ON \`session\` (\`root_id\`);`)
       yield* tx.run(`CREATE INDEX \`todo_session_idx\` ON \`todo\` (\`session_id\`);`)
     })
   },
