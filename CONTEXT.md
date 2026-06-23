@@ -39,6 +39,18 @@ An expected temporary inability to observe a **Context Source** value; the runti
 **Safe Provider-Turn Boundary**:
 The point immediately before a provider call, after durable input promotion and any required tool settlement, where context changes may be admitted chronologically.
 
+**Admitted Prompt**:
+A durable user input accepted into the Session inbox but not yet included in **Session History**.
+
+**Prompt Promotion**:
+The durable transition that removes an **Admitted Prompt** from pending input and appends its user message to **Session History**.
+
+**Provider Turn**:
+One request to a model provider and the response projected from that request.
+
+**Session Drain**:
+One process-local execution span that promotes eligible input and runs required **Provider Turns** until no immediate continuation remains. A Session Drain has no durable identity or transcript boundary.
+
 **Model Tool Output**:
 The bounded projection of a Core-executed tool result persisted in Session history and replayed to the model. A tool may shape this projection semantically, but the Tool Registry enforces the final size limit.
 
@@ -67,6 +79,11 @@ The host-supplied environment overlay applied by the server when creating a PTY,
 - Changes from multiple **Context Sources** admitted at one safe boundary combine into one **Mid-Conversation System Message**.
 - Context changes are sampled and admitted lazily at a **Safe Provider-Turn Boundary**, never pushed asynchronously when their source changes.
 - At a **Safe Provider-Turn Boundary**, newly promoted user input or settled tool results precede any combined **Mid-Conversation System Message**.
+- An **Admitted Prompt** is replayable pending input, not yet model-visible **Session History**.
+- **Prompt Promotion** atomically consumes the pending inbox entry and appends its model-visible user message.
+- Steering prompts promote at the next **Safe Provider-Turn Boundary** while the current **Session Drain** still requires continuation. Promoting any newly admitted user input resets the selected agent's provider-turn allowance; multiple prompts promoted at one boundary reset it once.
+- A queued prompt does not promote while the current **Session Drain** requires continuation. The runner promotes one queued prompt when the Session would otherwise become idle, then reevaluates continuation before promoting another.
+- A **Session Drain** is process-local coordination rather than a durable domain entity. Durable recovery must reason from prompts, projected history, provider attempts, and tool state rather than inventing an enclosing execution identity.
 - The first provider turn renders the latest complete **Baseline System Context** and initializes its **Context Snapshot** without emitting a redundant **Mid-Conversation System Message**; unavailable initial context blocks the turn instead of persisting an incomplete baseline.
 - Initial **System Context** preparation precedes the first durable input promotion so an unavailable baseline leaves that input pending and retryable; ordinary reconciliation remains after promotion.
 - Compaction starts a new **Context Epoch** with a freshly rendered **Baseline System Context** and **Context Snapshot**; prior **Mid-Conversation System Messages** remain durable audit history but leave projected model history.

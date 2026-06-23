@@ -179,8 +179,8 @@ describe("SessionV2.prompt", () => {
       expect(streamed.map((event) => [event.durable?.seq, event.type])).toEqual([
         [0, "session.next.prompt.admitted"],
         [1, "session.next.prompt.admitted"],
-        [2, "session.next.prompt.promoted"],
-        [3, "session.next.prompt.promoted"],
+        [2, "session.next.prompted"],
+        [3, "session.next.prompted"],
       ])
       expect(
         Array.from(
@@ -334,7 +334,7 @@ describe("SessionV2.prompt", () => {
       expect(messages[1]).toEqual(messages[0])
       expect(yield* session.messages({ sessionID })).toEqual([])
       expect(yield* admittedCount).toBe(1)
-      expect(yield* eventCount(EventV2.versionedType(SessionEvent.PromptLifecycle.Admitted.type, 1))).toBe(1)
+      expect(yield* eventCount(EventV2.versionedType(SessionEvent.PromptAdmitted.type, 1))).toBe(1)
     }),
   )
 
@@ -354,7 +354,7 @@ describe("SessionV2.prompt", () => {
         { concurrency: "unbounded" },
       )
 
-      expect(yield* eventCount(EventV2.versionedType(SessionEvent.PromptLifecycle.Promoted.type, 1))).toBe(1)
+      expect(yield* eventCount(EventV2.versionedType(SessionEvent.Prompted.type, 1))).toBe(1)
       expect(yield* admitted(messageID)).toMatchObject({ promotedSeq: 1 })
       expect(yield* session.messages({ sessionID })).toMatchObject([
         { id: messageID, type: "user", text: "Promote once" },
@@ -362,14 +362,14 @@ describe("SessionV2.prompt", () => {
     }),
   )
 
-  it.effect("promotes steers only through the captured aggregate cutoff", () =>
+  it.effect("promotes steers only through the captured inbox cutoff", () =>
     Effect.gen(function* () {
       yield* setup
       const { db } = yield* Database.Service
       const session = yield* SessionV2.Service
       const events = yield* EventV2.Service
       const first = yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Before cutoff" }), resume: false })
-      const cutoff = yield* SessionInput.latestSeq(db, sessionID)
+      const cutoff = first.admittedSeq
       const second = yield* session.prompt({ sessionID, prompt: new Prompt({ text: "After cutoff" }), resume: false })
 
       yield* SessionInput.promoteSteers(db, events, sessionID, cutoff)
@@ -379,7 +379,7 @@ describe("SessionV2.prompt", () => {
     }),
   )
 
-  it.effect("reprojects one pending lifecycle without scheduling execution", () =>
+  it.effect("reprojects pending inbox input without scheduling execution", () =>
     Effect.gen(function* () {
       yield* setup
       const { db } = yield* Database.Service
@@ -486,6 +486,27 @@ describe("SessionV2.prompt", () => {
         .pipe(Effect.flip)
 
       expect(failure).toMatchObject({ _tag: "Session.PromptConflictError", sessionID: other, messageID })
+    }),
+  )
+
+  it.effect("rejects a prompt ID already used by visible Session history", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const events = yield* EventV2.Service
+      yield* events.publish(SessionEvent.Synthetic, {
+        sessionID,
+        messageID,
+        timestamp: yield* DateTime.now,
+        text: "Existing history",
+      })
+
+      const failure = yield* session
+        .prompt({ id: messageID, sessionID, prompt: new Prompt({ text: "Conflicting prompt" }), resume: false })
+        .pipe(Effect.flip)
+
+      expect(failure).toMatchObject({ _tag: "Session.PromptConflictError", sessionID, messageID })
+      expect(yield* admitted(messageID)).toBeUndefined()
     }),
   )
 

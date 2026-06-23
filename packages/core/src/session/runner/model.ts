@@ -13,7 +13,6 @@ import { Integration } from "../../integration"
 import { IntegrationConnection } from "../../integration/connection"
 import { ModelV2 } from "../../model"
 import { ModelRequest } from "../../model-request"
-import { PluginBoot } from "../../plugin/boot"
 import { ProviderV2 } from "../../provider"
 import { SessionSchema } from "../schema"
 
@@ -178,11 +177,9 @@ export const locationLayer = Layer.effect(
     const catalog = yield* Catalog.Service
     const credentials = yield* Credential.Service
     const integrations = yield* Integration.Service
-    const boot = yield* PluginBoot.Service
     return Service.of({
       resolve: Effect.fn("SessionRunnerModel.resolve")(function* (session) {
         // Location plugins populate and filter the catalog asynchronously during layer startup.
-        yield* boot.wait()
         const defaultModel = session.model ? undefined : yield* catalog.model.default()
         const selected = session.model
           ? (yield* catalog.model.available()).find(

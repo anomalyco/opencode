@@ -164,18 +164,6 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         }
         case "session.next.prompt.admitted":
           break
-        case "session.next.prompt.promoted":
-          message.update(event.data.sessionID, (draft) => {
-            message.prepend(draft, {
-              id: event.data.messageID,
-              type: "user",
-              text: event.data.prompt.text,
-              files: event.data.prompt.files,
-              agents: event.data.prompt.agents,
-              time: { created: event.data.timeCreated },
-            })
-          })
-          break
         case "session.next.context.updated":
           message.update(event.data.sessionID, (draft) => {
             message.prepend(draft, {

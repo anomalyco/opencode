@@ -36,16 +36,11 @@ describe("ConfigSkillPlugin.Plugin", () => {
 
       yield* ConfigSkillPlugin.Plugin.effect(
         host({
-          location: location({ directory }),
-          path: { ...host().path, home: "/home/test" },
-          skill: SkillV2.Service.of({
-            transform,
-            rebuild: () => Effect.void,
-            sources: () => Effect.succeed(sources),
-            list: () => Effect.succeed([]),
-          }),
+          skill: { transform, reload: () => Effect.void },
         }),
       ).pipe(
+        Effect.provideService(Global.Service, Global.Service.of({ ...Global.make(), home: "/home/test" })),
+        Effect.provideService(Location.Service, Location.Service.of(location({ directory }))),
         Effect.provideService(
           Config.Service,
           Config.Service.of({

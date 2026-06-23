@@ -259,7 +259,7 @@ describe("CatalogV2", () => {
       expect((yield* catalog.model.default())?.id).toBe(old)
 
       configured = false
-      yield* catalog.rebuild()
+      yield* catalog.reload()
       expect((yield* catalog.model.default())?.id).toBe(newest)
     }),
   )

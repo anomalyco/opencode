@@ -1,5 +1,5 @@
 import { createStore, reconcile } from "solid-js/store"
-import { batch, createEffect, createMemo, onCleanup } from "solid-js"
+import { type Accessor, batch, createEffect, createMemo, onCleanup } from "solid-js"
 import { useParams } from "@solidjs/router"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useServerSDK } from "./server-sdk"
@@ -108,7 +108,7 @@ function buildNotificationIndex(list: Notification[]) {
 export const { use: useNotification, provider: NotificationProvider } = createSimpleContext({
   name: "Notification",
   gate: false,
-  init: () => {
+  init: (props: { directory?: Accessor<string | undefined>; sessionID?: Accessor<string | undefined> }) => {
     const params = useParams()
     const serverSDK = useServerSDK()
     const serverSync = useServerSync()
@@ -119,10 +119,10 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
     const empty: Notification[] = []
 
     const currentDirectory = createMemo(() => {
-      return decode64(params.dir)
+      return props.directory?.() ?? decode64(params.dir)
     })
 
-    const currentSession = createMemo(() => params.id)
+    const currentSession = createMemo(() => props.sessionID?.() ?? params.id)
 
     const [store, setStore, _, ready] = persisted(
       Persist.serverGlobal(serverSDK().scope, "notification", ["notification.v1"]),

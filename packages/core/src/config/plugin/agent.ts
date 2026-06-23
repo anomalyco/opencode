@@ -1,6 +1,6 @@
 export * as ConfigAgentPlugin from "./agent"
 
-import { define } from "@opencode-ai/plugin/v2/effect"
+import { define } from "../../plugin/internal"
 import path from "path"
 import { Effect, Option, Schema } from "effect"
 import { AgentV2 } from "../../agent"
