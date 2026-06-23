@@ -129,6 +129,14 @@ export function resources(client: Client, timeout?: number) {
   )
 }
 
+export function resourceTemplates(client: Client, timeout?: number) {
+  if (!client.getServerCapabilities()?.resources) return Promise.resolve([])
+  return paginate(
+    (cursor) => client.listResourceTemplates(cursor === undefined ? undefined : { cursor }, { timeout }),
+    (result) => result.resourceTemplates,
+  )
+}
+
 function listTools(client: Client, timeout: number) {
   return Effect.tryPromise({
     try: () =>
