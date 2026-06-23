@@ -140,6 +140,29 @@ function setCopyState(button: HTMLButtonElement, labels: CopyLabels, copied: boo
   button.setAttribute("data-tooltip", labels.copy)
 }
 
+const shellLanguages = new Set(["bash", "sh", "shell", "zsh", "fish", "console", "terminal"])
+
+function codeKind(language: string | undefined) {
+  const value = language?.toLowerCase()
+  if (!value) return
+  if (shellLanguages.has(value)) return "shell"
+}
+
+function codeLanguage(block: HTMLPreElement) {
+  const code = block.querySelector("code")
+  if (!(code instanceof HTMLElement)) return
+  return code.className.match(/(?:^|\s)language-([^\s]+)/)?.[1]
+}
+
+function applyCodeMetadata(wrapper: HTMLElement, language: string | undefined) {
+  if (language) wrapper.dataset.language = language
+  else delete wrapper.dataset.language
+
+  const kind = codeKind(language)
+  if (kind) wrapper.dataset.codeKind = kind
+  else delete wrapper.dataset.codeKind
+}
+
 function ensureCodeWrapper(block: HTMLPreElement, labels: CopyLabels) {
   const parent = block.parentElement
   if (!parent) return
@@ -147,11 +170,14 @@ function ensureCodeWrapper(block: HTMLPreElement, labels: CopyLabels) {
   if (!wrapped) {
     const wrapper = document.createElement("div")
     wrapper.setAttribute("data-component", "markdown-code")
+    applyCodeMetadata(wrapper, codeLanguage(block))
     parent.replaceChild(wrapper, block)
     wrapper.appendChild(block)
     wrapper.appendChild(createCopyButton(labels))
     return
   }
+
+  applyCodeMetadata(parent, codeLanguage(block))
 
   const buttons = Array.from(parent.querySelectorAll('[data-slot="markdown-copy-button"]')).filter(
     (el): el is HTMLButtonElement => el instanceof HTMLButtonElement,
@@ -522,6 +548,8 @@ function updateCodeBlock(
 
   const code = existing?.querySelector("code")
   if (code instanceof HTMLElement) {
+    const wrapper = code.closest('[data-component="markdown-code"]')
+    if (wrapper instanceof HTMLElement) applyCodeMetadata(wrapper, block.language)
     code.className = `language-${block.language}`
     const previous = renderedCodeTokens.get(next)
     const reset = shouldResetCodeTokens(previous, {
@@ -552,6 +580,7 @@ function updateCodeBlock(
 
   const wrapper = document.createElement("div")
   wrapper.setAttribute("data-component", "markdown-code")
+  applyCodeMetadata(wrapper, block.language)
   const pre = document.createElement("pre")
   pre.className = "shiki OpenCode"
   const codeElement = document.createElement("code")
