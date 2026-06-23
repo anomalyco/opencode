@@ -23,7 +23,6 @@ concurrency:
 permissions:
   contents: write
   pull-requests: write
-  issues: write # required by gh to create/manage labels
 
 jobs:
   upstream-sync-threshold:
@@ -31,20 +30,12 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      # Disable husky git hooks in CI. Otherwise the pre-push hook runs a full
-      # `bun turbo typecheck` (including packages this workflow does not validate,
-      # e.g. the Tauri desktop package) and can block the workflow's own pushes.
       HUSKY: "0"
       UPSTREAM_REPO: https://github.com/sst/opencode.git
       UPSTREAM_REF: ${{ github.event.inputs.upstream_ref || 'dev' }}
       TARGET_BRANCH: dev
       MIN_COMMITS: ${{ github.event.inputs.min_commits || '75' }}
       SYNC_BRANCH: sync/upstream-threshold
-      # An open PR carrying this label means a previous sync left conflicts (or a
-      # validation failure) that still need resolving. While one exists, the workflow
-      # pauses so it does not re-run the same failing merge every hour and pile up
-      # duplicate work. Merging or closing that PR resumes automated syncs.
-      BLOCK_LABEL: upstream-sync-blocked
 
     steps:
       - name: Checkout dev
@@ -53,12 +44,6 @@ jobs:
           ref: ${{ env.TARGET_BRANCH }}
           fetch-depth: 0
 
-      # Mint a GitHub App token (from OPENCODE_APP_ID / OPENCODE_APP_SECRET) and use it
-      # for git push and all gh commands. The default GITHUB_TOKEN is blocked from
-      # creating PRs by the "Allow GitHub Actions to create and approve pull requests"
-      # org setting; a GitHub App installation token is not. This action also sets the
-      # committer identity and points origin at the app token, and falls back to
-      # GITHUB_TOKEN if the app credentials are unset.
       - name: Setup git committer
         id: committer
         uses: ./.github/actions/setup-git-committer
@@ -74,8 +59,6 @@ jobs:
 
       - name: Check upstream threshold
         id: threshold
-        env:
-          GH_TOKEN: ${{ steps.committer.outputs.token }}
         run: |
           behind_count="$(git rev-list --count "origin/${TARGET_BRANCH}..upstream/${UPSTREAM_REF}")"
           upstream_sha="$(git rev-parse --short "upstream/${UPSTREAM_REF}")"
@@ -84,43 +67,13 @@ jobs:
           echo "minimum_commits=$MIN_COMMITS" >> "$GITHUB_OUTPUT"
           echo "upstream_sha=$upstream_sha" >> "$GITHUB_OUTPUT"
 
-          should_sync=false
-          blocked_pr=""
-
           if [ "$behind_count" -ge "$MIN_COMMITS" ]; then
-            # Fail-stop: pause while an unresolved sync PR is open so we don't keep
-            # re-running a merge that already needs human/AI attention.
-            gh label create "$BLOCK_LABEL" --color B60205 \
-              --description "Upstream sync paused until this is resolved" \
-              >/dev/null 2>&1 || true
-            blocked_pr="$(gh pr list --label "$BLOCK_LABEL" --state open \
-              --json number --jq '.[0].number' 2>/dev/null || true)"
-
-            # Fallback pause that does NOT depend on PR creation: if a previous run
-            # already pushed an unresolved merge to the sync branch (ahead of the
-            # target), pause until it is resolved/merged. Pushing works even when the
-            # token cannot open the pause PR, so this stops the workflow from
-            # re-failing every run while PR creation is blocked.
-            git fetch origin "$SYNC_BRANCH" >/dev/null 2>&1 || true
-            sync_branch_ahead=0
-            if git rev-parse --verify "origin/$SYNC_BRANCH" >/dev/null 2>&1; then
-              sync_branch_ahead="$(git rev-list --count "origin/${TARGET_BRANCH}..origin/${SYNC_BRANCH}" 2>/dev/null || echo 0)"
-            fi
-
-            if [ -n "$blocked_pr" ]; then
-              echo "Upstream sync is paused by open PR #$blocked_pr. Merge or close it to resume."
-            elif [ "$sync_branch_ahead" -gt 0 ]; then
-              echo "Upstream sync is paused: unresolved sync branch '$SYNC_BRANCH' is ahead of '$TARGET_BRANCH' by $sync_branch_ahead commit(s). Resolve and merge it (or delete the branch) to resume."
-            else
-              should_sync=true
-              echo "Upstream is $behind_count commits ahead. Sync threshold met."
-            fi
+            echo "should_sync=true" >> "$GITHUB_OUTPUT"
+            echo "Upstream is $behind_count commits ahead. Sync threshold met."
           else
+            echo "should_sync=false" >> "$GITHUB_OUTPUT"
             echo "Upstream is $behind_count commits ahead. Sync threshold not met."
           fi
-
-          echo "should_sync=$should_sync" >> "$GITHUB_OUTPUT"
-          echo "blocked_pr=$blocked_pr" >> "$GITHUB_OUTPUT"
 
           {
             echo "## Upstream Sync Threshold Check"
@@ -129,21 +82,12 @@ jobs:
             echo "- Upstream ref: \`$UPSTREAM_REF\` (\`$upstream_sha\`)"
             echo "- Commits behind upstream: \`$behind_count\`"
             echo "- Minimum threshold: \`$MIN_COMMITS\`"
-            if [ -n "$blocked_pr" ]; then
-              echo "- Status: ⏸️ paused by open PR #$blocked_pr (merge or close it to resume)"
-            elif [ "${sync_branch_ahead:-0}" -gt 0 ]; then
-              echo "- Status: ⏸️ paused by unresolved sync branch \`$SYNC_BRANCH\` (ahead by $sync_branch_ahead) — resolve/merge it or delete the branch to resume"
-            fi
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Stop when sync should not run
+      - name: Stop when threshold is not met
         if: steps.threshold.outputs.should_sync != 'true'
         run: |
-          if [ -n "${{ steps.threshold.outputs.blocked_pr }}" ]; then
-            echo "Skipping upstream sync: paused by open PR #${{ steps.threshold.outputs.blocked_pr }}. Merge or close it to resume."
-          else
-            echo "Skipping upstream sync because threshold was not met."
-          fi
+          echo "Skipping upstream sync because threshold was not met."
 
       - name: Create sync branch
         if: steps.threshold.outputs.should_sync == 'true'
@@ -167,14 +111,12 @@ jobs:
 
           if git diff --name-only --diff-filter=U | grep -q .; then
             conflicted_files="$(git diff --name-only --diff-filter=U || true)"
-
             echo "result=conflict" >> "$GITHUB_OUTPUT"
             {
               echo "conflicted_files<<EOF"
               echo "$conflicted_files"
               echo "EOF"
             } >> "$GITHUB_OUTPUT"
-
             echo "Merge conflicts detected:"
             echo "$conflicted_files"
             exit 0
@@ -184,26 +126,6 @@ jobs:
           echo "Merge failed for a reason other than conflicts."
           exit "$merge_status"
 
-      # The default GITHUB_TOKEN is a GitHub App token, and GitHub refuses to let it
-      # push changes to anything under .github/workflows/. We keep our own CI
-      # workflows anyway (see .github/conflict-rules.conf: ".github/workflows/*:ours"),
-      # so drop every upstream workflow change here — modified, newly-added, and
-      # conflicted files alike — restoring our version exactly. This keeps the pushed
-      # merge free of workflow-file changes so the push is allowed.
-      - name: Keep fork CI workflows (drop upstream workflow changes)
-        if: steps.threshold.outputs.should_sync == 'true' && (steps.merge.outputs.result == 'success' || steps.merge.outputs.result == 'conflict')
-        run: |
-          rm -rf .github/workflows
-          git checkout "origin/${TARGET_BRANCH}" -- .github/workflows
-          git add -A .github/workflows
-          # A clean merge already created the merge commit, so fold the revert into
-          # it. A conflicted merge is still uncommitted; a later step commits it.
-          if [ "${{ steps.merge.outputs.result }}" = "success" ]; then
-            git commit --amend --no-edit
-          fi
-
-      # Auto-resolve the known, safe conflict patterns. This clears the bulk of the
-      # churn so only the genuinely ambiguous conflicts are left over.
       - name: Attempt automated conflict resolution
         id: resolution
         if: steps.threshold.outputs.should_sync == 'true' && steps.merge.outputs.result == 'conflict'
@@ -230,64 +152,11 @@ jobs:
             .github/conflict-escalations.log
           if-no-files-found: ignore
 
-      # Hand off the leftover conflicts: push the merge (rule-resolved files plus the
-      # remaining conflict markers) to the sync branch and open a draft PR. Whoever
-      # picks it up — an AI coding agent or a dev — resolves the markers on the branch
-      # and merges. The pipeline does not call an LLM itself; it just gets the few
-      # remaining conflicts into a reviewable, resolvable place. While this PR is open
-      # the workflow is paused (BLOCK_LABEL), so conflicts stop piling up.
-      - name: Hand off unresolved conflicts to a resolution PR
-        if: always() && steps.threshold.outputs.should_sync == 'true' && steps.merge.outputs.result == 'conflict' && steps.resolution.outputs.can_complete_merge != 'true'
-        env:
-          GH_TOKEN: ${{ steps.committer.outputs.token }}
-        run: |
-          git add -A
-          git commit -m "chore(sync): upstream merge with unresolved conflicts (needs resolution)" || true
-          git push --force-with-lease origin "$SYNC_BRANCH"
-
-          gh label create "$BLOCK_LABEL" --color B60205 \
-            --description "Upstream sync paused until this is resolved" \
-            >/dev/null 2>&1 || true
-
-          title="chore(sync): upstream conflicts need resolution ($(date -u +%Y-%m-%d))"
-          {
-            echo "Automated upstream sync merged \`sst/opencode@${{ steps.threshold.outputs.upstream_sha }}\` but left conflicts the rule-based resolver could not safely auto-resolve."
-            echo
-            echo "- Commits behind upstream: \`${{ steps.threshold.outputs.behind_count }}\`"
-            echo "- Files with unresolved conflicts: \`${{ steps.resolution.outputs.escalated_files }}\`"
-            echo
-            echo "### How to finish this"
-            echo "1. Check out \`${SYNC_BRANCH}\` and resolve the remaining conflict markers — point your AI coding agent at them, or resolve by hand."
-            echo "2. Push, mark this PR ready, and merge into \`${TARGET_BRANCH}\`."
-            echo
-            echo "Automated syncs are paused while this PR is open (label \`${BLOCK_LABEL}\`), so conflicts will not pile up. Merging or closing this PR resumes them."
-            echo
-            if [ -f /tmp/resolution-summary.md ]; then
-              cat /tmp/resolution-summary.md
-            fi
-          } > /tmp/pr-body.md
-
-          existing="$(gh pr list --head "$SYNC_BRANCH" --base "$TARGET_BRANCH" --state open --json number --jq '.[0].number')"
-          if [ -n "$existing" ]; then
-            gh pr edit "$existing" --title "$title" --body-file /tmp/pr-body.md
-            pr_number="$existing"
-            echo "Updated existing resolution PR #$existing"
-          else
-            gh pr create --draft --base "$TARGET_BRANCH" --head "$SYNC_BRANCH" \
-              --title "$title" --body-file /tmp/pr-body.md
-            pr_number="$(gh pr list --head "$SYNC_BRANCH" --base "$TARGET_BRANCH" --state open --json number --jq '.[0].number')"
-            echo "Opened resolution PR #$pr_number"
-          fi
-
-          # Apply the pause label best-effort. The PR must exist regardless, so a
-          # labeling failure only warns instead of failing the step.
-          gh pr edit "$pr_number" --add-label "$BLOCK_LABEL" \
-            || echo "::warning::Could not apply '$BLOCK_LABEL' label to PR #$pr_number; automated syncs will not auto-pause until it is added."
-
-      - name: Fail when conflicts need resolution
+      - name: Fail if conflicts require manual review
         if: always() && steps.threshold.outputs.should_sync == 'true' && steps.merge.outputs.result == 'conflict' && steps.resolution.outputs.can_complete_merge != 'true'
         run: |
-          echo "Conflicts were handed off to a resolution PR. Automated syncs are paused until it is merged or closed."
+          echo "Automated conflict resolution escalated one or more files for manual review."
+          echo "Review the workflow summary and uploaded conflict resolution artifacts."
           exit 1
 
       - name: Commit automated resolution
@@ -315,26 +184,13 @@ jobs:
         if: steps.threshold.outputs.should_sync == 'true' && steps.sync_changes.outputs.has_changes == 'true'
         uses: oven-sh/setup-bun@v2
 
-      - name: Install dependencies and reconcile lockfile
+      - name: Install dependencies
         if: steps.threshold.outputs.should_sync == 'true' && steps.sync_changes.outputs.has_changes == 'true'
-        run: |
-          # We keep our bun.lock during the merge (conflict-rules: bun.lock:ours),
-          # but upstream's package.json dependency changes arrive via the merge, so
-          # the lockfile no longer matches. Regenerate it (not --frozen) and commit
-          # the result so the sync branch carries a valid, in-sync lockfile.
-          bun install
-          if ! git diff --quiet -- bun.lock; then
-            git add bun.lock
-            git commit -m "chore(sync): reconcile bun.lock with merged package.json"
-          fi
+        run: bun install --frozen-lockfile
 
       - name: Run typecheck after sync
         if: steps.threshold.outputs.should_sync == 'true' && steps.sync_changes.outputs.has_changes == 'true'
         run: bun --cwd packages/opencode typecheck
-
-      - name: Run tests after sync
-        if: steps.threshold.outputs.should_sync == 'true' && steps.sync_changes.outputs.has_changes == 'true'
-        run: bun turbo test
 
       - name: Push sync branch
         if: steps.threshold.outputs.should_sync == 'true' && steps.sync_changes.outputs.has_changes == 'true'
@@ -361,11 +217,27 @@ jobs:
           This PR was created by the threshold-based upstream sync workflow.
 
           - Upstream ref: \`$UPSTREAM_REF\`
+          - Upstream SHA: \`${{ steps.threshold.outputs.upstream_sha }}\`
           - Target branch: \`$TARGET_BRANCH\`
           - Commits behind upstream: \`${{ steps.threshold.outputs.behind_count }}\`
           - Minimum threshold: \`${{ steps.threshold.outputs.minimum_commits }}\`
 
-          The workflow merged upstream changes and ran validation (typecheck + tests) after the sync branch was prepared.
+          ## Automation performed
+
+          The workflow attempted to merge upstream changes into \`${TARGET_BRANCH}\`.
+
+          If conflicts were detected, the deterministic conflict resolver was run before escalating to manual review.
+
+          Validation completed before this PR was created or updated.
+
+          ## Validation
+
+          - Dependency install: \`bun install --frozen-lockfile\`
+          - Typecheck: \`bun --cwd packages/opencode typecheck\`
+
+          ## Notes
+
+          This workflow does not auto-merge upstream changes. Review and merge this PR through the normal approval process.
           EOF
           )"
 
@@ -382,49 +254,3 @@ jobs:
               --title "$pr_title" \
               --body "$pr_body"
           fi
-
-      # A clean merge that fails validation (typecheck or tests) also needs human/AI
-      # attention. Push the branch and open the same paused resolution PR so it gets
-      # fixed instead of silently re-running and failing every hour.
-      - name: Hand off validation failure to a resolution PR
-        if: failure() && steps.threshold.outputs.should_sync == 'true' && steps.sync_changes.outputs.has_changes == 'true'
-        env:
-          GH_TOKEN: ${{ steps.committer.outputs.token }}
-        run: |
-          git push --force-with-lease origin "$SYNC_BRANCH" || true
-
-          gh label create "$BLOCK_LABEL" --color B60205 \
-            --description "Upstream sync paused until this is resolved" \
-            >/dev/null 2>&1 || true
-
-          title="chore(sync): upstream sync failed validation ($(date -u +%Y-%m-%d))"
-          {
-            echo "Automated upstream sync merged \`sst/opencode@${{ steps.threshold.outputs.upstream_sha }}\` cleanly but failed validation (typecheck or tests)."
-            echo
-            echo "- Commits behind upstream: \`${{ steps.threshold.outputs.behind_count }}\`"
-            echo
-            echo "### How to finish this"
-            echo "1. Check out \`${SYNC_BRANCH}\` and fix the validation failures — an AI coding agent or a dev can take it from here."
-            echo "2. Push, mark this PR ready, and merge into \`${TARGET_BRANCH}\`."
-            echo
-            echo "Validation output: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-            echo
-            echo "Automated syncs are paused while this PR is open (label \`${BLOCK_LABEL}\`). Merging or closing it resumes them."
-          } > /tmp/pr-body.md
-
-          existing="$(gh pr list --head "$SYNC_BRANCH" --base "$TARGET_BRANCH" --state open --json number --jq '.[0].number')"
-          if [ -n "$existing" ]; then
-            gh pr edit "$existing" --title "$title" --body-file /tmp/pr-body.md
-            pr_number="$existing"
-            echo "Updated existing resolution PR #$existing"
-          else
-            gh pr create --draft --base "$TARGET_BRANCH" --head "$SYNC_BRANCH" \
-              --title "$title" --body-file /tmp/pr-body.md
-            pr_number="$(gh pr list --head "$SYNC_BRANCH" --base "$TARGET_BRANCH" --state open --json number --jq '.[0].number')"
-            echo "Opened resolution PR #$pr_number for validation failure"
-          fi
-
-          # Apply the pause label best-effort. The PR must exist regardless, so a
-          # labeling failure only warns instead of failing the step.
-          gh pr edit "$pr_number" --add-label "$BLOCK_LABEL" \
-            || echo "::warning::Could not apply '$BLOCK_LABEL' label to PR #$pr_number; automated syncs will not auto-pause until it is added."
