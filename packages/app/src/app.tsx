@@ -185,7 +185,9 @@ function TargetDirectoryLayout(props: ParentProps) {
     if (!search.draftId) return undefined
     return tabs.store.find((tab): tab is DraftTab => tab.type === "draft" && tab.draftID === search.draftId)?.directory
   })
-  const directory = createMemo<string | undefined>((prev) => prev ?? resolvedDirectory())
+  const directory = createMemo<string | undefined>((prev) =>
+    search.draftId ? resolvedDirectory() : (prev ?? resolvedDirectory()),
+  )
   const home = () => !params.serverKey && !search.draftId
   const targetDirectory = () => directory()!
 
