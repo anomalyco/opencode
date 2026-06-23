@@ -7,6 +7,7 @@ import { LSP } from "@/lsp/lsp"
 import DESCRIPTION from "./read.txt"
 import { InstanceState } from "@/effect/instance-state"
 import { assertExternalDirectoryEffect } from "./external-directory"
+import { containsPath, type InstanceContext } from "../project/instance-context"
 import { Instruction } from "../session/instruction"
 import { isPdfAttachment, sniffAttachmentMime } from "@/util/media"
 
@@ -73,9 +74,20 @@ export const ReadTool = Tool.define<
     const lsp = yield* LSP.Service
     const scope = yield* Scope.Scope
 
-    const miss = Effect.fn("ReadTool.miss")(function* (filepath: string) {
+    const miss = Effect.fn("ReadTool.miss")(function* (filepath: string, instance: InstanceContext) {
       const dir = path.dirname(filepath)
       const base = path.basename(filepath)
+
+      // SECURITY: "did you mean?" suggestions list sibling entries of the parent
+      // directory. Only do this when the parent directory is inside the project
+      // boundary (worktree/working dir). For paths outside the boundary, return a
+      // plain not-found error so we never leak names of files/dirs that exist in
+      // an external directory — even if a single-file external_directory read was
+      // permitted, enumerating that directory is a separate, broader disclosure.
+      if (!containsPath(dir, instance)) {
+        return yield* Effect.fail(new Error(`File not found: ${filepath}`))
+      }
+
       const items = yield* fs.readDirectory(dir).pipe(
         Effect.map((items) =>
           items
@@ -259,7 +271,7 @@ export const ReadTool = Tool.define<
         metadata: {},
       })
 
-      if (!stat) return yield* miss(filepath)
+      if (!stat) return yield* miss(filepath, instance)
 
       if (stat.type === "Directory") {
         const items = yield* list(filepath)

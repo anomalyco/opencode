@@ -256,6 +256,61 @@ describe("tool.read external_directory permission", () => {
   )
 })
 
+describe("tool.read not-found suggestions", () => {
+  // Wrap FSUtil so we can observe which directories the "did you mean?" path enumerates.
+  const spyReadDirectory = Effect.fn("ReadToolTest.spyReadDirectory")(function* (calls: string[]) {
+    const fs = yield* FSUtil.Service
+    return FSUtil.Service.of({
+      ...fs,
+      readDirectory: (...args: Parameters<typeof fs.readDirectory>) => {
+        calls.push(args[0])
+        return fs.readDirectory(...args)
+      },
+    })
+  })
+
+  it.live("suggests sibling files for a not-found path inside the worktree", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped({ git: true })
+      yield* put(path.join(dir, "src", "config.ts"), "export const x = 1")
+
+      const calls: string[] = []
+      const service = yield* spyReadDirectory(calls)
+      const err = yield* fail(dir, { filePath: path.join(dir, "src", "confg.ts") }).pipe(
+        Effect.provideService(FSUtil.Service, service),
+      )
+
+      expect(err.message).toContain("File not found")
+      expect(err.message).toContain("Did you mean one of these?")
+      expect(err.message).toContain(path.join(dir, "src", "config.ts"))
+      // The parent dir is inside the worktree, so enumerating it is allowed.
+      expect(calls).toContain(full(path.join(dir, "src")))
+    }),
+  )
+
+  it.live("does not leak sibling listings for a not-found path outside the worktree", () =>
+    Effect.gen(function* () {
+      const outer = yield* tmpdirScoped()
+      const dir = yield* tmpdirScoped({ git: true })
+      // A real, existing sibling that MUST NOT appear in the error message.
+      yield* put(path.join(outer, "secret.txt"), "secret data")
+
+      const calls: string[] = []
+      const service = yield* spyReadDirectory(calls)
+      const err = yield* fail(dir, { filePath: path.join(outer, "secrets.txt") }).pipe(
+        Effect.provideService(FSUtil.Service, service),
+      )
+
+      // Plain not-found error, no "did you mean?" disclosure.
+      expect(err.message).toContain("File not found")
+      expect(err.message).not.toContain("Did you mean one of these?")
+      expect(err.message).not.toContain("secret.txt")
+      // The external directory was never enumerated.
+      expect(calls).not.toContain(full(outer))
+    }),
+  )
+})
+
 describe("tool.read env file permissions", () => {
   const cases: [string, boolean][] = [
     [".env", true],
