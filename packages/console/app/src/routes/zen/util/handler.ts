@@ -697,6 +697,7 @@ export async function handler(
     logger.metric({
       api_key: data.apiKey,
       workspace: data.workspaceID,
+      user_id: data.user.id,
       ...(() => {
         if (data.billing.subscription)
           return {
