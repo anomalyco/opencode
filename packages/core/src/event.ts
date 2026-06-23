@@ -46,6 +46,19 @@ export type Payload<D extends Definition = Definition> = {
 export type Subscriber<D extends Definition = Definition> = (event: Payload<D>) => Effect.Effect<void>
 export type Unsubscribe = Effect.Effect<void>
 
+export const latestSequence = Effect.fn("EventV2.latestSequence")(function* (
+  db: Database.Interface["db"],
+  aggregateID: string,
+) {
+  const row = yield* db
+    .select({ seq: EventSequenceTable.seq })
+    .from(EventSequenceTable)
+    .where(eq(EventSequenceTable.aggregate_id, aggregateID))
+    .get()
+    .pipe(Effect.orDie)
+  return row?.seq ?? -1
+})
+
 export type SerializedEvent = {
   readonly id: ID
   readonly type: string

@@ -52,7 +52,7 @@ export const layer = Layer.effect(
     })
 
     return Service.of({
-      rebuild: state.rebuild,
+      reload: state.reload,
       transform: state.transform,
       get: Effect.fn("CommandV2.get")(function* (name) {
         return state.get().commands.get(name)
