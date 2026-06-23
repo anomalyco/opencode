@@ -78,6 +78,7 @@ import {
 
 import type { EventSource } from "./context/sdk"
 import { DialogVariant } from "./component/dialog-variant"
+import { DialogWorkflow } from "./component/dialog-workflow"
 import { createTuiAttention } from "./attention"
 import * as TuiAudio from "./audio"
 import { win32DisableProcessedInput, win32FlushInputBuffer } from "./terminal-win32"
@@ -87,6 +88,7 @@ import { cliErrorMessage, errorFormat } from "./util/error"
 const appGlobalBindingCommands = [
   "session.list",
   "session.new",
+  "workflow.list",
   "session.quick_switch.1",
   "session.quick_switch.2",
   "session.quick_switch.3",
@@ -579,6 +581,15 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
             type: "home",
           })
           dialog.clear()
+        },
+      },
+      {
+        name: "workflow.list",
+        title: "Open workflows",
+        category: "Workflow",
+        slashName: "workflows",
+        run: () => {
+          dialog.replace(() => <DialogWorkflow />)
         },
       },
       {

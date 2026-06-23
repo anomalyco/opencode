@@ -2,6 +2,7 @@
 import { testRender } from "@opentui/solid"
 import { onMount } from "solid-js"
 import { ArgsProvider } from "../../../../src/context/args"
+import { ExitProvider } from "../../../../src/context/exit"
 import { KVProvider, useKV } from "../../../../src/context/kv"
 import { ProjectProvider, useProject } from "../../../../src/context/project"
 import { SDKProvider } from "../../../../src/context/sdk"
@@ -30,6 +31,7 @@ export async function mount(override?: FetchHandler, state?: string) {
   const ready = new Promise<void>((resolve) => {
     done = resolve
   })
+  const exits: unknown[] = []
 
   function Probe() {
     const ctx: Ctx = { kv: useKV(), project: useProject(), sync: useSync() }
@@ -44,21 +46,23 @@ export async function mount(override?: FetchHandler, state?: string) {
 
   const app = await testRender(() => (
     <TestTuiContexts paths={state ? { state } : undefined}>
-      <ArgsProvider>
-        <KVProvider>
-          <SDKProvider url="http://test" directory={directory} fetch={calls.fetch} events={events.source}>
-            <ProjectProvider>
-              <SyncProvider>
-                <Probe />
-              </SyncProvider>
-            </ProjectProvider>
-          </SDKProvider>
-        </KVProvider>
-      </ArgsProvider>
+      <ExitProvider exit={(reason) => exits.push(reason)}>
+        <ArgsProvider>
+          <KVProvider>
+            <SDKProvider url="http://test" directory={directory} fetch={calls.fetch} events={events.source}>
+              <ProjectProvider>
+                <SyncProvider>
+                  <Probe />
+                </SyncProvider>
+              </ProjectProvider>
+            </SDKProvider>
+          </KVProvider>
+        </ArgsProvider>
+      </ExitProvider>
     </TestTuiContexts>
   ))
 
   await ready
   await wait(() => sync.status === "complete")
-  return { app, emit: events.emit, kv, project, sync, session: calls.session }
+  return { app, emit: events.emit, kv, project, sync, session: calls.session, exits }
 }

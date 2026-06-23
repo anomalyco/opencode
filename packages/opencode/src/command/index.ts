@@ -7,6 +7,7 @@ import { Effect, Layer, Context, Schema } from "effect"
 import { Config } from "@/config/config"
 import { MCP } from "../mcp"
 import { Skill } from "../skill"
+import { Workflow } from "@/workflow/workflow"
 import { EventV2 } from "@opencode-ai/core/event"
 import PROMPT_INITIALIZE from "./template/initialize.txt"
 import PROMPT_REVIEW from "./template/review.txt"
@@ -32,7 +33,7 @@ export const Info = Schema.Struct({
   description: Schema.optional(Schema.String),
   agent: Schema.optional(Schema.String),
   model: Schema.optional(Schema.String),
-  source: Schema.optional(Schema.Literals(["command", "mcp", "skill"])),
+  source: Schema.optional(Schema.Literals(["command", "mcp", "skill", "workflow"])),
   // Some command templates are lazy promises from MCP prompt resolution.
   template: Schema.Unknown,
   subtask: Schema.optional(Schema.Boolean),
@@ -69,18 +70,41 @@ export const layer = Layer.effect(
     const config = yield* Config.Service
     const mcp = yield* MCP.Service
     const skill = yield* Skill.Service
+    const workflow = yield* Workflow.Service
 
     const init = Effect.fn("Command.state")(function* (ctx: InstanceContext) {
       const cfg = yield* config.get()
       const bridge = yield* EffectBridge.make()
       const commands: Record<string, Info> = {}
 
+      // T5 (/init): surface discovered workflows in the generated AGENTS.md prompt
+      // so the init pass documents them. Names + descriptions (falling back to
+      // whenToUse). Only VALID workflows are listed; the section is omitted
+      // entirely when none remain, so a repo with no workflows gets the unchanged
+      // prompt. list() is the static (never-executed) reader — safe at build time.
+      const allWorkflows = (yield* workflow.list()).filter((wf) => wf.valid !== false)
+      // The init section documents REPO/PROJECT-defined workflows ("This repository
+      // defines …"); the builtins that ship inside opencode (source_kind "builtin",
+      // e.g. deep-research) are not repo-specific, so they are excluded from the
+      // prompt section. They still register as Command.Info entries via the loop below.
+      const initWorkflows = allWorkflows.filter((wf) => wf.source_kind !== "builtin")
+      const workflowsSection =
+        initWorkflows.length === 0
+          ? ""
+          : "\n\n## Available workflows\n\nThis repository defines OpenCode workflows. Mention them in `AGENTS.md` so future sessions know they exist:\n\n" +
+            initWorkflows
+              .map((wf) => {
+                const desc = wf.meta.description ?? wf.meta.whenToUse
+                return desc ? `- \`${wf.name}\` — ${desc}` : `- \`${wf.name}\``
+              })
+              .join("\n")
+
       commands[Default.INIT] = {
         name: Default.INIT,
         description: "guided AGENTS.md setup",
         source: "command",
         get template() {
-          return PROMPT_INITIALIZE.replace("${path}", ctx.worktree)
+          return PROMPT_INITIALIZE.replace("${path}", ctx.worktree) + workflowsSection
         },
         hints: hints(PROMPT_INITIALIZE),
       }
@@ -152,6 +176,33 @@ export const layer = Layer.effect(
         }
       }
 
+      // Spec §5.2 (3) / Delta 4+5: discovered workflows become real Command.Info
+      // entries (source "workflow") so they appear in /help and Command.list()
+      // (the TUI's sync.data.command), in parity with the autocomplete /<name>
+      // path. Runs LAST so any real command/mcp/skill of the same name wins
+      // (collision skip via `if (commands[wf.name]) continue`); invalid (broken)
+      // workflow files cannot be started, so they are skipped too.
+      // DELTA: source "workflow" is DISCOVERY-ONLY — the TUI dispatch starts these
+      // via the /workflow path (see AUTOCOMPLETE), NOT via session.command, so the
+      // empty `template` is never executed as a prompt.
+      // Reuses `allWorkflows` (already filtered to valid, INCLUDING builtins so
+      // deep-research still registers as a command) instead of a second
+      // workflow.list() call. The `valid === false` guard is now redundant but kept
+      // for clarity; the collision skip below still applies.
+      for (const wf of allWorkflows) {
+        if (wf.valid === false) continue
+        if (commands[wf.name]) continue
+        commands[wf.name] = {
+          name: wf.name,
+          description: wf.meta.description ?? wf.meta.whenToUse,
+          source: "workflow",
+          get template() {
+            return ""
+          },
+          hints: [],
+        }
+      }
+
       return {
         commands,
       }
@@ -177,8 +228,9 @@ export const defaultLayer = layer.pipe(
   Layer.provide(Config.defaultLayer),
   Layer.provide(MCP.defaultLayer),
   Layer.provide(Skill.defaultLayer),
+  Layer.provide(Workflow.defaultLayer),
 )
 
-export const node = LayerNode.make(layer, [Config.node, MCP.node, Skill.node])
+export const node = LayerNode.make(layer, [Config.node, MCP.node, Skill.node, Workflow.node])
 
 export * as Command from "."

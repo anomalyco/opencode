@@ -23,6 +23,18 @@ import { useFrecency } from "../../prompt/frecency"
 import { useBindings, useCommandSlashes, useOpencodeModeStack } from "../../keymap"
 import { displayCharAt, mentionTriggerIndex } from "../../prompt/display"
 import type { FileSystemEntry } from "@opencode-ai/sdk/v2"
+import {
+  isWorkflowCommandInput,
+  listWorkflowInfos,
+  reservedSlashNames,
+  workflowArgContext,
+  workflowAutocompleteTriggerIndex,
+  workflowCommandOption,
+  workflowCommandOptions,
+  workflowNameQuery,
+  workflowOptions,
+  WORKFLOW_COMMAND_PREFIX,
+} from "./workflow-autocomplete"
 
 function removeLineRange(input: string) {
   const hashIndex = input.lastIndexOf("#")
@@ -159,6 +171,18 @@ export function Autocomplete(props: {
   createEffect(() => {
     const next = filter()
     setSearch(next ? next : "")
+  })
+
+  const workflowNameSearch = createMemo(() => {
+    if (!store.visible) return
+    props.value
+    return workflowNameQuery(props.input().plainText, props.input().cursorOffset)
+  })
+
+  const workflowArgSearch = createMemo(() => {
+    if (!store.visible) return
+    props.value
+    return workflowArgContext(props.input().plainText, props.input().cursorOffset)
   })
 
   // When the filter changes due to how TUI works, the mousemove might still be triggered
@@ -448,17 +472,90 @@ export function Autocomplete(props: {
       ),
   )
 
+  const [workflowInfos] = createResource(
+    () => workflowNameSearch() !== undefined || workflowArgSearch() !== undefined,
+    (enabled) => listWorkflowInfos(sdk.client.workflow, enabled),
+    { initialValue: [] },
+  )
+
+  // Separate resource feeding the direct `/<name>` slash commands: enabled the
+  // moment the `/` slash menu is visible (not just inside a `/workflow` context),
+  // so discovered workflows appear alongside built-in slash commands. Cheap and
+  // cached; listWorkflowInfos already drops invalid entries. Declared BEFORE the
+  // `commands` memo that reads it — a later declaration is a temporal-dead-zone
+  // forward reference that crashes ("Cannot access 'slashCommandWorkflowInfos'
+  // before initialization") whenever `commands` computes eagerly.
+  const [slashCommandWorkflowInfos] = createResource(
+    () => store.visible === "/",
+    (enabled) => listWorkflowInfos(sdk.client.workflow, enabled),
+    { initialValue: [] },
+  )
+
   const commands = createMemo((): AutocompleteOption[] => {
-    const results: AutocompleteOption[] = [...slashes()]
+    // Nothing to show while the menu is hidden; also avoids reading slashes() and
+    // the workflow resources during the home route's Suspense fallback render
+    // before they have resolved.
+    if (!store.visible) return []
+    const results: AutocompleteOption[] = [...slashes(), workflowCommandOption(props.input())]
 
     for (const serverCommand of sync.data.command) {
       if (serverCommand.source === "skill") continue
+      // Spec §5.2 (3): a server command with source "workflow" is a discovered
+      // workflow surfaced in Command.list() — it must route via /workflow <name>
+      // (NOT the generic /<name> insertion, which would try to run an empty
+      // template as a prompt). DELTA 5b: the SDK Command.source union does not
+      // carry "workflow" (SDK not regenerated), so compare defensively as a
+      // string; remove the cast after the Phase-3 regen.
+      if ((serverCommand.source as string) === "workflow") {
+        results.push({
+          display: "/" + serverCommand.name,
+          description: serverCommand.description,
+          onSelect: () => {
+            const newText = `${WORKFLOW_COMMAND_PREFIX}${serverCommand.name} `
+            const cursor = props.input().logicalCursor
+            props.input().deleteRange(0, 0, cursor.row, cursor.col)
+            props.input().insertText(newText)
+            props.input().cursorOffset = Bun.stringWidth(newText)
+          },
+        })
+        continue
+      }
       const label = serverCommand.source === "mcp" ? ":mcp" : ""
       results.push({
         display: "/" + serverCommand.name + label,
         description: serverCommand.description,
         onSelect: () => {
           const newText = "/" + serverCommand.name + " "
+          const cursor = props.input().logicalCursor
+          props.input().deleteRange(0, 0, cursor.row, cursor.col)
+          props.input().insertText(newText)
+          props.input().cursorOffset = Bun.stringWidth(newText)
+        },
+      })
+    }
+
+    // Discovered workflows as direct `/<name>` slash commands. Item 30: the
+    // collision set is the SAME reservedSlashNames helper that guards the typed
+    // `/<name>` submit dispatch (prompt/index.tsx), so popover and typed routing
+    // can never disagree on what counts as a real command (built-in slashes incl.
+    // aliases, server/MCP/skill commands; skill commands are hidden from this
+    // popover but DO win the typed dispatch, so a colliding workflow must not
+    // surface here either). The popover additionally reserves the source-
+    // "workflow" command entries pushed above — they are the workflows themselves
+    // (discovery mirrors), deliberately NOT reserved for the typed route, but
+    // listing them twice here would duplicate rows. Selecting one routes EXACTLY
+    // like `/workflow <name>` (the existing parseWorkflowCommand dispatch) — the
+    // helper is pure, so the onSelect that inserts the routed text is attached here.
+    const existingCommandNames = reservedSlashNames(slashes(), sync.data.command)
+    for (const serverCommand of sync.data.command) {
+      if ((serverCommand.source as string) === "workflow") existingCommandNames.add(serverCommand.name)
+    }
+    for (const option of workflowCommandOptions(slashCommandWorkflowInfos(), existingCommandNames)) {
+      const name = option.value!
+      results.push({
+        ...option,
+        onSelect: () => {
+          const newText = `${WORKFLOW_COMMAND_PREFIX}${name} `
           const cursor = props.input().logicalCursor
           props.input().deleteRange(0, 0, cursor.row, cursor.col)
           props.input().insertText(newText)
@@ -478,6 +575,12 @@ export function Autocomplete(props: {
   })
 
   const options = createMemo((prev: AutocompleteOption[] | undefined) => {
+    // When the menu is hidden (boot, or while the home route renders its Suspense
+    // fallback) there is nothing to show. Returning early also avoids pulling the
+    // sibling memos (commands()/slashes()/files()) before they have computed —
+    // during the fallback render those are still undefined and would crash on
+    // spread/length.
+    if (!store.visible) return []
     const filesValue = files()
     const referenceMatchValue = referenceMatch()
     const agentsValue = agents()
@@ -485,6 +588,17 @@ export function Autocomplete(props: {
     const commandsValue = commands()
     const searchValue = search()
 
+    // /workflow <name> <args> — options are already filtered by the workflow
+    // name/arg search context, so return them directly (like fff-ranked files,
+    // no re-ranking). workflowOptions returns undefined outside a workflow input.
+    const workflow = workflowOptions(props.input(), workflowInfos(), {
+      arg: workflowArgSearch(),
+      name: workflowNameSearch(),
+    })
+    if (workflow) return workflow
+
+    // @<alias>/... — narrow to the matched reference, files come from fff
+    // already ranked so there is no re-ranking here.
     if (store.visible === "@" && referenceMatchValue) {
       return referenceAliasesValue.filter((item) => item.display === `@${referenceMatchValue.name}`)
     }
@@ -526,7 +640,12 @@ export function Autocomplete(props: {
       .map((arr) => arr.obj)
 
     return [...fuzziedNonFiles, ...fileOptions].slice(0, 10)
-  })
+    // Initial value `[]` so a read before the memo's first computation (e.g. while
+    // the home route renders its Suspense fallback, where consumers like `height`
+    // read `options().length` eagerly) returns an empty array instead of the
+    // memo's pre-compute `undefined` — which previously crashed boot with
+    // "undefined is not an object (evaluating 'options().length')".
+  }, [] as AutocompleteOption[])
 
   createEffect(() => {
     filter()
@@ -653,7 +772,7 @@ export function Autocomplete(props: {
 
   function hide() {
     const text = props.input().plainText
-    if (store.visible === "/" && !text.endsWith(" ") && text.startsWith("/")) {
+    if (store.visible === "/" && !text.endsWith(" ") && text.startsWith("/") && !isWorkflowCommandInput(text)) {
       const cursor = props.input().logicalCursor
       props.input().deleteRange(0, 0, cursor.row, cursor.col)
       // Sync the prompt store immediately since onContentChange is async
@@ -679,6 +798,11 @@ export function Autocomplete(props: {
       },
       onInput(value) {
         if (store.visible) {
+          const nestedSlashIndex = workflowAutocompleteTriggerIndex(value, props.input().cursorOffset)
+          if (store.visible === "/" && nestedSlashIndex !== undefined) {
+            setStore("index", nestedSlashIndex)
+            return
+          }
           if (
             // Typed text before the trigger
             props.input().cursorOffset <= store.index ||
@@ -700,6 +824,13 @@ export function Autocomplete(props: {
         if (value.startsWith("/") && !value.slice(0, offset).match(/\s/)) {
           show("/")
           setStore("index", 0)
+          return
+        }
+
+        const nestedSlashIndex = workflowAutocompleteTriggerIndex(value, offset)
+        if (nestedSlashIndex !== undefined) {
+          show("/")
+          setStore("index", nestedSlashIndex)
           return
         }
 

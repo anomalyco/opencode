@@ -6,14 +6,16 @@ import { Global } from "@opencode-ai/core/global"
 import { createTuiResolvedConfig } from "./fixture/tui-runtime"
 import { createEventSource, createFetch, directory, json } from "./fixture/tui-sdk"
 
-test("SIGHUP clears title and disposes scoped resources once", async () => {
+test("SIGHUP destroys the renderer and disposes scoped resources once", async () => {
   const setup = await createTestRenderer({ width: 80, height: 24, useThread: false })
   const core = await import("@opentui/core")
   mock.module("@opentui/core", () => ({ ...core, createCliRenderer: async () => setup.renderer }))
   const titles: string[] = []
+  const titlesAfterDestroy: string[] = []
   const setTitle = setup.renderer.setTerminalTitle.bind(setup.renderer)
   setup.renderer.setTerminalTitle = (title) => {
     titles.push(title)
+    if (setup.renderer.isDestroyed) titlesAfterDestroy.push(title)
     setTitle(title)
   }
   const listeners = new Set(process.listeners("SIGHUP"))
@@ -50,7 +52,9 @@ test("SIGHUP clears title and disposes scoped resources once", async () => {
     await task
 
     expect(setup.renderer.isDestroyed).toBe(true)
-    expect(titles.at(-1)).toBe("")
+    // The renderer's own SIGHUP exit handler destroys it before the app's
+    // handler runs; destroyRenderer must not write to a destroyed renderer.
+    expect(titlesAfterDestroy).toEqual([])
     expect(disposes).toBe(1)
     expect(process.listeners("SIGHUP").every((listener) => listeners.has(listener))).toBe(true)
   } finally {

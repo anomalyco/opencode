@@ -83,6 +83,24 @@ function permission(id: string, sessionID = "session"): PermissionRequest {
   }
 }
 
+function workflowFinished(id: string, status: "completed" | "failed", error?: string): Event {
+  // Wire shape from WORKFLOWSVC EventV2.define; not in the SDK Event union, so
+  // cast through unknown exactly like the production handler does.
+  return {
+    id: `evt_wf_${id}`,
+    type: "workflow.run.finished",
+    properties: {
+      id,
+      workflow: "demo",
+      status,
+      directory: "/ws",
+      agents: { total: 2, running: 0, failed: status === "failed" ? 1 : 0 },
+      pending_question: false,
+      ...(error && { error }),
+    },
+  } as unknown as Event
+}
+
 const questionNotification: TuiAttentionNotifyInput = {
   title: "Demo session",
   message: "Question needs input",
@@ -219,6 +237,33 @@ describe("internal notifications TUI plugin", () => {
       {
         title: "Demo session",
         message: "Session error",
+        notification: { when: "blurred" },
+        sound: { name: "error", when: "always" },
+      },
+    ])
+  })
+
+  test("notifies done on a finished workflow run and dedupes repeat finished frames", async () => {
+    const harness = await setup()
+    harness.emit(workflowFinished("job_done", "completed"))
+    harness.emit(workflowFinished("job_done", "completed"))
+    expect(harness.notifications).toEqual([
+      {
+        title: undefined,
+        message: "Workflow demo done",
+        notification: { when: "blurred" },
+        sound: { name: "done", when: "always" },
+      },
+    ])
+  })
+
+  test("notifies error sound on a failed workflow run", async () => {
+    const harness = await setup()
+    harness.emit(workflowFinished("job_fail", "failed", "boom"))
+    expect(harness.notifications).toEqual([
+      {
+        title: undefined,
+        message: "Workflow demo failed",
         notification: { when: "blurred" },
         sound: { name: "error", when: "always" },
       },

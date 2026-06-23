@@ -37,7 +37,7 @@ import { usePromptStash } from "../../prompt/stash"
 import { DialogStash } from "../dialog-stash"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
 import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
-import type { AssistantMessage, FilePart, UserMessage } from "@opencode-ai/sdk/v2"
+import type { AssistantMessage, FilePart, UserMessage, WorkflowInfo } from "@opencode-ai/sdk/v2"
 import { Locale } from "../../util/locale"
 import { errorMessage } from "../../util/error"
 import { formatDuration } from "../../util/format"
@@ -49,12 +49,39 @@ import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
 import { createFadeIn } from "../../util/signal"
 import { DialogSkill } from "../dialog-skill"
+import { DialogWorkflow } from "../dialog-workflow"
+import { DialogWorkflowApproval } from "../dialog-workflow-approval"
+import { approvalDecision, isSessionApproved, rememberSessionApproval } from "../dialog-workflow-approval-helpers"
+import { parseDirectWorkflowCommand, parseWorkflowCommand } from "../dialog-workflow-helpers"
+import { extractReservedBudget, listWorkflowInfos, parseWorkflowArgs, reservedSlashNames } from "./workflow-autocomplete"
+import {
+  confirmWorkspaceFileChanges,
+  openWorkspaceSelect,
+  warpWorkspaceSession,
+  type WorkspaceSelection,
+} from "../dialog-workspace-create"
 import { DialogWorkspaceUnavailable } from "../dialog-workspace-unavailable"
 import { useArgs } from "../../context/args"
-import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut, useLeaderActive, useOpencodeKeymap } from "../../keymap"
+import {
+  OPENCODE_BASE_MODE,
+  useBindings,
+  useCommandShortcut,
+  useCommandSlashes,
+  useLeaderActive,
+  useOpencodeKeymap,
+} from "../../keymap"
 import { useTuiConfig } from "../../config"
 import { usePromptWorkspace } from "./workspace"
 import { usePromptMove } from "./move"
+import {
+  budgetDirectiveText,
+  detectBudgetDirective,
+  detectUltracodeKeyword,
+  stripBudgetDirective,
+  stripUltracodeKeyword,
+  ultracodeReminder,
+  ULTRACODE_PROMPT_DIRECTIVE,
+} from "./ultracode"
 import { readLocalAttachment } from "./local-attachment"
 
 export type PromptProps = {
@@ -160,6 +187,9 @@ export function Prompt(props: PromptProps) {
   const history = usePromptHistory()
   const stash = usePromptStash()
   const keymap = useOpencodeKeymap()
+  // Item 30: the built-in palette slash entries feed the reserved-name set of the
+  // typed direct `/<name>` workflow dispatch (Commands > Workflows precedence).
+  const slashes = useCommandSlashes()
   const agentShortcut = useCommandShortcut("agent.cycle")
   const paletteShortcut = useCommandShortcut("command.palette.show")
   const renderer = useRenderer()
@@ -227,8 +257,36 @@ export function Prompt(props: PromptProps) {
   const fileStyleId = syntax().getStyleId("extmark.file")!
   const agentStyleId = syntax().getStyleId("extmark.agent")!
   const pasteStyleId = syntax().getStyleId("extmark.paste")!
+  const ultracodeStyleId = syntax().getStyleId("extmark.ultracode")!
   let promptPartTypeId = 0
+  // Separate extmark type for the live ultracode keyword highlight so it never
+  // collides with the part-backed extmarks (file/agent/paste) tracked above.
+  let ultracodeKeywordTypeId = 0
+  // Same isolation for the live `+$<n>` budget-directive highlight.
+  let budgetDirectiveTypeId = 0
   const event = useEvent()
+
+  // Session toggle (/ultracode). Item 13: the flag is persisted SERVER-side as
+  // session.metadata.ultracode (PATCH /session/:id); the server renders the
+  // standing opt-in into the system prompt and swaps the workflow tool's gate
+  // sentence — there is no per-message session directive anymore. This signal
+  // mirrors the server flag for the badge/toggle UI and is initialized from the
+  // synced session metadata on every session switch (server = source of truth).
+  const [ultracodeSession, setUltracodeSession] = createSignal(false)
+  // The variant we switched away from when boosting reasoning, so we can restore
+  // it when the session toggle is turned off.
+  let ultracodeRestoreVariant: string | undefined | false = false
+
+  // Config gates only the keyword detection (default true).
+  const ultracodeKeywordEnabled = createMemo(() => sync.data.config.workflows?.ultracode_keyword ?? true)
+  // Config gate for the `+$<n>` budget directive ("+$5" can occur in normal
+  // prose, so it must be switch-off-able). The schema field
+  // (workflows.budget_directive) lands with the engine track's config/SDK regen;
+  // the cast keeps the defensive `?? true` read compiling until the generated
+  // type carries the field.
+  const budgetDirectiveEnabled = createMemo(
+    () => (sync.data.config.workflows as { budget_directive?: boolean } | undefined)?.budget_directive ?? true,
+  )
 
   event.on("tui.prompt.append", (evt, { workspace }) => {
     if (workspace !== project.workspace.current()) return
@@ -293,11 +351,55 @@ export function Prompt(props: PromptProps) {
     interrupt: 0,
   })
 
+  // Declared AFTER the store it reads — an earlier declaration is a temporal-dead-zone
+  // forward reference ("Cannot access 'store' before initialization") that crashes
+  // whenever this memo computes eagerly (e.g. while the home route renders its
+  // Suspense fallback).
+  const ultracodeKeyword = createMemo(() => {
+    if (!ultracodeKeywordEnabled()) return undefined
+    if (store.mode === "shell") return undefined
+    // `/command …` inputs dispatch a slash command and never inject the ultracode
+    // directive on submit, so don't highlight a keyword inside them either — the
+    // visible highlight must mirror the submit behaviour. Mirrors the submit branch's
+    // leading-slash dispatch detection.
+    if (store.prompt.input.trimStart().startsWith("/")) return undefined
+    return detectUltracodeKeyword(store.prompt.input)
+  })
+
+  // Live `+$<n>` budget-directive hit — same guards as the keyword memo (config
+  // gate, shell mode, slash dispatch) so the highlight mirrors the submit
+  // behaviour exactly.
+  const budgetHit = createMemo(() => {
+    if (!budgetDirectiveEnabled()) return undefined
+    if (store.mode === "shell") return undefined
+    if (store.prompt.input.trimStart().startsWith("/")) return undefined
+    return detectBudgetDirective(store.prompt.input)
+  })
+
   createEffect(
     on(
-      () => props.sessionID,
-      () => {
-        setStore("placeholder", randomIndex(list().length))
+      () =>
+        [
+          props.sessionID,
+          props.sessionID ? sync.session.get(props.sessionID)?.metadata?.["ultracode"] === true : false,
+        ] as const,
+      ([sessionID, serverFlag], prev) => {
+        const sessionChanged = prev === undefined || prev[0] !== sessionID
+        if (sessionChanged) {
+          setStore("placeholder", randomIndex(list().length))
+          // Ultracode session mode is session-scoped state, so re-initialize it
+          // from the SERVER flag whenever the session changes. The reasoning-
+          // variant boost is disk-persistent model state, so restore the
+          // pre-boost variant before clearing — otherwise the boost leaks onto
+          // the model for the next session.
+          if (ultracodeSession() && ultracodeRestoreVariant !== false) local.model.variant.set(ultracodeRestoreVariant)
+          setUltracodeSession(serverFlag)
+          ultracodeRestoreVariant = false
+          return
+        }
+        // Same session, server flag changed: our own PATCH landed (no-op) or
+        // another client toggled the flag — follow the server either way.
+        if (serverFlag !== ultracodeSession()) setUltracodeSession(serverFlag)
       },
       { defer: true },
     ),
@@ -548,6 +650,17 @@ export function Prompt(props: PromptProps) {
           move.open()
         },
       },
+      {
+        title: ultracodeSession() ? "Ultracode: turn off" : "Ultracode: turn on",
+        desc: "Toggle workflow orchestration for this session",
+        name: "ultracode.toggle",
+        category: "Session",
+        slashName: "ultracode",
+        run: () => {
+          dialog.clear()
+          toggleUltracodeSession()
+        },
+      },
     ].map((entry) => ({
       namespace: "palette",
       ...entry,
@@ -647,6 +760,44 @@ export function Prompt(props: PromptProps) {
         autocompleteVisible: !!auto()?.visible,
       }),
     }
+  })
+
+  // Live ultracode keyword highlight: clear any previous keyword extmark, then
+  // create a non-virtual one over the detected span. Deleting the word naturally
+  // drops the highlight because the memo returns undefined.
+  createEffect(() => {
+    const hit = ultracodeKeyword()
+    if (!input || input.isDestroyed || ultracodeKeywordTypeId === 0) return
+    for (const extmark of input.extmarks.getAllForTypeId(ultracodeKeywordTypeId)) {
+      input.extmarks.delete(extmark.id)
+    }
+    if (!hit) return
+    input.extmarks.create({
+      start: hit.index,
+      end: hit.index + hit.length,
+      virtual: false,
+      styleId: ultracodeStyleId,
+      typeId: ultracodeKeywordTypeId,
+    })
+  })
+
+  // Live budget-directive highlight, same lifecycle as the keyword highlight
+  // above. Reuses the ultracode extmark style — one "directive" look, no extra
+  // theme entry.
+  createEffect(() => {
+    const hit = budgetHit()
+    if (!input || input.isDestroyed || budgetDirectiveTypeId === 0) return
+    for (const extmark of input.extmarks.getAllForTypeId(budgetDirectiveTypeId)) {
+      input.extmarks.delete(extmark.id)
+    }
+    if (!hit) return
+    input.extmarks.create({
+      start: hit.index,
+      end: hit.index + hit.length,
+      virtual: false,
+      styleId: ultracodeStyleId,
+      typeId: budgetDirectiveTypeId,
+    })
   })
 
   function restoreExtmarksFromParts(parts: PromptInfo["parts"]) {
@@ -1015,17 +1166,25 @@ export function Prompt(props: PromptProps) {
       }
 
       sessionID = res.data.id
+
+      // Item 13: the toggle was flipped before this session existed — persist
+      // the flag now so the very first prompt already gets the server-side
+      // standing opt-in (fresh session, nothing to merge).
+      if (ultracodeSession()) {
+        void sdk.client.session.update({ sessionID, metadata: { ultracode: true } })
+      }
     }
 
-    const inputText = expandTrackedPastedText(
-      store.prompt.input,
-      input.extmarks.getAllForTypeId(promptPartTypeId).flatMap((extmark) => {
-        const partIndex = store.extmarkToPartIndex.get(extmark.id)
-        const part = partIndex === undefined ? undefined : store.prompt.parts[partIndex]
-        if (part?.type !== "text") return []
-        return [{ start: extmark.start, end: extmark.end, text: part.text }]
-      }),
-    )
+    // Paste-placeholder spans tracked on the RAW input. Expansion is positional, so
+    // these offsets are valid only against the raw text (or a sentinel-protected
+    // copy of it, see below).
+    const pastedRanges = input.extmarks.getAllForTypeId(promptPartTypeId).flatMap((extmark) => {
+      const partIndex = store.extmarkToPartIndex.get(extmark.id)
+      const part = partIndex === undefined ? undefined : store.prompt.parts[partIndex]
+      if (part?.type !== "text") return []
+      return [{ start: extmark.start, end: extmark.end, text: part.text }]
+    })
+    const inputText = expandTrackedPastedText(store.prompt.input, pastedRanges)
 
     // Filter out text parts (pasted content) since they're now expanded inline
     const nonTextParts = store.prompt.parts.filter((part) => part.type !== "text")
@@ -1050,6 +1209,184 @@ export function Prompt(props: PromptProps) {
           ]
         : []
 
+    const workflowCommand = store.mode === "shell" ? undefined : parseWorkflowCommand(inputText)
+    // Item 30: a typed `/<name> args` submit (the popover entry NOT selected) is a
+    // direct workflow start candidate. Parse-only here; the dispatch chain below
+    // resolves it AFTER every real command route (Commands > Workflows) and falls
+    // back to a plain prompt for an unknown name (today's behavior).
+    const directWorkflow = store.mode === "shell" ? undefined : parseDirectWorkflowCommand(inputText)
+
+    // Item 30: the full named-start pipeline, shared by the `/workflow <name>`
+    // dispatch and the typed direct `/<name>` route: declared-type arg coercion,
+    // reserved budget extraction, the approval gate (always/first-run/never plus
+    // session-local "Yes, always"), and the workflow.start call that routes
+    // permission prompts to the active session. `info` is caller-resolved; an
+    // unknown name has none, so it cannot render a meaningful approval dialog —
+    // the start surfaces the engine's "not found" error as before rather than
+    // asking to approve a workflow that does not exist.
+    const startNamedWorkflow = async (name: string, rawArgs: string, info: WorkflowInfo | undefined) => {
+      // Resolve the workflow's declared argument types so parsing coerces only
+      // declared-number args (e.g. `version=1.0` stays the string "1.0"). An
+      // unknown name simply yields no declaration and every arg stays a string
+      // (the safe default).
+      const args = parseWorkflowArgs(rawArgs, info?.meta.arguments ?? {})
+      // Reserved `budget=` argument: pulled out of the parsed args (a workflow
+      // that declares its own `budget` argument wins — passthrough) and sent as
+      // the start payload's cost cap. An invalid value aborts the start with a
+      // toast (same fall-through as a cancelled approval: the submit tail below
+      // still clears the prompt).
+      const extracted = extractReservedBudget(args, info?.meta.arguments ?? {})
+      if (extracted.error) {
+        toast.show({ message: extracted.error, variant: "error" })
+        return
+      }
+      const startWorkflow = () =>
+        void sdk.client.workflow
+          // Fund 35: route the start's permission prompts (the workflow gate and any
+          // agent-step asks) to the ACTIVE session so they surface here in the TUI,
+          // instead of an orphaned session the user is not looking at.
+          .start({
+            name,
+            workflowStartPayload: {
+              args: extracted.args,
+              ...(extracted.budget !== undefined ? { budget: extracted.budget } : {}),
+              permissionSessionID: sessionID,
+            },
+          })
+          .then((result) => {
+            if (!result.data) {
+              toast.show({ message: `Failed to start workflow ${name}`, variant: "error" })
+              return
+            }
+            toast.show({ message: `Started workflow ${name}`, variant: "info" })
+            if (result.data.session_id) route.navigate({ type: "session", sessionID: result.data.session_id })
+          })
+          .catch(toast.error)
+
+      // Track D: gate every interactive start behind an approval dialog. The
+      // workflow *tool* keeps its own ask-gate (Permission service) untouched;
+      // this is the TUI pendant for `/workflow <name>`.
+      const approved = sync.data.config.workflows?.approved ?? []
+      const decision = !info
+        ? "start"
+        : approvalDecision({
+            mode: sync.data.config.workflows?.approval,
+            // OR in the session-local cache so a "Yes, always" earlier in this
+            // session is honoured immediately, even before the config re-sync
+            // makes the persisted value visible here.
+            alreadyApproved: approved.includes(name) || isSessionApproved(name),
+          })
+      if (decision === "start") {
+        startWorkflow()
+        return
+      }
+      const reply = await DialogWorkflowApproval.show(dialog, {
+        info: info!,
+        args: extracted.args,
+        budget: extracted.budget,
+      })
+      if (reply === "cancel") {
+        toast.show({ message: `Cancelled workflow ${name}`, variant: "info" })
+        return
+      }
+      // "Yes, always" persists consent so first-run never asks again for this
+      // workflow; the array is rewritten whole (config.update deep-merges and
+      // replaces arrays), which is fine since we append to the loaded list.
+      // Note: under approval:"always" this persists with no behavioural effect
+      // (always asks every start by design); we still record it so switching
+      // back to first-run later honours the prior consent.
+      if (reply === "always") {
+        // Remember in-session first so a second start this session never
+        // re-asks even before the persisted config re-syncs.
+        rememberSessionApproval(name)
+        if (!approved.includes(name))
+          await sdk.client.config
+            .update({ config: { workflows: { approved: [...approved, name] } } })
+            .catch(toast.error)
+      }
+      startWorkflow()
+    }
+
+    // Item 30: typed `/<name>` resolution against the discovered workflows. The
+    // UNFILTERED list() is needed here (unlike listWorkflowInfos, which drops
+    // invalid entries) because a typed name that matches a BROKEN workflow file
+    // must toast its parse error instead of leaking the slash text to the model
+    // as a plain prompt. Returns true when the submit was consumed (started, or
+    // rejected as invalid); false sends the input as a plain prompt — today's
+    // behavior for an unknown slash, and the safe degradation when list() fails.
+    const startDirectWorkflow = async (direct: { name: string; args: string }) => {
+      const result = await sdk.client.workflow.list().catch(() => undefined)
+      const info = result?.data?.find((item) => item.name === direct.name)
+      if (!info) return false
+      if (info.valid === false) {
+        toast.show({
+          message: `Invalid workflow ${direct.name}${info.error ? `: ${info.error}` : ""}`,
+          variant: "error",
+        })
+        return true
+      }
+      await startNamedWorkflow(direct.name, direct.args, info)
+      return true
+    }
+
+    // Ultracode opt-in (normal prompt path only). The keyword directive fires for the
+    // single turn that contains a standalone `ultracode` token, which is stripped from
+    // the visible text; it is prepended as a synthetic text part so the agent sees
+    // the orchestration instruction before the user's words, inside the
+    // <system-reminder> wrapper (state confirmation convention), so the model reads
+    // it as harness state, not user prose. The session toggle is server-side state
+    // (session.metadata.ultracode, see toggleUltracodeSession) and injects nothing here.
+    //
+    // Deliberate deviation from the original, which leaves the keyword in the visible
+    // text: we keep stripping it because the reminder restates the opt-in in full, the
+    // strip behaviour is documented and tested, and a visible keyword without a
+    // persisted highlight would be inconsistent.
+    //
+    // Detection AND stripping run on the RAW input (store.prompt.input), exactly what
+    // the live highlight sees — never on the paste-expanded text. Otherwise an
+    // `ultracode` token *inside* pasted content would trigger invisibly (no highlight)
+    // and a real typed keyword that the highlight shows would be stripped from the
+    // expanded text instead. To strip on raw yet keep the positional paste expansion
+    // correct, the placeholder spans are protected with unique sentinels across the
+    // strip, then expanded normally.
+    const keywordActive = ultracodeKeywordEnabled() && detectUltracodeKeyword(store.prompt.input) !== undefined
+    // Budget directive (`+$<n>`): detected on the SAME raw input as the keyword
+    // (see above — a directive inside pasted content must not trigger), stripped
+    // from the visible text, and confirmed via a synthetic reminder part. The
+    // first hit sets the value; the strip removes every hit.
+    const budgetActive = budgetDirectiveEnabled() ? detectBudgetDirective(store.prompt.input) : undefined
+    const stripActive = keywordActive || budgetActive !== undefined
+    const promptText = stripActive
+      ? (() => {
+          // Replace each placeholder span with a sentinel the strips cannot touch:
+          // no `ultracode`, no `+$<n>`, no whitespace (so the `\s+` collapse,
+          // leading-`\s` strip, and trim leave it intact), no colon/punctuation (so
+          // the dangling-punctuation cleanup skips it). NUL delimiters keep it from
+          // colliding with real input. Strip on the raw text, then expand the
+          // sentinels back. Strip order is deterministic: keyword first, budget second.
+          const sentinels = pastedRanges.map((range, i) => ({ ...range, sentinel: "\u0000P" + i + "\u0000" }))
+          const protectedRaw = expandTrackedPastedText(
+            store.prompt.input,
+            sentinels.map((s) => ({ start: s.start, end: s.end, text: s.sentinel })),
+          )
+          let stripped = protectedRaw
+          if (keywordActive) stripped = stripUltracodeKeyword(stripped)
+          if (budgetActive) stripped = stripBudgetDirective(stripped)
+          return sentinels.reduce((acc, s) => acc.replace(s.sentinel, s.text), stripped)
+        })()
+      : inputText
+    // Item 13: no session-directive part anymore — the session toggle persists
+    // session.metadata.ultracode and the SERVER carries the standing opt-in via
+    // the system prompt. Only the per-turn keyword and budget reminders remain.
+    const ultracodeParts = [
+      ...(keywordActive
+        ? [{ type: "text" as const, text: ultracodeReminder(ULTRACODE_PROMPT_DIRECTIVE), synthetic: true }]
+        : []),
+      ...(budgetActive
+        ? [{ type: "text" as const, text: ultracodeReminder(budgetDirectiveText(budgetActive.value)), synthetic: true }]
+        : []),
+    ]
+
     if (store.mode === "shell") {
       move.startSubmit()
       void sdk.client.session.shell({
@@ -1062,9 +1399,32 @@ export function Prompt(props: PromptProps) {
         command: inputText,
       })
       setStore("mode", "normal")
+    } else if (workflowCommand) {
+      // Fund 59: `/workflows ...` opens the dashboard while `/workflow <name> ...`
+      // starts the named workflow; the dispatch is decided by parseWorkflowCommand
+      // so `/workflows foo` can never be misread as starting a workflow literally
+      // named `workflows`. Fund 60: the raw arg remainder (multi-spaces preserved)
+      // is handed to parseWorkflowArgs untouched.
+      if (workflowCommand.type === "dashboard") {
+        dialog.replace(() => <DialogWorkflow />)
+      } else {
+        // listWorkflowInfos already drops invalid entries, so a broken file never
+        // supplies a synthesized meta to startNamedWorkflow here.
+        const infos = await listWorkflowInfos(sdk.client.workflow, true)
+        const info = infos.find((info) => info.name === workflowCommand.name)
+        await startNamedWorkflow(workflowCommand.name, workflowCommand.args, info)
+      }
     } else if (
       inputText.startsWith("/") &&
-      sync.data.command.some((x) => x.name === inputText.split("\n")[0].split(" ")[0].slice(1))
+      sync.data.command.some(
+        (x) =>
+          x.name === inputText.split("\n")[0].split(" ")[0].slice(1) &&
+          // Item 30: a source-"workflow" entry is a discovered workflow surfaced
+          // in Command.list() for /help parity only — its template is EMPTY, so
+          // dispatching it via session.command would run an empty prompt. It is
+          // handled by the direct `/<name>` workflow branch below instead.
+          x.source !== "workflow",
+      )
     ) {
       move.startSubmit()
       // Parse command from first line, preserve multi-line content in arguments
@@ -1083,6 +1443,21 @@ export function Prompt(props: PromptProps) {
         variant,
         parts: nonTextParts.filter((x) => x.type === "file"),
       })
+    } else if (
+      // Item 30: typed direct `/<name> args` dispatch (Claude-Code parity with
+      // the popover entries). Runs strictly AFTER the /workflow[s] and real-
+      // command branches and only for names outside the reserved set (built-in
+      // palette slashes incl. aliases + server commands), so a workflow can never
+      // shadow a real command. startDirectWorkflow returns false for a name no
+      // discovered workflow carries — that submit falls through to the plain
+      // prompt exactly as before.
+      directWorkflow &&
+      !reservedSlashNames(slashes(), sync.data.command).has(directWorkflow.name) &&
+      (await startDirectWorkflow(directWorkflow))
+    ) {
+      // Consumed: the workflow was started (incl. its approval flow) or rejected
+      // with an "Invalid workflow" toast — never sent to the model as a prompt.
+      // The shared submit tail below still clears the prompt and history.
     } else {
       move.startSubmit()
       sdk.client.session
@@ -1094,10 +1469,11 @@ export function Prompt(props: PromptProps) {
             model: selectedModel,
             variant,
             parts: [
+              ...ultracodeParts,
               ...editorParts,
               {
                 type: "text",
-                text: inputText,
+                text: promptText,
               },
               ...nonTextParts,
             ],
@@ -1279,6 +1655,68 @@ export function Prompt(props: PromptProps) {
     setStore("extmarkToPartIndex", new Map())
   }
 
+  // Best-effort reasoning boost: variants are the TUI's effort/reasoning concept.
+  // Prefer a known high-effort name, otherwise the last variant (providers order
+  // them low → high). Returns undefined when the model has no variants.
+  function strongestReasoningVariant() {
+    const variants = local.model.variant.list()
+    if (variants.length === 0) return undefined
+    const preferred = ["max", "ultra", "high", "xhigh", "extra"]
+    for (const name of preferred) {
+      const match = variants.find((v) => v.toLowerCase() === name)
+      if (match) return match
+    }
+    return variants[variants.length - 1]
+  }
+
+  function toggleUltracodeSession() {
+    const next = !ultracodeSession()
+    setUltracodeSession(next)
+
+    // Item 13: persist the flag server-side so the system prompt carries the
+    // standing opt-in and the workflow tool description swaps its gate. PATCH
+    // replaces the whole metadata record, so merge the synced keys. Toggling
+    // before the first session keeps the flag local; the submit path PATCHes it
+    // onto the freshly created session.
+    const sessionID = props.sessionID
+    if (sessionID) {
+      const current = sync.session.get(sessionID)
+      void sdk.client.session.update({
+        sessionID,
+        metadata: { ...(current?.metadata ?? {}), ultracode: next },
+      })
+    }
+
+    const boost = strongestReasoningVariant()
+    if (next) {
+      if (boost && local.model.variant.current() !== boost) {
+        // Remember what to restore (current may be undefined = default variant).
+        ultracodeRestoreVariant = local.model.variant.current()
+        local.model.variant.set(boost)
+      } else {
+        ultracodeRestoreVariant = false
+      }
+      toast.show({
+        title: "Ultracode ON",
+        message: boost
+          ? `Workflow orchestration on (reasoning boosted to ${boost})`
+          : "Workflow orchestration on (orchestration only)",
+        variant: "info",
+      })
+      return
+    }
+
+    if (ultracodeRestoreVariant !== false) {
+      local.model.variant.set(ultracodeRestoreVariant)
+      ultracodeRestoreVariant = false
+    }
+    toast.show({
+      title: "Ultracode OFF",
+      message: "Workflow orchestration off",
+      variant: "info",
+    })
+  }
+
   const highlight = createMemo(() => {
     if (leader()) return theme.border
     if (store.mode === "shell") return theme.primary
@@ -1421,6 +1859,12 @@ export function Prompt(props: PromptProps) {
                 if (promptPartTypeId === 0) {
                   promptPartTypeId = input.extmarks.registerType("prompt-part")
                 }
+                if (ultracodeKeywordTypeId === 0) {
+                  ultracodeKeywordTypeId = input.extmarks.registerType("ultracode-keyword")
+                }
+                if (budgetDirectiveTypeId === 0) {
+                  budgetDirectiveTypeId = input.extmarks.registerType("budget-directive")
+                }
                 props.ref?.(ref)
                 setTimeout(() => {
                   // setTimeout is a workaround and needs to be addressed properly
@@ -1457,6 +1901,12 @@ export function Prompt(props: PromptProps) {
                               <span style={{ fg: fadeColor(theme.warning, variantMetaAlpha()), bold: true }}>
                                 {local.model.variant.current()}
                               </span>
+                            </text>
+                          </Show>
+                          <Show when={ultracodeSession()}>
+                            <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>·</text>
+                            <text>
+                              <span style={{ fg: theme.accent, bold: true }}>ULTRACODE</span>
                             </text>
                           </Show>
                         </box>

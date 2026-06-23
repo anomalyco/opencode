@@ -73,13 +73,15 @@ export type Event =
   | EventTuiSessionSelect2
   | EventMcpToolsChanged
   | EventMcpBrowserOpenFailed
+  | EventQuestionAsked
+  | EventQuestionReplied
+  | EventQuestionRejected
+  | EventWorkflowRunUpdated
+  | EventWorkflowRunFinished
   | EventCommandExecuted
   | EventProjectUpdated
   | EventSessionStatus
   | EventSessionIdle
-  | EventQuestionAsked
-  | EventQuestionReplied
-  | EventQuestionRejected
   | EventSessionCompacted
   | EventVcsBranchUpdated
   | EventWorkspaceReady
@@ -87,8 +89,6 @@ export type Event =
   | EventWorkspaceStatus
   | EventWorktreeReady
   | EventWorktreeFailed
-  | EventWorkflowRunUpdated
-  | EventWorkflowRunFinished
   | EventServerConnected
   | EventGlobalDisposed
   | EventServerInstanceDisposed
@@ -668,28 +668,6 @@ export type Todo = {
   priority: string
 }
 
-export type SessionStatus =
-  | {
-      type: "idle"
-    }
-  | {
-      type: "retry"
-      attempt: number
-      message: string
-      action?: {
-        reason: string
-        provider: string
-        title: string
-        message: string
-        label: string
-        link?: string
-      }
-      next: number
-    }
-  | {
-      type: "busy"
-    }
-
 export type QuestionOption = {
   /**
    * Display text (1-5 words, concise)
@@ -724,6 +702,28 @@ export type QuestionTool = {
 }
 
 export type QuestionAnswer = Array<string>
+
+export type SessionStatus =
+  | {
+      type: "idle"
+    }
+  | {
+      type: "retry"
+      attempt: number
+      message: string
+      action?: {
+        reason: string
+        provider: string
+        title: string
+        message: string
+        label: string
+        link?: string
+      }
+      next: number
+    }
+  | {
+      type: "busy"
+    }
 
 export type GlobalEvent = {
   directory: string
@@ -1460,6 +1460,72 @@ export type GlobalEvent = {
       }
     | {
         id: string
+        type: "question.asked"
+        properties: {
+          id: string
+          sessionID: string
+          /**
+           * Questions to ask
+           */
+          questions: Array<QuestionInfo>
+          tool?: QuestionTool
+        }
+      }
+    | {
+        id: string
+        type: "question.replied"
+        properties: {
+          sessionID: string
+          requestID: string
+          answers: Array<QuestionAnswer>
+        }
+      }
+    | {
+        id: string
+        type: "question.rejected"
+        properties: {
+          sessionID: string
+          requestID: string
+        }
+      }
+    | {
+        id: string
+        type: "workflow.run.updated"
+        properties: {
+          id: string
+          workflow: string
+          status: "running" | "completed" | "failed" | "cancelled" | "interrupted" | "paused"
+          current_phase: string
+          directory: string
+          agents: {
+            total: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+            running: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+            failed: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          }
+          pending_question: boolean
+          error: string
+        }
+      }
+    | {
+        id: string
+        type: "workflow.run.finished"
+        properties: {
+          id: string
+          workflow: string
+          status: "running" | "completed" | "failed" | "cancelled" | "interrupted" | "paused"
+          current_phase: string
+          directory: string
+          agents: {
+            total: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+            running: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+            failed: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          }
+          pending_question: boolean
+          error: string
+        }
+      }
+    | {
+        id: string
         type: "command.executed"
         properties: {
           name: string
@@ -1512,36 +1578,6 @@ export type GlobalEvent = {
       }
     | {
         id: string
-        type: "question.asked"
-        properties: {
-          id: string
-          sessionID: string
-          /**
-           * Questions to ask
-           */
-          questions: Array<QuestionInfo>
-          tool?: QuestionTool
-        }
-      }
-    | {
-        id: string
-        type: "question.replied"
-        properties: {
-          sessionID: string
-          requestID: string
-          answers: Array<QuestionAnswer>
-        }
-      }
-    | {
-        id: string
-        type: "question.rejected"
-        properties: {
-          sessionID: string
-          requestID: string
-        }
-      }
-    | {
-        id: string
         type: "session.compacted"
         properties: {
           sessionID: string
@@ -1589,42 +1625,6 @@ export type GlobalEvent = {
         type: "worktree.failed"
         properties: {
           message: string
-        }
-      }
-    | {
-        id: string
-        type: "workflow.run.updated"
-        properties: {
-          id: string
-          workflow: string
-          status: "running" | "completed" | "failed" | "cancelled" | "interrupted" | "paused"
-          current_phase: string
-          directory: string
-          agents: {
-            total: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-            running: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-            failed: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-          }
-          pending_question: boolean
-          error: string
-        }
-      }
-    | {
-        id: string
-        type: "workflow.run.finished"
-        properties: {
-          id: string
-          workflow: string
-          status: "running" | "completed" | "failed" | "cancelled" | "interrupted" | "paused"
-          current_phase: string
-          directory: string
-          agents: {
-            total: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-            running: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-            failed: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-          }
-          pending_question: boolean
-          error: string
         }
       }
     | {
@@ -2384,7 +2384,7 @@ export type Command = {
   description?: string
   agent?: string
   model?: string
-  source?: "command" | "mcp" | "skill"
+  source?: "command" | "mcp" | "skill" | "workflow"
   template: string
   subtask?: boolean
   hints: Array<string>
@@ -3013,13 +3013,15 @@ export type V2Event =
   | V2EventTuiSessionSelect
   | V2EventMcpToolsChanged
   | V2EventMcpBrowserOpenFailed
+  | V2EventQuestionAsked
+  | V2EventQuestionReplied
+  | V2EventQuestionRejected
+  | V2EventWorkflowRunUpdated
+  | V2EventWorkflowRunFinished
   | V2EventCommandExecuted
   | V2EventProjectUpdated
   | V2EventSessionStatus
   | V2EventSessionIdle
-  | V2EventQuestionAsked
-  | V2EventQuestionReplied
-  | V2EventQuestionRejected
   | V2EventSessionCompacted
   | V2EventVcsBranchUpdated
   | V2EventWorkspaceReady
@@ -3027,8 +3029,6 @@ export type V2Event =
   | V2EventWorkspaceStatus
   | V2EventWorktreeReady
   | V2EventWorktreeFailed
-  | V2EventWorkflowRunUpdated
-  | V2EventWorkflowRunFinished
   | V2EventServerConnected
   | V2EventGlobalDisposed
 
@@ -5819,6 +5819,122 @@ export type V2EventMcpBrowserOpenFailed = {
   }
 }
 
+export type V2EventQuestionAsked = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  type: "question.asked"
+  data: {
+    id: string
+    sessionID: string
+    /**
+     * Questions to ask
+     */
+    questions: Array<QuestionInfo>
+    tool?: QuestionTool
+  }
+}
+
+export type V2EventQuestionReplied = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  type: "question.replied"
+  data: {
+    sessionID: string
+    requestID: string
+    answers: Array<QuestionAnswer>
+  }
+}
+
+export type V2EventQuestionRejected = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  type: "question.rejected"
+  data: {
+    sessionID: string
+    requestID: string
+  }
+}
+
+export type V2EventWorkflowRunUpdated = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  type: "workflow.run.updated"
+  data: {
+    id: string
+    workflow: string
+    status: "running" | "completed" | "failed" | "cancelled" | "interrupted" | "paused"
+    current_phase: string
+    directory: string
+    agents: {
+      total: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      running: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      failed: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    }
+    pending_question: boolean
+    error: string
+  }
+}
+
+export type V2EventWorkflowRunFinished = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  type: "workflow.run.finished"
+  data: {
+    id: string
+    workflow: string
+    status: "running" | "completed" | "failed" | "cancelled" | "interrupted" | "paused"
+    current_phase: string
+    directory: string
+    agents: {
+      total: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      running: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      failed: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    }
+    pending_question: boolean
+    error: string
+  }
+}
+
 export type V2EventCommandExecuted = {
   id: string
   metadata?: {
@@ -5908,66 +6024,6 @@ export type V2EventSessionIdle = {
   type: "session.idle"
   data: {
     sessionID: string
-  }
-}
-
-export type V2EventQuestionAsked = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef
-  type: "question.asked"
-  data: {
-    id: string
-    sessionID: string
-    /**
-     * Questions to ask
-     */
-    questions: Array<QuestionInfo>
-    tool?: QuestionTool
-  }
-}
-
-export type V2EventQuestionReplied = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef
-  type: "question.replied"
-  data: {
-    sessionID: string
-    requestID: string
-    answers: Array<QuestionAnswer>
-  }
-}
-
-export type V2EventQuestionRejected = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef
-  type: "question.rejected"
-  data: {
-    sessionID: string
-    requestID: string
   }
 }
 
@@ -6089,62 +6145,6 @@ export type V2EventWorktreeFailed = {
   type: "worktree.failed"
   data: {
     message: string
-  }
-}
-
-export type V2EventWorkflowRunUpdated = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef
-  type: "workflow.run.updated"
-  data: {
-    id: string
-    workflow: string
-    status: "running" | "completed" | "failed" | "cancelled" | "interrupted" | "paused"
-    current_phase: string
-    directory: string
-    agents: {
-      total: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      running: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      failed: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-    }
-    pending_question: boolean
-    error: string
-  }
-}
-
-export type V2EventWorkflowRunFinished = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef
-  type: "workflow.run.finished"
-  data: {
-    id: string
-    workflow: string
-    status: "running" | "completed" | "failed" | "cancelled" | "interrupted" | "paused"
-    current_phase: string
-    directory: string
-    agents: {
-      total: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      running: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      failed: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-    }
-    pending_question: boolean
-    error: string
   }
 }
 
@@ -6967,6 +6967,77 @@ export type EventMcpBrowserOpenFailed = {
   }
 }
 
+export type EventQuestionAsked = {
+  id: string
+  type: "question.asked"
+  properties: {
+    id: string
+    sessionID: string
+    /**
+     * Questions to ask
+     */
+    questions: Array<QuestionInfo>
+    tool?: QuestionTool
+  }
+}
+
+export type EventQuestionReplied = {
+  id: string
+  type: "question.replied"
+  properties: {
+    sessionID: string
+    requestID: string
+    answers: Array<QuestionAnswer>
+  }
+}
+
+export type EventQuestionRejected = {
+  id: string
+  type: "question.rejected"
+  properties: {
+    sessionID: string
+    requestID: string
+  }
+}
+
+export type EventWorkflowRunUpdated = {
+  id: string
+  type: "workflow.run.updated"
+  properties: {
+    id: string
+    workflow: string
+    status: "running" | "completed" | "failed" | "cancelled" | "interrupted" | "paused"
+    current_phase: string
+    directory: string
+    agents: {
+      total: number | "NaN" | "Infinity" | "-Infinity"
+      running: number | "NaN" | "Infinity" | "-Infinity"
+      failed: number | "NaN" | "Infinity" | "-Infinity"
+    }
+    pending_question: boolean
+    error: string
+  }
+}
+
+export type EventWorkflowRunFinished = {
+  id: string
+  type: "workflow.run.finished"
+  properties: {
+    id: string
+    workflow: string
+    status: "running" | "completed" | "failed" | "cancelled" | "interrupted" | "paused"
+    current_phase: string
+    directory: string
+    agents: {
+      total: number | "NaN" | "Infinity" | "-Infinity"
+      running: number | "NaN" | "Infinity" | "-Infinity"
+      failed: number | "NaN" | "Infinity" | "-Infinity"
+    }
+    pending_question: boolean
+    error: string
+  }
+}
+
 export type EventCommandExecuted = {
   id: string
   type: "command.executed"
@@ -7020,39 +7091,6 @@ export type EventSessionIdle = {
   type: "session.idle"
   properties: {
     sessionID: string
-  }
-}
-
-export type EventQuestionAsked = {
-  id: string
-  type: "question.asked"
-  properties: {
-    id: string
-    sessionID: string
-    /**
-     * Questions to ask
-     */
-    questions: Array<QuestionInfo>
-    tool?: QuestionTool
-  }
-}
-
-export type EventQuestionReplied = {
-  id: string
-  type: "question.replied"
-  properties: {
-    sessionID: string
-    requestID: string
-    answers: Array<QuestionAnswer>
-  }
-}
-
-export type EventQuestionRejected = {
-  id: string
-  type: "question.rejected"
-  properties: {
-    sessionID: string
-    requestID: string
   }
 }
 
@@ -7111,44 +7149,6 @@ export type EventWorktreeFailed = {
   type: "worktree.failed"
   properties: {
     message: string
-  }
-}
-
-export type EventWorkflowRunUpdated = {
-  id: string
-  type: "workflow.run.updated"
-  properties: {
-    id: string
-    workflow: string
-    status: "running" | "completed" | "failed" | "cancelled" | "interrupted" | "paused"
-    current_phase: string
-    directory: string
-    agents: {
-      total: number | "NaN" | "Infinity" | "-Infinity"
-      running: number | "NaN" | "Infinity" | "-Infinity"
-      failed: number | "NaN" | "Infinity" | "-Infinity"
-    }
-    pending_question: boolean
-    error: string
-  }
-}
-
-export type EventWorkflowRunFinished = {
-  id: string
-  type: "workflow.run.finished"
-  properties: {
-    id: string
-    workflow: string
-    status: "running" | "completed" | "failed" | "cancelled" | "interrupted" | "paused"
-    current_phase: string
-    directory: string
-    agents: {
-      total: number | "NaN" | "Infinity" | "-Infinity"
-      running: number | "NaN" | "Infinity" | "-Infinity"
-      failed: number | "NaN" | "Infinity" | "-Infinity"
-    }
-    pending_question: boolean
-    error: string
   }
 }
 

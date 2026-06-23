@@ -15828,6 +15828,21 @@
             "$ref": "#/components/schemas/EventMcpBrowserOpenFailed"
           },
           {
+            "$ref": "#/components/schemas/EventQuestionAsked"
+          },
+          {
+            "$ref": "#/components/schemas/EventQuestionReplied"
+          },
+          {
+            "$ref": "#/components/schemas/EventQuestionRejected"
+          },
+          {
+            "$ref": "#/components/schemas/EventWorkflowRunUpdated"
+          },
+          {
+            "$ref": "#/components/schemas/EventWorkflowRunFinished"
+          },
+          {
             "$ref": "#/components/schemas/EventCommandExecuted"
           },
           {
@@ -15838,15 +15853,6 @@
           },
           {
             "$ref": "#/components/schemas/EventSessionIdle"
-          },
-          {
-            "$ref": "#/components/schemas/EventQuestionAsked"
-          },
-          {
-            "$ref": "#/components/schemas/EventQuestionReplied"
-          },
-          {
-            "$ref": "#/components/schemas/EventQuestionRejected"
           },
           {
             "$ref": "#/components/schemas/EventSessionCompacted"
@@ -15868,12 +15874,6 @@
           },
           {
             "$ref": "#/components/schemas/EventWorktreeFailed"
-          },
-          {
-            "$ref": "#/components/schemas/EventWorkflowRunUpdated"
-          },
-          {
-            "$ref": "#/components/schemas/EventWorkflowRunFinished"
           },
           {
             "$ref": "#/components/schemas/EventServerConnected"
@@ -17621,6 +17621,69 @@
         "required": ["content", "status", "priority"],
         "additionalProperties": false
       },
+      "QuestionOption": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "description": "Display text (1-5 words, concise)"
+          },
+          "description": {
+            "type": "string",
+            "description": "Explanation of choice"
+          }
+        },
+        "required": ["label", "description"],
+        "additionalProperties": false
+      },
+      "QuestionInfo": {
+        "type": "object",
+        "properties": {
+          "question": {
+            "type": "string",
+            "description": "Complete question"
+          },
+          "header": {
+            "type": "string",
+            "description": "Very short label (max 30 chars)"
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QuestionOption"
+            },
+            "description": "Available choices"
+          },
+          "multiple": {
+            "type": "boolean"
+          },
+          "custom": {
+            "type": "boolean"
+          }
+        },
+        "required": ["question", "header", "options"],
+        "additionalProperties": false
+      },
+      "QuestionTool": {
+        "type": "object",
+        "properties": {
+          "messageID": {
+            "type": "string",
+            "pattern": "^msg"
+          },
+          "callID": {
+            "type": "string"
+          }
+        },
+        "required": ["messageID", "callID"],
+        "additionalProperties": false
+      },
+      "QuestionAnswer": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
       "SessionStatus": {
         "anyOf": [
           {
@@ -17693,69 +17756,6 @@
             "additionalProperties": false
           }
         ]
-      },
-      "QuestionOption": {
-        "type": "object",
-        "properties": {
-          "label": {
-            "type": "string",
-            "description": "Display text (1-5 words, concise)"
-          },
-          "description": {
-            "type": "string",
-            "description": "Explanation of choice"
-          }
-        },
-        "required": ["label", "description"],
-        "additionalProperties": false
-      },
-      "QuestionInfo": {
-        "type": "object",
-        "properties": {
-          "question": {
-            "type": "string",
-            "description": "Complete question"
-          },
-          "header": {
-            "type": "string",
-            "description": "Very short label (max 30 chars)"
-          },
-          "options": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/QuestionOption"
-            },
-            "description": "Available choices"
-          },
-          "multiple": {
-            "type": "boolean"
-          },
-          "custom": {
-            "type": "boolean"
-          }
-        },
-        "required": ["question", "header", "options"],
-        "additionalProperties": false
-      },
-      "QuestionTool": {
-        "type": "object",
-        "properties": {
-          "messageID": {
-            "type": "string",
-            "pattern": "^msg"
-          },
-          "callID": {
-            "type": "string"
-          }
-        },
-        "required": ["messageID", "callID"],
-        "additionalProperties": false
-      },
-      "QuestionAnswer": {
-        "type": "array",
-        "items": {
-          "type": "string"
-        }
       },
       "GlobalEvent": {
         "type": "object",
@@ -20245,182 +20245,6 @@
                   },
                   "type": {
                     "type": "string",
-                    "enum": ["command.executed"]
-                  },
-                  "properties": {
-                    "type": "object",
-                    "properties": {
-                      "name": {
-                        "type": "string"
-                      },
-                      "sessionID": {
-                        "type": "string",
-                        "pattern": "^ses"
-                      },
-                      "arguments": {
-                        "type": "string"
-                      },
-                      "messageID": {
-                        "type": "string",
-                        "pattern": "^msg"
-                      }
-                    },
-                    "required": ["name", "sessionID", "arguments", "messageID"],
-                    "additionalProperties": false
-                  }
-                },
-                "required": ["id", "type", "properties"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "string",
-                    "pattern": "^evt_"
-                  },
-                  "type": {
-                    "type": "string",
-                    "enum": ["project.updated"]
-                  },
-                  "properties": {
-                    "type": "object",
-                    "properties": {
-                      "id": {
-                        "type": "string"
-                      },
-                      "worktree": {
-                        "type": "string"
-                      },
-                      "vcs": {
-                        "type": "string",
-                        "enum": ["git"]
-                      },
-                      "name": {
-                        "type": "string"
-                      },
-                      "icon": {
-                        "type": "object",
-                        "properties": {
-                          "url": {
-                            "type": "string"
-                          },
-                          "override": {
-                            "type": "string"
-                          },
-                          "color": {
-                            "type": "string"
-                          }
-                        },
-                        "additionalProperties": false
-                      },
-                      "commands": {
-                        "type": "object",
-                        "properties": {
-                          "start": {
-                            "type": "string",
-                            "description": "Startup script to run when creating a new workspace (worktree)"
-                          }
-                        },
-                        "additionalProperties": false
-                      },
-                      "time": {
-                        "type": "object",
-                        "properties": {
-                          "created": {
-                            "type": "integer",
-                            "minimum": 0
-                          },
-                          "updated": {
-                            "type": "integer",
-                            "minimum": 0
-                          },
-                          "initialized": {
-                            "type": "integer",
-                            "minimum": 0
-                          }
-                        },
-                        "required": ["created", "updated"],
-                        "additionalProperties": false
-                      },
-                      "sandboxes": {
-                        "type": "array",
-                        "items": {
-                          "type": "string"
-                        }
-                      }
-                    },
-                    "required": ["id", "worktree", "time", "sandboxes"],
-                    "additionalProperties": false
-                  }
-                },
-                "required": ["id", "type", "properties"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "string",
-                    "pattern": "^evt_"
-                  },
-                  "type": {
-                    "type": "string",
-                    "enum": ["session.status"]
-                  },
-                  "properties": {
-                    "type": "object",
-                    "properties": {
-                      "sessionID": {
-                        "type": "string",
-                        "pattern": "^ses"
-                      },
-                      "status": {
-                        "$ref": "#/components/schemas/SessionStatus"
-                      }
-                    },
-                    "required": ["sessionID", "status"],
-                    "additionalProperties": false
-                  }
-                },
-                "required": ["id", "type", "properties"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "string",
-                    "pattern": "^evt_"
-                  },
-                  "type": {
-                    "type": "string",
-                    "enum": ["session.idle"]
-                  },
-                  "properties": {
-                    "type": "object",
-                    "properties": {
-                      "sessionID": {
-                        "type": "string",
-                        "pattern": "^ses"
-                      }
-                    },
-                    "required": ["sessionID"],
-                    "additionalProperties": false
-                  }
-                },
-                "required": ["id", "type", "properties"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "string",
-                    "pattern": "^evt_"
-                  },
-                  "type": {
-                    "type": "string",
                     "enum": ["question.asked"]
                   },
                   "properties": {
@@ -20512,189 +20336,6 @@
                       }
                     },
                     "required": ["sessionID", "requestID"],
-                    "additionalProperties": false
-                  }
-                },
-                "required": ["id", "type", "properties"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "string",
-                    "pattern": "^evt_"
-                  },
-                  "type": {
-                    "type": "string",
-                    "enum": ["session.compacted"]
-                  },
-                  "properties": {
-                    "type": "object",
-                    "properties": {
-                      "sessionID": {
-                        "type": "string",
-                        "pattern": "^ses"
-                      }
-                    },
-                    "required": ["sessionID"],
-                    "additionalProperties": false
-                  }
-                },
-                "required": ["id", "type", "properties"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "string",
-                    "pattern": "^evt_"
-                  },
-                  "type": {
-                    "type": "string",
-                    "enum": ["vcs.branch.updated"]
-                  },
-                  "properties": {
-                    "type": "object",
-                    "properties": {
-                      "branch": {
-                        "type": "string"
-                      }
-                    },
-                    "additionalProperties": false
-                  }
-                },
-                "required": ["id", "type", "properties"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "string",
-                    "pattern": "^evt_"
-                  },
-                  "type": {
-                    "type": "string",
-                    "enum": ["workspace.ready"]
-                  },
-                  "properties": {
-                    "type": "object",
-                    "properties": {
-                      "name": {
-                        "type": "string"
-                      }
-                    },
-                    "required": ["name"],
-                    "additionalProperties": false
-                  }
-                },
-                "required": ["id", "type", "properties"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "string",
-                    "pattern": "^evt_"
-                  },
-                  "type": {
-                    "type": "string",
-                    "enum": ["workspace.failed"]
-                  },
-                  "properties": {
-                    "type": "object",
-                    "properties": {
-                      "message": {
-                        "type": "string"
-                      }
-                    },
-                    "required": ["message"],
-                    "additionalProperties": false
-                  }
-                },
-                "required": ["id", "type", "properties"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "string",
-                    "pattern": "^evt_"
-                  },
-                  "type": {
-                    "type": "string",
-                    "enum": ["workspace.status"]
-                  },
-                  "properties": {
-                    "type": "object",
-                    "properties": {
-                      "workspaceID": {
-                        "type": "string",
-                        "pattern": "^wrk"
-                      },
-                      "status": {
-                        "type": "string",
-                        "enum": ["connected", "connecting", "disconnected", "error"]
-                      }
-                    },
-                    "required": ["workspaceID", "status"],
-                    "additionalProperties": false
-                  }
-                },
-                "required": ["id", "type", "properties"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "string",
-                    "pattern": "^evt_"
-                  },
-                  "type": {
-                    "type": "string",
-                    "enum": ["worktree.ready"]
-                  },
-                  "properties": {
-                    "type": "object",
-                    "properties": {
-                      "name": {
-                        "type": "string"
-                      },
-                      "branch": {
-                        "type": "string"
-                      }
-                    },
-                    "required": ["name"],
-                    "additionalProperties": false
-                  }
-                },
-                "required": ["id", "type", "properties"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "string",
-                    "pattern": "^evt_"
-                  },
-                  "type": {
-                    "type": "string",
-                    "enum": ["worktree.failed"]
-                  },
-                  "properties": {
-                    "type": "object",
-                    "properties": {
-                      "message": {
-                        "type": "string"
-                      }
-                    },
-                    "required": ["message"],
                     "additionalProperties": false
                   }
                 },
@@ -20953,6 +20594,365 @@
                       "pending_question",
                       "error"
                     ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["id", "type", "properties"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^evt_"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["command.executed"]
+                  },
+                  "properties": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "sessionID": {
+                        "type": "string",
+                        "pattern": "^ses"
+                      },
+                      "arguments": {
+                        "type": "string"
+                      },
+                      "messageID": {
+                        "type": "string",
+                        "pattern": "^msg"
+                      }
+                    },
+                    "required": ["name", "sessionID", "arguments", "messageID"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["id", "type", "properties"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^evt_"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["project.updated"]
+                  },
+                  "properties": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "worktree": {
+                        "type": "string"
+                      },
+                      "vcs": {
+                        "type": "string",
+                        "enum": ["git"]
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "icon": {
+                        "type": "object",
+                        "properties": {
+                          "url": {
+                            "type": "string"
+                          },
+                          "override": {
+                            "type": "string"
+                          },
+                          "color": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": false
+                      },
+                      "commands": {
+                        "type": "object",
+                        "properties": {
+                          "start": {
+                            "type": "string",
+                            "description": "Startup script to run when creating a new workspace (worktree)"
+                          }
+                        },
+                        "additionalProperties": false
+                      },
+                      "time": {
+                        "type": "object",
+                        "properties": {
+                          "created": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "updated": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "initialized": {
+                            "type": "integer",
+                            "minimum": 0
+                          }
+                        },
+                        "required": ["created", "updated"],
+                        "additionalProperties": false
+                      },
+                      "sandboxes": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "required": ["id", "worktree", "time", "sandboxes"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["id", "type", "properties"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^evt_"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["session.status"]
+                  },
+                  "properties": {
+                    "type": "object",
+                    "properties": {
+                      "sessionID": {
+                        "type": "string",
+                        "pattern": "^ses"
+                      },
+                      "status": {
+                        "$ref": "#/components/schemas/SessionStatus"
+                      }
+                    },
+                    "required": ["sessionID", "status"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["id", "type", "properties"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^evt_"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["session.idle"]
+                  },
+                  "properties": {
+                    "type": "object",
+                    "properties": {
+                      "sessionID": {
+                        "type": "string",
+                        "pattern": "^ses"
+                      }
+                    },
+                    "required": ["sessionID"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["id", "type", "properties"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^evt_"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["session.compacted"]
+                  },
+                  "properties": {
+                    "type": "object",
+                    "properties": {
+                      "sessionID": {
+                        "type": "string",
+                        "pattern": "^ses"
+                      }
+                    },
+                    "required": ["sessionID"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["id", "type", "properties"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^evt_"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["vcs.branch.updated"]
+                  },
+                  "properties": {
+                    "type": "object",
+                    "properties": {
+                      "branch": {
+                        "type": "string"
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["id", "type", "properties"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^evt_"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["workspace.ready"]
+                  },
+                  "properties": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["name"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["id", "type", "properties"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^evt_"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["workspace.failed"]
+                  },
+                  "properties": {
+                    "type": "object",
+                    "properties": {
+                      "message": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["message"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["id", "type", "properties"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^evt_"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["workspace.status"]
+                  },
+                  "properties": {
+                    "type": "object",
+                    "properties": {
+                      "workspaceID": {
+                        "type": "string",
+                        "pattern": "^wrk"
+                      },
+                      "status": {
+                        "type": "string",
+                        "enum": ["connected", "connecting", "disconnected", "error"]
+                      }
+                    },
+                    "required": ["workspaceID", "status"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["id", "type", "properties"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^evt_"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["worktree.ready"]
+                  },
+                  "properties": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "branch": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["name"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["id", "type", "properties"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^evt_"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["worktree.failed"]
+                  },
+                  "properties": {
+                    "type": "object",
+                    "properties": {
+                      "message": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["message"],
                     "additionalProperties": false
                   }
                 },
@@ -23074,7 +23074,7 @@
           },
           "source": {
             "type": "string",
-            "enum": ["command", "mcp", "skill"]
+            "enum": ["command", "mcp", "skill", "workflow"]
           },
           "template": {
             "type": "string"
@@ -24963,6 +24963,21 @@
             "$ref": "#/components/schemas/V2EventMcpBrowserOpenFailed"
           },
           {
+            "$ref": "#/components/schemas/V2EventQuestionAsked"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventQuestionReplied"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventQuestionRejected"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventWorkflowRunUpdated"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventWorkflowRunFinished"
+          },
+          {
             "$ref": "#/components/schemas/V2EventCommandExecuted"
           },
           {
@@ -24973,15 +24988,6 @@
           },
           {
             "$ref": "#/components/schemas/V2EventSessionIdle"
-          },
-          {
-            "$ref": "#/components/schemas/V2EventQuestionAsked"
-          },
-          {
-            "$ref": "#/components/schemas/V2EventQuestionReplied"
-          },
-          {
-            "$ref": "#/components/schemas/V2EventQuestionRejected"
           },
           {
             "$ref": "#/components/schemas/V2EventSessionCompacted"
@@ -25003,12 +25009,6 @@
           },
           {
             "$ref": "#/components/schemas/V2EventWorktreeFailed"
-          },
-          {
-            "$ref": "#/components/schemas/V2EventWorkflowRunUpdated"
-          },
-          {
-            "$ref": "#/components/schemas/V2EventWorkflowRunFinished"
           },
           {
             "$ref": "#/components/schemas/V2EventServerConnected"
@@ -33449,6 +33449,480 @@
         "required": ["id", "type", "data"],
         "additionalProperties": false
       },
+      "V2EventQuestionAsked": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["question.asked"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^que"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "questions": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/QuestionInfo"
+                },
+                "description": "Questions to ask"
+              },
+              "tool": {
+                "$ref": "#/components/schemas/QuestionTool"
+              }
+            },
+            "required": ["id", "sessionID", "questions"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventQuestionReplied": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["question.replied"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "requestID": {
+                "type": "string",
+                "pattern": "^que"
+              },
+              "answers": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/QuestionAnswer"
+                }
+              }
+            },
+            "required": ["sessionID", "requestID", "answers"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventQuestionRejected": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["question.rejected"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "requestID": {
+                "type": "string",
+                "pattern": "^que"
+              }
+            },
+            "required": ["sessionID", "requestID"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventWorkflowRunUpdated": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["workflow.run.updated"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "workflow": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": ["running", "completed", "failed", "cancelled", "interrupted", "paused"]
+              },
+              "current_phase": {
+                "type": "string"
+              },
+              "directory": {
+                "type": "string"
+              },
+              "agents": {
+                "type": "object",
+                "properties": {
+                  "total": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["NaN"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["-Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity", "-Infinity", "NaN"]
+                      }
+                    ]
+                  },
+                  "running": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["NaN"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["-Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity", "-Infinity", "NaN"]
+                      }
+                    ]
+                  },
+                  "failed": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["NaN"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["-Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity", "-Infinity", "NaN"]
+                      }
+                    ]
+                  }
+                },
+                "required": ["total", "running", "failed"],
+                "additionalProperties": false
+              },
+              "pending_question": {
+                "type": "boolean"
+              },
+              "error": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "workflow",
+              "status",
+              "current_phase",
+              "directory",
+              "agents",
+              "pending_question",
+              "error"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventWorkflowRunFinished": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["workflow.run.finished"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "workflow": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": ["running", "completed", "failed", "cancelled", "interrupted", "paused"]
+              },
+              "current_phase": {
+                "type": "string"
+              },
+              "directory": {
+                "type": "string"
+              },
+              "agents": {
+                "type": "object",
+                "properties": {
+                  "total": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["NaN"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["-Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity", "-Infinity", "NaN"]
+                      }
+                    ]
+                  },
+                  "running": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["NaN"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["-Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity", "-Infinity", "NaN"]
+                      }
+                    ]
+                  },
+                  "failed": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["NaN"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["-Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity", "-Infinity", "NaN"]
+                      }
+                    ]
+                  }
+                },
+                "required": ["total", "running", "failed"],
+                "additionalProperties": false
+              },
+              "pending_question": {
+                "type": "boolean"
+              },
+              "error": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "workflow",
+              "status",
+              "current_phase",
+              "directory",
+              "agents",
+              "pending_question",
+              "error"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
       "V2EventCommandExecuted": {
         "type": "object",
         "properties": {
@@ -33707,178 +34181,6 @@
               }
             },
             "required": ["sessionID"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "type", "data"],
-        "additionalProperties": false
-      },
-      "V2EventQuestionAsked": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "pattern": "^evt_"
-          },
-          "metadata": {
-            "type": "object"
-          },
-          "durable": {
-            "type": "object",
-            "properties": {
-              "aggregateID": {
-                "type": "string"
-              },
-              "seq": {
-                "type": "integer"
-              },
-              "version": {
-                "type": "integer"
-              }
-            },
-            "required": ["aggregateID", "seq", "version"],
-            "additionalProperties": false
-          },
-          "location": {
-            "$ref": "#/components/schemas/LocationRef"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["question.asked"]
-          },
-          "data": {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string",
-                "pattern": "^que"
-              },
-              "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
-              },
-              "questions": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/components/schemas/QuestionInfo"
-                },
-                "description": "Questions to ask"
-              },
-              "tool": {
-                "$ref": "#/components/schemas/QuestionTool"
-              }
-            },
-            "required": ["id", "sessionID", "questions"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "type", "data"],
-        "additionalProperties": false
-      },
-      "V2EventQuestionReplied": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "pattern": "^evt_"
-          },
-          "metadata": {
-            "type": "object"
-          },
-          "durable": {
-            "type": "object",
-            "properties": {
-              "aggregateID": {
-                "type": "string"
-              },
-              "seq": {
-                "type": "integer"
-              },
-              "version": {
-                "type": "integer"
-              }
-            },
-            "required": ["aggregateID", "seq", "version"],
-            "additionalProperties": false
-          },
-          "location": {
-            "$ref": "#/components/schemas/LocationRef"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["question.replied"]
-          },
-          "data": {
-            "type": "object",
-            "properties": {
-              "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
-              },
-              "requestID": {
-                "type": "string",
-                "pattern": "^que"
-              },
-              "answers": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/components/schemas/QuestionAnswer"
-                }
-              }
-            },
-            "required": ["sessionID", "requestID", "answers"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "type", "data"],
-        "additionalProperties": false
-      },
-      "V2EventQuestionRejected": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "pattern": "^evt_"
-          },
-          "metadata": {
-            "type": "object"
-          },
-          "durable": {
-            "type": "object",
-            "properties": {
-              "aggregateID": {
-                "type": "string"
-              },
-              "seq": {
-                "type": "integer"
-              },
-              "version": {
-                "type": "integer"
-              }
-            },
-            "required": ["aggregateID", "seq", "version"],
-            "additionalProperties": false
-          },
-          "location": {
-            "$ref": "#/components/schemas/LocationRef"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["question.rejected"]
-          },
-          "data": {
-            "type": "object",
-            "properties": {
-              "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
-              },
-              "requestID": {
-                "type": "string",
-                "pattern": "^que"
-              }
-            },
-            "required": ["sessionID", "requestID"],
             "additionalProperties": false
           }
         },
@@ -34216,308 +34518,6 @@
               }
             },
             "required": ["message"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "type", "data"],
-        "additionalProperties": false
-      },
-      "V2EventWorkflowRunUpdated": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "pattern": "^evt_"
-          },
-          "metadata": {
-            "type": "object"
-          },
-          "durable": {
-            "type": "object",
-            "properties": {
-              "aggregateID": {
-                "type": "string"
-              },
-              "seq": {
-                "type": "integer"
-              },
-              "version": {
-                "type": "integer"
-              }
-            },
-            "required": ["aggregateID", "seq", "version"],
-            "additionalProperties": false
-          },
-          "location": {
-            "$ref": "#/components/schemas/LocationRef"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["workflow.run.updated"]
-          },
-          "data": {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string"
-              },
-              "workflow": {
-                "type": "string"
-              },
-              "status": {
-                "type": "string",
-                "enum": ["running", "completed", "failed", "cancelled", "interrupted", "paused"]
-              },
-              "current_phase": {
-                "type": "string"
-              },
-              "directory": {
-                "type": "string"
-              },
-              "agents": {
-                "type": "object",
-                "properties": {
-                  "total": {
-                    "anyOf": [
-                      {
-                        "type": "number"
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["NaN"]
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["Infinity"]
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["-Infinity"]
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["Infinity", "-Infinity", "NaN"]
-                      }
-                    ]
-                  },
-                  "running": {
-                    "anyOf": [
-                      {
-                        "type": "number"
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["NaN"]
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["Infinity"]
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["-Infinity"]
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["Infinity", "-Infinity", "NaN"]
-                      }
-                    ]
-                  },
-                  "failed": {
-                    "anyOf": [
-                      {
-                        "type": "number"
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["NaN"]
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["Infinity"]
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["-Infinity"]
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["Infinity", "-Infinity", "NaN"]
-                      }
-                    ]
-                  }
-                },
-                "required": ["total", "running", "failed"],
-                "additionalProperties": false
-              },
-              "pending_question": {
-                "type": "boolean"
-              },
-              "error": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "id",
-              "workflow",
-              "status",
-              "current_phase",
-              "directory",
-              "agents",
-              "pending_question",
-              "error"
-            ],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "type", "data"],
-        "additionalProperties": false
-      },
-      "V2EventWorkflowRunFinished": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "pattern": "^evt_"
-          },
-          "metadata": {
-            "type": "object"
-          },
-          "durable": {
-            "type": "object",
-            "properties": {
-              "aggregateID": {
-                "type": "string"
-              },
-              "seq": {
-                "type": "integer"
-              },
-              "version": {
-                "type": "integer"
-              }
-            },
-            "required": ["aggregateID", "seq", "version"],
-            "additionalProperties": false
-          },
-          "location": {
-            "$ref": "#/components/schemas/LocationRef"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["workflow.run.finished"]
-          },
-          "data": {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string"
-              },
-              "workflow": {
-                "type": "string"
-              },
-              "status": {
-                "type": "string",
-                "enum": ["running", "completed", "failed", "cancelled", "interrupted", "paused"]
-              },
-              "current_phase": {
-                "type": "string"
-              },
-              "directory": {
-                "type": "string"
-              },
-              "agents": {
-                "type": "object",
-                "properties": {
-                  "total": {
-                    "anyOf": [
-                      {
-                        "type": "number"
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["NaN"]
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["Infinity"]
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["-Infinity"]
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["Infinity", "-Infinity", "NaN"]
-                      }
-                    ]
-                  },
-                  "running": {
-                    "anyOf": [
-                      {
-                        "type": "number"
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["NaN"]
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["Infinity"]
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["-Infinity"]
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["Infinity", "-Infinity", "NaN"]
-                      }
-                    ]
-                  },
-                  "failed": {
-                    "anyOf": [
-                      {
-                        "type": "number"
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["NaN"]
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["Infinity"]
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["-Infinity"]
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["Infinity", "-Infinity", "NaN"]
-                      }
-                    ]
-                  }
-                },
-                "required": ["total", "running", "failed"],
-                "additionalProperties": false
-              },
-              "pending_question": {
-                "type": "boolean"
-              },
-              "error": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "id",
-              "workflow",
-              "status",
-              "current_phase",
-              "directory",
-              "agents",
-              "pending_question",
-              "error"
-            ],
             "additionalProperties": false
           }
         },
@@ -37046,182 +37046,6 @@
         "required": ["id", "type", "properties"],
         "additionalProperties": false
       },
-      "EventCommandExecuted": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "pattern": "^evt_"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["command.executed"]
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "name": {
-                "type": "string"
-              },
-              "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
-              },
-              "arguments": {
-                "type": "string"
-              },
-              "messageID": {
-                "type": "string",
-                "pattern": "^msg"
-              }
-            },
-            "required": ["name", "sessionID", "arguments", "messageID"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "type", "properties"],
-        "additionalProperties": false
-      },
-      "EventProjectUpdated": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "pattern": "^evt_"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["project.updated"]
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string"
-              },
-              "worktree": {
-                "type": "string"
-              },
-              "vcs": {
-                "type": "string",
-                "enum": ["git"]
-              },
-              "name": {
-                "type": "string"
-              },
-              "icon": {
-                "type": "object",
-                "properties": {
-                  "url": {
-                    "type": "string"
-                  },
-                  "override": {
-                    "type": "string"
-                  },
-                  "color": {
-                    "type": "string"
-                  }
-                },
-                "additionalProperties": false
-              },
-              "commands": {
-                "type": "object",
-                "properties": {
-                  "start": {
-                    "type": "string",
-                    "description": "Startup script to run when creating a new workspace (worktree)"
-                  }
-                },
-                "additionalProperties": false
-              },
-              "time": {
-                "type": "object",
-                "properties": {
-                  "created": {
-                    "type": "integer",
-                    "minimum": 0
-                  },
-                  "updated": {
-                    "type": "integer",
-                    "minimum": 0
-                  },
-                  "initialized": {
-                    "type": "integer",
-                    "minimum": 0
-                  }
-                },
-                "required": ["created", "updated"],
-                "additionalProperties": false
-              },
-              "sandboxes": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              }
-            },
-            "required": ["id", "worktree", "time", "sandboxes"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "type", "properties"],
-        "additionalProperties": false
-      },
-      "EventSessionStatus": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "pattern": "^evt_"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["session.status"]
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
-              },
-              "status": {
-                "$ref": "#/components/schemas/SessionStatus"
-              }
-            },
-            "required": ["sessionID", "status"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "type", "properties"],
-        "additionalProperties": false
-      },
-      "EventSessionIdle": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "pattern": "^evt_"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["session.idle"]
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
-              }
-            },
-            "required": ["sessionID"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "type", "properties"],
-        "additionalProperties": false
-      },
       "EventQuestionAsked": {
         "type": "object",
         "properties": {
@@ -37322,189 +37146,6 @@
               }
             },
             "required": ["sessionID", "requestID"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "type", "properties"],
-        "additionalProperties": false
-      },
-      "EventSessionCompacted": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "pattern": "^evt_"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["session.compacted"]
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
-              }
-            },
-            "required": ["sessionID"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "type", "properties"],
-        "additionalProperties": false
-      },
-      "EventVcsBranchUpdated": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "pattern": "^evt_"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["vcs.branch.updated"]
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "branch": {
-                "type": "string"
-              }
-            },
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "type", "properties"],
-        "additionalProperties": false
-      },
-      "EventWorkspaceReady": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "pattern": "^evt_"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["workspace.ready"]
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "name": {
-                "type": "string"
-              }
-            },
-            "required": ["name"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "type", "properties"],
-        "additionalProperties": false
-      },
-      "EventWorkspaceFailed": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "pattern": "^evt_"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["workspace.failed"]
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "message": {
-                "type": "string"
-              }
-            },
-            "required": ["message"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "type", "properties"],
-        "additionalProperties": false
-      },
-      "EventWorkspaceStatus": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "pattern": "^evt_"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["workspace.status"]
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "workspaceID": {
-                "type": "string",
-                "pattern": "^wrk"
-              },
-              "status": {
-                "type": "string",
-                "enum": ["connected", "connecting", "disconnected", "error"]
-              }
-            },
-            "required": ["workspaceID", "status"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "type", "properties"],
-        "additionalProperties": false
-      },
-      "EventWorktreeReady": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "pattern": "^evt_"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["worktree.ready"]
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "name": {
-                "type": "string"
-              },
-              "branch": {
-                "type": "string"
-              }
-            },
-            "required": ["name"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "type", "properties"],
-        "additionalProperties": false
-      },
-      "EventWorktreeFailed": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "pattern": "^evt_"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["worktree.failed"]
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "message": {
-                "type": "string"
-              }
-            },
-            "required": ["message"],
             "additionalProperties": false
           }
         },
@@ -37739,6 +37380,365 @@
               "pending_question",
               "error"
             ],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventCommandExecuted": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["command.executed"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "arguments": {
+                "type": "string"
+              },
+              "messageID": {
+                "type": "string",
+                "pattern": "^msg"
+              }
+            },
+            "required": ["name", "sessionID", "arguments", "messageID"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventProjectUpdated": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["project.updated"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "worktree": {
+                "type": "string"
+              },
+              "vcs": {
+                "type": "string",
+                "enum": ["git"]
+              },
+              "name": {
+                "type": "string"
+              },
+              "icon": {
+                "type": "object",
+                "properties": {
+                  "url": {
+                    "type": "string"
+                  },
+                  "override": {
+                    "type": "string"
+                  },
+                  "color": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false
+              },
+              "commands": {
+                "type": "object",
+                "properties": {
+                  "start": {
+                    "type": "string",
+                    "description": "Startup script to run when creating a new workspace (worktree)"
+                  }
+                },
+                "additionalProperties": false
+              },
+              "time": {
+                "type": "object",
+                "properties": {
+                  "created": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "updated": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "initialized": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": ["created", "updated"],
+                "additionalProperties": false
+              },
+              "sandboxes": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": ["id", "worktree", "time", "sandboxes"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventSessionStatus": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.status"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "status": {
+                "$ref": "#/components/schemas/SessionStatus"
+              }
+            },
+            "required": ["sessionID", "status"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventSessionIdle": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.idle"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              }
+            },
+            "required": ["sessionID"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventSessionCompacted": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.compacted"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              }
+            },
+            "required": ["sessionID"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventVcsBranchUpdated": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["vcs.branch.updated"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "branch": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventWorkspaceReady": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["workspace.ready"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": ["name"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventWorkspaceFailed": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["workspace.failed"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["message"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventWorkspaceStatus": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["workspace.status"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "workspaceID": {
+                "type": "string",
+                "pattern": "^wrk"
+              },
+              "status": {
+                "type": "string",
+                "enum": ["connected", "connecting", "disconnected", "error"]
+              }
+            },
+            "required": ["workspaceID", "status"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventWorktreeReady": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["worktree.ready"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "branch": {
+                "type": "string"
+              }
+            },
+            "required": ["name"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventWorktreeFailed": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["worktree.failed"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["message"],
             "additionalProperties": false
           }
         },
