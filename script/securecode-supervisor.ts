@@ -12,14 +12,131 @@
 
 import { SandboxManager, type SandboxRuntimeConfig } from "@anthropic-ai/sandbox-runtime"
 import { spawn } from "node:child_process"
-import { existsSync, readFileSync } from "node:fs"
-import { homedir } from "node:os"
+import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync } from "node:fs"
+import { homedir, tmpdir } from "node:os"
 import { dirname, join, resolve } from "node:path"
 
 export const CONFIG_DIR = join(homedir(), ".config", "securecode")
 export const CONFIG_PATH = join(CONFIG_DIR, "sandbox.json")
 
 export const DEFAULT_ALLOWED_DOMAINS = ["conf-ai.acompany-az.com"]
+
+// securecode 本体 (= sandbox 内で動く inner binary。upstream の packages/core/src/global.ts
+// 由来) は `xdg-basedir` 経由で XDG ディレクトリ配下に "securecode" サブディレクトリを
+// 掘って DB / cache / log / lock / tmp を書く。supervisor は本体より前に立ち上がるため
+// core への import 依存は持てない。ここでは inner と同じ XDG 解決ロジックを最小実装で
+// 再現する:
+// - 環境変数が truthy ならそれを採用 (inner の `xdg-basedir` も `env || fallback`)。
+//   相対パスは sandbox-runtime に渡せる絶対パスへ `resolve()` で正規化する。inner 側の
+//   `path.join(v, app)` も同じ cwd 起点で解決されるため drift しない
+// - 空文字 / 未設定なら spec 標準のフォールバック (~/.local/share 等)
+const XDG_APP = "securecode"
+
+function xdgPath(envVar: string, fallback: string): string {
+  const v = process.env[envVar]
+  if (!v) return fallback
+  // inner (xdg-basedir) は truthy 値をそのまま採用する。supervisor もそれに合わせるが、
+  // sandbox-runtime の allowWrite/denyWrite は絶対パス前提なので、相対パスはここで
+  // process.cwd() 基準に解決して絶対化する。
+  return resolve(v)
+}
+
+/**
+ * sandbox `allowWrite` の組み込みベースライン。
+ *
+ * 「ユーザが何も書かなくても cwd と securecode の内部パスだけは書ける」状態を
+ * 構造的に保証する。`buildSandboxConfig` 内で常に user 指定の **前** に
+ * concat されるため、ユーザは「これに追加で開けたい場所」を `allowWrite` に
+ * 書けば良い (= cwd は消えない)。
+ *
+ * 含まれるパス:
+ * - **cwd** — ユーザがその場で開発する作業ディレクトリ
+ * - **$XDG_DATA_HOME/securecode** — DB / snapshot / log / repos
+ * - **$XDG_CACHE_HOME/securecode** — ripgrep / LSP バイナリ / skill キャッシュ
+ * - **$XDG_CONFIG_HOME/securecode** — securecode 設定 (`sandbox.json` 自身は
+ *   `buildSandboxConfig` 内で `denyWrite` 側に常時固定されており別途封鎖)
+ * - **$XDG_STATE_HOME/securecode** — flock
+ * - **per-session tmp** — `setupSessionTmpdir` で確保した `$TMPDIR/securecode-<ts>-<pid>/`。
+ *   ここを baseline に入れ、かつ `process.env.TMPDIR` を上書きして子に渡すことで、
+ *   sandbox 内 (securecode-bin) の `os.tmpdir()` 呼び出し (JDTLS / TUI clipboard /
+ *   TUI external editor / Global.Path.tmp など) が全部このディレクトリ配下に閉じる。
+ *   別セッションの残骸を読み書きできない設計。
+ *
+ * cwd を逆に塞ぎたい上級ケースは `denyWrite: ["./"]` で対処可能 (deny が勝つ)。
+ *
+ * @param opts.cwd - 作業ディレクトリ。テストから注入する用途で引数化している。
+ * @param opts.tmp - per-session tmp の絶対パス。未指定なら `$TMPDIR/securecode`
+ *   (= securecode 内の `Global.Path.tmp` 相当) にフォールバックするが、本番経路は
+ *   `setupSessionTmpdir()` の戻り値を必ず渡す。
+ */
+export function defaultAllowWrite(opts: { cwd?: string; tmp?: string } = {}): string[] {
+  const cwd = opts.cwd ?? process.cwd()
+  const tmp = opts.tmp ?? join(tmpdir(), XDG_APP)
+  const home = homedir()
+  return [
+    cwd,
+    join(xdgPath("XDG_DATA_HOME", join(home, ".local", "share")), XDG_APP),
+    join(xdgPath("XDG_CACHE_HOME", join(home, ".cache")), XDG_APP),
+    join(xdgPath("XDG_CONFIG_HOME", join(home, ".config")), XDG_APP),
+    join(xdgPath("XDG_STATE_HOME", join(home, ".local", "state")), XDG_APP),
+    tmp,
+  ]
+}
+
+/**
+ * supervisor 起動時に **per-session の TMPDIR override** を確保する。
+ *
+ * `$TMPDIR/securecode-<ts>-<pid>/` を作成し、戻り値 `path` を返す。呼び出し側は:
+ * 1. `process.env.TMPDIR = path` を設定して子 (securecode-bin) に継承させる
+ *    → Node の `os.tmpdir()` は `TMPDIR` を直接参照するため、upstream 側の改造ゼロで
+ *      sandbox 内の全 tmp 利用箇所がこのディレクトリ配下に閉じる
+ *    → 結果: 別セッションの残骸を AI が読めない / 自分の残骸も他セッションに見られない
+ * 2. `buildSandboxConfig` に `tmp: path` で渡して baseline に含める
+ * 3. securecode-bin 終了後に `cleanup()` で `rm -rf` する
+ *
+ * **suffix の構成**: `<Date.now()>-<process.pid>`。
+ * - **timestamp (ms)** がクロス時間方向のユニーク性を担当: PID 再利用や cleanup 取りこぼし
+ *   による「過去セッションの残骸と衝突する」問題を構造的に消す (時刻は単調増加するため、
+ *   古い dir 名と新セッションの dir 名は必ず異なる)。
+ * - **PID** が並行方向のユニーク性を担当: 同一 ms 内に並行起動した supervisor が同じ dir
+ *   名になるのを防ぐ (OS は同時に生きている 2 プロセスに同一 PID を割り当てないため)。
+ * - 結果として乱数を一切使わず構造的に衝突不可になる。両者ともデバッグ可読性も高い
+ *   (`いつ` 起動 / `誰が` 起動 が dir 名から即わかる)。
+ *
+ * **クラッシュ時の挙動**: supervisor が SIGKILL / panic で落ちると cleanup が呼ばれず
+ * ゴミディレクトリが残る。次回起動時に自動掃除はしない (古い `securecode-XXX`
+ * ディレクトリが現役の別 supervisor のものかを安全に判定するのが面倒なため)。
+ * 気になればユーザが手動 rm。
+ *
+ * @param opts.base - parent ディレクトリ。未指定なら現在の `os.tmpdir()`。テストから注入用。
+ * @param opts.suffix - ディレクトリ名の suffix (`securecode-<suffix>`)。未指定なら
+ *   `<timestamp>-<pid>` を生成。テストから決定論的なパスを指定する用途。
+ */
+export function setupSessionTmpdir(
+  opts: { base?: string; suffix?: string } = {},
+): { path: string; cleanup: () => void } {
+  // macOS の os.tmpdir() は `/var/folders/...` を返すが、`/var` は `/private/var` への
+  // symlink で実体は `/private/var/folders/...`。Seatbelt は canonical path で評価する
+  // ため、allowWrite に登録するパスと sandbox 内のプロセスが書き込もうとするパスが
+  // canonical 一致していないと write が拒否される (= JDTLS / TUI external editor / clipboard
+  // が壊れる)。`realpathSync` で確実に canonical path へ展開してから組み立てる。
+  // (Linux でも一般に同等。base が symlink を含まないシステムでは no-op。)
+  const base = realpathSync(opts.base ?? tmpdir())
+  const suffix = opts.suffix ?? `${Date.now()}-${process.pid}`
+  const path = join(base, `securecode-${suffix}`)
+  mkdirSync(path, { recursive: true })
+  return {
+    path,
+    cleanup: () => {
+      try {
+        rmSync(path, { recursive: true, force: true })
+      } catch {
+        // cleanup は best-effort: 既に削除済み / 別プロセスが触ってる等で失敗しても
+        // supervisor の終了経路をブロックしない。
+      }
+    },
+  }
+}
 
 /**
  * 全フィールドが `string[]` 必須に揃った正規化済み config。
@@ -61,9 +178,25 @@ function log(msg: string): void {
   process.stderr.write(`[securecode-supervisor] ${msg}\n`)
 }
 
+// fatal error 用の専用クラス。`die()` から throw され、top-level catch がここで
+// exit code を拾って `process.exit(code)` する。Error をそのまま使うと top-level の
+// 一般的な catch (unexpected error → exit 1) と区別できないため別クラスにする。
+class FatalError extends Error {
+  constructor(
+    msg: string,
+    readonly code: number = 1,
+  ) {
+    super(msg)
+    this.name = "FatalError"
+  }
+}
+
+// 致命エラー時の中断。`process.exit` を直接呼ぶと `try/finally` の cleanup を skip
+// するため、必ず throw 経由にして `main()` の outer try/finally → top-level catch
+// で集約的に exit する。`never` を返す型は維持しているので呼び出し側の制御フローは
+// 変わらない (= `die(...)` の後は unreachable)。
 function die(msg: string, code = 1): never {
-  log(`FATAL: ${msg}`)
-  process.exit(code)
+  throw new FatalError(msg, code)
 }
 
 /**
@@ -136,15 +269,21 @@ export function mergeUserConfigs(...configs: UserConfig[]): UserConfig {
  *   常に先頭に追加し、sandbox 内のプロセスから設定ファイルの読み書きを物理的に封鎖する。
  *   per-directory の `./.securecode/sandbox.json` を有効化する呼び出し側は、ここに project
  *   側のパスも含めて渡すこと。
- * - `allowWrite` — 未指定なら `["/"]` にフォールバック (= 書き込みは `denyWrite`
- *   側だけで制御する運用)。
+ * - `allowWrite` — `defaultAllowWrite(cwd)` のベースライン (cwd + opencode の XDG 配下 + tmp)
+ *   を常に先頭に concat し、user 指定分はその後ろに **追加**される (加算式)。
+ *   ユーザは「cwd 以外で追加で開けたい場所」だけを `allowWrite` に書けば良い。
+ *   cwd を逆に塞ぎたい上級ケースは `denyWrite: ["./"]` で対処可能 (deny が勝つ)。
  * - `allowPty` / `network.allowLocalBinding` — 常に `true` (TUI と dev server のため)。
  *
  * @param user - ユーザ設定。空オブジェクト `{}` も有効入力。
  * @param opts.configPaths - 常時 deny に追加する設定ファイルパス。未指定なら `[CONFIG_PATH]`。
+ * @param opts.cwd - `defaultAllowWrite` に渡す cwd。未指定なら `process.cwd()`。
  * @returns `SandboxManager.initialize()` にそのまま渡せる完全な config。
  */
-export function buildSandboxConfig(user: UserConfig, opts: { configPaths?: string[] } = {}): SandboxRuntimeConfig {
+export function buildSandboxConfig(
+  user: UserConfig,
+  opts: { configPaths?: string[]; cwd?: string; tmp?: string } = {},
+): SandboxRuntimeConfig {
   const allowedDomains = [...DEFAULT_ALLOWED_DOMAINS, ...user.network.allowedDomains]
 
   // SecureCode 本体が sandbox 設定ファイル (global + project) に読み書き一切できないよう
@@ -157,11 +296,12 @@ export function buildSandboxConfig(user: UserConfig, opts: { configPaths?: strin
   const denyRead = [...configPaths, ...user.filesystem.denyRead]
   const denyWrite = [...configPaths, ...user.filesystem.denyWrite]
 
-  // sandbox-runtime は allow-only: 空配列を渡すと「全 deny」と解釈されるため、
-  // ユーザが allowWrite を書かなかったケースは "/" にフォールバックして read 同様に
-  // "deny で絞る" 運用にする。allowRead は undefined を渡すと sandbox-runtime の
-  // デフォルト read 挙動に委ねられるので、未指定時は undefined のまま渡す。
-  const allowWrite = user.filesystem.allowWrite.length > 0 ? user.filesystem.allowWrite : ["/"]
+  // allowWrite は加算式: ベースライン (cwd + opencode XDG 配下 + per-session tmp) を
+  // 常に先頭に置き、ユーザ指定はそれに追加される。これにより「ユーザが allowWrite を
+  // 1 つでも書いた瞬間に cwd が消える」 footgun を構造的に排除している。
+  // allowRead は undefined を渡すと sandbox-runtime の デフォルト read 挙動に
+  // 委ねられるので、未指定時は undefined のまま渡す。
+  const allowWrite = [...defaultAllowWrite({ cwd: opts.cwd, tmp: opts.tmp }), ...user.filesystem.allowWrite]
   const allowRead = user.filesystem.allowRead.length > 0 ? user.filesystem.allowRead : undefined
 
   return {
@@ -282,50 +422,123 @@ export function resolveInnerCommand(args: string[], opts: { distBinPath?: string
   return `cd ${quotedRoot} && bun run --cwd packages/opencode --conditions=browser src/index.ts${tail}`
 }
 
-async function main(): Promise<void> {
+async function main(): Promise<number> {
   await assertSandboxAvailable()
 
-  // sandbox.json は global (~/.config/securecode/) と project (cwd/.securecode/) の 2 階層。
-  // 親ディレクトリへの walk は意図的にしない (攻撃面 / 暗黙の上位設定を避ける)。
-  const projectConfigPath = join(process.cwd(), ".securecode", "sandbox.json")
-  const userConfig = mergeUserConfigs(loadUserConfig(CONFIG_PATH), loadUserConfig(projectConfigPath))
-  const sandboxConfig = buildSandboxConfig(userConfig, {
-    configPaths: [CONFIG_PATH, projectConfigPath],
-  })
+  // per-session tmp を確保し、子に渡す env.TMPDIR を上書きする。これにより sandbox 内
+  // (securecode-bin) の全 os.tmpdir() 呼び出し (JDTLS / TUI clipboard / external editor /
+  // Global.Path.tmp) がこのディレクトリ配下に閉じ、別セッションの残骸を読み書きできない
+  // 設計になる。baseline (defaultAllowWrite) にも同じパスを渡し、sandbox の allowWrite に含める。
+  //
+  // 確保は signal handler 登録より前に済ませる: handler から `session` を参照するため。
+  const session = setupSessionTmpdir()
+  process.env.TMPDIR = session.path
 
-  log(`allowedDomains = ${sandboxConfig.network.allowedDomains.join(", ")}`)
-
+  // 以降は try/finally で囲み、どの経路 (正常 exit / 同期 throw / SandboxManager 初期化失敗 /
+  // wrapWithSandbox throw 等) でも session.cleanup が確実に走るようにする。`process.exit`
+  // は finally を skip するため、本関数では exit code を return するに留め、実 exit は
+  // 呼び出し側に集約する。
   try {
-    await SandboxManager.initialize(sandboxConfig)
-  } catch (err) {
-    die(`failed to initialize sandbox: ${(err as Error).message}`)
-  }
+    // Ctrl+C や SIGTERM は process group 全体に届くため、child (securecode-bin) も同じ
+    // signal を受けて自分で終了する。本来 parent は child の exit を待つだけで済むが、
+    //
+    // 1. parent の default SIGINT/SIGTERM handler は **即 process.exit()** してしまい、
+    //    finally の session.cleanup() を skip する。これがないと per-session tmpdir が
+    //    /tmp 配下に溜まり「別セッションの残骸を AI に読ませない」設計目標が崩れる。
+    // 2. child が signal を握りつぶす状態 (TUI が一時的に handler 差し替え中 / JDTLS が
+    //    停止しない 等) になると、parent も自分で終了できず永久ハングする。Ctrl+C が
+    //    効かないように見えるため、ユーザに `kill -9` を強いてしまう。
+    //
+    // 対策: 1 回目は child へ明示的に signal を forward (parent は exit させない)、
+    // 2 回目は「ユーザが本当に降りたい」とみなして session.cleanup を試みた後で強制 exit。
+    let child: ReturnType<typeof spawn> | undefined
+    let interruptCount = 0
+    const forwardSignal = (sig: "SIGINT" | "SIGTERM") => () => {
+      interruptCount++
+      if (child && child.exitCode === null && !child.killed) {
+        try {
+          child.kill(sig)
+        } catch {
+          // kill は best-effort: 既に死んでる / EPERM 等は無視。
+        }
+      }
+      if (interruptCount >= 2) {
+        // 2 回目以降は強制脱出。process.exit は finally を skip するため、
+        // tmpdir cleanup だけはここで明示的に試みる。
+        try {
+          session.cleanup()
+        } catch {
+          // ignore
+        }
+        // 128 + signal number 慣例: SIGINT=130, SIGTERM=143
+        process.exit(sig === "SIGINT" ? 130 : 143)
+      }
+    }
+    process.on("SIGINT", forwardSignal("SIGINT"))
+    process.on("SIGTERM", forwardSignal("SIGTERM"))
 
-  const inner = resolveInnerCommand(process.argv.slice(2))
-  const wrapped = await SandboxManager.wrapWithSandbox(inner)
-
-  log(`launching opencode inside sandbox`)
-
-  const child = spawn(wrapped, {
-    shell: true,
-    stdio: "inherit",
-    env: process.env,
-  })
-
-  const exitCode: number = await new Promise((r) => {
-    child.on("exit", (code) => r(code ?? 1))
-    child.on("error", (err) => {
-      log(`child error: ${err.message}`)
-      r(1)
+    // sandbox.json は global (~/.config/securecode/) と project (cwd/.securecode/) の 2 階層。
+    // 親ディレクトリへの walk は意図的にしない (攻撃面 / 暗黙の上位設定を避ける)。
+    //
+    // cwd は **canonical path** に展開する: macOS の `os.tmpdir()` (`/var/folders/...`) や
+    // ユーザが symlink 配下 (例: `/tmp/myproj` (= `/private/tmp/myproj`)) で開発するケースで、
+    // Seatbelt は canonical path で allow/deny を評価するため、logical path のまま allowWrite に
+    // 載せると sandbox 内の write が **全て** 拒否される。同じ理由で setupSessionTmpdir も
+    // base を realpath している。`projectConfigPath` も canonical 起点で組み立てて denyRead/
+    // denyWrite に渡すパスを sandbox 評価軸と一致させる。
+    const cwd = realpathSync(process.cwd())
+    const projectConfigPath = join(cwd, ".securecode", "sandbox.json")
+    const userConfig = mergeUserConfigs(loadUserConfig(CONFIG_PATH), loadUserConfig(projectConfigPath))
+    const sandboxConfig = buildSandboxConfig(userConfig, {
+      configPaths: [CONFIG_PATH, projectConfigPath],
+      cwd,
+      tmp: session.path,
     })
-  })
 
-  await SandboxManager.reset().catch(() => {})
-  process.exit(exitCode)
+    log(`allowedDomains = ${sandboxConfig.network.allowedDomains.join(", ")}`)
+    log(`session tmp = ${session.path}`)
+
+    try {
+      await SandboxManager.initialize(sandboxConfig)
+    } catch (err) {
+      die(`failed to initialize sandbox: ${(err as Error).message}`)
+    }
+
+    const inner = resolveInnerCommand(process.argv.slice(2))
+    const wrapped = await SandboxManager.wrapWithSandbox(inner)
+
+    log(`launching opencode inside sandbox`)
+
+    child = spawn(wrapped, {
+      shell: true,
+      stdio: "inherit",
+      env: process.env,
+    })
+
+    const exitCode: number = await new Promise((r) => {
+      child!.on("exit", (code) => r(code ?? 1))
+      child!.on("error", (err) => {
+        log(`child error: ${err.message}`)
+        r(1)
+      })
+    })
+
+    await SandboxManager.reset().catch(() => {})
+    return exitCode
+  } finally {
+    session.cleanup()
+  }
 }
 
 if (import.meta.main) {
-  main().catch((err) => {
-    die((err as Error).message)
-  })
+  main()
+    .then((code) => process.exit(code))
+    .catch((err) => {
+      if (err instanceof FatalError) {
+        log(`FATAL: ${err.message}`)
+        process.exit(err.code)
+      }
+      log(`FATAL: unexpected error: ${(err as Error).message}`)
+      process.exit(1)
+    })
 }

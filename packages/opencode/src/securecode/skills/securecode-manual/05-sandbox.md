@@ -36,7 +36,8 @@ Windows ネイティブは配布対象外です。WSL2 上で Linux 版を使っ
 主な制約:
 
 - **HTTPS / SOCKS5 outbound** は許可ドメイン (`conf-ai.acompany-az.com` 既定) 以外をすべて遮断
-- **ファイルアクセス** はワーキングディレクトリ配下と最小限の OS パスのみ
+- **書き込み可能なパス** は既定で **cwd + セキュアコード内部 (`~/.local/share/securecode` 等の XDG 配下) + per-session の一時ディレクトリ** のみ。それ以外はすべて拒否
+- **一時ディレクトリは起動ごとに分離** — supervisor が `$TMPDIR/securecode-<timestamp>-<pid>/` を作成し、サンドボックス内の本体プロセスには `TMPDIR` 環境変数を上書きして渡す。終了時に同ディレクトリは `rm -rf` でクリーンアップされる。これにより**別セッションの残骸を AI が読み書きできない**設計 (timestamp が PID 再利用方向、PID が同時起動方向の衝突を構造的に防止)
 - **`sandbox.json` 自体** は AI から **読みも書きも一切できない** (`denyRead` + `denyWrite` を global / project の sandbox.json 両方に常時固定。unlink + 再作成も Seatbelt / bubblewrap が阻止するので、AI が「自分の檻を広げるよう設定を書き換える」改ざんは構造上不可能)
 - サンドボックスが起動できない環境では **fail-closed** = セキュアコード は起動を拒否
 
@@ -57,6 +58,39 @@ Windows ネイティブは配布対象外です。WSL2 上で Linux 版を使っ
 ```
 
 > 追加するドメインは **必要最小限**。社内 proxy 経由でしか出られない環境では proxy のホスト名を追加。「全部許可」する書き方は意図的に提供していません。
+
+## 書き込みできる場所を増やす / 減らす
+
+サンドボックスは既定で以下を **常に書き込み可** とします (この組み込みベースラインは config では削除できません):
+
+- 起動時の **cwd** (= ユーザがその場で開発する作業ディレクトリ)
+- セキュアコードが DB / cache / log / lock を置く XDG 配下 (`~/.local/share/securecode`, `~/.cache/securecode`, `~/.config/securecode`, `~/.local/state/securecode`。`XDG_*_HOME` 環境変数を設定していればそちらに追従)
+- **起動ごとに作られる per-session 一時ディレクトリ** (`$TMPDIR/securecode-<timestamp>-<pid>/`)。supervisor が `TMPDIR` を上書きしてサンドボックス内のプロセスに渡すため、サンドボックス内の `os.tmpdir()` 呼び出し (Java LSP / TUI clipboard / TUI external editor 等) はすべてこの配下に閉じる。suffix は timestamp (ms) と PID の組で構成され、timestamp が PID 再利用方向の衝突を、PID が同時起動方向の衝突を構造的に防ぐため、クラッシュで残ったゴミディレクトリを後続セッションが引き継ぐことはなく、**別セッションの一時ファイルは読み書き不可**
+
+「cwd の **外** にも書きたい」場合は `filesystem.allowWrite` に **追加で**書きます。**ベースラインは消えず、ユーザ指定分が後ろに足される加算式**なので、`allowWrite` を書いた瞬間に cwd が消える事故は起きません。
+
+```json
+{
+  "filesystem": {
+    "allowWrite": [
+      "../shared-lib",
+      "/tmp/build"
+    ]
+  }
+}
+```
+
+逆に「cwd の中でも書かれたくないサブディレクトリがある」場合は `denyWrite` に書きます (deny が allow に優先):
+
+```json
+{
+  "filesystem": {
+    "denyWrite": [
+      "./secrets"
+    ]
+  }
+}
+```
 
 ## per-directory 設定
 
