@@ -16,7 +16,8 @@ import {
 import { testEffect } from "../lib/effect"
 
 const it = testEffect(Layer.mergeAll(Snapshot.defaultLayer, FSUtil.defaultLayer, testInstanceStoreLayer))
-const literalPathIt = process.platform === "win32" ? it.live.skip : it.live
+// Windows forbids both * and : in directory names.
+const nonWindowsIt = process.platform === "win32" ? it.live.skip : it.live
 
 // Git always outputs /-separated paths internally. Snapshot.patch() joins them
 // with path.join (which produces \ on Windows) then normalizes back to /.
@@ -455,7 +456,9 @@ it.live(
     const dir = yield* scopedGitTmpdir()
     const frontend = path.join(dir, "frontend")
     yield* write(`${frontend}/tracked.txt`, "initial")
+    yield* write(`${frontend}/deleted.txt`, "initial")
     yield* write(`${dir}/backend/tracked.txt`, "initial")
+    yield* write(`${dir}/backend/deleted.txt`, "initial")
     yield* exec(dir, ["git", "add", "."])
     yield* exec(dir, ["git", "commit", "-m", "init"])
     yield* Effect.gen(function* () {
@@ -464,18 +467,23 @@ it.live(
       expect(before).toBeTruthy()
       yield* write(`${frontend}/tracked.txt`, "changed")
       yield* write(`${frontend}/untracked.txt`, "new")
+      yield* rm(`${frontend}/deleted.txt`)
       yield* write(`${dir}/backend/tracked.txt`, "changed")
+      yield* rm(`${dir}/backend/deleted.txt`)
       const patch = yield* snapshot.patch(before!)
       const diff = yield* snapshot.diff(before!)
       expect(patch.files).toContain(fwd(frontend, "tracked.txt"))
       expect(patch.files).toContain(fwd(frontend, "untracked.txt"))
+      expect(patch.files).toContain(fwd(frontend, "deleted.txt"))
       expect(patch.files).not.toContain(fwd(dir, "backend", "tracked.txt"))
+      expect(patch.files).not.toContain(fwd(dir, "backend", "deleted.txt"))
       expect(diff).not.toContain("backend/tracked.txt")
+      expect(diff).not.toContain("backend/deleted.txt")
     }).pipe(provideInstance(frontend))
   }),
 )
 
-literalPathIt(
+nonWindowsIt(
   "subdirectory snapshots treat wildcard characters literally",
   Effect.gen(function* () {
     const dir = yield* scopedGitTmpdir()
@@ -499,12 +507,14 @@ literalPathIt(
       expect(patch.files).toContain(fwd(subdir, ".gitignore"))
       expect(patch.files).not.toContain(fwd(subdir, "later-ignored.txt"))
       expect(patch.files).not.toContain(fwd(dir, "srca", "file.txt"))
+      expect(diff).toContain("src*/later-ignored.txt")
+      expect(diff).toContain("deleted file mode")
       expect(diff).not.toContain("srca/file.txt")
     }).pipe(provideInstance(subdir))
   }),
 )
 
-literalPathIt(
+nonWindowsIt(
   "subdirectory snapshots treat leading colons literally",
   Effect.gen(function* () {
     const dir = yield* scopedGitTmpdir()
@@ -521,9 +531,12 @@ literalPathIt(
       yield* write(`${subdir}/later-ignored.txt`, "changed")
       yield* write(`${subdir}/.gitignore`, "later-ignored.txt\n")
       const patch = yield* snapshot.patch(before!)
+      const diff = yield* snapshot.diff(before!)
       expect(patch.files).toContain(fwd(subdir, "kept.txt"))
       expect(patch.files).toContain(fwd(subdir, ".gitignore"))
       expect(patch.files).not.toContain(fwd(subdir, "later-ignored.txt"))
+      expect(diff).toContain(":src/later-ignored.txt")
+      expect(diff).toContain("deleted file mode")
     }).pipe(provideInstance(subdir))
   }),
 )

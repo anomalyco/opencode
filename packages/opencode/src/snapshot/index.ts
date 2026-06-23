@@ -82,8 +82,9 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
 
         const args = (cmd: string[]) => ["--git-dir", state.gitdir, "--work-tree", state.worktree, ...cmd]
 
-        const feed = (list: string[]) => list.join("\0") + "\0"
-        const feedSpec = (list: string[]) => feed(list.map((item) => `:(top,literal)${item}`))
+        const encodeNulTerminatedPaths = (files: string[]) => files.join("\0") + "\0"
+        const encodeTopLevelLiteralPathspecs = (files: string[]) =>
+          encodeNulTerminatedPaths(files.map((file) => `:(top,literal)${file}`))
 
         const git = Effect.fnUntraced(
           function* (cmd: string[], opts?: { cwd?: string; env?: Record<string, string>; stdin?: string }) {
@@ -108,7 +109,8 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
 
         const ignore = Effect.fnUntraced(function* (files: string[]) {
           if (!files.length) return new Set<string>()
-          const input = files.map((item) => (item.startsWith(":") ? `./${item}` : item))
+          // check-ignore treats a leading colon as pathspec magic but accepts and echoes a protective ./ prefix.
+          const checkIgnorePaths = files.map((item) => (item.startsWith(":") ? `./${item}` : item))
           const check = yield* git(
             [
               ...quote,
@@ -123,7 +125,7 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
             ],
             {
               cwd: state.worktree,
-              stdin: feed(input),
+              stdin: encodeNulTerminatedPaths(checkIgnorePaths),
             },
           )
           if (check.code !== 0 && check.code !== 1) return new Set<string>()
@@ -144,7 +146,7 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
             ],
             {
               cwd: state.worktree,
-              stdin: feedSpec(files),
+              stdin: encodeTopLevelLiteralPathspecs(files),
             },
           )
         })
@@ -155,7 +157,7 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
             [...cfg, ...args(["add", "--all", "--sparse", "--pathspec-from-file=-", "--pathspec-file-nul"])],
             {
               cwd: state.worktree,
-              stdin: feedSpec(files),
+              stdin: encodeTopLevelLiteralPathspecs(files),
             },
           )
           if (result.code === 0) return
