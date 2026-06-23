@@ -1,4 +1,4 @@
-import { Show, createEffect, createMemo, onCleanup } from "solid-js"
+import { Show, createEffect, createMemo, createResource, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useNavigate, useSearchParams } from "@solidjs/router"
 import { useSpring } from "@opencode-ai/ui/motion-spring"
@@ -25,11 +25,12 @@ import { pathKey } from "@/utils/path-key"
 import { useLocal } from "@/context/local"
 import { useProviders } from "@/hooks/use-providers"
 import { useSettings } from "@/context/settings"
-import { useServer } from "@/context/server"
-import { useTabs } from "@/context/tabs"
+import { ServerConnection, useServer } from "@/context/server"
+import { type DraftTab, useTabs } from "@/context/tabs"
 import { useDirectoryPicker } from "@/components/directory-picker"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { legacySessionHref, requireServerKey, sessionHref } from "@/utils/session-route"
+import { useGlobal } from "@/context/global"
 
 export function SessionComposerRegion(props: {
   state: SessionComposerState
@@ -73,26 +74,52 @@ export function SessionComposerRegion(props: {
   const settings = useSettings()
   const server = useServer()
   const tabs = useTabs()
+  const global = useGlobal()
   const pickDirectory = useDirectoryPicker()
   const [search] = useSearchParams<{ draftId?: string }>()
   const view = layout.view(route.sessionKey)
+
+  const draft = createMemo(() => {
+    if (!search.draftId) return
+    return tabs.store.find((tab): tab is DraftTab => tab.type === "draft" && tab.draftID === search.draftId)
+  })
+  const projectServer = createMemo(() => {
+    if (!search.draftId) return server.current
+    const target = draft()?.server
+    if (!target) return
+    return server.list.find((conn) => ServerConnection.key(conn) === target)
+  })
+  const projectServerCtx = createMemo(() => {
+    const conn = projectServer()
+    if (conn) return global.createServerCtx(conn)
+  })
+  const projects = createMemo(() =>
+    search.draftId ? (projectServerCtx()?.projects.list() ?? []) : layout.projects.list(),
+  )
 
   const agentsQuery = createQuery(() => queryOptions().agents(pathKey(sdk().directory)))
   const globalProvidersQuery = createQuery(() => queryOptions().providers(null))
   const providersQuery = createQuery(() => queryOptions().providers(pathKey(sdk().directory)))
   const selectProject = (worktree: string) => {
-    layout.projects.open(worktree)
-    server.projects.touch(worktree)
+    const conn = projectServer()
+    const target = projectServerCtx()
     if (search.draftId) {
-      tabs.updateDraft(search.draftId, { server: server.key, directory: worktree })
+      if (!conn || !target) return
+      target.projects.open(worktree)
+      target.projects.touch(worktree)
+      tabs.updateDraft(search.draftId, { server: ServerConnection.key(conn), directory: worktree })
       return
     }
+
+    layout.projects.open(worktree)
+    server.projects.touch(worktree)
     navigate(`/${base64Encode(worktree)}/session`)
   }
   const addProject = (title: string) => {
-    if (!server.current) return
+    const conn = projectServer()
+    if (!conn) return
     pickDirectory({
-      server: server.current,
+      server: conn,
       title,
       onSelect: (result) => {
         const directory = Array.isArray(result) ? result[0] : result
@@ -115,7 +142,7 @@ export function SessionComposerRegion(props: {
       loading: agentsQuery.isLoading || providersQuery.isLoading || globalProvidersQuery.isLoading,
     },
     projects: {
-      available: layout.projects.list(),
+      available: projects(),
       directory: sdk().directory,
       select: selectProject,
       add: addProject,
@@ -216,6 +243,12 @@ export function SessionComposerRegion(props: {
     update()
   })
 
+  const ready = Promise.resolve()
+  const [promptReadyResource] = createResource(
+    () => prompt.ready.promise ?? ready,
+    (promise) => promise.then(() => true),
+  )
+
   return (
     <div
       ref={props.setPromptDockRef}
@@ -258,7 +291,7 @@ export function SessionComposerRegion(props: {
 
         <Show when={showComposer()}>
           <Show
-            when={prompt.ready()}
+            when={promptReadyResource()}
             fallback={
               <>
                 <Show when={rolled()} keyed>
