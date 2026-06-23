@@ -25,8 +25,7 @@ export function LpSecureChat() {
             チャットはセキュアチャット。
           </h2>
           <p className="mt-4 text-[15px] leading-relaxed text-slate-600">
-            セキュアコードのチャット版。同じ TEE 基盤で動く、コーディング以外の業務向け
-            製品です。社外秘の資料も顧客データも、平文を外に出さずに AI へ相談できます。
+            セキュアコードのチャット版。同じ TEE 基盤で動く、コーディング以外の業務向け製品です。社外秘の資料も顧客データも、平文を外に出さずに AI へ相談できます。
           </p>
           <ul className="mt-6 flex flex-wrap gap-2">
             {FEATURES.map((f) => (

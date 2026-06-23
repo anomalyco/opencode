@@ -30,8 +30,7 @@ export function LpProtection() {
             誰も中を覗けない。
           </h2>
           <p className="mt-5 text-[15px] leading-[1.9] text-slate-600 md:text-[17px]">
-            推論はすべて隔離された領域の中だけで行われ、インフラ事業者やモデル提供者を含む第三者は
-            処理中のデータを参照できません。「信頼」ではなく「ハードウェアの仕組み」で機密を守ります。
+            推論はすべて隔離された領域の中だけで行われ、インフラ事業者やモデル提供者を含む第三者は処理中のデータを参照できません。「信頼」ではなく「ハードウェアの仕組み」で機密を守ります。
           </p>
         </div>
 
@@ -46,12 +45,10 @@ export function LpProtection() {
               Confidential Computing 環境（TEE / Trusted Execution Environment）
             </div>
             <p className="mt-3.5 text-[15px] leading-[1.9] text-slate-600">
-              CPU や GPU の中に作られる「鍵のかかった隔離領域」です。外部から閲覧できないことが
-              保証されており、インフラ事業者やモデル提供者、そしてサービス提供者である Acompany
+              CPU や GPU の中に作られる「鍵のかかった隔離領域」です。外部から閲覧できないことが保証されており、インフラ事業者やモデル提供者、そしてサービス提供者である Acompany
               でさえも読み取れません。
               <br />
-              そのため、送信したデータが閲覧されることも、学習に使われることも、外部の攻撃で漏洩する
-              ことも決してありません。
+              そのため、送信したデータが閲覧されることも、学習に使われることも、外部の攻撃で漏洩することも決してありません。
             </p>
             <a href={BLOG} target="_blank" rel="noopener noreferrer" className="mt-4 inline-flex items-center gap-1.5 text-[14.5px] font-semibold text-brand-600">
               TEE の詳しい解説を読む →

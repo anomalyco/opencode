@@ -17,8 +17,7 @@ export function LpProduct() {
             安全な AI コーディングエージェント。
           </h2>
           <p className="mt-5 text-[15px] leading-[1.9] text-slate-600 md:text-[17px]">
-            Claude Code や Codex と同じ使い慣れた TUI の操作感のまま、ターミナルから離れずに
-            開発を進められます。新しいツールを覚え直す必要はなく、学習コストはほぼゼロです。
+            Claude Code や Codex と同じ使い慣れた TUI の操作感のまま、ターミナルから離れずに開発を進められます。新しいツールを覚え直す必要はなく、学習コストはほぼゼロです。
           </p>
         </div>
 
