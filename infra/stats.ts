@@ -85,7 +85,7 @@ const inferenceEventTable = new aws.s3tables.Table(
       },
     },
   },
-  { deleteBeforeReplace: $app.stage !== "production" },
+  { deleteBeforeReplace: $app.stage !== "production", ignoreChanges: ["metadata"] },
 )
 
 export const inferenceEvent = new sst.Linkable("InferenceEvent", {
