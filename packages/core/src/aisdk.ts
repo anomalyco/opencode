@@ -2,11 +2,19 @@ export * as AISDK from "./aisdk"
 
 import type { LanguageModelV3 } from "@ai-sdk/provider"
 import { Cause, Context, Effect, Layer, Schema, Scope } from "effect"
+import { Agent } from "undici"
 import { ModelV2 } from "./model"
 import { ProviderV2 } from "./provider"
 import { State } from "./state"
 
 type SDK = any
+
+function createUndiciDispatcher(timeout: unknown) {
+  if (typeof process !== "object" || (process.versions as Record<string, string | undefined>).bun) return undefined
+  const headersTimeout = timeout === false ? 0 : typeof timeout === "number" && timeout > 0 ? timeout : undefined
+  if (headersTimeout === undefined) return undefined
+  return new Agent({ headersTimeout })
+}
 
 export interface SDKEvent {
   readonly model: ModelV2.Info
@@ -81,6 +89,7 @@ function prepareOptions(model: ModelV2.Info, pkg: string) {
   const customFetch = options.fetch
   const chunkTimeout = options.chunkTimeout
   delete options.chunkTimeout
+  const dispatcher = typeof customFetch === "function" ? undefined : createUndiciDispatcher(options.timeout)
   options.fetch = async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
     const opts = { ...(init ?? {}) }
     const signals = [
@@ -111,8 +120,9 @@ function prepareOptions(model: ModelV2.Info, pkg: string) {
 
     const res = await (typeof customFetch === "function" ? customFetch : fetch)(input, {
       ...opts,
+      ...(dispatcher ? { dispatcher } : {}),
       timeout: false,
-    })
+    } as RequestInit)
     if (!chunkAbortCtl || typeof chunkTimeout !== "number") return res
     return wrapSSE(res, chunkTimeout, chunkAbortCtl)
   }

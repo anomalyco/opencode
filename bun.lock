@@ -303,6 +303,7 @@
         "npm-package-arg": "13.0.2",
         "semver": "^7.6.3",
         "turndown": "7.2.0",
+        "undici": "8.3.0",
         "venice-ai-sdk-provider": "2.0.2",
         "which": "6.0.1",
         "xdg-basedir": "5.1.0",
@@ -590,6 +591,7 @@
         "tree-sitter-powershell": "0.25.10",
         "turndown": "7.2.0",
         "ulid": "catalog:",
+        "undici": "8.3.0",
         "venice-ai-sdk-provider": "2.0.2",
         "vscode-jsonrpc": "8.2.1",
         "web-tree-sitter": "0.25.10",
@@ -674,7 +676,14 @@
         "@types/node": "catalog:",
         "@typescript/native-preview": "catalog:",
         "typescript": "catalog:",
+        "undici": "8.3.0",
       },
+      "peerDependencies": {
+        "undici": "^8.0.0",
+      },
+      "optionalPeers": [
+        "undici",
+      ],
     },
     "packages/server": {
       "name": "@opencode-ai/server",

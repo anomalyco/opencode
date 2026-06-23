@@ -47,13 +47,23 @@ function rewrite(request: Request, values: { directory?: string; workspace?: str
   return next
 }
 
+const nodeDispatcher = createNodeDispatcher()
+
+function createNodeDispatcher() {
+  if (typeof process === "undefined" || !process.versions || process.versions.bun) return Promise.resolve(undefined)
+  return import("undici")
+    .then(({ Agent }) => new Agent({ headersTimeout: 0, bodyTimeout: 0 }))
+    .catch(() => undefined)
+}
+
+async function nodeFetchWithDispatcher(req: Request) {
+  const dispatcher = await nodeDispatcher
+  return dispatcher ? fetch(req, { dispatcher } as RequestInit) : fetch(req)
+}
+
 export function createOpencodeClient(config?: Config & { directory?: string; experimental_workspaceID?: string }) {
   if (!config?.fetch) {
-    const customFetch: any = (req: any) => {
-      // @ts-ignore
-      req.timeout = false
-      return fetch(req)
-    }
+    const customFetch: any = (req: any) => nodeFetchWithDispatcher(req)
     config = {
       ...config,
       fetch: customFetch,

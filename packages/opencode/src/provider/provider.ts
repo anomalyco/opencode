@@ -2,6 +2,7 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import os from "os"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import fuzzysort from "fuzzysort"
+import { Agent } from "undici"
 import { Config } from "@/config/config"
 import { mapValues, mergeDeep, omit, pickBy, sortBy } from "remeda"
 import { NoSuchModelError, type Provider as SDK } from "ai"
@@ -89,6 +90,13 @@ function timeoutController(ms: number) {
     signal: ctl.signal,
     clear: () => clearTimeout(id),
   }
+}
+
+function createUndiciDispatcher(timeout: unknown) {
+  if (typeof process !== "object" || (process.versions as Record<string, string | undefined>).bun) return undefined
+  const headersTimeout = timeout === false ? 0 : typeof timeout === "number" && timeout > 0 ? timeout : undefined
+  if (headersTimeout === undefined) return undefined
+  return new Agent({ headersTimeout })
 }
 
 function googleVertexAnthropicBaseURL(project: string | undefined, location: string | undefined) {
@@ -1688,6 +1696,7 @@ export const layer = Layer.effect(
         const headerTimeout = options["headerTimeout"]
         delete options["chunkTimeout"]
         delete options["headerTimeout"]
+        const dispatcher = customFetch ? undefined : createUndiciDispatcher(options["timeout"])
 
         options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
           const fetchFn = customFetch ?? fetch
@@ -1708,9 +1717,10 @@ export const layer = Layer.effect(
 
           const res = await fetchFn(input, {
             ...opts,
+            ...(dispatcher ? { dispatcher } : {}),
             // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
             timeout: false,
-          }).finally(() => headerTimeoutCtl?.clear())
+          } as BunFetchRequestInit).finally(() => headerTimeoutCtl?.clear())
 
           if (!chunkAbortCtl) return res
           return wrapSSE(res, chunkTimeout, chunkAbortCtl)
