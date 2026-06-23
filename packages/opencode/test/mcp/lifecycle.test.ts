@@ -361,7 +361,7 @@ it.instance(
 
         expect(Object.keys(yield* mcp.tools())).toEqual(["paged-server_tool-one", "paged-server_tool-two"])
         expect(Object.keys(yield* mcp.prompts())).toEqual(["paged-server:prompt-one", "paged-server:prompt-two"])
-        expect(Object.keys(yield* mcp.resources())).toEqual(["paged-server:resource-one", "paged-server:resource-two"])
+        expect(Object.keys(yield* mcp.resources())).toEqual(["paged-server:test://one", "paged-server:test://two"])
         expect(serverState.listToolsCalls).toBe(2)
         expect(serverState.listPromptsCalls).toBe(2)
         expect(serverState.listResourcesCalls).toBe(2)
@@ -796,7 +796,10 @@ it.instance(
       Effect.gen(function* () {
         lastCreatedClientName = "resource-server"
         const serverState = getOrCreateClientState("resource-server")
-        serverState.resources = [{ name: "my-resource", uri: "file:///test.txt", description: "A test resource" }]
+        serverState.resources = [
+          { name: "my-resource", uri: "file:///test.txt", description: "A test resource" },
+          { name: "my-resource", uri: "ui://component-state", description: "A second resource with same name" },
+        ]
 
         yield* mcp.add("resource-server", {
           type: "local",
@@ -804,10 +807,10 @@ it.instance(
         })
 
         const resources = yield* mcp.resources()
-        expect(Object.keys(resources).length).toBe(1)
-        const key = Object.keys(resources)[0]
-        expect(key).toContain("resource-server")
-        expect(key).toContain("my-resource")
+        expect(Object.keys(resources)).toEqual([
+          "resource-server:file:///test.txt",
+          "resource-server:ui://component-state",
+        ])
       }),
     ),
   {
@@ -863,7 +866,7 @@ it.instance(
         expect(statusName(result.status, "resource-only-server")).toBe("connected")
         expect(serverState.listToolsCalls).toBe(0)
         expect(Object.keys(yield* mcp.tools())).toHaveLength(0)
-        expect(Object.keys(yield* mcp.resources())).toEqual(["resource-only-server:docs"])
+        expect(Object.keys(yield* mcp.resources())).toEqual(["resource-only-server:docs://readme"])
         expect(serverState.listResourcesCalls).toBe(1)
         expect(serverState.listPromptsCalls).toBe(0)
       }),

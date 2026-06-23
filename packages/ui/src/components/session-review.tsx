@@ -620,13 +620,14 @@ export const SessionReview = (props: SessionReviewProps) => {
                                       props.onDiffRendered?.()
                                     }}
                                     enableLineSelection={props.onLineComment != null}
-                                    enableHoverUtility={props.onLineComment != null}
+                                    enableGutterUtility={props.onLineComment != null}
                                     onLineSelected={handleLineSelected}
                                     onLineSelectionEnd={handleLineSelectionEnd}
-                                    onLineNumberSelectionEnd={commentsUi.onLineNumberSelectionEnd}
                                     annotations={commentsUi.annotations()}
                                     renderAnnotation={commentsUi.renderAnnotation}
-                                    renderHoverUtility={props.onLineComment ? commentsUi.renderHoverUtility : undefined}
+                                    renderGutterUtility={
+                                      props.onLineComment ? commentsUi.renderGutterUtility : undefined
+                                    }
                                     selectedLines={selectedLines()}
                                     commentedLines={commentedLines()}
                                     media={{
