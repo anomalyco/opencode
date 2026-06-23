@@ -21,6 +21,7 @@ const words = [
   "vector",
 ]
 
+const serverKey = "http://127.0.0.1:4096"
 const sourceID = "ses_smoke_source"
 const targetID = "ses_smoke_target"
 const directory = "C:/OpenCode/SmokeProject"
@@ -240,6 +241,7 @@ function orderedParts(message: Message) {
 
 export const fixture = {
   directory,
+  serverKey,
   project: {
     id: projectID,
     worktree: directory,
