@@ -194,10 +194,9 @@ export function withCliFixture<A, E>(
 
     const home = yield* fs.makeTempDirectory({ prefix: "oc-cli-" })
     yield* Effect.addFinalizer(() =>
-      fs.remove(home, { recursive: true }).pipe(
-        Effect.retry(Schedule.spaced("50 millis").pipe(Schedule.both(Schedule.recurs(20)))),
-        Effect.ignore,
-      ),
+      fs
+        .remove(home, { recursive: true })
+        .pipe(Effect.retry(Schedule.spaced("50 millis").pipe(Schedule.both(Schedule.recurs(20)))), Effect.ignore),
     )
 
     const configJson = JSON.stringify(testProviderConfig(llm.url))
