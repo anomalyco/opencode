@@ -32,9 +32,10 @@ function serveUI(request: HttpServerRequest.HttpServerRequest, url: URL, assets:
   if (request.method !== "GET" && request.method !== "HEAD")
     return Effect.succeed(HttpServerResponse.empty({ status: 405 }))
   const html = name === "index.html"
+  const revalidate = html || name === "sw.js" || name === "registerSW.js"
   const headers = {
     "content-type": FSUtil.mimeType(name),
-    "cache-control": html ? "no-cache" : "public, max-age=31536000, immutable",
+    "cache-control": revalidate ? "no-cache" : "public, max-age=31536000, immutable",
     "content-security-policy": html
       ? cspForHtml(typeof file === "string" ? file : Buffer.from(file).toString())
       : csp(),
