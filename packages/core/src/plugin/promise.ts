@@ -67,8 +67,7 @@ export function fromPromise(plugin: Plugin) {
             reload: () => run(host.integration.reload()),
             connection: {
               active: (id) => Effect.runPromiseWith(context)(host.integration.connection.active(id)),
-              resolve: (connection) =>
-                Effect.runPromiseWith(context)(host.integration.connection.resolve(connection)),
+              resolve: (connection) => Effect.runPromiseWith(context)(host.integration.connection.resolve(connection)),
             },
           },
           plugin: {

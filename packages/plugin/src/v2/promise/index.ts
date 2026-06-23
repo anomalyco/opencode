@@ -7,10 +7,6 @@ export type { AgentDraft, AgentHooks } from "./agent.js"
 export type { AISDKHooks } from "./aisdk.js"
 export type { CatalogDraft, CatalogHooks, CatalogProviderRecord } from "./catalog.js"
 export type { CommandDraft, CommandHooks } from "./command.js"
-export type {
-  IntegrationDraft,
-  IntegrationHooks,
-  IntegrationMethodRegistration,
-} from "./integration.js"
+export type { IntegrationDraft, IntegrationHooks, IntegrationMethodRegistration } from "./integration.js"
 export type { ReferenceDraft, ReferenceHooks } from "./reference.js"
 export type { SkillDraft, SkillHooks } from "./skill.js"

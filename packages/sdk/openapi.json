@@ -14648,6 +14648,9 @@
             "$ref": "#/components/schemas/EventIntegrationUpdated"
           },
           {
+            "$ref": "#/components/schemas/EventIntegrationConnectionUpdated"
+          },
+          {
             "$ref": "#/components/schemas/EventCatalogUpdated"
           },
           {
@@ -16816,6 +16819,31 @@
                   "properties": {
                     "type": "object",
                     "properties": {}
+                  }
+                },
+                "required": ["id", "type", "properties"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^evt_"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["integration.connection.updated"]
+                  },
+                  "properties": {
+                    "type": "object",
+                    "properties": {
+                      "integrationID": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["integrationID"],
+                    "additionalProperties": false
                   }
                 },
                 "required": ["id", "type", "properties"],
@@ -22990,6 +23018,9 @@
             "$ref": "#/components/schemas/V2EventIntegrationUpdated"
           },
           {
+            "$ref": "#/components/schemas/V2EventIntegrationConnectionUpdated"
+          },
+          {
             "$ref": "#/components/schemas/V2EventCatalogUpdated"
           },
           {
@@ -23426,6 +23457,61 @@
         },
         "required": ["id", "type", "properties"],
         "additionalProperties": false
+      },
+      "CredentialValue": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/CredentialOAuth"
+          },
+          {
+            "$ref": "#/components/schemas/CredentialKey"
+          }
+        ]
+      },
+      "IntegrationInputs": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "string"
+        }
+      },
+      "IntegrationMethod": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/IntegrationOAuthMethod"
+          },
+          {
+            "$ref": "#/components/schemas/IntegrationKeyMethod"
+          },
+          {
+            "$ref": "#/components/schemas/IntegrationEnvMethod"
+          }
+        ]
+      },
+      "IntegrationRef": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": ["id", "name"],
+        "additionalProperties": false
+      },
+      "SkillV2Source": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/SkillV2DirectorySource"
+          },
+          {
+            "$ref": "#/components/schemas/SkillV2UrlSource"
+          },
+          {
+            "$ref": "#/components/schemas/SkillV2EmbeddedSource"
+          }
+        ]
       },
       "MoveSessionDestination": {
         "type": "object",
@@ -27487,17 +27573,7 @@
           "methods": {
             "type": "array",
             "items": {
-              "anyOf": [
-                {
-                  "$ref": "#/components/schemas/IntegrationOAuthMethod"
-                },
-                {
-                  "$ref": "#/components/schemas/IntegrationKeyMethod"
-                },
-                {
-                  "$ref": "#/components/schemas/IntegrationEnvMethod"
-                }
-              ]
+              "$ref": "#/components/schemas/IntegrationMethod"
             }
           },
           "connections": {
@@ -27792,6 +27868,53 @@
           "data": {
             "type": "object",
             "properties": {}
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventIntegrationConnectionUpdated": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["integration.connection.updated"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "integrationID": {
+                "type": "string"
+              }
+            },
+            "required": ["integrationID"],
+            "additionalProperties": false
           }
         },
         "required": ["id", "type", "data"],
@@ -32682,6 +32805,31 @@
         "required": ["id", "type", "properties"],
         "additionalProperties": false
       },
+      "EventIntegrationConnectionUpdated": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["integration.connection.updated"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "integrationID": {
+                "type": "string"
+              }
+            },
+            "required": ["integrationID"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
       "EventCatalogUpdated": {
         "type": "object",
         "properties": {
@@ -35464,6 +35612,92 @@
           }
         },
         "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "CredentialOAuth": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["oauth"]
+          },
+          "methodID": {
+            "type": "string"
+          },
+          "refresh": {
+            "type": "string"
+          },
+          "access": {
+            "type": "string"
+          },
+          "expires": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "metadata": {
+            "type": "object"
+          }
+        },
+        "required": ["type", "methodID", "refresh", "access", "expires"],
+        "additionalProperties": false
+      },
+      "CredentialKey": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["key"]
+          },
+          "key": {
+            "type": "string"
+          },
+          "metadata": {
+            "type": "object"
+          }
+        },
+        "required": ["type", "key"],
+        "additionalProperties": false
+      },
+      "SkillV2DirectorySource": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["directory"]
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": ["type", "path"],
+        "additionalProperties": false
+      },
+      "SkillV2UrlSource": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["url"]
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": ["type", "url"],
+        "additionalProperties": false
+      },
+      "SkillV2EmbeddedSource": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["embedded"]
+          },
+          "skill": {
+            "$ref": "#/components/schemas/SkillV2Info"
+          }
+        },
+        "required": ["type", "skill"],
         "additionalProperties": false
       },
       "BadRequestError": {

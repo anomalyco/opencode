@@ -28,9 +28,7 @@ export type IntegrationOAuthAuthorization = {
 export type IntegrationOAuthMethodRegistration = {
   readonly integrationID: string
   readonly method: IntegrationOAuthMethod
-  readonly authorize: (
-    inputs: IntegrationInputs,
-  ) => Effect.Effect<IntegrationOAuthAuthorization, unknown, Scope.Scope>
+  readonly authorize: (inputs: IntegrationInputs) => Effect.Effect<IntegrationOAuthAuthorization, unknown, Scope.Scope>
   readonly refresh?: (credential: CredentialOAuth) => Effect.Effect<CredentialOAuth, unknown>
   readonly label?: (credential: CredentialOAuth) => string | undefined
 }
