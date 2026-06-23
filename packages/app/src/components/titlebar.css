@@ -1,3 +1,29 @@
+[data-slot="titlebar-tab-item"] {
+  user-select: none;
+}
+
+[data-slot="titlebar-tab-item"] a {
+  outline: none;
+}
+
+[data-slot="titlebar-v2"] [data-component="icon-button-v2"][data-variant="ghost-muted"]:is(:focus-visible, [data-state="focus"]):not(:disabled) {
+  outline: none;
+  background-color: var(--v2-overlay-simple-overlay-hover);
+}
+
+[data-slot="titlebar-tab-item"] [data-component="icon-button-v2"]:is(:focus-visible, [data-state="focus"]):not(:disabled) {
+  opacity: 1;
+}
+
+[data-slot="titlebar-tab-item"]:has([data-component="icon-button-v2"]:focus-visible) [data-slot="titlebar-tab-close"] {
+  right: 0;
+  left: auto;
+}
+
+[data-slot="titlebar-tab-item"]:has([data-component="icon-button-v2"]:focus-visible) [data-slot="titlebar-tab-close-fade"] {
+  background-image: var(--active-bg);
+}
+
 @keyframes titlebar-tab-fade-left {
   from {
     visibility: hidden;

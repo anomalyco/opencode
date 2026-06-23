@@ -12,7 +12,7 @@ import { createEffect, createMemo, createSignal, For, onMount, Show } from "soli
 import { createStore } from "solid-js/store"
 import { createMediaQuery } from "@solid-primitives/media"
 import { Portal } from "solid-js/web"
-import { useCommand } from "@/context/command"
+import { formatKeybindKeys, useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
@@ -28,6 +28,8 @@ import { Persist, persisted } from "@/utils/persist"
 import { StatusPopover, StatusPopoverV2 } from "../status-popover"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
+import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
+import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 
 const OPEN_APPS = [
   "vscode",
@@ -527,6 +529,8 @@ type SessionHeaderV2ActionsState = {
 }
 
 function SessionHeaderV2Actions(props: { state: SessionHeaderV2ActionsState }) {
+  const language = useLanguage()
+
   return (
     <div class="flex items-center gap-2">
       <Show when={props.state.statusVisible}>
@@ -535,7 +539,17 @@ function SessionHeaderV2Actions(props: { state: SessionHeaderV2ActionsState }) {
         </Tooltip>
       </Show>
       <Show when={props.state.reviewVisible}>
-        <TooltipKeybind title={props.state.reviewLabel} keybind={props.state.reviewKeybind}>
+        <TooltipV2
+          placement="bottom"
+          value={
+            <>
+              {props.state.reviewLabel}
+              <Show when={props.state.reviewKeybind}>
+                <KeybindV2 keys={formatKeybindKeys(props.state.reviewKeybind, language.t)} variant="neutral" />
+              </Show>
+            </>
+          }
+        >
           <IconButtonV2
             type="button"
             variant="ghost-muted"
@@ -548,7 +562,7 @@ function SessionHeaderV2Actions(props: { state: SessionHeaderV2ActionsState }) {
             aria-controls="review-panel"
             icon={<IconV2 name="sidebar-right" />}
           />
-        </TooltipKeybind>
+        </TooltipV2>
       </Show>
     </div>
   )

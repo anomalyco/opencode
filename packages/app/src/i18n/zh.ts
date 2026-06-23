@@ -507,6 +507,7 @@ export const dict = {
   "home.projects": "项目",
   "home.project.add": "添加项目",
   "home.sessions.search.placeholder": "搜索会话",
+  "home.sessions.search.placeholder.scoped": "在 {{scope}} 中搜索会话",
   "home.sessions.search.sessions": "会话",
   "home.sessions.search.noResults": "未找到与 {{query}} 相关的会话",
   "home.sessions.empty": "未找到会话",
