@@ -25,6 +25,7 @@ import { readSessionTabsRemovedDetail, SESSION_TABS_REMOVED_EVENT } from "@/comp
 import { useGlobal } from "@/context/global"
 import { ServerConnection, useServer } from "@/context/server"
 import { tabKey, useTabs } from "@/context/tabs"
+import { canTileSessionTabs } from "@/context/tabs-order"
 import "./titlebar.css"
 import { newTabTooltipKeybind } from "./command-tooltip-keybind"
 
@@ -264,8 +265,21 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                   .then((x) => x.data)
                   .catch(() => {}),
             )
-            const sessionTabCount = () =>
-              tabsStore.filter((tab) => tab.type === "session" && tab.server === server.key).length
+            const activeSessionServer = () => {
+              const route = layout.route()
+              if (route.type !== "session") return
+              return route.server ?? server.key
+            }
+            const sessionTabCount = () => {
+              const key = activeSessionServer()
+              if (!key) return 0
+              return tabsStore.filter((tab) => tab.type === "session" && tab.server === key).length
+            }
+            const canShowPanelToggle = () =>
+              !!activeSessionServer() &&
+              settings.general.showSessionPanels() &&
+              !mobile() &&
+              canTileSessionTabs(sessionTabCount())
             const panelToggleLabel = () =>
               tabs.panels.tiled() ? language.t("command.tabs.viewAsTabs") : language.t("command.tabs.viewAsPanels")
 
@@ -362,14 +376,15 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
               const current = currentTab()
 
               return [
-                {
-                  id: "tabs.panel.toggle",
-                  category: language.t("command.category.view"),
-                  title: panelToggleLabel(),
-                  disabled: sessionTabCount() < 2,
-                  hidden: true,
-                  onSelect: () => tabs.panels.toggle(),
-                },
+                canShowPanelToggle()
+                  ? {
+                      id: "tabs.panel.toggle",
+                      category: language.t("command.category.view"),
+                      title: panelToggleLabel(),
+                      hidden: true,
+                      onSelect: () => tabs.panels.toggle(),
+                    }
+                  : undefined,
                 {
                   id: "tab.new",
                   category: "tab",
@@ -501,8 +516,8 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                     />
                   </TooltipV2>
                 </Show>
-                <Show when={sessionTabCount() > 1}>
-                  <Tooltip placement="bottom" value={panelToggleLabel()}>
+                <Show when={canShowPanelToggle()}>
+                  <TooltipV2 placement="bottom" value={panelToggleLabel()}>
                     <IconButtonV2
                       type="button"
                       variant="ghost-muted"
@@ -514,7 +529,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                       aria-pressed={tabs.panels.tiled()}
                       icon={<IconV2 name={tabs.panels.tiled() ? "status-active" : "status"} />}
                     />
-                  </Tooltip>
+                  </TooltipV2>
                 </Show>
                 <div class="flex-1" />
                 <TitlebarV2Right state={v2RightState()} />

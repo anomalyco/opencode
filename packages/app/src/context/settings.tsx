@@ -31,6 +31,7 @@ export interface Settings {
     showReasoningSummaries: boolean
     shellToolPartsExpanded: boolean
     editToolPartsExpanded: boolean
+    showSessionPanels: boolean
     showCustomAgents: boolean
     mobileTitlebarPosition: "top" | "bottom"
     newLayoutDesigns?: boolean
@@ -116,6 +117,7 @@ const defaultSettings: Settings = {
     showReasoningSummaries: false,
     shellToolPartsExpanded: false,
     editToolPartsExpanded: false,
+    showSessionPanels: false,
     showCustomAgents: false,
     mobileTitlebarPosition: "top",
   },
@@ -236,6 +238,13 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         ),
         setEditToolPartsExpanded(value: boolean) {
           setStore("general", "editToolPartsExpanded", value)
+        },
+        showSessionPanels: withFallback(
+          () => store.general?.showSessionPanels,
+          defaultSettings.general.showSessionPanels,
+        ),
+        setShowSessionPanels(value: boolean) {
+          setStore("general", "showSessionPanels", value)
         },
         showCustomAgents,
         setShowCustomAgents(value: boolean) {

@@ -64,7 +64,7 @@ export function SessionTextPane(props: { tab: SessionTab; centered?: boolean }) 
   const sync = createMemo(() => {
     const dir = directory()
     if (!dir) return
-    return serverSync().createDirSyncContext(dir)
+    return serverSync().ensureDirSyncContext(dir)
   })
   const messages = createMemo(
     () => sync()?.data.message[props.tab.sessionId] ?? emptyMessages,

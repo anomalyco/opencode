@@ -93,6 +93,7 @@ import { legacySessionHref, requireServerKey, sessionHref } from "@/utils/sessio
 import { useUsageExceededDialogs } from "./session/usage-exceeded-dialogs"
 import { createSessionOwnership } from "./session/session-ownership"
 import { tabHref, tabKey, useTabs as useOpenTabs, type SessionTab } from "@/context/tabs"
+import { canTileSessionTabs } from "@/context/tabs-order"
 import { SessionTextPane } from "@/pages/session/session-text-pane"
 
 type FollowupItem = FollowupDraft & { id: string }
@@ -249,7 +250,15 @@ export default function Page() {
   )
 
   const isDesktop = createMediaQuery("(min-width: 768px)")
-  const panelMode = createMemo(() => newSessionDesign() && isDesktop() && openTabs.panels.tiled() && !!params.id && panelTabs().length > 1)
+  const panelMode = createMemo(
+    () =>
+      newSessionDesign() &&
+      settings.general.showSessionPanels() &&
+      isDesktop() &&
+      openTabs.panels.tiled() &&
+      !!params.id &&
+      canTileSessionTabs(panelTabs().length),
+  )
   const size = createSizing()
   const desktopReviewOpen = createMemo(() => isDesktop() && view().reviewPanel.opened())
   const desktopFileTreeOpen = createMemo(

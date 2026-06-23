@@ -861,6 +861,8 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Expand edit tool parts",
   "settings.general.row.editToolPartsExpanded.description":
     "Show edit, write, and patch tool parts expanded by default in the timeline",
+  "settings.general.row.showSessionPanels.title": "Session panels",
+  "settings.general.row.showSessionPanels.description": "Show controls to tile open session tabs on desktop",
   "settings.general.row.newLayoutDesigns.title": "New layout and designs",
   "settings.general.row.newLayoutDesigns.description": "Enable the redesigned layout, home, composer, and session UI",
   "settings.general.row.pinchZoom.title": "Pinch to zoom",
