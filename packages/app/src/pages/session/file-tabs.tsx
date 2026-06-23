@@ -405,7 +405,7 @@ export function FileTabContent(props: { tab: string }) {
           cacheKey: cacheKey(),
         }}
         enableLineSelection
-        enableHoverUtility
+        enableGutterUtility
         selectedLines={activeSelection()}
         commentedLines={commentedLines()}
         onRendered={() => {
@@ -413,7 +413,7 @@ export function FileTabContent(props: { tab: string }) {
         }}
         annotations={commentsUi.annotations()}
         renderAnnotation={commentsUi.renderAnnotation}
-        renderHoverUtility={commentsUi.renderHoverUtility}
+        renderGutterUtility={commentsUi.renderHoverUtility}
         onLineSelected={(range: SelectedLineRange | null) => {
           commentsUi.onLineSelected(range)
         }}

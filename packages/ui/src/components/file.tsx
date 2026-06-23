@@ -65,6 +65,8 @@ type SharedProps<T> = {
   classList?: ComponentProps<"div">["classList"]
   media?: FileMediaOptions
   search?: FileSearchControl
+  enableGutterUtility?: boolean
+  renderGutterUtility?: (getHoveredRow: () => any) => HTMLElement | null | undefined
 }
 
 export type FileSearchHandle = {
@@ -211,13 +213,9 @@ function useFileViewer(config: ViewerConfig) {
     if (event.button !== 0) return
 
     const hit = config.lineFromMouseEvent(event)
-    if (hit.numberColumn) {
-      bridge.begin(true, hit.line)
-      return
-    }
     if (hit.line === undefined) return
 
-    bridge.begin(false, hit.line)
+    bridge.begin(hit.numberColumn, hit.line)
     dragStart = hit.line
     dragEnd = hit.line
     dragMoved = false
@@ -249,7 +247,7 @@ function useFileViewer(config: ViewerConfig) {
 
   const handleMouseUp = () => {
     if (!config.enableLineSelection()) return
-    if (bridge.finish() === "numbers") return
+    bridge.finish()
     if (dragStart === undefined) return
 
     if (!dragMoved) {
