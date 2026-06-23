@@ -6,7 +6,6 @@ import {
   type ModelUsagePoint,
   type StatsLabData,
 } from "@opencode-ai/stats-core/domain/home"
-import { runtime } from "@opencode-ai/stats-core/runtime"
 import { createAsync, query, useParams } from "@solidjs/router"
 import { createMemo, createSignal, For, onMount, Show, type JSX } from "solid-js"
 import { getRequestEvent } from "solid-js/web"
@@ -17,6 +16,7 @@ import {
   type ModelCatalogEntry,
   type ModelCatalogLab,
 } from "../model-catalog"
+import { runStatsEffect } from "../../stats-runtime"
 import {
   applyThemePreference,
   Footer,
@@ -46,7 +46,7 @@ const labFooterLinks: readonly HeaderLink[] = [
 
 const getLabData = query(async (lab: string) => {
   "use server"
-  return runtime.runPromise(getStatsLabData(lab))
+  return runStatsEffect(getStatsLabData(lab))
 }, "getStatsLabData")
 
 export default function StatsLab() {
@@ -69,10 +69,10 @@ export default function StatsLab() {
   const githubStars = createAsync(() => getGitHubStars())
   const [themePreference, setThemePreference] = createSignal<ThemePreference>("system")
   const labName = createMemo(() => lab()?.name ?? formatCatalogLabName(labParam()))
-  const labTitle = createMemo(() => `${labName()} Models`)
+  const labTitle = createMemo(() => `${labName()} AI Model Usage & Rankings | OpenCode Data`)
   const labDescription = createMemo(
     () =>
-      `Explore ${labName()} models used in OpenCode, with recent token usage, context windows, release dates, and model-specific data.`,
+      `Compare ${labName()} models used in OpenCode Go, including token usage, model rankings, context windows, release dates, costs, and model-specific data.`,
   )
   const labUrl = createMemo(() => new URL(lab()?.id ?? labParam(), statsCanonicalBaseUrl).toString())
   const updateThemePreference = (preference: ThemePreference) => {

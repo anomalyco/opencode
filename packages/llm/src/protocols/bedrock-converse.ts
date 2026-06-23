@@ -412,6 +412,9 @@ const fromRequest = Effect.fn("BedrockConverse.fromRequest")(function* (request:
             stopSequences: generation?.stop,
           },
     toolConfig,
+    // Converse's base inferenceConfig has no topK; Anthropic/Nova accept it
+    // as a model-specific field, so it goes through additionalModelRequestFields.
+    additionalModelRequestFields: generation?.topK === undefined ? undefined : { top_k: generation.topK },
   }
 })
 

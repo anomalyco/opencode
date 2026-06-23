@@ -21,34 +21,39 @@ import { SessionStore } from "@opencode-ai/core/session/store"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
-const database = Database.layerFromPath(":memory:")
-const events = EventV2.layer.pipe(Layer.provide(database))
-const directories = ProjectDirectories.layer.pipe(Layer.provide(database), Layer.provide(events))
-const projector = SessionProjector.layer.pipe(Layer.provide(database), Layer.provide(events))
 const project = Project.layer.pipe(
-  Layer.provide(database),
+  Layer.provide(Database.defaultLayer),
   Layer.provide(FSUtil.defaultLayer),
   Layer.provide(Git.defaultLayer),
-  Layer.provide(directories),
+  Layer.provide(ProjectDirectories.defaultLayer),
 )
-const store = SessionStore.layer.pipe(Layer.provide(database))
 const sessions = SessionV2.layer.pipe(
-  Layer.provide(database),
-  Layer.provide(events),
+  Layer.provide(Database.defaultLayer),
+  Layer.provide(EventV2.defaultLayer),
   Layer.provide(project),
-  Layer.provide(store),
+  Layer.provide(SessionStore.defaultLayer),
   Layer.provide(SessionExecution.noopLayer),
 )
 const layer = MoveSession.layer.pipe(
-  Layer.provide(database),
+  Layer.provide(Database.defaultLayer),
   Layer.provide(FSUtil.defaultLayer),
   Layer.provide(Git.defaultLayer),
-  Layer.provide(events),
+  Layer.provide(EventV2.defaultLayer),
   Layer.provide(project),
   Layer.provide(sessions),
 )
 const it = testEffect(
-  Layer.mergeAll(layer, database, events, directories, project, projector, store, SessionExecution.noopLayer, sessions),
+  Layer.mergeAll(
+    layer,
+    Database.defaultLayer,
+    EventV2.defaultLayer,
+    ProjectDirectories.defaultLayer,
+    project,
+    SessionProjector.defaultLayer,
+    SessionStore.defaultLayer,
+    SessionExecution.noopLayer,
+    sessions,
+  ),
 )
 
 function abs(input: string) {
