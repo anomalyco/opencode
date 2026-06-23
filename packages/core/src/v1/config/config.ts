@@ -118,6 +118,10 @@ export const Info = Schema.Struct({
     description:
       "Enable or configure LSP servers. Omit or set to false to disable, true to enable built-ins, or an object to enable built-ins with overrides.",
   }),
+  instructionMode: Schema.optional(Schema.Literals(["default", "explicit"])).annotate({
+    description:
+      "Controls instruction discovery. 'default' auto-discovers AGENTS.md files from project and global config. 'explicit' only loads instructions listed in the 'instructions' field.",
+  }),
   instructions: Schema.optional(Schema.mutable(Schema.Array(Schema.String))).annotate({
     description: "Additional instruction files or patterns to include",
   }),

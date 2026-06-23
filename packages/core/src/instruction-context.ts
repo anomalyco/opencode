@@ -2,6 +2,7 @@ export * as InstructionContext from "./instruction-context"
 
 import { Array, Effect, Layer, Schema } from "effect"
 import { isAbsolute, join, relative, sep } from "path"
+import { Config } from "./config"
 import { FSUtil } from "./fs-util"
 import { Flag } from "./flag/flag"
 import { Global } from "./global"
@@ -24,6 +25,7 @@ export const layer = Layer.effectDiscard(
     const global = yield* Global.Service
     const location = yield* Location.Service
     const registry = yield* SystemContextRegistry.Service
+    const config = yield* Config.Service
 
     const source = (value: ReadonlyArray<File> | SystemContext.Unavailable) =>
       SystemContext.make({
@@ -37,6 +39,11 @@ export const layer = Layer.effectDiscard(
       })
 
     const observe = Effect.fn("InstructionContext.observe")(function* () {
+      const entries = yield* config.entries()
+      const instructionMode = Config.latest(entries, "instruction_mode")
+
+      if (instructionMode === "explicit") return []
+
       const start = FSUtil.resolve(location.directory)
       const stop = FSUtil.resolve(location.project.directory)
       const fromProject = relative(stop, start)

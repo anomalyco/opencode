@@ -95,6 +95,10 @@ export class Info extends Schema.Class<Info>("Config.Info")({
   instructions: Schema.String.pipe(Schema.Array, Schema.optional).annotate({
     description: "Additional paths or URLs supplying ambient instructions",
   }),
+  instruction_mode: Schema.Literals(["default", "explicit"]).pipe(Schema.optional).annotate({
+    description:
+      "Controls instruction discovery. 'default' auto-discovers AGENTS.md files. 'explicit' only loads instructions listed in the 'instructions' field.",
+  }),
   references: ConfigReference.Info.pipe(Schema.optional).annotate({
     description: "Named local directories or Git repositories available as external context",
   }),
