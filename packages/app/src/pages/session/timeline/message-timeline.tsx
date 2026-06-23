@@ -1300,7 +1300,9 @@ export function MessageTimeline(props: {
               "sticky top-0 z-30 bg-[linear-gradient(to_bottom,var(--background-stronger)_48px,transparent)]": true,
               "w-full": true,
               "pb-4": true,
-              "pl-2 pr-3 md:pl-4 md:pr-3": true,
+              "pr-3": true,
+              "pl-4": settings.general.newLayoutDesigns(),
+              "pl-2 md:pl-4": !settings.general.newLayoutDesigns(),
               "md:max-w-200 md:mx-auto 2xl:max-w-[1000px]": props.centered,
             }}
           >
