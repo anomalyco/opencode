@@ -312,3 +312,54 @@ export DISPLAY=:99.0
 ```
 
 opencode will detect if you're using Wayland and prefer `wl-clipboard`, otherwise it will try to find clipboard tools in order of: `xclip` and `xsel`.
+
+---
+
+## Workflows
+
+For an overview of the feature, see the [Workflows](/docs/workflows) guide. This
+section covers the failure modes you may hit when running them.
+
+### Workflow error classes
+
+A workflow can fail with one of six error classes. The error reaches you as the
+run's `error` (shown in the dashboard and returned by the HTTP/tool APIs); a
+tool-started run also surfaces it as a tool error. What each means and what to do:
+
+| Error                             | Meaning                                                                                                                                                                                                                 | What to do                                                                                                                                                                                                                                                                |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **WorkflowNotFoundError**         | No workflow with that name was found in the project, global, or built-in roots (or a resume/inspect referenced an unknown run id).                                                                                      | Check the name with `/workflow` autocomplete or the tool's `read` action. Names are file basenames without extension. Make sure the file is under a discovered `workflows/` directory.                                                                                    |
+| **WorkflowInvalidError**          | The workflow file could not be loaded — non-literal/missing metadata, no `run`, a syntax error, `ctx.workflow` nesting past depth 1, or `isolation: "worktree"` requested outside a git repo. Surfaces as HTTP **400**. | Read the message — it names the file and the problem. Make `name`/`description`/`phases`/`arguments` literal (see [Metadata must be statically analyzable](/docs/workflows#metadata-must-be-statically-analyzable)). For worktree isolation, run inside a git repository. |
+| **WorkflowStructuredOutputError** | A `ctx.agent` step requested a `schema` but the model produced no result matching it. There is no fallback to prose — the step fails.                                                                                   | Tighten the prompt to demand schema-conforming output, simplify the schema (`additionalProperties: false`, fewer required fields), or wrap the call in a `try/catch` in `run()` to handle it.                                                                             |
+| **WorkflowBudgetExceededError**   | The run was started with a `budget` (USD) and the cap was reached; the next `ctx.agent` step refused to spend past it.                                                                                                  | Raise or omit the `budget`, reduce fan-out/iterations, route cheap steps to `model: "small"`. Note the cap is a soft per-step cap, so the final spend can slightly exceed it (concurrent in-flight steps).                                                                |
+| **WorkflowAgentLimitError**       | The run started its lifetime cap of agent dispatches (1,000 by default), e.g. an unbounded `ctx.agent` loop.                                                                                                            | Bound your fan-outs and loops (cap list lengths, add an iteration cap). This ceiling is a safety guard against runaway workflows, not a tunable knob.                                                                                                                     |
+| **WorkflowCancelledError**        | The run was cancelled — from the dashboard (**X**), by a turn abort (Esc), or by deleting it while running. The run ends as `cancelled`.                                                                                | Expected when you cancel. If it was unintentional, resume the run (cancel is terminal, so resume starts a fresh run that replays the journal — see below).                                                                                                                |
+
+### A run is stuck at `paused` with a pending question
+
+A workflow that calls `ctx.question` waits for a human answer. If no answer
+arrives within the timeout (default 10 minutes), the run **parks as `paused`**
+with the question kept — this is by design, not a failure.
+
+To unblock it, answer the open question:
+
+- **In the TUI**, the question dialog appears while the run is live; a parked run
+  shows a ⏳ badge in the `/workflows` dashboard — answer it there to resume.
+- **Over HTTP**, `POST /workflow/run/{id}/answer` with `{ "answer": "..." }`.
+  Answering a parked run starts a resume that replays the prior steps from the
+  journal and feeds your answer to the `ctx.question` call, so the body continues
+  where it left off. (A **409** means the run has no open question; a **404** means
+  the id is unknown.)
+
+### A run shows `interrupted`
+
+`interrupted` means the run was orphaned — its in-memory fiber was lost to a
+process crash or restart while the database still said `running`. On the next
+start, an **orphan sweep** rewrites any such zombie run to `interrupted` so a lost
+run is reported honestly instead of appearing to run forever. (Paused runs are
+deliberately left alone by the sweep — they are parked by design, not lost.)
+
+An `interrupted` run is treated as a failure, but its journal is intact, so you can
+**resume** it: from the dashboard press **P** on the selected run, or start a new
+run with `resume_of` set to its id (HTTP/tool). The resume replays every completed
+agent from the journal instead of re-running them.
