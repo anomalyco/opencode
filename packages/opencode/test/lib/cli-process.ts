@@ -517,5 +517,10 @@ export const cliIt = {
     name: string,
     body: (input: CliFixture) => Effect.Effect<A, E, Scope.Scope | HttpClient.HttpClient>,
     opts?: number | TestOptions,
-  ) => test.concurrent(name, () => Effect.runPromise(Effect.scoped(withCliFixture(body))), opts),
+  ) =>
+    (process.platform === "win32" ? test : test.concurrent)(
+      name,
+      () => Effect.runPromise(Effect.scoped(withCliFixture(body))),
+      opts,
+    ),
 }
