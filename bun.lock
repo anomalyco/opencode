@@ -361,6 +361,7 @@
         "electron": "42.3.3",
         "electron-builder": "26.15.2",
         "electron-vite": "^5",
+        "esbuild": "0.25.12",
         "solid-js": "catalog:",
         "sury": "11.0.0-alpha.4",
         "typescript": "~5.6.2",

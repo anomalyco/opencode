@@ -49,6 +49,64 @@ describe("buildRequestParts", () => {
     expect(result.optimisticParts.every((part) => part.sessionID === "ses_1" && part.messageID === "msg_1")).toBe(true)
   })
 
+  test("prepends directives as leading synthetic system-reminder parts", () => {
+    const result = buildRequestParts({
+      prompt: [
+        { type: "text", content: "fix the bug", start: 0, end: 11 },
+        { type: "file", path: "src/foo.ts", content: "@src/foo.ts", start: 11, end: 22 },
+      ],
+      context: [],
+      images: [],
+      text: "fix the bug @src/foo.ts",
+      directives: ["directive one", "directive two"],
+      messageID: "msg_dir",
+      sessionID: "ses_dir",
+      sessionDirectory: "/repo",
+    })
+
+    // Order: [reminder..., main text, files...] — directives lead, the visible
+    // user text follows un-synthetic, attachments after.
+    const [first, second, third, fourth] = result.requestParts
+    expect(first).toMatchObject({
+      type: "text",
+      text: "<system-reminder>directive one</system-reminder>",
+      synthetic: true,
+    })
+    expect(second).toMatchObject({
+      type: "text",
+      text: "<system-reminder>directive two</system-reminder>",
+      synthetic: true,
+    })
+    expect(third).toMatchObject({ type: "text", text: "fix the bug @src/foo.ts" })
+    expect(third?.type === "text" && third.synthetic).toBeFalsy()
+    expect(fourth?.type).toBe("file")
+  })
+
+  test("optimistic parts mirror the synthetic flag of directive parts", () => {
+    const result = buildRequestParts({
+      prompt: [{ type: "text", content: "hello", start: 0, end: 5 }],
+      context: [],
+      images: [],
+      text: "hello",
+      directives: ["directive"],
+      messageID: "msg_dir_opt",
+      sessionID: "ses_dir_opt",
+      sessionDirectory: "/repo",
+    })
+
+    expect(result.optimisticParts).toHaveLength(2)
+    const [reminder, body] = result.optimisticParts
+    expect(reminder).toMatchObject({
+      type: "text",
+      text: "<system-reminder>directive</system-reminder>",
+      synthetic: true,
+      sessionID: "ses_dir_opt",
+      messageID: "msg_dir_opt",
+    })
+    expect(body).toMatchObject({ type: "text", text: "hello" })
+    expect(body?.type === "text" && body.synthetic).toBeFalsy()
+  })
+
   test("keeps multiple uploaded attachments in order", () => {
     const result = buildRequestParts({
       prompt: [{ type: "text", content: "check these", start: 0, end: 11 }],

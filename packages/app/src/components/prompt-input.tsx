@@ -62,6 +62,9 @@ import {
   promptLength,
 } from "./prompt-input/history"
 import { createPromptSubmit, type FollowupDraft } from "./prompt-input/submit"
+import { strongestReasoningVariant, ultracodeToggle } from "./prompt-input/ultracode"
+import { workflowCommandOptions } from "./prompt-input/workflow-command"
+import { openWorkflowDashboard } from "./prompt-input/workflow-dashboard"
 import { PromptPopover, type AtOption, type SlashCommand } from "./prompt-input/slash-popover"
 import { PromptContextItems } from "./prompt-input/context-items"
 import { PromptImageAttachments } from "./prompt-input/image-attachments"
@@ -355,6 +358,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     mode: "normal" | "shell"
     applyingHistory: boolean
     variantOpen: boolean
+    ultracodeSession: boolean
+    // The variant we switched away from when /ultracode boosted reasoning:
+    // `false` = nothing to restore, `null` = restore the default (no variant),
+    // a string = restore that variant.
+    ultracodeRestoreVariant: string | null | false
   }>({
     popover: null,
     historyIndex: -1,
@@ -364,6 +372,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     mode: "normal",
     applyingHistory: false,
     variantOpen: false,
+    ultracodeSession: false,
+    ultracodeRestoreVariant: false,
   })
   const [picker, setPicker] = createStore({
     projectOpen: false,
@@ -576,6 +586,68 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       disabled: store.mode === "normal",
       onSelect: () => setMode("normal"),
     },
+    {
+      id: "ultracode.toggle",
+      title: language.t(store.ultracodeSession ? "command.ultracode.disable" : "command.ultracode.enable"),
+      category: language.t("command.category.session"),
+      slash: "ultracode",
+      onSelect: () => {
+        // Best-effort reasoning boost on enable (TUI parity): switch to the
+        // strongest variant and remember what to restore on disable. No boost
+        // when the model has no variants or already runs the strongest one.
+        const boost = store.ultracodeSession
+          ? undefined
+          : strongestReasoningVariant(props.controls.model.selection.variant.list())
+        const result = ultracodeToggle(store.ultracodeSession, boost)
+        setStore("ultracodeSession", result.next)
+        // Item 13: persist the flag server-side (session.metadata.ultracode) so
+        // the system prompt carries the standing opt-in and the workflow tool
+        // description swaps its gate. PATCH replaces the whole metadata record,
+        // so merge the synced keys. Toggling before the first session keeps the
+        // flag local; the submit path PATCHes the freshly created session.
+        if (props.controls.session.id) {
+          void sdk().client.session
+            .update({
+              sessionID: props.controls.session.id,
+              metadata: { ...(info()?.metadata ?? {}), ultracode: result.next },
+            })
+            .catch(() => {})
+        }
+        if (result.next) {
+          if (boost && props.controls.model.selection.variant.current() !== boost) {
+            // Remember what to restore (`null` = the default, no variant).
+            setStore("ultracodeRestoreVariant", props.controls.model.selection.variant.current() ?? null)
+            props.controls.model.selection.variant.set(boost)
+          } else {
+            setStore("ultracodeRestoreVariant", false)
+          }
+        } else if (store.ultracodeRestoreVariant !== false) {
+          props.controls.model.selection.variant.set(store.ultracodeRestoreVariant ?? undefined)
+          setStore("ultracodeRestoreVariant", false)
+        }
+        showToast({
+          title: language.t(result.toast.title as Parameters<typeof language.t>[0]),
+          description: language.t(
+            result.toast.description as Parameters<typeof language.t>[0],
+            boost === undefined ? undefined : { boost },
+          ),
+        })
+      },
+    },
+    {
+      id: "workflow.start",
+      title: language.t("command.workflow.start"),
+      category: language.t("command.category.workflow"),
+      slash: "workflow",
+      onSelect: () => insertSlashText("/workflow "),
+    },
+    {
+      id: "workflow.list",
+      title: language.t("command.workflow.dashboard"),
+      category: language.t("command.category.workflow"),
+      slash: "workflows",
+      onSelect: () => void openWorkflowDashboard(dialog),
+    },
   ])
 
   const closePopover = () => setStore("popover", null)
@@ -605,6 +677,16 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       selection?.removeAllRanges()
       selection?.addRange(range)
     })
+  }
+
+  // Replaces the editor with `text`, keeps the current image attachments, and
+  // parks the cursor at the end — the same insert used for selecting a custom
+  // slash command (handleSlashSelect) and for the /workflow starter command.
+  const insertSlashText = (text: string) => {
+    const images = imageAttachments()
+    setEditorText(text)
+    prompt.set([{ type: "text", content: text, start: 0, end: text.length }, ...images], text.length)
+    focusEditorEnd()
   }
 
   const currentCursor = () => {
@@ -637,6 +719,37 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }, 6500)
     onCleanup(() => clearInterval(interval))
   })
+
+  // Ultracode session mode is per-session: re-initialize it from the SERVER
+  // flag (session.metadata.ultracode, item 13) when the active session changes
+  // (mirror TUI prompt/index.tsx) so the toggle never leaks across sessions and
+  // the server stays the source of truth. Within a session, a metadata change
+  // (our own PATCH landing, or another client toggling) is followed too.
+  // Unlike the TUI, the variant is deliberately NOT restored here:
+  // app variants are persisted per session (local.tsx write() → setSaved
+  // ('session', …)), so the boosted variant cannot leak onto another session —
+  // only the restore bookmark is dropped.
+  createEffect(
+    on(
+      () =>
+        [
+          props.controls.session.id,
+          props.controls.session.id
+            ? sync().session.get(props.controls.session.id)?.metadata?.["ultracode"] === true
+            : false,
+        ] as const,
+      ([sessionID, serverFlag], prev) => {
+        const sessionChanged = prev === undefined || prev[0] !== sessionID
+        if (sessionChanged) {
+          setStore("ultracodeSession", serverFlag)
+          setStore("ultracodeRestoreVariant", false)
+          return
+        }
+        if (serverFlag !== store.ultracodeSession) setStore("ultracodeSession", serverFlag)
+      },
+      { defer: true },
+    ),
+  )
 
   const [composing, setComposing] = createSignal(false)
   const isImeComposing = (event: KeyboardEvent) => event.isComposing || composing() || event.keyCode === 229
@@ -716,6 +829,18 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     onSelect: handleAtSelect,
   })
 
+  // Discovered workflows for the `/<name>` slash entries (Claude-Code parity).
+  // Fetched lazily — only once the slash popover opens — and cached by the
+  // resource so reopening the popover does not refetch on every keystroke.
+  const [workflowList] = createResource(
+    () => (store.popover === "slash" ? sdk().directory : undefined),
+    (directory) =>
+      sdk()
+        .client.workflow.list({ directory })
+        .then((response) => response.data ?? [])
+        .catch(() => []),
+  )
+
   const slashCommands = createMemo<SlashCommand[]>(() => {
     const builtin = command.options
       .filter((opt) => !opt.disabled && !opt.id.startsWith("suggested.") && opt.slash)
@@ -728,16 +853,38 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         type: "builtin" as const,
       }))
 
-    const custom = sync().data.command.map((cmd) => ({
-      id: `custom.${cmd.name}`,
-      trigger: cmd.name,
-      title: cmd.name,
-      description: cmd.description,
-      type: "custom" as const,
-      source: cmd.source,
+    // Bonus A: the server registers every DISCOVERED workflow as a Command with
+    // source:'workflow' and an EMPTY template (discovery-only). Surfacing those
+    // as 'custom' entries would (a) duplicate/shadow the real type:'workflow'
+    // entries below (their names land in existingNames) and (b) route submits
+    // into session.command with the empty template — no run, no approval gate.
+    // Real commands (command/mcp/skill) keep precedence over workflows.
+    const custom = sync().data.command
+      .filter((cmd) => cmd.source !== "workflow")
+      .map((cmd) => ({
+        id: `custom.${cmd.name}`,
+        trigger: cmd.name,
+        title: cmd.name,
+        description: cmd.description,
+        type: "custom" as const,
+        source: cmd.source,
+      }))
+
+    // A workflow that collides with any built-in slash trigger or any server
+    // command name is dropped (workflowCommandOptions filter) so a workflow never
+    // shadows a real command. Each surviving workflow surfaces as `/<name>` and
+    // routes through the /workflow path on select (handleSlashSelect).
+    const existingNames = new Set<string>([...builtin.map((b) => b.trigger), ...custom.map((c) => c.trigger)])
+    const workflow = workflowCommandOptions(workflowList() ?? [], existingNames).map((option) => ({
+      id: `workflow.run.${option.name}`,
+      trigger: option.name,
+      title: option.name,
+      description: option.description,
+      type: "workflow" as const,
+      source: "workflow" as const,
     }))
 
-    return [...custom, ...builtin]
+    return [...workflow, ...custom, ...builtin]
   })
 
   const handleSlashSelect = (cmd: SlashCommand | undefined) => {
@@ -745,11 +892,16 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     closePopover()
     const images = imageAttachments()
 
+    // A discovered workflow entry inserts `/workflow <name> ` so SUBMIT routes it
+    // through the /workflow path (parity with the TUI's `/<name>` → `/workflow
+    // <name>` dispatch). There is no per-name command registered to trigger.
+    if (cmd.type === "workflow") {
+      insertSlashText(`/workflow ${cmd.trigger} `)
+      return
+    }
+
     if (cmd.type === "custom") {
-      const text = `/${cmd.trigger} `
-      setEditorText(text)
-      prompt.set([{ type: "text", content: text, start: 0, end: text.length }, ...images], text.length)
-      focusEditorEnd()
+      insertSlashText(`/${cmd.trigger} `)
       return
     }
 
@@ -1193,6 +1345,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       commentCount,
       autoAccept: () => accepting(),
       mode: () => store.mode,
+      ultracodeSession: () => store.ultracodeSession,
+      openWorkflowDashboard: () => void openWorkflowDashboard(dialog),
       working,
       editor: () => editorRef,
       queueScroll,
@@ -1659,6 +1813,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       </TooltipKeybind>
                     </div>
                   </Show>
+                  {/* Ultracode session badge (TUI parity: the literal token, no i18n). */}
+                  <Show when={store.ultracodeSession}>
+                    <span
+                      data-component="ultracode-badge"
+                      class="shrink-0 px-1 text-11-medium font-bold text-v2-text-text-accent select-none"
+                    >
+                      ULTRACODE
+                    </span>
+                  </Show>
                 </div>
                 <Tooltip placement="top" inactive={!working() && blank()} value={tip()}>
                   <IconButton
@@ -2010,6 +2173,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                               />
                             </TooltipKeybind>
                           </div>
+                        </Show>
+                        {/* Ultracode session badge (TUI parity: the literal token, no i18n). */}
+                        <Show when={store.ultracodeSession}>
+                          <span
+                            data-component="ultracode-badge"
+                            class="shrink-0 px-1 text-11-medium font-bold text-v2-text-text-accent select-none"
+                          >
+                            ULTRACODE
+                          </span>
                         </Show>
                       </Show>
                     </Show>

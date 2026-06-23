@@ -13,6 +13,12 @@ import { decode64 } from "@/utils/base64"
 import { EventSessionError } from "@opencode-ai/sdk/v2"
 import { Persist, persisted } from "@/utils/persist"
 import { playSoundById } from "@/utils/sound"
+import { showToast } from "@/utils/toast"
+import {
+  asWorkflowRunEvent,
+  workflowFinishedNotice,
+  type WorkflowRunEventData,
+} from "@/components/dialog-workflow-client"
 
 type NotificationBase = {
   directory?: string
@@ -286,8 +292,60 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
       })
     }
 
+    // Workflow-run-finished dedup, per run id: the event stream replays recent
+    // events after a reconnect, and the toast/OS notification must fire exactly
+    // once per run. Capped so a long-lived app session cannot grow it unbounded
+    // (a clear at >1000 risks one duplicate notice per pruned run at worst).
+    const finishedWorkflowRuns = new Set<string>()
+
+    // Toast + (settings-gated) OS notification when a workflow run finishes,
+    // mirroring the TUI's notifications.ts workflow.run.finished handler.
+    // Deliberately NOT appended to the persisted notification center: the
+    // Notification union (turn-complete | error) stays session-shaped; a
+    // dedicated workflow entry type is an optional follow-up.
+    const handleWorkflowFinished = (directory: string, run: WorkflowRunEventData) => {
+      if (finishedWorkflowRuns.has(run.id)) return
+      if (finishedWorkflowRuns.size > 1000) finishedWorkflowRuns.clear()
+      finishedWorkflowRuns.add(run.id)
+
+      const notice = workflowFinishedNotice(run)
+      if (notice.done ? settings.sounds.agentEnabled() : settings.sounds.errorsEnabled()) {
+        void playSoundById(notice.done ? settings.sounds.agent() : settings.sounds.errors())
+      }
+
+      showToast({
+        variant: notice.variant,
+        title: language.t("toast.workflow.finished.title", { name: run.workflow }),
+        description: notice.detail,
+      })
+
+      if (!settings.notifications.agent()) return
+      // The finished event carries no session_id — resolve it best-effort for a
+      // deep link into the run's session; on failure fall back to the project.
+      void serverSDK()
+        .client.workflow.get({ id: run.id, directory })
+        .then((result) => result.data?.session_id)
+        .catch(() => undefined)
+        .then((sessionID) => {
+          if (meta.disposed) return
+          const href = sessionID
+            ? `/${base64Encode(directory)}/session/${sessionID}`
+            : `/${base64Encode(directory)}`
+          void platform.notify(
+            language.t("notification.workflow.finished.title"),
+            `${run.workflow}: ${notice.done ? "done" : run.status}`,
+            href,
+          )
+        })
+    }
+
     const unsub = serverSDK().event.listen((e) => {
       const event = e.details
+      const workflowEvent = asWorkflowRunEvent(event)
+      if (workflowEvent?.kind === "finished") {
+        handleWorkflowFinished(e.name, workflowEvent.run)
+        return
+      }
       if (event.type !== "session.idle" && event.type !== "session.error") return
 
       const directory = e.name

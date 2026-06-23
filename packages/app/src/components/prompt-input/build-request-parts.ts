@@ -5,6 +5,7 @@ import { encodeFilePath } from "@/context/file/path"
 import type { AgentPart, FileAttachmentPart, ImageAttachmentPart, Prompt } from "@/context/prompt"
 import { Identifier } from "@/utils/id"
 import { createCommentMetadata, formatCommentNote } from "@/utils/comment-note"
+import { systemReminder } from "./ultracode"
 
 type PromptRequestPart = (TextPartInput | FilePartInput | AgentPartInput) & { id: string }
 
@@ -24,6 +25,10 @@ type BuildRequestPartsInput = {
   context: ContextFile[]
   images: ImageAttachmentPart[]
   text: string
+  // Ultracode directives (submit.ts) that ride AHEAD of the user text as
+  // separate synthetic <system-reminder> parts instead of being fused into the
+  // visible text (TUI parity: prompt/index.tsx ultracodeParts).
+  directives?: string[]
   messageID: string
   sessionID: string
   sessionDirectory: string
@@ -89,7 +94,19 @@ const toOptimisticPart = (part: PromptRequestPart, sessionID: string, messageID:
 }
 
 export function buildRequestParts(input: BuildRequestPartsInput) {
+  // Directive reminders lead the message; synthetic:true keeps them out of the
+  // visible transcript (message-part.tsx renders the first NON-synthetic text
+  // part) while they still reach the model as message parts.
   const requestParts: PromptRequestPart[] = [
+    ...(input.directives ?? []).map(
+      (directive) =>
+        ({
+          id: Identifier.ascending("part"),
+          type: "text",
+          text: systemReminder(directive),
+          synthetic: true,
+        }) satisfies PromptRequestPart,
+    ),
     {
       id: Identifier.ascending("part"),
       type: "text",
