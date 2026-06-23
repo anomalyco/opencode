@@ -26,11 +26,7 @@ export function SessionProgressIndicatorV2(props: ComponentProps<"svg">) {
       data-component="session-progress-indicator-v2"
       aria-hidden={rest["aria-hidden"] ?? "true"}
     >
-      <For each={dots}>
-        {(cell) => (
-          <rect data-dot={cell.index} x={cell.x} y={cell.y} width={dot} height={dot} />
-        )}
-      </For>
+      <For each={dots}>{(cell) => <rect data-dot={cell.index} x={cell.x} y={cell.y} width={dot} height={dot} />}</For>
     </svg>
   )
 }
