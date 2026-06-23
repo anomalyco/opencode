@@ -14,8 +14,10 @@ import type { Provider as ProviderV2, Model as ModelV2, Auth } from "@opencode-a
 
 import type { BunShell } from "./shell.js"
 import { type ToolDefinition } from "./tool.js"
+import type { WorkflowDefinition } from "./workflow.js"
 
 export * from "./tool.js"
+export * from "./workflow.js"
 
 export type ProviderContext = {
   source: "env" | "config" | "custom" | "api"
@@ -225,6 +227,14 @@ export interface Hooks {
   config?: (input: Config) => Promise<void>
   tool?: {
     [key: string]: ToolDefinition
+  }
+  /**
+   * Register workflows discoverable by name. File-based project/global workflows
+   * shadow plugin workflows; plugin workflows shadow built-ins. If multiple
+   * plugins register the same name, the first loaded plugin wins.
+   */
+  workflow?: {
+    [key: string]: WorkflowDefinition | string
   }
   auth?: AuthHook
   provider?: ProviderHook

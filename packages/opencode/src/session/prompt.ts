@@ -1628,6 +1628,7 @@ const ModelRef = Schema.Struct({
 
 export const PromptInput = Schema.Struct({
   sessionID: SessionID,
+  permissionSessionID: Schema.optional(SessionID),
   messageID: Schema.optional(MessageID),
   model: Schema.optional(ModelRef),
   agent: Schema.optional(Schema.String),
@@ -1639,6 +1640,22 @@ export const PromptInput = Schema.Struct({
   format: Schema.optional(SessionV1.Format),
   system: Schema.optional(Schema.String),
   variant: Schema.optional(Schema.String),
+  // Item 24: optional shared TURN budget. When set, the prompt creates ONE
+  // TurnBudget.Pool for this turn: the main loop charges it directly (never
+  // gated) and every workflow run started by this turn reserves/settles
+  // against it — so multiple runs of one turn share a single cap. Non-negative
+  // finite, mirroring the workflow budget validation.
+  turnBudget: Schema.optional(
+    Schema.Struct({
+      usd: Schema.optional(Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0))),
+      tokens: Schema.optional(Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0))),
+    }),
+  ),
+  // Item 28: MCP tool loading mode for this session's loop. 'eager' (default)
+  // registers every MCP tool schema as before; 'lazy' starts with only the
+  // tool_search meta-tool and registers MCP tools on activation. Workflow
+  // subagent sessions are started lazy (config workflows.lazy_mcp).
+  mcp: Schema.optional(Schema.Literals(["eager", "lazy"])),
   parts: Schema.Array(
     Schema.Union([
       SessionV1.TextPartInput,

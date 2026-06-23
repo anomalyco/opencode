@@ -163,6 +163,41 @@ export const Info = Schema.Struct({
       }),
     }),
   ),
+  workflows: Schema.optional(
+    Schema.Struct({
+      ultracode_keyword: Schema.optional(Schema.Boolean).annotate({
+        description:
+          "Detect the standalone `ultracode` keyword in the prompt and highlight it; on submit it opts the turn into workflow orchestration (default: true)",
+      }),
+      approval: Schema.optional(Schema.Literals(["always", "first-run", "never"])).annotate({
+        description:
+          "When to ask before an interactive workflow start. 'first-run' (default) asks once per workflow until approved, 'always' asks every time, 'never' starts without asking.",
+      }),
+      approved: Schema.optional(Schema.mutable(Schema.Array(Schema.String))).annotate({
+        description: "Workflow names that have been approved via 'Yes, always' in the interactive start dialog.",
+      }),
+      foreground_grace_ms: Schema.optional(NonNegativeInt).annotate({
+        description:
+          "How long a workflow start waits in the foreground before switching the run to the background (milliseconds, default 45000). Only applies when neither background nor timeout is set explicitly.",
+      }),
+      budget_directive: Schema.optional(Schema.Boolean).annotate({
+        description:
+          "Detect the `+$N` budget directive in the prompt and highlight it; on submit it reserves that budget for workflow orchestration in the turn (default: true)",
+      }),
+      shell_permission: Schema.optional(Schema.Boolean).annotate({
+        description:
+          "Gate workflow ctx.shell commands through the caller's bash permission ruleset, exactly like the bash tool (default: true). Set to false to restore the ungated behavior.",
+      }),
+      lint: Schema.optional(Schema.Literals(["off", "warn", "deny"])).annotate({
+        description:
+          "Static source lint for workflow scripts on create/inline start (node builtins, Bun.spawn, process.env, fetch, dynamic import). 'warn' (default) surfaces findings non-blocking, 'deny' fails create/start on findings, 'off' disables the lint.",
+      }),
+      lazy_mcp: Schema.optional(Schema.Boolean).annotate({
+        description:
+          "Load MCP tools lazily in workflow subagent sessions via the tool_search meta-tool instead of registering every MCP schema eagerly (default: true).",
+      }),
+    }),
+  ).annotate({ description: "Workflow orchestration options" }),
   experimental: Schema.optional(
     Schema.Struct({
       disable_paste_summary: Schema.optional(Schema.Boolean),
