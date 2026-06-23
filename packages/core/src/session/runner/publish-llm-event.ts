@@ -115,9 +115,11 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
 
   const text = fragments("text", (textID, value) =>
     Effect.gen(function* () {
-      const toolCallMatch = value.match(
+      const bracketToolCallMatch = value.match(
         /\[Assistant tool call\]\s*:\s*(\w+)\s*\(/i,
       )
+      const xmlToolCallMatch = value.match(/<\w+>[\s\S]*?"name"\s*:\s*"([^"]+)"/u)
+      const toolCallMatch = bracketToolCallMatch ?? xmlToolCallMatch
       if (toolCallMatch) {
         textBasedToolCall = true
         yield* events.publish(SessionEvent.Text.Ended, {
