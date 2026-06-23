@@ -20,8 +20,6 @@ export type Event =
   | EventSessionNextMoved
   | EventSessionNextPrompted
   | EventSessionNextPromptAdmitted
-  | EventSessionNextPromptPromoted
-  | EventSessionNextInterruptRequested
   | EventSessionNextContextUpdated
   | EventSessionNextSynthetic
   | EventSessionNextShellStarted
@@ -52,10 +50,10 @@ export type Event =
   | EventInstallationUpdated
   | EventInstallationUpdateAvailable
   | EventFileEdited
-  | EventPluginAdded
+  | EventReferenceUpdated
   | EventPermissionV2Asked
   | EventPermissionV2Replied
-  | EventReferenceUpdated
+  | EventPluginAdded
   | EventProjectDirectoriesUpdated
   | EventFileWatcherUpdated
   | EventPtyCreated
@@ -867,25 +865,6 @@ export type GlobalEvent = {
       }
     | {
         id: string
-        type: "session.next.prompt.promoted"
-        properties: {
-          timestamp: number
-          sessionID: string
-          messageID: string
-          prompt: Prompt
-          timeCreated: number
-        }
-      }
-    | {
-        id: string
-        type: "session.next.interrupt.requested"
-        properties: {
-          timestamp: number
-          sessionID: string
-        }
-      }
-    | {
-        id: string
         type: "session.next.context.updated"
         properties: {
           timestamp: number
@@ -1259,9 +1238,9 @@ export type GlobalEvent = {
       }
     | {
         id: string
-        type: "plugin.added"
+        type: "reference.updated"
         properties: {
-          id: string
+          [key: string]: unknown
         }
       }
     | {
@@ -1290,9 +1269,9 @@ export type GlobalEvent = {
       }
     | {
         id: string
-        type: "reference.updated"
+        type: "plugin.added"
         properties: {
-          [key: string]: unknown
+          id: string
         }
       }
     | {
@@ -1637,8 +1616,6 @@ export type GlobalEvent = {
     | SyncEventSessionNextMoved
     | SyncEventSessionNextPrompted
     | SyncEventSessionNextPromptAdmitted
-    | SyncEventSessionNextPromptPromoted
-    | SyncEventSessionNextInterruptRequested
     | SyncEventSessionNextContextUpdated
     | SyncEventSessionNextSynthetic
     | SyncEventSessionNextShellStarted
@@ -2780,8 +2757,6 @@ export type V2Event =
   | V2EventSessionNextMoved
   | V2EventSessionNextPrompted
   | V2EventSessionNextPromptAdmitted
-  | V2EventSessionNextPromptPromoted
-  | V2EventSessionNextInterruptRequested
   | V2EventSessionNextContextUpdated
   | V2EventSessionNextSynthetic
   | V2EventSessionNextShellStarted
@@ -2812,10 +2787,10 @@ export type V2Event =
   | V2EventInstallationUpdated
   | V2EventInstallationUpdateAvailable
   | V2EventFileEdited
-  | V2EventPluginAdded
+  | V2EventReferenceUpdated
   | V2EventPermissionV2Asked
   | V2EventPermissionV2Replied
-  | V2EventReferenceUpdated
+  | V2EventPluginAdded
   | V2EventProjectDirectoriesUpdated
   | V2EventFileWatcherUpdated
   | V2EventPtyCreated
@@ -3231,39 +3206,6 @@ export type SyncEventSessionNextPromptAdmitted = {
   }
 }
 
-export type SyncEventSessionNextPromptPromoted = {
-  type: "sync"
-  id: string
-  syncEvent: {
-    type: "session.next.prompt.promoted.1"
-    id: string
-    seq: number
-    aggregateID: string
-    data: {
-      timestamp: number
-      sessionID: string
-      messageID: string
-      prompt: Prompt
-      timeCreated: number
-    }
-  }
-}
-
-export type SyncEventSessionNextInterruptRequested = {
-  type: "sync"
-  id: string
-  syncEvent: {
-    type: "session.next.interrupt.requested.1"
-    id: string
-    seq: number
-    aggregateID: string
-    data: {
-      timestamp: number
-      sessionID: string
-    }
-  }
-}
-
 export type SyncEventSessionNextContextUpdated = {
   type: "sync"
   id: string
@@ -3663,7 +3605,7 @@ export type SyncEventSessionNextCompactionEnded = {
   type: "sync"
   id: string
   syncEvent: {
-    type: "session.next.compaction.ended.2"
+    type: "session.next.compaction.ended.1"
     id: string
     seq: number
     aggregateID: string
@@ -4549,45 +4491,6 @@ export type V2EventSessionNextPromptAdmitted = {
   }
 }
 
-export type V2EventSessionNextPromptPromoted = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef
-  type: "session.next.prompt.promoted"
-  data: {
-    timestamp: number
-    sessionID: string
-    messageID: string
-    prompt: Prompt
-    timeCreated: number
-  }
-}
-
-export type V2EventSessionNextInterruptRequested = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef
-  type: "session.next.interrupt.requested"
-  data: {
-    timestamp: number
-    sessionID: string
-  }
-}
-
 export type V2EventSessionNextContextUpdated = {
   id: string
   metadata?: {
@@ -5261,7 +5164,7 @@ export type V2EventFileEdited = {
   }
 }
 
-export type V2EventPluginAdded = {
+export type V2EventReferenceUpdated = {
   id: string
   metadata?: {
     [key: string]: unknown
@@ -5272,9 +5175,9 @@ export type V2EventPluginAdded = {
     version: number
   }
   location?: LocationRef
-  type: "plugin.added"
+  type: "reference.updated"
   data: {
-    id: string
+    [key: string]: unknown
   }
 }
 
@@ -5322,7 +5225,7 @@ export type V2EventPermissionV2Replied = {
   }
 }
 
-export type V2EventReferenceUpdated = {
+export type V2EventPluginAdded = {
   id: string
   metadata?: {
     [key: string]: unknown
@@ -5333,9 +5236,9 @@ export type V2EventReferenceUpdated = {
     version: number
   }
   location?: LocationRef
-  type: "reference.updated"
+  type: "plugin.added"
   data: {
-    [key: string]: unknown
+    id: string
   }
 }
 
@@ -6212,27 +6115,6 @@ export type EventSessionNextPromptAdmitted = {
   }
 }
 
-export type EventSessionNextPromptPromoted = {
-  id: string
-  type: "session.next.prompt.promoted"
-  properties: {
-    timestamp: number
-    sessionID: string
-    messageID: string
-    prompt: Prompt
-    timeCreated: number
-  }
-}
-
-export type EventSessionNextInterruptRequested = {
-  id: string
-  type: "session.next.interrupt.requested"
-  properties: {
-    timestamp: number
-    sessionID: string
-  }
-}
-
 export type EventSessionNextContextUpdated = {
   id: string
   type: "session.next.context.updated"
@@ -6636,11 +6518,11 @@ export type EventFileEdited = {
   }
 }
 
-export type EventPluginAdded = {
+export type EventReferenceUpdated = {
   id: string
-  type: "plugin.added"
+  type: "reference.updated"
   properties: {
-    id: string
+    [key: string]: unknown
   }
 }
 
@@ -6670,11 +6552,11 @@ export type EventPermissionV2Replied = {
   }
 }
 
-export type EventReferenceUpdated = {
+export type EventPluginAdded = {
   id: string
-  type: "reference.updated"
+  type: "plugin.added"
   properties: {
-    [key: string]: unknown
+    id: string
   }
 }
 

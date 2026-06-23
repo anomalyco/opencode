@@ -1,16 +1,18 @@
 import { Effect } from "effect"
-import { define } from "@opencode-ai/plugin/v2/effect"
+import { define } from "../internal"
 import { ProviderV2 } from "../../provider"
+import { Integration } from "../../integration"
 
 export const OpencodePlugin = define({
   id: "opencode",
   effect: Effect.fn(function* (ctx) {
+    const integrations = yield* Integration.Service
     let hasKey = false
     yield* ctx.catalog.transform(
       Effect.fn(function* (evt) {
         const item = evt.provider.get(ProviderV2.ID.opencode)
         if (!item) return
-        const integration = yield* ctx.integration.get(item.provider.id)
+        const integration = yield* integrations.get(Integration.ID.make(item.provider.id))
         hasKey = Boolean(
           process.env.OPENCODE_API_KEY || integration?.connections.length || item.provider.request.body.apiKey,
         )

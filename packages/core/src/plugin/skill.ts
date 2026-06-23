@@ -2,7 +2,7 @@
 
 export * as SkillPlugin from "./skill"
 
-import { define } from "@opencode-ai/plugin/v2/effect"
+import { define } from "./internal"
 import { Effect } from "effect"
 import { AbsolutePath } from "../schema"
 import { SkillV2 } from "../skill"

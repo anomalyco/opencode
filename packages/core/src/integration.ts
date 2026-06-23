@@ -432,7 +432,7 @@ export const locationLayer = Layer.effect(
 
     return Service.of({
       transform: state.transform,
-      rebuild: state.rebuild,
+      reload: state.reload,
       get: Effect.fn("Integration.get")(function* (id) {
         const entry = state.get().integrations.get(id)
         if (!entry) return undefined

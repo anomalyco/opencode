@@ -5,7 +5,6 @@ import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { PermissionV2 } from "@opencode-ai/core/permission"
-import { PluginBoot } from "@opencode-ai/core/plugin/boot"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { SkillV2 } from "@opencode-ai/core/skill"
@@ -42,17 +41,6 @@ describe("SkillTool", () => {
           let current = [info]
           const assertions: PermissionV2.AssertInput[] = []
           let deny = false
-          let bootWaited = false
-          const boot = Layer.succeed(
-            PluginBoot.Service,
-            PluginBoot.Service.of({
-              add: () => Effect.void,
-              wait: () =>
-                Effect.sync(() => {
-                  bootWaited = true
-                }),
-            }),
-          )
           const permission = Layer.succeed(
             PermissionV2.Service,
             PermissionV2.Service.of({
@@ -71,7 +59,7 @@ describe("SkillTool", () => {
             SkillV2.Service,
             SkillV2.Service.of({
               transform: (_transform) => Effect.die("unused"),
-              rebuild: () => Effect.die("unused"),
+              reload: () => Effect.die("unused"),
               sources: () => Effect.die("unused"),
               list: () => Effect.succeed(current),
             }),
@@ -81,14 +69,12 @@ describe("SkillTool", () => {
             Layer.provide(registry),
             Layer.provide(permission),
             Layer.provide(FSUtil.defaultLayer),
-            Layer.provide(boot),
             Layer.provide(skills),
           )
-          const layer = Layer.mergeAll(permission, skills, registry, boot, tool)
+          const layer = Layer.mergeAll(permission, skills, registry, tool)
 
           return yield* Effect.gen(function* () {
             const registry = yield* ToolRegistry.Service
-            expect(bootWaited).toBe(true)
             expect((yield* toolDefinitions(registry))[0]).toMatchObject({
               name: "skill",
               description: SkillTool.description,
