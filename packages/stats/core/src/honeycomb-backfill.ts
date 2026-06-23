@@ -454,11 +454,7 @@ function baseAggregate(row: RawRow, grain: Grain, opts: ImportOptions): StatBase
     tier: tier(row),
     sessions: integer(row, "sessions", ["COUNT_DISTINCT(session)"]),
     requests: integer(row, "requests", ["COUNT", "COUNT()"]),
-    unique_users: integer(row, "unique_users", [
-      "COUNT_DISTINCT(user_id)",
-      "COUNT_DISTINCT(workspace)",
-      "COUNT_DISTINCT(api_key)",
-    ]),
+    unique_users: integer(row, "unique_users", ["COUNT_DISTINCT(workspace)", "COUNT_DISTINCT(api_key)"]),
     input_tokens: integer(row, "input_tokens", ["SUM(tokens.input)", "SUM(tokens_input)"]),
     output_tokens: integer(row, "output_tokens", ["SUM(tokens.output)", "SUM(tokens_output)"]),
     reasoning_tokens: integer(row, "reasoning_tokens", ["SUM(tokens.reasoning)", "SUM(tokens_reasoning)"]),

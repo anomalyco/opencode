@@ -56,7 +56,6 @@ const inferenceEventTable = new aws.s3tables.Table(
             { name: "error_cause2", type: "string", required: false },
             { name: "api_key", type: "string", required: false },
             { name: "workspace", type: "string", required: false },
-            { name: "user_id", type: "string", required: false },
             { name: "is_subscription", type: "boolean", required: false },
             { name: "subscription", type: "string", required: false },
             { name: "response_length", type: "long", required: false },
