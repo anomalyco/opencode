@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto"
-import { mkdirSync, rmSync } from "node:fs"
+import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs"
 import * as http from "node:http"
 import { createServer } from "node:net"
 import { homedir, tmpdir } from "node:os"
@@ -98,6 +98,26 @@ function ensureLoopbackNoProxy() {
 
   upsert("NO_PROXY")
   upsert("no_proxy")
+}
+
+function readServerConfig(): { hostname?: string; port?: number } {
+  const configDir = process.env.XDG_CONFIG_HOME
+    ? join(process.env.XDG_CONFIG_HOME, "opencode")
+    : join(homedir(), ".config", "opencode")
+  for (const file of ["opencode.jsonc", "opencode.json", "config.json"]) {
+    const filepath = join(configDir, file)
+    if (!existsSync(filepath)) continue
+    try {
+      const content = readFileSync(filepath, "utf-8")
+        .replace(/\/\/.*$/gm, "")
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+      const cfg = JSON.parse(content)
+      if (cfg?.server?.hostname || cfg?.server?.port) {
+        return { hostname: cfg.server.hostname, port: cfg.server.port }
+      }
+    } catch {}
+  }
+  return {}
 }
 
 const main = Effect.gen(function* () {
@@ -280,6 +300,8 @@ const main = Effect.gen(function* () {
     ),
   )
 
+  const serverConfig = readServerConfig()
+
   const port = yield* Effect.gen(function* () {
     const fromEnv = process.env.OPENCODE_PORT
     if (fromEnv) {
@@ -287,24 +309,26 @@ const main = Effect.gen(function* () {
       if (!Number.isNaN(parsed)) return parsed
     }
 
+    if (serverConfig.port) return serverConfig.port
+
     const res = yield* Deferred.make<number, unknown>()
-    const server = createServer()
-    server.on("error", (e) => Deferred.failSync(res, () => e))
-    server.listen(0, "127.0.0.1", () => {
-      const address = server.address()
+    const tcp = createServer()
+    tcp.on("error", (e) => Deferred.failSync(res, () => e))
+    tcp.listen(0, "127.0.0.1", () => {
+      const address = tcp.address()
       if (typeof address !== "object" || !address) {
-        server.close()
+        tcp.close()
         Deferred.failSync(res, () => new Error("Failed to get port"))
         return
       }
       const port = address.port
-      server.close(() => Effect.runSync(Deferred.succeed(res, port)))
+      tcp.close(() => Effect.runSync(Deferred.succeed(res, port)))
     })
 
     return yield* Deferred.await(res)
   })
-  const hostname = "127.0.0.1"
-  const url = `http://${hostname}:${port}`
+  const bindHostname = serverConfig.hostname ?? "127.0.0.1"
+  const url = `http://127.0.0.1:${port}`
   const password = randomUUID()
 
   const loadingTask = yield* Effect.gen(function* () {
@@ -315,7 +339,7 @@ const main = Effect.gen(function* () {
 
     logger.log("spawning sidecar", { url })
     const { listener, health } = yield* Effect.promise(() =>
-      spawnLocalServer(hostname, port, password, {
+      spawnLocalServer(bindHostname, port, password, {
         userDataPath: app.getPath("userData"),
         onStdout: (message) => writeLog("server", "stdout", { message }),
         onStderr: (message) => writeLog("server", "stderr", { message }, "warn"),
