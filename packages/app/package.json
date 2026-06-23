@@ -41,7 +41,9 @@
     "typescript": "catalog:",
     "vite": "catalog:",
     "vite-plugin-icons-spritesheet": "3.0.1",
-    "vite-plugin-solid": "catalog:"
+    "vite-plugin-pwa": "1.3.0",
+    "vite-plugin-solid": "catalog:",
+    "workbox-window": "7.4.1"
   },
   "dependencies": {
     "@kobalte/core": "catalog:",

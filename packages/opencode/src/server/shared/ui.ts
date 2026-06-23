@@ -52,9 +52,10 @@ function notFound() {
   return HttpServerResponse.jsonUnsafe({ error: "Not Found" }, { status: 404 })
 }
 
-function embeddedUIResponse(file: string, body: Uint8Array) {
+function embeddedUIResponse(requestPath: string, file: string, body: Uint8Array) {
   const mime = FSUtil.mimeType(file)
   const headers = new Headers({ "content-type": mime })
+  if (requestPath === "/sw.js") headers.set("cache-control", "no-cache")
   if (mime.startsWith("text/html")) {
     headers.set("content-security-policy", cspForHtml(new TextDecoder().decode(body)))
   }
@@ -70,7 +71,7 @@ export function serveEmbeddedUIEffect(
   if (!file) return Effect.succeed(notFound())
 
   return fs.readFile(file).pipe(
-    Effect.map((body) => embeddedUIResponse(file, body)),
+    Effect.map((body) => embeddedUIResponse(requestPath, file, body)),
     Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(notFound())),
   )
 }
@@ -92,6 +93,8 @@ export function serveUIEffect(
       }),
     )
     const headers = proxyResponseHeaders(response.headers)
+
+    if (path === "/sw.js") headers.set("Cache-Control", "no-cache")
 
     if (response.headers["content-type"]?.includes("text/html")) {
       const body = yield* response.text

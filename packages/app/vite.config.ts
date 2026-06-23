@@ -1,5 +1,6 @@
 import { sentryVitePlugin } from "@sentry/vite-plugin"
 import { defineConfig } from "vite"
+import { VitePWA } from "vite-plugin-pwa"
 import desktopPlugin from "./vite"
 
 const sentry =
@@ -20,7 +21,51 @@ const sentry =
     : false
 
 export default defineConfig({
-  plugins: [desktopPlugin, sentry] as any,
+  plugins: [
+    desktopPlugin,
+    VitePWA({
+      strategies: "generateSW",
+      registerType: "prompt",
+      injectRegister: null,
+      manifest: false,
+      workbox: {
+        cleanupOutdatedCaches: true,
+        clientsClaim: true,
+        inlineWorkboxRuntime: true,
+        navigateFallback: "/index.html",
+        globPatterns: [
+          "index.html",
+          "site.webmanifest",
+          "favicon*",
+          "apple-touch-icon*",
+          "web-app-manifest*",
+          "assets/index-*.{js,css}",
+          "assets/home-*.js",
+          "assets/new-session-*.js",
+          "assets/session-*.js",
+          "assets/workbox-window*.js",
+          "assets/Inter.ttf",
+          "assets/JetBrainsMonoNerdFontMono-Regular.woff2",
+        ],
+        runtimeCaching: [
+          {
+            urlPattern: ({ url }) => url.origin === self.location.origin && url.pathname.startsWith("/assets/"),
+            handler: "CacheFirst",
+            options: {
+              cacheName: "opencode-assets",
+              cacheableResponse: {
+                statuses: [200],
+              },
+              expiration: {
+                maxEntries: 1000,
+              },
+            },
+          },
+        ],
+      },
+    }),
+    sentry,
+  ] as any,
   server: {
     host: "0.0.0.0",
     allowedHosts: true,

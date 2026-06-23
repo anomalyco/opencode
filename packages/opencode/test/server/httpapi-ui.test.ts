@@ -323,6 +323,23 @@ describe("HttpApi UI fallback", () => {
     }),
   )
 
+  it.live("revalidates the embedded service worker", () =>
+    Effect.gen(function* () {
+      const fs = yield* FSUtil.Service
+      const response = yield* serveEmbeddedUIEffect(
+        "/sw.js",
+        {
+          ...fs,
+          readFile: () => Effect.succeed(new TextEncoder().encode("service worker")),
+        },
+        { "sw.js": "/$bunfs/root/sw.js" },
+      ).pipe(Effect.map(HttpServerResponse.toWeb))
+
+      expect(response.status).toBe(200)
+      expect(response.headers.get("cache-control")).toBe("no-cache")
+    }),
+  )
+
   it.live("allows embedded UI terminal wasm and theme preload CSP", () =>
     Effect.gen(function* () {
       const script = 'document.documentElement.dataset.theme = "dark"'
@@ -424,7 +441,12 @@ describe("HttpApi UI fallback", () => {
   // should bypass auth.
   it.live("serves the PWA manifest without auth even when a server password is set", () =>
     Effect.gen(function* () {
-      for (const path of ["/site.webmanifest", "/web-app-manifest-192x192.png", "/web-app-manifest-512x512.png"]) {
+      for (const path of [
+        "/site.webmanifest",
+        "/sw.js",
+        "/web-app-manifest-192x192.png",
+        "/web-app-manifest-512x512.png",
+      ]) {
         const response = yield* uiApp({
           password: "secret",
           username: "opencode",
@@ -432,6 +454,7 @@ describe("HttpApi UI fallback", () => {
           client: httpClient(new Response("ok")),
         }).request(path)
         expect(response.status).not.toBe(401)
+        if (path === "/sw.js") expect(response.headers.get("cache-control")).toBe("no-cache")
       }
     }),
   )
