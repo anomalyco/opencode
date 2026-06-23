@@ -7,6 +7,7 @@ export type ClientOptions = {
 export type Event =
   | EventModelsDevRefreshed
   | EventIntegrationUpdated
+  | EventIntegrationConnectionUpdated
   | EventCatalogUpdated
   | EventSessionCreated
   | EventSessionUpdated
@@ -740,6 +741,13 @@ export type GlobalEvent = {
         type: "integration.updated"
         properties: {
           [key: string]: unknown
+        }
+      }
+    | {
+        id: string
+        type: "integration.connection.updated"
+        properties: {
+          integrationID: string
         }
       }
     | {
@@ -2744,6 +2752,7 @@ export type ProviderNotFoundError = {
 export type V2Event =
   | V2EventModelsDevRefreshed
   | V2EventIntegrationUpdated
+  | V2EventIntegrationConnectionUpdated
   | V2EventCatalogUpdated
   | V2EventSessionCreated
   | V2EventSessionUpdated
@@ -2898,6 +2907,21 @@ export type EventTuiSessionSelect2 = {
     sessionID: string
   }
 }
+
+export type CredentialValue = CredentialOAuth | CredentialKey
+
+export type IntegrationInputs = {
+  [key: string]: string
+}
+
+export type IntegrationMethod = IntegrationOAuthMethod | IntegrationKeyMethod | IntegrationEnvMethod
+
+export type IntegrationRef = {
+  id: string
+  name: string
+}
+
+export type SkillV2Source = SkillV2DirectorySource | SkillV2UrlSource | SkillV2EmbeddedSource
 
 export type MoveSessionDestination = {
   directory: string
@@ -4145,7 +4169,7 @@ export type ConnectionInfo = ConnectionCredentialInfo | ConnectionEnvInfo
 export type IntegrationInfo = {
   id: string
   name: string
-  methods: Array<IntegrationOAuthMethod | IntegrationKeyMethod | IntegrationEnvMethod>
+  methods: Array<IntegrationMethod>
   connections: Array<ConnectionInfo>
 }
 
@@ -4237,6 +4261,23 @@ export type V2EventIntegrationUpdated = {
   type: "integration.updated"
   data: {
     [key: string]: unknown
+  }
+}
+
+export type V2EventIntegrationConnectionUpdated = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  type: "integration.connection.updated"
+  data: {
+    integrationID: string
   }
 }
 
@@ -5981,6 +6022,14 @@ export type EventIntegrationUpdated = {
   }
 }
 
+export type EventIntegrationConnectionUpdated = {
+  id: string
+  type: "integration.connection.updated"
+  properties: {
+    integrationID: string
+  }
+}
+
 export type EventCatalogUpdated = {
   id: string
   type: "catalog.updated"
@@ -6867,6 +6916,40 @@ export type EventGlobalDisposed = {
   properties: {
     [key: string]: unknown
   }
+}
+
+export type CredentialOAuth = {
+  type: "oauth"
+  methodID: string
+  refresh: string
+  access: string
+  expires: number
+  metadata?: {
+    [key: string]: unknown
+  }
+}
+
+export type CredentialKey = {
+  type: "key"
+  key: string
+  metadata?: {
+    [key: string]: unknown
+  }
+}
+
+export type SkillV2DirectorySource = {
+  type: "directory"
+  path: string
+}
+
+export type SkillV2UrlSource = {
+  type: "url"
+  url: string
+}
+
+export type SkillV2EmbeddedSource = {
+  type: "embedded"
+  skill: SkillV2Info
 }
 
 export type BadRequestError = {

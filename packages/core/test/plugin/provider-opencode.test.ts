@@ -1,6 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
+import { Credential } from "@opencode-ai/core/credential"
 import { Integration } from "@opencode-ai/core/integration"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { PluginV2 } from "@opencode-ai/core/plugin"
@@ -48,6 +49,79 @@ function withEnv<A, E, R>(vars: Record<string, string | undefined>, effect: () =
 const cost = (input: number, output = 0) => [{ input, output, cache: { read: 0, write: 0 } }]
 
 describe("OpencodePlugin", () => {
+  it.effect("registers OAuth and API key methods", () =>
+    Effect.gen(function* () {
+      yield* addPlugin()
+      expect((yield* (yield* Integration.Service).get(Integration.ID.make("opencode")))?.methods).toEqual([
+        {
+          id: Integration.MethodID.make("device"),
+          type: "oauth",
+          label: "Sign in with OpenCode",
+          prompts: [
+            {
+              type: "text",
+              key: "server",
+              message: "OpenCode server",
+              placeholder: "https://console.opencode.ai",
+            },
+          ],
+        },
+        { type: "key", label: "API key" },
+      ])
+    }),
+  )
+
+  it.live("loads providers and models from the connected OpenCode server", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => {
+        const authorization: Array<string | null> = []
+        return {
+          authorization,
+          server: Bun.serve({
+            port: 0,
+            fetch: (request) => {
+              authorization.push(request.headers.get("authorization"))
+              return Response.json({
+                config: {
+                  providers: {
+                    remote: {
+                      name: "Remote",
+                      models: {
+                        model: { name: "Remote Model" },
+                      },
+                    },
+                  },
+                },
+              })
+            },
+          }),
+        }
+      }),
+      ({ authorization, server }) =>
+        Effect.gen(function* () {
+          const credentials = yield* Credential.Service
+          yield* credentials.create({
+            integrationID: Integration.ID.make("opencode"),
+            value: new Credential.Key({
+              type: "key",
+              key: "secret",
+              metadata: { server: server.url.origin },
+            }),
+          })
+
+          yield* addPlugin()
+
+          const catalog = yield* Catalog.Service
+          expect((yield* catalog.provider.get(ProviderV2.ID.make("remote")))?.name).toBe("Remote")
+          expect((yield* catalog.model.get(ProviderV2.ID.make("remote"), ModelV2.ID.make("model")))?.name).toBe(
+            "Remote Model",
+          )
+          expect(authorization).toContain("Bearer secret")
+        }),
+      ({ server }) => Effect.promise(() => server.stop(true)),
+    ),
+  )
+
   it.effect("uses a public key and disables paid models without credentials", () =>
     withEnv({ OPENCODE_API_KEY: undefined }, () =>
       Effect.gen(function* () {

@@ -27,6 +27,7 @@ export class EmbeddedSource extends Schema.Class<EmbeddedSource>("SkillV2.Embedd
 
 export const Source = Schema.Union([DirectorySource, UrlSource, EmbeddedSource]).pipe(
   Schema.toTaggedUnion("type"),
+  Schema.annotate({ identifier: "SkillV2.Source" }),
   withStatics(() => ({
     equals: (a: DirectorySource | UrlSource | EmbeddedSource, b: DirectorySource | UrlSource | EmbeddedSource) => {
       if (a.type !== b.type) return false

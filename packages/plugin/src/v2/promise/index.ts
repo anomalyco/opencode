@@ -10,8 +10,7 @@ export type { CommandDraft, CommandHooks } from "./command.js"
 export type {
   IntegrationDraft,
   IntegrationHooks,
-  IntegrationMethod,
   IntegrationMethodRegistration,
 } from "./integration.js"
 export type { ReferenceDraft, ReferenceHooks } from "./reference.js"
-export type { SkillDraft, SkillHooks, SkillSource } from "./skill.js"
+export type { SkillDraft, SkillHooks } from "./skill.js"

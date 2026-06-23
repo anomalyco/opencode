@@ -1,6 +1,7 @@
 import type { PluginContext } from "@opencode-ai/plugin/v2/effect"
 import { AgentV2 } from "@opencode-ai/core/agent"
 import { Catalog } from "@opencode-ai/core/catalog"
+import { Credential } from "@opencode-ai/core/credential"
 import { Integration } from "@opencode-ai/core/integration"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
@@ -31,6 +32,10 @@ export function host(overrides: Overrides = {}): PluginContext {
     integration: overrides.integration ?? {
       transform: () => Effect.die("unused integration.transform"),
       reload: () => Effect.die("unused integration.reload"),
+      connection: {
+        active: () => Effect.die("unused integration.connection.active"),
+        resolve: () => Effect.die("unused integration.connection.resolve"),
+      },
     },
     plugin: overrides.plugin ?? {
       add: () => Effect.die("unused plugin.add"),
@@ -138,6 +143,13 @@ export function catalogHost(catalog: Catalog.Interface): PluginContext["catalog"
 export function integrationHost(integration: Integration.Interface): PluginContext["integration"] {
   return {
     reload: integration.reload,
+    connection: {
+      active: (id) => integration.connection.active(Integration.ID.make(id)),
+      resolve: (connection) =>
+        integration.connection.resolve(
+          connection.type === "credential" ? { ...connection, id: Credential.ID.make(connection.id) } : connection,
+        ),
+    },
     transform: (callback) =>
       integration.transform((draft) =>
         callback({
@@ -150,16 +162,75 @@ export function integrationHost(integration: Integration.Interface): PluginConte
           remove: (id) => draft.remove(Integration.ID.make(id)),
           method: {
             list: (id) => draft.method.list(Integration.ID.make(id)).map(method),
-            update: (input) =>
-              input.method.type === "env"
-                ? draft.method.update({
-                    integrationID: Integration.ID.make(input.integrationID),
-                    method: { ...input.method, names: [...input.method.names] },
-                  })
-                : draft.method.update({
-                    integrationID: Integration.ID.make(input.integrationID),
-                    method: input.method,
-                  }),
+            update: (input) => {
+              if ("authorize" in input) {
+                const methodID = Integration.MethodID.make(input.method.id)
+                const refresh = input.refresh
+                draft.method.update({
+                  integrationID: Integration.ID.make(input.integrationID),
+                  method: { ...input.method, id: methodID },
+                  authorize: (inputs) =>
+                    input.authorize(inputs).pipe(
+                      Effect.map((authorization) => {
+                        if (authorization.mode === "auto") {
+                          return {
+                            ...authorization,
+                            callback: authorization.callback.pipe(
+                              Effect.map(
+                                (credential) =>
+                                  new Credential.OAuth({
+                                    ...credential,
+                                    methodID: Integration.MethodID.make(credential.methodID),
+                                  }),
+                              ),
+                            ),
+                          }
+                        }
+                        return {
+                          ...authorization,
+                          callback: (code: string) =>
+                            authorization.callback(code).pipe(
+                              Effect.map(
+                                (credential) =>
+                                  new Credential.OAuth({
+                                    ...credential,
+                                    methodID: Integration.MethodID.make(credential.methodID),
+                                  }),
+                              ),
+                            ),
+                        }
+                      }),
+                    ),
+                  ...(refresh
+                    ? {
+                        refresh: (value: Credential.OAuth) =>
+                          refresh(value).pipe(
+                            Effect.map(
+                              (next) =>
+                                new Credential.OAuth({
+                                  ...next,
+                                  methodID: Integration.MethodID.make(next.methodID),
+                                }),
+                            ),
+                          ),
+                      }
+                    : {}),
+                  ...(input.label ? { label: input.label } : {}),
+                })
+                return
+              }
+              if (input.method.type === "env") {
+                draft.method.update({
+                  integrationID: Integration.ID.make(input.integrationID),
+                  method: { ...input.method, names: [...input.method.names] },
+                })
+                return
+              }
+              draft.method.update({
+                integrationID: Integration.ID.make(input.integrationID),
+                method: input.method,
+              })
+            },
             remove: (id, item) => draft.method.remove(Integration.ID.make(id), internalMethod(item)),
           },
         }),

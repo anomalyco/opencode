@@ -332,7 +332,7 @@ describe("Integration", () => {
             },
             { type: "env", name: "INTEGRATION_TEST_ACME_KEY" },
           ])
-          expect(yield* integrations.connection.forIntegration(integrationID)).toEqual({
+          expect(yield* integrations.connection.active(integrationID)).toEqual({
             type: "credential",
             id: personal.id,
             label: "Personal",

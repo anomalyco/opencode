@@ -1,6 +1,9 @@
 import { Schema } from "effect"
 import { HttpApi } from "effect/unstable/httpapi"
 import { EventV2 } from "@opencode-ai/core/event"
+import { Credential } from "@opencode-ai/core/credential"
+import { Integration } from "@opencode-ai/core/integration"
+import { SkillV2 } from "@opencode-ai/core/skill"
 import { InstanceDisposed } from "@/server/event"
 import { Question } from "@/question"
 import { ConfigApi } from "./groups/config"
@@ -72,7 +75,16 @@ export const OpenCodeHttpApi = HttpApi.make("opencode")
   .addHttpApi(InstanceHttpApi)
   .addHttpApi(Api)
   .addHttpApi(PtyConnectApi)
-  .annotate(HttpApi.AdditionalSchemas, [EventSchema, Question.Replied, Question.Rejected])
+  .annotate(HttpApi.AdditionalSchemas, [
+    EventSchema,
+    Question.Replied,
+    Question.Rejected,
+    Credential.Value,
+    Integration.Inputs,
+    Integration.Method,
+    Integration.Ref,
+    SkillV2.Source,
+  ])
 
 export type RootHttpApiType = typeof RootHttpApi
 export type InstanceHttpApiType = typeof InstanceHttpApi
