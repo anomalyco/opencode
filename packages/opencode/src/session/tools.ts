@@ -224,7 +224,8 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
           properties: {
             server: {
               type: "string",
-              description: "Optional MCP server name. When omitted, lists resource templates from every connected server.",
+              description:
+                "Optional MCP server name. When omitted, lists resource templates from every connected server.",
             },
           },
           additionalProperties: false,
