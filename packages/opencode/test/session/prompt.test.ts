@@ -37,6 +37,7 @@ import { SessionProcessor } from "../../src/session/processor"
 import { SessionPrompt } from "../../src/session/prompt"
 import { SessionRevert } from "../../src/session/revert"
 import { SessionRunState } from "../../src/session/run-state"
+import { McpLazyActivation } from "../../src/session/mcp-lazy"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { SessionStatus } from "../../src/session/status"
 import { SessionV2 } from "@opencode-ai/core/session"
@@ -55,6 +56,7 @@ import { awaitWithTimeout, pollWithTimeout, testEffect } from "../lib/effect"
 import { reply, TestLLMServer } from "../lib/llm-server"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { Workflow } from "@/workflow/workflow"
 import { ModelV2 } from "@opencode-ai/core/model"
 
 const summary = Layer.succeed(
@@ -193,6 +195,7 @@ function makePrompt(input?: { processor?: "blocking" }) {
     Layer.provide(Ripgrep.defaultLayer),
     Layer.provide(Format.defaultLayer),
     Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
+    Layer.provide(Workflow.defaultLayer),
     Layer.provideMerge(todo),
     Layer.provideMerge(question),
     Layer.provideMerge(deps),
@@ -215,6 +218,8 @@ function makePrompt(input?: { processor?: "blocking" }) {
   return SessionPrompt.layer.pipe(
     Layer.provide(SessionRevert.defaultLayer),
     Layer.provide(Image.defaultLayer),
+    // Item 28: lazy-MCP activation state (a SessionPrompt dependency).
+    Layer.provide(McpLazyActivation.defaultLayer),
     Layer.provide(summary),
     Layer.provideMerge(run),
     Layer.provideMerge(compact),

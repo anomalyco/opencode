@@ -25,6 +25,14 @@ import { Filesystem } from "@/util/filesystem"
 import { createOpencodeClient, type OpencodeClient, type ToolPart } from "@opencode-ai/sdk/v2"
 import { FormatError, FormatUnknownError } from "../error"
 import { INTERACTIVE_INPUT_ERROR, resolveInteractiveStdin } from "./run/runtime.stdin"
+import {
+  detectUltracodeKeyword,
+  formatParkedQuestion,
+  parseHeadlessWorkflowArgs,
+  RUN_ULTRACODE_DIRECTIVE,
+  stripUltracodeKeyword,
+  workflowExitCode,
+} from "./run/workflow.shared"
 
 type ModelInput = Parameters<OpencodeClient["session"]["prompt"]>[0]["model"]
 
@@ -142,6 +150,10 @@ export const RunCommand = effectCmd({
       })
       .option("command", {
         describe: "the command to run, use message for args",
+        type: "string",
+      })
+      .option("workflow", {
+        describe: "run a workflow by name instead of a prompt; positional message becomes key=value args",
         type: "string",
       })
       .option("continue", {
@@ -280,6 +292,18 @@ export const RunCommand = effectCmd({
         die("--mini must be used without the run subcommand")
       }
 
+      // Delta 7a: --workflow is an orthogonal start path (not a session prompt),
+      // so it is mutually exclusive with the session/prompt flags. (Dev renamed
+      // the interactive split-footer flag to `--mini`; the local `interactive`
+      // is driven by it, so the interactive exclusion guards on that.)
+      if (args.workflow) {
+        if (args.command) die("--workflow cannot be used with --command")
+        if (interactive) die("--workflow cannot be used with --mini")
+        if (args.continue) die("--workflow cannot be used with --continue")
+        if (args.session) die("--workflow cannot be used with --session")
+        if (args.fork) die("--workflow cannot be used with --fork")
+      }
+
       if (args.demo && !interactive) {
         die("--demo requires --mini")
       }
@@ -400,7 +424,8 @@ export const RunCommand = effectCmd({
       message = resolveRunInput(message, piped) ?? ""
       const initialInput = resolveRunInput(rawMessage, piped)
 
-      if (message.trim().length === 0 && !args.command && !interactive) {
+      // Delta 7b: --workflow needs no prompt message (its positionals are args).
+      if (message.trim().length === 0 && !args.command && !interactive && !args.workflow) {
         UI.error("You must provide a message or a command")
         process.exit(1)
       }
@@ -650,6 +675,88 @@ export const RunCommand = effectCmd({
         return localAgent()
       }
 
+      // Headless --workflow path (Spec §5.2 (5), Delta 7): orthogonal to sessions.
+      // Start the workflow via the SDK (start/get ARE in the generated client;
+      // only `answer` is not — Delta 2), poll to a STOP status (robust in a
+      // short-lived headless process; the run.* events are not in the SDK either),
+      // print result/error, and exit with workflowExitCode. No permissionSessionID
+      // (no interactive session).
+      //
+      // Finding 6: `paused` is a NON-terminal status the engine parks to when a
+      // `ctx.question` step times out waiting for an answer. Headless mode has no
+      // interactive answerer, so polling for ONLY the terminal statuses would spin
+      // forever on such a run. We therefore stop polling on `paused` too and, when
+      // it carries a pending_question, print the question + the exact (resumable)
+      // answer command and exit with the distinct parked code (2) — we never
+      // auto-answer.
+      async function runWorkflow(sdk: OpencodeClient) {
+        const wfArgs = parseHeadlessWorkflowArgs([...args.message, ...(args["--"] || [])])
+        const started = await sdk.workflow
+          .start({ name: args.workflow!, workflowStartPayload: { args: wfArgs } })
+          .catch((error) => ({ error, data: undefined }) as { error: unknown; data: undefined })
+        if ((started as { error?: unknown }).error || !started.data) {
+          const error = (started as { error?: unknown }).error
+          UI.error(`Failed to start workflow ${args.workflow}: ${formatRunError(error) || "unknown error"}`)
+          process.exit(1)
+        }
+        const id = started.data.id
+        // `paused` is a stop status here even though the engine treats it as
+        // non-terminal: a headless run can never be answered, so we must not poll
+        // past it (Finding 6).
+        const stop = new Set(["completed", "failed", "cancelled", "interrupted", "paused"])
+        let final = started.data
+        while (!stop.has(final.status)) {
+          await Bun.sleep(500)
+          const polled = await sdk.workflow.get({ id }).catch(() => undefined)
+          if (polled?.data) final = polled.data
+        }
+        // A run that parked on an unanswerable question gets its own guidance +
+        // exit code; everything else falls through to the normal result print.
+        if (final.status === "paused" && final.pending_question) {
+          const guidance = formatParkedQuestion({
+            id,
+            question: final.pending_question.question,
+            options: final.pending_question.options,
+          })
+          if (args.format === "json") {
+            process.stdout.write(
+              JSON.stringify({
+                type: "workflow_parked",
+                timestamp: Date.now(),
+                id,
+                workflow: final.workflow,
+                status: final.status,
+                question: final.pending_question.question,
+                options: final.pending_question.options,
+              }) + EOL,
+            )
+          } else {
+            UI.error(guidance)
+          }
+          process.exitCode = workflowExitCode(final.status)
+          return
+        }
+        if (args.format === "json") {
+          process.stdout.write(
+            JSON.stringify({
+              type: "workflow_finished",
+              timestamp: Date.now(),
+              id,
+              workflow: final.workflow,
+              status: final.status,
+              result: final.result,
+              ...(final.error && { error: final.error }),
+            }) + EOL,
+          )
+        } else {
+          UI.println(`Workflow ${final.workflow} ${final.status}`)
+          if (final.result !== undefined)
+            UI.println(typeof final.result === "string" ? final.result : JSON.stringify(final.result, null, 2))
+          if (final.error) UI.error(final.error)
+        }
+        process.exitCode = workflowExitCode(final.status)
+      }
+
       async function execute(sdk: OpencodeClient) {
         const sess = await session(sdk)
         if (!sess?.id) {
@@ -839,12 +946,25 @@ export const RunCommand = effectCmd({
           }
 
           const model = pick(args.model)
+          // Ultracode keyword in the headless prompt path (Spec §5.2 (5)): when a
+          // standalone `ultracode` keyword is present (non-interactive only),
+          // strip it from the visible prompt and PREPEND the directive as a
+          // synthetic text part, mirroring the TUI prompt submit. Default-on like
+          // the TUI (config.workflows.ultracode_keyword is not easily read here
+          // before the workflow loads — Delta 6a note); a non-matching message is
+          // untouched.
+          const ultracode = detectUltracodeKeyword(message)
+          const promptText = ultracode ? stripUltracodeKeyword(message) : message
           const result = await client.session.prompt({
             sessionID,
             agent,
             model,
             variant: args.variant,
-            parts: [...files, { type: "text", text: message }],
+            parts: [
+              ...(ultracode ? [{ type: "text" as const, text: RUN_ULTRACODE_DIRECTIVE }] : []),
+              ...files,
+              { type: "text" as const, text: promptText },
+            ],
           })
           if (result.error) {
             if (!emit("error", { error: result.error })) UI.error(formatRunError(result.error))
@@ -920,7 +1040,7 @@ export const RunCommand = effectCmd({
 
       if (args.attach) {
         const sdk = attachSDK(directory)
-        return await execute(sdk)
+        return args.workflow ? await runWorkflow(sdk) : await execute(sdk)
       }
 
       const fetchFn = (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -936,6 +1056,7 @@ export const RunCommand = effectCmd({
         fetch: fetchFn,
         directory,
       })
+      if (args.workflow) return await runWorkflow(sdk)
       await execute(sdk)
     })
   }),
@@ -964,6 +1085,8 @@ export async function runMini(input: MiniCommandInput) {
     _: ["mini"],
     message: input.prompt ? [input.prompt] : [],
     command: undefined,
+    // --workflow is mutually exclusive with --mini (interactive); mini never runs one.
+    workflow: undefined,
     continue: input.continue,
     session: input.session,
     fork: input.fork,

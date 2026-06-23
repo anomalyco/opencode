@@ -17,6 +17,7 @@ import { SessionProcessor } from "../../src/session/processor"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { SessionStatus } from "../../src/session/status"
 import { SessionSummary } from "../../src/session/summary"
+import { TurnBudget } from "../../src/session/turn-budget"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { provideTmpdirInstance, provideTmpdirServer } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
@@ -81,6 +82,27 @@ function providerCfg(url: string) {
         options: {
           ...cfg.provider.test.options,
           baseURL: url,
+        },
+      },
+    },
+  }
+}
+
+// Item 24: a variant with NON-ZERO model cost (USD per million tokens) so the
+// turn-pool test can prove usage.cost actually reaches chargeDirect.
+function costedProviderCfg(url: string) {
+  const base = providerCfg(url)
+  return {
+    ...base,
+    provider: {
+      ...base.provider,
+      test: {
+        ...base.provider.test,
+        models: {
+          "test-model": {
+            ...base.provider.test.models["test-model"],
+            cost: { input: 3, output: 6 },
+          },
         },
       },
     },
@@ -284,6 +306,60 @@ it.live("session.processor effect tests capture llm input cleanly", () =>
         expect(parts.some((part) => part.type === "text" && part.text === "hello")).toBe(true)
       }),
     { config: (url) => providerCfg(url) },
+  ),
+)
+
+// Item 24: the step-finish settlement charges the shared turn pool DIRECTLY
+// (never gated/reserved) — the same usage the assistant message accumulates.
+// The test model's cost config is non-zero so usage.cost > 0 is provable, and
+// the pool's token limit observes the output tokens (the test server reports
+// no reasoning tokens, so output alone is the expected charge).
+it.live("session.processor step-finish charges the shared turn pool via chargeDirect", () =>
+  provideTmpdirServer(
+    ({ dir, llm }) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+
+        yield* llm.text("hello", { usage: { input: 10, output: 25 } })
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "hi")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const pool = TurnBudget.make({ usd: 1, tokens: 1000 })
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+          turnBudget: pool,
+        })
+
+        const value = yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies SessionV1.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "hi" }],
+          tools: {},
+        })
+
+        expect(value).toBe("continue")
+        // The pool committed exactly the step's cost (non-zero with the costed
+        // model config) and its output tokens; chargeDirect never reserves.
+        expect(msg.cost).toBeGreaterThan(0)
+        expect(pool.usd!.committed).toBeCloseTo(msg.cost, 10)
+        expect(pool.tokens!.committed).toBe(25)
+        expect(pool.usd!.reserved).toBe(0)
+      }),
+    { config: (url) => costedProviderCfg(url) },
   ),
 )
 

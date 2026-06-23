@@ -95,6 +95,20 @@ it.instance("plan agent denies the general subagent by default", () =>
   }),
 )
 
+// Workflow subagent sessions run with their own (default: build) permissions, so a
+// workflow started from plan mode would edit files despite the plan agent's edit
+// denies — the workflow tool must be denied in plan mode (same rationale as the
+// task.general deny above).
+it.instance("plan agent denies the workflow tool by default", () =>
+  Effect.gen(function* () {
+    const plan = yield* load((svc) => svc.get("plan"))
+    expect(plan).toBeDefined()
+    expect(Permission.evaluate("workflow", "any-workflow-name", plan!.permission).action).toBe("deny")
+    const build = yield* load((svc) => svc.get("build"))
+    expect(Permission.evaluate("workflow", "any-workflow-name", build!.permission).action).toBe("allow")
+  }),
+)
+
 it.instance(
   "user permission can allow the general subagent from plan mode",
   () =>

@@ -77,6 +77,17 @@ const withHome = <A, E, R>(home: string, self: Effect.Effect<A, E, R>) =>
   )
 
 describe("skill", () => {
+  it.instance("includes workflows instructions built-in skill", () =>
+    Effect.gen(function* () {
+      const skill = yield* Skill.Service
+      const info = yield* skill.require("workflows-instructions")
+      expect(info.location).toBe("<built-in>")
+      expect(info.description).toContain("workflow")
+      expect(info.content).toContain('action: "start"')
+      expect(info.content).toContain('action: "inspect"')
+    }),
+  )
+
   it.live("discovers skills from .opencode/skill/ directory", () =>
     provideTmpdirInstance(
       (dir) =>

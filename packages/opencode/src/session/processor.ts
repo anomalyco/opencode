@@ -18,6 +18,7 @@ import type { SessionID } from "./schema"
 import { SessionRetry } from "./retry"
 import { SessionStatus } from "./status"
 import { SessionSummary } from "./summary"
+import { TurnBudget } from "./turn-budget"
 import type { Provider } from "@/provider/provider"
 import { Question } from "@/question"
 import { errorMessage } from "@/util/error"
@@ -57,6 +58,12 @@ type Input = {
   assistantMessage: SessionV1.Assistant
   sessionID: SessionID
   model: Provider.Model
+  /**
+   * Item 24: the shared turn pool. Each step-finish charges its cost/output
+   * tokens directly (never gated) so workflow runs of the same turn see the
+   * main loop's spend in their shared headroom.
+   */
+  turnBudget?: TurnBudget.Pool
 }
 
 export interface Interface {
@@ -716,6 +723,14 @@ export const layer = Layer.effect(
             ctx.assistantMessage.finish = value.reason
             ctx.assistantMessage.cost += usage.cost
             ctx.assistantMessage.tokens = usage.tokens
+            // Item 24: charge the shared turn pool directly (never gated) at
+            // the same site the per-message cost accumulates.
+            if (input.turnBudget) {
+              TurnBudget.chargeDirect(input.turnBudget, {
+                usd: usage.cost,
+                tokens: usage.tokens.output + usage.tokens.reasoning,
+              })
+            }
             yield* session.updatePart({
               id: PartID.ascending(),
               reason: value.reason,

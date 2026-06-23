@@ -33,6 +33,10 @@ const CUSTOMIZE_OPENCODE_SKILL_NAME = "customize-opencode"
 const CUSTOMIZE_OPENCODE_SKILL_DESCRIPTION =
   "Use ONLY when the user is editing or creating opencode's own configuration: opencode.json, opencode.jsonc, files under .opencode/, or files under ~/.config/opencode/. Also use when creating or fixing opencode agents, subagents, skills, plugins, MCP servers, or permission rules. Do not use for the user's own application code, or for any project that is not configuring opencode itself."
 const CUSTOMIZE_OPENCODE_SKILL_BODY = SkillPlugin.CustomizeOpencodeContent
+const WORKFLOWS_INSTRUCTIONS_SKILL_NAME = "workflows-instructions"
+const WORKFLOWS_INSTRUCTIONS_SKILL_DESCRIPTION =
+  "Use when the user asks to create, modify, run, debug, or review opencode workflows. Explains workflow authoring, the native workflow tool, foreground/background execution, permissions, and how to inspect logs, agents, and results. Do not use for ordinary tasks unless the user explicitly wants workflow automation."
+const WORKFLOWS_INSTRUCTIONS_SKILL_BODY = SkillPlugin.WorkflowsInstructionsContent
 
 export const Info = Schema.Struct({
   name: Schema.String,
@@ -280,6 +284,12 @@ export const layer = Layer.effect(
           description: CUSTOMIZE_OPENCODE_SKILL_DESCRIPTION,
           location: "<built-in>",
           content: CUSTOMIZE_OPENCODE_SKILL_BODY,
+        }
+        s.skills[WORKFLOWS_INSTRUCTIONS_SKILL_NAME] = {
+          name: WORKFLOWS_INSTRUCTIONS_SKILL_NAME,
+          description: WORKFLOWS_INSTRUCTIONS_SKILL_DESCRIPTION,
+          location: "<built-in>",
+          content: WORKFLOWS_INSTRUCTIONS_SKILL_BODY,
         }
         yield* loadSkills(s, yield* InstanceState.get(discovered), events)
         return s

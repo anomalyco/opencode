@@ -19,6 +19,15 @@ export interface TaskPromptOps {
   cancel(sessionID: SessionID): Effect.Effect<void>
   resolvePromptParts(template: string): Effect.Effect<SessionPrompt.PromptInput["parts"]>
   prompt(input: SessionPrompt.PromptInput): Effect.Effect<SessionV1.WithParts>
+  /**
+   * The session's currently RESOLVED model (session.model → last user message's
+   * model → provider default) — the same chain the prompt loop uses for a turn
+   * with no explicit model. Lets a tool (e.g. workflow start) capture the
+   * caller's effective model so subagents without an explicit override can
+   * inherit it (Item 12). Optional so existing prompt-ops stubs keep compiling;
+   * consumers read it defensively.
+   */
+  currentModel?(sessionID: SessionID): Effect.Effect<{ providerID: string; modelID: string; variant?: string }>
 }
 
 const id = "task"
@@ -188,6 +197,7 @@ export const TaskTool = Tool.define(
         const result = yield* ops.prompt({
           messageID: MessageID.ascending(),
           sessionID: nextSession.id,
+          permissionSessionID: ctx.sessionID,
           model: {
             modelID: model.modelID,
             providerID: model.providerID,

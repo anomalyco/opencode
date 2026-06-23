@@ -1,0 +1,234 @@
+<!-- AUTHORING GUIDE for the workflow tool. Keep in sync with:
+     - packages/plugin/src/workflow.ts (WorkflowContext — the public ctx API)
+     - packages/opencode/src/workflow/workflow.ts (engine semantics: resume/replay/cancel/pause,
+       caps, model routing, pipeline stage signature, onError/skip null results, budget {usd,tokens})
+     - packages/opencode/src/tool/workflow.ts (actions, script_path, replay, budget_tokens)
+     - packages/web/src/content/docs/workflows.mdx (user-facing docs of the same semantics) -->
+WORKFLOW AUTHORING GUIDE
+
+A workflow is a TypeScript (or JavaScript) module that orchestrates a fleet of subagents
+deterministically: plain code decides what runs, in what order, with what concurrency;
+agents do the fuzzy reading/writing. You author the harness, the engine runs it.
+
+MODULE SHAPE
+
+Preferred (typed) — the plugin helper as default export:
+
+  import { workflow } from "@opencode-ai/plugin"
+
+  export default workflow({
+    name: "review-files",
+    description: "Review changed files and verify findings.",
+    whenToUse: "When the user asks for a focused review of pending changes.",
+    phases: ["find", { title: "verify", model: "anthropic/claude-haiku-4-5" }],
+    arguments: { scope: { type: "string", default: "HEAD", description: "Git ref to diff against." } },
+    async run(args, ctx) {
+      // body — see patterns below
+      return { done: true }
+    },
+  })
+
+Also accepted: `export const meta = {...}` + `export async function run(args, ctx) {...}`,
+or `export default { meta, run }`.
+
+meta MUST be a pure literal (no variables, spreads, function calls, or computed values).
+It is parsed statically from the AST before any code runs — it feeds the user's approval
+dialog and the progress UI. A non-literal meta is rejected as invalid.
+meta fields: name (required), description, whenToUse, phases (string | {title, detail?,
+model?} — a phase declared with model becomes the default model while that phase is
+active), arguments ({name: {type: "string"|"number"|"boolean", default?, description?}}
+— values are type-coerced and passed as `run(args, ctx)`).
+
+Discovery precedence is project workflow file, then global workflow file, then plugin-provided
+workflow, then built-in workflow. When multiple plugins register the same workflow name, the
+first loaded plugin wins. Plugin workflow names use the same letters/numbers/underscore/dash
+constraints as file workflow names.
+
+ctx API (the only orchestration surface)
+
+- ctx.agent({prompt, agent?, model?, variant?, tools?, skills?, files?, schema?, isolation?,
+  phase?, label?, onError?}) -> Promise<{data, text} | null>. Dispatches one subagent. `data`
+  is populated ONLY when you pass `schema` (a JSON schema; the engine forces a
+  StructuredOutput tool call). `model: "small"` routes to the configured small_model (fails if
+  none is configured). `isolation: "worktree"` runs the step in a fresh git worktree (parallel
+  file mutations don't collide; a dirty worktree is preserved on finish, never deleted).
+  `phase` pins the step to a named phase under concurrency (no setPhase side effect); `label`
+  names the step in run views.
+  IMPORTANT: a bare ctx.agent error THROWS and fails the run by default. It resolves null in
+  exactly two cases: a human skipped the step, or you passed onError: "null" (the error is
+  recorded, the body branches). Budget/lifetime errors and aborts always throw. Guard results
+  (`if (!r) ...`). Error tolerance otherwise comes from parallel/pipeline (null-drop) or your
+  own try/catch.
+- ctx.parallel([...thunks], {concurrencyLimit?}) -> Promise<(T | null)[]>. Concurrent batch
+  with a BARRIER: resolves when all thunks settle. A throwing thunk becomes null at its
+  position (logged), the rest keep running.
+- ctx.pipeline(items, ...stages, {concurrencyLimit?}) -> Promise<(R | null)[]>. Per-item
+  chain WITHOUT a stage barrier: each item flows through all stages sequentially while
+  items run concurrently. Stage signature: (prev, item, index) => Promise<next> — the first
+  stage's `prev` is the item itself. A throwing stage nulls ONLY that item.
+  Null-drop idiom (mandatory after parallel/pipeline): `.filter((x) => x !== null)`.
+- ctx.shell(cmd, {timeout?, cwd?}) -> Promise<{output, exitCode}>. Deterministic non-LLM
+  step. A non-zero exit is RETURNED, never thrown. Costs no budget. Commands run through
+  the caller's bash permission rules (a denied command fails the step).
+- ctx.tool(name, args?, {timeout?, onError?}) -> Promise<{output, metadata?} | null>.
+  Call an available native/custom/MCP tool directly without an agent step. Permissions still
+  run through the caller workflow/session context. Default errors throw; onError: "null"
+  resolves null except for cancellation.
+- ctx.question({question, options?, timeout?}) -> Promise<{answer}>. Ask the human and
+  wait. On timeout (default 10 min) the run PARKS as paused; a later answer resumes it.
+- ctx.setPhase(title) / ctx.log(message). Progress + audit trail; log every decision that
+  trims work.
+- ctx.workflow(name, args?) -> Promise<unknown>. Run another discovered workflow inline
+  under the same run (shared budget/concurrency). Max nesting depth 1.
+- ctx.budget.total (USD or null), ctx.budget.spent(), ctx.budget.remaining() (Infinity
+  when unlimited); ctx.budget.tokensTotal/tokensSpent()/tokensRemaining() is the same trio
+  for the independent output-token cap. Set caps at start via budget (USD) and/or
+  budget_tokens — whichever is exhausted first wins. The engine refuses the NEXT agent call
+  once a budget is exhausted — a soft cap; steps already in flight finish.
+
+Caps: at most min(16, CPU-2) concurrent agent dispatches per run, a lifetime total of
+1000 agent dispatches per run, and at most 4096 items per parallel/pipeline call.
+
+Subagents load MCP tools lazily: a step starts with a tool_search meta-tool instead of
+every MCP schema and activates matching tools on demand (config workflows.lazy_mcp).
+
+PIPELINE-FIRST DOCTRINE
+
+Default to ctx.pipeline with one chain per item. Use a barrier (ctx.parallel + a merge
+step) ONLY when a step must see multiple items AT ONCE — dedup, ranking, cross-item
+synthesis. Smell test: if the step after the barrier would only concatenate the results,
+you did not need the barrier — stay in the per-item chain. Wall-clock reason: a pipeline
+finishes with its slowest ITEM chain; a barrier waits for the slowest ENTIRE stage.
+
+COPYABLE EXAMPLES
+
+(a) Review + verify pipeline (find-stage, then adversarial verify-stage with schema):
+
+  async run(args, ctx) {
+    const diff = await ctx.shell(`git diff --name-only ${args.scope ?? "HEAD"}`)
+    const files = diff.output.split("\n").filter((line) => line.trim() !== "")
+    const verified = await ctx.pipeline(
+      files,
+      async (file) => {
+        const found = await ctx.agent({
+          prompt: `Review ${file} for bugs. Report only real defects, one per line, no preamble. Reply NONE if clean.`,
+        })
+        return { file, findings: found.text }
+      },
+      async (prev) => {
+        const check = await ctx.agent({
+          prompt: `You are a skeptical verifier. For ${prev.file}, confirm ONLY findings that are real:\n${prev.findings}`,
+          schema: { type: "object", properties: { confirmed: { type: "array", items: { type: "string" } } }, required: ["confirmed"] },
+        })
+        return { file: prev.file, confirmed: (check.data as { confirmed: string[] }).confirmed }
+      },
+      { concurrencyLimit: 8 },
+    )
+    return verified.filter((x) => x !== null)
+  }
+
+(b) Dedup barrier — parallel over chunks, then ONE merge agent at the collection edge:
+
+  const chunks = await ctx.parallel(chunkList.map((chunk) => () =>
+    ctx.agent({ prompt: `List candidate issues in:\n${chunk}` })))
+  const merged = await ctx.agent({
+    prompt: `Merge and dedupe these findings:\n${chunks.filter((x) => x !== null).map((r) => r.text).join("\n")}`,
+    schema: { type: "object", properties: { issues: { type: "array", items: { type: "string" } } }, required: ["issues"] },
+  })
+
+(c) Budget loop / fleet sizing — spend down a queue without overshooting:
+
+  const PER_AGENT = 0.5
+  while (queue.length > 0 && ctx.budget.remaining() > PER_AGENT) {
+    const fleet = Math.min(queue.length, Math.floor(ctx.budget.remaining() / PER_AGENT))
+    const batch = queue.splice(0, fleet)
+    const results = await ctx.parallel(batch.map((item) => () => ctx.agent({ prompt: `Process: ${item}` })))
+    handle(results.filter((x) => x !== null))
+  }
+
+(d) Loop until dry — re-run until no NEW findings appear (with a hard backstop):
+
+  const seen = new Set<string>()
+  for (let round = 1; round <= MAX_ROUNDS; round++) {
+    const found = await ctx.agent({
+      prompt: `Find more issues. Already known: ${[...seen].join("; ") || "none"}. Reply NONE if nothing new.`,
+    })
+    if (found.text.trim() === "NONE") break
+    for (const line of found.text.split("\n")) seen.add(line)
+    ctx.log(`round ${round}: ${seen.size} total findings`)
+  }
+
+(e) Shell-gated self-repair — deterministic gate, bounded retries:
+
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    await ctx.agent({ prompt: "Fix the failing tests. Edit files directly." })
+    const test = await ctx.shell("bun test --timeout 30000")
+    if (test.exitCode === 0) break
+    ctx.log(`attempt ${attempt} failed, retrying`)
+  }
+
+ONE PHASE PER RUN
+
+A run should carry ONE intent phase:
+- Understand: map code/data, produce a report; no edits.
+- Design: propose alternatives, judge them; no edits.
+- Review: find + verify defects against a fixed target.
+- Research: gather + cross-check external/internal facts.
+- Migrate: apply a mechanical change everywhere, gate with tests.
+Multi-phase jobs are a SEQUENCE of single-phase runs with the orchestrating session in
+the loop (read the Understand run's result, then authorize the Change run) — not one
+mega-workflow.
+
+QUALITY PATTERNS
+
+- Verify stage behind every find stage: a separate agent with an adversarial framing
+  ("confirm only what is certainly real") cuts false positives.
+- schema at every merge/consume point — never parse prose you could have typed.
+- Deterministic gates via ctx.shell (tests, grep counts, exit codes) beat LLM judgment.
+- N-skeptics majority: for risky claims, ask 3 independent agents and require a strict
+  majority.
+- Judge panel: rank candidate outputs with a judging agent (schema {winner, reason}).
+- No silent caps: whenever you slice/limit a work list, ctx.log what was cut.
+- Agent prompts ALWAYS state the return contract ("Report only X, one per line, no
+  preamble").
+
+SCALING HEURISTIC
+
+Read fleet size from the user's wording: "find a bug" 2-4 agents; "review this PR" 4-8;
+"thoroughly audit"/"exhaustive" 10+ plus a loop-until-dry. Respect ctx.budget when set.
+
+HARNESS COMPOSITION
+
+Tournaments (parallel candidates + one judge with schema {winner, reason}), staged
+escalation (model: "small" scouts triage, the full model only sees flagged items), and
+self-repair loops are all just stages — they compose inside one pipeline.
+
+ITERATE ON A RUN
+
+- start returns a run_id; inspect with action="inspect", view="all" (logs, agents, result,
+  source).
+- Every inline/script start reports a <script_path>: edit that file and re-invoke
+  action="start" with script_path to iterate without resending the source.
+- Resume: start with resume_of=<run_id> replays the source run's completed agent journal
+  (works after paused, interrupted, FAILED — fix the script, completed prefix is replayed
+  free — and completed runs). invalidate_agents=[indices] forces chosen steps live.
+  Keep the order/shape of agent calls stable so the journal matches.
+- replay="prefix" (default) replays the journal in order and stops permanently at the first
+  changed/invalidated step (everything after re-runs live — safe). replay="keyed" matches by
+  call shape, so unchanged later steps still replay after an earlier edit (best for read-only
+  or heavily parallel workflows).
+- action="cancel" stops a running run terminally; action="pause" parks it resumable.
+
+PORTING CLAUDE-CODE SCRIPTS
+
+- The `args` global becomes the `run(args, ctx)` parameter (declared args are type-coerced,
+  undeclared ones pass through verbatim).
+- Global helpers become ctx members: agent(p, opts) -> ctx.agent({prompt, ...}),
+  phase() -> ctx.setPhase(), log() -> ctx.log(), budget -> ctx.budget.
+- No determinism guards needed: Date.now()/Math.random() are fine — resume matches by
+  call shape, so just keep the sequence of ctx.agent calls stable across edits.
+- agent() THROWS on failure here instead of resolving null; where the original checked
+  `if (result === null)`, pass onError: "null" on the call (or use pipeline/parallel
+  null-drops / try/catch).
+- Budget is USD-first (budget), with an optional output-token cap (budget_tokens) —
+  not token-only.

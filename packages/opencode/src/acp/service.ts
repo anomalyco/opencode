@@ -717,23 +717,28 @@ function profiledRequest<T>(name: string, fn: () => Promise<T | SdkResponse<T>>,
 
 async function loadDirectorySnapshot(sdk: OpencodeClient, directory: string) {
   return ACPProfile.measure("acp.directory.load", async () => {
-    const [providersResponse, agentsResponse, commandsResponse, skillsResponse, configResponse] = await Promise.all([
-      ACPProfile.measure("acp.directory.provider.list", () =>
-        sdk.config.providers({ directory }, { throwOnError: true }),
-      ),
-      ACPProfile.measure("acp.directory.mode.defaultAgent.load", () =>
-        sdk.app.agents({ directory }, { throwOnError: true }),
-      ),
-      ACPProfile.measure("acp.directory.command.list", () => sdk.command.list({ directory }, { throwOnError: true })),
-      ACPProfile.measure("acp.directory.skill.list", () => sdk.app.skills({ directory }, { throwOnError: true })),
-      ACPProfile.measure("acp.directory.defaultModel.config", () =>
-        sdk.config.get({ directory }, { throwOnError: true }).catch(() => undefined),
-      ),
-    ])
+    const [providersResponse, agentsResponse, commandsResponse, skillsResponse, workflowsResponse, configResponse] =
+      await Promise.all([
+        ACPProfile.measure("acp.directory.provider.list", () =>
+          sdk.config.providers({ directory }, { throwOnError: true }),
+        ),
+        ACPProfile.measure("acp.directory.mode.defaultAgent.load", () =>
+          sdk.app.agents({ directory }, { throwOnError: true }),
+        ),
+        ACPProfile.measure("acp.directory.command.list", () => sdk.command.list({ directory }, { throwOnError: true })),
+        ACPProfile.measure("acp.directory.skill.list", () => sdk.app.skills({ directory }, { throwOnError: true })),
+        ACPProfile.measure("acp.directory.workflow.list", () =>
+          sdk.workflow.list({ directory }, { throwOnError: true }),
+        ),
+        ACPProfile.measure("acp.directory.defaultModel.config", () =>
+          sdk.config.get({ directory }, { throwOnError: true }).catch(() => undefined),
+        ),
+      ])
     const providersData = providersResponse.data!
     const agents = agentsResponse.data!
     const commandsData = commandsResponse.data!
     const skills = skillsResponse.data!
+    const workflows = workflowsResponse.data!
     const providers = Object.fromEntries(providersData.providers.map((provider) => [provider.id, provider])) as Record<
       ProviderV2.ID,
       Provider.Info
@@ -761,6 +766,33 @@ async function loadDirectorySnapshot(sdk: OpencodeClient, directory: string) {
         })),
     ] as Command.Info[]
 
+    // Discovery (Spec §5.3 T-ACP, Task 1): surface workflows in availableCommands
+    // with an argument hint derived from `meta.arguments`. Workflows reach the ACP
+    // layer here directly (not via Command.Info, which drops `arguments`) so the
+    // hint can be built. Invalid (broken) workflows cannot be started → skipped.
+    // Dedup by name: a workflow already present via command.list (the T-TUI path,
+    // hint-less) keeps its entry but inherits the hint here so the hint-bearing
+    // form wins; otherwise the workflow is appended as a new entry.
+    for (const wf of workflows) {
+      if (wf.valid === false) continue
+      const hints = argumentHints(wf.meta.arguments)
+      const existingIndex = commands.findIndex((command) => command.name === wf.name)
+      if (existingIndex !== -1) {
+        const existing = commands[existingIndex]
+        if ((existing.hints?.length ?? 0) === 0 && hints.length > 0) {
+          commands[existingIndex] = { ...existing, hints }
+        }
+        continue
+      }
+      commands.push({
+        name: wf.name,
+        description: wf.meta.description,
+        source: "workflow",
+        template: "",
+        hints,
+      })
+    }
+
     return Directory.build({
       directory,
       providers,
@@ -770,6 +802,19 @@ async function loadDirectorySnapshot(sdk: OpencodeClient, directory: string) {
       ...(defaultModel ? { defaultModel } : {}),
     })
   })
+}
+
+// Build a deterministic, sorted `name=<value>` argument hint for a workflow's
+// declared arguments. Empty/absent arguments yield no hint so the `input` field
+// is omitted (back-compat for hint-less entries). Sorted output keeps the wire
+// response stable across runs (analogous to the stableStringify convention).
+function argumentHints(args: Record<string, { default?: unknown }> | undefined): string[] {
+  if (!args) return []
+  const hint = Object.keys(args)
+    .toSorted((a, b) => a.localeCompare(b))
+    .map((key) => `${key}=<value>`)
+    .join(" ")
+  return hint ? [hint] : []
 }
 
 function defaultModelFromConfig(
@@ -888,10 +933,14 @@ function sendAvailableCommands(
         sessionId,
         update: {
           sessionUpdate: "available_commands_update",
-          availableCommands: snapshot.availableCommands.map((command) => ({
-            name: command.name,
-            description: command.description ?? "",
-          })),
+          availableCommands: snapshot.availableCommands.map((command) => {
+            const hint = command.hints?.[0]
+            return {
+              name: command.name,
+              description: command.description ?? "",
+              ...(hint ? { input: { hint } } : {}),
+            }
+          }),
         },
       })
     }, 0)

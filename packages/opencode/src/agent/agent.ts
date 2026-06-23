@@ -165,6 +165,10 @@ export const layer = Layer.effect(
                 task: {
                   general: "deny",
                 },
+                // Workflow subagent sessions run with their own (default: build)
+                // permissions and would bypass plan mode's edit denies — same
+                // rationale as the `task.general` deny above (#31696 parity).
+                workflow: "deny",
                 external_directory: {
                   [path.join(Global.Path.data, "plans", "*")]: "allow",
                 },
