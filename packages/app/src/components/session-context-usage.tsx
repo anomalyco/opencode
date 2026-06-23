@@ -1,4 +1,4 @@
-import { Match, Show, Switch, createMemo } from "solid-js"
+import { Match, Show, Switch, batch, createMemo } from "solid-js"
 import { Tooltip, type TooltipProps } from "@opencode-ai/ui/tooltip"
 import { ProgressCircle } from "@opencode-ai/ui/progress-circle"
 import { Button } from "@opencode-ai/ui/button"
@@ -22,10 +22,12 @@ function openSessionContext(args: {
   layout: ReturnType<typeof useLayout>
   tabs: ReturnType<ReturnType<typeof useLayout>["tabs"]>
 }) {
-  if (!args.view.reviewPanel.opened()) args.view.reviewPanel.open()
-  if (args.layout.fileTree.opened() && args.layout.fileTree.tab() !== "all") args.layout.fileTree.setTab("all")
-  void args.tabs.open("context")
-  args.tabs.setActive("context")
+  batch(() => {
+    if (!args.view.reviewPanel.opened()) args.view.reviewPanel.open()
+    if (args.layout.fileTree.opened() && args.layout.fileTree.tab() !== "all") args.layout.fileTree.setTab("all")
+    void args.tabs.open("context")
+    args.tabs.setActive("context")
+  })
 }
 
 export function SessionContextUsage(props: SessionContextUsageProps) {
