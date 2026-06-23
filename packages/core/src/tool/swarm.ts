@@ -71,7 +71,7 @@ export const layer = Layer.effectDiscard(
             yield* publishProgress(`🚀 [Swarm] Iniciando swarm de agentes para a tarefa. Rodadas planejadas: ${numRounds}`)
 
             const session = yield* store.get(context.sessionID)
-            if (!session) return yield* Effect.fail(new ToolFailure({ message: "Session not found" }))
+            if (!session) return yield* new ToolFailure({ message: "Session not found" })
             const model = yield* models.resolve(session)
 
             const history: Array<{ agent: string; round: number; content: string }> = []

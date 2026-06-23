@@ -95,7 +95,7 @@ export const layer = Layer.effectDiscard(
 
               // Resolve model for fixing
               const session = yield* store.get(context.sessionID)
-              if (!session) return yield* Effect.fail(new ToolFailure({ message: "Session not found" }))
+              if (!session) return yield* new ToolFailure({ message: "Session not found" })
               const model = yield* models.resolve(session)
 
               while (attempt < maxAttempts) {

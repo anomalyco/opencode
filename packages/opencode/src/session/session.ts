@@ -580,7 +580,7 @@ export const layer: Layer.Layer<
 
     const get = Effect.fn("Session.get")(function* (id: SessionID) {
       const row = yield* db.select().from(SessionTable).where(eq(SessionTable.id, id)).get().pipe(Effect.orDie)
-      if (!row) return yield* Effect.fail(new NotFoundError({ message: `Session not found: ${id}` }))
+      if (!row) return yield* new NotFoundError({ message: `Session not found: ${id}` })
       return fromRow(row)
     })
 

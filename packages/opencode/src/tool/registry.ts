@@ -28,6 +28,7 @@ import { PersonalKnowledgeTool as personal_knowledge } from "./personal-knowledg
 import { PersonalWorkflowTool as personal_workflow } from "./personal-workflow"
 import { PersonalClipboardTool as personal_clipboard } from "./personal-clipboard"
 import { PersonalWatcherTool as personal_watcher } from "./personal-watcher"
+import { PersonalContactsTool as personal_contacts } from "./personal-contacts"
 import * as Tool from "./tool"
 import { Config } from "@/config/config"
 import { type ToolContext as PluginToolContext, type ToolDefinition } from "@opencode-ai/plugin"
@@ -132,6 +133,7 @@ export const layer = Layer.effect(
     const p_workflow = yield* personal_workflow
     const p_clipboard = yield* personal_clipboard
     const p_watcher = yield* personal_watcher
+    const p_contacts = yield* personal_contacts
 
     const state = yield* InstanceState.make<State>(
       Effect.fn("ToolRegistry.state")(function* (ctx) {
@@ -250,6 +252,7 @@ export const layer = Layer.effect(
           personal_workflow: Tool.init(p_workflow),
           personal_clipboard: Tool.init(p_clipboard),
           personal_watcher: Tool.init(p_watcher),
+          personal_contacts: Tool.init(p_contacts),
         })
 
         return {
@@ -281,6 +284,7 @@ export const layer = Layer.effect(
             tool.personal_workflow,
             tool.personal_clipboard,
             tool.personal_watcher,
+            tool.personal_contacts,
             ...(flags.experimentalLspTool ? [tool.lsp] : []),
             ...(flags.experimentalPlanMode && flags.client === "cli" ? [tool.plan] : []),
           ],

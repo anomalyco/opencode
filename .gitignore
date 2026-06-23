@@ -32,3 +32,8 @@ UPCOMING_CHANGELOG.md
 logs/
 *.bun-build
 tsconfig.tsbuildinfo
+
+# Termux / local junk
+__pycache__/
+*.orig
+maker_bot.out

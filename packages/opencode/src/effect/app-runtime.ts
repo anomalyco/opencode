@@ -63,6 +63,7 @@ import { API } from "@opencode-ai/core/personal/api"
 import { Knowledge } from "@opencode-ai/core/personal/knowledge"
 import { Workflow } from "@opencode-ai/core/personal/workflow"
 import { Watcher } from "@opencode-ai/core/personal/watcher"
+import { Contacts } from "@opencode-ai/core/personal/contacts"
 
 export const AppLayer = Layer.mergeAll(
   Npm.defaultLayer,
@@ -122,6 +123,7 @@ export const AppLayer = Layer.mergeAll(
   Knowledge.defaultLayer,
   Workflow.defaultLayer,
   Watcher.defaultLayer,
+  Contacts.defaultLayer,
   HotReload.defaultLayer,
 ).pipe(
   Layer.provideMerge(Ripgrep.defaultLayer),

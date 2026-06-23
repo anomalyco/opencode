@@ -30,7 +30,7 @@ class ExitManager {
   private config: Required<ExitHandlerConfig> = {
     handlers: [],
     killSubprocesses: !this.isTestMode(),
-    onExit: undefined as any,
+    onExit: undefined as unknown as (code: number) => Promise<void> | void,
   }
   private subprocesses = new Set<ChildProcess>()
   private isShuttingDown = false
@@ -46,7 +46,7 @@ class ExitManager {
   configure(config: ExitHandlerConfig): void {
     this.config.handlers = config.handlers ?? []
     this.config.killSubprocesses = config.killSubprocesses ?? !this.isTestMode()
-    this.config.onExit = config.onExit ?? (undefined as any)
+    this.config.onExit = config.onExit ?? (undefined as unknown as (code: number) => Promise<void> | void)
   }
 
   /**

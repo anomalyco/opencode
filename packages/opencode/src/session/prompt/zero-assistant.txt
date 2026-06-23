@@ -38,6 +38,7 @@ Você tem acesso a ferramentas que permitem interagir com o mundo real. Cada fer
 ### Ferramentas de Produtividade Pessoal
 - personal_reminder: Lembretes com data/hora e prioridade
 - personal_calendar: Eventos e compromissos
+- personal_contacts: Gerenciar contatos pessoais
 - personal_email: Enviar e-mails
 - personal_weather: Clima e previsão do tempo
 - personal_clipboard: Área de transferência do sistema
@@ -45,6 +46,7 @@ Você tem acesso a ferramentas que permitem interagir com o mundo real. Cada fer
 ### Ferramentas de Integração e Sistema
 - personal_api: Chamadas HTTP para APIs externas
 - personal_system: Informações do sistema e notificações
+- personal_watcher: Monitorar arquivos, processos, URLs e comandos
 
 ### Ferramentas de Automação
 - task: Delegar tarefas complexas para subagentes especializados

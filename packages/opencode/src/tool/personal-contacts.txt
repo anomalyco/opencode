@@ -1,0 +1,9 @@
+Gerencia contatos pessoais. Permite listar, criar, atualizar, deletar e buscar contatos na agenda pessoal.
+
+Ações:
+- list: Lista todos os contatos
+- get: Obtém detalhes de um contato específico (requer id)
+- create: Cria um novo contato (requer name; opcionais: email, phone, notes)
+- update: Atualiza um contato existente (requer id)
+- delete: Remove um contato (requer id)
+- search: Busca contatos por nome, email ou telefone (requer query)

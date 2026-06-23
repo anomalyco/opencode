@@ -149,7 +149,7 @@ export const layer = Layer.effectDiscard(
               } else if (input.action) {
                 executable = actionMap[input.action]
               } else {
-                return yield* Effect.fail(new ToolFailure({ message: "Either 'action' or 'apiCommand' must be provided." }))
+                return yield* new ToolFailure({ message: "Either 'action' or 'apiCommand' must be provided." })
               }
 
               const commandArgs = input.args || []
