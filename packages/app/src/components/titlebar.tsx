@@ -524,10 +524,16 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                           }
 
                           const [session] = createResource(
-                            () => tab.sessionId,
-                            (sessionID) =>
-                              serverSdk()
-                                .client.session.get({ sessionID })
+                            () => {
+                              const id = tab.sessionId
+                              const conn = server.list.find((s) => ServerConnection.key(s) === tab.server)
+                              if (!conn) return null
+                              const { sdk } = global.createServerCtx(conn)
+                              return { id, sdk }
+                            },
+                            ({ id, sdk }) =>
+                              sdk.client.session
+                                .get({ sessionID: id })
                                 .then((x) => x.data)
                                 .catch(() => undefined),
                           )
