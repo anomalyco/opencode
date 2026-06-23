@@ -16,17 +16,16 @@ import { ProjectDirectories } from "@opencode-ai/core/project/directories"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
-const databaseLayer = Database.layerFromPath(":memory:")
-const eventLayer = EventV2.layer.pipe(Layer.provide(databaseLayer))
-const directoriesLayer = ProjectDirectories.layer.pipe(Layer.provide(databaseLayer))
 const copyLayer = ProjectCopy.layer.pipe(
-  Layer.provide(databaseLayer),
-  Layer.provide(directoriesLayer),
-  Layer.provide(eventLayer),
+  Layer.provide(Database.defaultLayer),
+  Layer.provide(ProjectDirectories.defaultLayer),
+  Layer.provide(EventV2.defaultLayer),
   Layer.provide(FSUtil.defaultLayer),
   Layer.provide(Git.defaultLayer),
 )
-const it = testEffect(Layer.mergeAll(copyLayer, databaseLayer, eventLayer, directoriesLayer))
+const it = testEffect(
+  Layer.mergeAll(copyLayer, Database.defaultLayer, EventV2.defaultLayer, ProjectDirectories.defaultLayer),
+)
 
 function abs(input: string) {
   return AbsolutePath.make(input)

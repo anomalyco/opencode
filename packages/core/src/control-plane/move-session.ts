@@ -48,7 +48,7 @@ export class ResetSourceChangesError extends Schema.TaggedErrorClass<ResetSource
   {
     directory: AbsolutePath,
     message: Schema.String,
-    cause: Schema.optional(Schema.Defect),
+    cause: Schema.optional(Schema.Defect()),
   },
 ) {}
 

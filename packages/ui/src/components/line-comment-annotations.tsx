@@ -288,12 +288,6 @@ export function createLineCommentState<T>(props: LineCommentStateProps<T>) {
     setSelected(next)
   }
 
-  const finishSelection = (range: SelectedLineRange) => {
-    closeComment()
-    setSelected(range)
-    cancelDraft()
-  }
-
   return {
     draft,
     setDraft,
@@ -310,7 +304,6 @@ export function createLineCommentState<T>(props: LineCommentStateProps<T>) {
     openEditor,
     hoverComment,
     cancelDraft,
-    finishSelection,
     select: setSelected,
     reset,
   }
@@ -322,10 +315,9 @@ export function createLineCommentController<T extends LineCommentShape>(
   note: ReturnType<typeof createLineCommentState<string>>
   annotations: Accessor<DiffLineAnnotation<LineCommentAnnotationMeta<T>>[]>
   renderAnnotation: ReturnType<typeof createManagedLineCommentAnnotationRenderer<T>>["renderAnnotation"]
-  renderHoverUtility: ReturnType<typeof createLineCommentHoverRenderer>
+  renderGutterUtility: ReturnType<typeof createLineCommentGutterRenderer>
   onLineSelected: (range: SelectedLineRange | null) => void
   onLineSelectionEnd: (range: SelectedLineRange | null) => void
-  onLineNumberSelectionEnd: (range: SelectedLineRange | null) => void
 }
 export function createLineCommentController<T extends LineCommentShape>(
   props: LineCommentControllerProps<T>,
@@ -333,10 +325,9 @@ export function createLineCommentController<T extends LineCommentShape>(
   note: ReturnType<typeof createLineCommentState<string>>
   annotations: Accessor<LineCommentAnnotation<T>[]>
   renderAnnotation: ReturnType<typeof createManagedLineCommentAnnotationRenderer<T>>["renderAnnotation"]
-  renderHoverUtility: ReturnType<typeof createLineCommentHoverRenderer>
+  renderGutterUtility: ReturnType<typeof createLineCommentGutterRenderer>
   onLineSelected: (range: SelectedLineRange | null) => void
   onLineSelectionEnd: (range: SelectedLineRange | null) => void
-  onLineNumberSelectionEnd: (range: SelectedLineRange | null) => void
 }
 export function createLineCommentController<T extends LineCommentShape>(
   props: LineCommentControllerProps<T> | LineCommentControllerWithSideProps<T>,
@@ -426,7 +417,7 @@ export function createLineCommentController<T extends LineCommentShape>(
     }),
   })
 
-  const renderHoverUtility = createLineCommentHoverRenderer({
+  const renderGutterUtility = createLineCommentGutterRenderer({
     label: props.label,
     getSelectedRange: () => {
       if (note.opened()) return null
@@ -452,11 +443,6 @@ export function createLineCommentController<T extends LineCommentShape>(
       return
     }
 
-    note.finishSelection(range)
-  }
-
-  const onLineNumberSelectionEnd = (range: SelectedLineRange | null) => {
-    if (!range) return
     note.openDraft(range)
   }
 
@@ -464,10 +450,9 @@ export function createLineCommentController<T extends LineCommentShape>(
     note,
     annotations,
     renderAnnotation,
-    renderHoverUtility,
+    renderGutterUtility,
     onLineSelected,
     onLineSelectionEnd,
-    onLineNumberSelectionEnd,
   }
 }
 
@@ -569,7 +554,7 @@ export function createManagedLineCommentAnnotationRenderer<T>(props: {
   }
 }
 
-export function createLineCommentHoverRenderer(props: {
+export function createLineCommentGutterRenderer(props: {
   label: string
   getSelectedRange: Accessor<SelectedLineRange | null>
   onOpenDraft: (range: SelectedLineRange) => void
