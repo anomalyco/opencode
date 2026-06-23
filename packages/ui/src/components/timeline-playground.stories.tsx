@@ -316,10 +316,10 @@ const TOOL_SAMPLES = {
   },
   bash: {
     tool: "bash",
-    input: { command: "bun test --filter session", description: "Run session tests" },
+    input: { command: "bun test --filter session" },
     output:
       "bun test v1.3.14\n\n✓ session-turn.test.tsx (3 tests) 45ms\n✓ message-part.test.tsx (7 tests) 120ms\n\nTest Suites: 2 passed, 2 total\nTests:       10 passed, 10 total\nTime:        0.89s",
-    title: "Run session tests",
+    title: "bun test --filter session",
     metadata: { command: "bun test --filter session" },
   },
   edit: {
