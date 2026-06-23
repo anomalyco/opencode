@@ -116,10 +116,18 @@ function createServerCtx(
       ? sync.data.project.find((x) => x.id === projectID)
       : sync.data.project.find((x) => x.worktree === project.worktree)
 
-    // Preserve local icon override from per-workspace localStorage cache (childStore.icon).
+    // Preserve local project overrides from per-workspace localStorage cache (childStore.projectMeta).
     // Without this, different subdirectories of the same git repo would share the same
-    // icon from the database instead of using their individual overrides.
+    // name and icon from the database instead of using their individual overrides.
     const base = { ...metadata, ...project }
+    if (childStore.projectMeta?.name) {
+      base.name = childStore.projectMeta.name
+    }
+    // Apply icon override from projectMeta (written by projectMeta() for local projects)
+    if (childStore.projectMeta?.icon?.override) {
+      return { ...base, icon: { ...base.icon, override: childStore.projectMeta.icon.override } }
+    }
+    // Fallback: legacy icon override from projectIcon() (written for server projects)
     if (childStore.icon) {
       return { ...base, icon: { ...base.icon, override: childStore.icon } }
     }
