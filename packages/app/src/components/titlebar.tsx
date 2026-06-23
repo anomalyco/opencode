@@ -29,7 +29,6 @@ import { useLanguage } from "@/context/language"
 import { useSettings } from "@/context/settings"
 import { WindowsAppMenu } from "./windows-app-menu"
 import { applyPath, backPath, forwardPath } from "./titlebar-history"
-import { base64Encode } from "@opencode-ai/core/util/encode"
 import { projectForSession } from "@/pages/layout/helpers"
 import { SessionTabAvatar } from "@/pages/layout/session-tab-avatar"
 import { makeEventListener } from "@solid-primitives/event-listener"
@@ -264,15 +263,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
             const serverSdk = useServerSDK()
             const navigate = useNavigate()
             const layout = useLayout()
-
-            const newSessionHref = () => {
-              if (params.dir) return `/${params.dir}/session`
-
-              const project = layout.projects.list()[0]
-              if (!project) return "/"
-
-              return `/${base64Encode(project.worktree)}/session`
-            }
+            const global = useGlobal()
 
             const tabs = useTabs()
             const tabsStore = tabs.store
@@ -337,7 +328,28 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
               tabsStoreActions.removeSessions(detail)
             })
 
-            const openNewTab = () => navigate(newSessionHref())
+            const openNewTab = () => {
+              const route = layout.route()
+              const activeSession = session()
+              if (route.type === "session" && activeSession) {
+                tabs.newDraft({ server: route.server ?? server.key, directory: activeSession.directory }, "")
+                return
+              }
+
+              const current = layout.projects.list()[0]
+              if (current) {
+                tabs.newDraft({ server: server.key, directory: current.worktree }, "")
+                return
+              }
+
+              const fallback = global.servers.list().flatMap((conn) => {
+                const project = global.createServerCtx(conn).projects.list()[0]
+                return project ? [{ server: ServerConnection.key(conn), project }] : []
+              })[0]
+              if (!fallback) return
+
+              tabs.newDraft({ server: fallback.server, directory: fallback.project.worktree }, "")
+            }
             const toggleHome = () => tabs.toggleHome({ home: layout.route().type === "home", current: currentTab() })
 
             command.register("titlebar-home", () => [
@@ -592,8 +604,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                     size="large"
                     class="shrink-0"
                     icon={<IconV2 name="plus" />}
-                    as="a"
-                    href={newSessionHref()}
+                    onClick={openNewTab}
                     aria-label={language.t("command.session.new")}
                   />
                 </Show>
