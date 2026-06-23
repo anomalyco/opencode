@@ -1,0 +1,425 @@
+[data-component="session-progress-indicator-v2"] {
+  --_duration: 1200ms;
+  display: block;
+  flex-shrink: 0;
+  color: var(--v2-icon-icon-muted, #808080);
+}
+
+[data-component="session-progress-indicator-v2"] [data-dot] {
+  fill: currentColor;
+  opacity: 0.2;
+  animation-duration: var(--_duration);
+  animation-timing-function: ease-out;
+  animation-iteration-count: infinite;
+  animation-fill-mode: both;
+}
+
+@keyframes session-progress-indicator-v2-dot-0 {
+  0% { opacity: 0.2; }
+  12.5% { opacity: 0.2; }
+  25% { opacity: 0.2; }
+  37.5% { opacity: 1; }
+  50% { opacity: 0.5; }
+  62.5% { opacity: 0.2; }
+  75% { opacity: 0.2; }
+  87.5% { opacity: 0.2; }
+  100% { opacity: 0.2; }
+}
+
+[data-component="session-progress-indicator-v2"] [data-dot="0"] {
+  animation-name: session-progress-indicator-v2-dot-0;
+}
+
+@keyframes session-progress-indicator-v2-dot-5 {
+  0% { opacity: 0.2; }
+  12.5% { opacity: 0.2; }
+  25% { opacity: 0.2; }
+  37.5% { opacity: 0.75; }
+  50% { opacity: 0.2; }
+  62.5% { opacity: 0.2; }
+  75% { opacity: 0.2; }
+  87.5% { opacity: 0.2; }
+  100% { opacity: 0.2; }
+}
+
+[data-component="session-progress-indicator-v2"] [data-dot="5"] {
+  animation-name: session-progress-indicator-v2-dot-5;
+}
+
+@keyframes session-progress-indicator-v2-dot-10 {
+  0% { opacity: 0.2; }
+  12.5% { opacity: 0.2; }
+  25% { opacity: 1; }
+  37.5% { opacity: 0.5; }
+  50% { opacity: 0.2; }
+  62.5% { opacity: 0.2; }
+  75% { opacity: 0.2; }
+  87.5% { opacity: 0.2; }
+  100% { opacity: 0.2; }
+}
+
+[data-component="session-progress-indicator-v2"] [data-dot="10"] {
+  animation-name: session-progress-indicator-v2-dot-10;
+}
+
+@keyframes session-progress-indicator-v2-dot-15 {
+  0% { opacity: 0.2; }
+  12.5% { opacity: 0.2; }
+  25% { opacity: 0.75; }
+  37.5% { opacity: 0.2; }
+  50% { opacity: 0.2; }
+  62.5% { opacity: 0.2; }
+  75% { opacity: 0.2; }
+  87.5% { opacity: 0.2; }
+  100% { opacity: 0.2; }
+}
+
+[data-component="session-progress-indicator-v2"] [data-dot="15"] {
+  animation-name: session-progress-indicator-v2-dot-15;
+}
+
+@keyframes session-progress-indicator-v2-dot-20 {
+  0% { opacity: 0.2; }
+  12.5% { opacity: 1; }
+  25% { opacity: 0.5; }
+  37.5% { opacity: 0.2; }
+  50% { opacity: 0.2; }
+  62.5% { opacity: 0.2; }
+  75% { opacity: 0.2; }
+  87.5% { opacity: 0.2; }
+  100% { opacity: 0.2; }
+}
+
+[data-component="session-progress-indicator-v2"] [data-dot="20"] {
+  animation-name: session-progress-indicator-v2-dot-20;
+}
+
+@keyframes session-progress-indicator-v2-dot-1 {
+  0% { opacity: 0.2; }
+  12.5% { opacity: 0.2; }
+  25% { opacity: 0.2; }
+  37.5% { opacity: 0.2; }
+  50% { opacity: 0.75; }
+  62.5% { opacity: 0.2; }
+  75% { opacity: 0.2; }
+  87.5% { opacity: 0.2; }
+  100% { opacity: 0.2; }
+}
+
+[data-component="session-progress-indicator-v2"] [data-dot="1"] {
+  animation-name: session-progress-indicator-v2-dot-1;
+}
+
+@keyframes session-progress-indicator-v2-dot-6 {
+  0% { opacity: 0.2; }
+  12.5% { opacity: 0.2; }
+  25% { opacity: 0.2; }
+  37.5% { opacity: 1; }
+  50% { opacity: 0.5; }
+  62.5% { opacity: 0.2; }
+  75% { opacity: 0.2; }
+  87.5% { opacity: 0.2; }
+  100% { opacity: 0.2; }
+}
+
+[data-component="session-progress-indicator-v2"] [data-dot="6"] {
+  animation-name: session-progress-indicator-v2-dot-6;
+}
+
+@keyframes session-progress-indicator-v2-dot-11 {
+  0% { opacity: 0.2; }
+  12.5% { opacity: 0.2; }
+  25% { opacity: 1; }
+  37.5% { opacity: 0.75; }
+  50% { opacity: 0.2; }
+  62.5% { opacity: 0.2; }
+  75% { opacity: 0.2; }
+  87.5% { opacity: 0.2; }
+  100% { opacity: 0.2; }
+}
+
+[data-component="session-progress-indicator-v2"] [data-dot="11"] {
+  animation-name: session-progress-indicator-v2-dot-11;
+}
+
+@keyframes session-progress-indicator-v2-dot-16 {
+  0% { opacity: 0.2; }
+  12.5% { opacity: 1; }
+  25% { opacity: 0.5; }
+  37.5% { opacity: 0.2; }
+  50% { opacity: 0.2; }
+  62.5% { opacity: 0.2; }
+  75% { opacity: 0.2; }
+  87.5% { opacity: 0.2; }
+  100% { opacity: 0.2; }
+}
+
+[data-component="session-progress-indicator-v2"] [data-dot="16"] {
+  animation-name: session-progress-indicator-v2-dot-16;
+}
+
+@keyframes session-progress-indicator-v2-dot-21 {
+  0% { opacity: 0.2; }
+  12.5% { opacity: 0.75; }
+  25% { opacity: 0.2; }
+  37.5% { opacity: 0.2; }
+  50% { opacity: 0.2; }
+  62.5% { opacity: 0.2; }
+  75% { opacity: 0.2; }
+  87.5% { opacity: 0.2; }
+  100% { opacity: 0.2; }
+}
+
+[data-component="session-progress-indicator-v2"] [data-dot="21"] {
+  animation-name: session-progress-indicator-v2-dot-21;
+}
+
+@keyframes session-progress-indicator-v2-dot-2 {
+  0% { opacity: 0.2; }
+  12.5% { opacity: 0.2; }
+  25% { opacity: 0.2; }
+  37.5% { opacity: 0.2; }
+  50% { opacity: 1; }
+  62.5% { opacity: 0.5; }
+  75% { opacity: 0.2; }
+  87.5% { opacity: 0.2; }
+  100% { opacity: 0.2; }
+}
+
+[data-component="session-progress-indicator-v2"] [data-dot="2"] {
+  animation-name: session-progress-indicator-v2-dot-2;
+}
+
+@keyframes session-progress-indicator-v2-dot-7 {
+  0% { opacity: 0.2; }
+  12.5% { opacity: 0.2; }
+  25% { opacity: 0.2; }
+  37.5% { opacity: 0.2; }
+  50% { opacity: 1; }
+  62.5% { opacity: 0.75; }
+  75% { opacity: 0.2; }
+  87.5% { opacity: 0.2; }
+  100% { opacity: 0.2; }
+}
+
+[data-component="session-progress-indicator-v2"] [data-dot="7"] {
+  animation-name: session-progress-indicator-v2-dot-7;
+}
+
+@keyframes session-progress-indicator-v2-dot-12 {
+  0% { opacity: 1; }
+  12.5% { opacity: 1; }
+  25% { opacity: 1; }
+  37.5% { opacity: 1; }
+  50% { opacity: 1; }
+  62.5% { opacity: 1; }
+  75% { opacity: 1; }
+  87.5% { opacity: 1; }
+  100% { opacity: 1; }
+}
+
+[data-component="session-progress-indicator-v2"] [data-dot="12"] {
+  animation-name: session-progress-indicator-v2-dot-12;
+}
+
+@keyframes session-progress-indicator-v2-dot-17 {
+  0% { opacity: 1; }
+  12.5% { opacity: 0.75; }
+  25% { opacity: 0.2; }
+  37.5% { opacity: 0.2; }
+  50% { opacity: 0.2; }
+  62.5% { opacity: 0.2; }
+  75% { opacity: 0.2; }
+  87.5% { opacity: 0.2; }
+  100% { opacity: 1; }
+}
+
+[data-component="session-progress-indicator-v2"] [data-dot="17"] {
+  animation-name: session-progress-indicator-v2-dot-17;
+}
+
+@keyframes session-progress-indicator-v2-dot-22 {
+  0% { opacity: 1; }
+  12.5% { opacity: 0.5; }
+  25% { opacity: 0.2; }
+  37.5% { opacity: 0.2; }
+  50% { opacity: 0.2; }
+  62.5% { opacity: 0.2; }
+  75% { opacity: 0.2; }
+  87.5% { opacity: 0.2; }
+  100% { opacity: 1; }
+}
+
+[data-component="session-progress-indicator-v2"] [data-dot="22"] {
+  animation-name: session-progress-indicator-v2-dot-22;
+}
+
+@keyframes session-progress-indicator-v2-dot-3 {
+  0% { opacity: 0.2; }
+  12.5% { opacity: 0.2; }
+  25% { opacity: 0.2; }
+  37.5% { opacity: 0.2; }
+  50% { opacity: 0.2; }
+  62.5% { opacity: 0.75; }
+  75% { opacity: 0.2; }
+  87.5% { opacity: 0.2; }
+  100% { opacity: 0.2; }
+}
+
+[data-component="session-progress-indicator-v2"] [data-dot="3"] {
+  animation-name: session-progress-indicator-v2-dot-3;
+}
+
+@keyframes session-progress-indicator-v2-dot-8 {
+  0% { opacity: 0.2; }
+  12.5% { opacity: 0.2; }
+  25% { opacity: 0.2; }
+  37.5% { opacity: 0.2; }
+  50% { opacity: 0.2; }
+  62.5% { opacity: 1; }
+  75% { opacity: 0.75; }
+  87.5% { opacity: 0.2; }
+  100% { opacity: 0.2; }
+}
+
+[data-component="session-progress-indicator-v2"] [data-dot="8"] {
+  animation-name: session-progress-indicator-v2-dot-8;
+}
+
+@keyframes session-progress-indicator-v2-dot-13 {
+  0% { opacity: 0.2; }
+  12.5% { opacity: 0.2; }
+  25% { opacity: 0.2; }
+  37.5% { opacity: 0.2; }
+  50% { opacity: 0.2; }
+  62.5% { opacity: 0.2; }
+  75% { opacity: 1; }
+  87.5% { opacity: 1; }
+  100% { opacity: 0.2; }
+}
+
+[data-component="session-progress-indicator-v2"] [data-dot="13"] {
+  animation-name: session-progress-indicator-v2-dot-13;
+}
+
+@keyframes session-progress-indicator-v2-dot-18 {
+  0% { opacity: 0.5; }
+  12.5% { opacity: 0.2; }
+  25% { opacity: 0.2; }
+  37.5% { opacity: 0.2; }
+  50% { opacity: 0.2; }
+  62.5% { opacity: 0.2; }
+  75% { opacity: 0.2; }
+  87.5% { opacity: 0.75; }
+  100% { opacity: 0.5; }
+}
+
+[data-component="session-progress-indicator-v2"] [data-dot="18"] {
+  animation-name: session-progress-indicator-v2-dot-18;
+}
+
+@keyframes session-progress-indicator-v2-dot-23 {
+  0% { opacity: 0.75; }
+  12.5% { opacity: 0.2; }
+  25% { opacity: 0.2; }
+  37.5% { opacity: 0.2; }
+  50% { opacity: 0.2; }
+  62.5% { opacity: 0.2; }
+  75% { opacity: 0.2; }
+  87.5% { opacity: 0.2; }
+  100% { opacity: 0.75; }
+}
+
+[data-component="session-progress-indicator-v2"] [data-dot="23"] {
+  animation-name: session-progress-indicator-v2-dot-23;
+}
+
+@keyframes session-progress-indicator-v2-dot-4 {
+  0% { opacity: 0.2; }
+  12.5% { opacity: 0.2; }
+  25% { opacity: 0.2; }
+  37.5% { opacity: 0.2; }
+  50% { opacity: 0.2; }
+  62.5% { opacity: 1; }
+  75% { opacity: 0.5; }
+  87.5% { opacity: 0.2; }
+  100% { opacity: 0.2; }
+}
+
+[data-component="session-progress-indicator-v2"] [data-dot="4"] {
+  animation-name: session-progress-indicator-v2-dot-4;
+}
+
+@keyframes session-progress-indicator-v2-dot-9 {
+  0% { opacity: 0.2; }
+  12.5% { opacity: 0.2; }
+  25% { opacity: 0.2; }
+  37.5% { opacity: 0.2; }
+  50% { opacity: 0.2; }
+  62.5% { opacity: 0.2; }
+  75% { opacity: 0.75; }
+  87.5% { opacity: 0.2; }
+  100% { opacity: 0.2; }
+}
+
+[data-component="session-progress-indicator-v2"] [data-dot="9"] {
+  animation-name: session-progress-indicator-v2-dot-9;
+}
+
+@keyframes session-progress-indicator-v2-dot-14 {
+  0% { opacity: 0.2; }
+  12.5% { opacity: 0.2; }
+  25% { opacity: 0.2; }
+  37.5% { opacity: 0.2; }
+  50% { opacity: 0.2; }
+  62.5% { opacity: 0.2; }
+  75% { opacity: 1; }
+  87.5% { opacity: 1; }
+  100% { opacity: 0.2; }
+}
+
+[data-component="session-progress-indicator-v2"] [data-dot="14"] {
+  animation-name: session-progress-indicator-v2-dot-14;
+}
+
+@keyframes session-progress-indicator-v2-dot-19 {
+  0% { opacity: 0.2; }
+  12.5% { opacity: 0.2; }
+  25% { opacity: 0.2; }
+  37.5% { opacity: 0.2; }
+  50% { opacity: 0.2; }
+  62.5% { opacity: 0.2; }
+  75% { opacity: 0.2; }
+  87.5% { opacity: 0.75; }
+  100% { opacity: 0.2; }
+}
+
+[data-component="session-progress-indicator-v2"] [data-dot="19"] {
+  animation-name: session-progress-indicator-v2-dot-19;
+}
+
+@keyframes session-progress-indicator-v2-dot-24 {
+  0% { opacity: 0.5; }
+  12.5% { opacity: 0.2; }
+  25% { opacity: 0.2; }
+  37.5% { opacity: 0.2; }
+  50% { opacity: 0.2; }
+  62.5% { opacity: 0.2; }
+  75% { opacity: 0.2; }
+  87.5% { opacity: 0.5; }
+  100% { opacity: 0.5; }
+}
+
+[data-component="session-progress-indicator-v2"] [data-dot="24"] {
+  animation-name: session-progress-indicator-v2-dot-24;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-component="session-progress-indicator-v2"] [data-dot] {
+    animation: none;
+  }
+
+  [data-component="session-progress-indicator-v2"] [data-dot="12"] {
+    opacity: 1;
+  }
+}

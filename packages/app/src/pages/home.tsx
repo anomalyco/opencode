@@ -38,7 +38,7 @@ import {
   sortedRootSessions,
   toggleHomeProjectSelection,
 } from "@/pages/layout/helpers"
-import { useSessionTabAvatarState } from "@/pages/layout/project-avatar-state"
+import { SessionTabAvatar } from "@/pages/layout/session-tab-avatar"
 import { sessionTitle } from "@/utils/session-title"
 import { pathKey } from "@/utils/path-key"
 import { useGlobal } from "@/context/global"
@@ -755,21 +755,6 @@ function HomeProjectAvatar(props: { project: LocalProject }) {
   )
 }
 
-function HomeSessionAvatar(props: { project: LocalProject; session: Session; activeServer: boolean }) {
-  const directory = () => props.session.directory
-  const sessionId = () => props.session.id
-  const state = useSessionTabAvatarState(directory, sessionId, () => props.activeServer)
-  return (
-    <ProjectAvatar
-      fallback={displayName(props.project)}
-      src={getProjectAvatarSource(props.project.id, props.project.icon)}
-      variant={getProjectAvatarVariant(props.project.icon?.color)}
-      unread={state.unread()}
-      loading={state.loading()}
-    />
-  )
-}
-
 function HomeSessionLeading(props: {
   project: LocalProject
   session: Session
@@ -787,7 +772,12 @@ function HomeSessionLeading(props: {
           style={{ right: "calc(100% + 12px)" }}
         />
       </Show>
-      <HomeSessionAvatar project={props.project} session={props.session} activeServer={props.activeServer} />
+      <SessionTabAvatar
+        project={props.project}
+        directory={props.session.directory}
+        sessionId={props.session.id}
+        activeServer={props.activeServer}
+      />
     </div>
   )
 }
