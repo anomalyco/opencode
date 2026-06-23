@@ -104,14 +104,7 @@ export function ErrorComponent(props: { error: Error; reset: () => void; mode?: 
       flexDirection="column"
       alignItems="center"
     >
-      <box
-        width={contentWidth()}
-        flexGrow={1}
-        flexDirection="column"
-        paddingTop={1}
-        paddingBottom={1}
-        gap={1}
-      >
+      <box width={contentWidth()} flexGrow={1} flexDirection="column" paddingTop={1} paddingBottom={1} gap={1}>
         {/* Headline */}
         <box flexDirection="column" alignItems="center" flexShrink={0}>
           <text attributes={TextAttributes.BOLD} fg={colors.text}>
