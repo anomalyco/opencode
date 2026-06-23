@@ -329,7 +329,7 @@ export function NewHome() {
 
   return (
     <div class="rounded-[10px] shadow-[var(--v2-elevation-raised)] m-2 min-h-0 lg:overflow-hidden bg-v2-background-bg-base self-stretch flex-1">
-      <div class="mx-auto grid w-full h-full max-w-[1080px] gap-8 px-6 pb-16 lg:grid-cols-[280px_minmax(0,720px)]">
+      <div class="mx-auto grid h-full w-full max-w-[1080px] grid-rows-[auto_minmax(0,1fr)_auto] gap-4 px-3 pb-3 lg:grid-cols-[280px_minmax(0,720px)] lg:grid-rows-1 lg:gap-8 lg:px-6 lg:pb-16">
         <HomeProjectColumn
           projects={projects()}
           selected={state.selection}
@@ -355,7 +355,7 @@ export function NewHome() {
         />
 
         <section
-          class="min-h-0 min-w-0 flex-1 flex flex-col pt-12"
+          class="min-h-0 min-w-0 flex-1 flex flex-col pt-6 lg:pt-12"
           aria-label={language.t("sidebar.project.recentSessions")}
         >
           <HomeSessionSearch
@@ -419,6 +419,12 @@ export function NewHome() {
             </div>
           </ScrollView>
         </section>
+        <HomeUtilityNav
+          class="flex lg:hidden"
+          openSettings={openSettings}
+          openHelp={() => platform.openLink("https://opencode.ai/desktop-feedback")}
+          language={language}
+        />
       </div>
     </div>
   )
@@ -443,7 +449,7 @@ function HomeProjectColumn(props: {
   const dialog = useDialog()
   const controller = useServerManagementController({ navigateOnAdd: false })
   return (
-    <aside class="flex min-w-0 flex-col lg:pt-[52px] mt-14 gap-4" aria-label={props.language.t("home.projects")}>
+    <aside class="mt-6 flex min-w-0 flex-col gap-4 lg:mt-14 lg:pt-[52px]" aria-label={props.language.t("home.projects")}>
       <div class="flex h-7 min-w-0 items-center justify-between pl-1.5">
         <div class={HOME_SECTION_LABEL}>{props.language.t("home.projects")}</div>
         <Show when={global.servers.list().length === 1}>
@@ -489,25 +495,41 @@ function HomeProjectColumn(props: {
           }}
         </For>
       </Show>
-      <div class="mt-4 flex min-w-0 flex-col gap-1">
-        <button
-          type="button"
-          class={`${HOME_PROJECT_NAV_ROW} text-v2-text-text-faint [&>[data-slot=icon-svg]]:text-v2-icon-icon-muted`}
-          onClick={props.openSettings}
-        >
-          <IconV2 name="settings-gear" size="small" />
-          <span class={HOME_PROJECT_NAV_LABEL}>{props.language.t("sidebar.settings")}</span>
-        </button>
-        <button
-          type="button"
-          class={`${HOME_PROJECT_NAV_ROW} text-v2-text-text-faint [&>[data-slot=icon-svg]]:text-v2-icon-icon-muted`}
-          onClick={props.openHelp}
-        >
-          <IconV2 name="help" size="small" />
-          <span class={HOME_PROJECT_NAV_LABEL}>{props.language.t("sidebar.help")}</span>
-        </button>
-      </div>
+      <HomeUtilityNav
+        class="mt-4 hidden lg:flex"
+        openSettings={props.openSettings}
+        openHelp={props.openHelp}
+        language={props.language}
+      />
     </aside>
+  )
+}
+
+function HomeUtilityNav(props: {
+  class?: string
+  openSettings: () => void
+  openHelp: () => void
+  language: ReturnType<typeof useLanguage>
+}) {
+  return (
+    <div class={`${props.class ?? ""} min-w-0 flex-col gap-1`}>
+      <button
+        type="button"
+        class={`${HOME_PROJECT_NAV_ROW} text-v2-text-text-faint [&>[data-slot=icon-svg]]:text-v2-icon-icon-muted`}
+        onClick={props.openSettings}
+      >
+        <IconV2 name="settings-gear" size="small" />
+        <span class={HOME_PROJECT_NAV_LABEL}>{props.language.t("sidebar.settings")}</span>
+      </button>
+      <button
+        type="button"
+        class={`${HOME_PROJECT_NAV_ROW} text-v2-text-text-faint [&>[data-slot=icon-svg]]:text-v2-icon-icon-muted`}
+        onClick={props.openHelp}
+      >
+        <IconV2 name="help" size="small" />
+        <span class={HOME_PROJECT_NAV_LABEL}>{props.language.t("sidebar.help")}</span>
+      </button>
+    </div>
   )
 }
 
