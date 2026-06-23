@@ -1,9 +1,27 @@
 import { describe, expect } from "bun:test"
 import { BackgroundJob } from "@opencode-ai/core/background-job"
-import { Deferred, Effect, Exit, Scope } from "effect"
+import { Deferred, Effect, Exit, Schema, Scope } from "effect"
 import { it } from "./lib/effect"
 
 describe("BackgroundJob", () => {
+  it.live("preserves useful text for structured failures without messages", () =>
+    Effect.gen(function* () {
+      class StructuredError extends Schema.TaggedErrorClass<StructuredError>()("StructuredError", {
+        resource: Schema.String,
+      }) {}
+      const jobs = yield* BackgroundJob.Service
+      const job = yield* jobs.start({
+        type: "test",
+        run: Effect.fail(new StructuredError({ resource: "model" })),
+      })
+
+      expect(yield* jobs.wait({ id: job.id })).toMatchObject({
+        timedOut: false,
+        info: { status: "error", error: "StructuredError" },
+      })
+    }).pipe(Effect.provide(BackgroundJob.layer)),
+  )
+
   it.live("tracks process-local work through explicit observation", () =>
     Effect.gen(function* () {
       const jobs = yield* BackgroundJob.Service

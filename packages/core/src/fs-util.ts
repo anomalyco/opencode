@@ -9,12 +9,18 @@ import { Glob } from "./util/glob"
 import { serviceUse } from "./effect/service-use"
 import { LayerNode } from "./effect/layer-node"
 import { filesystem } from "./effect/layer-node-platform"
+import { errorMessage } from "./util/error"
 
 export namespace FSUtil {
   export class FileSystemError extends Schema.TaggedErrorClass<FileSystemError>()("FileSystemError", {
     method: Schema.String,
     cause: Schema.optional(Schema.Defect()),
-  }) {}
+  }) {
+    override get message() {
+      const detail = this.cause === undefined ? undefined : errorMessage(this.cause)
+      return `Filesystem operation failed (${this.method})${detail ? `: ${detail}` : ""}`
+    }
+  }
 
   export type Error = PlatformError | FileSystemError
 

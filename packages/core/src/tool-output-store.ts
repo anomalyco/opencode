@@ -8,6 +8,7 @@ import { Global } from "./global"
 import { SessionSchema } from "./session/schema"
 import { Identifier } from "./util/identifier"
 import type { ToolOutput } from "@opencode-ai/llm"
+import { errorMessage } from "./util/error"
 
 export const MAX_LINES = 2_000
 export const MAX_BYTES = 50 * 1024
@@ -29,7 +30,11 @@ export interface BoundResult {
 export class StorageError extends Schema.TaggedErrorClass<StorageError>()("ToolOutputStore.StorageError", {
   operation: Schema.Literals(["encode", "write"]),
   cause: Schema.Defect(),
-}) {}
+}) {
+  override get message() {
+    return `Failed to ${this.operation} tool output: ${errorMessage(this.cause)}`
+  }
+}
 
 export type Error = StorageError
 

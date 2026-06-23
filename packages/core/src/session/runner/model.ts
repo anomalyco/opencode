@@ -21,7 +21,11 @@ export class ModelNotSelectedError extends Schema.TaggedErrorClass<ModelNotSelec
   {
     sessionID: SessionSchema.ID,
   },
-) {}
+) {
+  override get message() {
+    return `No model is available for session ${this.sessionID}`
+  }
+}
 
 export class ModelUnavailableError extends Schema.TaggedErrorClass<ModelUnavailableError>()(
   "SessionRunnerModel.ModelUnavailableError",
@@ -29,7 +33,11 @@ export class ModelUnavailableError extends Schema.TaggedErrorClass<ModelUnavaila
     providerID: ProviderV2.ID,
     modelID: ModelV2.ID,
   },
-) {}
+) {
+  override get message() {
+    return `Model unavailable: ${this.providerID}/${this.modelID}`
+  }
+}
 
 export class VariantUnavailableError extends Schema.TaggedErrorClass<VariantUnavailableError>()(
   "SessionRunnerModel.VariantUnavailableError",
@@ -38,7 +46,11 @@ export class VariantUnavailableError extends Schema.TaggedErrorClass<VariantUnav
     modelID: ModelV2.ID,
     variant: ModelV2.VariantID,
   },
-) {}
+) {
+  override get message() {
+    return `Variant unavailable for ${this.providerID}/${this.modelID}: ${this.variant}`
+  }
+}
 
 export class UnsupportedApiError extends Schema.TaggedErrorClass<UnsupportedApiError>()(
   "SessionRunnerModel.UnsupportedApiError",
@@ -47,7 +59,11 @@ export class UnsupportedApiError extends Schema.TaggedErrorClass<UnsupportedApiE
     modelID: ModelV2.ID,
     api: Schema.String,
   },
-) {}
+) {
+  override get message() {
+    return `Unsupported API for ${this.providerID}/${this.modelID}: ${this.api}`
+  }
+}
 
 export type Error = ModelNotSelectedError | ModelUnavailableError | VariantUnavailableError | UnsupportedApiError
 

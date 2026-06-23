@@ -2,6 +2,7 @@ export * as BackgroundJob from "./background-job"
 
 import { Cause, Clock, Context, Deferred, Effect, Exit, Layer, Scope, SynchronizedRef } from "effect"
 import { Identifier } from "./id/id"
+import { causeMessage } from "./util/error"
 
 export type Status = "running" | "completed" | "error" | "cancelled"
 
@@ -104,11 +105,6 @@ function snapshot(job: Active): Info {
   }
 }
 
-function errorText(error: unknown) {
-  if (error instanceof Error) return error.message
-  return String(error)
-}
-
 /**
  * Makes one scoped, process-local registry. Entries are intentionally not
  * durable: process restart or owner-scope closure loses status and interrupts
@@ -157,7 +153,7 @@ export const make = Effect.gen(function* () {
           status,
           completed_at,
           ...(output ? { output: output.text } : {}),
-          ...(Exit.isFailure(exit) ? { error: errorText(Cause.squash(exit.cause)) } : {}),
+          ...(Exit.isFailure(exit) ? { error: causeMessage(exit.cause) } : {}),
         },
       }
       return [{ info: snapshot(next), done: job.done, scope: job.scope }, new Map(jobs).set(id, next)]
