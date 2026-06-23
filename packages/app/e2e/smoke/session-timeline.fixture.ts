@@ -139,7 +139,7 @@ function toolPart(
       status: "completed",
       input,
       output: lorem(index * 23 + partIndex, outputLength),
-      title: tool === "bash" ? "Verify generated output" : input.filePath || input.path || input.pattern || "completed",
+      title: tool === "bash" ? input.command : input.filePath || input.path || input.pattern || "completed",
       metadata,
       time: { start: 1700000000000 + index * 10_000, end: 1700000000000 + index * 10_000 + 400 },
     },
@@ -201,7 +201,7 @@ function turn(index: number): Message[] {
       ? [toolPart(index, 8, "apply_patch", { files: [`src/generated/patch-${index}.ts`] }, 620)]
       : []),
     ...(index % 7 === 0
-      ? [toolPart(index, 4, "bash", { command: "bun typecheck", description: "Verify generated output" }, 620)]
+      ? [toolPart(index, 4, "bash", { command: "bun typecheck" }, 620)]
       : []),
     ...(index % 10 === 0 ? [toolPart(index, 9, "webfetch", { url: "https://example.com/docs/sample" }, 120)] : []),
     ...(index % 11 === 0 ? [toolPart(index, 10, "websearch", { query: "sample movement notes" }, 240)] : []),
@@ -295,6 +295,7 @@ export const fixture = {
         .filter(renderable)
         .map((part) => part.id),
     ),
+    expandedShellPartID: targetMessages.flatMap((message) => message.parts).find((part) => part.tool === "bash")!.id,
   },
 }
 

@@ -714,6 +714,22 @@ Compatibility:
 - Foreground V2 bash execution is unchanged.
 - Reintroduce background bash only with durable status observation, completion delivery, and explicit cancellation semantics.
 
+## 2026-06-18: Remove Bash Description Input
+
+Affected schema:
+
+- V1 and Core V2 model-facing `bash` tool parameters.
+
+Change:
+
+- Remove the V1 required and V2 optional `description` parameter.
+- Derive shell presentation from the command or a generic shell label instead of model-authored description metadata.
+
+Compatibility:
+
+- Existing persisted tool calls may still contain `description`, but new tool definitions no longer expose or require it.
+- Shell command execution behavior is unchanged.
+
 ## 2026-06-04: Add Durable Session Context Snapshots
 
 Affected schema:
