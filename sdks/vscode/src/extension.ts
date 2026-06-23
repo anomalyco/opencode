@@ -3,7 +3,11 @@ export function deactivate() {}
 
 import * as vscode from "vscode"
 
-const TERMINAL_NAME = "opencode"
+const TERMINAL_NAME_PREFIX = "opencode"
+
+function isOpencodeTerminal(terminal: vscode.Terminal): boolean {
+  return terminal.name.startsWith(TERMINAL_NAME_PREFIX)
+}
 
 export function activate(context: vscode.ExtensionContext) {
   const openNewTerminalDisposable = vscode.commands.registerCommand("opencode.openNewTerminal", async () => {
@@ -12,7 +16,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   const openTerminalDisposable = vscode.commands.registerCommand("opencode.openTerminal", async () => {
     // An opencode terminal already exists => focus it
-    const existingTerminal = vscode.window.terminals.find((t) => t.name === TERMINAL_NAME)
+    const existingTerminal = vscode.window.terminals.find((t) => isOpencodeTerminal(t))
     if (existingTerminal) {
       existingTerminal.show()
       return
@@ -32,7 +36,7 @@ export function activate(context: vscode.ExtensionContext) {
       return
     }
 
-    if (terminal.name === TERMINAL_NAME) {
+    if (isOpencodeTerminal(terminal)) {
       // @ts-ignore
       const port = terminal.creationOptions.env?.["_EXTENSION_OPENCODE_PORT"]
       port ? await appendPrompt(parseInt(port), fileRef) : terminal.sendText(fileRef, false)
@@ -45,8 +49,10 @@ export function activate(context: vscode.ExtensionContext) {
   async function openTerminal() {
     // Create a new terminal in split screen
     const port = Math.floor(Math.random() * (65535 - 16384 + 1)) + 16384
+    const hostname = vscode.workspace.getConfiguration("opencode").get<string>("hostname") || ""
+    const hostnameArg = hostname ? ` --hostname ${hostname}` : ""
     const terminal = vscode.window.createTerminal({
-      name: TERMINAL_NAME,
+      name: `${TERMINAL_NAME_PREFIX}:${port}`,
       iconPath: {
         light: vscode.Uri.file(context.asAbsolutePath("images/button-dark.svg")),
         dark: vscode.Uri.file(context.asAbsolutePath("images/button-light.svg")),
@@ -62,7 +68,7 @@ export function activate(context: vscode.ExtensionContext) {
     })
 
     terminal.show()
-    terminal.sendText(`opencode --port ${port}`)
+    terminal.sendText(`opencode --port ${port}${hostnameArg}`)
 
     const fileRef = getActiveFile()
     if (!fileRef) {

@@ -23,6 +23,16 @@
   "activationEvents": [],
   "main": "./dist/extension.js",
   "contributes": {
+    "configuration": {
+      "title": "opencode",
+      "properties": {
+        "opencode.hostname": {
+          "type": "string",
+          "default": "",
+          "description": "Hostname to pass to opencode via --hostname flag. Leave empty to skip."
+        }
+      }
+    },
     "commands": [
       {
         "command": "opencode.openTerminal",
