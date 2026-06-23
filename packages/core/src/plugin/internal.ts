@@ -98,6 +98,7 @@ export const locationLayer = Layer.effectDiscard(
     }
 
     yield* Effect.gen(function* () {
+      yield* add(ConfigReferencePlugin.Plugin)
       yield* add(AgentPlugin.Plugin)
       yield* add(CommandPlugin.Plugin)
       yield* add(SkillPlugin.Plugin)
@@ -106,7 +107,6 @@ export const locationLayer = Layer.effectDiscard(
       yield* add(ConfigAgentPlugin.Plugin)
       yield* add(ConfigCommandPlugin.Plugin)
       yield* add(ConfigSkillPlugin.Plugin)
-      yield* add(ConfigReferencePlugin.Plugin)
       for (const item of ProviderPlugins) yield* add(item)
       yield* add(ConfigExternalPlugin.Plugin)
     }).pipe(Effect.withSpan("PluginInternal.boot"), Effect.forkScoped({ startImmediately: true }))
