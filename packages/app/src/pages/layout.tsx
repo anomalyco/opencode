@@ -57,6 +57,7 @@ import { setNavigate } from "@/utils/notification-click"
 import { Worktree as WorktreeState } from "@/utils/worktree"
 import { setSessionHandoff } from "@/pages/session/handoff"
 import { SessionRouteKey, SessionStateKey } from "@/utils/server-scope"
+import { useQueryClient } from "@tanstack/solid-query"
 
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme/context"
@@ -116,6 +117,7 @@ export default function LegacyLayout(props: ParentProps) {
 
   const params = useParams()
   const serverSync = useServerSync()
+  const queryClient = useQueryClient()
   const layout = useLayout()
   const layoutReady = createMemo(() => layout.ready())
   const platform = usePlatform()
@@ -399,6 +401,13 @@ export default function LegacyLayout(props: ParentProps) {
         if (e.details?.type === "worktree.ready") {
           setBusy(e.name, false)
           WorktreeState.ready(serverSDK().scope, e.name)
+          void queryClient
+            .fetchQuery(serverSync().queryOptions.agents(pathKey(e.name)))
+            .then((agents) => {
+              const [, setChildStore] = serverSync().child(e.name, { bootstrap: false })
+              setChildStore("agent", agents)
+            })
+            .catch(() => undefined)
           return
         }
 

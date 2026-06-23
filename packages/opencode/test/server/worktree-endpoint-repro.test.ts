@@ -1,10 +1,13 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer, Queue } from "effect"
+import fs from "node:fs/promises"
+import path from "node:path"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { GlobalBus, type GlobalEvent } from "@/bus/global"
 import { Worktree } from "@/worktree"
 import { Server } from "../../src/server/server"
 import { ExperimentalPaths } from "../../src/server/routes/instance/httpapi/groups/experimental"
+import { InstancePaths } from "../../src/server/routes/instance/httpapi/groups/instance"
 import { WorkspacePaths } from "../../src/server/routes/instance/httpapi/groups/workspace"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, TestInstance } from "../fixture/fixture"
@@ -301,6 +304,68 @@ describe("worktree endpoint reproduction", () => {
         })
 
         expect(Date.now() - started).toBeLessThan(1_500)
+      }),
+    { git: true },
+  )
+
+  worktreeTest(
+    "worktree ready reloads agents created by project start command after early agent load",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const server = yield* serverScoped()
+        yield* setProjectStartCommand({
+          server,
+          directory: test.directory,
+          command:
+            'while [ ! -f .opencode-agent-ready ]; do sleep 0.1; done; mkdir -p .opencode/agents && printf -- "---\\ndescription: Script reviewer\\nmode: subagent\\n---\\nReview script output\\n" > .opencode/agents/script-reviewer.md',
+        })
+
+        yield* Effect.acquireUseRelease(
+          Effect.gen(function* () {
+            const waitReady = yield* readyWatcher()
+            const response = yield* withRequestTimeout(
+              request(server, `${ExperimentalPaths.worktree}?directory=${encodeURIComponent(test.directory)}`, {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ name: "agent-startup" }),
+              }),
+              "worktree create with agent startup",
+            )
+            expect(response.status).toBe(200)
+            const body = yield* json<CreatedWorktree>(response)
+            return { directory: body.directory, ready: waitReady(body.directory) }
+          }),
+          ({ directory, ready }) =>
+            Effect.gen(function* () {
+              const earlyResponse = yield* request(
+                server,
+                `${InstancePaths.agent}?directory=${encodeURIComponent(directory)}`,
+              )
+              expect(earlyResponse.status).toBe(200)
+              const early = yield* json<{ name: string }[]>(earlyResponse)
+              expect(early.map((agent) => agent.name)).not.toContain("script-reviewer")
+
+              yield* Effect.promise(() => fs.writeFile(path.join(directory, ".opencode-agent-ready"), "ready"))
+
+              yield* ready
+
+              const loadedResponse = yield* request(
+                server,
+                `${InstancePaths.agent}?directory=${encodeURIComponent(directory)}`,
+              )
+              expect(loadedResponse.status).toBe(200)
+              const loaded = yield* json<{ name: string }[]>(loadedResponse)
+              expect(loaded.map((agent) => agent.name)).toContain("script-reviewer")
+            }),
+          ({ directory, ready }) =>
+            removeCreatedWorktree({
+              server,
+              rootDirectory: test.directory,
+              worktreeDirectory: directory,
+              ready,
+            }).pipe(Effect.orDie),
+        )
       }),
     { git: true },
   )

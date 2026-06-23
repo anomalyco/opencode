@@ -263,7 +263,9 @@ export const layer: Layer.Layer<
         return
       }
 
-      const booted = yield* store.load({ directory: info.directory }).pipe(
+      yield* runStartScripts(info.directory, { projectID, extra })
+
+      const booted = yield* store.reload({ directory: info.directory }).pipe(
         Effect.as(true),
         Effect.catch((error) =>
           Effect.gen(function* () {
@@ -290,8 +292,6 @@ export const layer: Layer.Layer<
           properties: { name: info.name, ...(info.branch ? { branch: info.branch } : {}) },
         },
       })
-
-      yield* runStartScripts(info.directory, { projectID, extra })
     })
 
     const createFromInfo = Effect.fn("Worktree.createFromInfo")(function* (info: Info, startCommand?: string) {
