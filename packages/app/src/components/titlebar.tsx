@@ -89,9 +89,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
   const params = useParams()
   const useV2Titlebar = createMemo(() => settings.general.newLayoutDesigns())
   const mobile = createMediaQuery("(max-width: 767px)")
-  const bottom = createMemo(
-    () => useV2Titlebar() && mobile() && settings.general.mobileTitlebarPosition() === "bottom",
-  )
+  const bottom = createMemo(() => useV2Titlebar() && mobile() && settings.general.mobileTitlebarPosition() === "bottom")
 
   const mac = createMemo(() => platform.platform === "desktop" && platform.os === "macos")
   const windows = createMemo(() => platform.platform === "desktop" && platform.os === "windows")
