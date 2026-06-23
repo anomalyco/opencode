@@ -382,76 +382,64 @@ function autocontinue(enabled: boolean) {
 }
 
 describe("session.compaction.isOverflow", () => {
-  it.live(
+  itCompaction.instance(
     "returns true when token count exceeds usable context",
-    provideTmpdirInstance(() =>
-      Effect.gen(function* () {
-        const compact = yield* SessionCompaction.Service
-        const model = createModel({ context: 100_000, output: 32_000 })
-        const tokens = { input: 75_000, output: 5_000, reasoning: 0, cache: { read: 0, write: 0 } }
-        expect(yield* compact.isOverflow({ tokens, model })).toBe(true)
-      }),
-    ),
+    Effect.gen(function* () {
+      const compact = yield* SessionCompaction.Service
+      const model = createModel({ context: 100_000, output: 32_000 })
+      const tokens = { input: 75_000, output: 5_000, reasoning: 0, cache: { read: 0, write: 0 } }
+      expect(yield* compact.isOverflow({ tokens, model })).toBe(true)
+    }).pipe(withCompaction({ config: cfg({ auto: true }) })),
   )
 
-  it.live(
+  itCompaction.instance(
     "returns false when token count within usable context",
-    provideTmpdirInstance(() =>
-      Effect.gen(function* () {
-        const compact = yield* SessionCompaction.Service
-        const model = createModel({ context: 200_000, output: 32_000 })
-        const tokens = { input: 100_000, output: 10_000, reasoning: 0, cache: { read: 0, write: 0 } }
-        expect(yield* compact.isOverflow({ tokens, model })).toBe(false)
-      }),
-    ),
+    Effect.gen(function* () {
+      const compact = yield* SessionCompaction.Service
+      const model = createModel({ context: 200_000, output: 32_000 })
+      const tokens = { input: 100_000, output: 10_000, reasoning: 0, cache: { read: 0, write: 0 } }
+      expect(yield* compact.isOverflow({ tokens, model })).toBe(false)
+    }).pipe(withCompaction({ config: cfg({ auto: true }) })),
   )
 
-  it.live(
+  itCompaction.instance(
     "includes cache.read in token count",
-    provideTmpdirInstance(() =>
-      Effect.gen(function* () {
-        const compact = yield* SessionCompaction.Service
-        const model = createModel({ context: 100_000, output: 32_000 })
-        const tokens = { input: 60_000, output: 10_000, reasoning: 0, cache: { read: 10_000, write: 0 } }
-        expect(yield* compact.isOverflow({ tokens, model })).toBe(true)
-      }),
-    ),
+    Effect.gen(function* () {
+      const compact = yield* SessionCompaction.Service
+      const model = createModel({ context: 100_000, output: 32_000 })
+      const tokens = { input: 60_000, output: 10_000, reasoning: 0, cache: { read: 10_000, write: 0 } }
+      expect(yield* compact.isOverflow({ tokens, model })).toBe(true)
+    }).pipe(withCompaction({ config: cfg({ auto: true }) })),
   )
 
-  it.live(
+  itCompaction.instance(
     "respects input limit for input caps",
-    provideTmpdirInstance(() =>
-      Effect.gen(function* () {
-        const compact = yield* SessionCompaction.Service
-        const model = createModel({ context: 400_000, input: 272_000, output: 128_000 })
-        const tokens = { input: 271_000, output: 1_000, reasoning: 0, cache: { read: 2_000, write: 0 } }
-        expect(yield* compact.isOverflow({ tokens, model })).toBe(true)
-      }),
-    ),
+    Effect.gen(function* () {
+      const compact = yield* SessionCompaction.Service
+      const model = createModel({ context: 400_000, input: 272_000, output: 128_000 })
+      const tokens = { input: 271_000, output: 1_000, reasoning: 0, cache: { read: 2_000, write: 0 } }
+      expect(yield* compact.isOverflow({ tokens, model })).toBe(true)
+    }).pipe(withCompaction({ config: cfg({ auto: true }) })),
   )
 
-  it.live(
+  itCompaction.instance(
     "returns false when input/output are within input caps",
-    provideTmpdirInstance(() =>
-      Effect.gen(function* () {
-        const compact = yield* SessionCompaction.Service
-        const model = createModel({ context: 400_000, input: 272_000, output: 128_000 })
-        const tokens = { input: 200_000, output: 20_000, reasoning: 0, cache: { read: 10_000, write: 0 } }
-        expect(yield* compact.isOverflow({ tokens, model })).toBe(false)
-      }),
-    ),
+    Effect.gen(function* () {
+      const compact = yield* SessionCompaction.Service
+      const model = createModel({ context: 400_000, input: 272_000, output: 128_000 })
+      const tokens = { input: 200_000, output: 20_000, reasoning: 0, cache: { read: 10_000, write: 0 } }
+      expect(yield* compact.isOverflow({ tokens, model })).toBe(false)
+    }).pipe(withCompaction({ config: cfg({ auto: true }) })),
   )
 
-  it.live(
+  itCompaction.instance(
     "returns false when output within limit with input caps",
-    provideTmpdirInstance(() =>
-      Effect.gen(function* () {
-        const compact = yield* SessionCompaction.Service
-        const model = createModel({ context: 200_000, input: 120_000, output: 10_000 })
-        const tokens = { input: 50_000, output: 9_999, reasoning: 0, cache: { read: 0, write: 0 } }
-        expect(yield* compact.isOverflow({ tokens, model })).toBe(false)
-      }),
-    ),
+    Effect.gen(function* () {
+      const compact = yield* SessionCompaction.Service
+      const model = createModel({ context: 200_000, input: 120_000, output: 10_000 })
+      const tokens = { input: 50_000, output: 9_999, reasoning: 0, cache: { read: 0, write: 0 } }
+      expect(yield* compact.isOverflow({ tokens, model })).toBe(false)
+    }).pipe(withCompaction({ config: cfg({ auto: true }) })),
   )
 
   // ─── Bug reproduction tests ───────────────────────────────────────────
@@ -546,54 +534,86 @@ describe("session.compaction.isOverflow", () => {
     ),
   )
 
-  it.live(
+  itCompaction.instance(
     "returns false when compaction.auto is disabled",
-    provideTmpdirInstance(
-      () =>
-        Effect.gen(function* () {
-          const compact = yield* SessionCompaction.Service
-          const model = createModel({ context: 100_000, output: 32_000 })
-          const tokens = { input: 75_000, output: 5_000, reasoning: 0, cache: { read: 0, write: 0 } }
-          expect(yield* compact.isOverflow({ tokens, model })).toBe(false)
-        }),
-      {
-        config: {
-          compaction: { auto: false },
-        },
-      },
-    ),
+    Effect.gen(function* () {
+      const compact = yield* SessionCompaction.Service
+      const model = createModel({ context: 100_000, output: 32_000 })
+      const tokens = { input: 75_000, output: 5_000, reasoning: 0, cache: { read: 0, write: 0 } }
+      expect(yield* compact.isOverflow({ tokens, model })).toBe(false)
+    }).pipe(withCompaction({ config: cfg({ auto: false }) })),
   )
 })
 
 describe("session.compaction.create", () => {
-  it.live(
+  itCompaction.instance(
     "creates a compaction user message and part",
-    provideTmpdirInstance(() =>
-      Effect.gen(function* () {
-        const compact = yield* SessionCompaction.Service
-        const ssn = yield* SessionNs.Service
+    Effect.gen(function* () {
+      const compact = yield* SessionCompaction.Service
+      const ssn = yield* SessionNs.Service
 
-        const info = yield* ssn.create({})
+      const info = yield* ssn.create({})
 
-        yield* compact.create({
-          sessionID: info.id,
-          agent: "build",
-          model: ref,
-          auto: true,
-          overflow: true,
-        })
+      yield* compact.create({
+        sessionID: info.id,
+        agent: "build",
+        model: ref,
+        auto: true,
+        overflow: true,
+      })
 
-        const msgs = yield* ssn.messages({ sessionID: info.id })
-        expect(msgs).toHaveLength(1)
-        expect(msgs[0].info.role).toBe("user")
-        expect(msgs[0].parts).toHaveLength(1)
-        expect(msgs[0].parts[0]).toMatchObject({
-          type: "compaction",
-          auto: true,
-          overflow: true,
-        })
-      }),
-    ),
+      const msgs = yield* ssn.messages({ sessionID: info.id })
+      expect(msgs).toHaveLength(1)
+      expect(msgs[0].info.role).toBe("user")
+      expect(msgs[0].parts).toHaveLength(1)
+      expect(msgs[0].parts[0]).toMatchObject({
+        type: "compaction",
+        auto: true,
+        overflow: true,
+      })
+    }).pipe(withCompaction({ config: cfg({ auto: true }) })),
+  )
+
+  itCompaction.instance(
+    "skips automatic compaction message when disabled",
+    Effect.gen(function* () {
+      const compact = yield* SessionCompaction.Service
+      const ssn = yield* SessionNs.Service
+      const info = yield* ssn.create({})
+
+      yield* compact.create({
+        sessionID: info.id,
+        agent: "build",
+        model: ref,
+        auto: true,
+        overflow: true,
+      })
+
+      expect(yield* ssn.messages({ sessionID: info.id })).toHaveLength(0)
+    }).pipe(withCompaction({ config: cfg({ auto: false }) })),
+  )
+
+  itCompaction.instance(
+    "creates manual compaction message when automatic compaction is disabled",
+    Effect.gen(function* () {
+      const compact = yield* SessionCompaction.Service
+      const ssn = yield* SessionNs.Service
+      const info = yield* ssn.create({})
+
+      yield* compact.create({
+        sessionID: info.id,
+        agent: "build",
+        model: ref,
+        auto: false,
+      })
+
+      const msgs = yield* ssn.messages({ sessionID: info.id })
+      expect(msgs).toHaveLength(1)
+      expect(msgs[0].parts[0]).toMatchObject({
+        type: "compaction",
+        auto: false,
+      })
+    }).pipe(withCompaction({ config: cfg({ auto: false }) })),
   )
 
   it.live.skip(
@@ -845,6 +865,48 @@ describe("session.compaction.process", () => {
     }),
   )
 
+  itCompaction.instance(
+    "stops automatic compaction process when disabled",
+    Effect.gen(function* () {
+      const ssn = yield* SessionNs.Service
+      const session = yield* ssn.create({})
+      const msg = yield* createUserMessage(session.id, "hello")
+      const msgs = yield* ssn.messages({ sessionID: session.id })
+
+      const result = yield* SessionCompaction.use.process({
+        parentID: msg.id,
+        messages: msgs,
+        sessionID: session.id,
+        auto: true,
+      })
+
+      const all = yield* ssn.messages({ sessionID: session.id })
+      expect(result).toBe("stop")
+      expect(all.some((message) => message.info.role === "assistant" && message.info.summary)).toBe(false)
+    }).pipe(withCompaction({ config: cfg({ auto: false }) })),
+  )
+
+  itCompaction.instance(
+    "runs manual compaction when automatic compaction is disabled",
+    Effect.gen(function* () {
+      const ssn = yield* SessionNs.Service
+      const session = yield* ssn.create({})
+      const msg = yield* createUserMessage(session.id, "hello")
+      const msgs = yield* ssn.messages({ sessionID: session.id })
+
+      const result = yield* SessionCompaction.use.process({
+        parentID: msg.id,
+        messages: msgs,
+        sessionID: session.id,
+        auto: false,
+      })
+
+      const all = yield* ssn.messages({ sessionID: session.id })
+      expect(result).toBe("continue")
+      expect(all.some((message) => message.info.role === "assistant" && message.info.summary)).toBe(true)
+    }).pipe(withCompaction({ config: cfg({ auto: false }) })),
+  )
+
   it.instance(
     "publishes compacted event on continue",
     Effect.gen(function* () {
@@ -906,7 +968,7 @@ describe("session.compaction.process", () => {
     }).pipe(withCompaction({ result: "compact" })),
   )
 
-  it.instance(
+  itCompaction.instance(
     "adds synthetic continue prompt when auto is enabled",
     Effect.gen(function* () {
       const ssn = yield* SessionNs.Service
@@ -934,7 +996,7 @@ describe("session.compaction.process", () => {
       if (last?.parts[0]?.type === "text") {
         expect(last.parts[0].text).toContain("Continue if you have next steps")
       }
-    }),
+    }).pipe(withCompaction({ config: cfg({ auto: true }) })),
   )
 
   itCompaction.instance(
@@ -1133,10 +1195,10 @@ describe("session.compaction.process", () => {
             ),
         ),
       ).toBe(false)
-    }).pipe(withCompaction({ plugin: autocontinue(false) })),
+    }).pipe(withCompaction({ plugin: autocontinue(false), config: cfg({ auto: true }) })),
   )
 
-  it.instance(
+  itCompaction.instance(
     "replays the prior user turn on overflow when earlier context exists",
     Effect.gen(function* () {
       const ssn = yield* SessionNs.Service
@@ -1171,10 +1233,10 @@ describe("session.compaction.process", () => {
       expect(
         last?.parts.some((part) => part.type === "text" && part.text.includes("Attached image/png: cat.png")),
       ).toBe(true)
-    }),
+    }).pipe(withCompaction({ config: cfg({ auto: true }) })),
   )
 
-  it.instance(
+  itCompaction.instance(
     "falls back to overflow guidance when no replayable turn exists",
     Effect.gen(function* () {
       const ssn = yield* SessionNs.Service
@@ -1198,7 +1260,7 @@ describe("session.compaction.process", () => {
       if (last?.parts[0]?.type === "text") {
         expect(last.parts[0].text).toContain("previous request exceeded the provider's size limit")
       }
-    }),
+    }).pipe(withCompaction({ config: cfg({ auto: true }) })),
   )
 
   itCompaction.instance(

@@ -22,7 +22,6 @@ import { ConfigProvider } from "./config/provider"
 import { ConfigReference } from "./config/reference"
 import { ConfigToolOutput } from "./config/tool-output"
 import { ConfigWatcher } from "./config/watcher"
-import { Flag } from "./flag/flag"
 import { ConfigV1 } from "./v1/config/config"
 import { ConfigMigrateV1 } from "./v1/config/migrate"
 
@@ -200,15 +199,7 @@ export const layer = Layer.effect(
     const supplementary = yield* Effect.forEach(directories, loadDirectory).pipe(Effect.orDie)
     // Apply general settings first and more specific settings last:
     // global config, project files, then `.opencode` files.
-    const envCompaction = new ConfigCompaction.Info({
-      ...(Flag.OPENCODE_DISABLE_AUTOCOMPACT ? { auto: false } : {}),
-      ...(Flag.OPENCODE_DISABLE_PRUNE ? { prune: false } : {}),
-    })
-    const envConfig =
-      envCompaction.auto === undefined && envCompaction.prune === undefined
-        ? []
-        : [new Document({ type: "document", info: new Info({ compaction: envCompaction }) })]
-    const configs = [...(supplementary[0] ?? []), ...direct, ...supplementary.slice(1).flat(), ...envConfig]
+    const configs = [...(supplementary[0] ?? []), ...direct, ...supplementary.slice(1).flat()]
     // Rules use the opposite order so a user-global rule can override a
     // repository rule. Statement order inside each file stays unchanged.
     yield* policy.load(
@@ -219,7 +210,9 @@ export const layer = Layer.effect(
     )
 
     return Service.of({
-      entries: Effect.fn("Config.entries")(() => Effect.succeed(configs)),
+      entries: Effect.fn("Config.entries")(function* () {
+        return configs
+      }),
     })
   }),
 )

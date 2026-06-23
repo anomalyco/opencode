@@ -163,7 +163,23 @@ const blockingProcessor = Layer.succeed(
   }),
 )
 
-function makePrompt(input?: { processor?: "blocking" }) {
+const compactProcessor = Layer.succeed(
+  SessionProcessor.Service,
+  SessionProcessor.Service.of({
+    create: (input) =>
+      Effect.succeed({
+        get message() {
+          return input.assistantMessage
+        },
+        updateToolCall: (_toolCallID: string, _update: (part: SessionV1.ToolPart) => SessionV1.ToolPart) =>
+          Effect.sync((): SessionV1.ToolPart | undefined => undefined),
+        completeToolCall: () => Effect.void,
+        process: () => Effect.sync((): SessionProcessor.Result => "compact"),
+      } satisfies SessionProcessor.Handle),
+  }),
+)
+
+function makePrompt(input?: { processor?: "blocking" | "compact" }) {
   const deps = Layer.mergeAll(
     Session.defaultLayer,
     Snapshot.defaultLayer,
@@ -201,12 +217,14 @@ function makePrompt(input?: { processor?: "blocking" }) {
   const proc =
     input?.processor === "blocking"
       ? blockingProcessor
-      : SessionProcessor.layer.pipe(
-          Layer.provide(summary),
-          Layer.provide(Image.defaultLayer),
-          Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
-          Layer.provideMerge(deps),
-        )
+      : input?.processor === "compact"
+        ? compactProcessor
+        : SessionProcessor.layer.pipe(
+            Layer.provide(summary),
+            Layer.provide(Image.defaultLayer),
+            Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
+            Layer.provideMerge(deps),
+          )
   const compact = SessionCompaction.layer.pipe(
     Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
     Layer.provideMerge(proc),
@@ -233,12 +251,13 @@ function makeHttp(input?: { processor?: "blocking" }) {
   return Layer.mergeAll(TestLLMServer.layer, makePrompt(input))
 }
 
-function makeHttpNoLLMServer(input?: { processor?: "blocking" }) {
+function makeHttpNoLLMServer(input?: { processor?: "blocking" | "compact" }) {
   return makePrompt(input)
 }
 
 const it = testEffect(makeHttp())
 const noLLMServer = testEffect(makeHttpNoLLMServer())
+const compactNoLLMServer = testEffect(makeHttpNoLLMServer({ processor: "compact" }))
 const raceNoLLMServer = testEffect(makeHttpNoLLMServer({ processor: "blocking" }))
 const unix = process.platform !== "win32" ? it.instance : it.instance.skip
 const unixNoLLMServer = process.platform !== "win32" ? noLLMServer.instance : noLLMServer.instance.skip
@@ -580,6 +599,39 @@ it.instance("loop stops provider overflow instead of auto-compacting when disabl
     }
     expect(messages.some((message) => message.parts.some((part) => part.type === "compaction"))).toBe(false)
   }),
+)
+
+compactNoLLMServer.instance("loop stops compact result instead of auto-compacting when disabled", () =>
+  Effect.gen(function* () {
+    const { directory } = yield* TestInstance
+    yield* writeConfig(directory, {
+      ...cfg,
+      compaction: { auto: false },
+    })
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({ title: "Pinned" })
+
+    yield* prompt.prompt({
+      sessionID: chat.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "hello" }],
+    })
+
+    const result = yield* prompt.loop({ sessionID: chat.id })
+    const messages = yield* sessions.messages({ sessionID: chat.id })
+
+    expect(result.info.role).toBe("assistant")
+    if (result.info.role === "assistant") {
+      expect(result.info.error?.name).toBe("ContextOverflowError")
+      expect(result.info.finish).toBe("error")
+      expect(result.info.summary).toBeUndefined()
+    }
+    expect(messages.some((message) => message.parts.some((part) => part.type === "compaction"))).toBe(false)
+    expect(messages.some((message) => message.info.role === "assistant" && message.info.summary)).toBe(false)
+  }),
+  30_000,
 )
 
 noLLMServer.instance.skip(

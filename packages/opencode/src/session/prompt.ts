@@ -1414,6 +1414,20 @@ export const layer = Layer.effect(
 
             if (result === "stop") return "break" as const
             if (result === "compact") {
+              const cfg = yield* config.get()
+              if (cfg.compaction?.auto === false) {
+                const existing = handle.message.error
+                const error =
+                  existing ??
+                  new SessionV1.ContextOverflowError({
+                    message: "Input exceeds context window of this model",
+                  }).toObject()
+                handle.message.error = error
+                handle.message.finish = "error"
+                yield* sessions.updateMessage(handle.message)
+                if (!existing) yield* events.publish(Session.Event.Error, { sessionID, error })
+                return "break" as const
+              }
               yield* compaction.create({
                 sessionID,
                 agent: lastUser.agent,
