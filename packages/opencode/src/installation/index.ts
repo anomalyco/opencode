@@ -13,6 +13,7 @@ import { makeRuntime } from "@opencode-ai/core/effect/runtime"
 import semver from "semver"
 import { InstallationChannel, InstallationVersion } from "@opencode-ai/core/installation/version"
 import { NpmConfig } from "@opencode-ai/core/npm-config"
+import type { ProgressCallback, ProgressStage } from "./progress"
 
 export type Method = "curl" | "npm" | "yarn" | "pnpm" | "bun" | "brew" | "scoop" | "choco" | "unknown"
 
@@ -88,7 +89,11 @@ export interface Interface {
   readonly info: () => Effect.Effect<Info>
   readonly method: () => Effect.Effect<Method>
   readonly latest: (method?: Method) => Effect.Effect<string>
-  readonly upgrade: (method: Method, target: string) => Effect.Effect<void, UpgradeFailedError>
+  readonly upgrade: (
+    method: Method,
+    target: string,
+    progressCallback?: ProgressCallback,
+  ) => Effect.Effect<void, UpgradeFailedError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Installation") {}
@@ -155,10 +160,48 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProce
     })
 
     const upgradeCurl = Effect.fnUntraced(
-      function* (target: string) {
-        const response = yield* httpOk.execute(HttpClientRequest.get("https://opencode.ai/install"))
-        const body = yield* response.text
-        const bodyBytes = new TextEncoder().encode(body)
+      function* (target: string, progressCallback?: ProgressCallback) {
+        progressCallback?.({ stage: "checking" })
+
+        const response = yield* httpOk.execute(
+          HttpClientRequest.get("https://opencode.ai/install"),
+        )
+
+        const totalBytes = Number(response.headers.get("content-length") || "0")
+        let downloadedBytes = 0
+        const startTime = Date.now()
+
+        const stream = Stream.fromReadableStream(
+          response.body as unknown as ReadableStream<Uint8Array>,
+        ).pipe(
+          Stream.mapEffect((chunk) =>
+            Effect.sync(() => {
+              downloadedBytes += chunk.length
+              if (totalBytes > 0) {
+                const percentage = (downloadedBytes / totalBytes) * 100
+                const elapsed = (Date.now() - startTime) / 1000
+                const speed = elapsed > 0 ? downloadedBytes / elapsed : 0
+
+                progressCallback?.({
+                  stage: "downloading",
+                  version: target,
+                  downloaded: downloadedBytes,
+                  total: totalBytes,
+                  speed,
+                  percentage,
+                })
+              }
+              return chunk
+            }),
+          ),
+        )
+
+        const chunks = yield* Stream.runCollect(stream)
+        const bodyBytes = Uint8Array.from(chunks.flatMap((chunk) => Array.from(chunk)))
+        const body = new TextDecoder().decode(bodyBytes)
+
+        progressCallback?.({ stage: "installing" })
+
         const shell = yield* upgradeScriptShell()
         const result = yield* appProcess.run(
           ChildProcess.make(shell, [], {
@@ -274,22 +317,27 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProce
         const data = yield* HttpClientResponse.schemaBodyJson(GitHubRelease)(response)
         return data.tag_name.replace(/^v/, "")
       }, Effect.orDie),
-      upgrade: Effect.fn("Installation.upgrade")(function* (m: Method, target: string) {
+      upgrade: Effect.fn("Installation.upgrade")(function* (m: Method, target: string, progressCallback?: ProgressCallback) {
+        progressCallback?.({ stage: "checking" })
         let upgradeResult: { code: number; stdout: string; stderr: string } | undefined
         switch (m) {
           case "curl":
-            upgradeResult = yield* upgradeCurl(target)
+            upgradeResult = yield* upgradeCurl(target, progressCallback)
             break
           case "npm":
+            progressCallback?.({ stage: "installing" })
             upgradeResult = yield* run(["npm", "install", "-g", `opencode-ai@${target}`])
             break
           case "pnpm":
+            progressCallback?.({ stage: "installing" })
             upgradeResult = yield* run(["pnpm", "install", "-g", `opencode-ai@${target}`])
             break
           case "bun":
+            progressCallback?.({ stage: "installing" })
             upgradeResult = yield* run(["bun", "install", "-g", `opencode-ai@${target}`])
             break
           case "brew": {
+            progressCallback?.({ stage: "installing" })
             const formula = yield* getBrewFormula()
             const env = { HOMEBREW_NO_AUTO_UPDATE: "1" }
             if (formula.includes("/")) {
@@ -312,17 +360,21 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProce
             break
           }
           case "choco":
+            progressCallback?.({ stage: "installing" })
             upgradeResult = yield* run(["choco", "upgrade", "opencode", `--version=${target}`, "-y"])
             break
           case "scoop":
+            progressCallback?.({ stage: "installing" })
             upgradeResult = yield* run(["scoop", "install", `opencode@${target}`])
             break
           default:
             return yield* new UpgradeFailedError({ stderr: `Unknown installation method: ${m}` })
         }
         if (!upgradeResult || upgradeResult.code !== 0) {
+          progressCallback?.({ stage: "failed", message: upgradeFailure(m, upgradeResult) })
           return yield* new UpgradeFailedError({ stderr: upgradeFailure(m, upgradeResult) })
         }
+        progressCallback?.({ stage: "complete", version: target })
         yield* Effect.logInfo("upgraded", {
           method: m,
           target,
