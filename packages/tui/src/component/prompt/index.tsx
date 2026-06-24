@@ -528,6 +528,48 @@ export function Prompt(props: PromptProps) {
         },
       },
       {
+        title: "Copy session ID",
+        desc: "Copy the current session ID to clipboard",
+        name: "session.copy-id",
+        category: "Session",
+        slashName: "session-id",
+        enabled: Boolean(props.sessionID),
+        run: async () => {
+          if (!props.sessionID || !clipboard.write) return
+          await clipboard.write(props.sessionID)
+          toast.show({
+            variant: "success",
+            message: `Copied: ${props.sessionID}`,
+            duration: 3000,
+          })
+          dialog.clear()
+        },
+      },
+      {
+        title: "Copy session info",
+        desc: "Copy project path, session title, and session ID to clipboard",
+        name: "session.copy-info",
+        category: "Session",
+        slashName: "session-info",
+        enabled: Boolean(props.sessionID),
+        run: async () => {
+          if (!props.sessionID || !clipboard.write) return
+          const dir =
+            (project.instance.path().worktree === "/" ? undefined : project.instance.path().worktree) ||
+            project.instance.directory() ||
+            ""
+          const session = sync.session.get(props.sessionID)
+          const title = session?.title ?? ""
+          await clipboard.write(`Project ${dir}; Session ${title}; ID ${props.sessionID}`)
+          toast.show({
+            variant: "success",
+            message: "Copied project, session title, and ID to clipboard",
+            duration: 3000,
+          })
+          dialog.clear()
+        },
+      },
+      {
         title: "Warp",
         desc: "Change the workspace for the session",
         name: "workspace.set",
