@@ -8,7 +8,7 @@
     display: inline-flex;
     align-items: center;
     user-select: none;
-    color: var(--text-text-faint);
+    color: var(--v2-text-text-faint);
     font-size: 11px;
     font-style: normal;
     font-weight: 440;
@@ -18,7 +18,7 @@
   }
 
   [data-slot="radio-v2-description"] {
-    color: var(--text-text-faint);
+    color: var(--v2-text-text-faint);
     font-size: 11px;
     font-weight: 440;
     line-height: 1.2;
@@ -32,7 +32,7 @@
   }
 
   [data-slot="radio-v2-error"] {
-    color: var(--state-fg-danger);
+    color: var(--v2-state-fg-danger);
     font-size: 12px;
     font-weight: var(--font-weight-regular);
     line-height: var(--line-height-normal);
@@ -86,9 +86,9 @@
 
     border-radius: 9999px;
     border: none;
-    box-shadow: inset 0 0 0 0.5px var(--border-border-strong);
+    box-shadow: inset 0 0 0 0.5px var(--v2-border-border-strong);
 
-    background: linear-gradient(180deg, var(--alpha-light-6) 0%, var(--alpha-light-0) 100%), var(--background-bg-base);
+    background: linear-gradient(180deg, var(--v2-alpha-light-6) 0%, var(--v2-alpha-light-0) 100%), var(--v2-background-bg-base);
     transition:
       background 170ms ease-out,
       opacity 170ms ease-out,
@@ -99,15 +99,15 @@
     [data-slot="radio-v2-item-input"]:focus-visible
     ~ [data-slot="radio-v2-item-control-stack"]
     [data-slot="radio-v2-item-control"] {
-    outline: 2px solid var(--border-border-focus);
+    outline: 2px solid var(--v2-border-border-focus);
     outline-offset: 1px;
   }
 
   &:where(:hover):where(:not([data-disabled], [data-readonly])):where(:not([data-checked]))
     [data-slot="radio-v2-item-control"] {
     background:
-      linear-gradient(0deg, var(--overlay-simple-overlay-hover), var(--overlay-simple-overlay-hover)),
-      linear-gradient(180deg, var(--alpha-light-6) 0%, var(--alpha-light-0) 100%), var(--background-bg-base);
+      linear-gradient(0deg, var(--v2-overlay-simple-overlay-hover), var(--v2-overlay-simple-overlay-hover)),
+      linear-gradient(180deg, var(--v2-alpha-light-6) 0%, var(--v2-alpha-light-0) 100%), var(--v2-background-bg-base);
   }
 
   &:where([data-disabled]) [data-slot="radio-v2-item-control"] {
@@ -116,14 +116,14 @@
 
   &:where([data-checked]) [data-slot="radio-v2-item-control"] {
     background:
-      linear-gradient(180deg, var(--alpha-light-20) 0%, var(--alpha-light-0) 100%), var(--background-bg-accent);
+      linear-gradient(180deg, var(--v2-alpha-light-20) 0%, var(--v2-alpha-light-0) 100%), var(--v2-background-bg-accent);
   }
 
   &:where([data-checked]):where(:hover):where(:not([data-disabled], [data-readonly]))
     [data-slot="radio-v2-item-control"] {
     background:
-      linear-gradient(0deg, var(--overlay-simple-overlay-contrast-hover), var(--overlay-simple-overlay-contrast-hover)),
-      linear-gradient(180deg, var(--alpha-light-20) 0%, var(--alpha-light-0) 100%), var(--background-bg-accent);
+      linear-gradient(0deg, var(--v2-overlay-simple-overlay-contrast-hover), var(--v2-overlay-simple-overlay-contrast-hover)),
+      linear-gradient(180deg, var(--v2-alpha-light-20) 0%, var(--v2-alpha-light-0) 100%), var(--v2-background-bg-accent);
   }
 
   &:where([data-checked][data-disabled]) [data-slot="radio-v2-item-control"] {
@@ -131,8 +131,8 @@
   }
 
   &:where([data-invalid]):where(:not([data-checked])) [data-slot="radio-v2-item-control"] {
-    background: var(--state-bg-danger);
-    box-shadow: inset 0 0 0 0.5px #b82d35;
+    background: var(--v2-state-bg-danger);
+    box-shadow: inset 0 0 0 0.5px var(--v2-state-border-danger);
   }
 
   [data-slot="radio-v2-item-indicator"] {
@@ -144,10 +144,10 @@
     top: calc(50% - 6px / 2);
     border-radius: 9999px;
 
-    background: var(--grey-300);
+    background: var(--v2-grey-300);
     border: none;
     box-shadow:
-      inset 0 0 0 0.5px var(--overlay-gradient-depth-overlay-depth-top),
+      inset 0 0 0 0.5px var(--v2-overlay-gradient-depth-overlay-depth-top),
       0px 0.5px 0.5px rgba(0, 0, 0, 0.4);
   }
 
@@ -174,14 +174,14 @@
     display: inline-flex;
     align-items: center;
     user-select: none;
-    color: var(--text-text-base);
+    color: var(--v2-text-text-base);
     font-size: 13px;
     line-height: 20px;
     letter-spacing: -0.04px;
   }
 
   [data-slot="radio-v2-item-description"] {
-    color: var(--text-text-muted);
+    color: var(--v2-text-text-muted);
     font-size: 11px;
     font-weight: 440;
     line-height: 1;
