@@ -7,6 +7,8 @@ import { assertExternalDirectoryEffect } from "./external-directory"
 import DESCRIPTION from "./glob.txt"
 import * as Tool from "./tool"
 
+const GLOB_TIMEOUT = "30 seconds"
+
 export const Parameters = Schema.Struct({
   pattern: Schema.String.annotate({ description: "The glob pattern to match files against" }),
   path: Schema.optional(Schema.String).annotate({
@@ -47,7 +49,12 @@ export const GlobTool = Tool.define(
           })
 
           const limit = 100
-          const files = yield* ripgrep.glob({ cwd: search, pattern: params.pattern, limit })
+          const files = yield* ripgrep.glob({ cwd: search, pattern: params.pattern, limit }).pipe(
+            Effect.timeoutOrElse({
+              duration: GLOB_TIMEOUT,
+              orElse: () => Effect.fail(new Error(`Glob search timed out after ${GLOB_TIMEOUT}`)),
+            }),
+          )
           const truncated = files.length === limit
 
           const output = []

@@ -1,22 +1,25 @@
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { describe, expect } from "bun:test"
 import path from "path"
-import { Cause, Effect, Exit, Layer } from "effect"
+import { Cause, Duration, Effect, Exit, Fiber, Layer } from "effect"
+import * as TestClock from "effect/testing/TestClock"
 import { GlobTool } from "../../src/tool/glob"
 import { SessionID, MessageID } from "../../src/session/schema"
+import { InstanceRef } from "../../src/effect/instance-ref"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Global } from "@opencode-ai/core/global"
 import { Truncate } from "@/tool/truncate"
 import { Agent } from "../../src/agent/agent"
-import { TestInstance, tmpdirScoped } from "../fixture/fixture"
+import { TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { Config } from "@/config/config"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Git } from "@/git"
 import { Filesystem } from "@/util/filesystem"
 import { Permission } from "../../src/permission"
+import { ProjectV2 } from "@opencode-ai/core/project"
 import type * as Tool from "../../src/tool/tool"
 
 const toolLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
@@ -90,6 +93,49 @@ const git = Effect.fn("GlobToolTest.git")(function* (cwd: string, args: string[]
 })
 
 describe("tool.glob", () => {
+  it.effect("times out slow ripgrep searches", () =>
+    Effect.gen(function* () {
+      const directory = path.join(import.meta.dir, "..", "fixture")
+      const info = yield* GlobTool.pipe(
+        Effect.provide(
+          Layer.mock(Ripgrep.Service, {
+            glob: () => Effect.never,
+          }),
+        ),
+      )
+      const glob = yield* info.init()
+      const fiber = yield* glob
+        .execute(
+          {
+            pattern: "**/*.ts",
+            path: directory,
+          },
+          ctx,
+        )
+        .pipe(
+          Effect.provideService(InstanceRef, {
+            directory,
+            worktree: directory,
+            project: {
+              id: ProjectV2.ID.global,
+              worktree: directory,
+              time: { created: 0, updated: 0 },
+              sandboxes: [],
+            },
+          }),
+          Effect.forkChild,
+        )
+
+      yield* TestClock.adjust(Duration.seconds(30))
+      const exit = yield* Fiber.await(fiber)
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) {
+        const err = Cause.squash(exit.cause)
+        expect(err instanceof Error ? err.message : String(err)).toContain("Glob search timed out after 30 seconds")
+      }
+    }),
+  )
+
   it.instance("matches files from a directory path", () =>
     Effect.gen(function* () {
       const test = yield* TestInstance
