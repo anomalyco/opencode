@@ -1348,7 +1348,7 @@ export default function LegacyLayout(props: ParentProps) {
       return
     }
 
-    navigateWithSidebarReset(`/${base64Encode(root)}/session`)
+    navigateWithSidebarReset(`/${base64Encode(directory)}/session`)
   }
 
   function navigateToSession(session: Session | undefined) {
