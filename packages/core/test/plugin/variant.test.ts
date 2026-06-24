@@ -23,13 +23,7 @@ const connections = Credential.defaultLayer.pipe(Layer.fresh)
 const integrations = Integration.locationLayer.pipe(Layer.provide(events), Layer.provide(connections))
 const catalog = Catalog.layer.pipe(
   Layer.provide(
-    Layer.mergeAll(
-      events,
-      locationLayer,
-      Policy.layer.pipe(Layer.provide(locationLayer)),
-      connections,
-      integrations,
-    ),
+    Layer.mergeAll(events, locationLayer, Policy.layer.pipe(Layer.provide(locationLayer)), connections, integrations),
   ),
 )
 const it = testEffect(
@@ -71,9 +65,7 @@ describe("VariantPlugin", () => {
             type: "aisdk",
             package: "@ai-sdk/openai-compatible",
           }
-          model.variants = [
-            { id: ModelV2.VariantID.make("high"), headers: { custom: "true" }, body: {} },
-          ]
+          model.variants = [{ id: ModelV2.VariantID.make("high"), headers: { custom: "true" }, body: {} }]
         })
       })
       yield* VariantPlugin.Plugin.effect(host({ catalog: catalogHost(service) }))
