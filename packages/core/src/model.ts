@@ -1,11 +1,12 @@
 import { Schema, Types } from "effect"
+import { Model } from "@opencode-ai/schema/model"
 import { ProviderV2 } from "./provider"
 import { ModelRequest } from "./model-request"
 
-export const ID = Schema.String.pipe(Schema.brand("ModelV2.ID"))
+export const ID = Model.ID
 export type ID = typeof ID.Type
 
-export const VariantID = Schema.String.pipe(Schema.brand("VariantID"))
+export const VariantID = Model.VariantID
 export type VariantID = typeof VariantID.Type
 
 // Grouping of models, eg claude opus, claude sonnet
@@ -33,11 +34,7 @@ export const Cost = Schema.Struct({
   }),
 })
 
-export const Ref = Schema.Struct({
-  id: ID,
-  providerID: ProviderV2.ID,
-  variant: VariantID.pipe(Schema.optional),
-})
+export const Ref = Model.Ref
 export type Ref = typeof Ref.Type
 
 export const Api = Schema.Union([

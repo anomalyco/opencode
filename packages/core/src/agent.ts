@@ -1,13 +1,14 @@
 export * as AgentV2 from "./agent"
 
-import { Array, Context, Effect, Layer, Schema, Scope, Types } from "effect"
+import { Array, Context, Effect, Layer, Schema, Types } from "effect"
+import { Agent } from "@opencode-ai/schema/agent"
 import { ModelV2 } from "./model"
 import { PermissionSchema } from "./permission/schema"
 import { ProviderV2 } from "./provider"
 import { PositiveInt } from "./schema"
 import { State } from "./state"
 
-export const ID = Schema.String.pipe(Schema.brand("AgentV2.ID"))
+export const ID = Agent.ID
 export type ID = typeof ID.Type
 export const defaultID = ID.make("build")
 

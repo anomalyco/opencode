@@ -1,26 +1,10 @@
 export * as ProviderV2 from "./provider"
 
-import { withStatics } from "./schema"
 import { IntegrationSchema } from "./integration/schema"
 import { Schema, Types } from "effect"
+import { Provider } from "@opencode-ai/schema/provider"
 
-export const ID = Schema.String.pipe(
-  Schema.brand("ProviderV2.ID"),
-  withStatics((schema) => ({
-    // Well-known providers
-    opencode: schema.make("opencode"),
-    anthropic: schema.make("anthropic"),
-    openai: schema.make("openai"),
-    google: schema.make("google"),
-    googleVertex: schema.make("google-vertex"),
-    githubCopilot: schema.make("github-copilot"),
-    amazonBedrock: schema.make("amazon-bedrock"),
-    azure: schema.make("azure"),
-    openrouter: schema.make("openrouter"),
-    mistral: schema.make("mistral"),
-    gitlab: schema.make("gitlab"),
-  })),
-)
+export const ID = Provider.ID
 export type ID = typeof ID.Type
 
 export const AISDK = Schema.Struct({
