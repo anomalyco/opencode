@@ -419,22 +419,6 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                     if (next) tabs.select(next)
                   },
                 },
-                ...Array.from({ length: 9 }, (_, i) => {
-                  const index = i
-                  const number = index + 1
-                  return {
-                    id: `tab.${number}`,
-                    category: "tab",
-                    title: "",
-                    keybind: `mod+${number}`,
-                    disabled: layout.projects.list().length <= index,
-                    hidden: true,
-                    onSelect: () => {
-                      const tab = tabsStore[index]
-                      if (tab) tabs.select(tab)
-                    },
-                  }
-                }),
               ].filter((v) => v !== undefined)
             })
 
@@ -508,6 +492,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                             return (
                               <>
                                 {divider()}
+                                <TabShortcut index={i()} onSelect={() => tabs.select(tab)} />
                                 <DraftTabItem
                                   ref={ref}
                                   href={tabHref(tab)}
@@ -543,22 +528,25 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                               {divider()}
                               <Show when={session()}>
                                 {(session) => (
-                                  <TabNavItem
-                                    ref={ref}
-                                    href={tabHref(tab)}
-                                    server={tab.server}
-                                    sessionId={tab.sessionId}
-                                    session={session()}
-                                    onNavigate={() => {
-                                      tabs.select(tab)
+                                  <>
+                                    <TabShortcut index={i()} onSelect={() => tabs.select(tab)} />
+                                    <TabNavItem
+                                      ref={ref}
+                                      href={tabHref(tab)}
+                                      server={tab.server}
+                                      sessionId={tab.sessionId}
+                                      session={session()}
+                                      onNavigate={() => {
+                                        tabs.select(tab)
 
-                                      ref.scrollIntoView({ behavior: "instant" })
-                                    }}
-                                    onClose={() => tabsStoreActions.removeTab(i())}
-                                    active={currentTab() === tab}
-                                    activeServer={tab.server === server.key}
-                                    forceTruncate={tabsAreOverflowing()}
-                                  />
+                                        ref.scrollIntoView({ behavior: "instant" })
+                                      }}
+                                      onClose={() => tabsStoreActions.removeTab(i())}
+                                      active={currentTab() === tab}
+                                      activeServer={tab.server === server.key}
+                                      forceTruncate={tabsAreOverflowing()}
+                                    />
+                                  </>
                                 )}
                               </Show>
                             </>
@@ -833,6 +821,28 @@ function TitlebarUpdateIconButton(props: { state: TitlebarUpdatePillState }) {
       </button>
     </div>
   )
+}
+
+function TabShortcut(props: { index: number; onSelect: () => void }) {
+  const command = useCommand()
+
+  command.register(() => {
+    const number = props.index + 1
+    if (number > 9) return []
+
+    return [
+      {
+        id: `tab.${number}`,
+        category: "tab",
+        title: "",
+        keybind: `mod+${number}`,
+        hidden: true,
+        onSelect: () => props.onSelect(),
+      },
+    ]
+  })
+
+  return null
 }
 
 function TabNavItem(props: {
