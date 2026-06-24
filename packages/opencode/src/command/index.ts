@@ -1,6 +1,5 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { InstanceState } from "@/effect/instance-state"
-import { EffectBridge } from "@/effect/bridge"
 import type { InstanceContext } from "@/project/instance-context"
 import { SessionID, MessageID } from "@/session/schema"
 import { Effect, Layer, Context, Schema } from "effect"
@@ -11,8 +10,15 @@ import { EventV2 } from "@opencode-ai/core/event"
 import PROMPT_INITIALIZE from "./template/initialize.txt"
 import PROMPT_REVIEW from "./template/review.txt"
 
+type McpPromptInfo = {
+  client: string
+  name: string
+  arguments: string[]
+}
+
 type State = {
   commands: Record<string, Info>
+  mcpPrompts: Record<string, McpPromptInfo>
 }
 
 export const Event = {
@@ -59,6 +65,7 @@ export const Default = {
 export interface Interface {
   readonly get: (name: string) => Effect.Effect<Info | undefined>
   readonly list: () => Effect.Effect<Info[]>
+  readonly template: (name: string, args: string[]) => Effect.Effect<string>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Command") {}
@@ -72,8 +79,8 @@ export const layer = Layer.effect(
 
     const init = Effect.fn("Command.state")(function* (ctx: InstanceContext) {
       const cfg = yield* config.get()
-      const bridge = yield* EffectBridge.make()
       const commands: Record<string, Info> = {}
+      const mcpPrompts: Record<string, McpPromptInfo> = {}
 
       commands[Default.INIT] = {
         name: Default.INIT,
@@ -111,32 +118,20 @@ export const layer = Layer.effect(
       }
 
       for (const [name, prompt] of Object.entries(yield* mcp.prompts())) {
+        const argNames = prompt.arguments?.map((argument) => argument.name) ?? []
         commands[name] = {
           name,
           source: "mcp",
           description: prompt.description,
+          // Resolved at invocation time (SessionPrompt.command) by calling
+          // getPrompt with the user-provided arguments. Doing it here would send
+          // literal $N placeholders to prompts/get, failing type validation.
           get template() {
-            return bridge.promise(
-              mcp
-                .getPrompt(
-                  prompt.client,
-                  prompt.name,
-                  prompt.arguments
-                    ? Object.fromEntries(prompt.arguments.map((argument, i) => [argument.name, `$${i + 1}`]))
-                    : {},
-                )
-                .pipe(
-                  Effect.map(
-                    (template) =>
-                      template?.messages
-                        .map((message) => (message.content.type === "text" ? message.content.text : ""))
-                        .join("\n") || "",
-                  ),
-                ),
-            )
+            return ""
           },
-          hints: prompt.arguments?.map((_, i) => `$${i + 1}`) ?? [],
+          hints: argNames.map((_, i) => `$${i + 1}`),
         }
+        mcpPrompts[name] = { client: prompt.client, name: prompt.name, arguments: argNames }
       }
 
       for (const item of yield* skill.all()) {
@@ -154,6 +149,7 @@ export const layer = Layer.effect(
 
       return {
         commands,
+        mcpPrompts,
       }
     })
 
@@ -169,7 +165,25 @@ export const layer = Layer.effect(
       return Object.values(s.commands)
     })
 
-    return Service.of({ get, list })
+    const template = Effect.fn("Command.template")(function* (name: string, args: string[]) {
+      const s = yield* InstanceState.get(state)
+      const mcpPrompt = s.mcpPrompts[name]
+      if (mcpPrompt) {
+        const argumentsMap = Object.fromEntries(
+          mcpPrompt.arguments.slice(0, args.length).map((argName, i) => [argName, args[i]] as const),
+        )
+        const result = yield* mcp.getPrompt(mcpPrompt.client, mcpPrompt.name, argumentsMap)
+        return (
+          result?.messages
+            .map((message) => (message.content.type === "text" ? message.content.text : ""))
+            .join("\n") ?? ""
+        )
+      }
+      const cmd = s.commands[name]
+      return cmd ? yield* Effect.promise(async () => cmd.template) : ""
+    })
+
+    return Service.of({ get, list, template })
   }),
 )
 
