@@ -17,6 +17,7 @@ import { type LocalProject } from "@/context/layout"
 import { loadSessionsQuery, useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { NewSessionItem, SessionItem, SessionSkeleton } from "./sidebar-items"
+import { MonitorSidebarItem } from "./sidebar-monitor-item"
 import { sortedRootSessions, workspaceKey } from "./helpers"
 import { useQuery } from "@tanstack/solid-query"
 
@@ -252,6 +253,12 @@ const WorkspaceSessionList = (props: {
         clearHoverProjectSoon={props.ctx.clearHoverProjectSoon}
       />
     </Show>
+    <MonitorSidebarItem
+      slug={props.slug()}
+      mobile={props.mobile}
+      sidebarExpanded={props.ctx.sidebarExpanded}
+      clearHoverProjectSoon={props.ctx.clearHoverProjectSoon}
+    />
     <Show when={props.loading()}>
       <SessionSkeleton />
     </Show>

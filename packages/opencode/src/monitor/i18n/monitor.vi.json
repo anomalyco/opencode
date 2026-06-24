@@ -1,0 +1,102 @@
+{
+  "monitor": {
+    "title": "Giám sát",
+    "tab": {
+      "kanban": "Kanban",
+      "health": "Sức khỏe",
+      "workflows": "Luồng công việc",
+      "alerts": "Cảnh báo",
+      "channels": "Kênh",
+      "events": "Lịch sử"
+    },
+    "kanban": {
+      "working": "Đang chạy",
+      "waiting": "Chờ",
+      "completed": "Xong",
+      "error": "Lỗi",
+      "abandoned": "Bỏ dở",
+      "view_sessions": "Session",
+      "view_agents": "Agent",
+      "empty": "Chưa có gì.",
+      "tooltip": {
+        "waiting": "Đặt khi session đang đợi prompt (mới mở, giữa các turn, hoặc chờ xin quyền).",
+        "abandoned": "Tự đánh dấu khi {{minutes}} phút không có sự kiện."
+      }
+    },
+    "health": {
+      "title": "Sức khỏe tổng hợp",
+      "formula": "0.40 × thành công + 0.25 × cache hit + 0.25 × (100 − lỗi) + 0.10 × (100 − heap)",
+      "components": {
+        "success_rate": "Tỉ lệ thành công",
+        "cache_hit_rate": "Cache hit",
+        "error_rate": "Tỉ lệ lỗi",
+        "heap_pct": "Heap"
+      }
+    },
+    "workflows": {
+      "title": "Luồng công việc",
+      "status_active": "Đang chạy",
+      "status_completed": "Đã xong",
+      "status_all": "Tất cả"
+    },
+    "alerts": {
+      "title": "Cảnh báo",
+      "create": "Tạo rule",
+      "types": {
+        "event-pattern": "Khớp sự kiện",
+        "inactivity": "Im lặng",
+        "stuck-agent": "Agent kẹt",
+        "token-threshold": "Ngưỡng token"
+      },
+      "fields": {
+        "name": "Tên",
+        "cooldown": "Cooldown (giây)",
+        "enabled": "Bật"
+      },
+      "activity": "Hoạt động",
+      "acked": "Đã xem",
+      "acked_all": "Xem tất cả",
+      "only_unacked": "Chỉ hiện chưa xem"
+    },
+    "channels": {
+      "title": "Kênh",
+      "create": "Thêm kênh",
+      "test": "Gửi thử",
+      "providers": {
+        "slack": "Slack",
+        "discord": "Discord",
+        "teams": "Microsoft Teams",
+        "google-chat": "Google Chat",
+        "mattermost": "Mattermost",
+        "rocketchat": "Rocket.Chat",
+        "telegram": "Telegram",
+        "pagerduty": "PagerDuty",
+        "opsgenie": "Opsgenie",
+        "splunk-oncall": "Splunk On-Call",
+        "zapier": "Zapier",
+        "make": "Make",
+        "n8n": "n8n",
+        "pipedream": "Pipedream",
+        "generic": "Tùy biến"
+      }
+    },
+    "tabby": {
+      "panel_title": "Tabby",
+      "live": "{{n}} đang chạy",
+      "errored": "{{n}} lỗi",
+      "ask": "Hỏi",
+      "ask_placeholder": "Có gì đang chạy? Có lỗi không?",
+      "mute": "Tắt bong bóng",
+      "clear_alerts": "Xóa cảnh báo"
+    },
+    "common": {
+      "loading": "Đang tải…",
+      "empty": "Chưa có dữ liệu.",
+      "refresh": "Làm mới",
+      "save": "Lưu",
+      "cancel": "Huỷ",
+      "delete": "Xoá",
+      "view_session": "Mở session →"
+    }
+  }
+}

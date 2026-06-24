@@ -47,6 +47,8 @@ import { Installation } from "@/installation"
 import { ShareNext } from "@/share"
 import { SessionShare } from "@/share"
 import { Npm } from "@/npm"
+import { Monitor } from "@/monitor"
+import { MonitorEngine } from "@/monitor/engine"
 import { memoMap } from "./memo-map"
 
 export const AppLayer = Layer.mergeAll(
@@ -95,6 +97,8 @@ export const AppLayer = Layer.mergeAll(
   Installation.defaultLayer,
   ShareNext.defaultLayer,
   SessionShare.defaultLayer,
+  Monitor.defaultLayer,
+  MonitorEngine.defaultLayer,
 ).pipe(Layer.provideMerge(Observability.layer))
 
 const rt = ManagedRuntime.make(AppLayer, { memoMap })

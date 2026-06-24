@@ -10,6 +10,8 @@ import { Vcs } from "@/project"
 import { Snapshot } from "@/snapshot"
 import { Bus } from "@/bus"
 import { Config } from "@/config"
+import { Monitor } from "@/monitor"
+import { MonitorEngine } from "@/monitor/engine"
 import * as Observability from "./observability"
 import { memoMap } from "./memo-map"
 
@@ -24,6 +26,8 @@ export const BootstrapLayer = Layer.mergeAll(
   Vcs.defaultLayer,
   Snapshot.defaultLayer,
   Bus.defaultLayer,
+  Monitor.defaultLayer,
+  MonitorEngine.defaultLayer,
 ).pipe(Layer.provide(Observability.layer))
 
 export const BootstrapRuntime = ManagedRuntime.make(BootstrapLayer, { memoMap })

@@ -1,0 +1,102 @@
+{
+  "monitor": {
+    "title": "Monitor",
+    "tab": {
+      "kanban": "Kanban",
+      "health": "Health",
+      "workflows": "Workflows",
+      "alerts": "Alerts",
+      "channels": "Channels",
+      "events": "Events"
+    },
+    "kanban": {
+      "working": "Working",
+      "waiting": "Waiting",
+      "completed": "Completed",
+      "error": "Error",
+      "abandoned": "Abandoned",
+      "view_sessions": "Sessions",
+      "view_agents": "Agents",
+      "empty": "Nothing here yet.",
+      "tooltip": {
+        "waiting": "Set when a session is sitting at a prompt (fresh session, between turns, or blocked on a permission notification).",
+        "abandoned": "Auto-marked when no event has been received for {{minutes}} minutes."
+      }
+    },
+    "health": {
+      "title": "Composite health",
+      "formula": "0.40 × success + 0.25 × cache hit + 0.25 × (100 − errors) + 0.10 × (100 − heap)",
+      "components": {
+        "success_rate": "Success rate",
+        "cache_hit_rate": "Cache hit",
+        "error_rate": "Error rate",
+        "heap_pct": "Heap usage"
+      }
+    },
+    "workflows": {
+      "title": "Workflows",
+      "status_active": "Active only",
+      "status_completed": "Completed",
+      "status_all": "All"
+    },
+    "alerts": {
+      "title": "Alerts",
+      "create": "Create rule",
+      "types": {
+        "event-pattern": "Event pattern",
+        "inactivity": "Inactivity",
+        "stuck-agent": "Stuck agent",
+        "token-threshold": "Token threshold"
+      },
+      "fields": {
+        "name": "Name",
+        "cooldown": "Cooldown (s)",
+        "enabled": "Enabled"
+      },
+      "activity": "Activity",
+      "acked": "Acknowledge",
+      "acked_all": "Acknowledge all",
+      "only_unacked": "Show unacknowledged only"
+    },
+    "channels": {
+      "title": "Channels",
+      "create": "Add channel",
+      "test": "Send test",
+      "providers": {
+        "slack": "Slack",
+        "discord": "Discord",
+        "teams": "Microsoft Teams",
+        "google-chat": "Google Chat",
+        "mattermost": "Mattermost",
+        "rocketchat": "Rocket.Chat",
+        "telegram": "Telegram",
+        "pagerduty": "PagerDuty",
+        "opsgenie": "Opsgenie",
+        "splunk-oncall": "Splunk On-Call",
+        "zapier": "Zapier",
+        "make": "Make",
+        "n8n": "n8n",
+        "pipedream": "Pipedream",
+        "generic": "Generic"
+      }
+    },
+    "tabby": {
+      "panel_title": "Tabby",
+      "live": "{{n}} live",
+      "errored": "{{n}} errored",
+      "ask": "Ask",
+      "ask_placeholder": "What's running? Any errors?",
+      "mute": "Mute bubbles",
+      "clear_alerts": "Clear alerts"
+    },
+    "common": {
+      "loading": "Loading…",
+      "empty": "No data yet.",
+      "refresh": "Refresh",
+      "save": "Save",
+      "cancel": "Cancel",
+      "delete": "Delete",
+      "view_session": "View session →"
+    }
+  }
+}

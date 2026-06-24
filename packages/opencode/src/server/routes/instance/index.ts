@@ -28,6 +28,7 @@ import { EventRoutes } from "./event"
 import { SyncRoutes } from "./sync"
 import { InstanceMiddleware } from "./middleware"
 import { jsonRequest } from "./trace"
+import { MonitorRoutes } from "@/monitor/routes"
 
 export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
   const app = new Hono()
@@ -64,6 +65,7 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
     .route("/", EventRoutes())
     .route("/mcp", McpRoutes())
     .route("/tui", TuiRoutes())
+    .route("/monitor", MonitorRoutes)
     .post(
       "/instance/dispose",
       describeRoute({

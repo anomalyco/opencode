@@ -1,0 +1,102 @@
+{
+  "monitor": {
+    "title": "监控",
+    "tab": {
+      "kanban": "看板",
+      "health": "健康度",
+      "workflows": "工作流",
+      "alerts": "告警",
+      "channels": "通知渠道",
+      "events": "告警记录"
+    },
+    "kanban": {
+      "working": "运行中",
+      "waiting": "等待中",
+      "completed": "已完成",
+      "error": "出错",
+      "abandoned": "已弃置",
+      "view_sessions": "会话",
+      "view_agents": "代理",
+      "empty": "暂无内容。",
+      "tooltip": {
+        "waiting": "会话处于提示符等待状态时设置(新会话、回合间、或等待权限确认)。",
+        "abandoned": "{{minutes}} 分钟无事件时自动标记。"
+      }
+    },
+    "health": {
+      "title": "综合健康度",
+      "formula": "0.40 × 成功率 + 0.25 × 缓存命中 + 0.25 × (100 − 错误率) + 0.10 × (100 − 堆占用)",
+      "components": {
+        "success_rate": "成功率",
+        "cache_hit_rate": "缓存命中",
+        "error_rate": "错误率",
+        "heap_pct": "堆占用"
+      }
+    },
+    "workflows": {
+      "title": "工作流",
+      "status_active": "仅进行中",
+      "status_completed": "已完成",
+      "status_all": "全部"
+    },
+    "alerts": {
+      "title": "告警",
+      "create": "新建规则",
+      "types": {
+        "event-pattern": "事件匹配",
+        "inactivity": "无活动",
+        "stuck-agent": "代理卡住",
+        "token-threshold": "Token 阈值"
+      },
+      "fields": {
+        "name": "名称",
+        "cooldown": "冷却(秒)",
+        "enabled": "启用"
+      },
+      "activity": "告警记录",
+      "acked": "确认",
+      "acked_all": "全部确认",
+      "only_unacked": "仅显示未确认"
+    },
+    "channels": {
+      "title": "通知渠道",
+      "create": "添加渠道",
+      "test": "发送测试",
+      "providers": {
+        "slack": "Slack",
+        "discord": "Discord",
+        "teams": "Microsoft Teams",
+        "google-chat": "Google Chat",
+        "mattermost": "Mattermost",
+        "rocketchat": "Rocket.Chat",
+        "telegram": "Telegram",
+        "pagerduty": "PagerDuty",
+        "opsgenie": "Opsgenie",
+        "splunk-oncall": "Splunk On-Call",
+        "zapier": "Zapier",
+        "make": "Make",
+        "n8n": "n8n",
+        "pipedream": "Pipedream",
+        "generic": "自定义"
+      }
+    },
+    "tabby": {
+      "panel_title": "Tabby",
+      "live": "{{n}} 运行中",
+      "errored": "{{n}} 出错",
+      "ask": "问",
+      "ask_placeholder": "现在有什么在跑?有错误吗?",
+      "mute": "静音气泡",
+      "clear_alerts": "清除告警"
+    },
+    "common": {
+      "loading": "加载中…",
+      "empty": "暂无数据。",
+      "refresh": "刷新",
+      "save": "保存",
+      "cancel": "取消",
+      "delete": "删除",
+      "view_session": "查看会话 →"
+    }
+  }
+}

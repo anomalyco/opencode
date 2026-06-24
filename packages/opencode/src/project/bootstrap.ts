@@ -11,6 +11,8 @@ import { Instance } from "./instance"
 import { Log } from "@/util"
 import { FileWatcher } from "@/file/watcher"
 import { ShareNext } from "@/share"
+import { Service as MonitorService } from "@/monitor/service"
+import { Service as MonitorEngineService } from "@/monitor/engine"
 import * as Effect from "effect/Effect"
 import { Config } from "@/config"
 
@@ -20,6 +22,9 @@ export const InstanceBootstrap = Effect.gen(function* () {
   yield* Config.Service.use((svc) => svc.get())
   // Plugin can mutate config so it has to be initialized before anything else.
   yield* Plugin.Service.use((svc) => svc.init())
+  yield* Effect.forkDetach(MonitorService.use((i) => i.init()))
+yield* Effect.forkDetach(MonitorEngineService.use((i) => i.init()))
+
   yield* Effect.all(
     [
       LSP.Service,
