@@ -42,7 +42,7 @@ export function provider(model: Provider.Model) {
 export interface Interface {
   readonly environment: (model: Provider.Model) => Effect.Effect<string[]>
   readonly skills: (agent: Agent.Info) => Effect.Effect<string | undefined>
-  readonly mcp: (agent: Agent.Info) => Effect.Effect<string[]>
+  readonly mcp: (agent: Agent.Info) => Effect.Effect<string | undefined>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SystemPrompt") {}
@@ -108,15 +108,27 @@ export const layer = Layer.effect(
       }),
 
       mcp: Effect.fn("SystemPrompt.mcp")(function* (agent: Agent.Info) {
-        return (yield* mcp.instructions())
-          .filter((item) => {
-            if (item.tools.length === 0) return false
-            return Permission.disabled(item.tools, agent.permission).size < item.tools.length
-          })
-          .map(
-            (item) =>
-              `Instructions from: MCP server ${item.name}\nThese instructions apply to MCP tools whose names start with \`mcp__${McpCatalog.sanitize(item.name)}__\`, and to prompts/resources from this MCP server.\n\n${item.instructions}`,
-          )
+        const available = (yield* mcp.instructions()).filter((item) => {
+          if (item.tools.length === 0) return false
+          return Permission.disabled(item.tools, agent.permission).size < item.tools.length
+        })
+        if (available.length === 0) return
+
+        return [
+          "MCP servers may provide instructions for using their tools, prompts, and resources.",
+          "Each entry applies to tools matching its tool prefix and to prompts and resources from that server.",
+          "<mcp_server_instructions>",
+          ...available.flatMap((item) => [
+            "  <mcp_server>",
+            `    <name>${item.name}</name>`,
+            `    <tool_prefix>mcp__${McpCatalog.sanitize(item.name)}__</tool_prefix>`,
+            "    <instructions>",
+            ...item.instructions.split("\n").map((line) => `      ${line}`),
+            "    </instructions>",
+            "  </mcp_server>",
+          ]),
+          "</mcp_server_instructions>",
+        ].join("\n")
       }),
     })
   }),

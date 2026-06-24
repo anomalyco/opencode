@@ -545,8 +545,8 @@ withMcpInstructions.instance("loop includes MCP instructions in model system con
 
     const hits = yield* llm.hits
     const body = JSON.stringify(hits[0]?.body)
-    expect(body).toContain("Instructions from: MCP server guide-server")
-    expect(body).toContain("mcp__guide-server__")
+    expect(body).toContain("<name>guide-server</name>")
+    expect(body).toContain("<tool_prefix>mcp__guide-server__</tool_prefix>")
     expect(body).toContain("Use lookup before mutate.")
     yield* Fiber.interrupt(fiber)
   }),

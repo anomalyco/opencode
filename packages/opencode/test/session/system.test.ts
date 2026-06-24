@@ -105,14 +105,21 @@ describe("session.system", () => {
         permission: Permission.fromConfig({ "mcp__guide-server__mutate": "deny" }),
       })
 
-      expect(output).toEqual([
+      expect(output).toBe(
         [
-          "Instructions from: MCP server guide-server",
-          "These instructions apply to MCP tools whose names start with `mcp__guide-server__`, and to prompts/resources from this MCP server.",
-          "",
-          "Use lookup before mutate.",
+          "MCP servers may provide instructions for using their tools, prompts, and resources.",
+          "Each entry applies to tools matching its tool prefix and to prompts and resources from that server.",
+          "<mcp_server_instructions>",
+          "  <mcp_server>",
+          "    <name>guide-server</name>",
+          "    <tool_prefix>mcp__guide-server__</tool_prefix>",
+          "    <instructions>",
+          "      Use lookup before mutate.",
+          "    </instructions>",
+          "  </mcp_server>",
+          "</mcp_server_instructions>",
         ].join("\n"),
-      ])
+      )
     }),
   )
 
@@ -124,7 +131,7 @@ describe("session.system", () => {
         permission: Permission.fromConfig({ "mcp__guide-server__*": "deny" }),
       })
 
-      expect(output).toEqual([])
+      expect(output).toBeUndefined()
     }),
   )
 })

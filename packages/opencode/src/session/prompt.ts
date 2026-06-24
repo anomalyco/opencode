@@ -1363,7 +1363,12 @@ export const layer = Layer.effect(
               sys.mcp(agent),
               MessageV2.toModelMessagesEffect(msgs, model),
             ])
-            const system = [...env, ...instructions, ...mcpInstructions, ...(skills ? [skills] : [])]
+            const system = [
+              ...env,
+              ...instructions,
+              ...(mcpInstructions ? [mcpInstructions] : []),
+              ...(skills ? [skills] : []),
+            ]
             const format = lastUser.format ?? { type: "text" as const }
             if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
             const result = yield* handle.process({
