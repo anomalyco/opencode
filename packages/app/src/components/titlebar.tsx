@@ -39,7 +39,6 @@ import { useGlobal } from "@/context/global"
 import { ServerConnection, useServer } from "@/context/server"
 import { tabHref, useTabs } from "@/context/tabs"
 import "./titlebar.css"
-import { useServerSDK } from "@/context/server-sdk"
 import { Session } from "@opencode-ai/sdk/v2"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { createTabPromptState } from "@/context/prompt"
@@ -262,7 +261,6 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
       <Switch>
         <Match when={useV2Titlebar()}>
           {(_) => {
-            const serverSdk = useServerSDK()
             const navigate = useNavigate()
             const layout = useLayout()
             const global = useGlobal()
@@ -273,11 +271,15 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
             const [session] = createResource(
               () => {
                 const route = layout.route()
-                return route.type === "session" ? route : undefined
+                if (route.type !== "session") return undefined
+                const conn = global.servers
+                  .list()
+                  .find((item) => ServerConnection.key(item) === (route.server ?? server.key))
+                return conn ? { route, sdk: global.createServerCtx(conn).sdk } : undefined
               },
-              (route) =>
-                serverSdk()
-                  .client.session.get({ sessionID: route.sessionId })
+              ({ route, sdk }) =>
+                sdk.client.session
+                  .get({ sessionID: route.sessionId })
                   .then((x) => x.data)
                   .catch(() => {}),
             )
