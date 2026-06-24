@@ -88,7 +88,8 @@
     border: none;
     box-shadow: inset 0 0 0 0.5px var(--v2-border-border-strong);
 
-    background: linear-gradient(180deg, var(--v2-alpha-light-6) 0%, var(--v2-alpha-light-0) 100%), var(--v2-background-bg-base);
+    background:
+      linear-gradient(180deg, var(--v2-alpha-light-6) 0%, var(--v2-alpha-light-0) 100%), var(--v2-background-bg-base);
     transition:
       background 170ms ease-out,
       opacity 170ms ease-out,
@@ -122,7 +123,11 @@
   &:where([data-checked]):where(:hover):where(:not([data-disabled], [data-readonly]))
     [data-slot="radio-v2-item-control"] {
     background:
-      linear-gradient(0deg, var(--v2-overlay-simple-overlay-contrast-hover), var(--v2-overlay-simple-overlay-contrast-hover)),
+      linear-gradient(
+        0deg,
+        var(--v2-overlay-simple-overlay-contrast-hover),
+        var(--v2-overlay-simple-overlay-contrast-hover)
+      ),
       linear-gradient(180deg, var(--v2-alpha-light-20) 0%, var(--v2-alpha-light-0) 100%), var(--v2-background-bg-accent);
   }
 

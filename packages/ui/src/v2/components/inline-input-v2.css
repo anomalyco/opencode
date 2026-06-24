@@ -10,7 +10,8 @@
   border-radius: 6px;
   outline: 1px solid transparent;
   outline-offset: 0;
-  background: linear-gradient(180deg, var(--v2-alpha-light-2) 0%, var(--v2-alpha-light-0) 100%), var(--v2-background-bg-base);
+  background:
+    linear-gradient(180deg, var(--v2-alpha-light-2) 0%, var(--v2-alpha-light-0) 100%), var(--v2-background-bg-base);
   box-shadow: var(--v2-elevation-button-neutral);
   flex: none;
   align-self: stretch;

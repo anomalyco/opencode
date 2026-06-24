@@ -61,7 +61,8 @@
     border: none;
     box-shadow: inset 0 0 0 0.5px var(--v2-border-border-strong);
 
-    background: linear-gradient(180deg, var(--v2-alpha-light-6) 0%, var(--v2-alpha-light-0) 100%), var(--v2-background-bg-base);
+    background:
+      linear-gradient(180deg, var(--v2-alpha-light-6) 0%, var(--v2-alpha-light-0) 100%), var(--v2-background-bg-base);
     transition:
       background 170ms ease-out,
       opacity 170ms ease-out,
@@ -138,7 +139,8 @@
 }
 
 [data-slot="checkbox-v2"]:where([data-checked], [data-indeterminate]) [data-slot="checkbox-v2-control"] {
-  background: linear-gradient(180deg, var(--v2-alpha-light-20) 0%, var(--v2-alpha-light-0) 100%), var(--v2-background-bg-accent);
+  background:
+    linear-gradient(180deg, var(--v2-alpha-light-20) 0%, var(--v2-alpha-light-0) 100%), var(--v2-background-bg-accent);
 }
 
 [data-slot="checkbox-v2"]:where([data-checked], [data-indeterminate]):where(:hover):where(
@@ -146,7 +148,11 @@
   )
   [data-slot="checkbox-v2-control"] {
   background:
-    linear-gradient(0deg, var(--v2-overlay-simple-overlay-contrast-hover), var(--v2-overlay-simple-overlay-contrast-hover)),
+    linear-gradient(
+      0deg,
+      var(--v2-overlay-simple-overlay-contrast-hover),
+      var(--v2-overlay-simple-overlay-contrast-hover)
+    ),
     linear-gradient(180deg, var(--v2-alpha-light-20) 0%, var(--v2-alpha-light-0) 100%), var(--v2-background-bg-accent);
 }
 
