@@ -968,13 +968,49 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
     })
   })
 
+  // Track the most recent inbound `tui.session.select` so the publish effect
+  // below doesn't echo it back to the bus when the inbound listener navigates
+  // in response. Cleared on the next microtask: if the inbound caused an
+  // actual route change, the effect runs synchronously in the same microtask
+  // and consumes the value; otherwise the entry is dropped so a later genuine
+  // navigation to the same sessionID is published normally.
+  let inboundSessionID: string | null = null
+
   event.on("tui.session.select", (evt, { workspace }) => {
     if (workspace !== project.workspace.current()) return
+    inboundSessionID = evt.properties.sessionID
+    queueMicrotask(() => {
+      inboundSessionID = null
+    })
     route.navigate({
       type: "session",
       sessionID: evt.properties.sessionID,
     })
   })
+
+  // Publish `tui.session.select` whenever the TUI navigates to a session route
+  // from anywhere — session picker, quick-switch keybinds, prompt resolution,
+  // initial-route restore. Plugins can subscribe to detect session switches
+  // regardless of whether navigation originated externally (HTTP) or in-TUI.
+  // See https://github.com/anomalyco/opencode/issues/31051.
+  createEffect(
+    on(
+      () => (route.data.type === "session" ? route.data.sessionID : null),
+      (sessionID, previous) => {
+        if (!sessionID || sessionID === previous) return
+        if (sessionID === inboundSessionID) {
+          inboundSessionID = null
+          return
+        }
+        sdk.client.tui.publish({
+          body: {
+            type: "tui.session.select",
+            properties: { sessionID },
+          },
+        })
+      },
+    ),
+  )
 
   event.on("session.deleted", (evt) => {
     if (route.data.type === "session" && route.data.sessionID === evt.properties.info.id) {

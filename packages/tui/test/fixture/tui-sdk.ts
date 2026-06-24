@@ -59,14 +59,34 @@ export function createEventSource() {
   }
 }
 
-export type FetchHandler = (url: URL) => Response | Promise<Response> | undefined
+export type FetchHandler = (url: URL, init?: RequestInit) => Response | Promise<Response> | undefined
+
+export type RecordedRequest = { url: URL; init?: RequestInit; body?: string }
 
 export function createFetch(override?: FetchHandler, events?: ReturnType<typeof createEventSource>) {
   const session = [] as URL[]
-  const fetch = (async (input: RequestInfo | URL) => {
+  const tuiPublish = [] as RecordedRequest[]
+  const fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(input instanceof Request ? input.url : String(input))
     if (url.pathname === "/session") session.push(url)
-    const overridden = await override?.(url)
+    if (url.pathname === "/tui/publish") {
+      let body: string | undefined
+      if (input instanceof Request) {
+        body = await input.clone().text()
+      } else {
+        const raw = init?.body
+        body =
+          typeof raw === "string"
+            ? raw
+            : raw instanceof Uint8Array
+              ? new TextDecoder().decode(raw)
+              : raw instanceof ArrayBuffer
+                ? new TextDecoder().decode(new Uint8Array(raw))
+                : undefined
+      }
+      tuiPublish.push({ url, init, body })
+    }
+    const overridden = await override?.(url, init)
     if (overridden) return overridden
     if (url.pathname === "/api/event" && events) return events.response()
 
@@ -102,8 +122,9 @@ export function createFetch(override?: FetchHandler, events?: ReturnType<typeof 
       return json({ location: { directory, project: { id: "proj_test", directory } }, data: [] })
     if (url.pathname === "/provider") return json({ all: [], default: {}, connected: [] })
     if (url.pathname === "/session") return json([])
+    if (url.pathname === "/tui/publish") return json(true)
     if (url.pathname === "/vcs") return json({ branch: "main" })
     throw new Error(`unexpected request: ${url.pathname}`)
   }) as typeof globalThis.fetch
-  return { fetch, session }
+  return { fetch, session, tuiPublish }
 }
