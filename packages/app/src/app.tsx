@@ -10,7 +10,7 @@ import { Splash } from "@opencode-ai/ui/logo"
 import { ThemeProvider } from "@opencode-ai/ui/theme/context"
 import { MetaProvider } from "@solidjs/meta"
 import { type BaseRouterProps, Navigate, Route, Router, useParams, useSearchParams } from "@solidjs/router"
-import { keepPreviousData, QueryClient, QueryClientProvider, useQuery } from "@tanstack/solid-query"
+import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/solid-query"
 import { Effect } from "effect"
 import {
   type Component,
@@ -166,20 +166,22 @@ function TargetDirectoryLayout(props: ParentProps) {
     return tabs.store.find((tab): tab is DraftTab => tab.type === "draft" && tab.draftID === search.draftId)?.server
   })
 
-  const resolved = useQuery(() => ({
-    queryKey: [serverSDK().scope, "session-route", params.id] as const,
-    enabled: !!params.serverKey && !!params.id,
-    placeholderData: keepPreviousData,
-    queryFn: async () => {
-      const session = (await serverSDK().client.session.get({ sessionID: params.id! })).data!
-      const root = await rootSession(session, (sessionID) =>
-        serverSDK()
-          .client.session.get({ sessionID })
-          .then((result) => result.data!),
-      )
-      return { session, rootID: root.id }
-    },
-  }))
+  const resolved = useQuery(() => {
+    const id = params.id
+    return {
+      queryKey: [serverSDK().scope, "session-route", id] as const,
+      enabled: !!params.serverKey && !!params.id,
+      queryFn: async () => {
+        const session = (await serverSDK().client.session.get({ sessionID: params.id! })).data!
+        const root = await rootSession(session, (sessionID) =>
+          serverSDK()
+            .client.session.get({ sessionID })
+            .then((result) => result.data!),
+        )
+        return { session, rootID: root.id }
+      },
+    }
+  })
   const resolvedDirectory = createMemo(() => {
     if (params.serverKey) return resolved.data?.session.directory
     if (!search.draftId) return undefined
