@@ -1,14 +1,10 @@
 export * as ProjectSchema from "./schema"
 
 import { Schema } from "effect"
-import { AbsolutePath, withStatics } from "../schema"
+import { Project } from "@opencode-ai/schema/project"
+import { AbsolutePath } from "../schema"
 
-export const ID = Schema.String.pipe(
-  Schema.brand("Project.ID"),
-  withStatics((schema) => ({
-    global: schema.make("global"),
-  })),
-)
+export const ID = Project.ID
 export type ID = typeof ID.Type
 
 export const Vcs = Schema.Union([

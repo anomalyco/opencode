@@ -69,11 +69,11 @@ export const layer = Layer.effect(
     const policy = yield* Policy.Service
     const integrations = yield* Integration.Service
 
-    const available = (provider: ProviderV2.Info, integration: Integration.Info | undefined, connected: boolean) => {
+    const available = (provider: ProviderV2.Info, integration: Integration.Info | undefined) => {
       if (provider.disabled) return false
       if (typeof provider.request.body.apiKey === "string") return true
-      if (connected) return true
-      return !integration
+      if (integration?.connections.length) return true
+      return provider.integrationID === undefined && !integration
     }
 
     const projectModel = (model: ModelV2.Info, provider: ProviderV2.Info) => {
@@ -89,7 +89,7 @@ export const layer = Layer.effect(
         ...ModelRequest.merge({ ...provider.request, generation: {}, options: {} }, model.request),
         variant: model.request.variant,
       }
-      return new ModelV2.Info({
+      return ModelV2.Info.make({
         ...model,
         api,
         request,
@@ -170,7 +170,7 @@ export const layer = Layer.effect(
     })
     const result: Interface = {
       transform: state.transform,
-      rebuild: state.rebuild,
+      reload: state.reload,
 
       provider: {
         get: Effect.fn("CatalogV2.provider.get")(function* (providerID) {
@@ -183,13 +183,8 @@ export const layer = Layer.effect(
 
         available: Effect.fn("CatalogV2.provider.available")(function* () {
           const active = new Map((yield* integrations.list()).map((integration) => [integration.id, integration]))
-          const connections = yield* integrations.connection.list()
           return (yield* result.provider.all()).filter((provider) =>
-            available(
-              provider,
-              active.get(Integration.ID.make(provider.id)),
-              connections.has(Integration.ID.make(provider.id)),
-            ),
+            available(provider, active.get(provider.integrationID ?? Integration.ID.make(provider.id))),
           )
         }),
       },

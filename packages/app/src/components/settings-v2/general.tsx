@@ -1,4 +1,5 @@
 import { Component, Show, createMemo, createResource, onMount } from "solid-js"
+import { createMediaQuery } from "@solid-primitives/media"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
 import { Switch } from "@opencode-ai/ui/v2/switch-v2"
@@ -89,6 +90,7 @@ export const SettingsGeneralV2: Component = () => {
   const dialog = useDialog()
   const params = useParams()
   const settings = useSettings()
+  const mobile = createMediaQuery("(max-width: 767px)")
 
   const updater = useUpdaterAction()
 
@@ -345,6 +347,20 @@ export const SettingsGeneralV2: Component = () => {
             />
           </div>
         </SettingsRowV2>
+
+        <Show when={mobile()}>
+          <SettingsRowV2
+            title={language.t("settings.general.row.mobileTitlebarBottom.title")}
+            description={language.t("settings.general.row.mobileTitlebarBottom.description")}
+          >
+            <div data-action="settings-mobile-titlebar-bottom">
+              <Switch
+                checked={settings.general.mobileTitlebarPosition() === "bottom"}
+                onChange={(checked) => settings.general.setMobileTitlebarPosition(checked ? "bottom" : "top")}
+              />
+            </div>
+          </SettingsRowV2>
+        </Show>
       </SettingsListV2>
     </div>
   )

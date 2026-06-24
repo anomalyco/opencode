@@ -19,6 +19,7 @@ import {
   pickerMode,
   preloadTreeDirectories,
   cleanPickerInput,
+  createPriorityTaskQueue,
   createDirectorySearch,
   currentPickerSuggestions,
   displayPickerPath,
@@ -55,6 +56,7 @@ export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
   const [error, setError] = createSignal(false)
   const [rootValid, setRootValid] = createSignal(false)
   const listings = new Map<string, Promise<Array<{ name: string; type: "file" | "directory" }> | undefined>>()
+  const loads = createPriorityTaskQueue<Array<{ name: string; type: "file" | "directory" }> | undefined>(3)
   const advanced = new Set<string>()
   let tree: FileTree | undefined
   let container: HTMLDivElement | undefined
@@ -102,16 +104,21 @@ export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
   })
   const currentSuggestions = createMemo(() => currentPickerSuggestions(suggestions(), input()))
 
-  async function load(path: string, generation: number, preload = true) {
+  async function load(path: string, generation: number, eager = false) {
     const key = path.replace(/\/+$/, "")
     setError(false)
     const absolute = absoluteTreePath(root(), key)
+    const existing = listings.get(key)
+    if (existing && !eager) loads.promote(`${generation}:${key}`)
     const request =
-      listings.get(key) ??
-      sdk.client.file
-        .list({ directory: absolute, path: "" })
-        .then((result) => result.data ?? [])
-        .catch(() => undefined)
+      existing ??
+      loads.schedule(`${generation}:${key}`, eager ? "background" : "user", () => {
+        if (!activeTreeNavigation(generation, navigation)) return Promise.resolve(undefined)
+        return sdk.client.file
+          .list({ directory: absolute, path: "" })
+          .then((result) => result.data ?? [])
+          .catch(() => undefined)
+      })
     listings.set(key, request)
     const nodes = await request
     if (!activeTreeNavigation(generation, navigation)) return false
@@ -121,8 +128,8 @@ export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
       return false
     }
     tree?.batch(policy.entries(key, nodes).map((item) => ({ type: "add", path: item })))
-    if (preload && advanceTreePreload(advanced, key)) {
-      void Promise.all(preloadTreeDirectories(key, nodes).map((directory) => load(directory, generation, false)))
+    if (!eager && advanceTreePreload(advanced, key)) {
+      for (const directory of preloadTreeDirectories(key, nodes)) void load(directory, generation, true)
     }
     return true
   }
