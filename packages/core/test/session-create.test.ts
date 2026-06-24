@@ -55,21 +55,6 @@ const location = Location.Ref.make({ directory: AbsolutePath.make("/project") })
 const id = SessionV2.ID.create()
 
 describe("SessionV2.create", () => {
-  it.effect("derives stable namespaced external IDs", () =>
-    Effect.sync(() => {
-      const input = { namespace: "opencord.agent-thread", key: "thread-1" }
-
-      expect(SessionV2.ID.fromExternal(input)).toBe(SessionV2.ID.fromExternal(input))
-      expect(SessionV2.ID.fromExternal(input)).toMatch(/^ses_[a-f0-9]{64}$/)
-      expect(SessionV2.ID.fromExternal({ ...input, namespace: "another-app" })).not.toBe(
-        SessionV2.ID.fromExternal(input),
-      )
-      expect(SessionV2.ID.fromExternal({ namespace: "a:b", key: "c" })).not.toBe(
-        SessionV2.ID.fromExternal({ namespace: "a", key: "b:c" }),
-      )
-    }),
-  )
-
   it.effect("creates a fresh projected session when the ID is omitted", () =>
     Effect.gen(function* () {
       const session = yield* SessionV2.Service
@@ -218,14 +203,14 @@ describe("SessionV2.create", () => {
       const events = yield* EventV2.Service
       const { db } = yield* Database.Service
       const created = yield* session.create({ location })
-      yield* session.prompt({ sessionID: created.id, prompt: new Prompt({ text: "Hello" }), resume: false })
+      yield* session.prompt({ sessionID: created.id, prompt: Prompt.make({ text: "Hello" }), resume: false })
       yield* SessionInput.promoteSteers(db, events, created.id, Number.MAX_SAFE_INTEGER)
 
       expect(
         Array.from(yield* session.events({ sessionID: created.id }).pipe(Stream.take(2), Stream.runCollect)),
       ).toMatchObject([
         { durable: { seq: 1 }, type: "session.next.prompt.admitted", data: { prompt: { text: "Hello" } } },
-        { durable: { seq: 2 }, type: "session.next.prompt.promoted" },
+        { durable: { seq: 2 }, type: "session.next.prompted" },
       ])
     }),
   )
@@ -238,7 +223,7 @@ describe("SessionV2.create", () => {
       const created = yield* session.create({ id: SessionV2.ID.make("ses_fresh_target_replay"), location })
       const admitted = yield* session.prompt({
         sessionID: created.id,
-        prompt: new Prompt({ text: "Replay lifecycle" }),
+        prompt: Prompt.make({ text: "Replay lifecycle" }),
         resume: false,
       })
       yield* SessionInput.promoteSteers(sourceDb, sourceEvents, created.id, Number.MAX_SAFE_INTEGER)
@@ -308,8 +293,8 @@ describe("SessionV2.create", () => {
             .pipe(Effect.orDie)).map((event) => [event.seq, event.type]),
         ).toEqual([
           [0, EventV2.versionedType(SessionV1.Event.Created.type, 1)],
-          [1, EventV2.versionedType(SessionEvent.PromptLifecycle.Admitted.type, 1)],
-          [2, EventV2.versionedType(SessionEvent.PromptLifecycle.Promoted.type, 1)],
+          [1, EventV2.versionedType(SessionEvent.PromptAdmitted.type, 1)],
+          [2, EventV2.versionedType(SessionEvent.Prompted.type, 1)],
         ])
       }).pipe(Effect.provide(Layer.fresh(Layer.mergeAll(targetDatabase, targetEvents, targetProjector, targetStore))))
     }),

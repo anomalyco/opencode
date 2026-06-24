@@ -27,7 +27,7 @@ describe("CommandV2", () => {
       })
 
       expect(yield* command.get("review")).toEqual(
-        new CommandV2.Info({
+        CommandV2.Info.make({
           name: "review",
           template: "Second",
           description: "Review code",
@@ -39,7 +39,7 @@ describe("CommandV2", () => {
         }),
       )
       expect(yield* command.list()).toEqual([
-        new CommandV2.Info({
+        CommandV2.Info.make({
           name: "review",
           template: "Second",
           description: "Review code",

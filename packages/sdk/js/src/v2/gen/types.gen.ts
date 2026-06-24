@@ -7,6 +7,7 @@ export type ClientOptions = {
 export type Event =
   | EventModelsDevRefreshed
   | EventIntegrationUpdated
+  | EventIntegrationConnectionUpdated
   | EventCatalogUpdated
   | EventSessionCreated
   | EventSessionUpdated
@@ -20,8 +21,6 @@ export type Event =
   | EventSessionNextMoved
   | EventSessionNextPrompted
   | EventSessionNextPromptAdmitted
-  | EventSessionNextPromptPromoted
-  | EventSessionNextInterruptRequested
   | EventSessionNextContextUpdated
   | EventSessionNextSynthetic
   | EventSessionNextShellStarted
@@ -52,10 +51,10 @@ export type Event =
   | EventInstallationUpdated
   | EventInstallationUpdateAvailable
   | EventFileEdited
-  | EventPluginAdded
+  | EventReferenceUpdated
   | EventPermissionV2Asked
   | EventPermissionV2Replied
-  | EventReferenceUpdated
+  | EventPluginAdded
   | EventProjectDirectoriesUpdated
   | EventFileWatcherUpdated
   | EventPtyCreated
@@ -746,6 +745,13 @@ export type GlobalEvent = {
       }
     | {
         id: string
+        type: "integration.connection.updated"
+        properties: {
+          integrationID: string
+        }
+      }
+    | {
+        id: string
         type: "catalog.updated"
         properties: {
           [key: string]: unknown
@@ -863,25 +869,6 @@ export type GlobalEvent = {
           messageID: string
           prompt: Prompt
           delivery: "steer" | "queue"
-        }
-      }
-    | {
-        id: string
-        type: "session.next.prompt.promoted"
-        properties: {
-          timestamp: number
-          sessionID: string
-          messageID: string
-          prompt: Prompt
-          timeCreated: number
-        }
-      }
-    | {
-        id: string
-        type: "session.next.interrupt.requested"
-        properties: {
-          timestamp: number
-          sessionID: string
         }
       }
     | {
@@ -1259,9 +1246,9 @@ export type GlobalEvent = {
       }
     | {
         id: string
-        type: "plugin.added"
+        type: "reference.updated"
         properties: {
-          id: string
+          [key: string]: unknown
         }
       }
     | {
@@ -1290,9 +1277,9 @@ export type GlobalEvent = {
       }
     | {
         id: string
-        type: "reference.updated"
+        type: "plugin.added"
         properties: {
-          [key: string]: unknown
+          id: string
         }
       }
     | {
@@ -1637,8 +1624,6 @@ export type GlobalEvent = {
     | SyncEventSessionNextMoved
     | SyncEventSessionNextPrompted
     | SyncEventSessionNextPromptAdmitted
-    | SyncEventSessionNextPromptPromoted
-    | SyncEventSessionNextInterruptRequested
     | SyncEventSessionNextContextUpdated
     | SyncEventSessionNextSynthetic
     | SyncEventSessionNextShellStarted
@@ -2767,6 +2752,7 @@ export type ProviderNotFoundError = {
 export type V2Event =
   | V2EventModelsDevRefreshed
   | V2EventIntegrationUpdated
+  | V2EventIntegrationConnectionUpdated
   | V2EventCatalogUpdated
   | V2EventSessionCreated
   | V2EventSessionUpdated
@@ -2780,8 +2766,6 @@ export type V2Event =
   | V2EventSessionNextMoved
   | V2EventSessionNextPrompted
   | V2EventSessionNextPromptAdmitted
-  | V2EventSessionNextPromptPromoted
-  | V2EventSessionNextInterruptRequested
   | V2EventSessionNextContextUpdated
   | V2EventSessionNextSynthetic
   | V2EventSessionNextShellStarted
@@ -2812,10 +2796,10 @@ export type V2Event =
   | V2EventInstallationUpdated
   | V2EventInstallationUpdateAvailable
   | V2EventFileEdited
-  | V2EventPluginAdded
+  | V2EventReferenceUpdated
   | V2EventPermissionV2Asked
   | V2EventPermissionV2Replied
-  | V2EventReferenceUpdated
+  | V2EventPluginAdded
   | V2EventProjectDirectoriesUpdated
   | V2EventFileWatcherUpdated
   | V2EventPtyCreated
@@ -2923,6 +2907,21 @@ export type EventTuiSessionSelect2 = {
     sessionID: string
   }
 }
+
+export type CredentialValue = CredentialOAuth | CredentialKey
+
+export type IntegrationInputs = {
+  [key: string]: string
+}
+
+export type IntegrationMethod = IntegrationOAuthMethod | IntegrationKeyMethod | IntegrationEnvMethod
+
+export type IntegrationRef = {
+  id: string
+  name: string
+}
+
+export type SkillV2Source = SkillV2DirectorySource | SkillV2UrlSource | SkillV2EmbeddedSource
 
 export type MoveSessionDestination = {
   directory: string
@@ -3227,39 +3226,6 @@ export type SyncEventSessionNextPromptAdmitted = {
       messageID: string
       prompt: Prompt
       delivery: "steer" | "queue"
-    }
-  }
-}
-
-export type SyncEventSessionNextPromptPromoted = {
-  type: "sync"
-  id: string
-  syncEvent: {
-    type: "session.next.prompt.promoted.1"
-    id: string
-    seq: number
-    aggregateID: string
-    data: {
-      timestamp: number
-      sessionID: string
-      messageID: string
-      prompt: Prompt
-      timeCreated: number
-    }
-  }
-}
-
-export type SyncEventSessionNextInterruptRequested = {
-  type: "sync"
-  id: string
-  syncEvent: {
-    type: "session.next.interrupt.requested.1"
-    id: string
-    seq: number
-    aggregateID: string
-    data: {
-      timestamp: number
-      sessionID: string
     }
   }
 }
@@ -3663,7 +3629,7 @@ export type SyncEventSessionNextCompactionEnded = {
   type: "sync"
   id: string
   syncEvent: {
-    type: "session.next.compaction.ended.2"
+    type: "session.next.compaction.ended.1"
     id: string
     seq: number
     aggregateID: string
@@ -4116,6 +4082,7 @@ export type ModelV2Info = {
 
 export type ProviderV2Info = {
   id: string
+  integrationID?: string
   name: string
   disabled?: boolean
   api:
@@ -4203,7 +4170,7 @@ export type ConnectionInfo = ConnectionCredentialInfo | ConnectionEnvInfo
 export type IntegrationInfo = {
   id: string
   name: string
-  methods: Array<IntegrationOAuthMethod | IntegrationKeyMethod | IntegrationEnvMethod>
+  methods: Array<IntegrationMethod>
   connections: Array<ConnectionInfo>
 }
 
@@ -4240,7 +4207,6 @@ export type PermissionSavedInfo = {
 export type FileSystemEntry = {
   path: string
   type: "file" | "directory"
-  mime: string
 }
 
 export type CommandV2Info = {
@@ -4295,6 +4261,23 @@ export type V2EventIntegrationUpdated = {
   type: "integration.updated"
   data: {
     [key: string]: unknown
+  }
+}
+
+export type V2EventIntegrationConnectionUpdated = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  type: "integration.connection.updated"
+  data: {
+    integrationID: string
   }
 }
 
@@ -4546,45 +4529,6 @@ export type V2EventSessionNextPromptAdmitted = {
     messageID: string
     prompt: Prompt
     delivery: "steer" | "queue"
-  }
-}
-
-export type V2EventSessionNextPromptPromoted = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef
-  type: "session.next.prompt.promoted"
-  data: {
-    timestamp: number
-    sessionID: string
-    messageID: string
-    prompt: Prompt
-    timeCreated: number
-  }
-}
-
-export type V2EventSessionNextInterruptRequested = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef
-  type: "session.next.interrupt.requested"
-  data: {
-    timestamp: number
-    sessionID: string
   }
 }
 
@@ -5261,7 +5205,7 @@ export type V2EventFileEdited = {
   }
 }
 
-export type V2EventPluginAdded = {
+export type V2EventReferenceUpdated = {
   id: string
   metadata?: {
     [key: string]: unknown
@@ -5272,9 +5216,9 @@ export type V2EventPluginAdded = {
     version: number
   }
   location?: LocationRef
-  type: "plugin.added"
+  type: "reference.updated"
   data: {
-    id: string
+    [key: string]: unknown
   }
 }
 
@@ -5322,7 +5266,7 @@ export type V2EventPermissionV2Replied = {
   }
 }
 
-export type V2EventReferenceUpdated = {
+export type V2EventPluginAdded = {
   id: string
   metadata?: {
     [key: string]: unknown
@@ -5333,9 +5277,9 @@ export type V2EventReferenceUpdated = {
     version: number
   }
   location?: LocationRef
-  type: "reference.updated"
+  type: "plugin.added"
   data: {
-    [key: string]: unknown
+    id: string
   }
 }
 
@@ -6078,6 +6022,14 @@ export type EventIntegrationUpdated = {
   }
 }
 
+export type EventIntegrationConnectionUpdated = {
+  id: string
+  type: "integration.connection.updated"
+  properties: {
+    integrationID: string
+  }
+}
+
 export type EventCatalogUpdated = {
   id: string
   type: "catalog.updated"
@@ -6209,27 +6161,6 @@ export type EventSessionNextPromptAdmitted = {
     messageID: string
     prompt: Prompt
     delivery: "steer" | "queue"
-  }
-}
-
-export type EventSessionNextPromptPromoted = {
-  id: string
-  type: "session.next.prompt.promoted"
-  properties: {
-    timestamp: number
-    sessionID: string
-    messageID: string
-    prompt: Prompt
-    timeCreated: number
-  }
-}
-
-export type EventSessionNextInterruptRequested = {
-  id: string
-  type: "session.next.interrupt.requested"
-  properties: {
-    timestamp: number
-    sessionID: string
   }
 }
 
@@ -6636,11 +6567,11 @@ export type EventFileEdited = {
   }
 }
 
-export type EventPluginAdded = {
+export type EventReferenceUpdated = {
   id: string
-  type: "plugin.added"
+  type: "reference.updated"
   properties: {
-    id: string
+    [key: string]: unknown
   }
 }
 
@@ -6670,11 +6601,11 @@ export type EventPermissionV2Replied = {
   }
 }
 
-export type EventReferenceUpdated = {
+export type EventPluginAdded = {
   id: string
-  type: "reference.updated"
+  type: "plugin.added"
   properties: {
-    [key: string]: unknown
+    id: string
   }
 }
 
@@ -6985,6 +6916,40 @@ export type EventGlobalDisposed = {
   properties: {
     [key: string]: unknown
   }
+}
+
+export type CredentialOAuth = {
+  type: "oauth"
+  methodID: string
+  refresh: string
+  access: string
+  expires: number
+  metadata?: {
+    [key: string]: unknown
+  }
+}
+
+export type CredentialKey = {
+  type: "key"
+  key: string
+  metadata?: {
+    [key: string]: unknown
+  }
+}
+
+export type SkillV2DirectorySource = {
+  type: "directory"
+  path: string
+}
+
+export type SkillV2UrlSource = {
+  type: "url"
+  url: string
+}
+
+export type SkillV2EmbeddedSource = {
+  type: "embedded"
+  skill: SkillV2Info
 }
 
 export type BadRequestError = {

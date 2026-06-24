@@ -422,7 +422,7 @@ export function getToolInfo(
       return {
         icon: "console",
         title: i18n.t("ui.tool.shell"),
-        subtitle: input.description,
+        subtitle: input.command,
       }
     case "edit":
       return {
@@ -1905,18 +1905,18 @@ ToolRegistry.register({
       <BasicTool
         {...props}
         icon="console"
-        trigger={
+        trigger={(open) => (
           <div data-slot="basic-tool-tool-info-structured">
             <div data-slot="basic-tool-tool-info-main">
               <span data-slot="basic-tool-tool-title">
                 <TextShimmer text={i18n.t("ui.tool.shell")} active={pending()} />
               </span>
-              <Show when={!pending() && props.input.description}>
-                <ShellSubmessage text={props.input.description} animate={sawPending} />
+              <Show when={!pending() && !open() && props.input.command}>
+                <ShellSubmessage text={props.input.command} animate={sawPending} />
               </Show>
             </div>
           </div>
-        }
+        )}
       >
         <div data-component="bash-output">
           <div data-slot="bash-copy">

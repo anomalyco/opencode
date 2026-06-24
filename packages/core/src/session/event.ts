@@ -1,14 +1,14 @@
 import { Schema } from "effect"
-import { ProviderMetadata, ToolContent } from "@opencode-ai/llm"
+import { ProviderMetadata, ToolContent } from "@opencode-ai/schema/llm"
+import { Delivery } from "@opencode-ai/schema/session-delivery"
 import { EventV2 } from "../event"
 import { ModelV2 } from "../model"
-import { NonNegativeInt } from "../schema"
-import { V2Schema } from "../v2-schema"
+import { DateTimeUtcFromMillis, NonNegativeInt, RelativePath } from "../schema"
 import { FileAttachment, Prompt } from "./prompt"
 import { SessionSchema } from "./schema"
 import { Location } from "../location"
-import { RelativePath } from "../schema"
 import { SessionMessageID } from "./message-id"
+import { SessionMessage } from "./message"
 
 export { FileAttachment }
 
@@ -22,8 +22,14 @@ export const Source = Schema.Struct({
 export type Source = typeof Source.Type
 
 const Base = {
-  timestamp: V2Schema.DateTimeUtcFromMillis,
+  timestamp: DateTimeUtcFromMillis,
   sessionID: SessionSchema.ID,
+}
+const PromptFields = {
+  ...Base,
+  messageID: SessionMessageID.ID,
+  prompt: Prompt,
+  delivery: Delivery,
 }
 
 const options = {
@@ -39,13 +45,8 @@ const stepSettlementOptions = {
   },
 } as const
 
-export const UnknownError = Schema.Struct({
-  type: Schema.Literal("unknown"),
-  message: Schema.String,
-}).annotate({
-  identifier: "Session.Error.Unknown",
-})
-export type UnknownError = typeof UnknownError.Type
+export const UnknownError = SessionMessage.UnknownError
+export type UnknownError = SessionMessage.UnknownError
 
 export const AgentSwitched = EventV2.define({
   type: "session.next.agent.switched",
@@ -83,47 +84,16 @@ export type Moved = typeof Moved.Type
 export const Prompted = EventV2.define({
   type: "session.next.prompted",
   ...options,
-  schema: {
-    ...Base,
-    messageID: SessionMessageID.ID,
-    prompt: Prompt,
-    delivery: Schema.Literals(["steer", "queue"]),
-  },
+  schema: PromptFields,
 })
 export type Prompted = typeof Prompted.Type
 
-export namespace PromptLifecycle {
-  export const Admitted = EventV2.define({
-    type: "session.next.prompt.admitted",
-    ...options,
-    schema: {
-      ...Base,
-      messageID: SessionMessageID.ID,
-      prompt: Prompt,
-      delivery: Schema.Literals(["steer", "queue"]),
-    },
-  })
-  export type Admitted = typeof Admitted.Type
-
-  export const Promoted = EventV2.define({
-    type: "session.next.prompt.promoted",
-    ...options,
-    schema: {
-      ...Base,
-      messageID: SessionMessageID.ID,
-      prompt: Prompt,
-      timeCreated: V2Schema.DateTimeUtcFromMillis,
-    },
-  })
-  export type Promoted = typeof Promoted.Type
-}
-
-export const InterruptRequested = EventV2.define({
-  type: "session.next.interrupt.requested",
+export const PromptAdmitted = EventV2.define({
+  type: "session.next.prompt.admitted",
   ...options,
-  schema: Base,
+  schema: PromptFields,
 })
-export type InterruptRequested = typeof InterruptRequested.Type
+export type PromptAdmitted = typeof PromptAdmitted.Type
 
 export const ContextUpdated = EventV2.define({
   type: "session.next.context.updated",
@@ -443,20 +413,9 @@ export namespace Compaction {
   })
   export type Delta = typeof Delta.Type
 
-  // Retain the unpublished v1 decoder so stored beta events remain replayable.
-  export const EndedV1 = EventV2.define({
-    type: "session.next.compaction.ended",
-    ...options,
-    schema: {
-      ...Base,
-      text: Schema.String,
-      include: Schema.String.pipe(Schema.optional),
-    },
-  })
-
   export const Ended = EventV2.define({
     type: "session.next.compaction.ended",
-    durable: { aggregate: "sessionID", version: 2 },
+    ...options,
     schema: {
       ...Base,
       messageID: SessionMessageID.ID,
@@ -473,9 +432,7 @@ const DurableDefinitions = [
   ModelSwitched,
   Moved,
   Prompted,
-  PromptLifecycle.Admitted,
-  PromptLifecycle.Promoted,
-  InterruptRequested,
+  PromptAdmitted,
   ContextUpdated,
   Synthetic,
   Shell.Started,

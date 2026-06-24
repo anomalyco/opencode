@@ -744,10 +744,14 @@ function TopModelsChart(props: {
                     data-placement={dayIndex() > props.data.length * 0.62 ? "left" : "right"}
                   >
                     <strong>{point().date}</strong>
-                    <span>
-                      {formatUsageChartValue(usageTotal(point()), metric())} {usageChartTotalLabel(metric())}
-                    </span>
-                    <div data-slot="tooltip-divider" />
+                    <Show when={metric() === "tokens"}>
+                      <span>
+                        {formatUsageChartValue(usageTotal(point()), metric())} {usageChartTotalLabel(metric())}
+                      </span>
+                    </Show>
+                    <Show when={metric() === "tokens"}>
+                      <div data-slot="tooltip-divider" />
+                    </Show>
                     <For each={visibleTopModelsSegments(point())}>
                       {(item) => (
                         <p

@@ -1,119 +1,30 @@
-import { Schema, Types } from "effect"
+import { Types } from "effect"
+import { Model } from "@opencode-ai/schema/model"
 import { ProviderV2 } from "./provider"
-import { ModelRequest } from "./model-request"
 
-export const ID = Schema.String.pipe(Schema.brand("ModelV2.ID"))
+export const ID = Model.ID
 export type ID = typeof ID.Type
 
-export const VariantID = Schema.String.pipe(Schema.brand("VariantID"))
+export const VariantID = Model.VariantID
 export type VariantID = typeof VariantID.Type
 
 // Grouping of models, eg claude opus, claude sonnet
-export const Family = Schema.String.pipe(Schema.brand("Family"))
-export type Family = typeof Family.Type
+export const Family = Model.Family
+export type Family = Model.Family
 
-export const Capabilities = Schema.Struct({
-  tools: Schema.Boolean,
-  // mime patterns, image, audio, video/*, text/*
-  input: Schema.String.pipe(Schema.Array, Schema.mutable),
-  output: Schema.String.pipe(Schema.Array, Schema.mutable),
-})
-export type Capabilities = typeof Capabilities.Type
+export const Capabilities = Model.Capabilities
+export type Capabilities = Model.Capabilities
 
-export const Cost = Schema.Struct({
-  tier: Schema.Struct({
-    type: Schema.Literal("context"),
-    size: Schema.Int,
-  }).pipe(Schema.optional),
-  input: Schema.Finite,
-  output: Schema.Finite,
-  cache: Schema.Struct({
-    read: Schema.Finite,
-    write: Schema.Finite,
-  }),
-})
+export const Cost = Model.Cost
 
-export const Ref = Schema.Struct({
-  id: ID,
-  providerID: ProviderV2.ID,
-  variant: VariantID.pipe(Schema.optional),
-})
+export const Ref = Model.Ref
 export type Ref = typeof Ref.Type
 
-export const Api = Schema.Union([
-  Schema.Struct({
-    id: ID,
-    ...ProviderV2.AISDK.fields,
-  }),
-  Schema.Struct({
-    id: ID,
-    ...ProviderV2.Native.fields,
-  }),
-]).pipe(Schema.toTaggedUnion("type"))
-export type Api = typeof Api.Type
+export const Api = Model.Api
+export type Api = Model.Api
 
-export class Info extends Schema.Class<Info>("ModelV2.Info")({
-  id: ID,
-  providerID: ProviderV2.ID,
-  family: Family.pipe(Schema.optional),
-  name: Schema.String,
-  api: Api,
-  capabilities: Capabilities,
-  request: Schema.Struct({
-    ...ModelRequest.Request.fields,
-    variant: Schema.String.pipe(Schema.optional),
-  }),
-  variants: Schema.Struct({
-    id: VariantID,
-    ...ModelRequest.Request.fields,
-  }).pipe(Schema.Array, Schema.mutable),
-  time: Schema.Struct({
-    released: Schema.Finite,
-  }),
-  cost: Cost.pipe(Schema.Array, Schema.mutable),
-  status: Schema.Literals(["alpha", "beta", "deprecated", "active"]),
-  enabled: Schema.Boolean,
-  limit: Schema.Struct({
-    context: Schema.Int,
-    input: Schema.Int.pipe(Schema.optional),
-    output: Schema.Int,
-  }),
-}) {
-  static empty(providerID: ProviderV2.ID, modelID: ID): Info {
-    return new Info({
-      id: modelID,
-      providerID,
-      name: modelID,
-      api: {
-        id: modelID,
-        type: "native",
-        settings: {},
-      },
-      capabilities: {
-        tools: false,
-        input: [],
-        output: [],
-      },
-      request: {
-        headers: {},
-        body: {},
-        generation: {},
-        options: {},
-      },
-      variants: [],
-      time: {
-        released: 0,
-      },
-      cost: [],
-      status: "active",
-      enabled: true,
-      limit: {
-        context: 0,
-        output: 0,
-      },
-    })
-  }
-}
+export const Info = Model.Info
+export type Info = Model.Info
 
 export type MutableInfo = Omit<Types.DeepMutable<Info>, "api"> & {
   api: ProviderV2.MutableApi<Api>

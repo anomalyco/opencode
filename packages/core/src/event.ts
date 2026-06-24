@@ -5,7 +5,7 @@ import { and, asc, eq, gt } from "drizzle-orm"
 import { Database } from "./database/database"
 import { EventSequenceTable, EventTable } from "./event/sql"
 import { Location } from "./location"
-import { externalID, type ExternalID, withStatics } from "./schema"
+import { withStatics } from "./schema"
 import { Identifier } from "./util/identifier"
 import { LayerNode } from "./effect/layer-node"
 import { isDeepStrictEqual } from "node:util"
@@ -14,7 +14,6 @@ export const ID = Schema.String.check(Schema.isStartsWith("evt_")).pipe(
   Schema.brand("Event.ID"),
   withStatics((schema) => ({
     create: () => schema.make("evt_" + Identifier.ascending()),
-    fromExternal: (input: ExternalID) => schema.make(externalID("evt", input)),
   })),
 )
 export type ID = typeof ID.Type
@@ -45,6 +44,19 @@ export type Payload<D extends Definition = Definition> = {
 
 export type Subscriber<D extends Definition = Definition> = (event: Payload<D>) => Effect.Effect<void>
 export type Unsubscribe = Effect.Effect<void>
+
+export const latestSequence = Effect.fn("EventV2.latestSequence")(function* (
+  db: Database.Interface["db"],
+  aggregateID: string,
+) {
+  const row = yield* db
+    .select({ seq: EventSequenceTable.seq })
+    .from(EventSequenceTable)
+    .where(eq(EventSequenceTable.aggregate_id, aggregateID))
+    .get()
+    .pipe(Effect.orDie)
+  return row?.seq ?? -1
+})
 
 export type SerializedEvent = {
   readonly id: ID

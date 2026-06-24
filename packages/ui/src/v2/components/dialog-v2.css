@@ -91,6 +91,7 @@
           border-radius: 4px;
           flex-shrink: 0;
           cursor: pointer;
+          color: var(--v2-icon-icon-muted);
 
           &:hover {
             background: var(--v2-overlay-simple-overlay-hover);
