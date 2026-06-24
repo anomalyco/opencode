@@ -85,26 +85,16 @@ function oauth(http: HttpClient.HttpClient) {
     method: {
       id: methodID,
       type: "oauth",
-      label: "Sign in with OpenCode",
-      prompts: [
-        {
-          type: "text",
-          key: "server",
-          message: "OpenCode server",
-          placeholder: defaultServer,
-        },
-      ],
+      label: "OpenCode Console account",
     },
-    authorize: (inputs) =>
+    authorize: () =>
       Effect.gen(function* () {
-        const url = new URL(inputs.server || defaultServer)
-        const server = `${url.origin}${url.pathname.replace(/\/+$/, "")}`
-        const device = yield* post(http, `${server}/auth/device/code`, { client_id: clientID }, Device)
+        const device = yield* post(http, `${defaultServer}/auth/device/code`, { client_id: clientID }, Device)
         return {
           mode: "auto" as const,
-          url: `${server}${device.verification_uri_complete}`,
+          url: `${defaultServer}${device.verification_uri_complete}`,
           instructions: `Enter code: ${device.user_code}`,
-          callback: poll(http, server, device.device_code, Duration.seconds(device.interval)),
+          callback: poll(http, defaultServer, device.device_code, Duration.seconds(device.interval)),
         }
       }),
     refresh: (credential) =>
@@ -157,7 +147,7 @@ export const OpencodePlugin = define<HttpClient.HttpClient | EventV2.Service | S
         integration.name = "OpenCode"
       })
       draft.method.update(oauth(http))
-      draft.method.update({ integrationID: "opencode", method: { type: "key", label: "API key" } })
+      draft.method.update({ integrationID: "opencode", method: { type: "key", label: "API key (service account)" } })
     })
 
     yield* load()
@@ -302,7 +292,7 @@ function credential(http: HttpClient.HttpClient, server: string, token: typeof T
       ],
       { concurrency: 2 },
     )
-    const org = orgs.toSorted((a, b) => a.id.localeCompare(b.id))[0]
+    const org = orgs.toSorted((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id))[0]
     return new Credential.OAuth({
       type: "oauth" as const,
       methodID,

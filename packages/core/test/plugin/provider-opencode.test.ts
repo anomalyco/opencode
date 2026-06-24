@@ -49,24 +49,16 @@ function withEnv<A, E, R>(vars: Record<string, string | undefined>, effect: () =
 const cost = (input: number, output = 0) => [{ input, output, cache: { read: 0, write: 0 } }]
 
 describe("OpencodePlugin", () => {
-  it.effect("registers OAuth and API key methods", () =>
+  it.effect("registers account and service account methods", () =>
     Effect.gen(function* () {
       yield* addPlugin()
       expect((yield* (yield* Integration.Service).get(Integration.ID.make("opencode")))?.methods).toEqual([
         {
           id: Integration.MethodID.make("device"),
           type: "oauth",
-          label: "Sign in with OpenCode",
-          prompts: [
-            {
-              type: "text",
-              key: "server",
-              message: "OpenCode server",
-              placeholder: "https://console.opencode.ai",
-            },
-          ],
+          label: "OpenCode Console account",
         },
-        { type: "key", label: "API key" },
+        { type: "key", label: "API key (service account)" },
       ])
     }),
   )
