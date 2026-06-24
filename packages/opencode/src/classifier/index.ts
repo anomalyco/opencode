@@ -7,6 +7,7 @@ import type { SessionV1 } from "@opencode-ai/core/v1/session"
 import { isSafeAllowlisted } from "./allowlist"
 import { resolvePolicy } from "./prompt"
 import { ownModelProvider } from "./provider/own-model"
+import { ogProvider } from "./provider/og"
 import { buildTranscript, projectToolInput } from "./transcript"
 import type { ClassifierDecision } from "./types"
 
@@ -17,6 +18,10 @@ const block = (reason: string): ClassifierDecision => ({ kind: "block", reason }
 // Escalation backstop: too many denials in one turn → escalate to the human.
 const MAX_CONSECUTIVE_DENIALS = 3
 const MAX_TOTAL_DENIALS = 20
+
+// Default OpenGuardrails endpoints; override per backend via `classifier.endpoint`.
+const OG_SAAS_ENDPOINT = "https://api.openguardrails.com"
+const OG_LOCAL_ENDPOINT = "http://localhost:8000"
 
 /**
  * Per-session denial counters. Reset when the latest user message changes
@@ -63,12 +68,6 @@ export const evaluate = Effect.fn("Classifier.evaluate")(function* (input: {
   if (isSafeAllowlisted(input.tool)) return undefined
 
   const backend = cfg.backend ?? "own"
-  if (backend !== "own") {
-    // og-local / og-saas land in a later step. Until then, fail closed.
-    return ask(`classifier backend '${backend}' is not implemented yet`)
-  }
-
-  const provider = yield* Provider.Service
 
   // Counter state, reset on a new user turn.
   const sid = input.sessionID
@@ -81,7 +80,21 @@ export const evaluate = Effect.fn("Classifier.evaluate")(function* (input: {
   }
 
   const policy = resolvePolicy(cfg)
+  const classifierInput = {
+    transcript: buildTranscript(input.messages),
+    action: { tool: input.tool, input: projectToolInput(input.tool, input.toolInput) },
+    policy,
+  }
+
   const verdict = yield* Effect.gen(function* () {
+    // og-saas / og-local: POST the contract to the OpenGuardrails service.
+    if (backend === "og-saas" || backend === "og-local") {
+      const endpoint = cfg.endpoint ?? (backend === "og-saas" ? OG_SAAS_ENDPOINT : OG_LOCAL_ENDPOINT)
+      const p = ogProvider({ endpoint, apiKey: cfg.apiKey, label: backend })
+      return yield* Effect.promise(() => p.classify(classifierInput, input.abort))
+    }
+    // own: the user's configured model via the AI SDK.
+    const provider = yield* Provider.Service
     let model: Provider.Model
     if (cfg.model) {
       const [providerID, modelID] = parseModel(cfg.model)
@@ -90,18 +103,15 @@ export const evaluate = Effect.fn("Classifier.evaluate")(function* (input: {
       model = input.fallbackModel
     }
     const language = yield* provider.getLanguage(model)
-    const classifier = ownModelProvider(language, `${model.providerID}/${model.id}`)
-    const action = { tool: input.tool, input: projectToolInput(input.tool, input.toolInput) }
-    return yield* Effect.promise(() =>
-      classifier.classify({ transcript: buildTranscript(input.messages), action, policy }, input.abort),
-    )
+    const p = ownModelProvider(language, `${model.providerID}/${model.id}`)
+    return yield* Effect.promise(() => p.classify(classifierInput, input.abort))
   }).pipe(
     Effect.catch((e) =>
       Effect.succeed({
         shouldBlock: true,
         unavailable: true,
         reason: e instanceof Error ? e.message : String(e),
-        model: "own",
+        model: backend,
       }),
     ),
   )
