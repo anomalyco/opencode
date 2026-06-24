@@ -11,8 +11,19 @@
  */
 
 import { SandboxManager, type SandboxRuntimeConfig } from "@anthropic-ai/sandbox-runtime"
-import { spawn } from "node:child_process"
-import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync } from "node:fs"
+import { spawn, spawnSync } from "node:child_process"
+import { createHash } from "node:crypto"
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  renameSync,
+  rmSync,
+  watch,
+  writeFileSync,
+} from "node:fs"
 import { homedir, tmpdir } from "node:os"
 import { dirname, join, resolve } from "node:path"
 
@@ -20,6 +31,40 @@ export const CONFIG_DIR = join(homedir(), ".config", "securecode")
 export const CONFIG_PATH = join(CONFIG_DIR, "sandbox.json")
 
 export const DEFAULT_ALLOWED_DOMAINS = ["conf-ai.acompany-az.com"]
+
+/**
+ * supervisor が TUI と「sandbox.json の hash」を受け渡すための runtime dir のベース。
+ * 実体は `${RUNTIME_DIR_BASE}/<supervisor_pid>` に作る (同時起動への配慮)。
+ */
+export const RUNTIME_DIR_BASE = join(homedir(), ".cache", "securecode", "runtime")
+
+/**
+ * 子プロセス (TUI) が「reload してほしい」を supervisor に伝えるための専用 exit code。
+ * 75 = `EX_TEMPFAIL` (sysexits.h)。SecureCode では「一時的な状態で、再試行 (= reload) で
+ * 解決する」というセマンティクスにフィットする。
+ */
+export const RELOAD_EXIT_CODE = 75
+
+/**
+ * 子プロセスが runtime dir のパスを知るための環境変数名。
+ * TUI plugin (`sandbox-reload`) がこの env から hash file を発見する。
+ */
+export const SANDBOX_HASH_DIR_ENV = "SECURECODE_SANDBOX_HASH_DIR"
+
+/**
+ * RELOAD_EXIT_CODE の値を子プロセスに伝える env 名。
+ * TUI 側で `parseInt(env)` して使う (定数の二重管理を避けるため)。
+ */
+export const RELOAD_EXIT_CODE_ENV = "SECURECODE_RELOAD_EXIT_CODE"
+
+/**
+ * reload 後の起動で「前回 reload が失敗した理由」を TUI に伝える env 名。
+ * 値が空文字でない場合、TUI plugin が toast.error で表示する。
+ */
+export const RELOAD_ERROR_ENV = "SECURECODE_RELOAD_ERROR"
+
+export const BASELINE_HASH_FILENAME = "baseline-hash"
+export const CURRENT_HASH_FILENAME = "current-hash"
 
 // securecode 本体 (= sandbox 内で動く inner binary。upstream の packages/core/src/global.ts
 // 由来) は `xdg-basedir` 経由で XDG ディレクトリ配下に "securecode" サブディレクトリを
@@ -178,6 +223,17 @@ function log(msg: string): void {
   process.stderr.write(`[securecode-supervisor] ${msg}\n`)
 }
 
+/**
+ * verbose な進捗ログ。reload 経路で出すと、再 spawn 直前 (旧 TUI が alternate
+ * screen から抜けた直後) に端末へドカドカ流れて見苦しい。デフォルトは silent、
+ * `SECURECODE_SUPERVISOR_DEBUG=1` のときだけ stderr に出す。
+ *
+ * エラー (`failed to ...` 等) は常に `log` 経由で出す。
+ */
+function debugLog(msg: string): void {
+  if (process.env["SECURECODE_SUPERVISOR_DEBUG"] === "1") log(msg)
+}
+
 // fatal error 用の専用クラス。`die()` から throw され、top-level catch がここで
 // exit code を拾って `process.exit(code)` する。Error をそのまま使うと top-level の
 // 一般的な catch (unexpected error → exit 1) と区別できないため別クラスにする。
@@ -260,6 +316,268 @@ export function mergeUserConfigs(...configs: UserConfig[]): UserConfig {
 }
 
 /**
+ * 空入力からなる正規化済みの `UserConfig`。
+ *
+ * `tryLoadUserConfig` がファイル不在を成功扱いするときの戻り値や、テストの
+ * fixture でゼロ値が必要なときに使う。
+ */
+export function emptyUserConfig(): UserConfig {
+  return {
+    network: { allowedDomains: [], deniedDomains: [] },
+    filesystem: { allowRead: [], allowWrite: [], denyRead: [], denyWrite: [] },
+  }
+}
+
+/**
+ * `loadUserConfig` の non-fatal 版。reload 時に呼ぶ。parse 失敗を例外ではなく
+ * Result 型として返すことで、supervisor は旧 config を維持したまま「reload 失敗」
+ * を子プロセス側に伝えられる。正規化ロジックは `loadUserConfig` と完全に同じ。
+ */
+export function tryLoadUserConfig(
+  path: string = CONFIG_PATH,
+): { ok: true; value: UserConfig } | { ok: false; error: string } {
+  if (!existsSync(path)) return { ok: true, value: emptyUserConfig() }
+  let raw: RawUserConfig
+  try {
+    raw = JSON.parse(readFileSync(path, "utf8")) as RawUserConfig
+  } catch (err) {
+    return { ok: false, error: (err as Error).message }
+  }
+  return {
+    ok: true,
+    value: {
+      network: {
+        allowedDomains: raw.network?.allowedDomains ?? [],
+        deniedDomains: raw.network?.deniedDomains ?? [],
+      },
+      filesystem: {
+        allowRead: raw.filesystem?.allowRead ?? [],
+        allowWrite: raw.filesystem?.allowWrite ?? [],
+        denyRead: raw.filesystem?.denyRead ?? [],
+        denyWrite: raw.filesystem?.denyWrite ?? [],
+      },
+    },
+  }
+}
+
+/**
+ * 複数の sandbox.json ファイルを **まとめて** 1 個の SHA-256 hex に畳む。
+ *
+ * 「global と project の両方が監視対象」のため、reload の検知は「いずれかの
+ * ファイルが変わったか」を 1 個のハッシュで表現する形に揃える。
+ *
+ * - ファイル不在 → `absent\0` を含める。「不在」と「ある」を区別できる
+ * - 読み取り失敗 → `error:<msg>\0` を含める
+ * - パス自体もハッシュに含める (順序入れ替えで hash が変わるのは設計通り)
+ */
+export function computeSandboxConfigHash(paths: string[] = [CONFIG_PATH]): string {
+  const h = createHash("sha256")
+  for (const path of paths) {
+    h.update(`path:${path}\0`)
+    if (!existsSync(path)) {
+      h.update("absent\0")
+      continue
+    }
+    try {
+      h.update("file:")
+      h.update(readFileSync(path))
+      h.update("\0")
+    } catch (err) {
+      h.update(`error:${(err as Error).message}\0`)
+    }
+  }
+  return h.digest("hex")
+}
+
+/**
+ * supervisor 用の runtime dir (`${RUNTIME_DIR_BASE}/<pid>`) を作成して path を返す。
+ * 同名のディレクトリが残骸として残っていた場合は中身を削除して作り直す。
+ */
+export function prepareRuntimeDir(pid: number = process.pid, base: string = RUNTIME_DIR_BASE): string {
+  const dir = join(base, String(pid))
+  if (existsSync(dir)) rmSync(dir, { recursive: true, force: true })
+  mkdirSync(dir, { recursive: true })
+  return dir
+}
+
+function defaultIsAlive(pid: number): boolean {
+  try {
+    // signal 0 は実送信せず存在確認だけ行う POSIX の慣用句。
+    process.kill(pid, 0)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * 過去の supervisor が SIGKILL 等で即死した場合に残る stale runtime dir を掃除する。
+ * dir 名 (= pid) のプロセスがもう生きていなければ削除する。
+ */
+export function cleanupStaleRuntimeDirs(
+  base: string = RUNTIME_DIR_BASE,
+  isAlive: (pid: number) => boolean = defaultIsAlive,
+): void {
+  if (!existsSync(base)) return
+  let entries: string[]
+  try {
+    entries = readdirSync(base)
+  } catch {
+    return
+  }
+  for (const name of entries) {
+    const pid = Number.parseInt(name, 10)
+    if (!Number.isInteger(pid) || pid <= 0 || String(pid) !== name) continue
+    if (pid === process.pid || isAlive(pid)) continue
+    try {
+      rmSync(join(base, name), { recursive: true, force: true })
+    } catch {
+      // 消せない残骸は放置 (次回起動時にまた試す)
+    }
+  }
+}
+
+/**
+ * 端末を usable な状態に復旧する。TUI が renderer cleanup なしに `process.exit(75)`
+ * で即死した直後、再 spawn せず supervisor 自身が死ぬ経路 (sandbox 再 init 失敗) で
+ * 端末が alternate screen / raw mode のままになるのを防ぐ。
+ */
+export function resetTerminal(out: NodeJS.WriteStream = process.stdout): void {
+  // alternate screen 離脱 / カーソル再表示 / 文字属性リセット
+  out.write("\x1b[?1049l\x1b[?25h\x1b[0m")
+  // raw mode (termios) は escape sequence では戻せないので stty に頼る。
+  if (process.stdin.isTTY) {
+    try {
+      spawnSync("stty", ["sane"], { stdio: ["inherit", "ignore", "ignore"] })
+    } catch {
+      // stty が無い環境では escape sequence だけで妥協する
+    }
+  }
+}
+
+/**
+ * ハッシュ文字列を atomic に書き込む (temp file + rename)。
+ * `fs.watch` がエディタの atomic write を観測するのと同じ理由。
+ */
+export function writeHashFile(target: string, hash: string): void {
+  const tmp = `${target}.tmp`
+  writeFileSync(tmp, hash)
+  renameSync(tmp, target)
+}
+
+/**
+ * sandbox.json (global + project) を fs.watch で監視し、いずれかの変更を debounce
+ * してから combined hash を current-hash ファイルへ書き出す。
+ *
+ * 同じ親 dir のパスは 1 個の watcher にまとめる (= 重複監視を避ける)。
+ */
+export function startSandboxConfigWatcher(opts: {
+  configPaths: string[]
+  currentHashFile: string
+  debounceMs?: number
+}): () => void {
+  const debounceMs = opts.debounceMs ?? 200
+  let timer: ReturnType<typeof setTimeout> | undefined
+
+  const handle = () => {
+    if (timer) clearTimeout(timer)
+    timer = setTimeout(() => {
+      const hash = computeSandboxConfigHash(opts.configPaths)
+      try {
+        writeHashFile(opts.currentHashFile, hash)
+      } catch (err) {
+        log(`failed to write current hash: ${(err as Error).message}`)
+      }
+    }, debounceMs)
+  }
+
+  // 親 dir ごとに 1 個の watcher にまとめる。
+  const targetsByDir = new Map<string, Set<string>>()
+  for (const p of opts.configPaths) {
+    const dir = dirname(p)
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+    const targets = targetsByDir.get(dir) ?? new Set<string>()
+    targets.add(p.slice(dir.length + 1))
+    targetsByDir.set(dir, targets)
+  }
+
+  const watchers: ReturnType<typeof watch>[] = []
+  for (const [dir, targets] of targetsByDir) {
+    const w = watch(dir, (_event, name) => {
+      // name は OS によって null/undefined になり得る。null の時も発火させる
+      // (atomic rename の最終 event で name が落ちることがある)。
+      if (name && !targets.has(name)) return
+      handle()
+    })
+    // FSWatcher の 'error' イベントに何も付けないと、dir が消えた瞬間に
+    // uncaughtException で supervisor が死ぬ。fatal ではないので log だけ出す。
+    w.on("error", (err) => log(`config watcher error: ${err.message}`))
+    watchers.push(w)
+  }
+
+  return () => {
+    if (timer) clearTimeout(timer)
+    for (const w of watchers) w.close()
+  }
+}
+
+/**
+ * reload 後に子プロセスを再 spawn するための引数列を組み立てる純関数。
+ *
+ * - `--prompt <値>` / `--prompt=<値>` は除去 (初期プロンプトを再送しない)
+ * - セッション指定 (`--continue` / `-c` / `--session` / `-s`) が無ければ `--continue` を付与
+ */
+export function buildRespawnArgs(baseArgs: string[]): string[] {
+  const args: string[] = []
+  for (let i = 0; i < baseArgs.length; i++) {
+    const a = baseArgs[i]!
+    if (a === "--prompt") {
+      i++ // 直後の値も読み飛ばす
+      continue
+    }
+    if (a.startsWith("--prompt=")) continue
+    args.push(a)
+  }
+  const hasSessionFlag = args.some(
+    (a) => a === "--continue" || a === "-c" || a === "--session" || a === "-s" || a.startsWith("--session="),
+  )
+  if (!hasSessionFlag) args.push("--continue")
+  return args
+}
+
+/**
+ * reload の 1 イテレーション分の決定論的な核を切り出した純関数。
+ * 失敗時は旧 config を保持し、エラーだけを伝える (フェイルセーフ)。
+ */
+export function resolveReload(input: {
+  prevConfig: UserConfig
+  prevHash: string
+  loadResult: { ok: true; value: UserConfig } | { ok: false; error: string }
+  newHash: string
+}): { nextConfig: UserConfig; nextHash: string; error?: string } {
+  if (input.loadResult.ok) {
+    return { nextConfig: input.loadResult.value, nextHash: input.newHash }
+  }
+  return { nextConfig: input.prevConfig, nextHash: input.prevHash, error: input.loadResult.error }
+}
+
+/**
+ * global + project の両方を non-fatal に読み込み、merge した正規化 UserConfig を返す。
+ * どちらか 1 つでも parse に失敗したら旧 config 維持できるよう `{ ok: false, error }` を返す。
+ */
+function loadAndMergeAllUserConfigs(
+  paths: string[],
+): { ok: true; value: UserConfig } | { ok: false; error: string } {
+  const configs: UserConfig[] = []
+  for (const p of paths) {
+    const r = tryLoadUserConfig(p)
+    if (!r.ok) return { ok: false, error: `${p}: ${r.error}` }
+    configs.push(r.value)
+  }
+  return { ok: true, value: mergeUserConfigs(...configs) }
+}
+
+/**
  * `UserConfig` を sandbox-runtime に渡す `SandboxRuntimeConfig` に変換する。
  *
  * 合成ルール:
@@ -273,16 +591,23 @@ export function mergeUserConfigs(...configs: UserConfig[]): UserConfig {
  *   を常に先頭に concat し、user 指定分はその後ろに **追加**される (加算式)。
  *   ユーザは「cwd 以外で追加で開けたい場所」だけを `allowWrite` に書けば良い。
  *   cwd を逆に塞ぎたい上級ケースは `denyWrite: ["./"]` で対処可能 (deny が勝つ)。
+ * - `denyWrite` — `opts.runtimeDir` が指定されていれば末尾に追加する。AI が偽 hash を
+ *   書いて reload を誘発する経路を物理的に封鎖する。
+ * - `allowRead` — user が allowlist mode で指定している場合のみ `opts.runtimeDir` を append。
+ *   未指定 (= 全許可) なら何もしない (= TUI plugin はそのまま読める)。
  * - `allowPty` / `network.allowLocalBinding` — 常に `true` (TUI と dev server のため)。
  *
  * @param user - ユーザ設定。空オブジェクト `{}` も有効入力。
  * @param opts.configPaths - 常時 deny に追加する設定ファイルパス。未指定なら `[CONFIG_PATH]`。
  * @param opts.cwd - `defaultAllowWrite` に渡す cwd。未指定なら `process.cwd()`。
+ * @param opts.tmp - `defaultAllowWrite` に渡す per-session tmp。
+ * @param opts.runtimeDir - supervisor が TUI と hash を受け渡すための runtime dir。指定すると
+ *        denyWrite に append され、user の allowRead が allowlist mode の場合は allowRead にも append。
  * @returns `SandboxManager.initialize()` にそのまま渡せる完全な config。
  */
 export function buildSandboxConfig(
   user: UserConfig,
-  opts: { configPaths?: string[]; cwd?: string; tmp?: string } = {},
+  opts: { configPaths?: string[]; cwd?: string; tmp?: string; runtimeDir?: string } = {},
 ): SandboxRuntimeConfig {
   const allowedDomains = [...DEFAULT_ALLOWED_DOMAINS, ...user.network.allowedDomains]
 
@@ -295,14 +620,17 @@ export function buildSandboxConfig(
   const configPaths = opts.configPaths ?? [CONFIG_PATH]
   const denyRead = [...configPaths, ...user.filesystem.denyRead]
   const denyWrite = [...configPaths, ...user.filesystem.denyWrite]
+  if (opts.runtimeDir) denyWrite.push(opts.runtimeDir)
 
   // allowWrite は加算式: ベースライン (cwd + opencode XDG 配下 + per-session tmp) を
   // 常に先頭に置き、ユーザ指定はそれに追加される。これにより「ユーザが allowWrite を
   // 1 つでも書いた瞬間に cwd が消える」 footgun を構造的に排除している。
-  // allowRead は undefined を渡すと sandbox-runtime の デフォルト read 挙動に
-  // 委ねられるので、未指定時は undefined のまま渡す。
   const allowWrite = [...defaultAllowWrite({ cwd: opts.cwd, tmp: opts.tmp }), ...user.filesystem.allowWrite]
-  const allowRead = user.filesystem.allowRead.length > 0 ? user.filesystem.allowRead : undefined
+  // allowRead は undefined を渡すと sandbox-runtime の デフォルト read 挙動 (= 全許可)
+  // に委ねられる。user が allowlist mode を指定している場合のみ、runtime dir を追加で
+  // 許可しないと TUI plugin が hash file を読めなくなる。
+  const baseAllowRead = user.filesystem.allowRead.length > 0 ? user.filesystem.allowRead : undefined
+  const allowRead = baseAllowRead && opts.runtimeDir ? [...baseAllowRead, opts.runtimeDir] : baseAllowRead
 
   return {
     network: {
@@ -434,23 +762,49 @@ async function main(): Promise<number> {
   const session = setupSessionTmpdir()
   process.env.TMPDIR = session.path
 
+  // sandbox.json は global (~/.config/securecode/) と project (cwd/.securecode/) の 2 階層。
+  // 親ディレクトリへの walk は意図的にしない (攻撃面 / 暗黙の上位設定を避ける)。
+  //
+  // cwd は **canonical path** に展開する: macOS の `os.tmpdir()` (`/var/folders/...`) や
+  // ユーザが symlink 配下 (例: `/tmp/myproj` (= `/private/tmp/myproj`)) で開発するケースで、
+  // Seatbelt は canonical path で allow/deny を評価するため、logical path のまま allowWrite に
+  // 載せると sandbox 内の write が全て拒否される。同じ理由で setupSessionTmpdir も
+  // base を realpath している。`projectConfigPath` も canonical 起点で組み立てて denyRead/
+  // denyWrite に渡すパスを sandbox 評価軸と一致させる。
+  const cwd = realpathSync(process.cwd())
+  const projectConfigPath = join(cwd, ".securecode", "sandbox.json")
+  const configPaths = [CONFIG_PATH, projectConfigPath]
+
+  // TUI plugin と hash を受け渡すための runtime dir。session と同じく try/finally 内で
+  // cleanup する。前回 SIGKILL 等で残った dir もここで掃除する。
+  cleanupStaleRuntimeDirs()
+  const runtimeDir = prepareRuntimeDir()
+  const baselineHashFile = join(runtimeDir, BASELINE_HASH_FILENAME)
+  const currentHashFile = join(runtimeDir, CURRENT_HASH_FILENAME)
+  const cleanupRuntime = () => {
+    try {
+      rmSync(runtimeDir, { recursive: true, force: true })
+    } catch {
+      // 削除失敗は無視 (次回起動時に prepareRuntimeDir が作り直す)
+    }
+  }
+
   // 以降は try/finally で囲み、どの経路 (正常 exit / 同期 throw / SandboxManager 初期化失敗 /
-  // wrapWithSandbox throw 等) でも session.cleanup が確実に走るようにする。`process.exit`
-  // は finally を skip するため、本関数では exit code を return するに留め、実 exit は
-  // 呼び出し側に集約する。
+  // wrapWithSandbox throw 等) でも session.cleanup と cleanupRuntime が確実に走るようにする。
+  // `process.exit` は finally を skip するため、本関数では exit code を return するに留め、
+  // 実 exit は呼び出し側に集約する。
   try {
     // Ctrl+C や SIGTERM は process group 全体に届くため、child (securecode-bin) も同じ
     // signal を受けて自分で終了する。本来 parent は child の exit を待つだけで済むが、
     //
     // 1. parent の default SIGINT/SIGTERM handler は **即 process.exit()** してしまい、
-    //    finally の session.cleanup() を skip する。これがないと per-session tmpdir が
-    //    /tmp 配下に溜まり「別セッションの残骸を AI に読ませない」設計目標が崩れる。
+    //    finally の cleanup を skip する。これがないと per-session tmpdir / runtime dir が
+    //    /tmp や ~/.cache 配下に溜まる。
     // 2. child が signal を握りつぶす状態 (TUI が一時的に handler 差し替え中 / JDTLS が
-    //    停止しない 等) になると、parent も自分で終了できず永久ハングする。Ctrl+C が
-    //    効かないように見えるため、ユーザに `kill -9` を強いてしまう。
+    //    停止しない 等) になると、parent も自分で終了できず永久ハングする。
     //
     // 対策: 1 回目は child へ明示的に signal を forward (parent は exit させない)、
-    // 2 回目は「ユーザが本当に降りたい」とみなして session.cleanup を試みた後で強制 exit。
+    // 2 回目は「ユーザが本当に降りたい」とみなして cleanup を試みた後で強制 exit。
     let child: ReturnType<typeof spawn> | undefined
     let interruptCount = 0
     const forwardSignal = (sig: "SIGINT" | "SIGTERM") => () => {
@@ -464,12 +818,13 @@ async function main(): Promise<number> {
       }
       if (interruptCount >= 2) {
         // 2 回目以降は強制脱出。process.exit は finally を skip するため、
-        // tmpdir cleanup だけはここで明示的に試みる。
+        // cleanup だけはここで明示的に試みる。
         try {
           session.cleanup()
         } catch {
           // ignore
         }
+        cleanupRuntime()
         // 128 + signal number 慣例: SIGINT=130, SIGTERM=143
         process.exit(sig === "SIGINT" ? 130 : 143)
       }
@@ -477,22 +832,18 @@ async function main(): Promise<number> {
     process.on("SIGINT", forwardSignal("SIGINT"))
     process.on("SIGTERM", forwardSignal("SIGTERM"))
 
-    // sandbox.json は global (~/.config/securecode/) と project (cwd/.securecode/) の 2 階層。
-    // 親ディレクトリへの walk は意図的にしない (攻撃面 / 暗黙の上位設定を避ける)。
-    //
-    // cwd は **canonical path** に展開する: macOS の `os.tmpdir()` (`/var/folders/...`) や
-    // ユーザが symlink 配下 (例: `/tmp/myproj` (= `/private/tmp/myproj`)) で開発するケースで、
-    // Seatbelt は canonical path で allow/deny を評価するため、logical path のまま allowWrite に
-    // 載せると sandbox 内の write が **全て** 拒否される。同じ理由で setupSessionTmpdir も
-    // base を realpath している。`projectConfigPath` も canonical 起点で組み立てて denyRead/
-    // denyWrite に渡すパスを sandbox 評価軸と一致させる。
-    const cwd = realpathSync(process.cwd())
-    const projectConfigPath = join(cwd, ".securecode", "sandbox.json")
-    const userConfig = mergeUserConfigs(loadUserConfig(CONFIG_PATH), loadUserConfig(projectConfigPath))
-    const sandboxConfig = buildSandboxConfig(userConfig, {
-      configPaths: [CONFIG_PATH, projectConfigPath],
+    // 起動時は strict (process.exit on parse error)。reload 時は non-fatal な
+    // tryLoadUserConfig を使うので、ここだけ loadUserConfig を直接呼ぶ。
+    let userConfig = mergeUserConfigs(loadUserConfig(CONFIG_PATH), loadUserConfig(projectConfigPath))
+    let baselineHash = computeSandboxConfigHash(configPaths)
+    writeHashFile(baselineHashFile, baselineHash)
+    writeHashFile(currentHashFile, baselineHash)
+
+    let sandboxConfig = buildSandboxConfig(userConfig, {
+      configPaths,
       cwd,
       tmp: session.path,
+      runtimeDir,
     })
 
     log(`allowedDomains = ${sandboxConfig.network.allowedDomains.join(", ")}`)
@@ -504,29 +855,105 @@ async function main(): Promise<number> {
       die(`failed to initialize sandbox: ${(err as Error).message}`)
     }
 
-    const inner = resolveInnerCommand(process.argv.slice(2))
-    const wrapped = await SandboxManager.wrapWithSandbox(inner)
-
-    log(`launching opencode inside sandbox`)
-
-    child = spawn(wrapped, {
-      shell: true,
-      stdio: "inherit",
-      env: process.env,
+    const stopWatcher = startSandboxConfigWatcher({
+      configPaths,
+      currentHashFile,
     })
 
-    const exitCode: number = await new Promise((r) => {
-      child!.on("exit", (code) => r(code ?? 1))
-      child!.on("error", (err) => {
-        log(`child error: ${err.message}`)
-        r(1)
-      })
-    })
+    const baseArgs = process.argv.slice(2)
+    let reloadError: string | undefined
+    let iteration = 0
 
-    await SandboxManager.reset().catch(() => {})
-    return exitCode
+    try {
+      while (true) {
+        // 2 周目以降は前回セッションを継続する (--prompt は再送しない)。
+        const args = iteration === 0 ? baseArgs : buildRespawnArgs(baseArgs)
+        const inner = resolveInnerCommand(args)
+        const wrapped = await SandboxManager.wrapWithSandbox(inner)
+
+        // iter 0 (初回起動) は端末がまだ alternate screen に入っていないので普通に出す。
+        // iter >= 1 (reload) は旧 TUI が抜けた直後の主画面に流れて見苦しいので silent。
+        if (iteration === 0) log("launching opencode inside sandbox")
+        else debugLog(`launching opencode inside sandbox (iter ${iteration})`)
+
+        child = spawn(wrapped, {
+          shell: true,
+          stdio: "inherit",
+          env: {
+            ...process.env,
+            [SANDBOX_HASH_DIR_ENV]: runtimeDir,
+            [RELOAD_EXIT_CODE_ENV]: String(RELOAD_EXIT_CODE),
+            // 前回 reload に失敗していたらこの起動でだけ伝える (起動後に env を消す手段は
+            // 無いので、TUI plugin 側は「起動時に 1 度だけ読む」運用にする)。
+            [RELOAD_ERROR_ENV]: reloadError ?? "",
+          },
+        })
+
+        const exitCode: number = await new Promise((r) => {
+          child!.on("exit", (code) => r(code ?? 1))
+          child!.on("error", (err) => {
+            log(`child error: ${err.message}`)
+            r(1)
+          })
+        })
+
+        if (exitCode !== RELOAD_EXIT_CODE) {
+          await SandboxManager.reset().catch(() => {})
+          return exitCode
+        }
+
+        debugLog("reload requested by TUI")
+        reloadError = undefined
+
+        // 新しい sandbox.json (global + project) を non-fatal に読み込む。
+        // どちらかが parse 失敗していたら、旧 config を維持して error toast だけ伝える。
+        const loadResult = loadAndMergeAllUserConfigs(configPaths)
+        const newHash = computeSandboxConfigHash(configPaths)
+        const reloaded = resolveReload({
+          prevConfig: userConfig,
+          prevHash: baselineHash,
+          loadResult,
+          newHash,
+        })
+        if (reloaded.error) {
+          reloadError = `sandbox.json の parse に失敗しました (旧設定を維持): ${reloaded.error}`
+          log(reloadError)
+        }
+
+        userConfig = reloaded.nextConfig
+        baselineHash = reloaded.nextHash
+        sandboxConfig = buildSandboxConfig(userConfig, {
+          configPaths,
+          cwd,
+          tmp: session.path,
+          runtimeDir,
+        })
+        writeHashFile(baselineHashFile, baselineHash)
+        writeHashFile(currentHashFile, baselineHash)
+
+        try {
+          await SandboxManager.reset()
+        } catch (err) {
+          log(`SandboxManager.reset() failed: ${(err as Error).message} (続行)`)
+        }
+        try {
+          await SandboxManager.initialize(sandboxConfig)
+        } catch (err) {
+          // 直前の TUI は process.exit(RELOAD_EXIT_CODE) で即死しており端末が
+          // alternate screen / raw mode のまま。再 spawn せず die するので復旧してから終了。
+          resetTerminal()
+          die(`failed to re-initialize sandbox: ${(err as Error).message}`)
+        }
+
+        debugLog(`reloaded allowedDomains = ${sandboxConfig.network.allowedDomains.join(", ")}`)
+        iteration++
+      }
+    } finally {
+      stopWatcher()
+    }
   } finally {
     session.cleanup()
+    cleanupRuntime()
   }
 }
 

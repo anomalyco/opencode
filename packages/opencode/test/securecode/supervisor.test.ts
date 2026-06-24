@@ -1,17 +1,35 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
-import { existsSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs"
 import { homedir, tmpdir } from "node:os"
 import { join, resolve } from "node:path"
 import {
   CONFIG_PATH,
   DEFAULT_ALLOWED_DOMAINS,
+  buildRespawnArgs,
   buildSandboxConfig,
+  cleanupStaleRuntimeDirs,
+  computeSandboxConfigHash,
   defaultAllowWrite,
   loadUserConfig,
   mergeUserConfigs,
+  prepareRuntimeDir,
+  resetTerminal,
   resolveInnerCommand,
+  resolveReload,
   setupSessionTmpdir,
   shellQuote,
+  startSandboxConfigWatcher,
+  tryLoadUserConfig,
+  writeHashFile,
   type UserConfig,
 } from "../../../../script/securecode-supervisor"
 
@@ -436,5 +454,313 @@ describe("shellQuote", () => {
     expect(shellQuote("it's")).toBe("'it'\\''s'")
     expect(shellQuote("'leading")).toBe("''\\''leading'")
     expect(shellQuote("trailing'")).toBe("'trailing'\\'''")
+  })
+})
+
+describe("buildSandboxConfig (runtimeDir 周り)", () => {
+  test("runtimeDir 指定時、denyWrite に末尾追加される", () => {
+    const cfg = buildSandboxConfig(makeConfig(), { runtimeDir: "/tmp/securecode-runtime/123" })
+    expect(cfg.filesystem.denyWrite).toContain("/tmp/securecode-runtime/123")
+  })
+
+  test("runtimeDir 指定 + user.allowRead 未指定なら allowRead は undefined のまま (全許可)", () => {
+    const cfg = buildSandboxConfig(makeConfig(), { runtimeDir: "/tmp/r/1" })
+    expect(cfg.filesystem.allowRead).toBeUndefined()
+  })
+
+  test("runtimeDir + user.allowRead 指定なら allowRead に runtimeDir が append される", () => {
+    const cfg = buildSandboxConfig(makeConfig({ filesystem: { allowRead: ["/workspace"] } }), {
+      runtimeDir: "/tmp/r/1",
+    })
+    expect(cfg.filesystem.allowRead).toEqual(["/workspace", "/tmp/r/1"])
+  })
+
+  test("runtimeDir 未指定なら denyWrite に runtime dir は入らない", () => {
+    const cfg = buildSandboxConfig(makeConfig())
+    expect(cfg.filesystem.denyWrite).toEqual([CONFIG_PATH])
+  })
+})
+
+describe("computeSandboxConfigHash", () => {
+  test("空配列でも deterministic な hash を返す", () => {
+    expect(computeSandboxConfigHash([])).toMatch(/^[0-9a-f]{64}$/)
+  })
+
+  test("単一パス・ファイル不在でも deterministic、パスが違えば hash も変わる", () => {
+    const h = computeSandboxConfigHash(["/nonexistent/securecode-test/sandbox.json"])
+    expect(h).toMatch(/^[0-9a-f]{64}$/)
+    expect(h).not.toBe(computeSandboxConfigHash(["/nonexistent/another/sandbox.json"]))
+  })
+
+  test("同じ内容・同じパスなら同じハッシュ", () => {
+    const dir = mkdtempSync(join(tmpdir(), "securecode-hash-"))
+    const p = join(dir, "x.json")
+    writeFileSync(p, '{"network":{"allowedDomains":["foo.com"]}}')
+    try {
+      expect(computeSandboxConfigHash([p])).toBe(computeSandboxConfigHash([p]))
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  test("内容が違えばハッシュが変わる", () => {
+    const dir = mkdtempSync(join(tmpdir(), "securecode-hash-"))
+    const p = join(dir, "x.json")
+    writeFileSync(p, '{"a":1}')
+    const h1 = computeSandboxConfigHash([p])
+    writeFileSync(p, '{"a":2}')
+    const h2 = computeSandboxConfigHash([p])
+    try {
+      expect(h1).not.toBe(h2)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  test("複数パス: project 側だけ変わっても全体 hash が変わる", () => {
+    const dir = mkdtempSync(join(tmpdir(), "securecode-multihash-"))
+    const g = join(dir, "global.json")
+    const p = join(dir, "project.json")
+    writeFileSync(g, '{"network":{"allowedDomains":["g.com"]}}')
+    writeFileSync(p, '{"network":{"allowedDomains":["p1.com"]}}')
+    const h1 = computeSandboxConfigHash([g, p])
+    writeFileSync(p, '{"network":{"allowedDomains":["p2.com"]}}')
+    const h2 = computeSandboxConfigHash([g, p])
+    try {
+      expect(h1).not.toBe(h2)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  test("複数パス: 「不在 → 作成」の遷移も hash 変化として検知できる", () => {
+    const dir = mkdtempSync(join(tmpdir(), "securecode-absenthash-"))
+    const g = join(dir, "global.json")
+    const p = join(dir, "project.json")
+    writeFileSync(g, '{"network":{"allowedDomains":["g.com"]}}')
+    const h1 = computeSandboxConfigHash([g, p])
+    writeFileSync(p, '{"network":{"allowedDomains":["p.com"]}}')
+    const h2 = computeSandboxConfigHash([g, p])
+    try {
+      expect(h1).not.toBe(h2)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+})
+
+describe("tryLoadUserConfig", () => {
+  test("ファイル不在は ok=true で全フィールド空配列の正規化 config", () => {
+    const r = tryLoadUserConfig("/nonexistent/securecode-test/sandbox.json")
+    expect(r.ok).toBe(true)
+    if (r.ok) {
+      expect(r.value.network.allowedDomains).toEqual([])
+      expect(r.value.filesystem.denyRead).toEqual([])
+    }
+  })
+
+  test("正常な JSON は ok=true で正規化された config を返す", () => {
+    const dir = mkdtempSync(join(tmpdir(), "securecode-tryload-"))
+    const p = join(dir, "sandbox.json")
+    writeFileSync(p, '{"network":{"allowedDomains":["foo.com"]}}')
+    try {
+      const r = tryLoadUserConfig(p)
+      expect(r.ok).toBe(true)
+      if (r.ok) {
+        expect(r.value.network.allowedDomains).toEqual(["foo.com"])
+        expect(r.value.network.deniedDomains).toEqual([])
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  test("不正な JSON は ok=false で error を返す (process.exit しない)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "securecode-tryload-"))
+    const p = join(dir, "sandbox.json")
+    writeFileSync(p, "{ not valid json")
+    try {
+      const r = tryLoadUserConfig(p)
+      expect(r.ok).toBe(false)
+      if (!r.ok) expect(r.error).toContain("JSON")
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+})
+
+describe("resolveReload (reload 1 イテレーションの決定論)", () => {
+  test("loadResult.ok=true なら新しい config / hash を返す", () => {
+    const prev = makeConfig({ network: { allowedDomains: ["old.com"] } })
+    const next = makeConfig({ network: { allowedDomains: ["new.com"] } })
+    const result = resolveReload({
+      prevConfig: prev,
+      prevHash: "old-hash",
+      loadResult: { ok: true, value: next },
+      newHash: "new-hash",
+    })
+    expect(result.nextConfig.network.allowedDomains).toEqual(["new.com"])
+    expect(result.nextHash).toBe("new-hash")
+    expect(result.error).toBeUndefined()
+  })
+
+  test("loadResult.ok=false なら旧 config / 旧 hash を保ち、error を埋める", () => {
+    const prev = makeConfig({ network: { allowedDomains: ["old.com"] } })
+    const result = resolveReload({
+      prevConfig: prev,
+      prevHash: "old-hash",
+      loadResult: { ok: false, error: "Unexpected token" },
+      newHash: "new-hash-ignored",
+    })
+    expect(result.nextConfig.network.allowedDomains).toEqual(["old.com"])
+    expect(result.nextHash).toBe("old-hash")
+    expect(result.error).toBe("Unexpected token")
+  })
+})
+
+describe("prepareRuntimeDir / writeHashFile", () => {
+  test("runtime dir を作成し、再呼び出しで内容をリセットする", () => {
+    const base = mkdtempSync(join(tmpdir(), "securecode-rtbase-"))
+    try {
+      const dir = prepareRuntimeDir(999, base)
+      expect(existsSync(dir)).toBe(true)
+      writeFileSync(join(dir, "leftover"), "stale")
+      const dir2 = prepareRuntimeDir(999, base)
+      expect(dir2).toBe(dir)
+      expect(existsSync(join(dir, "leftover"))).toBe(false)
+    } finally {
+      rmSync(base, { recursive: true, force: true })
+    }
+  })
+
+  test("writeHashFile は中間 tmp ファイルを残さず atomic に書く", () => {
+    const dir = mkdtempSync(join(tmpdir(), "securecode-hashw-"))
+    try {
+      const target = join(dir, "current-hash")
+      writeHashFile(target, "abcd1234")
+      expect(readFileSync(target, "utf8")).toBe("abcd1234")
+      expect(existsSync(`${target}.tmp`)).toBe(false)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+})
+
+describe("startSandboxConfigWatcher", () => {
+  test("単一パス: sandbox.json の変更を debounce 経由で検知して current-hash を更新する", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "securecode-watch-"))
+    const configPath = join(dir, "sandbox.json")
+    const currentHashFile = join(dir, "current-hash")
+    writeFileSync(configPath, '{"network":{"allowedDomains":["a.com"]}}')
+    writeHashFile(currentHashFile, computeSandboxConfigHash([configPath]))
+    const initial = readFileSync(currentHashFile, "utf8")
+    const stop = startSandboxConfigWatcher({ configPaths: [configPath], currentHashFile, debounceMs: 30 })
+    try {
+      // macOS の fs.watch (FSEvents) は watcher のセットアップが非同期で、watch()
+      // 直後の書き込みイベントを取りこぼすことがある。固定 sleep だと flaky になる
+      // ため、反映を確認できるまで書き込みを繰り返すリトライ形式にする。
+      const deadline = Date.now() + 5000
+      let after = initial
+      while (after === initial && Date.now() < deadline) {
+        writeFileSync(configPath, '{"network":{"allowedDomains":["b.com"]}}')
+        writeFileSync(configPath, '{"network":{"allowedDomains":["c.com"]}}')
+        await new Promise((r) => setTimeout(r, 100))
+        after = readFileSync(currentHashFile, "utf8")
+      }
+      expect(after).not.toBe(initial)
+      expect(after).toBe(computeSandboxConfigHash([configPath]))
+    } finally {
+      stop()
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  test("global + project: project 側の変更だけでも current-hash が更新される", async () => {
+    const gDir = mkdtempSync(join(tmpdir(), "securecode-watch-g-"))
+    const pDir = mkdtempSync(join(tmpdir(), "securecode-watch-p-"))
+    const globalPath = join(gDir, "sandbox.json")
+    const projectPath = join(pDir, "sandbox.json")
+    const currentHashFile = join(gDir, "current-hash")
+    writeFileSync(globalPath, '{"network":{"allowedDomains":["g.com"]}}')
+    const configPaths = [globalPath, projectPath]
+    writeHashFile(currentHashFile, computeSandboxConfigHash(configPaths))
+    const initial = readFileSync(currentHashFile, "utf8")
+    const stop = startSandboxConfigWatcher({ configPaths, currentHashFile, debounceMs: 30 })
+    try {
+      const deadline = Date.now() + 5000
+      let after = initial
+      while (after === initial && Date.now() < deadline) {
+        writeFileSync(projectPath, '{"network":{"allowedDomains":["p1.com"]}}')
+        writeFileSync(projectPath, '{"network":{"allowedDomains":["p2.com"]}}')
+        await new Promise((r) => setTimeout(r, 100))
+        after = readFileSync(currentHashFile, "utf8")
+      }
+      expect(after).not.toBe(initial)
+      expect(after).toBe(computeSandboxConfigHash(configPaths))
+    } finally {
+      stop()
+      rmSync(gDir, { recursive: true, force: true })
+      rmSync(pDir, { recursive: true, force: true })
+    }
+  })
+})
+
+describe("buildRespawnArgs", () => {
+  test("引数なしなら --continue だけ付与する", () => {
+    expect(buildRespawnArgs([])).toEqual(["--continue"])
+  })
+
+  test("--prompt とその値を除去する (初期プロンプトの再送防止)", () => {
+    expect(buildRespawnArgs(["--prompt", "fix the bug", "--model", "m"])).toEqual(["--model", "m", "--continue"])
+  })
+
+  test("--prompt=値 形式も除去する", () => {
+    expect(buildRespawnArgs(["--prompt=fix the bug"])).toEqual(["--continue"])
+  })
+
+  test("既に --continue があれば二重付与しない", () => {
+    expect(buildRespawnArgs(["--continue"])).toEqual(["--continue"])
+  })
+
+  test("--session 指定時は --continue を付与しない (同セッション継続)", () => {
+    expect(buildRespawnArgs(["--session", "abc"])).toEqual(["--session", "abc"])
+    expect(buildRespawnArgs(["--session=abc"])).toEqual(["--session=abc"])
+  })
+
+  test("その他の引数 (positional / フラグ) は保持し、入力配列を変更しない", () => {
+    const base = ["/path/to/project", "--model", "m"]
+    expect(buildRespawnArgs(base)).toEqual(["/path/to/project", "--model", "m", "--continue"])
+    expect(base).toEqual(["/path/to/project", "--model", "m"])
+  })
+})
+
+describe("cleanupStaleRuntimeDirs", () => {
+  test("死んだ pid の dir だけ削除し、生きている pid と非数値名は残す", () => {
+    const base = mkdtempSync(join(tmpdir(), "securecode-stale-"))
+    try {
+      mkdirSync(join(base, "100"), { recursive: true })
+      mkdirSync(join(base, "200"), { recursive: true })
+      mkdirSync(join(base, "not-a-pid"), { recursive: true })
+      cleanupStaleRuntimeDirs(base, (pid) => pid === 200)
+      expect(existsSync(join(base, "100"))).toBe(false)
+      expect(existsSync(join(base, "200"))).toBe(true)
+      expect(existsSync(join(base, "not-a-pid"))).toBe(true)
+    } finally {
+      rmSync(base, { recursive: true, force: true })
+    }
+  })
+
+  test("base が存在しなくても throw しない", () => {
+    expect(() => cleanupStaleRuntimeDirs("/nonexistent/securecode-test/runtime")).not.toThrow()
+  })
+})
+
+describe("resetTerminal", () => {
+  test("alternate screen 離脱とカーソル再表示の escape sequence を書く", () => {
+    let buf = ""
+    const out = { write: (s: string) => ((buf += s), true) } as unknown as NodeJS.WriteStream
+    resetTerminal(out)
+    expect(buf).toContain("\x1b[?1049l")
+    expect(buf).toContain("\x1b[?25h")
   })
 })

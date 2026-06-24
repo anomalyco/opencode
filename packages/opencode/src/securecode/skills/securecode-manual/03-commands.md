@@ -33,6 +33,13 @@ securecode --help
 
 `/help` は **TUI 内** のスラッシュコマンド版で、起動中の対話モードでだけ使えます。
 
+## TUI 内スラッシュコマンド (SecureCode 固有)
+
+| コマンド | 用途 |
+|---|---|
+| `/reload_sandbox` | `~/.config/securecode/sandbox.json` を編集したあとに叩くと、会話履歴を保ったまま新しいサンドボックス設定を反映する。設定に変更がないときは何も起こらず説明ダイアログだけが出る (詳細 → `05-sandbox.md`) |
+| `/scode` | `scode` シェルエイリアスを `~/.zshrc` 等に追加する |
+
 ## 関連
 
 - 認証と環境変数 → `01-installation.md`
