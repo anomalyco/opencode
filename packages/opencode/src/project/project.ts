@@ -245,6 +245,41 @@ export const layer = Layer.effect(
       const data = yield* projectV2.resolve(AbsolutePath.make(directory))
       const worktree = data.id === ProjectV2.ID.make("global") && !data.vcs ? "/" : data.directory
 
+      // If the resolved project ID differs from an existing project whose
+      // sandboxes contain this directory, prefer the existing project. This
+      // prevents duplicate projects when a git remote URL changes (causing a
+      // different project ID to be computed) and the daemon restarts.
+      if (data.vcs) {
+        const absDir = AbsolutePath.make(data.directory)
+        const allProjects = yield* db.select().from(ProjectTable).all().pipe(Effect.orDie)
+        const sandboxOwner = allProjects.find(
+          (p) =>
+            p.id !== data.id &&
+            (p.sandboxes.includes(absDir) || p.sandboxes.includes(AbsolutePath.make(directory))),
+        )
+        if (sandboxOwner) {
+          yield* Effect.logInfo("fromDirectory sandbox match", {
+            directory,
+            resolvedID: data.id,
+            sandboxProjectID: sandboxOwner.id,
+          })
+          const existing = fromRow(sandboxOwner)
+          const sandboxes = existing.sandboxes.includes(absDir)
+            ? existing.sandboxes
+            : [...existing.sandboxes, absDir]
+          yield* db
+            .update(ProjectTable)
+            .set({ sandboxes: sandboxes as AbsolutePath[], time_updated: Date.now() })
+            .where(eq(ProjectTable.id, sandboxOwner.id))
+            .run()
+            .pipe(Effect.orDie)
+          yield* saveProjectDirectory({ projectID: sandboxOwner.id, directory: absDir })
+          const updated = { ...existing, sandboxes }
+          yield* emitUpdated(updated)
+          return { project: updated, sandbox: data.directory }
+        }
+      }
+
       // Phase 2: upsert
       const projectID = ProjectV2.ID.make(data.id)
       yield* migrateProjectId(data.previous ? ProjectV2.ID.make(data.previous) : undefined, projectID)
