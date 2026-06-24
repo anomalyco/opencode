@@ -1,6 +1,8 @@
 import { dlopen, ptr } from "bun:ffi"
 
-if (process.platform === "win32") {
+export function enableVT(): void {
+  if (process.platform !== "win32") return
+
   try {
     const k = dlopen("kernel32.dll", {
       GetStdHandle: { args: ["i32"], returns: "ptr" },
@@ -18,7 +20,7 @@ if (process.platform === "win32") {
         k.symbols.SetConsoleMode(handle, buf[0] | ENABLE_VIRTUAL_TERMINAL_PROCESSING)
       }
     }
-  } catch {
-    // silently ignore
+  } catch (err) {
+    console.error("[enableVT] Failed to enable virtual terminal processing:", String(err))
   }
 }

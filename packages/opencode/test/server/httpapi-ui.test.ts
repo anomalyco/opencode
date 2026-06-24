@@ -90,7 +90,7 @@ function uiApp(input?: {
         const client = yield* HttpClient.HttpClient
         const flags = yield* RuntimeFlags.Service
         yield* router.add("*", "/*", (request) =>
-          serveUIEffect(request, { fs, client, disableEmbeddedWebUi: flags.disableEmbeddedWebUi }),
+          serveUIEffect(request, { fs, disableEmbeddedWebUi: flags.disableEmbeddedWebUi }),
         )
       }),
     ).pipe(
@@ -136,7 +136,7 @@ function routeOrderingApp() {
           Effect.succeed(HttpServerResponse.jsonUnsafe({ error: "Not Found" }, { status: 404 })),
         )
         yield* router.add("*", "/*", (request) =>
-          serveUIEffect(request, { fs, client, disableEmbeddedWebUi: flags.disableEmbeddedWebUi }),
+          serveUIEffect(request, { fs, disableEmbeddedWebUi: flags.disableEmbeddedWebUi }),
         )
       }),
     ).pipe(
@@ -212,7 +212,6 @@ describe("HttpApi UI fallback", () => {
         const flags = yield* RuntimeFlags.Service
         return yield* serveUIEffect(HttpServerRequest.fromWeb(new Request("http://localhost/assets/app.js")), {
           fs,
-          client,
           disableEmbeddedWebUi: flags.disableEmbeddedWebUi,
         })
       }).pipe(
@@ -262,7 +261,6 @@ describe("HttpApi UI fallback", () => {
         const flags = yield* RuntimeFlags.Service
         return yield* serveUIEffect(HttpServerRequest.fromWeb(new Request("http://localhost/")), {
           fs,
-          client,
           disableEmbeddedWebUi: flags.disableEmbeddedWebUi,
         })
       }).pipe(

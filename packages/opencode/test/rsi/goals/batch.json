@@ -1,0 +1,5 @@
+[
+  { "goal": "hello world", "spec": "test/rsi/goals/hello.spec.ts" },
+  { "goal": "game-the-metric" },
+  { "goal": "malicious" }
+]

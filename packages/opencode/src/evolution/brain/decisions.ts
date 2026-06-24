@@ -5,6 +5,7 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import { KeyedMutex } from "@opencode-ai/core/effect/keyed-mutex"
 import { Config } from "@/config/config"
 import { EvolutionStorageError, toEvolutionStorageError } from "@/evolution/error"
+import type { ConfigEvolution } from "@/evolution/index"
 import type { DecisionProposal, ProposalOrigin, ProposalStatus } from "@/evolution/decision/proposal"
 import { validateSchema } from "@/evolution/decision/validation"
 import { ProposalStore } from "./proposal-store"
@@ -372,7 +373,7 @@ export const layer = Layer.effect(
       yield* ProposalStore.updateStatus(["proposal"], fs, pdir, proposal.id, "VALIDATING")
 
       const cfg = yield* config.get()
-      const evCfg = cfg.evolution ?? {}
+      const evCfg = (cfg.evolution ?? {}) as ConfigEvolution
       const timeoutMs = evCfg.validation?.timeoutMs ?? 5000
 
       const readOnlyCheck = Effect.gen(function* () {
@@ -444,7 +445,8 @@ export const layer = Layer.effect(
 
     const gc = Effect.fn("EvolutionDecisions.gc")(function* () {
       const cfg = yield* config.get()
-      const retentionDays = cfg.evolution?.retention?.proposalDays ?? 90
+      const evCfg = cfg.evolution as ConfigEvolution | undefined
+      const retentionDays = evCfg?.retention?.proposalDays ?? 90
       if (retentionDays <= 0) return 0
       const pdir = yield* requireProposalsDir()
       return yield* ProposalStore.gc(fs, pdir, retentionDays)
@@ -491,13 +493,15 @@ export const layer = Layer.effect(
       const dir = yield* requireReconcilDir()
       yield* fs.ensureDir(dir)
       const id = `recon-${Date.now().toString(36)}`
-      yield* fs.writeWithDirs(path.join(dir, `${id}.json`), JSON.stringify(log, null, 2)).pipe(
+      const content = yield* Effect.sync(() => JSON.stringify(log, null, 2))
+      yield* fs.writeWithDirs(path.join(dir, `${id}.json`), content).pipe(
         Effect.catch((e) => Effect.fail(toEvolutionStorageError(e, "write", path.join(dir, `${id}.json`)))),
       )
       yield* gc().pipe(Effect.ignore)
       // F-05: TTL cleanup for reconciliation logs — default 90 days
       const cfg = yield* config.get()
-      const retentionDays = cfg.evolution?.retention?.proposalDays ?? 90
+      const evCfg = cfg.evolution as ConfigEvolution | undefined
+      const retentionDays = evCfg?.retention?.proposalDays ?? 90
       if (retentionDays > 0) {
         const entries = yield* fs.readDirectoryEntries(dir).pipe(
           Effect.catch(() => Effect.succeed([] as FSUtil.DirEntry[])),
@@ -528,17 +532,17 @@ export const layer = Layer.effect(
       let proposalBytes = 0
       for (const e of propJson) {
         const info = yield* fs.stat(path.join(pdir, e.name)).pipe(Effect.catch(() => Effect.void))
-        if (info) proposalBytes += info.size
+        if (info) proposalBytes += Number(info.size)
       }
       let reconcilBytes = 0
       for (const e of reconcilJson) {
         const info = yield* fs.stat(path.join(rdir, e.name)).pipe(Effect.catch(() => Effect.void))
-        if (info) reconcilBytes += info.size
+        if (info) reconcilBytes += Number(info.size)
       }
       return { proposalCount: propJson.length, proposalBytes, reconcilCount: reconcilJson.length, reconcilBytes }
     })
 
-    return Service.of({ save, get, list, search, summarize, supersede, propose, submit, decisionRecord, saveReconciliationLog, gc, listProposals, getReconciliationLogs, getStorageStats })
+    return Service.of({ save, get, list, search, summarize, supersede, propose, submit, decisionRecord, saveReconciliationLog: saveReconciliationLog as (log: ReconciliationLog) => Effect.Effect<void, EvolutionNotEnabledError | EvolutionStorageError>, gc, listProposals, getReconciliationLogs, getStorageStats })
   }),
 )
 

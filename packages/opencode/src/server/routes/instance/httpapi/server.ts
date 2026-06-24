@@ -29,6 +29,7 @@ import { Project } from "@/project/project"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { ProjectCopy } from "@opencode-ai/core/project/copy"
 import { MoveSession } from "@opencode-ai/core/control-plane/move-session"
+import { Muel } from "@/muel/service"
 import { ProviderAuth } from "@/provider/auth"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { Provider } from "@/provider/provider"
@@ -258,6 +259,7 @@ export function createRoutes(
     Layer.provideMerge(Ripgrep.defaultLayer),
     Layer.provide(InstanceLayer.layer),
     Layer.provideMerge(Observability.layer),
+    Layer.provideMerge(Muel.layer),
   )
 }
 

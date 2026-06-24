@@ -1,11 +1,10 @@
 import { cmd } from "./cmd"
 import { withNetworkOptions, resolveNetworkOptionsNoConfig } from "../network"
 import { Flag } from "@opencode-ai/core/flag/flag"
-import type { Argv } from "yargs"
 
 export const ServeCommand = cmd({
   command: "serve",
-  builder: (yargs: Argv) => withNetworkOptions(yargs) as Argv,
+  builder: (yargs) => withNetworkOptions(yargs),
   describe: "starts a headless opencode server" as const,
   async handler(args) {
     const { Server } = await import("../../server/server")

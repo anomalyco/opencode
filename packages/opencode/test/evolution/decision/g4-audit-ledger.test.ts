@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { FSUtil } from "@opencode-ai/core/fs-util"
-import { testEffect, type EffectTestAPI } from "../../lib/effect"
+import { testEffect } from "../../lib/effect"
 import { AuditLedger } from "@/evolution/audit/ledger"
 import { TestConfig } from "../../fixture/config"
 import os from "os"
@@ -10,15 +10,15 @@ const enabledCfg = TestConfig.layer({
   get: () => Effect.succeed({ evolution: { enabled: true as const, mode: "assist" as const } }),
 })
 
-const it: EffectTestAPI = testEffect(
+const it = testEffect(
   Layer.mergeAll(enabledCfg, FSUtil.defaultLayer),
 )
 
-function withTmpdir<A, E, R>(fn: (dir: string, fs: FSUtil.Interface) => Effect.Effect<A, E, R>): Effect.Effect<A, E, R> {
+function withTmpdir<A, E, R>(fn: (dir: string, fs: FSUtil.Interface) => Effect.Effect<A, E, R>): Effect.Effect<A, E, R | FSUtil.Service> {
   return Effect.gen(function* () {
     const fs = yield* FSUtil.Service
     const dir = yield* Effect.sync(() => `${os.tmpdir()}/audit-test-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`)
-    yield* fs.makeDirectory(dir, { recursive: true })
+    yield* fs.makeDirectory(dir, { recursive: true }).pipe(Effect.catch(() => Effect.void))
     return yield* fn(dir, fs)
   })
 }
@@ -42,7 +42,7 @@ describe("G4 — Audit Ledger", () => {
         expect(records.length).toBe(1)
         expect(records[0].id).toBe(r.id)
       }),
-    ),
+    )
   )
 
   it.live("append and query: reconciliation", () =>
@@ -57,9 +57,9 @@ describe("G4 — Audit Ledger", () => {
         })
         const records = yield* ledger.query({ type: "reconciliation" })
         expect(records.length).toBe(1)
-        expect((records[0].data as any).winner).toBe("a")
+        expect((records[0].data as AuditLedger.AuditReconciliation).winner).toBe("a")
       }),
-    ),
+    )
   )
 
   it.live("append and query: rejection", () =>
@@ -74,7 +74,7 @@ describe("G4 — Audit Ledger", () => {
         const records = yield* ledger.query({ type: "rejection" })
         expect(records.length).toBe(1)
       }),
-    ),
+    )
   )
 
   it.live("query with proposalId filter", () =>
@@ -93,9 +93,9 @@ describe("G4 — Audit Ledger", () => {
         })
         const matches = yield* ledger.query({ proposalId: "target" })
         expect(matches.length).toBe(1)
-        expect((matches[0].data as any).proposalId).toBe("target")
+        expect((matches[0].data as AuditLedger.AuditProposalSubmit).proposalId).toBe("target")
       }),
-    ),
+    )
   )
 
   it.live("hash chain integrity", () =>
@@ -111,7 +111,7 @@ describe("G4 — Audit Ledger", () => {
         expect(r1.previousHash).toBe("")
         expect(r2.previousHash).toBe(r1.hash)
       }),
-    ),
+    )
   )
 
   it.live("query with timeRange", () =>
@@ -126,7 +126,7 @@ describe("G4 — Audit Ledger", () => {
         const matches = yield* ledger.query({ timeRange: { from: before, to: after } })
         expect(matches.length).toBe(1)
       }),
-    ),
+    )
   )
 
   it.live("query with no matches returns empty array", () =>
@@ -139,6 +139,6 @@ describe("G4 — Audit Ledger", () => {
         const matches = yield* ledger.query({ type: "reconciliation" })
         expect(matches).toHaveLength(0)
       }),
-    ),
+    )
   )
 })

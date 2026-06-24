@@ -51,3 +51,12 @@
 {"decisionId":"test-batch-3","category":"CONFIG_BUDGET","outcome":"HELD_FOR_REVIEW","executor":"system","timestamp":1781862071008,"reason":"batch test 3","consensusOutcome":"VETO_HELD"}
 {"decisionId":"test-batch-4","category":"CONFIG_BUDGET","outcome":"HELD_FOR_REVIEW","executor":"system","timestamp":1781862071008,"reason":"batch test 4","consensusOutcome":"VETO_HELD"}
 {"decisionId":"dec-1781862165600","category":"CONFIG_THRESHOLD","outcome":"AUTO_EXECUTED","executor":"system","timestamp":1781862165601,"reason":"AUTO_EXECUTABLE — category CONFIG_THRESHOLD is in the approved low-risk list","consensusOutcome":"UNANIMOUS_APPROVED"}
+{"decisionId":"dec-1782266777918","category":"CONFIG_THRESHOLD","outcome":"AUTO_EXECUTED","executor":"system","timestamp":1782266777918,"reason":"AUTO_EXECUTABLE — category CONFIG_THRESHOLD is in the approved low-risk list","consensusOutcome":"UNANIMOUS_APPROVED"}
+{"decisionId":"dec-1782267007263","category":"CONFIG_THRESHOLD","outcome":"AUTO_EXECUTED","executor":"system","timestamp":1782267007263,"reason":"AUTO_EXECUTABLE — category CONFIG_THRESHOLD is in the approved low-risk list","consensusOutcome":"UNANIMOUS_APPROVED"}
+{"decisionId":"test-1","category":"CONFIG_THRESHOLD","outcome":"AUTO_EXECUTED","executor":"system","timestamp":1782267056839,"reason":"test","consensusOutcome":"UNANIMOUS_APPROVED"}
+{"decisionId":"test-batch-0","category":"CONFIG_BUDGET","outcome":"HELD_FOR_REVIEW","executor":"system","timestamp":1782267056865,"reason":"batch test 0","consensusOutcome":"VETO_HELD"}
+{"decisionId":"test-batch-1","category":"CONFIG_BUDGET","outcome":"HELD_FOR_REVIEW","executor":"system","timestamp":1782267056865,"reason":"batch test 1","consensusOutcome":"VETO_HELD"}
+{"decisionId":"test-batch-2","category":"CONFIG_BUDGET","outcome":"HELD_FOR_REVIEW","executor":"system","timestamp":1782267056865,"reason":"batch test 2","consensusOutcome":"VETO_HELD"}
+{"decisionId":"test-batch-3","category":"CONFIG_BUDGET","outcome":"HELD_FOR_REVIEW","executor":"system","timestamp":1782267056865,"reason":"batch test 3","consensusOutcome":"VETO_HELD"}
+{"decisionId":"test-batch-4","category":"CONFIG_BUDGET","outcome":"HELD_FOR_REVIEW","executor":"system","timestamp":1782267056865,"reason":"batch test 4","consensusOutcome":"VETO_HELD"}
+{"decisionId":"dec-1782269591042","category":"CONFIG_THRESHOLD","outcome":"AUTO_EXECUTED","executor":"system","timestamp":1782269591042,"reason":"AUTO_EXECUTABLE — category CONFIG_THRESHOLD is in the approved low-risk list","consensusOutcome":"UNANIMOUS_APPROVED"}

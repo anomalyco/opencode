@@ -5,67 +5,16 @@ import { SystemContext } from "@opencode-ai/core/system-context/index"
 import { Evolution } from "@/evolution/index"
 import { Config } from "@/config/config"
 import { EvolutionContextLayer } from "@/evolution/context/register"
-
-const mockConfig = Config.Service.of({
-  get: () => Effect.succeed({ evolution: { enabled: true } } as any),
-  getGlobal: () => Effect.succeed({} as any),
-  getConsoleState: () => Effect.succeed({} as any),
-  update: () => Effect.void,
-  updateGlobal: () => Effect.succeed({} as any),
-  directories: () => Effect.succeed([]),
-  invalidate: () => Effect.void,
-  waitForDependencies: () => Effect.void,
-})
-
-const mockEvolution = Evolution.Service.of({
-  memory: () => ({
-    all: () => Effect.succeed([]),
-    save: () => Effect.succeed({ id: "mock", content: "", type: "lesson", tags: [], created: 0, updated: 0 }),
-    retrieve: () => Effect.succeed([]),
-    search: () => Effect.succeed([]),
-    summarize: () => Effect.succeed({ count: 0, lastUpdate: null, types: {} }),
-    compact: () => Effect.void,
-  }),
-  decisions: () => ({
-    list: () => Effect.succeed([]),
-    get: () => Effect.succeed(undefined),
-    save: () =>
-      Effect.succeed({
-        id: "ADR-mock", title: "", status: "proposed", context: "",
-        decision: "", consequences: "", tags: [], createdAt: 0, updatedAt: 0,
-      }),
-    supersede: () => Effect.void,
-    summarize: () => Effect.succeed({ count: 0 }),
-  }),
-  project: () => ({
-    profile: () =>
-      Effect.succeed({
-        root: "/mock", name: "mock", vcs: "git", languages: ["ts"],
-        frameworks: [], packages: [], structure: "single",
-        hasDocker: false, hasTests: false, hasCI: false, detectedAt: 0,
-      }),
-    detectFrameworks: () => Effect.succeed([]),
-    getStructure: () => Effect.succeed("single"),
-    hasDependency: () => Effect.succeed(false),
-    refresh: () => Effect.succeed({}),
-  }),
-  status: () =>
-    Effect.succeed({
-      enabled: true,
-      mode: "observe" as const,
-      memory: { count: 0, lastUpdate: null },
-      decisions: { count: 0 },
-      project: { detected: false, root: "", frameworks: [] },
-    }),
-  getConfig: () => Effect.succeed({}),
-  getMemories: () => Effect.succeed([]),
-  getDecisions: () => Effect.succeed([]),
-  getProjectContext: () => Effect.succeed({} as any),
-})
+import { mockEvolution } from "@test/evolution/fixture/mock-evolution"
 
 const baseLayer = Layer.mergeAll(
-  Layer.succeed(Config.Service, mockConfig),
-  Layer.succeed(Evolution.Service, mockEvolution),
+  Layer.mock(Config.Service, {
+    get: () => Effect.succeed({}),
+    getGlobal: () => Effect.succeed({}),
+    getConsoleState: () => Effect.succeed({ consoleManagedProviders: [], activeOrgName: undefined, switchableOrgCount: 0 }),
+    updateGlobal: () => Effect.succeed({ info: {}, changed: false }),
+  }),
+  Layer.succeed(Evolution.Service, mockEvolution()),
   SystemContextRegistry.layer,
 )
 

@@ -1,93 +1,40 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Exit, Layer, Scope, Fiber } from "effect"
-import { Evolution } from "@/evolution/index"
+import { Evolution, EvolutionMemory } from "@/evolution/index"
 import { Config } from "@/config/config"
-
-const mockEvolution = Evolution.Service.of({
-  memory: () => ({
-    all: () => Effect.succeed([]),
-    save: (entry: any) =>
-      Effect.succeed({
-        id: `mem-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        type: entry.type ?? "lesson",
-        content: entry.content ?? "",
-        tags: entry.tags ?? [],
-        created: Date.now(),
-        updated: Date.now(),
-      }),
-    retrieve: (query: any) =>
-      Effect.succeed([
-        {
-          id: "mem-existing-1",
-          type: query.type ?? "lesson",
-          content: "Decision: use strict mode in tsconfig",
-          tags: ["decision", "typescript"],
-          created: Date.now() - 1000,
-          updated: Date.now() - 1000,
-        },
-      ]),
-    search: () => Effect.succeed([]),
-    summarize: () => Effect.succeed({ count: 1, lastUpdate: Date.now(), types: { lesson: 1 } }),
-    compact: () => Effect.void,
-  }),
-  decisions: () => ({
-    list: () => Effect.succeed([]),
-    get: () => Effect.succeed(undefined),
-    save: (input: any) =>
-      Effect.succeed({
-        id: `ADR-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`,
-        title: input.title ?? "",
-        status: "proposed" as const,
-        context: input.context ?? "",
-        decision: input.decision ?? "",
-        consequences: input.consequences ?? "",
-        tags: input.tags ?? [],
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      }),
-    supersede: () => Effect.void,
-    summarize: () => Effect.succeed({ count: 0 }),
-  }),
-  project: () => ({
-    profile: () =>
-      Effect.succeed({
-        root: "/mock", name: "mock", vcs: "git", languages: ["ts"],
-        frameworks: [], packages: [], structure: "single",
-        hasDocker: false, hasTests: false, hasCI: false, detectedAt: 0,
-      }),
-    detectFrameworks: () => Effect.succeed([]),
-    getStructure: () => Effect.succeed("single"),
-    hasDependency: () => Effect.succeed(false),
-    refresh: () => Effect.succeed({}),
-  }),
-  status: () =>
-    Effect.succeed({
-      enabled: true,
-      mode: "observe" as const,
-      memory: { count: 0, lastUpdate: null },
-      decisions: { count: 0 },
-      project: { detected: false, root: "", frameworks: [] },
-    }),
-  getConfig: () => Effect.succeed({}),
-  getMemories: () => Effect.succeed([]),
-  getDecisions: () => Effect.succeed([]),
-  getProjectContext: () => Effect.succeed({} as any),
-})
-
-const mockConfig = Config.Service.of({
-  get: () => Effect.succeed({ evolution: { enabled: true } } as any),
-  getGlobal: () => Effect.succeed({} as any),
-  getConsoleState: () => Effect.succeed({} as any),
-  update: () => Effect.void,
-  updateGlobal: () => Effect.succeed({} as any),
-  directories: () => Effect.succeed([]),
-  invalidate: () => Effect.void,
-  waitForDependencies: () => Effect.void,
-})
+import { mockEvolution, mockMemory } from "@test/evolution/fixture/mock-evolution"
 
 const baseLayer = Layer.mergeAll(
-  Layer.succeed(Config.Service, mockConfig),
-  Layer.succeed(Evolution.Service, mockEvolution),
+  Layer.mock(Config.Service, {
+    get: () => Effect.succeed({}),
+    getGlobal: () => Effect.succeed({}),
+    getConsoleState: () => Effect.succeed({ consoleManagedProviders: [], activeOrgName: undefined, switchableOrgCount: 0 }),
+    updateGlobal: () => Effect.succeed({ info: {}, changed: false }),
+  }),
+  Layer.succeed(Evolution.Service, {
+    ...mockEvolution(),
+    memory: () => ({
+      ...mockMemory(),
+      save: (entry: Omit<EvolutionMemory.MemoryEntry, "id" | "created" | "updated">) =>
+        Effect.succeed({
+          id: `mem-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          ...entry,
+          created: Date.now(),
+          updated: Date.now(),
+        }),
+      retrieve: (query: Parameters<EvolutionMemory.Interface["retrieve"]>[0]) =>
+        Effect.succeed([
+          {
+            id: "mem-existing-1",
+            type: "lesson" as const,
+            content: "Decision: use strict mode in tsconfig",
+            tags: ["decision", "typescript"],
+            created: Date.now() - 1000,
+            updated: Date.now() - 1000,
+          },
+        ]),
+    }),
+  }),
 )
 
 describe("S-04.1 — Memory Proposal via Evolution.Service Facade", () => {

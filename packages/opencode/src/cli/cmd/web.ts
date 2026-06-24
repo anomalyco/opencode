@@ -4,7 +4,6 @@ import { withNetworkOptions, resolveNetworkOptionsNoConfig } from "../network"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import open from "open"
 import { networkInterfaces } from "os"
-import type { Argv } from "yargs"
 
 function getNetworkIPs() {
   const nets = networkInterfaces()
@@ -30,7 +29,7 @@ function getNetworkIPs() {
 
 export const WebCommand = cmd({
   command: "web",
-  builder: (yargs: Argv) => withNetworkOptions(yargs) as Argv,
+  builder: (yargs) => withNetworkOptions(yargs),
   describe: "start opencode server and open web interface" as const,
   async handler(args) {
     const { Server } = await import("../../server/server")

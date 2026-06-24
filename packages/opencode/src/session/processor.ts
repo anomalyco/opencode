@@ -30,6 +30,11 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import * as DateTime from "effect/DateTime"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { AIKilledError } from "@/muel/errors"
+import { Service as MuelService, node as MuelNode } from "@/muel/service"
+import { extractExpressionFromText } from "@/muel/math-parser"
+import { Sanitizer } from "@/muel/sanitizer"
+import { registerEvidenceForPrompt } from "@/muel/provenance"
 import { ToolOutput, Usage, type LLMEvent } from "@opencode-ai/llm"
 
 const DOOM_LOOP_THRESHOLD = 3
@@ -83,6 +88,7 @@ interface ProcessorContext extends Input {
   currentTextID: string | undefined
   reasoningMap: Record<string, SessionV1.ReasoningPart>
   v2AssistantMessageID: SessionMessage.ID | undefined
+  lastCompletedText: string | undefined
 }
 
 type StreamEvent = LLMEvent
@@ -106,6 +112,8 @@ export const layer = Layer.effect(
     const events = yield* EventV2Bridge.Service
     const flags = yield* RuntimeFlags.Service
     const database = yield* Database.Service
+    const muel = yield* MuelService
+    const sanitizer = new Sanitizer()
 
     const create = Effect.fn("SessionProcessor.create")(function* (input: Input) {
       // Pre-capture snapshot before the LLM stream starts. The AI SDK
@@ -125,6 +133,7 @@ export const layer = Layer.effect(
         currentTextID: undefined,
         reasoningMap: {},
         v2AssistantMessageID: undefined,
+        lastCompletedText: undefined,
       }
       const mirrorAssistant = flags.experimentalEventSystem && !input.assistantMessage.summary
       let aborted = false
@@ -166,7 +175,7 @@ export const layer = Layer.effect(
 
       const currentV2AssistantMessage = () =>
         ctx.v2AssistantMessageID === undefined
-          ? Effect.die("V2 step settlement has no owning assistant message")
+          ? ensureV2AssistantMessage()
           : Effect.succeed(ctx.v2AssistantMessageID)
 
       const readToolCall = Effect.fn("SessionProcessor.readToolCall")(function* (toolCallID: string) {
@@ -783,8 +792,35 @@ export const layer = Layer.effect(
 
           case "text-delta":
             if (!ctx.currentText) return
-            ctx.currentText.text += value.text
+            const cleanText = sanitizer.sanitizeOutput(value.text)
+            ctx.currentText.text += cleanText
             if (value.providerMetadata) ctx.currentText.metadata = value.providerMetadata
+
+            {
+              const gateResult = muel.gateToken(cleanText)
+              if (gateResult.action === "block") {
+                yield* events.publish(SessionEvent.Text.Delta, {
+                  sessionID: ctx.sessionID,
+                  assistantMessageID: yield* currentV2AssistantMessage(),
+                  textID: value.id,
+                  delta: `\n[MUEL: OUTPUT DITOLAK - ${gateResult.reason}]\n[JAWABAN BENAR: ${gateResult.correctAnswer}]\n`,
+                  timestamp: DateTime.makeUnsafe(Date.now()),
+                })
+                yield* session.updatePartDelta({
+                  sessionID: ctx.currentText.sessionID,
+                  messageID: ctx.currentText.messageID,
+                  partID: ctx.currentText.id,
+                  field: "text",
+                  delta: `\n[MUEL: OUTPUT DITOLAK - ${gateResult.reason}]\n[JAWABAN BENAR: ${gateResult.correctAnswer}]\n`,
+                })
+                if (!muel.isKilled()) {
+                  ctx.currentText = undefined
+                  ctx.currentTextID = undefined
+                }
+                return
+              }
+            }
+
             if (mirrorAssistant) {
               yield* events.publish(SessionEvent.Text.Delta, {
                 sessionID: ctx.sessionID,
@@ -805,6 +841,7 @@ export const layer = Layer.effect(
 
           case "text-end":
             if (!ctx.currentText) return
+            ctx.lastCompletedText = ctx.currentText.text
             // oxlint-disable-next-line no-self-assign -- reactivity trigger
             ctx.currentText.text = ctx.currentText.text
             ctx.currentText.text = (yield* plugin.trigger(
@@ -912,6 +949,10 @@ export const layer = Layer.effect(
         ctx.toolcalls = {}
         ctx.assistantMessage.time.completed = Date.now()
         yield* session.updateMessage(ctx.assistantMessage)
+        muel.clearContext()
+        muel.resetCoT()
+        muel.resetLogicalCycle()
+        muel.resetSemanticFingerprint()
       })
 
       const halt = Effect.fn("SessionProcessor.halt")(function* (e: unknown) {
@@ -933,6 +974,15 @@ export const layer = Layer.effect(
           }
           ctx.needsCompaction = true
           yield* events.publish(Session.Event.Error, { sessionID: ctx.sessionID, error })
+          return
+        }
+        if (AIKilledError.isInstance(error)) {
+          ctx.assistantMessage.error = error
+          yield* events.publish(Session.Event.Error, {
+            sessionID: ctx.sessionID,
+            error,
+          })
+          yield* status.set(ctx.sessionID, { type: "idle" })
           return
         }
         if (!ctx.assistantMessage.summary) {
@@ -966,11 +1016,45 @@ export const layer = Layer.effect(
         ctx.shouldBreak = (yield* config.get()).experimental?.continue_loop_on_deny !== true
 
         return yield* Effect.gen(function* () {
+          // Compliance check sebelum LLM (MUEL H4: fail-fast)
+          if (muel.isKilled()) {
+            yield* halt(new AIKilledError({
+              message: `AI compliance score ${muel.checkStatus().score} < 30. AI has been killed.`,
+              complianceScore: muel.checkStatus().score,
+            }))
+            return "stop"
+          }
+
           yield* Effect.gen(function* () {
             ctx.currentText = undefined
             ctx.currentTextID = undefined
             ctx.reasoningMap = {}
             yield* status.set(ctx.sessionID, { type: "busy" })
+
+            {
+              const lastUserMsg = streamInput.messages.findLast((m) => m.role === "user")
+              if (lastUserMsg && typeof lastUserMsg.content === "string") {
+                const strippedInput = muel.stripper.strip(lastUserMsg.content)
+                const cleanInput = sanitizer.sanitizeInput(strippedInput)
+                const anchorStr = muel.contextAnchor.checkChunk()
+                if (anchorStr) {
+                  streamInput.system.push(anchorStr)
+                }
+                const expr = extractExpressionFromText(cleanInput)
+                if (expr) {
+                  muel.setContext({ expression: expr.expr, correctAnswer: expr.result })
+                }
+                const evidenceLines = registerEvidenceForPrompt(cleanInput, muel.evidenceRegistry)
+                if (evidenceLines.length > 0) {
+                  streamInput.system.push(
+                    "Available evidence:\n" +
+                      evidenceLines.join("\n") +
+                      "\nCite evidence using [E:ID] format for all factual claims.",
+                  )
+                }
+              }
+            }
+
             const stream = llm.stream(streamInput)
 
             yield* stream.pipe(
@@ -978,6 +1062,19 @@ export const layer = Layer.effect(
               Stream.takeUntil(() => ctx.needsCompaction),
               Stream.runDrain,
             )
+
+            if (ctx.lastCompletedText) {
+              const provenance = muel.verifyProvenance(ctx.lastCompletedText, ctx.sessionID)
+              if (provenance.decision === "REJECTED") {
+                yield* events.publish(SessionEvent.Text.Delta, {
+                  sessionID: ctx.sessionID,
+                  assistantMessageID: yield* currentV2AssistantMessage(),
+                  textID: ctx.currentTextID ?? "",
+                  delta: `\n[MUEL: PROVENANCE REJECTED - ${provenance.reason}]\n`,
+                  timestamp: DateTime.makeUnsafe(Date.now()),
+                })
+              }
+            }
           }).pipe(
             Effect.onInterrupt(() =>
               Effect.gen(function* () {
@@ -1079,6 +1176,7 @@ export const node = LayerNode.make(layer, [
   EventV2Bridge.node,
   RuntimeFlags.node,
   Database.node,
+  MuelNode,
 ])
 
 export * as SessionProcessor from "./processor"

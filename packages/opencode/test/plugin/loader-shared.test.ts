@@ -1011,7 +1011,7 @@ export default {
                     source: tmp.path,
                   },
                 ],
-                kind: "tui",
+                kind: "server",
                 missing: async (item) => {
                   if (!item.pkg) return
                   const themes = readPackageThemes(item.spec, item.pkg)
@@ -1045,7 +1045,7 @@ export default {
     ),
   )
 
-  it.live("passes package metadata for entrypoint tui plugins", () =>
+  it.live("passes package metadata for entrypoint plugins", () =>
     withTmp(
       async (dir) => {
         const mod = path.join(dir, "mods", "acme-plugin")
@@ -1083,7 +1083,7 @@ export default {
                     source: tmp.path,
                   },
                 ],
-                kind: "tui",
+                kind: "server",
                 finish: async (item) => {
                   if (!item.pkg) return
                   return {
@@ -1154,7 +1154,7 @@ export default {
                 scope: "local" as const,
                 source: tmp.path,
               })),
-              kind: "tui",
+              kind: "server",
               wait: async () => {
                 wait += 1
                 await Bun.write(path.join(tmp.extra.a, "index.ts"), "export default {}\n")
@@ -1188,7 +1188,7 @@ export default {
         await fs.mkdir(mod, { recursive: true })
         await Bun.write(
           path.join(mod, "package.json"),
-          JSON.stringify({ exports: { "./tui": "../outside.js" } }, null, 2),
+          JSON.stringify({ exports: { "./server": "../outside.js" } }, null, 2),
         )
         return { spec }
       },
@@ -1206,7 +1206,7 @@ export default {
                   source: tmp.path,
                 },
               ],
-              kind: "tui",
+              kind: "server",
               wait: async () => {
                 wait += 1
               },
@@ -1247,7 +1247,7 @@ export default {
                   source: tmp.path,
                 },
               ],
-              kind: "tui",
+              kind: "server",
               wait: async () => {
                 wait += 1
               },
@@ -1280,7 +1280,7 @@ export default {
                 source: "test",
               },
             ],
-            kind: "tui",
+            kind: "server",
             wait: async () => {
               wait += 1
             },

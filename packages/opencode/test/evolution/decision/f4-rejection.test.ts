@@ -3,7 +3,7 @@ import { Effect, Layer } from "effect"
 import { LLMClient, LLMEvent, LLMResponse, Usage } from "@opencode-ai/llm"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { TestConfig } from "../../fixture/config"
-import { Evolution } from "../../../src/evolution/index"
+import { Evolution, EvolutionProject } from "../../../src/evolution/index"
 import { EvolutionDecisions } from "../../../src/evolution/brain/decisions"
 import { EvolutionDecisionEngine } from "../../../src/evolution/decision/engine"
 import { withTmpdirInstance } from "../../fixture/fixture"
@@ -32,7 +32,7 @@ const mockLLM = Layer.mock(LLMClient.Service, {
   generate: () => Effect.succeed(
     new LLMResponse({
       events: [LLMEvent.toolCall({ id: "mock-call-rej", name: "generate_object", input: mockLLMInput })],
-      usage: new Usage({ input: 10, output: 20 }),
+      usage: new Usage({ outputTokens: 20 }),
     }),
   ),
 })
@@ -49,20 +49,22 @@ const mockEvolution = Layer.effect(
         search: () => Effect.succeed([]),
         summarize: () => Effect.succeed({ count: 0, lastUpdate: null, types: {} }),
         compact: () => Effect.void,
+        verify: () => Effect.never,
+        detectAnomalies: () => Effect.succeed([]),
       }),
       decisions: () => decisions,
       project: () => ({
-        profile: () => Effect.succeed({ root: "/mock", name: "mock", vcs: "git", languages: [], frameworks: [], packages: [], structure: "single", hasDocker: false, hasTests: false, hasCI: false, detectedAt: 0 }),
+        profile: () => Effect.succeed<EvolutionProject.ProjectProfile>({ root: "/mock", name: "mock", vcs: "git", languages: [], frameworks: [], packages: [], structure: "single", hasDocker: false, hasTests: false, hasCI: false, detectedAt: 0 }),
         detectFrameworks: () => Effect.succeed([]),
         getStructure: () => Effect.succeed("single"),
         hasDependency: () => Effect.succeed(false),
-        refresh: () => Effect.succeed({}),
+        refresh: () => Effect.succeed<EvolutionProject.ProjectProfile>({ root: "/mock", name: "mock", vcs: "git", languages: [], frameworks: [], packages: [], structure: "single", hasDocker: false, hasTests: false, hasCI: false, detectedAt: 0 }),
       }),
       status: () => Effect.succeed({ enabled: true, mode: "assist" as const, memory: { count: 0, lastUpdate: null }, decisions: { count: 0 }, project: { detected: false, root: "", frameworks: [] } }),
       getConfig: () => Effect.succeed({ enabled: true, mode: "assist" }),
       getMemories: () => Effect.succeed([]),
       getDecisions: () => Effect.succeed([]),
-      getProjectContext: () => Effect.succeed({} as any),
+      getProjectContext: () => Effect.succeed<EvolutionProject.ProjectProfile>({ root: "/mock", name: "mock", vcs: "git", languages: [], frameworks: [], packages: [], structure: "single", hasDocker: false, hasTests: false, hasCI: false, detectedAt: 0 }),
     })
   }),
 )
@@ -72,7 +74,7 @@ const decisionsLayer = EvolutionDecisions.layer.pipe(
 )
 
 const mockAuditLedger = Layer.mock(AuditLedger.Service, {
-  append: () => Effect.void,
+  append: () => Effect.succeed({ id: "mock", type: "reconciliation" as const, timestamp: Date.now(), data: { reconciliationId: "mock", candidates: [], winner: "mock" }, previousHash: "", hash: "mock" }),
   query: () => Effect.succeed([]),
 })
 

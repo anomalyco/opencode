@@ -57,16 +57,14 @@ function ctxRoot(dir: string): PlugCtx {
 
 async function plugin(
   dir: string,
-  kinds?: Array<"server" | "tui">,
+  kinds?: Array<"server">,
   opts?: {
     server?: Record<string, unknown>
-    tui?: Record<string, unknown>
   },
   themes?: string[],
 ) {
   const p = path.join(dir, "plugin")
   const server = kinds?.includes("server") ?? false
-  const tui = kinds?.includes("tui") ?? false
   const exports: Record<string, unknown> = {}
   if (server) {
     exports["./server"] = opts?.server
@@ -75,14 +73,6 @@ async function plugin(
           config: opts.server,
         }
       : "./server.js"
-  }
-  if (tui) {
-    exports["./tui"] = opts?.tui
-      ? {
-          import: "./tui.js",
-          config: opts.tui,
-        }
-      : "./tui.js"
   }
   await fs.mkdir(p, { recursive: true })
   await Bun.write(
@@ -111,7 +101,7 @@ async function read(file: string) {
 describe("plugin.install.task", () => {
   test("writes both server and tui config entries", async () => {
     await using tmp = await tmpdir()
-    const target = await plugin(tmp.path, ["server", "tui"])
+    const target = await plugin(tmp.path, ["server"])
     const run = createPlugTask(
       {
         mod: "acme@1.2.3",
@@ -130,9 +120,8 @@ describe("plugin.install.task", () => {
 
   test("writes default options from exports config metadata", async () => {
     await using tmp = await tmpdir()
-    const target = await plugin(tmp.path, ["server", "tui"], {
+    const target = await plugin(tmp.path, ["server"], {
       server: { custom: true, other: false },
-      tui: { compact: true },
     })
     const run = createPlugTask(
       {
@@ -145,14 +134,12 @@ describe("plugin.install.task", () => {
     expect(ok).toBe(true)
 
     const server = await read(path.join(tmp.path, ".opencode", "opencode.jsonc"))
-    const tui = await read(path.join(tmp.path, ".opencode", "tui.jsonc"))
     expect(server.plugin).toEqual([["acme@1.2.3", { custom: true, other: false }]])
-    expect(tui.plugin).toEqual([["acme@1.2.3", { compact: true }]])
   })
 
   test("preserves JSONC comments when adding plugins to server and tui config", async () => {
     await using tmp = await tmpdir()
-    const target = await plugin(tmp.path, ["server", "tui"])
+    const target = await plugin(tmp.path, ["server"])
     const cfg = path.join(tmp.path, ".opencode")
     const server = path.join(cfg, "opencode.jsonc")
     const tui = path.join(cfg, "tui.jsonc")
@@ -407,40 +394,7 @@ describe("plugin.install.task", () => {
     expect(await Filesystem.exists(path.join(directory, ".opencode", "opencode.jsonc"))).toBe(true)
   })
 
-  test("writes tui local scope under directory when worktree is root slash", async () => {
-    await using tmp = await tmpdir()
-    const target = await plugin(tmp.path, ["tui"])
-    const directory = path.join(tmp.path, "dir")
-    await fs.mkdir(directory, { recursive: true })
-    const run = createPlugTask(
-      {
-        mod: "acme@1.2.3",
-      },
-      deps(path.join(tmp.path, "global"), target),
-    )
-
-    const ok = await run(ctxRoot(directory))
-    expect(ok).toBe(true)
-    expect(await Filesystem.exists(path.join(directory, ".opencode", "tui.jsonc"))).toBe(true)
-  })
-
-  test("writes only tui config for tui-only plugins", async () => {
-    await using tmp = await tmpdir()
-    const target = await plugin(tmp.path, ["tui"])
-    const run = createPlugTask(
-      {
-        mod: "acme@1.2.3",
-      },
-      deps(path.join(tmp.path, "global"), target),
-    )
-
-    const ok = await run(ctx(tmp.path))
-    expect(ok).toBe(true)
-    expect(await Filesystem.exists(path.join(tmp.path, ".opencode", "tui.jsonc"))).toBe(true)
-    expect(await Filesystem.exists(path.join(tmp.path, ".opencode", "opencode.jsonc"))).toBe(false)
-  })
-
-  test("writes tui config for oc-themes-only packages", async () => {
+  test("writes config for oc-themes-only packages", async () => {
     await using tmp = await tmpdir()
     const target = await plugin(tmp.path, undefined, undefined, ["themes/forest.json"])
     await fs.mkdir(path.join(target, "themes"), { recursive: true })
@@ -479,7 +433,7 @@ describe("plugin.install.task", () => {
 
   test("force replaces version in both server and tui configs", async () => {
     await using tmp = await tmpdir()
-    const target = await plugin(tmp.path, ["server", "tui"])
+    const target = await plugin(tmp.path, ["server"])
     const server = path.join(tmp.path, ".opencode", "opencode.json")
     const tui = path.join(tmp.path, ".opencode", "tui.json")
     await fs.mkdir(path.dirname(server), { recursive: true })

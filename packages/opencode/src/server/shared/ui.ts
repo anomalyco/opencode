@@ -12,7 +12,6 @@ export function embeddedUI(disableEmbeddedWebUi: boolean) {
   if (disableEmbeddedWebUi) return Promise.resolve(null)
   return (embeddedUIPromise ??=
     Promise.race([
-      // @ts-expect-error - generated file at build time
       import(webUIModuleName).then((module) => module.default as Record<string, string>),
       new Promise<null>((resolve) => setTimeout(() => resolve(null), 2000)),
     ]).catch(() => null))

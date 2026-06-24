@@ -421,6 +421,21 @@ export const Retried = EventV2.define({
 })
 export type Retried = typeof Retried.Type
 
+export const MuelAuditEvent = EventV2.define({
+  type: "session.next.muel.audit",
+  ...options,
+  schema: {
+    ...Base,
+    messageID: SessionMessageID.ID,
+    hash: Schema.String,
+    prevHash: Schema.String,
+    decision: Schema.String,
+    violations: Schema.Array(Schema.String),
+    complianceScore: Schema.Finite,
+  },
+})
+export type MuelAuditEvent = typeof MuelAuditEvent.Type
+
 export namespace Compaction {
   export const Started = EventV2.define({
     type: "session.next.compaction.started",
@@ -494,6 +509,7 @@ const DurableDefinitions = [
   Reasoning.Started,
   Reasoning.Ended,
   Retried,
+  MuelAuditEvent,
   Compaction.Started,
   Compaction.Ended,
 ] as const

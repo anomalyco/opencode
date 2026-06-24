@@ -31,7 +31,7 @@ describe("ContextBudget.Service", () => {
     const exit = Effect.runSyncExit(svc.enforce({ memory: 300, decisions: 200, project: 100 }))
     expect(Exit.isFailure(exit)).toBe(true)
     if (Exit.isFailure(exit)) {
-      const err = Cause.squash(exit.cause)
+      const err = Cause.squash(exit.cause) as ContextBudget.ContextBudgetError
       expect(err._tag).toBe("EvolutionContextBudgetError")
       expect(err.message).toContain("600 tokens used")
       expect(err.message).toContain("500 configured")
@@ -42,7 +42,7 @@ describe("ContextBudget.Service", () => {
     const svc = ContextBudget.make({ contextBudget: 100 })
     const exit = Effect.runSyncExit(svc.enforce({ memory: 50, decisions: 40, project: 30 }))
     if (Exit.isFailure(exit)) {
-      const err = Cause.squash(exit.cause)
+      const err = Cause.squash(exit.cause) as ContextBudget.ContextBudgetError
       expect(err.message).toContain("memory: 50")
       expect(err.message).toContain("decisions: 40")
       expect(err.message).toContain("project: 30")

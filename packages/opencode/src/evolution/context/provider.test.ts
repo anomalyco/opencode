@@ -3,49 +3,66 @@ import { Effect } from "effect"
 import type { Evolution } from "@/evolution/index"
 import { SystemContextProvider, formatEvolutionContext } from "./provider"
 import type { EvolutionContext } from "./composer"
+import type { EvolutionMemory } from "../brain/memory"
+import type { EvolutionDecisions } from "../brain/decisions"
+import type { EvolutionProject } from "../brain/project"
+import { EvolutionStorageError } from "@/evolution/error"
+
+function memEntry(id: string, i: number): EvolutionMemory.MemoryEntry {
+  return { id, content: `pattern ${i}`, type: "lesson", tags: [], created: i, updated: i }
+}
+
+function decRecord(id: string, title: string): EvolutionDecisions.DecisionRecord {
+  return { id, title, decision: "flat budget", status: "accepted", context: "phase 2", consequences: "simpler", tags: [], createdAt: 1, updatedAt: 1 }
+}
+
+function projProfile(): EvolutionProject.ProjectProfile {
+  return { root: "/", name: "opencode", vcs: "git", languages: ["ts"], frameworks: ["bun"], packages: [], structure: "monorepo", hasDocker: false, hasTests: true, hasCI: true, detectedAt: 1 }
+}
 
 function makeEvolution(memoryCount = 2): Evolution.Interface {
-  const memories = Array.from({ length: memoryCount }, (_, i) => ({
-    id: `${i}`, content: `pattern ${i}`, type: "lesson" as const,
-    tags: [], created: i, updated: i,
-  }))
+  const memories: EvolutionMemory.MemoryEntry[] = Array.from({ length: memoryCount }, (_, i) => memEntry(`${i}`, i))
+  const profile = projProfile()
   return {
     memory: () => ({
       all: () => Effect.succeed(memories),
-      save: () => Effect.succeed({} as any),
-      retrieve: () => Effect.succeed([]),
-      search: () => Effect.succeed([]),
-      summarize: () => Effect.succeed({ count: 0, lastUpdate: null, types: {} }),
+      save: () => Effect.succeed(memEntry("mock", 0)),
+      retrieve: () => Effect.succeed<EvolutionMemory.MemoryEntry[]>([]),
+      search: () => Effect.succeed<EvolutionMemory.MemoryEntry[]>([]),
+      summarize: () => Effect.succeed<{ count: number; lastUpdate: number | null; types: Record<string, number> }>({ count: 0, lastUpdate: null, types: {} }),
       compact: () => Effect.void,
+      verify: () => Effect.succeed(memEntry("mock", 0)),
+      detectAnomalies: () => Effect.succeed<EvolutionMemory.AnomalyWarning[]>([]),
     }),
     decisions: () => ({
-      list: () => Effect.succeed([{
-        id: "1", title: "ADR-007", decision: "flat budget",
-        status: "accepted" as const, context: "phase 2",
-        consequences: "simpler", tags: [], createdAt: 1, updatedAt: 1,
-      }]),
-      get: () => Effect.succeed({} as any),
-      record: () => Effect.succeed({} as any),
-      supersede: () => Effect.void,
-      summarize: () => Effect.succeed({ count: 0 }),
+      list: () => Effect.succeed<EvolutionDecisions.DecisionRecord[]>([decRecord("1", "ADR-007")]),
+      get: () => Effect.succeed<EvolutionDecisions.DecisionRecord | undefined>(undefined),
+      record: () => Effect.succeed<{ id: string }>({ id: "mock" }),
+      supersede: () => Effect.succeed(decRecord("1", "ADR-007")),
+      summarize: () => Effect.succeed<{ count: number; byStatus: Record<string, number> }>({ count: 0, byStatus: { accepted: 1 } }),
+      save: () => Effect.succeed(decRecord("mock", "mock")),
+      saveReconciliationLog: () => Effect.void,
+      search: () => Effect.succeed<EvolutionDecisions.DecisionRecord[]>([]),
+      propose: () => Effect.succeed<import("@/evolution/decision/proposal").DecisionProposal>({ id: "p1", key: "k1", title: "", context: "", proposedDecision: "", consequences: "", tags: [], origin: { proposerId: "test" }, createdAt: 0, status: "SUBMITTED" }),
+      submit: () => Effect.succeed<import("@/evolution/decision/proposal").DecisionProposal>({ id: "p2", key: "k2", title: "", context: "", proposedDecision: "", consequences: "", tags: [], origin: { proposerId: "test" }, createdAt: 0, status: "SUBMITTED" }),
+      decisionRecord: () => Effect.succeed<import("@/evolution/brain/decisions").DecisionView[]>([]),
+      listProposals: () => Effect.succeed<import("@/evolution/decision/proposal").DecisionProposal[]>([]),
+      getReconciliationLogs: () => Effect.succeed<import("@/evolution/decision/reconciliation-log").ReconciliationLog[]>([]),
+      gc: () => Effect.succeed(0),
+      getStorageStats: () => Effect.succeed<import("@/evolution/brain/decisions").StorageStats>({ proposalCount: 0, proposalBytes: 0, reconcilCount: 0, reconcilBytes: 0 }),
     }),
     project: () => ({
-      profile: () => Effect.succeed({
-        root: "/", name: "opencode", vcs: "git",
-        languages: ["ts"], frameworks: ["bun"],
-        packages: [], structure: "monorepo",
-        hasDocker: false, hasTests: true, hasCI: true, detectedAt: 1,
-      }),
-      detectFrameworks: () => Effect.succeed([]),
-      getStructure: () => Effect.succeed("monorepo" as const),
+      profile: () => Effect.succeed(profile),
+      detectFrameworks: () => Effect.succeed<string[]>([]),
+      getStructure: () => Effect.succeed<"single" | "monorepo">("monorepo"),
       hasDependency: () => Effect.succeed(false),
-      refresh: () => Effect.succeed({} as any),
+      refresh: () => Effect.succeed(profile),
     }),
-    status: () => Effect.succeed({} as any),
-    getConfig: () => Effect.succeed({}),
-    getMemories: () => Effect.succeed([]),
-    getDecisions: () => Effect.succeed([]),
-    getProjectContext: () => Effect.succeed({} as any),
+    status: () => Effect.succeed<Evolution.Status>({ enabled: false, mode: "observe", memory: { count: 0, lastUpdate: null }, decisions: { count: 0 }, project: { detected: false, root: "", frameworks: [] } }),
+    getConfig: () => Effect.succeed<Record<string, unknown>>({}),
+    getMemories: () => Effect.succeed<EvolutionMemory.MemoryEntry[]>([]),
+    getDecisions: () => Effect.succeed<EvolutionDecisions.DecisionRecord[]>([]),
+    getProjectContext: () => Effect.succeed(profile),
   }
 }
 
@@ -59,13 +76,14 @@ describe("SystemContextProvider", () => {
   })
 
   test("provide() returns empty string on storage failure (graceful degradation)", () => {
-    const broken = {
+    const broken: Evolution.Interface = {
       ...makeEvolution(),
       memory: () => ({
-        all: () => Effect.fail({ _tag: "EvolutionStorageError", message: "disk full" } as any),
+        ...makeEvolution().memory(),
+        all: () => Effect.fail(new EvolutionStorageError({ message: "disk full", operation: "read" })),
       }),
     }
-    const svc = SystemContextProvider.make(broken as any, { contextBudget: 4096 })
+    const svc = SystemContextProvider.make(broken, { contextBudget: 4096 })
     const result = Effect.runSync(svc.provide())
     expect(result).toBe("")
   })

@@ -67,6 +67,18 @@ function calcConfidence(candidate: ProposalCandidate): number {
   return SCORING_CONTRACT[candidate.reasoningStrength]
 }
 
+function caps(...items: AgentCapability[]): AgentCapability[] { return items }
+
+function toAssessment(s: string): "LOW" | "MEDIUM" | "HIGH" | "CRITICAL" {
+  switch (s.toUpperCase()) {
+    case "LOW": return "LOW"
+    case "MEDIUM": return "MEDIUM"
+    case "HIGH": return "HIGH"
+    case "CRITICAL": return "CRITICAL"
+    default: return "LOW"
+  }
+}
+
 export function summariseAdvisorOutput(output: unknown): string {
   const obj = output as Record<string, unknown>
   if (Array.isArray(obj?.risks)) return `${obj.risks.length} risks identified`
@@ -130,7 +142,7 @@ function resolveEvolutionModel(): Effect.Effect<LLMModel | undefined> {
 function buildOutputParticipants(allResults: readonly { manifest: AgentManifest; output: unknown }[], selectedAgentId: string | null): OutputParticipant[] {
   return allResults.map((r) => ({
     agentId: r.manifest.id,
-    contributionType: r.manifest.capabilities.includes("proposal" as AgentCapability) ? "proposal" : r.manifest.capabilities[0] ?? "unknown",
+    contributionType: r.manifest.capabilities.includes("proposal") ? "proposal" : r.manifest.capabilities[0] ?? "unknown",
     executed: true,
     selected: r.manifest.id === selectedAgentId,
   }))
@@ -147,7 +159,7 @@ const dryRunReconcile = Effect.fn("EvolutionDecisionEngine.dryRunReconcile")(fun
   const now = Date.now()
 
   const syntheticGenerator = {
-    manifest: { id: "context-analyst", capabilities: ["proposal" as AgentCapability], execute: undefined as any },
+    manifest: { id: "context-analyst", capabilities: caps("proposal"), execute: () => Effect.die(new Error("dry-run")) },
     output: { agentId: "context-analyst", reasoningStrength: "medium" as const, rationale: "Synthetic dry-run evaluation. No LLM call was made.", proposedAction: "Accept current architecture with minor improvements", tags: ["dry-run", "synthetic"], producedAt: now },
   }
 
@@ -155,8 +167,8 @@ const dryRunReconcile = Effect.fn("EvolutionDecisionEngine.dryRunReconcile")(fun
   const planOutput = { phases: [{ name: "Phase 1", steps: ["Review architecture", "Apply improvements", "Verify"], estimatedEffort: "2 days" }], estimatedComplexity: 2, rationale: "Synthetic execution plan for dry-run" }
 
   const syntheticAdvisors = [
-    { manifest: { id: "risk-agent", capabilities: ["risk-analysis" as AgentCapability], execute: undefined as any }, output: riskOutput },
-    { manifest: { id: "planning-agent", capabilities: ["execution-plan" as AgentCapability], execute: undefined as any }, output: planOutput },
+    { manifest: { id: "risk-agent", capabilities: caps("risk-analysis"), execute: () => Effect.die(new Error("dry-run")) }, output: riskOutput },
+    { manifest: { id: "planning-agent", capabilities: caps("execution-plan"), execute: () => Effect.die(new Error("dry-run")) }, output: planOutput },
   ]
 
   const allResults = [syntheticGenerator, ...syntheticAdvisors]
@@ -259,8 +271,13 @@ export const layer = Layer.effect(
           return { agentId: "context-analyst", proposedAction: c.proposedAction, rationale: c.rationale, confidence: SCORING_CONTRACT[c.reasoningStrength] } as ContextAnalystOutput
         }
         if (r.manifest.id === "risk-agent") {
-          const ra = r.output as { overallSeverity: string; recommendationCategory: string; rationale: string; risks: readonly any[] }
-          return { agentId: "risk-analyst", assessment: ra.overallSeverity.toUpperCase() as any, recommendation: ra.recommendationCategory === "APPROVE" ? "APPROVE" : "REJECT", critical: ra.overallSeverity === "critical", reason: ra.rationale, recommendationCategory: ra.recommendationCategory } as RiskAnalystOutput
+          const output = r.output
+          if (typeof output !== "object" || output === null || !("overallSeverity" in output)) {
+            throw new DecisionEngineError({ message: "Invalid risk agent output" })
+          }
+          const ra = output as { overallSeverity: string; recommendationCategory: string; rationale: string; risks: readonly unknown[] }
+          const result: RiskAnalystOutput = { agentId: "risk-analyst", assessment: toAssessment(ra.overallSeverity), recommendation: ra.recommendationCategory === "APPROVE" ? "APPROVE" : "REJECT", critical: ra.overallSeverity === "critical", reason: ra.rationale, recommendationCategory: ra.recommendationCategory }
+          return result
         }
         if (r.manifest.id === "planning-agent") {
           return { agentId: "planning-analyst", feasible: true, reason: "Completed" } as PlanningAnalystOutput

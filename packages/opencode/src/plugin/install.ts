@@ -16,7 +16,7 @@ import { isRecord } from "@/util/record"
 import { parsePluginSpecifier, readPackageThemes, readPluginPackage, resolvePluginTarget } from "./shared"
 
 type Mode = "noop" | "add" | "replace"
-type Kind = "server" | "tui"
+type Kind = "server"
 
 export type Target = {
   kind: Kind
@@ -31,7 +31,7 @@ export type PatchDeps = {
   readText: (file: string) => Promise<string>
   write: (file: string, text: string) => Promise<void>
   exists: (file: string) => Promise<boolean>
-  files: (dir: string, name: "opencode" | "tui") => string[]
+  files: (dir: string, name: "opencode") => string[]
 }
 
 export type PatchInput = {
@@ -153,14 +153,7 @@ function packageTargets(pkg: { json: Record<string, unknown>; dir: string; pkg: 
     targets.push({ kind: "server" })
   }
 
-  const tui = exportTarget(pkg.json, "tui")
-  if (tui) {
-    targets.push({ kind: "tui", opts: tui.opts })
-  }
-
-  if (!targets.some((item) => item.kind === "tui") && readPackageThemes(spec, pkg).length) {
-    targets.push({ kind: "tui" })
-  }
+  readPackageThemes(spec, pkg)
 
   return targets
 }
@@ -337,9 +330,8 @@ function patchDir(input: PatchInput) {
   return path.join(root, ".opencode")
 }
 
-function patchName(kind: Kind): "opencode" | "tui" {
-  if (kind === "server") return "opencode"
-  return "tui"
+function patchName(kind: Kind): "opencode" {
+  return "opencode"
 }
 
 async function patchOne(dir: string, target: Target, spec: string, force: boolean, dep: PatchDeps): Promise<PatchOne> {

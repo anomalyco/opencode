@@ -28,6 +28,12 @@ import { errorMessage } from "./util/error"
 import { EvolutionCommand } from "./evolution/cli"
 import { PluginCommand } from "./cli/cmd/plug"
 import { Heap } from "./cli/heap"
+import { TerminalManager, App, Container } from "./terminal"
+
+const terminal = new TerminalManager()
+const app = new App(terminal)
+const container = new Container()
+app.mount(container)
 
 const args = hideBin(process.argv)
 
@@ -74,6 +80,12 @@ const cli = yargs(args)
     process.env.AGENT = "1"
     process.env.OPENCODE = "1"
     process.env.OPENCODE_PID = String(process.pid)
+
+    const cmd = opts._[0]
+    if (cmd && !opts.help && ["run", "console", "agent"].includes(String(cmd))) {
+      terminal.startup()
+      app.start()
+    }
   })
   .usage("")
   .completion("completion", "generate shell completion script")
@@ -136,5 +148,6 @@ try {
   // Most notably, some docker-container-based MCP servers don't handle such signals unless
   // run using `docker run --init`.
   // Explicitly exit to avoid any hanging subprocesses.
+  app.stop()
   process.exit()
 }

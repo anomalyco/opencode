@@ -1,7 +1,7 @@
 import { Schema } from "effect"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 
-export const StorageOperation = Schema.Literals(["read", "write", "exists"])
+export const StorageOperation = Schema.Literals(["read", "write", "exists", "verify"])
 export type StorageOperation = Schema.Schema.Type<typeof StorageOperation>
 
 export class EvolutionStorageError extends Schema.TaggedErrorClass<EvolutionStorageError>()("EvolutionStorageError", {

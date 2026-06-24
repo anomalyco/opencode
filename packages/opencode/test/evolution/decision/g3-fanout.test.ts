@@ -3,8 +3,14 @@ import { Effect } from "effect"
 import { collect } from "@/evolution/decision/coordinator"
 import type { AgentManifest } from "@/evolution/decision/agents/types"
 import type { ProposalCandidate } from "@/evolution/decision/proposal-candidate"
+import type { EvolutionContext } from "@/evolution/context"
 
-const mockContext = {} as any
+const mockContext: EvolutionContext = {
+  project: { name: "test", frameworks: [], structure: "" },
+  memories: [],
+  decisions: [],
+  budget: { configured: 0, used: 0, remaining: 0, strategy: "truncate" },
+}
 const mockCriteria = { instruction: "test", tags: [] }
 
 function makeManifest(id: string, candidate: ProposalCandidate): AgentManifest {

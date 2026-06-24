@@ -4,42 +4,32 @@ import { Evolution } from "@/evolution/index"
 import { MetricsService, type MetricsSnapshot } from "@/evolution/evolution/metrics"
 import type { DecisionProposal } from "@/evolution/decision/proposal"
 import type { ReconciliationLog } from "@/evolution/decision/reconciliation-log"
-
-function mockDecisions(
-  proposals: DecisionProposal[],
-  logs: ReconciliationLog[],
-) {
-  return {
-    listProposals: () => Effect.succeed(proposals),
-    getReconciliationLogs: () => Effect.succeed(logs),
-    list: () => Effect.succeed([]),
-    get: () => Effect.succeed(undefined),
-    save: () => Effect.succeed({} as any),
-    search: () => Effect.succeed([]),
-    summarize: () => Effect.succeed({ count: 0, byStatus: {} }),
-    supersede: () => Effect.succeed({} as any),
-    propose: () => Effect.succeed({} as any),
-    submit: () => Effect.succeed({} as any),
-    decisionRecord: () => Effect.succeed([]),
-    saveReconciliationLog: () => Effect.void,
-    gc: () => Effect.succeed(0),
-    getStorageStats: () => Effect.succeed({ proposalCount: 0, proposalBytes: 0, reconcilCount: 0, reconcilBytes: 0 }),
-  }
-}
+import { mockMemory, mockProject, mockDecisions, projProfile } from "./fixture/mock-evolution"
 
 function mockEvoService(
   proposals: DecisionProposal[],
   logs: ReconciliationLog[],
 ) {
   return Evolution.Service.of({
-    memory: () => ({} as any),
-    decisions: () => mockDecisions(proposals, logs),
-    project: () => ({} as any),
-    status: () => Effect.succeed({} as any),
+    memory: () => mockMemory(),
+    decisions: () => ({
+      ...mockDecisions(),
+      listProposals: () => Effect.succeed(proposals),
+      getReconciliationLogs: () => Effect.succeed(logs),
+    }),
+    project: () => mockProject(),
+    status: () =>
+      Effect.succeed({
+        enabled: false,
+        mode: "observe" as const,
+        memory: { count: 0, lastUpdate: null },
+        decisions: { count: 0 },
+        project: { detected: false, root: "", frameworks: [] },
+      }),
     getConfig: () => Effect.succeed({}),
     getMemories: () => Effect.succeed([]),
     getDecisions: () => Effect.succeed([]),
-    getProjectContext: () => Effect.succeed({} as any),
+    getProjectContext: () => Effect.succeed(projProfile()),
   })
 }
 
@@ -89,15 +79,32 @@ function makeLog(overrides: Partial<ReconciliationLog>): ReconciliationLog {
   }
 }
 
+function nullSnapshot(): MetricsSnapshot {
+  return {
+    totalProposals: null,
+    acceptanceRate: null,
+    avgTimeToAcceptance: null,
+    proposalChurn: null,
+    totalReconciliations: null,
+    avgConfidenceScore: null,
+    avgParticipantsPerReconciliation: null,
+    budgetUtilization: null,
+    diversityIndex: null,
+    rejectionCodeFrequency: null,
+    reconciliationOutcomeCounts: null,
+    advisorActivity: null,
+  }
+}
+
 describe("G5 MetricsService", () => {
   test("TG-01: Interface has only snapshot() method (no write methods)", () => {
-    const svc = MetricsService.Service.of({ snapshot: () => Effect.succeed({} as any) })
+    const svc = MetricsService.Service.of({ snapshot: () => Effect.succeed(nullSnapshot()) })
     expect(typeof svc.snapshot).toBe("function")
-    expect((svc as any).record).toBeUndefined()
-    expect((svc as any).save).toBeUndefined()
-    expect((svc as any).write).toBeUndefined()
-    expect((svc as any).insert).toBeUndefined()
-    expect((svc as any).submit).toBeUndefined()
+    expect((svc as unknown as Record<string, unknown>).record).toBeUndefined()
+    expect((svc as unknown as Record<string, unknown>).save).toBeUndefined()
+    expect((svc as unknown as Record<string, unknown>).write).toBeUndefined()
+    expect((svc as unknown as Record<string, unknown>).insert).toBeUndefined()
+    expect((svc as unknown as Record<string, unknown>).submit).toBeUndefined()
   })
 
   test("TG-02: MetricsService module uses Evolution.Service facade", () => {
@@ -142,7 +149,7 @@ describe("G5 MetricsService", () => {
           { agentId: "a", reasoningStrength: "high" as const, confidenceScore: 0.85, selected: true },
           { agentId: "b", reasoningStrength: "medium" as const, confidenceScore: 0.65, selected: false },
         ],
-        participants: [{ agentId: "a", capabilities: ["proposal"] as any, contributionType: "proposal", confidenceScore: 0.85, selected: true }],
+        participants: [{ agentId: "a", capabilities: ["proposal"] as const, contributionType: "proposal", confidenceScore: 0.85, selected: true }],
         selectedCandidateAgentId: "a",
         selectionReason: "HIGHEST_CONFIDENCE",
         outcome: "PROPOSAL_SUBMITTED",
@@ -151,7 +158,7 @@ describe("G5 MetricsService", () => {
         candidates: [
           { agentId: "c", reasoningStrength: "low" as const, confidenceScore: 0.3, selected: true },
         ],
-        participants: [{ agentId: "c", capabilities: ["proposal"] as any, contributionType: "proposal", confidenceScore: 0.3, selected: true }],
+        participants: [{ agentId: "c", capabilities: ["proposal"] as const, contributionType: "proposal", confidenceScore: 0.3, selected: true }],
         selectedCandidateAgentId: "c",
         selectionReason: "HIGHEST_CONFIDENCE",
         outcome: "PROPOSAL_SUBMITTED",
@@ -213,7 +220,7 @@ describe("G5 MetricsService", () => {
     const logs = [
       makeLog({
         candidates: [{ agentId: "a", reasoningStrength: "high" as const, confidenceScore: 0.9, selected: true }],
-        participants: [{ agentId: "a", capabilities: ["proposal"] as any, contributionType: "proposal", confidenceScore: 0.9, selected: true }],
+        participants: [{ agentId: "a", capabilities: ["proposal"] as const, contributionType: "proposal", confidenceScore: 0.9, selected: true }],
         selectedCandidateAgentId: "a",
         selectionReason: "HIGHEST_CONFIDENCE",
         outcome: "PROPOSAL_SUBMITTED",

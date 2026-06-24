@@ -10,6 +10,9 @@ export const profiles = {
   deepseek: { provider: "deepseek", baseURL: "https://api.deepseek.com/v1" },
   fireworks: { provider: "fireworks", baseURL: "https://api.fireworks.ai/inference/v1" },
   groq: { provider: "groq", baseURL: "https://api.groq.com/openai/v1" },
+  // Ollama — local inference server, OpenAI-compatible endpoint
+  // Default port 11434; override baseURL in opencode.jsonc if using a different port
+  ollama: { provider: "ollama", baseURL: "http://localhost:11434/v1" },
   openrouter: { provider: "openrouter", baseURL: "https://openrouter.ai/api/v1" },
   togetherai: { provider: "togetherai", baseURL: "https://api.together.xyz/v1" },
   xai: { provider: "xai", baseURL: "https://api.x.ai/v1" },

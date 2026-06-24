@@ -15,7 +15,7 @@ export const EvaluateCommand = effectCmd({
       ),
     )
 
-    if ("error" in result) {
+    if (typeof result !== "string" && "error" in result) {
       process.stdout.write(`Evaluation failed: ${result.error}${EOL}`)
       return
     }

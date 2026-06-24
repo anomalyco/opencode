@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { FSUtil } from "@opencode-ai/core/fs-util"
-import { testEffect, type EffectTestAPI } from "../../lib/effect"
+import { testEffect } from "../../lib/effect"
 import { ProposalStore } from "@/evolution/brain/proposal-store"
 import type { DecisionProposal } from "@/evolution/decision/proposal"
 import { TestConfig } from "../../fixture/config"
@@ -11,7 +11,7 @@ const enabledCfg = TestConfig.layer({
   get: () => Effect.succeed({ evolution: { enabled: true as const, mode: "assist" as const } }),
 })
 
-const it: EffectTestAPI = testEffect(Layer.mergeAll(enabledCfg, FSUtil.defaultLayer))
+const it = testEffect(Layer.mergeAll(enabledCfg, FSUtil.defaultLayer))
 
 function makeProposal(id: string, rejectedAt: number): DecisionProposal {
   return {
@@ -31,10 +31,10 @@ function makeProposal(id: string, rejectedAt: number): DecisionProposal {
   }
 }
 
-function makeTmpdir(fs: FSUtil.Interface): Effect.Effect<string> {
+function makeTmpdir(fs: FSUtil.Interface) {
   return Effect.gen(function* () {
     const dir = yield* Effect.sync(() => `${os.tmpdir()}/gc-test-${Date.now()}`)
-    yield* fs.makeDirectory(dir, { recursive: true })
+    yield* fs.makeDirectory(dir, { recursive: true }).pipe(Effect.catch(() => Effect.void))
     return dir
   })
 }
@@ -47,7 +47,7 @@ describe("G4 — Retention GC", () => {
       yield* ProposalStore.submit(["proposal"], fs, dir, makeProposal("p1", Date.now()))
       const deleted = yield* ProposalStore.gc(fs, dir, 365)
       expect(deleted).toBe(0)
-    }),
+    })
   )
 
   it.live("gc with expired proposal deletes it", () =>
@@ -58,7 +58,7 @@ describe("G4 — Retention GC", () => {
       yield* ProposalStore.submit(["proposal"], fs, dir, makeProposal("p1", old))
       const deleted = yield* ProposalStore.gc(fs, dir, 90)
       expect(deleted).toBe(1)
-    }),
+    })
   )
 
   it.live("gc with mix of expired and live", () =>
@@ -74,7 +74,7 @@ describe("G4 — Retention GC", () => {
       const remaining = yield* ProposalStore.listByStatus(fs, dir, "REJECTED")
       expect(remaining.length).toBe(1)
       expect(remaining[0].id).toBe("new")
-    }),
+    })
   )
 
   it.live("gc with retentionDays=0 deletes nothing", () =>
@@ -85,7 +85,7 @@ describe("G4 — Retention GC", () => {
       yield* ProposalStore.submit(["proposal"], fs, dir, makeProposal("p1", old))
       const deleted = yield* ProposalStore.gc(fs, dir, 0)
       expect(deleted).toBe(0)
-    }),
+    })
   )
 
   it.live("gc ignores ACCEPTED proposals regardless of age", () =>
@@ -101,6 +101,6 @@ describe("G4 — Retention GC", () => {
       yield* ProposalStore.submit(["proposal"], fs, dir, accepted)
       const deleted = yield* ProposalStore.gc(fs, dir, 30)
       expect(deleted).toBe(0)
-    }),
+    })
   )
 })

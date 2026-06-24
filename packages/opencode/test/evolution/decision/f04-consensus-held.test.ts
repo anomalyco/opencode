@@ -9,7 +9,6 @@ function makeCandidate(overrides: Partial<ProposalCandidate> & { agentId: string
     rationale: "test rationale",
     proposedAction: "Accept proposal",
     tags: ["test"],
-    agentId: overrides.agentId,
     producedAt: Date.now(),
     ...overrides,
   }

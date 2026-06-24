@@ -23,13 +23,11 @@ function run(msg: Msg) {
   })
 }
 
-async function plugin(dir: string, kinds: Array<"server" | "tui">) {
+async function plugin(dir: string, kinds: Array<"server">) {
   const p = path.join(dir, "plugin")
   const server = kinds.includes("server")
-  const tui = kinds.includes("tui")
   const exports: Record<string, string> = {}
   if (server) exports["./server"] = "./server.js"
-  if (tui) exports["./tui"] = "./tui.js"
   await fs.mkdir(p, { recursive: true })
   await Bun.write(
     path.join(p, "package.json"),
@@ -88,7 +86,7 @@ describe("plugin.install.concurrent", () => {
 
   test("serializes concurrent server+tui config updates across processes", async () => {
     await using tmp = await tmpdir()
-    const target = await plugin(tmp.path, ["server", "tui"])
+    const target = await plugin(tmp.path, ["server"])
     const all = mods("mod-both", 6)
 
     const out = await Promise.all(

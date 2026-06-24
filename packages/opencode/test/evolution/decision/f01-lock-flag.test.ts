@@ -2,9 +2,9 @@ import { describe, expect, test } from "bun:test"
 import { Duration, Effect, Layer, Ref } from "effect"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { TestConfig } from "../../fixture/config"
-import { Evolution } from "../../../src/evolution/index"
+import { Evolution, EvolutionProject } from "../../../src/evolution/index"
 import { EvolutionDecisions } from "../../../src/evolution/brain/decisions"
-import { EvolutionDecisionEngine } from "../../../src/evolution/decision/engine"
+import { EvolutionDecisionEngine, DecisionEngineError } from "../../../src/evolution/decision/engine"
 import { Activation } from "../../../src/evolution/decision/activation/index"
 import { ExecutionPipeline } from "../../../src/evolution/execution/pipeline"
 import { AsyncAuditLogger } from "../../../src/evolution/audit/async-logger"
@@ -30,20 +30,22 @@ const mockEvolution = Layer.effect(
         search: () => Effect.succeed([]),
         summarize: () => Effect.succeed({ count: 0, lastUpdate: null, types: {} }),
         compact: () => Effect.void,
+        verify: () => Effect.never,
+        detectAnomalies: () => Effect.succeed([]),
       }),
       decisions: () => decisions,
       project: () => ({
-        profile: () => Effect.succeed({ root: "/mock", name: "mock", vcs: "git", languages: [], frameworks: [], packages: [], structure: "single", hasDocker: false, hasTests: false, hasCI: false, detectedAt: 0 }),
+        profile: () => Effect.succeed<EvolutionProject.ProjectProfile>({ root: "/mock", name: "mock", vcs: "git", languages: [], frameworks: [], packages: [], structure: "single", hasDocker: false, hasTests: false, hasCI: false, detectedAt: 0 }),
         detectFrameworks: () => Effect.succeed([]),
         getStructure: () => Effect.succeed("single"),
         hasDependency: () => Effect.succeed(false),
-        refresh: () => Effect.succeed({}),
+        refresh: () => Effect.succeed<EvolutionProject.ProjectProfile>({ root: "/mock", name: "mock", vcs: "git", languages: [], frameworks: [], packages: [], structure: "single", hasDocker: false, hasTests: false, hasCI: false, detectedAt: 0 }),
       }),
       status: () => Effect.succeed({ enabled: true, mode: "assist" as const, memory: { count: 0, lastUpdate: null }, decisions: { count: 0 }, project: { detected: false, root: "", frameworks: [] } }),
       getConfig: () => Effect.succeed({ enabled: true, mode: "assist" }),
       getMemories: () => Effect.succeed([]),
       getDecisions: () => Effect.succeed([]),
-      getProjectContext: () => Effect.succeed({} as any),
+      getProjectContext: () => Effect.succeed<EvolutionProject.ProjectProfile>({ root: "/mock", name: "mock", vcs: "git", languages: [], frameworks: [], packages: [], structure: "single", hasDocker: false, hasTests: false, hasCI: false, detectedAt: 0 }),
     })
   }),
 )
@@ -89,7 +91,7 @@ const errLayer = Layer.effect(
   Effect.gen(function* () {
     return EvolutionDecisionEngine.Service.of({
       propose: () => Effect.succeed({ proposalId: "mock", status: "ACCEPTED" as const }),
-      reconcile: () => Effect.fail(new Error("Simulated failure")),
+      reconcile: () => Effect.fail(new DecisionEngineError({ message: "Simulated failure" })),
     })
   }),
 )

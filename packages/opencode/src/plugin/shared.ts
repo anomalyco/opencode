@@ -34,7 +34,7 @@ export function parsePluginSpecifier(spec: string) {
 }
 
 export type PluginSource = "file" | "npm"
-export type PluginKind = "server" | "tui"
+export type PluginKind = "server"
 type PluginMode = "strict" | "detect"
 
 export type PluginPackage = {
@@ -143,18 +143,6 @@ async function resolvePluginEntrypoint(spec: string, target: string, kind: Plugi
   if (entry) return entry
 
   const dir = await resolveTargetDirectory(target)
-
-  if (kind === "tui") {
-    if (source === "file" && dir) {
-      const index = await resolveDirectoryIndex(dir)
-      if (index) return pathToFileURL(index).href
-    }
-
-    if (source === "npm") return
-    if (dir) return
-
-    return target
-  }
 
   if (dir && isRecord(hit.json.exports)) {
     if (source === "file") {
@@ -280,24 +268,14 @@ export function readV1Plugin(
     if (mode === "detect") return
     throw new TypeError(`Plugin ${spec} must default export an object with ${kind}()`)
   }
-  if (mode === "detect" && !("id" in value) && !("server" in value) && !("tui" in value)) return
+  if (mode === "detect" && !("id" in value) && !("server" in value)) return
 
   const server = "server" in value ? value.server : undefined
-  const tui = "tui" in value ? value.tui : undefined
   if (server !== undefined && typeof server !== "function") {
     throw new TypeError(`Plugin ${spec} has invalid server export`)
   }
-  if (tui !== undefined && typeof tui !== "function") {
-    throw new TypeError(`Plugin ${spec} has invalid tui export`)
-  }
-  if (server !== undefined && tui !== undefined) {
-    throw new TypeError(`Plugin ${spec} must default export either server() or tui(), not both`)
-  }
   if (kind === "server" && server === undefined) {
     throw new TypeError(`Plugin ${spec} must default export an object with server()`)
-  }
-  if (kind === "tui" && tui === undefined) {
-    throw new TypeError(`Plugin ${spec} must default export an object with tui()`)
   }
 
   return value

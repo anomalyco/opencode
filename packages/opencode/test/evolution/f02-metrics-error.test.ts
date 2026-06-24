@@ -3,33 +3,29 @@ import { Effect, Layer } from "effect"
 import { Evolution } from "../../src/evolution/index"
 import { MetricsService } from "../../src/evolution/evolution/metrics"
 import { EvolutionStorageError } from "../../src/evolution/error"
+import { mockMemory, mockProject, mockDecisions, projProfile } from "./fixture/mock-evolution"
+
+function mockStatus(): Evolution.Status {
+  return { enabled: false, mode: "observe", memory: { count: 0, lastUpdate: null }, decisions: { count: 0 }, project: { detected: false, root: "", frameworks: [] } }
+}
+
+function makeMock(decisionsOverrides: Partial<ReturnType<typeof mockDecisions>>) {
+  return Evolution.Service.of({
+    memory: () => mockMemory(),
+    decisions: () => ({ ...mockDecisions(), ...decisionsOverrides }),
+    project: () => mockProject(),
+    status: () => Effect.succeed(mockStatus()),
+    getConfig: () => Effect.succeed({}),
+    getMemories: () => Effect.succeed([]),
+    getDecisions: () => Effect.succeed([]),
+    getProjectContext: () => Effect.succeed(projProfile()),
+  })
+}
 
 describe("F-02 — Metrics Error Propagation", () => {
   test("snapshot propagates EvolutionStorageError from listProposals", async () => {
-    const mock = Evolution.Service.of({
-      memory: () => ({} as any),
-      decisions: () => ({
-        listProposals: () => Effect.fail(new EvolutionStorageError({ message: "storage error", operation: "read", path: "proposals" })),
-        getReconciliationLogs: () => Effect.succeed([]),
-        list: () => Effect.succeed([]),
-        get: () => Effect.succeed(undefined),
-        save: () => Effect.succeed({} as any),
-        search: () => Effect.succeed([]),
-        summarize: () => Effect.succeed({ count: 0, byStatus: {} }),
-        supersede: () => Effect.succeed({} as any),
-        propose: () => Effect.succeed({} as any),
-        submit: () => Effect.succeed({} as any),
-        decisionRecord: () => Effect.succeed([]),
-        saveReconciliationLog: () => Effect.void,
-        gc: () => Effect.succeed(0),
-        getStorageStats: () => Effect.succeed({ proposalCount: 0, proposalBytes: 0, reconcilCount: 0, reconcilBytes: 0 }),
-      }),
-      project: () => ({} as any),
-      status: () => Effect.succeed({} as any),
-      getConfig: () => Effect.succeed({}),
-      getMemories: () => Effect.succeed([]),
-      getDecisions: () => Effect.succeed([]),
-      getProjectContext: () => Effect.succeed({} as any),
+    const mock = makeMock({
+      listProposals: () => Effect.fail(new EvolutionStorageError({ message: "storage error", operation: "read", path: "proposals" })),
     })
 
     const testLayer = Layer.provideMerge(
@@ -49,30 +45,8 @@ describe("F-02 — Metrics Error Propagation", () => {
   })
 
   test("snapshot propagates EvolutionStorageError from getReconciliationLogs", async () => {
-    const mock = Evolution.Service.of({
-      memory: () => ({} as any),
-      decisions: () => ({
-        listProposals: () => Effect.succeed([]),
-        getReconciliationLogs: () => Effect.fail(new EvolutionStorageError({ message: "storage error", operation: "read", path: "reconciliation" })),
-        list: () => Effect.succeed([]),
-        get: () => Effect.succeed(undefined),
-        save: () => Effect.succeed({} as any),
-        search: () => Effect.succeed([]),
-        summarize: () => Effect.succeed({ count: 0, byStatus: {} }),
-        supersede: () => Effect.succeed({} as any),
-        propose: () => Effect.succeed({} as any),
-        submit: () => Effect.succeed({} as any),
-        decisionRecord: () => Effect.succeed([]),
-        saveReconciliationLog: () => Effect.void,
-        gc: () => Effect.succeed(0),
-        getStorageStats: () => Effect.succeed({ proposalCount: 0, proposalBytes: 0, reconcilCount: 0, reconcilBytes: 0 }),
-      }),
-      project: () => ({} as any),
-      status: () => Effect.succeed({} as any),
-      getConfig: () => Effect.succeed({}),
-      getMemories: () => Effect.succeed([]),
-      getDecisions: () => Effect.succeed([]),
-      getProjectContext: () => Effect.succeed({} as any),
+    const mock = makeMock({
+      getReconciliationLogs: () => Effect.fail(new EvolutionStorageError({ message: "storage error", operation: "read", path: "reconciliation" })),
     })
 
     const testLayer = Layer.provideMerge(
@@ -92,31 +66,7 @@ describe("F-02 — Metrics Error Propagation", () => {
   })
 
   test("snapshot succeeds when both read paths work", async () => {
-    const mock = Evolution.Service.of({
-      memory: () => ({} as any),
-      decisions: () => ({
-        listProposals: () => Effect.succeed([]),
-        getReconciliationLogs: () => Effect.succeed([]),
-        list: () => Effect.succeed([]),
-        get: () => Effect.succeed(undefined),
-        save: () => Effect.succeed({} as any),
-        search: () => Effect.succeed([]),
-        summarize: () => Effect.succeed({ count: 0, byStatus: {} }),
-        supersede: () => Effect.succeed({} as any),
-        propose: () => Effect.succeed({} as any),
-        submit: () => Effect.succeed({} as any),
-        decisionRecord: () => Effect.succeed([]),
-        saveReconciliationLog: () => Effect.void,
-        gc: () => Effect.succeed(0),
-        getStorageStats: () => Effect.succeed({ proposalCount: 0, proposalBytes: 0, reconcilCount: 0, reconcilBytes: 0 }),
-      }),
-      project: () => ({} as any),
-      status: () => Effect.succeed({} as any),
-      getConfig: () => Effect.succeed({}),
-      getMemories: () => Effect.succeed([]),
-      getDecisions: () => Effect.succeed([]),
-      getProjectContext: () => Effect.succeed({} as any),
-    })
+    const mock = makeMock({})
 
     const testLayer = Layer.provideMerge(
       MetricsService.layer,

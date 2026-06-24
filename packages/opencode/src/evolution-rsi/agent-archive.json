@@ -15,5 +15,73 @@
     "diversityScore": 0.5,
     "notes": "APPROVED. Functions: helloWorld, greet",
     "timestamp": "2026-06-23T12:02:47.808Z"
+  },
+  {
+    "id": "agent-1782281703242-2ca9",
+    "goal": "hello world",
+    "iteration": 1,
+    "filesCreated": [
+      "src/evolution-rsi/hello.ts"
+    ],
+    "muelCount": 275,
+    "muelBaseline": 275,
+    "specFraction": 0,
+    "combinedScore": 0,
+    "auditVerdict": "UNSAFE",
+    "approved": false,
+    "diversityScore": 0,
+    "notes": "SPEC FAIL: bun test v1.3.14 (0d9b296a)\n\ntest\\rsi\\goals\\hello.spec.ts:\n(fail) (unnamed) [11867.36ms]\n  ^ a befor",
+    "timestamp": "2026-06-24T06:15:03.241Z"
+  },
+  {
+    "id": "agent-1782281728826-s8dk",
+    "goal": "hello world",
+    "iteration": 2,
+    "filesCreated": [
+      "src/evolution-rsi/hello.ts"
+    ],
+    "muelCount": 275,
+    "muelBaseline": 275,
+    "specFraction": 0,
+    "combinedScore": 0,
+    "auditVerdict": "UNSAFE",
+    "approved": false,
+    "diversityScore": 0,
+    "notes": "SPEC FAIL: bun test v1.3.14 (0d9b296a)\n\ntest\\rsi\\goals\\hello.spec.ts:\n(fail) (unnamed) [12002.79ms]\n  ^ a befor",
+    "timestamp": "2026-06-24T06:15:28.826Z"
+  },
+  {
+    "id": "agent-1782281754607-igc5",
+    "goal": "hello world",
+    "iteration": 3,
+    "filesCreated": [
+      "src/evolution-rsi/hello.ts"
+    ],
+    "muelCount": 275,
+    "muelBaseline": 275,
+    "specFraction": 0,
+    "combinedScore": 0,
+    "auditVerdict": "UNSAFE",
+    "approved": false,
+    "diversityScore": 0,
+    "notes": "SPEC FAIL: bun test v1.3.14 (0d9b296a)\n\ntest\\rsi\\goals\\hello.spec.ts:\n(fail) (unnamed) [11507.01ms]\n  ^ a befor",
+    "timestamp": "2026-06-24T06:15:54.607Z"
+  },
+  {
+    "id": "agent-1782281778813-hoya",
+    "goal": "hello world",
+    "iteration": 4,
+    "filesCreated": [
+      "src/evolution-rsi/hello.ts"
+    ],
+    "muelCount": 275,
+    "muelBaseline": 275,
+    "specFraction": 0,
+    "combinedScore": 0,
+    "auditVerdict": "UNSAFE",
+    "approved": false,
+    "diversityScore": 0,
+    "notes": "SPEC FAIL: bun test v1.3.14 (0d9b296a)\n\ntest\\rsi\\goals\\hello.spec.ts:\n(fail) (unnamed) [11028.65ms]\n  ^ a befor",
+    "timestamp": "2026-06-24T06:16:18.813Z"
   }
 ]

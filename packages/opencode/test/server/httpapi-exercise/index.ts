@@ -1484,63 +1484,54 @@ const scenarios: Scenario[] = [
       },
       "status",
     ),
+  // TUI routes removed in Phase 0 — negative contract verification
   http.protected
-    .post("/tui/append-prompt", "tui.appendPrompt")
+    .post("/tui/append-prompt", "tui.appendPrompt.removed")
     .at((ctx) => ({ path: "/tui/append-prompt", headers: ctx.headers(), body: { text: "hello" } }))
-    .json(200, boolean, "status"),
+    .status(404),
   http.protected
-    .post("/tui/select-session", "tui.selectSession.invalid")
+    .post("/tui/select-session", "tui.selectSession.removed")
     .at((ctx) => ({ path: "/tui/select-session", headers: ctx.headers(), body: { sessionID: "invalid" } }))
-    .status(400),
-  http.protected.post("/tui/open-help", "tui.openHelp").json(200, boolean, "status"),
-  http.protected.post("/tui/open-sessions", "tui.openSessions").json(200, boolean, "status"),
-  http.protected.post("/tui/open-themes", "tui.openThemes").json(200, boolean, "status"),
-  http.protected.post("/tui/open-models", "tui.openModels").json(200, boolean, "status"),
-  http.protected.post("/tui/submit-prompt", "tui.submitPrompt").json(200, boolean, "status"),
-  http.protected.post("/tui/clear-prompt", "tui.clearPrompt").json(200, boolean, "status"),
+    .status(404),
+  http.protected.post("/tui/open-help", "tui.openHelp.removed").status(404),
+  http.protected.post("/tui/open-sessions", "tui.openSessions.removed").status(404),
+  http.protected.post("/tui/open-themes", "tui.openThemes.removed").status(404),
+  http.protected.post("/tui/open-models", "tui.openModels.removed").status(404),
+  http.protected.post("/tui/submit-prompt", "tui.submitPrompt.removed").status(404),
+  http.protected.post("/tui/clear-prompt", "tui.clearPrompt.removed").status(404),
   http.protected
-    .post("/tui/execute-command", "tui.executeCommand")
+    .post("/tui/execute-command", "tui.executeCommand.removed")
     .at((ctx) => ({ path: "/tui/execute-command", headers: ctx.headers(), body: { command: "agent_cycle" } }))
-    .json(200, boolean, "status"),
+    .status(404),
   http.protected
-    .post("/tui/show-toast", "tui.showToast")
+    .post("/tui/show-toast", "tui.showToast.removed")
     .at((ctx) => ({
       path: "/tui/show-toast",
       headers: ctx.headers(),
       body: { title: "Exercise", message: "covered", variant: "info", duration: 1000 },
     }))
-    .json(200, boolean, "status"),
+    .status(404),
   http.protected
-    .post("/tui/publish", "tui.publish")
+    .post("/tui/publish", "tui.publish.removed")
     .at((ctx) => ({
       path: "/tui/publish",
       headers: ctx.headers(),
       body: { type: "tui.prompt.append", properties: { text: "published" } },
     }))
-    .json(200, boolean, "status"),
+    .status(404),
   http.protected
-    .post("/tui/select-session", "tui.selectSession")
+    .post("/tui/select-session", "tui.selectSession.seeded.removed")
     .seeded((ctx) => ctx.session({ title: "TUI select" }))
     .at((ctx) => ({ path: "/tui/select-session", headers: ctx.headers(), body: { sessionID: ctx.state.id } }))
-    .json(200, boolean, "status"),
+    .status(404),
   http.protected
-    .post("/tui/control/response", "tui.control.response")
+    .post("/tui/control/response", "tui.control.response.removed")
     .at((ctx) => ({ path: "/tui/control/response", headers: ctx.headers(), body: { ok: true } }))
-    .json(200, boolean, "status"),
+    .status(404),
   http.protected
-    .get("/tui/control/next", "tui.control.next")
+    .get("/tui/control/next", "tui.control.next.removed")
     .mutating()
-    .seeded((ctx) => ctx.tuiRequest({ path: "/tui/exercise", body: { text: "queued" } }))
-    .json(
-      200,
-      (body) => {
-        object(body)
-        check(body.path === "/tui/exercise", "control next should return queued path")
-        object(body.body)
-        check(body.body.text === "queued", "control next should return queued body")
-      },
-      "status",
-    ),
+    .status(404),
   http.protected
     .post("/global/upgrade", "global.upgrade")
     .global()
@@ -1600,7 +1591,7 @@ const main = Effect.gen(function* () {
   return undefined
 })
 
-Effect.runPromise(main.pipe(Effect.provide(TestLLMServer.layer), Effect.scoped)).then(
+Effect.runPromise(main.pipe(Effect.provide(TestLLMServer.layer), Effect.scoped) as any).then(
   () => process.exit(0),
   (error: unknown) => {
     console.error(`${color.red}${message(error)}${color.reset}`)

@@ -1,8 +1,6 @@
 export function helloWorld(): string {
-  const greeting = "Hello from RSI"
-  return greeting
+  return "Hello from RSI (optimized)"
 }
 export function greet(name: string): string {
-  const msg = "Hello, " + name
-  return msg
+  return `Hello, ${name}!`
 }

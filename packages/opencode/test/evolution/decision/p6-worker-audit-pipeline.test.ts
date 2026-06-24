@@ -145,8 +145,7 @@ describe("P6 — Pipeline approve/reject decisions", () => {
     proposedAction: "Test action",
     rationale: "Test rationale",
     category: "CONFIG_THRESHOLD",
-    participants: [],
-    enrichments: [],
+    producedAt: Date.now(),
   })
 
   const mockAsyncLoggerImpl = {

@@ -190,6 +190,36 @@ Each entry must have:
 
 ---
 
+## TD-T-002 — `as Layer.Any` Escape in LocationServiceMap Node
+
+| Field | Value |
+|---|---|
+| **Title** | `as Layer.Any` cast blinds compiler to LocationServiceMap dependency changes |
+| **Status** | ACTIVE |
+| **Type** | Implementation |
+| **Created** | 2026-06-21 |
+| **Target Phase** | 6 |
+| **Risk** | `LocationServiceMap.layer` (R = never today) is cast to `Layer.Any` to satisfy `LayerNode.Node<unknown, unknown>`. The contravariant R parameter (`never` vs `unknown`) is structurally incompatible. If a future refactor adds dependencies to `LocationServiceMap.layer`, `R` will change to non-never — the `as Layer.Any` will silently accept the new layer without compile-time validation, and the `LayerNode.make(...)` call site will not detect the mismatch. Runtime crash when the layer tries to access unavailable services. |
+| **Evidence** | `packages/opencode/src/agent/agent.ts:448` — `LocationServiceMap.layer as Layer.Any`. `packages/opencode/src/session/system.ts:113` — identical cast. Without `as Layer.Any`, TypeScript rejects: `Layer<LocationServiceMap, never>` is not assignable to `Layer<unknown, unknown>` because `R = never` is not assignable to `R = unknown` in contravariant position. Both locations have identical root cause. |
+| **Exit Criteria** | Eliminate both `as Layer.Any` casts. Either (a) widen `LayerNode.Node` to accept `Layer<any, any>` internally with typed wrapper, (b) redesign `LocationServiceMap.layer` to have explicit `unknown`-compatible R, or (c) extract interface that doesn't expose contravariant R variance. |
+
+---
+
+## TD-T-001 — Evolution Effect v4 Type Errors (164)
+
+| Field | Value |
+|---|---|
+| **Title** | Evolution `src/evolution/` type errors from Effect v4 API migration |
+| **Status** | ACTIVE |
+| **Owner Type** | Implementation |
+| **Created** | 2026-06-21 |
+| **Target Phase** | 6 |
+| **Risk** | 164 pre-existing type errors block strict typecheck adoption and mask real regressions. Terminal engine (0 errors) must be isolated from evolution errors in CI. |
+| **Evidence** | `bun typecheck --filter=packages/opencode` returns 164 errors, all in `src/evolution/` (`src/terminal/` has 0). Errors are primarily Effect v4 API changes (e.g. `Effect.fork` → `Effect.forkIn(scope)`, removed methods, changed signatures). |
+| **Exit Criteria** | Zero type errors in `src/evolution/`. Each fix verified individually. No new type errors introduced in `src/terminal/` during migration. |
+
+---
+
 ## Index
 
 | ID | Title | Status | Owner | Target |
@@ -206,3 +236,5 @@ Each entry must have:
 | CR-001 | Single-Writer Enforcement (via invariant checker) | ✅ **RESOLVED** | Architecture | P4 Sprint F |
 | CR-005 | Decision Provenance (ADR-024 research) | ACTIVE (ADR-024 DRAFT — Sprint F complete) | Architecture | P5 Sprint F |
 | CR-002 | Confidence Calibration (ADR-025 research) | ACTIVE (ADR-025 DRAFT — Sprint F complete) | Architecture | P5 Sprint F |
+| TD-T-001 | Evolution Effect v4 Type Errors (164) | ACTIVE | Implementation | Phase 6 |
+| TD-T-002 | `as Layer.Any` Escape in LocationServiceMap Node | ACTIVE | Implementation | Phase 6 |

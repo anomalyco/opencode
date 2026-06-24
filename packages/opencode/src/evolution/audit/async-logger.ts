@@ -1,4 +1,5 @@
 import { Context, Effect, Fiber, Layer, Option, Queue, Ref } from "effect"
+import type { Scope } from "effect/Scope"
 import type { AuditEntry } from "@/evolution/decision/p6-types"
 import { promises as fs } from "fs"
 import path from "path"
@@ -8,7 +9,7 @@ const MAX_BATCH_SIZE = 100
 export interface Interface {
   readonly log: (entry: AuditEntry) => Effect.Effect<void>
   readonly flush: Effect.Effect<void>
-  readonly start: Effect.Effect<void>
+  readonly start: Effect.Effect<void, never, Scope>
   readonly stop: Effect.Effect<void>
   readonly getQueueDepth: Effect.Effect<number>
 }
@@ -59,7 +60,7 @@ export const layer = Layer.effect(
     const queueDepthRef = yield* Ref.make(0)
     const fiberRef = yield* Ref.make<Fiber.Fiber<void> | undefined>(undefined)
 
-    const start: Effect.Effect<void> = Effect.gen(function* () {
+    const start: Effect.Effect<void, never, Scope> = Effect.gen(function* () {
       const f = yield* Effect.forkScoped(
         writeBatch(queue, queueDepthRef, ledgerPath).pipe(
           Effect.forever,
@@ -94,7 +95,7 @@ export const layer = Layer.effect(
   }),
 )
 
-export function logAuditAsync(entry: AuditEntry): Effect.Effect<void> {
+export function logAuditAsync(entry: AuditEntry): Effect.Effect<void, never, Service> {
   return Effect.gen(function* () {
     const svc = yield* Service
     return yield* svc.log(entry)

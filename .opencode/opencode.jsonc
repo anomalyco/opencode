@@ -1,6 +1,37 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "model": "opencode/gpt-5.2",
-  "provider": {},
-  "permission": {},
+  "provider": {
+    // Ollama — local inference, no API key required.
+    // Prerequisite: Ollama must be running (`ollama serve`) before using this provider.
+    // Switch model by changing "model" field above to "ollama/qwen2.5-coder:0.5b"
+    // Pull first: ollama pull qwen2.5-coder:0.5b
+    "ollama": {
+      "name": "Ollama (Local)",
+      "npm": "@ai-sdk/openai-compatible",
+      "env": [],
+      "options": {
+        "apiKey": "ollama",
+        "baseURL": "http://localhost:11434/v1"
+      },
+      "models": {
+        "qwen2.5-coder:0.5b": {
+          "name": "Qwen 2.5 Coder 0.5B",
+          "tool_call": false,
+          "limit": { "context": 32768, "output": 4096 }
+        },
+        "qwen2.5-coder:7b": {
+          "name": "Qwen 2.5 Coder 7B",
+          "tool_call": true,
+          "limit": { "context": 32768, "output": 8192 }
+        },
+        "llama3.2:3b": {
+          "name": "Llama 3.2 3B",
+          "tool_call": false,
+          "limit": { "context": 8192, "output": 2048 }
+        }
+      }
+    }
+  },
+  "permission": {}
 }

@@ -18,6 +18,7 @@ const VALID_TRANSITIONS: Record<ProposalStatus, ProposalStatus[]> = {
   VALIDATING: ["ACCEPTED", "REJECTED"],
   ACCEPTED: [],
   REJECTED: [],
+  HELD: [],
 }
 
 function encodeWrite(data: DecisionProposal): string {

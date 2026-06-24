@@ -382,6 +382,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
           }),
         )
       },
+      "session.next.muel.audit": () => Effect.void,
     })
   })
 }
