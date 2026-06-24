@@ -86,12 +86,21 @@ describe("OpencodePlugin", () => {
                   providers: {
                     remote: {
                       name: "Remote",
-                      request: { body: { apiKey: "centralized-secret", custom: "value" } },
+                      request: {
+                        body: { apiKey: "centralized-secret", env: ["REMOTE_API_KEY"], custom: "value" },
+                      },
                       models: {
                         model: {
                           name: "Remote Model",
-                          request: { body: { apiKey: "model-secret", temperature: 0.5 } },
-                          variants: [{ id: "high", body: { apiKey: "variant-secret", temperature: 0.2 } }],
+                          request: {
+                            body: { apiKey: "model-secret", env: ["MODEL_API_KEY"], temperature: 0.5 },
+                          },
+                          variants: [
+                            {
+                              id: "high",
+                              body: { apiKey: "variant-secret", env: ["VARIANT_API_KEY"], temperature: 0.2 },
+                            },
+                          ],
                         },
                       },
                     },
