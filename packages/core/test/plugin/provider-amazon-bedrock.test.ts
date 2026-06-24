@@ -1,10 +1,63 @@
+import { AISDK } from "@opencode-ai/core/aisdk"
 import { describe, expect } from "bun:test"
+import type { LanguageModelV3 } from "@ai-sdk/provider"
 import { Effect } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
+import { ModelV2 } from "@opencode-ai/core/model"
 import { PluginV2 } from "@opencode-ai/core/plugin"
+import { PluginHost } from "@opencode-ai/core/plugin/host"
 import { AmazonBedrockPlugin } from "@opencode-ai/core/plugin/provider/amazon-bedrock"
 import { ProviderV2 } from "@opencode-ai/core/provider"
-import { fakeSelectorSdk, it, model, provider, withEnv } from "./provider-helper"
+import { testEffect } from "../lib/effect"
+import { PluginTestLayer } from "./fixture"
+
+const it = testEffect(PluginTestLayer)
+
+const addPlugin = Effect.fn(function* () {
+  const plugin = yield* PluginV2.Service
+  const aisdk = yield* AISDK.Service
+  const host = yield* PluginHost.make(plugin)
+  yield* AmazonBedrockPlugin.effect(host)
+})
+
+function required<T>(value: T | undefined): T {
+  if (value === undefined) throw new Error("Expected value")
+  return value
+}
+
+function withEnv<A, E, R>(vars: Record<string, string | undefined>, fx: () => Effect.Effect<A, E, R>) {
+  return Effect.acquireUseRelease(
+    Effect.sync(() => {
+      const previous = Object.fromEntries(Object.keys(vars).map((key) => [key, process.env[key]]))
+      Object.entries(vars).forEach(([key, value]) => {
+        if (value === undefined) delete process.env[key]
+        else process.env[key] = value
+      })
+      return previous
+    }),
+    fx,
+    (previous) =>
+      Effect.sync(() => {
+        Object.entries(previous).forEach(([key, value]) => {
+          if (value === undefined) delete process.env[key]
+          else process.env[key] = value
+        })
+      }),
+  )
+}
+
+function fakeSelectorSdk(calls: string[]) {
+  const make = (method: string) => (id: string) => {
+    calls.push(`${method}:${id}`)
+    return { modelId: id, provider: method, specificationVersion: "v3" } as unknown as LanguageModelV3
+  }
+  return {
+    responses: make("responses"),
+    messages: make("messages"),
+    chat: make("chat"),
+    languageModel: make("languageModel"),
+  }
+}
 
 function bedrockBaseURL(sdk: unknown, modelID = "anthropic.claude-sonnet-4-5") {
   const language = (sdk as { languageModel: (id: string) => unknown }).languageModel(modelID)
@@ -28,12 +81,10 @@ function openAIUrl(language: unknown, path: string, modelId: string) {
 describe("AmazonBedrockPlugin", () => {
   it.effect("moves endpoint option to api URL", () =>
     Effect.gen(function* () {
-      const plugin = yield* PluginV2.Service
       const catalog = yield* Catalog.Service
-      yield* plugin.add(AmazonBedrockPlugin)
-      const transform = yield* catalog.transform()
-      yield* transform((catalog) => {
-        const bedrock = provider("amazon-bedrock", {
+      yield* catalog.transform((catalog) => {
+        const bedrock = ProviderV2.Info.make({
+          ...ProviderV2.Info.empty(ProviderV2.ID.amazonBedrock),
           api: { type: "aisdk", package: "@ai-sdk/amazon-bedrock" },
           request: {
             headers: {},
@@ -45,7 +96,8 @@ describe("AmazonBedrockPlugin", () => {
           item.request = bedrock.request
         })
       })
-      const result = yield* catalog.provider.get(ProviderV2.ID.amazonBedrock)
+      yield* addPlugin()
+      const result = required(yield* catalog.provider.get(ProviderV2.ID.amazonBedrock))
       expect(result.api).toEqual({
         type: "aisdk",
         package: "@ai-sdk/amazon-bedrock",
@@ -59,22 +111,22 @@ describe("AmazonBedrockPlugin", () => {
     withEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined, AWS_PROFILE: undefined, AWS_ACCESS_KEY_ID: undefined }, () =>
       Effect.gen(function* () {
         const plugin = yield* PluginV2.Service
-        yield* plugin.add(AmazonBedrockPlugin)
-        const result = yield* plugin.trigger(
-          "aisdk.sdk",
-          {
-            model: model("amazon-bedrock", "anthropic.claude-sonnet-4-5"),
-            package: "@ai-sdk/amazon-bedrock",
-            options: {
-              name: "amazon-bedrock",
-              bearerToken: "token",
-              baseURL: "https://base.example",
-              endpoint: "https://endpoint.example",
-              region: "us-east-1",
-            },
+        const aisdk = yield* AISDK.Service
+        yield* addPlugin()
+        const result = yield* aisdk.runSDK({
+          model: ModelV2.Info.make({
+            ...ModelV2.Info.empty(ProviderV2.ID.amazonBedrock, ModelV2.ID.make("anthropic.claude-sonnet-4-5")),
+            api: { id: ModelV2.ID.make("anthropic.claude-sonnet-4-5"), type: "aisdk", package: "test-provider" },
+          }),
+          package: "@ai-sdk/amazon-bedrock",
+          options: {
+            name: "amazon-bedrock",
+            bearerToken: "token",
+            baseURL: "https://base.example",
+            endpoint: "https://endpoint.example",
+            region: "us-east-1",
           },
-          {},
-        )
+        })
         expect(bedrockBaseURL(result.sdk)).toBe("https://endpoint.example")
       }),
     ),
@@ -84,21 +136,21 @@ describe("AmazonBedrockPlugin", () => {
     withEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined, AWS_PROFILE: undefined, AWS_ACCESS_KEY_ID: undefined }, () =>
       Effect.gen(function* () {
         const plugin = yield* PluginV2.Service
-        yield* plugin.add(AmazonBedrockPlugin)
-        const result = yield* plugin.trigger(
-          "aisdk.sdk",
-          {
-            model: model("amazon-bedrock", "anthropic.claude-sonnet-4-5"),
-            package: "@ai-sdk/amazon-bedrock",
-            options: {
-              name: "amazon-bedrock",
-              bearerToken: "token",
-              baseURL: "https://base.example",
-              region: "us-east-1",
-            },
+        const aisdk = yield* AISDK.Service
+        yield* addPlugin()
+        const result = yield* aisdk.runSDK({
+          model: ModelV2.Info.make({
+            ...ModelV2.Info.empty(ProviderV2.ID.amazonBedrock, ModelV2.ID.make("anthropic.claude-sonnet-4-5")),
+            api: { id: ModelV2.ID.make("anthropic.claude-sonnet-4-5"), type: "aisdk", package: "test-provider" },
+          }),
+          package: "@ai-sdk/amazon-bedrock",
+          options: {
+            name: "amazon-bedrock",
+            bearerToken: "token",
+            baseURL: "https://base.example",
+            region: "us-east-1",
           },
-          {},
-        )
+        })
         expect(bedrockBaseURL(result.sdk)).toBe("https://base.example")
       }),
     ),
@@ -118,16 +170,20 @@ describe("AmazonBedrockPlugin", () => {
       () =>
         Effect.gen(function* () {
           const plugin = yield* PluginV2.Service
-          yield* plugin.add(AmazonBedrockPlugin)
-          const result = yield* plugin.trigger(
-            "aisdk.sdk",
-            {
-              model: model("amazon-bedrock", "anthropic.claude-sonnet-4-5"),
-              package: "@ai-sdk/amazon-bedrock",
-              options: { name: "amazon-bedrock" },
-            },
-            {},
-          )
+          const aisdk = yield* AISDK.Service
+          yield* addPlugin()
+          const result = yield* aisdk.runSDK({
+            model: ModelV2.Info.make({
+              ...ModelV2.Info.empty(ProviderV2.ID.amazonBedrock, ModelV2.ID.make("anthropic.claude-sonnet-4-5")),
+              api: {
+                id: ModelV2.ID.make("anthropic.claude-sonnet-4-5"),
+                type: "aisdk",
+                package: "test-provider",
+              },
+            }),
+            package: "@ai-sdk/amazon-bedrock",
+            options: { name: "amazon-bedrock" },
+          })
           expect(result.sdk).toBeDefined()
           expect(bedrockBaseURL(result.sdk)).toBe("https://bedrock-runtime.us-east-1.amazonaws.com")
         }),
@@ -138,16 +194,16 @@ describe("AmazonBedrockPlugin", () => {
     withEnv({ AWS_BEARER_TOKEN_BEDROCK: "token", AWS_REGION: "us-east-1" }, () =>
       Effect.gen(function* () {
         const plugin = yield* PluginV2.Service
-        yield* plugin.add(AmazonBedrockPlugin)
-        const result = yield* plugin.trigger(
-          "aisdk.sdk",
-          {
-            model: model("amazon-bedrock", "anthropic.claude-sonnet-4-5"),
-            package: "@ai-sdk/amazon-bedrock",
-            options: { name: "amazon-bedrock", region: "eu-west-1" },
-          },
-          {},
-        )
+        const aisdk = yield* AISDK.Service
+        yield* addPlugin()
+        const result = yield* aisdk.runSDK({
+          model: ModelV2.Info.make({
+            ...ModelV2.Info.empty(ProviderV2.ID.amazonBedrock, ModelV2.ID.make("anthropic.claude-sonnet-4-5")),
+            api: { id: ModelV2.ID.make("anthropic.claude-sonnet-4-5"), type: "aisdk", package: "test-provider" },
+          }),
+          package: "@ai-sdk/amazon-bedrock",
+          options: { name: "amazon-bedrock", region: "eu-west-1" },
+        })
         expect(bedrockBaseURL(result.sdk)).toBe("https://bedrock-runtime.eu-west-1.amazonaws.com")
       }),
     ),
@@ -157,16 +213,16 @@ describe("AmazonBedrockPlugin", () => {
     withEnv({ AWS_BEARER_TOKEN_BEDROCK: "token", AWS_REGION: "eu-west-1" }, () =>
       Effect.gen(function* () {
         const plugin = yield* PluginV2.Service
-        yield* plugin.add(AmazonBedrockPlugin)
-        const result = yield* plugin.trigger(
-          "aisdk.sdk",
-          {
-            model: model("amazon-bedrock", "anthropic.claude-sonnet-4-5"),
-            package: "@ai-sdk/amazon-bedrock",
-            options: { name: "amazon-bedrock" },
-          },
-          {},
-        )
+        const aisdk = yield* AISDK.Service
+        yield* addPlugin()
+        const result = yield* aisdk.runSDK({
+          model: ModelV2.Info.make({
+            ...ModelV2.Info.empty(ProviderV2.ID.amazonBedrock, ModelV2.ID.make("anthropic.claude-sonnet-4-5")),
+            api: { id: ModelV2.ID.make("anthropic.claude-sonnet-4-5"), type: "aisdk", package: "test-provider" },
+          }),
+          package: "@ai-sdk/amazon-bedrock",
+          options: { name: "amazon-bedrock" },
+        })
         expect(bedrockBaseURL(result.sdk)).toBe("https://bedrock-runtime.eu-west-1.amazonaws.com")
       }),
     ),
@@ -176,16 +232,16 @@ describe("AmazonBedrockPlugin", () => {
     withEnv({ AWS_BEARER_TOKEN_BEDROCK: "token", AWS_REGION: undefined }, () =>
       Effect.gen(function* () {
         const plugin = yield* PluginV2.Service
-        yield* plugin.add(AmazonBedrockPlugin)
-        const result = yield* plugin.trigger(
-          "aisdk.sdk",
-          {
-            model: model("amazon-bedrock", "anthropic.claude-sonnet-4-5"),
-            package: "@ai-sdk/amazon-bedrock",
-            options: { name: "amazon-bedrock" },
-          },
-          {},
-        )
+        const aisdk = yield* AISDK.Service
+        yield* addPlugin()
+        const result = yield* aisdk.runSDK({
+          model: ModelV2.Info.make({
+            ...ModelV2.Info.empty(ProviderV2.ID.amazonBedrock, ModelV2.ID.make("anthropic.claude-sonnet-4-5")),
+            api: { id: ModelV2.ID.make("anthropic.claude-sonnet-4-5"), type: "aisdk", package: "test-provider" },
+          }),
+          package: "@ai-sdk/amazon-bedrock",
+          options: { name: "amazon-bedrock" },
+        })
         expect(bedrockBaseURL(result.sdk)).toBe("https://bedrock-runtime.us-east-1.amazonaws.com")
       }),
     ),
@@ -195,24 +251,24 @@ describe("AmazonBedrockPlugin", () => {
     withEnv({ AWS_ACCESS_KEY_ID: undefined, AWS_BEARER_TOKEN_BEDROCK: undefined, AWS_PROFILE: undefined }, () =>
       Effect.gen(function* () {
         const plugin = yield* PluginV2.Service
+        const aisdk = yield* AISDK.Service
         const headers: Array<string | null> = []
-        yield* plugin.add(AmazonBedrockPlugin)
-        const result = yield* plugin.trigger(
-          "aisdk.sdk",
-          {
-            model: model("amazon-bedrock", "anthropic.claude-sonnet-4-5"),
-            package: "@ai-sdk/amazon-bedrock",
-            options: {
-              name: "amazon-bedrock",
-              bearerToken: "option-token",
-              fetch: async (_input: Parameters<typeof fetch>[0], init?: RequestInit) => {
-                headers.push(new Headers(init?.headers).get("Authorization"))
-                return new Response("{}")
-              },
+        yield* addPlugin()
+        const result = yield* aisdk.runSDK({
+          model: ModelV2.Info.make({
+            ...ModelV2.Info.empty(ProviderV2.ID.amazonBedrock, ModelV2.ID.make("anthropic.claude-sonnet-4-5")),
+            api: { id: ModelV2.ID.make("anthropic.claude-sonnet-4-5"), type: "aisdk", package: "test-provider" },
+          }),
+          package: "@ai-sdk/amazon-bedrock",
+          options: {
+            name: "amazon-bedrock",
+            bearerToken: "option-token",
+            fetch: async (_input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+              headers.push(new Headers(init?.headers).get("Authorization"))
+              return new Response("{}")
             },
           },
-          {},
-        )
+        })
         yield* Effect.promise(() => bedrockFetch(result.sdk)("https://bedrock.example", { method: "POST" }))
         expect(process.env.AWS_BEARER_TOKEN_BEDROCK).toBe("option-token")
         expect(headers).toEqual(["Bearer option-token"])
@@ -224,24 +280,24 @@ describe("AmazonBedrockPlugin", () => {
     withEnv({ AWS_BEARER_TOKEN_BEDROCK: "env-token" }, () =>
       Effect.gen(function* () {
         const plugin = yield* PluginV2.Service
+        const aisdk = yield* AISDK.Service
         const headers: Array<string | null> = []
-        yield* plugin.add(AmazonBedrockPlugin)
-        const result = yield* plugin.trigger(
-          "aisdk.sdk",
-          {
-            model: model("amazon-bedrock", "anthropic.claude-sonnet-4-5"),
-            package: "@ai-sdk/amazon-bedrock",
-            options: {
-              name: "amazon-bedrock",
-              bearerToken: "option-token",
-              fetch: async (_input: Parameters<typeof fetch>[0], init?: RequestInit) => {
-                headers.push(new Headers(init?.headers).get("Authorization"))
-                return new Response("{}")
-              },
+        yield* addPlugin()
+        const result = yield* aisdk.runSDK({
+          model: ModelV2.Info.make({
+            ...ModelV2.Info.empty(ProviderV2.ID.amazonBedrock, ModelV2.ID.make("anthropic.claude-sonnet-4-5")),
+            api: { id: ModelV2.ID.make("anthropic.claude-sonnet-4-5"), type: "aisdk", package: "test-provider" },
+          }),
+          package: "@ai-sdk/amazon-bedrock",
+          options: {
+            name: "amazon-bedrock",
+            bearerToken: "option-token",
+            fetch: async (_input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+              headers.push(new Headers(init?.headers).get("Authorization"))
+              return new Response("{}")
             },
           },
-          {},
-        )
+        })
         yield* Effect.promise(() => bedrockFetch(result.sdk)("https://bedrock.example", { method: "POST" }))
         expect(process.env.AWS_BEARER_TOKEN_BEDROCK).toBe("env-token")
         expect(headers).toEqual(["Bearer env-token"])
@@ -253,23 +309,25 @@ describe("AmazonBedrockPlugin", () => {
     withEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined, AWS_PROFILE: undefined, AWS_ACCESS_KEY_ID: undefined }, () =>
       Effect.gen(function* () {
         const plugin = yield* PluginV2.Service
-        yield* plugin.add(AmazonBedrockPlugin)
-        const result = yield* plugin.trigger(
-          "aisdk.sdk",
-          {
-            model: model("amazon-bedrock", "openai.gpt-5.5", {
-              api: { type: "aisdk", package: "@ai-sdk/amazon-bedrock/mantle" },
-            }),
-            package: "@ai-sdk/amazon-bedrock/mantle",
-            options: {
-              name: "amazon-bedrock",
-              bearerToken: "token",
-              baseURL: "https://bedrock-mantle.us-east-2.api.aws/openai/v1",
-              region: "us-east-2",
+        const aisdk = yield* AISDK.Service
+        yield* addPlugin()
+        const result = yield* aisdk.runSDK({
+          model: ModelV2.Info.make({
+            ...ModelV2.Info.empty(ProviderV2.ID.amazonBedrock, ModelV2.ID.make("openai.gpt-5.5")),
+            api: {
+              id: ModelV2.ID.make("openai.gpt-5.5"),
+              type: "aisdk",
+              package: "@ai-sdk/amazon-bedrock/mantle",
             },
+          }),
+          package: "@ai-sdk/amazon-bedrock/mantle",
+          options: {
+            name: "amazon-bedrock",
+            bearerToken: "token",
+            baseURL: "https://bedrock-mantle.us-east-2.api.aws/openai/v1",
+            region: "us-east-2",
           },
-          {},
-        )
+        })
         const language = result.sdk.responses("openai.gpt-5.5")
         expect(openAIUrl(language, "/responses", "openai.gpt-5.5")).toBe(
           "https://bedrock-mantle.us-east-2.api.aws/openai/v1/responses",
@@ -281,30 +339,33 @@ describe("AmazonBedrockPlugin", () => {
   it.effect("selects Mantle APIs without Bedrock cross-region prefixes", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
+      const aisdk = yield* AISDK.Service
       const calls: string[] = []
-      yield* plugin.add(AmazonBedrockPlugin)
-      yield* plugin.trigger(
-        "aisdk.language",
-        {
-          model: model("amazon-bedrock", "openai.gpt-5.5", {
-            api: { type: "aisdk", package: "@ai-sdk/amazon-bedrock/mantle" },
-          }),
-          sdk: fakeSelectorSdk(calls),
-          options: { baseURL: "https://bedrock-mantle.us-east-2.api.aws/openai/v1", region: "us-east-2" },
-        },
-        {},
-      )
-      yield* plugin.trigger(
-        "aisdk.language",
-        {
-          model: model("amazon-bedrock", "openai.gpt-oss-safeguard-120b", {
-            api: { type: "aisdk", package: "@ai-sdk/amazon-bedrock/mantle" },
-          }),
-          sdk: fakeSelectorSdk(calls),
-          options: { region: "us-east-1" },
-        },
-        {},
-      )
+      yield* addPlugin()
+      yield* aisdk.runLanguage({
+        model: ModelV2.Info.make({
+          ...ModelV2.Info.empty(ProviderV2.ID.amazonBedrock, ModelV2.ID.make("openai.gpt-5.5")),
+          api: {
+            id: ModelV2.ID.make("openai.gpt-5.5"),
+            type: "aisdk",
+            package: "@ai-sdk/amazon-bedrock/mantle",
+          },
+        }),
+        sdk: fakeSelectorSdk(calls),
+        options: { baseURL: "https://bedrock-mantle.us-east-2.api.aws/openai/v1", region: "us-east-2" },
+      })
+      yield* aisdk.runLanguage({
+        model: ModelV2.Info.make({
+          ...ModelV2.Info.empty(ProviderV2.ID.amazonBedrock, ModelV2.ID.make("openai.gpt-oss-safeguard-120b")),
+          api: {
+            id: ModelV2.ID.make("openai.gpt-oss-safeguard-120b"),
+            type: "aisdk",
+            package: "@ai-sdk/amazon-bedrock/mantle",
+          },
+        }),
+        sdk: fakeSelectorSdk(calls),
+        options: { region: "us-east-1" },
+      })
       expect(calls).toEqual(["responses:openai.gpt-5.5", "chat:openai.gpt-oss-safeguard-120b"])
     }),
   )
@@ -312,18 +373,20 @@ describe("AmazonBedrockPlugin", () => {
   it.effect("ignores other Bedrock provider subpaths", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
-      yield* plugin.add(AmazonBedrockPlugin)
-      const result = yield* plugin.trigger(
-        "aisdk.sdk",
-        {
-          model: model("amazon-bedrock", "anthropic.claude-sonnet-4-5", {
-            api: { type: "aisdk", package: "@ai-sdk/amazon-bedrock/anthropic" },
-          }),
-          package: "@ai-sdk/amazon-bedrock/anthropic",
-          options: { name: "amazon-bedrock" },
-        },
-        {},
-      )
+      const aisdk = yield* AISDK.Service
+      yield* addPlugin()
+      const result = yield* aisdk.runSDK({
+        model: ModelV2.Info.make({
+          ...ModelV2.Info.empty(ProviderV2.ID.amazonBedrock, ModelV2.ID.make("anthropic.claude-sonnet-4-5")),
+          api: {
+            id: ModelV2.ID.make("anthropic.claude-sonnet-4-5"),
+            type: "aisdk",
+            package: "@ai-sdk/amazon-bedrock/anthropic",
+          },
+        }),
+        package: "@ai-sdk/amazon-bedrock/anthropic",
+        options: { name: "amazon-bedrock" },
+      })
       expect(result.sdk).toBeUndefined()
     }),
   )
@@ -340,23 +403,27 @@ describe("AmazonBedrockPlugin", () => {
       () =>
         Effect.gen(function* () {
           const plugin = yield* PluginV2.Service
+          const aisdk = yield* AISDK.Service
           const headers: Array<string | null> = []
-          yield* plugin.add(AmazonBedrockPlugin)
-          const result = yield* plugin.trigger(
-            "aisdk.sdk",
-            {
-              model: model("amazon-bedrock", "anthropic.claude-sonnet-4-5"),
-              package: "@ai-sdk/amazon-bedrock",
-              options: {
-                name: "amazon-bedrock",
-                fetch: async (_input: Parameters<typeof fetch>[0], init?: RequestInit) => {
-                  headers.push(new Headers(init?.headers).get("Authorization"))
-                  return new Response("{}")
-                },
+          yield* addPlugin()
+          const result = yield* aisdk.runSDK({
+            model: ModelV2.Info.make({
+              ...ModelV2.Info.empty(ProviderV2.ID.amazonBedrock, ModelV2.ID.make("anthropic.claude-sonnet-4-5")),
+              api: {
+                id: ModelV2.ID.make("anthropic.claude-sonnet-4-5"),
+                type: "aisdk",
+                package: "test-provider",
+              },
+            }),
+            package: "@ai-sdk/amazon-bedrock",
+            options: {
+              name: "amazon-bedrock",
+              fetch: async (_input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+                headers.push(new Headers(init?.headers).get("Authorization"))
+                return new Response("{}")
               },
             },
-            {},
-          )
+          })
           yield* Effect.promise(() =>
             bedrockFetch(result.sdk)("https://bedrock-runtime.us-east-1.amazonaws.com/model/test/invoke", {
               body: "{}",
@@ -371,53 +438,53 @@ describe("AmazonBedrockPlugin", () => {
   it.effect("applies legacy cross-region inference prefixes", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
+      const aisdk = yield* AISDK.Service
       const calls: string[] = []
-      yield* plugin.add(AmazonBedrockPlugin)
-      yield* plugin.trigger(
-        "aisdk.language",
-        {
-          model: model("amazon-bedrock", "anthropic.claude-sonnet-4-5"),
-          sdk: { languageModel: fakeSelectorSdk(calls).languageModel },
-          options: {},
-        },
-        {},
-      )
-      yield* plugin.trigger(
-        "aisdk.language",
-        {
-          model: model("amazon-bedrock", "anthropic.claude-sonnet-4-5"),
-          sdk: { languageModel: fakeSelectorSdk(calls).languageModel },
-          options: { region: "eu-west-1" },
-        },
-        {},
-      )
-      yield* plugin.trigger(
-        "aisdk.language",
-        {
-          model: model("amazon-bedrock", "global.anthropic.claude-sonnet-4-5"),
-          sdk: { languageModel: fakeSelectorSdk(calls).languageModel },
-          options: { region: "eu-west-1" },
-        },
-        {},
-      )
-      yield* plugin.trigger(
-        "aisdk.language",
-        {
-          model: model("amazon-bedrock", "anthropic.claude-sonnet-4-5"),
-          sdk: { languageModel: fakeSelectorSdk(calls).languageModel },
-          options: { region: "ap-northeast-1" },
-        },
-        {},
-      )
-      yield* plugin.trigger(
-        "aisdk.language",
-        {
-          model: model("amazon-bedrock", "anthropic.claude-sonnet-4-5"),
-          sdk: { languageModel: fakeSelectorSdk(calls).languageModel },
-          options: { region: "ap-southeast-2" },
-        },
-        {},
-      )
+      yield* addPlugin()
+      yield* aisdk.runLanguage({
+        model: ModelV2.Info.make({
+          ...ModelV2.Info.empty(ProviderV2.ID.amazonBedrock, ModelV2.ID.make("anthropic.claude-sonnet-4-5")),
+          api: { id: ModelV2.ID.make("anthropic.claude-sonnet-4-5"), type: "aisdk", package: "test-provider" },
+        }),
+        sdk: { languageModel: fakeSelectorSdk(calls).languageModel },
+        options: {},
+      })
+      yield* aisdk.runLanguage({
+        model: ModelV2.Info.make({
+          ...ModelV2.Info.empty(ProviderV2.ID.amazonBedrock, ModelV2.ID.make("anthropic.claude-sonnet-4-5")),
+          api: { id: ModelV2.ID.make("anthropic.claude-sonnet-4-5"), type: "aisdk", package: "test-provider" },
+        }),
+        sdk: { languageModel: fakeSelectorSdk(calls).languageModel },
+        options: { region: "eu-west-1" },
+      })
+      yield* aisdk.runLanguage({
+        model: ModelV2.Info.make({
+          ...ModelV2.Info.empty(ProviderV2.ID.amazonBedrock, ModelV2.ID.make("global.anthropic.claude-sonnet-4-5")),
+          api: {
+            id: ModelV2.ID.make("global.anthropic.claude-sonnet-4-5"),
+            type: "aisdk",
+            package: "test-provider",
+          },
+        }),
+        sdk: { languageModel: fakeSelectorSdk(calls).languageModel },
+        options: { region: "eu-west-1" },
+      })
+      yield* aisdk.runLanguage({
+        model: ModelV2.Info.make({
+          ...ModelV2.Info.empty(ProviderV2.ID.amazonBedrock, ModelV2.ID.make("anthropic.claude-sonnet-4-5")),
+          api: { id: ModelV2.ID.make("anthropic.claude-sonnet-4-5"), type: "aisdk", package: "test-provider" },
+        }),
+        sdk: { languageModel: fakeSelectorSdk(calls).languageModel },
+        options: { region: "ap-northeast-1" },
+      })
+      yield* aisdk.runLanguage({
+        model: ModelV2.Info.make({
+          ...ModelV2.Info.empty(ProviderV2.ID.amazonBedrock, ModelV2.ID.make("anthropic.claude-sonnet-4-5")),
+          api: { id: ModelV2.ID.make("anthropic.claude-sonnet-4-5"), type: "aisdk", package: "test-provider" },
+        }),
+        sdk: { languageModel: fakeSelectorSdk(calls).languageModel },
+        options: { region: "ap-southeast-2" },
+      })
       expect(calls).toEqual([
         "languageModel:us.anthropic.claude-sonnet-4-5",
         "languageModel:eu.anthropic.claude-sonnet-4-5",
@@ -432,17 +499,17 @@ describe("AmazonBedrockPlugin", () => {
     withEnv({ AWS_REGION: "eu-west-1" }, () =>
       Effect.gen(function* () {
         const plugin = yield* PluginV2.Service
+        const aisdk = yield* AISDK.Service
         const calls: string[] = []
-        yield* plugin.add(AmazonBedrockPlugin)
-        yield* plugin.trigger(
-          "aisdk.language",
-          {
-            model: model("amazon-bedrock", "anthropic.claude-sonnet-4-5"),
-            sdk: { languageModel: fakeSelectorSdk(calls).languageModel },
-            options: {},
-          },
-          {},
-        )
+        yield* addPlugin()
+        yield* aisdk.runLanguage({
+          model: ModelV2.Info.make({
+            ...ModelV2.Info.empty(ProviderV2.ID.amazonBedrock, ModelV2.ID.make("anthropic.claude-sonnet-4-5")),
+            api: { id: ModelV2.ID.make("anthropic.claude-sonnet-4-5"), type: "aisdk", package: "test-provider" },
+          }),
+          sdk: { languageModel: fakeSelectorSdk(calls).languageModel },
+          options: {},
+        })
         expect(calls).toEqual(["languageModel:eu.anthropic.claude-sonnet-4-5"])
       }),
     ),
@@ -451,6 +518,7 @@ describe("AmazonBedrockPlugin", () => {
   it.effect("applies the full legacy cross-region prefix matrix", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
+      const aisdk = yield* AISDK.Service
       const calls: string[] = []
       const cases = [
         { region: "us-east-1", modelID: "amazon.nova-micro-v1:0", expected: "us.amazon.nova-micro-v1:0" },
@@ -518,17 +586,16 @@ describe("AmazonBedrockPlugin", () => {
           expected: "au.anthropic.claude-sonnet-4-5",
         },
       ]
-      yield* plugin.add(AmazonBedrockPlugin)
+      yield* addPlugin()
       for (const item of cases) {
-        yield* plugin.trigger(
-          "aisdk.language",
-          {
-            model: model("amazon-bedrock", item.modelID),
-            sdk: { languageModel: fakeSelectorSdk(calls).languageModel },
-            options: { region: item.region },
-          },
-          {},
-        )
+        yield* aisdk.runLanguage({
+          model: ModelV2.Info.make({
+            ...ModelV2.Info.empty(ProviderV2.ID.amazonBedrock, ModelV2.ID.make(item.modelID)),
+            api: { id: ModelV2.ID.make(item.modelID), type: "aisdk", package: "test-provider" },
+          }),
+          sdk: { languageModel: fakeSelectorSdk(calls).languageModel },
+          options: { region: item.region },
+        })
       }
       expect(calls).toEqual(cases.map((item) => `languageModel:${item.expected}`))
     }),
@@ -537,17 +604,17 @@ describe("AmazonBedrockPlugin", () => {
   it.effect("ignores non-Bedrock providers for language selection", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
+      const aisdk = yield* AISDK.Service
       const calls: string[] = []
-      yield* plugin.add(AmazonBedrockPlugin)
-      const result = yield* plugin.trigger(
-        "aisdk.language",
-        {
-          model: model("openai", "anthropic.claude-sonnet-4-5"),
-          sdk: { languageModel: fakeSelectorSdk(calls).languageModel },
-          options: { region: "eu-west-1" },
-        },
-        {},
-      )
+      yield* addPlugin()
+      const result = yield* aisdk.runLanguage({
+        model: ModelV2.Info.make({
+          ...ModelV2.Info.empty(ProviderV2.ID.openai, ModelV2.ID.make("anthropic.claude-sonnet-4-5")),
+          api: { id: ModelV2.ID.make("anthropic.claude-sonnet-4-5"), type: "aisdk", package: "test-provider" },
+        }),
+        sdk: { languageModel: fakeSelectorSdk(calls).languageModel },
+        options: { region: "eu-west-1" },
+      })
       expect(calls).toEqual([])
       expect(result.language).toBeUndefined()
     }),
