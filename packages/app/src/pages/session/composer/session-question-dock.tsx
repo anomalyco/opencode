@@ -15,6 +15,21 @@ import { ScopedKey } from "@/utils/server-scope"
 
 const cache = new Map<string, { tab: number; answers: QuestionAnswer[]; custom: string[]; customOn: boolean[] }>()
 
+export type CustomInputKeyAction = "ignore" | "escape" | "commit"
+
+// Resolves what the custom-answer textarea should do for a keydown event.
+// Guards against IME composition: while a CJK input method is composing,
+// Enter confirms the candidate and must not commit the answer (see #20850).
+export function customInputKeyAction(
+  e: Pick<KeyboardEvent, "key" | "shiftKey" | "metaKey" | "ctrlKey" | "altKey" | "isComposing" | "keyCode">,
+): CustomInputKeyAction {
+  if (e.isComposing || e.keyCode === 229) return "ignore"
+  if (e.key === "Escape") return "escape"
+  if ((e.metaKey || e.ctrlKey) && !e.altKey) return "ignore"
+  if (e.key !== "Enter" || e.shiftKey) return "ignore"
+  return "commit"
+}
+
 function Mark(props: { multi: boolean; picked: boolean; onClick?: (event: MouseEvent) => void }) {
   return (
     <span data-slot="question-option-check" aria-hidden="true" onClick={props.onClick}>
@@ -549,14 +564,14 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
                 rows={1}
                 disabled={sending()}
                 onKeyDown={(e) => {
-                  if (e.key === "Escape") {
+                  const action = customInputKeyAction(e)
+                  if (action === "ignore") return
+                  if (action === "escape") {
                     e.preventDefault()
                     setStore("editing", false)
                     focus(options().length)
                     return
                   }
-                  if ((e.metaKey || e.ctrlKey) && !e.altKey) return
-                  if (e.key !== "Enter" || e.shiftKey) return
                   e.preventDefault()
                   commitCustom()
                 }}
