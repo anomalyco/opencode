@@ -473,6 +473,29 @@ export function message(msgs: ModelMessage[], model: Provider.Model, options: Re
     })
   }
 
+  // Final safety net: filter out messages with empty content from any provider.
+  // Individual transforms above each have their own (or no) guard; this single
+  // pass catches every current and future case that could otherwise cause
+  // provider API errors — including DeepSeek (messages.N: all messages must
+  // have non-empty content), Bedrock (ValidationException), and others.
+  msgs = msgs
+    .map((msg) => {
+      if (typeof msg.content === "string") {
+        if (msg.content === "") return undefined
+        return msg
+      }
+      if (!Array.isArray(msg.content)) return msg
+      const filtered = msg.content.filter((part) => {
+        if (part.type === "text") return part.text !== ""
+        if (part.type === "reasoning") return part.text.trim().length > 0
+        return true
+      })
+      if (filtered.length === 0) return undefined
+      return { ...msg, content: filtered }
+    })
+    .filter((msg): msg is ModelMessage => msg !== undefined)
+
+
   return msgs
 }
 
