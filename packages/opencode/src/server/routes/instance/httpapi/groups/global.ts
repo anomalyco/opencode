@@ -16,13 +16,13 @@ const GlobalHealth = Schema.Struct({
 const SyncEventSchemas = EventV2.registry
   .values()
   .flatMap((definition) => {
-    if (!definition.sync) return []
+    if (!definition.durable) return []
     return [
       Schema.Struct({
         type: Schema.Literal("sync"),
         id: EventV2.ID,
         syncEvent: Schema.Struct({
-          type: Schema.Literal(EventV2.versionedType(definition.type, definition.sync.version)),
+          type: Schema.Literal(EventV2.versionedType(definition.type, definition.durable.version)),
           id: EventV2.ID,
           seq: Schema.Finite,
           aggregateID: Schema.String,

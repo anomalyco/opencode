@@ -1,4 +1,4 @@
-CRITICAL - MAXIMUM STEPS REACHED
+export const MAX_STEPS_PROMPT = `CRITICAL - MAXIMUM STEPS REACHED
 
 The maximum number of steps allowed for this task has been reached. Tools are disabled until next user input. Respond with text only.
 
@@ -13,4 +13,4 @@ Response must include:
 - List of any remaining tasks that were not completed
 - Recommendations for what should be done next
 
-Any attempt to use tools is a critical violation. Respond with text ONLY.
+Any attempt to use tools is a critical violation. Respond with text ONLY.`

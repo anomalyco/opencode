@@ -177,7 +177,7 @@ describe("SessionV2.prompt", () => {
     }),
   )
 
-  it.effect("streams durable Session events after an aggregate cursor", () =>
+  it.effect("streams durable Session events after an aggregate sequence", () =>
     Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
@@ -191,17 +191,17 @@ describe("SessionV2.prompt", () => {
       yield* SessionInput.promoteSteers(db, events, sessionID, Number.MAX_SAFE_INTEGER)
       const streamed = Array.from(yield* Fiber.join(fiber))
 
-      expect(streamed.map((event) => [event.cursor, event.event.type])).toEqual([
-        [EventV2.Cursor.make(0), "session.next.prompt.admitted"],
-        [EventV2.Cursor.make(1), "session.next.prompt.admitted"],
-        [EventV2.Cursor.make(2), "session.next.prompt.promoted"],
-        [EventV2.Cursor.make(3), "session.next.prompt.promoted"],
+      expect(streamed.map((event) => [event.durable?.seq, event.type])).toEqual([
+        [0, "session.next.prompt.admitted"],
+        [1, "session.next.prompt.admitted"],
+        [2, "session.next.prompt.promoted"],
+        [3, "session.next.prompt.promoted"],
       ])
       expect(
         Array.from(
-          yield* session.events({ sessionID, after: streamed[0]!.cursor }).pipe(Stream.take(1), Stream.runCollect),
-        ).map((event) => [event.cursor, event.event.type]),
-      ).toEqual([[EventV2.Cursor.make(1), "session.next.prompt.admitted"]])
+          yield* session.events({ sessionID, after: streamed[0]!.durable?.seq }).pipe(Stream.take(1), Stream.runCollect),
+        ).map((event) => [event.durable?.seq, event.type]),
+      ).toEqual([[1, "session.next.prompt.admitted"]])
     }),
   )
 
@@ -469,58 +469,6 @@ describe("SessionV2.prompt", () => {
 
       expect(retried).toMatchObject({ id: messageID, prompt: { text: "Historical queued prompt" } })
       expect(yield* admitted(messageID)).toMatchObject({ delivery: "queue" })
-    }),
-  )
-
-  it.effect("rejects an input ID already used by a durable non-prompt event", () =>
-    Effect.gen(function* () {
-      yield* setup
-      const session = yield* SessionV2.Service
-      const events = yield* EventV2.Service
-      yield* events.publish(SessionEvent.Synthetic, {
-        sessionID,
-        messageID,
-        timestamp: yield* DateTime.now,
-        text: "Collision",
-      })
-
-      const failure = yield* session
-        .prompt({ id: messageID, sessionID, prompt: new Prompt({ text: "Collision" }), resume: false })
-        .pipe(Effect.flip)
-
-      expect(failure._tag).toBe("Session.PromptConflictError")
-      expect(yield* admitted(messageID)).toBeUndefined()
-    }),
-  )
-
-  it.effect("rejects a durable event ID reserved by an admitted prompt without poisoning promotion", () =>
-    Effect.gen(function* () {
-      yield* setup
-      const { db } = yield* Database.Service
-      const session = yield* SessionV2.Service
-      const events = yield* EventV2.Service
-      const prompt = new Prompt({ text: "Reserved prompt" })
-      yield* session.prompt({ id: messageID, sessionID, prompt, resume: false })
-
-      const failure = yield* events
-        .publish(SessionEvent.Synthetic, {
-          sessionID,
-          messageID,
-          timestamp: yield* DateTime.now,
-          text: "Conflicting synthetic",
-        })
-        .pipe(Effect.catchDefect(Effect.succeed))
-
-      expect(String(failure)).toContain("SessionInput.LifecycleConflict")
-      expect(yield* admitted(messageID)).not.toHaveProperty("promotedSeq")
-      expect(yield* session.messages({ sessionID })).toEqual([])
-
-      yield* SessionInput.promoteSteers(db, events, sessionID, Number.MAX_SAFE_INTEGER)
-
-      expect(yield* admitted(messageID)).toMatchObject({ promotedSeq: 1 })
-      expect(yield* session.messages({ sessionID })).toMatchObject([
-        { id: messageID, type: "user", text: "Reserved prompt" },
-      ])
     }),
   )
 

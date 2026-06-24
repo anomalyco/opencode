@@ -1,5 +1,6 @@
 import { createConnection } from "net"
 import { createServer } from "http"
+import { escapeHtml } from "@/util/html"
 import { OAUTH_CALLBACK_PORT, OAUTH_CALLBACK_PATH, parseRedirectUri } from "./oauth-provider"
 
 // Current callback server configuration (may differ from defaults if custom redirectUri is used)
@@ -25,15 +26,6 @@ const HTML_SUCCESS = `<!DOCTYPE html>
   <script>setTimeout(() => window.close(), 2000);</script>
 </body>
 </html>`
-
-function escapeHtml(value: string) {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;")
-}
 
 const HTML_ERROR = (error: string) => `<!DOCTYPE html>
 <html>
@@ -79,6 +71,13 @@ function cleanupStateIndex(oauthState: string) {
   }
 }
 
+function stopIfIdle() {
+  if (pendingAuths.size > 0 || !server) return
+
+  server.close()
+  server = undefined
+}
+
 function handleRequest(req: import("http").IncomingMessage, res: import("http").ServerResponse) {
   const url = new URL(req.url || "/", `http://localhost:${currentPort}`)
 
@@ -112,6 +111,7 @@ function handleRequest(req: import("http").IncomingMessage, res: import("http").
     }
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" })
     res.end(HTML_ERROR(errorMsg))
+    stopIfIdle()
     return
   }
 
@@ -138,6 +138,7 @@ function handleRequest(req: import("http").IncomingMessage, res: import("http").
 
   res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" })
   res.end(HTML_SUCCESS)
+  stopIfIdle()
 }
 
 export async function ensureRunning(redirectUri?: string): Promise<void> {
@@ -176,6 +177,7 @@ export function waitForCallback(oauthState: string, mcpName?: string): Promise<s
         pendingAuths.delete(oauthState)
         if (mcpName) mcpNameToState.delete(mcpName)
         reject(new Error("OAuth callback timeout - authorization took too long"))
+        stopIfIdle()
       }
     }, CALLBACK_TIMEOUT_MS)
 
@@ -193,6 +195,7 @@ export function cancelPending(mcpName: string): void {
     pendingAuths.delete(key)
     mcpNameToState.delete(mcpName)
     pending.reject(new Error("Authorization cancelled"))
+    stopIfIdle()
   }
 }
 
