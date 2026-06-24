@@ -21,6 +21,7 @@ import { EffectBridge } from "@/effect/bridge"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { isRecord } from "@/util/record"
+import { Classifier } from "@/classifier"
 
 const MCP_RESOURCE_TOOLS = {
   list: "list_mcp_resources",
@@ -82,6 +83,19 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
           sessionID: input.session.id,
           tool: { messageID: input.processor.message.id, callID: options.toolCallId },
           ruleset: Permission.merge(input.agent.permission, input.session.permission ?? []),
+          // Classifier gate. evaluate() self-disables when the classifier is off;
+          // run.run provides the captured request context so the thunk is R=never.
+          classifier: () =>
+            run.run(
+              Classifier.evaluate({
+                tool: req.permission,
+                toolInput: args,
+                messages: input.messages,
+                fallbackModel: input.model,
+                sessionID: input.session.id,
+                abort: options.abortSignal!,
+              }),
+            ),
         })
         .pipe(Effect.orDie),
   })

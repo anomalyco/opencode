@@ -2,11 +2,28 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { ConfigPermissionV1 } from "@opencode-ai/core/v1/config/permission"
 import { InstanceState } from "@/effect/instance-state"
 import { Wildcard } from "@opencode-ai/core/util/wildcard"
-import { Deferred, Effect, Layer, Context } from "effect"
+import { Deferred, Effect, Layer, Context, Schema } from "effect"
 import os from "os"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { EventV2 } from "@opencode-ai/core/event"
+
+// Classifier gate (after Claude Code "auto mode"): a model-assisted check that
+// runs only on the would-auto-approve path. The callback is provided by the
+// call site (session/tools.ts) and closes over the transcript / tool / model.
+export class ClassifierDeniedError extends Schema.TaggedErrorClass<ClassifierDeniedError>()(
+  "PermissionClassifierDeniedError",
+  { reason: Schema.String },
+) {
+  override get message() {
+    return `The command-approval classifier blocked this tool call: ${this.reason}. Find a safer approach rather than routing around the block.`
+  }
+}
+export type ClassifierDecision =
+  | { kind: "allow" }
+  | { kind: "block"; reason: string }
+  | { kind: "ask"; reason: string }
+export type ClassifierThunk = () => Effect.Effect<ClassifierDecision | undefined>
 
 export const Event = {
   Asked: EventV2.define({ type: "permission.asked", schema: PermissionV1.Request.fields }),
@@ -21,7 +38,9 @@ export const Event = {
 }
 
 export interface Interface {
-  readonly ask: (input: PermissionV1.AskInput) => Effect.Effect<void, PermissionV1.Error>
+  readonly ask: (
+    input: PermissionV1.AskInput & { classifier?: ClassifierThunk },
+  ) => Effect.Effect<void, PermissionV1.Error | ClassifierDeniedError>
   readonly reply: (input: PermissionV1.ReplyInput) => Effect.Effect<void, PermissionV1.NotFoundError>
   readonly list: () => Effect.Effect<ReadonlyArray<PermissionV1.Request>>
 }
@@ -75,7 +94,9 @@ export const layer = Layer.effect(
       }),
     )
 
-    const ask = Effect.fn("Permission.ask")(function* (input: PermissionV1.AskInput) {
+    const ask = Effect.fn("Permission.ask")(function* (
+      input: PermissionV1.AskInput & { classifier?: ClassifierThunk },
+    ) {
       const { approved, pending } = yield* InstanceState.get(state)
       const { ruleset, ...request } = input
       let needsAsk = false
@@ -90,6 +111,15 @@ export const layer = Layer.effect(
         }
         if (rule.action === "allow") continue
         needsAsk = true
+      }
+
+      // Classifier gate: consult only on the would-auto-approve path.
+      if (!needsAsk && input.classifier) {
+        const decision = yield* input.classifier()
+        if (decision?.kind === "block") {
+          return yield* new ClassifierDeniedError({ reason: decision.reason })
+        }
+        if (decision?.kind === "ask") needsAsk = true
       }
 
       if (!needsAsk) return
