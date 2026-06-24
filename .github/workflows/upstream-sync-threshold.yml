@@ -154,8 +154,10 @@ import subprocess
 
 summary = pathlib.Path("/tmp/resolution-summary.md")
 
+
 def run(cmd, check=False):
     return subprocess.run(cmd, text=True, capture_output=True, check=check)
+
 
 unmerged = run(["git", "diff", "--name-only", "--diff-filter=U"]).stdout.splitlines()
 
@@ -193,9 +195,11 @@ risk_keywords = [
     "sst",
 ]
 
+
 def has_any(text, keywords):
     low = text.lower()
     return any(k in low for k in keywords)
+
 
 def split_conflict_file(text):
     lines = text.splitlines()
@@ -248,7 +252,8 @@ def split_conflict_file(text):
 
     return output, hunks
 
-def build_text(template, hunks, decisions):
+
+def build_text(template, decisions):
     final = []
 
     for item in template:
@@ -259,6 +264,7 @@ def build_text(template, hunks, decisions):
             final.append(item)
 
     return "\n".join(final) + "\n"
+
 
 def preview_hunk(hunk, max_lines=80):
     lines = []
@@ -272,6 +278,7 @@ def preview_hunk(hunk, max_lines=80):
         return "\n".join(lines[:max_lines]) + "\n...truncated..."
 
     return "\n".join(lines)
+
 
 resolved_files = []
 still_manual = []
@@ -328,7 +335,7 @@ with summary.open("a", encoding="utf-8") as out:
         out.write("**Guarded recommendation:**\n\n")
 
         if can_resolve_file:
-            new_text = build_text(template, hunks, decisions)
+            new_text = build_text(template, decisions)
             path.write_text(new_text, encoding="utf-8")
             run(["git", "add", file_name], check=True)
             resolved_files.append(file_name)
@@ -368,7 +375,6 @@ PY
 
           remaining_conflicts="$(git diff --name-only --diff-filter=U || true)"
           resolved_files="$(cat /tmp/guarded-resolved-files.txt 2>/dev/null || true)"
-          manual_files="$(cat /tmp/guarded-manual-files.txt 2>/dev/null || true)"
 
           {
             echo
