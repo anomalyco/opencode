@@ -39,6 +39,7 @@ describe("opencode mcp debug", () => {
         const output = result.stdout + result.stderr
         expect(output).toContain("Access token: present")
         expect(output).not.toContain("secret-access-token-prefix")
+        expect(output).toContain("Expires: 2100-01-01T00:00:00.000Z")
         expect(output).toContain("Refresh token: present")
         expect(output).toContain("Client ID: test-client")
       }),
