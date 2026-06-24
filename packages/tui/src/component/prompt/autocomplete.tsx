@@ -773,7 +773,7 @@ export function Autocomplete(props: {
               </text>
               <Show when={option().description}>
                 <text fg={index === store.selected ? selectedForeground(theme) : theme.textMuted} wrapMode="none">
-                  {option().description}
+                  {" " + option().description?.trimStart()}
                 </text>
               </Show>
             </box>

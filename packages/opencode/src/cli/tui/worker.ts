@@ -20,13 +20,16 @@ import {
 
 Heap.start()
 
-process.on("unhandledRejection", (e) => {
+const onUnhandledRejection = (e: unknown) => {
   console.error("worker unhandled rejection", e instanceof Error ? e.message : e)
-})
+}
 
-process.on("uncaughtException", (e) => {
+const onUncaughtException = (e: Error) => {
   console.error("worker uncaught exception", e instanceof Error ? e.message : e)
-})
+}
+
+process.on("unhandledRejection", onUnhandledRejection)
+process.on("uncaughtException", onUncaughtException)
 
 // Initialize OTEL and audit logger in the worker. The main thread's
 // MeterProvider and dynamoClient are not shared with Bun Workers.
@@ -132,6 +135,8 @@ export const rpc = {
     await shutdownOTEL().catch(() => {})
     await InstanceRuntime.disposeAllInstances()
     if (server) await server.stop(true)
+    process.off("unhandledRejection", onUnhandledRejection)
+    process.off("uncaughtException", onUncaughtException)
   },
 }
 
