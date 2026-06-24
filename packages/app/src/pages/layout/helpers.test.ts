@@ -2,9 +2,11 @@ import { describe, expect, test } from "bun:test"
 import {
   collectNewSessionDeepLinks,
   collectOpenProjectDeepLinks,
+  collectOpenSessionDeepLinks,
   drainPendingDeepLinks,
   parseDeepLink,
   parseNewSessionDeepLink,
+  parseOpenSessionDeepLink,
 } from "./deep-links"
 import { type Session } from "@opencode-ai/sdk/v2/client"
 import {
@@ -96,6 +98,27 @@ describe("layout deep links", () => {
       "opencode://new-session?directory=/c&prompt=ship%20it",
     ])
     expect(result).toEqual([{ directory: "/a" }, { directory: "/c", prompt: "ship it" }])
+  })
+
+  test("parses open-session deep links", () => {
+    expect(parseOpenSessionDeepLink("opencode://open-session?directory=/tmp/demo&session=ses_123")).toEqual({
+      directory: "/tmp/demo",
+      session: "ses_123",
+    })
+    expect(parseOpenSessionDeepLink("opencode://open-session?directory=/tmp/demo")).toBeUndefined()
+    expect(parseOpenSessionDeepLink("opencode://open-session?session=ses_123")).toBeUndefined()
+  })
+
+  test("collects only valid open-session deep links", () => {
+    const result = collectOpenSessionDeepLinks([
+      "opencode://open-session?directory=/a&session=ses_a",
+      "opencode://open-project?directory=/b",
+      "opencode://open-session?directory=/c&session=ses_c",
+    ])
+    expect(result).toEqual([
+      { directory: "/a", session: "ses_a" },
+      { directory: "/c", session: "ses_c" },
+    ])
   })
 
   test("drains global deep links once", () => {

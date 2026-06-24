@@ -79,6 +79,7 @@ import {
 import {
   collectNewSessionDeepLinks,
   collectOpenProjectDeepLinks,
+  collectOpenSessionDeepLinks,
   deepLinkEvent,
   drainPendingDeepLinks,
 } from "./layout/deep-links"
@@ -1378,6 +1379,11 @@ export default function LegacyLayout(props: ParentProps) {
       }
       const href = link.prompt ? `/${slug}/session?prompt=${encodeURIComponent(link.prompt)}` : `/${slug}/session`
       navigateWithSidebarReset(href)
+    }
+
+    for (const link of collectOpenSessionDeepLinks(urls)) {
+      void openProject(link.directory, false)
+      navigateWithSidebarReset(`/${base64Encode(link.directory)}/session/${link.session}`)
     }
   }
 
