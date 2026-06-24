@@ -18,6 +18,7 @@ export default function NewLayout(props: ParentProps) {
   createEffect(() => setV2Toast(true))
   createEffect(() => {
     if (!notification.ready() || !params.id) return
+    if (notification.session.unseenCount(params.id) === 0) return
     notification.session.markViewed(params.id)
   })
 
