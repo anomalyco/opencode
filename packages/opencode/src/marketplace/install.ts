@@ -86,8 +86,12 @@ export const layer = Layer.effect(
         const assets = yield* discover(installDir)
 
         for (const skillPath of assets.skills) {
-          const rel = path.relative(installDir, skillPath)
-          yield* copyFile(skillPath, path.join(global.config, "skills", pkgName, rel), fs).pipe(Effect.ignore)
+          const skillDir = path.dirname(skillPath)
+          const skillName = path.basename(skillDir)
+          const dest = path.join(global.config, "skills", pkgName, skillName)
+          yield* Effect.promise(() =>
+            import("fs/promises").then((f) => f.cp(skillDir, dest, { recursive: true })),
+          ).pipe(Effect.ignore)
         }
         for (const agentPath of assets.agents) {
           const rel = path.relative(installDir, agentPath)
