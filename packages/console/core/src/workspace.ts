@@ -6,8 +6,9 @@ import { Identifier } from "./identifier"
 import { UserTable } from "./schema/user.sql"
 import { BillingTable } from "./schema/billing.sql"
 import { WorkspaceTable } from "./schema/workspace.sql"
+import { AccountTable } from "./schema/account.sql"
 import { Key } from "./key"
-import { eq, sql } from "drizzle-orm"
+import { and, eq, isNull, sql } from "drizzle-orm"
 
 export namespace Workspace {
   export const create = fn(
@@ -19,6 +20,13 @@ export namespace Workspace {
       const workspaceID = Identifier.create("workspace")
       const userID = Identifier.create("user")
       await Database.transaction(async (tx) => {
+        const active = await tx
+          .select({ id: AccountTable.id })
+          .from(AccountTable)
+          .where(and(eq(AccountTable.id, account.properties.accountID), isNull(AccountTable.timeDeleted)))
+          .then((rows) => rows[0])
+        if (!active) throw new Error("Account is not active")
+
         await tx.insert(WorkspaceTable).values({
           id: workspaceID,
           name,

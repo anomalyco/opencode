@@ -37,7 +37,6 @@
     "update-limits": "script/update-limits.ts",
     "promote-limits-to-dev": "script/promote-limits.ts dev",
     "promote-limits-to-prod": "script/promote-limits.ts production",
-    "referral-backfill": "script/referral-backfill.ts",
     "typecheck": "tsgo --noEmit"
   },
   "devDependencies": {
