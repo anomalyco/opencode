@@ -81,7 +81,6 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
   type Queued = QueuedServerEvent
   const FLUSH_FRAME_MS = 16
   const STREAM_YIELD_MS = 8
-  const RECONNECT_DELAY_MS = 250
 
   let queue: Queued[] = []
   let buffer: Queued[] = []
@@ -135,10 +134,21 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
   let started = false
   let generation = 0
   const HEARTBEAT_TIMEOUT_MS = 15_000
+  // Exponential backoff for reconnects: 500ms, 1s, 2s, 4s, ..., capped at 30s with ±25% jitter.
+  // Survives flaky proxies/AV/idle TCP timeouts that close the SSE stream silently.
+  const RECONNECT_BASE_MS = 500
+  const RECONNECT_MAX_MS = 30_000
+  let reconnectAttempt = 0
+  const nextReconnectDelay = () => {
+    const exp = Math.min(RECONNECT_MAX_MS, RECONNECT_BASE_MS * 2 ** reconnectAttempt)
+    const jitter = exp * (Math.random() * 0.5 - 0.25)
+    return Math.max(RECONNECT_BASE_MS, Math.floor(exp + jitter))
+  }
   let lastEventAt = Date.now()
   let heartbeat: ReturnType<typeof setTimeout> | undefined
   const resetHeartbeat = () => {
     lastEventAt = Date.now()
+    reconnectAttempt = 0
     if (heartbeat) clearTimeout(heartbeat)
     heartbeat = setTimeout(() => {
       attempt?.abort()
@@ -227,7 +237,8 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
         }
 
         if (abort.signal.aborted || !started || generation !== active) return
-        await wait(RECONNECT_DELAY_MS)
+        reconnectAttempt++
+        await wait(nextReconnectDelay())
       }
     })().finally(() => {
       if (run !== current) return

@@ -30,9 +30,11 @@ function parseBody(body: string) {
   }
 }
 
-function eventResponse() {
+const DEFAULT_HEARTBEAT_MS = 10_000
+
+function eventResponse({ heartbeatMs }: { heartbeatMs: number }) {
   return Effect.gen(function* () {
-    yield* Effect.logInfo("global event connected")
+    yield* Effect.logInfo("global event connected").pipe(Effect.annotateLogs({ heartbeatMs }))
     const events = Stream.callback<GlobalBusEvent>((queue) => {
       const handler = (event: GlobalBusEvent) => Queue.offerUnsafe(queue, event)
       return Effect.acquireRelease(
@@ -40,7 +42,7 @@ function eventResponse() {
         () => Effect.sync(() => GlobalBus.off("event", handler)),
       )
     })
-    const heartbeat = Stream.tick("10 seconds").pipe(
+    const heartbeat = Stream.tick(`${heartbeatMs} millis`).pipe(
       Stream.drop(1),
       Stream.map(() => ({ payload: { id: EventV2.ID.create(), type: "server.heartbeat", properties: {} } })),
     )
@@ -51,7 +53,18 @@ function eventResponse() {
         Stream.map(eventData),
         Stream.pipeThroughChannel(Sse.encode()),
         Stream.encodeText,
-        Stream.ensuring(Effect.logInfo("global event disconnected")),
+        Stream.ensuring(
+          Effect.gen(function* () {
+            yield* Effect.logInfo("global event disconnected")
+            GlobalBus.emit("event", {
+              directory: "global",
+              payload: {
+                type: "server.client_disconnected",
+                properties: {},
+              },
+            })
+          }),
+        ),
       ),
       {
         contentType: "text/event-stream",
@@ -76,7 +89,9 @@ export const globalHandlers = HttpApiBuilder.group(RootHttpApi, "global", (handl
     })
 
     const event = Effect.fn("GlobalHttpApi.event")(function* () {
-      return yield* eventResponse()
+      const info = yield* config.get()
+      const heartbeatMs = info.server?.eventStream?.heartbeatMs ?? DEFAULT_HEARTBEAT_MS
+      return yield* eventResponse({ heartbeatMs })
     })
 
     const configGet = Effect.fn("GlobalHttpApi.configGet")(function* () {

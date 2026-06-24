@@ -91,4 +91,29 @@ describe("event HttpApi", () => {
       }),
     { git: true, config: { formatter: false, lsp: false } },
   )
+
+  it.instance(
+    "honours configured heartbeat interval",
+    () =>
+      Effect.gen(function* () {
+        const { directory } = yield* TestInstance
+        const { reader } = yield* openEventStream(directory)
+        expect(yield* readEvent(reader)).toMatchObject({ type: "server.connected", properties: {} })
+
+        // With heartbeatMs=1000 a heartbeat must arrive well under 1.5s.
+        const start = Date.now()
+        const heartbeat = yield* Queue.take(reader).pipe(
+          Effect.timeoutOrElse({
+            duration: "1500 millis",
+            orElse: () => Effect.fail(new Error("heartbeat did not arrive in time")),
+          }),
+        )
+        const elapsed = Date.now() - start
+        expect(JSON.parse(new TextDecoder().decode(heartbeat).replace(/^data: /, ""))).toMatchObject({
+          type: "server.heartbeat",
+        })
+        expect(elapsed).toBeLessThan(1500)
+      }),
+    { git: true, config: { formatter: false, lsp: false, server: { eventStream: { heartbeatMs: 1000 } } } },
+  )
 })
