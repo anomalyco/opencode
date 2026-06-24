@@ -212,7 +212,7 @@ export const layer = Layer.effect(
       if (!containsPath(file, ctx)) return [] as LSPClient.Info[]
       const s = yield* InstanceState.get(state)
       const clients = yield* Effect.promise(async () => {
-        const extension = path.parse(file).ext || file
+        const extension = path.parse(file).ext || path.basename(file)
         const result: LSPClient.Info[] = []
         let updated = 0
 
@@ -331,7 +331,7 @@ export const layer = Layer.effect(
       const ctx = yield* InstanceState.context
       const s = yield* InstanceState.get(state)
       return yield* Effect.promise(async () => {
-        const extension = path.parse(file).ext || file
+        const extension = path.parse(file).ext || path.basename(file)
         for (const server of Object.values(s.servers)) {
           if (server.extensions.length && !server.extensions.includes(extension)) continue
           const root = await server.root(file, ctx)
