@@ -1,6 +1,6 @@
-import { Config } from "@/config/config"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import { EventV2 } from "@opencode-ai/core/event"
+import { EventManifest } from "@/event-manifest"
 import { InstanceDisposed } from "@/server/event"
 import "@opencode-ai/core/account"
 import "@/server/event"
@@ -13,8 +13,7 @@ const GlobalHealth = Schema.Struct({
   version: Schema.String,
 })
 
-const SyncEventSchemas = EventV2.registry
-  .values()
+const SyncEventSchemas = EventManifest.Latest.values()
   .flatMap((definition) => {
     if (!definition.durable) return []
     return [
@@ -38,8 +37,7 @@ const GlobalEventSchema = Schema.Struct({
   project: Schema.optional(Schema.String),
   workspace: Schema.optional(Schema.String),
   payload: Schema.Union([
-    ...EventV2.registry
-      .values()
+    ...EventManifest.Latest.values()
       .map((definition) =>
         Schema.Struct({ id: EventV2.ID, type: Schema.Literal(definition.type), properties: definition.data }),
       )

@@ -80,7 +80,7 @@ describe("AzurePlugin", () => {
       Effect.gen(function* () {
         const catalog = yield* Catalog.Service
         yield* catalog.transform((catalog) => {
-          const azure = new ProviderV2.Info({
+          const azure = ProviderV2.Info.make({
             ...ProviderV2.Info.empty(ProviderV2.ID.azure),
             api: { type: "aisdk", package: "@ai-sdk/azure" },
             request: { headers: {}, body: { resourceName: "from-config" } },
@@ -103,7 +103,7 @@ describe("AzurePlugin", () => {
       Effect.gen(function* () {
         const catalog = yield* Catalog.Service
         yield* catalog.transform((catalog) => {
-          const azure = new ProviderV2.Info({
+          const azure = ProviderV2.Info.make({
             ...ProviderV2.Info.empty(ProviderV2.ID.azure),
             api: { type: "aisdk", package: "@ai-sdk/azure" },
             request: { headers: {}, body: { resourceName: "" } },
@@ -124,7 +124,7 @@ describe("AzurePlugin", () => {
       Effect.gen(function* () {
         const catalog = yield* Catalog.Service
         yield* catalog.transform((catalog) => {
-          const azure = new ProviderV2.Info({
+          const azure = ProviderV2.Info.make({
             ...ProviderV2.Info.empty(ProviderV2.ID.azure),
             api: { type: "aisdk", package: "@ai-sdk/azure" },
             request: { headers: {}, body: { resourceName: "   " } },
@@ -147,7 +147,7 @@ describe("AzurePlugin", () => {
         const aisdk = yield* AISDK.Service
         yield* addPlugin()
         const result = yield* aisdk.runSDK({
-          model: new ModelV2.Info({
+          model: ModelV2.Info.make({
             ...ModelV2.Info.empty(ProviderV2.ID.azure, ModelV2.ID.make("deployment")),
             api: { id: ModelV2.ID.make("deployment"), type: "aisdk", package: "test-provider" },
           }),
@@ -166,7 +166,7 @@ describe("AzurePlugin", () => {
         yield* addPlugin()
         const exit = yield* aisdk
           .runSDK({
-            model: new ModelV2.Info({
+            model: ModelV2.Info.make({
               ...ModelV2.Info.empty(ProviderV2.ID.azure, ModelV2.ID.make("deployment")),
               api: { id: ModelV2.ID.make("deployment"), type: "aisdk", package: "test-provider" },
             }),
@@ -186,7 +186,7 @@ describe("AzurePlugin", () => {
       const calls: string[] = []
       yield* addPlugin()
       yield* aisdk.runLanguage({
-        model: new ModelV2.Info({
+        model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.azure, ModelV2.ID.make("deployment")),
           api: { id: ModelV2.ID.make("deployment"), type: "aisdk", package: "test-provider" },
         }),
@@ -204,7 +204,7 @@ describe("AzurePlugin", () => {
       const calls: string[] = []
       yield* addPlugin()
       yield* aisdk.runLanguage({
-        model: new ModelV2.Info({
+        model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.azure, ModelV2.ID.make("deployment")),
           api: { id: ModelV2.ID.make("deployment"), type: "aisdk", package: "test-provider" },
         }),
@@ -222,7 +222,7 @@ describe("AzurePlugin", () => {
       const calls: string[] = []
       yield* addPlugin()
       yield* aisdk.runLanguage({
-        model: new ModelV2.Info({
+        model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.azure, ModelV2.ID.make("deployment")),
           api: { id: ModelV2.ID.make("deployment"), type: "aisdk", package: "test-provider" },
           request: { headers: {}, body: { useCompletionUrls: true } },
@@ -241,7 +241,7 @@ describe("AzurePlugin", () => {
       const calls: string[] = []
       yield* addPlugin()
       yield* aisdk.runLanguage({
-        model: new ModelV2.Info({
+        model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.azure, ModelV2.ID.make("deployment")),
           api: { id: ModelV2.ID.make("deployment"), type: "aisdk", package: "test-provider" },
         }),
@@ -249,7 +249,7 @@ describe("AzurePlugin", () => {
         options: {},
       })
       const ignored = yield* aisdk.runLanguage({
-        model: new ModelV2.Info({
+        model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.openai, ModelV2.ID.make("deployment")),
           api: { id: ModelV2.ID.make("deployment"), type: "aisdk", package: "test-provider" },
         }),
@@ -272,7 +272,7 @@ describe("AzurePlugin", () => {
       }
       yield* addPlugin()
       yield* aisdk.runLanguage({
-        model: new ModelV2.Info({
+        model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.azure, ModelV2.ID.make("messages-deployment")),
           api: { id: ModelV2.ID.make("messages-deployment"), type: "aisdk", package: "test-provider" },
         }),
@@ -280,7 +280,7 @@ describe("AzurePlugin", () => {
         options: {},
       })
       yield* aisdk.runLanguage({
-        model: new ModelV2.Info({
+        model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.azure, ModelV2.ID.make("language-deployment")),
           api: { id: ModelV2.ID.make("language-deployment"), type: "aisdk", package: "test-provider" },
         }),

@@ -6,19 +6,9 @@ import { Deferred, Effect, Layer, Context } from "effect"
 import os from "os"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { EventV2Bridge } from "@/event-v2-bridge"
-import { EventV2 } from "@opencode-ai/core/event"
+import { PermissionV1Event } from "@opencode-ai/schema/permission-v1"
 
-export const Event = {
-  Asked: EventV2.define({ type: "permission.asked", schema: PermissionV1.Request.fields }),
-  Replied: EventV2.define({
-    type: "permission.replied",
-    schema: {
-      sessionID: PermissionV1.Request.fields.sessionID,
-      requestID: PermissionV1.ID,
-      reply: PermissionV1.Reply,
-    },
-  }),
-}
+export const Event = PermissionV1Event
 
 export interface Interface {
   readonly ask: (input: PermissionV1.AskInput) => Effect.Effect<void, PermissionV1.Error>
@@ -214,7 +204,7 @@ export function merge(...rulesets: PermissionV1.Ruleset[]): PermissionV1.Rule[] 
 
 export function disabled(tools: string[], ruleset: PermissionV1.Ruleset): Set<string> {
   const edits = ["edit", "write", "apply_patch"]
-  const reads = ["list_mcp_resources", "read_mcp_resource"]
+  const reads = ["list_mcp_resources", "list_mcp_resource_templates", "read_mcp_resource"]
   return new Set(
     tools.filter((tool) => {
       const permission = edits.includes(tool) ? "edit" : reads.includes(tool) ? "read" : tool

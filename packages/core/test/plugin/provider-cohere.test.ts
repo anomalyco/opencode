@@ -54,7 +54,7 @@ describe("CoherePlugin", () => {
       yield* addPlugin()
 
       const ignored = yield* aisdk.runSDK({
-        model: new ModelV2.Info({
+        model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.make("cohere"), ModelV2.ID.make("command")),
           api: { id: ModelV2.ID.make("command"), type: "aisdk", package: "test-provider" },
         }),
@@ -64,7 +64,7 @@ describe("CoherePlugin", () => {
       expect(ignored.sdk).toBeUndefined()
 
       const result = yield* aisdk.runSDK({
-        model: new ModelV2.Info({
+        model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.make("cohere"), ModelV2.ID.make("command")),
           api: { id: ModelV2.ID.make("command"), type: "aisdk", package: "test-provider" },
         }),
@@ -81,7 +81,7 @@ describe("CoherePlugin", () => {
       const aisdk = yield* AISDK.Service
       yield* addPlugin()
       const result = yield* aisdk.runSDK({
-        model: new ModelV2.Info({
+        model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.make("custom-cohere"), ModelV2.ID.make("command-r-plus")),
           api: { id: ModelV2.ID.make("command-r-plus"), type: "aisdk", package: "test-provider" },
         }),
@@ -106,7 +106,7 @@ describe("CoherePlugin", () => {
       const sdk = fakeSelectorSdk(calls)
       yield* addPlugin()
       const result = yield* aisdk.runLanguage({
-        model: new ModelV2.Info({
+        model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.make("cohere"), ModelV2.ID.make("alias")),
           api: { id: ModelV2.ID.make("command-r-plus"), type: "aisdk", package: "test-provider" },
         }),

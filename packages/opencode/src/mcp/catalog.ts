@@ -100,9 +100,11 @@ export function fetch<T extends { name: string }>(
     ),
     Effect.map((items) => {
       const sanitizedClient = sanitize(clientName)
+      // Escape both the separator and escape marker so `server:uri` keys remain unambiguous.
+      const resourceClient = clientName.replaceAll("%", "%25").replaceAll(":", "%3A")
       return Object.fromEntries(
         items.map((item) => [
-          key ? clientName + ":" + key(item) : sanitizedClient + ":" + sanitize(item.name),
+          key ? resourceClient + ":" + key(item) : sanitizedClient + ":" + sanitize(item.name),
           { ...item, client: clientName },
         ]),
       )
@@ -112,6 +114,8 @@ export function fetch<T extends { name: string }>(
 }
 
 export const sanitize = (value: string) => value.replace(/[^a-zA-Z0-9_-]/g, "_")
+
+export const toolName = (clientName: string, name: string) => sanitize(clientName) + "_" + sanitize(name)
 
 export function prompts(client: Client, timeout?: number) {
   if (!client.getServerCapabilities()?.prompts) return Promise.resolve([])
