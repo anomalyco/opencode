@@ -1,7 +1,7 @@
 import { useNavigate } from "@solidjs/router"
 import { useCommand, type CommandOption } from "@/context/command"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { previewSelectedLines } from "@opencode-ai/ui/pierre/selection-bridge"
+import { previewSelectedLines } from "@opencode-ai/session-ui/pierre/selection-bridge"
 import { useFile, selectionFromLines, type FileSelection, type SelectedLineRange } from "@/context/file"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
