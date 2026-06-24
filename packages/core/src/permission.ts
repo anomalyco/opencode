@@ -1,6 +1,7 @@
 export * as PermissionV2 from "./permission"
 
 import { Context, Deferred, Effect as EffectRuntime, Layer, Schema } from "effect"
+import { Permission } from "@opencode-ai/schema/permission"
 import { EventV2 } from "./event"
 import { Location } from "./location"
 import { AgentV2 } from "./agent"
@@ -9,14 +10,10 @@ import { SessionStore } from "./session/store"
 import { withStatics } from "./schema"
 import { Identifier } from "./util/identifier"
 import { Wildcard } from "./util/wildcard"
-import { PermissionSchema } from "./permission/schema"
 import { PermissionSaved } from "./permission/saved"
 
-export { Effect, Rule, Ruleset } from "./permission/schema"
-type Effect = PermissionSchema.Effect
-type Rule = PermissionSchema.Rule
-type Ruleset = PermissionSchema.Ruleset
-const missingAgentPermissions: Ruleset = [{ action: "*", resource: "*", effect: "deny" }]
+export { Effect, Rule, Ruleset } from "@opencode-ai/schema/permission"
+const missingAgentPermissions: Permission.Ruleset = [{ action: "*", resource: "*", effect: "deny" }]
 
 export const ID = Schema.String.check(Schema.isStartsWith("per")).pipe(
   Schema.brand("PermissionV2.ID"),
@@ -67,7 +64,7 @@ export type ReplyInput = typeof ReplyInput.Type
 
 export const AskResult = Schema.Struct({
   id: ID,
-  effect: PermissionSchema.Effect,
+  effect: Permission.Effect,
 }).annotate({ identifier: "PermissionV2.AskResult" })
 export type AskResult = typeof AskResult.Type
 
@@ -90,7 +87,7 @@ export class CorrectedError extends Schema.TaggedErrorClass<CorrectedError>()("P
 }) {}
 
 export class DeniedError extends Schema.TaggedErrorClass<DeniedError>()("PermissionV2.DeniedError", {
-  rules: PermissionSchema.Ruleset,
+  rules: Permission.Ruleset,
 }) {}
 
 export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("PermissionV2.NotFoundError", {
@@ -99,7 +96,7 @@ export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("Per
 
 export type Error = DeniedError | RejectedError | CorrectedError
 
-export function evaluate(action: string, resource: string, ...rulesets: Ruleset[]): Rule {
+export function evaluate(action: string, resource: string, ...rulesets: Permission.Ruleset[]): Permission.Rule {
   return (
     rulesets
       .flat()
@@ -111,7 +108,7 @@ export function evaluate(action: string, resource: string, ...rulesets: Ruleset[
   )
 }
 
-export function merge(...rulesets: Ruleset[]): Ruleset {
+export function merge(...rulesets: Permission.Ruleset[]): Permission.Ruleset {
   return rulesets.flat()
 }
 
@@ -156,7 +153,7 @@ export const layer = Layer.effect(
 
     const savedRules = EffectRuntime.fnUntraced(function* () {
       return (yield* saved.list({ projectID: location.project.id })).map(
-        (item): Rule => ({ action: item.action, resource: item.resource, effect: "allow" }),
+        (item): Permission.Rule => ({ action: item.action, resource: item.resource, effect: "allow" }),
       )
     })
 
@@ -170,11 +167,11 @@ export const layer = Layer.effect(
       return agent?.permissions ?? missingAgentPermissions
     })
 
-    function denied(input: AssertInput, rules: Ruleset) {
+    function denied(input: AssertInput, rules: Permission.Ruleset) {
       return input.resources.some((resource) => evaluate(input.action, resource, rules).effect === "deny")
     }
 
-    function relevant(input: AssertInput, rules: Ruleset) {
+    function relevant(input: AssertInput, rules: Permission.Ruleset) {
       return rules.filter((rule) => Wildcard.match(input.action, rule.action))
     }
 
@@ -183,7 +180,7 @@ export const layer = Layer.effect(
       if (denied(input, rules)) return { effect: "deny" as const, rules }
       const all = [...rules, ...(yield* savedRules())]
       const effects = input.resources.map((resource) => evaluate(input.action, resource, all).effect)
-      const effect: Effect = effects.includes("deny") ? "deny" : effects.includes("ask") ? "ask" : "allow"
+      const effect: Permission.Effect = effects.includes("deny") ? "deny" : effects.includes("ask") ? "ask" : "allow"
       return { effect, rules: all }
     })
 
