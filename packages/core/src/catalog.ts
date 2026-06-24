@@ -2,7 +2,6 @@ export * as Catalog from "./catalog"
 
 import { Array, Context, Effect, Layer, Option, Order, pipe, Schema } from "effect"
 import { ModelV2 } from "./model"
-import { ModelRequest } from "./model-request"
 import { ProviderV2 } from "./provider"
 import { EventV2 } from "./event"
 import { Policy } from "./policy"
@@ -86,7 +85,8 @@ export const layer = Layer.effect(
               ? { ...model.api, settings: { ...provider.api.settings, ...model.api.settings } }
               : model.api
       const request = {
-        ...ModelRequest.merge({ ...provider.request, generation: {}, options: {} }, model.request),
+        headers: { ...provider.request.headers, ...model.request.headers },
+        body: { ...provider.request.body, ...model.request.body },
         variant: model.request.variant,
       }
       return ModelV2.Info.make({
