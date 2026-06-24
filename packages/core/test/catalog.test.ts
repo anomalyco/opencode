@@ -233,16 +233,13 @@ describe("CatalogV2", () => {
           model.request.headers.shared = "model"
           model.request.body.model = true
           model.request.body.request = true
-          const options = (model.request.options ??= {})
-          options.shared = "model"
-          options.model = true
+          model.request.body.shared = "model"
         })
       })
 
       const model = required(yield* catalog.model.get(providerID, modelID))
       expect(model.request.headers).toEqual({ provider: "provider", shared: "model", model: "model" })
-      expect(model.request.body).toEqual({ provider: true, model: true, request: true })
-      expect(model.request.options).toEqual({ shared: "model", model: true })
+      expect(model.request.body).toEqual({ provider: true, model: true, request: true, shared: "model" })
     }),
   )
 
