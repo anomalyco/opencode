@@ -30,14 +30,30 @@
     margin-bottom: 0;
   }
 
-  /* Headings: Same size, distinguished by color and spacing */
-  h1,
-  h2,
+  /* Headings: Sized by level, distinguished by color and spacing */
+  h1 {
+    font-size: 17px;
+    color: var(--v2-text-text-base);
+    font-weight: 600;
+    margin-top: 0px;
+    margin-bottom: 24px;
+    line-height: var(--line-height-large);
+  }
+
+  h2 {
+    font-size: 15px;
+    color: var(--v2-text-text-base);
+    font-weight: 600;
+    margin-top: 0px;
+    margin-bottom: 24px;
+    line-height: var(--line-height-large);
+  }
+
   h3,
   h4,
   h5,
   h6 {
-    font-size: 14px;
+    font-size: 13px;
     color: var(--v2-text-text-base);
     font-weight: var(--font-weight-medium);
     margin-top: 0px;
