@@ -4502,3 +4502,132 @@ describe("ProviderTransform.providerOptions - ai-gateway-provider", () => {
     expect(result).toEqual({ openaiCompatible: { reasoningEffort: "high" } })
   })
 })
+
+
+describe("ProviderTransform.message - empty content filtering", () => {
+  const deepseekModel = {
+    id: ModelV2.ID.make("deepseek/deepseek-chat"),
+    providerID: ProviderV2.ID.make("deepseek"),
+    api: {
+      id: "deepseek-chat",
+      url: "https://api.deepseek.com",
+      npm: "@ai-sdk/openai-compatible",
+    },
+    name: "DeepSeek Chat",
+    capabilities: {
+      temperature: true,
+      reasoning: true,
+      attachment: false,
+      toolcall: true,
+      input: { text: true, audio: false, image: false, video: false, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: {
+        field: "reasoning_content",
+      },
+    },
+    cost: { input: 0.001, output: 0.002, cache: { read: 0.0001, write: 0.0002 } },
+    limit: { context: 128000, output: 8192 },
+    status: "active",
+    options: {},
+    headers: {},
+    release_date: "2023-04-01",
+  }
+
+  test("filters out messages with empty string content", () => {
+    const msgs = [
+      { role: "user", content: "" },
+      { role: "user", content: "valid message" },
+      { role: "assistant", content: "" },
+    ] as any[]
+    const result = ProviderTransform.message(msgs, deepseekModel, {})
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toBe("valid message")
+  })
+
+  test("filters out messages with empty array content", () => {
+    const msgs = [
+      { role: "assistant", content: [] },
+      { role: "user", content: "valid" },
+    ] as any[]
+    const result = ProviderTransform.message(msgs, deepseekModel, {})
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toBe("valid")
+  })
+
+  test("filters out messages where all text parts are empty", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "" },
+          { type: "reasoning", text: "" },
+        ],
+      },
+      { role: "user", content: "valid" },
+    ] as any[]
+    const result = ProviderTransform.message(msgs, deepseekModel, {})
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toBe("valid")
+  })
+
+  test("preserves non-empty messages in mixed context", () => {
+    const msgs = [
+      { role: "system", content: "system prompt" },
+      { role: "user", content: "hello" },
+      { role: "assistant", content: "" },
+      { role: "user", content: "follow up" },
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "reply" }],
+      },
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "" },
+          { type: "reasoning", text: " " },
+        ],
+      },
+    ] as any[]
+    const result = ProviderTransform.message(msgs, deepseekModel, {}) as any[]
+    expect(result).toHaveLength(4)
+    expect(result[0].content).toBe("system prompt")
+    expect(result[1].content).toBe("hello")
+    expect(result[2].content).toBe("follow up")
+    expect(result[3].content[0].text).toBe("reply")
+  })
+
+  test("applies empty-content guard regardless of provider", () => {
+    // The guard is provider-agnostic — verify it works for a non-DeepSeek model too
+    const openaiModel = {
+      id: ModelV2.ID.make("openai/gpt-4"),
+      providerID: ProviderV2.ID.make("openai"),
+      api: { id: "gpt-4", url: "https://api.openai.com", npm: "@ai-sdk/openai" },
+      name: "GPT-4",
+      capabilities: {
+        temperature: true,
+        reasoning: false,
+        attachment: true,
+        toolcall: true,
+        input: { text: true, audio: false, image: true, video: false, pdf: true },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+      cost: { input: 1, output: 1, cache: { read: 0, write: 0 } },
+      limit: { context: 128000, output: 4096 },
+      status: "active",
+      options: {},
+      headers: {},
+      release_date: "2023-03-14",
+    }
+
+    const msgs = [
+      { role: "user", content: "" },
+      { role: "assistant", content: [] },
+      { role: "user", content: "only valid message" },
+    ] as any[]
+    const result = ProviderTransform.message(msgs, openaiModel, {})
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toBe("only valid message")
+  })
+})
+
