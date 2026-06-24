@@ -1,26 +1,20 @@
-name: upstream-sync (deprecated)
+name: upstream-sync
 
-# DEPRECATED — superseded by upstream-sync-threshold.yml.
-#
-# The threshold workflow now owns automated upstream sync: it merges on a commit
-# threshold, auto-resolves known conflict patterns, runs typecheck + tests, and
-# pauses (fail-stop) behind a single resolution PR so conflicts don't pile up.
-# Running this nightly job in parallel re-introduces the duplicate PRs/issues and
-# defeats that fail-stop, so its automatic schedule is disabled.
-#
-# It is kept as manual-dispatch-only during validation of the threshold workflow.
-# Once that's confirmed in production, delete this file.
 on:
   workflow_dispatch:
     inputs:
       upstream_ref:
-        description: "Upstream branch or ref to sync from (default: dev)"
+        description: "Upstream branch or ref to sync from"
         required: false
         default: "dev"
         type: string
 
+  # GitHub cron is UTC. 04:00 UTC is 11 PM Central during daylight saving time.
+  schedule:
+    - cron: "0 4 * * *"
+
 concurrency:
-  group: ${{ github.workflow }}
+  group: upstream-sync
   cancel-in-progress: true
 
 permissions:
@@ -30,20 +24,23 @@ permissions:
 
 jobs:
   sync:
+    name: Nightly upstream sync
     runs-on: ubuntu-latest
+
     env:
       HUSKY: "0"
       SYNC_BRANCH: sync/upstream
       UPSTREAM_REPO: https://github.com/sst/opencode.git
-      UPSTREAM_REF: ${{ inputs.upstream_ref || 'dev' }}
+      UPSTREAM_REF: ${{ github.event.inputs.upstream_ref || 'dev' }}
       TARGET_BRANCH: dev
+
     steps:
       - name: Checkout dev
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           ref: dev
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ github.token }}
 
       - name: Setup Bun
         uses: ./.github/actions/setup-bun
@@ -57,73 +54,105 @@ jobs:
 
       - name: Fetch upstream
         run: |
-          git remote add upstream "$UPSTREAM_REPO"
+          git remote add upstream "$UPSTREAM_REPO" || git remote set-url upstream "$UPSTREAM_REPO"
+          git fetch origin "$TARGET_BRANCH"
           git fetch upstream "$UPSTREAM_REF"
 
       - name: Create sync branch from dev
-        run: git checkout -B "$SYNC_BRANCH"
+        run: |
+          git checkout -B "$SYNC_BRANCH" "origin/$TARGET_BRANCH"
 
       - name: Merge upstream into sync branch
         id: merge
         run: |
-          if git merge "upstream/$UPSTREAM_REF" --no-edit; then
+          set +e
+          git merge "upstream/$UPSTREAM_REF" --no-edit
+          merge_status=$?
+          set -e
+
+          if [ "$merge_status" -eq 0 ]; then
             echo "result=success" >> "$GITHUB_OUTPUT"
             echo "conflicted_files=" >> "$GITHUB_OUTPUT"
-          else
+            echo "Upstream merge completed successfully."
+            exit 0
+          fi
+
+          if git diff --name-only --diff-filter=U | grep -q .; then
             echo "result=conflict" >> "$GITHUB_OUTPUT"
-            conflicted_files=$(git diff --name-only --diff-filter=U | paste -sd "," -)
+            conflicted_files="$(git diff --name-only --diff-filter=U | paste -sd "," -)"
             echo "conflicted_files=$conflicted_files" >> "$GITHUB_OUTPUT"
+
             echo "Conflicted files:"
             git diff --name-only --diff-filter=U || true
+
             git merge --abort
+            exit 0
           fi
+
+          echo "result=failed" >> "$GITHUB_OUTPUT"
+          echo "Merge failed for a reason other than conflicts."
+          exit "$merge_status"
 
       - name: Count new commits
         id: diff
         if: steps.merge.outputs.result == 'success'
-        run: echo "count=$(git rev-list origin/$TARGET_BRANCH..HEAD --count)" >> "$GITHUB_OUTPUT"
+        run: |
+          count="$(git rev-list "origin/$TARGET_BRANCH..HEAD" --count)"
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+          echo "New upstream commits: $count"
+
+      - name: Stop when no upstream changes
+        if: steps.merge.outputs.result == 'success' && steps.diff.outputs.count == '0'
+        run: |
+          echo "No upstream changes to sync."
 
       - name: Push sync branch
         if: steps.merge.outputs.result == 'success' && steps.diff.outputs.count != '0'
-        run: git push origin "$SYNC_BRANCH" --force-with-lease
-
-      - name: Create sync branch from upstream (for conflict PR)
-        if: steps.merge.outputs.result == 'conflict'
         run: |
-          # Start from upstream's code
-          git checkout -B "$SYNC_BRANCH" "upstream/$UPSTREAM_REF"
-          # Replace .github/workflows/ with ours (can't push upstream's workflow files)
-          git rm -rf .github/workflows/
-          git checkout "origin/$TARGET_BRANCH" -- .github/workflows/
-          git commit -m "chore: restore fork workflow files for sync PR"
           git push origin "$SYNC_BRANCH" --force-with-lease
 
       - name: Run typecheck
         id: typecheck
         if: steps.merge.outputs.result == 'success' && steps.diff.outputs.count != '0'
-        run: bun --cwd packages/opencode typecheck
+        run: |
+          bun --cwd packages/opencode typecheck
 
       - name: Run tests
         id: tests
         if: steps.merge.outputs.result == 'success' && steps.diff.outputs.count != '0' && steps.typecheck.outcome == 'success'
-        run: bun turbo test
+        run: |
+          bun turbo test
 
-      - name: Create or update PR
+      - name: Create or update upstream sync PR
         if: steps.merge.outputs.result == 'success' && steps.diff.outputs.count != '0' && steps.typecheck.outcome == 'success' && steps.tests.outcome == 'success'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          date=$(date +%Y-%m-%d)
+          date="$(date +%Y-%m-%d)"
+
           body="Automated upstream sync from \`sst/opencode\` — $date.
 
-          Validation (typecheck + tests) passed ✅. Awaiting team review before merge into \`$TARGET_BRANCH\`."
+          Validation passed ✅
 
-          existing=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$SYNC_BRANCH" --base "$TARGET_BRANCH" --json number --jq '.[0].number')
+          - Typecheck passed
+          - Tests passed
+
+          Awaiting team review before merge into \`$TARGET_BRANCH\`."
+
+          existing="$(gh pr list \
+            --repo "$GITHUB_REPOSITORY" \
+            --head "$SYNC_BRANCH" \
+            --base "$TARGET_BRANCH" \
+            --state open \
+            --json number \
+            --jq '.[0].number')"
+
           if [ -n "$existing" ]; then
             gh pr edit "$existing" \
               --repo "$GITHUB_REPOSITORY" \
               --title "chore: nightly upstream sync $date" \
               --body "$body"
+
             echo "Updated existing PR #$existing"
           else
             gh pr create \
@@ -132,27 +161,57 @@ jobs:
               --body "$body" \
               --head "$SYNC_BRANCH" \
               --base "$TARGET_BRANCH"
+
+            echo "Created new upstream sync PR."
           fi
+
+      - name: Create sync branch from upstream for conflict PR
+        if: steps.merge.outputs.result == 'conflict'
+        run: |
+          git checkout -B "$SYNC_BRANCH" "upstream/$UPSTREAM_REF"
+
+          git rm -rf .github/workflows/ || true
+          git checkout "origin/$TARGET_BRANCH" -- .github/workflows/
+
+          if git diff --cached --quiet && git diff --quiet; then
+            echo "No workflow restore changes to commit."
+          else
+            git add .github/workflows/
+            git commit -m "chore: restore fork workflow files for sync PR"
+          fi
+
+          git push origin "$SYNC_BRANCH" --force-with-lease
 
       - name: Create or update conflict review PR
         if: steps.merge.outputs.result == 'conflict'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          date=$(date +%Y-%m-%d)
+          date="$(date +%Y-%m-%d)"
+
           body="Automated upstream sync from \`sst/opencode\` hit merge conflicts on $date.
 
-          This PR contains upstream's latest code. Use the **Resolve conflicts** button to pick and choose changes visually.
+          This PR contains upstream's latest code with our workflow files restored so the branch can be pushed safely.
 
           Conflicted files:
-          \`${{ steps.merge.outputs.conflicted_files }}\`"
+          \`${{ steps.merge.outputs.conflicted_files }}\`
 
-          existing=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$SYNC_BRANCH" --base "$TARGET_BRANCH" --json number --jq '.[0].number')
+          Manual intervention is required to resolve the conflicts and merge upstream into \`$TARGET_BRANCH\`."
+
+          existing="$(gh pr list \
+            --repo "$GITHUB_REPOSITORY" \
+            --head "$SYNC_BRANCH" \
+            --base "$TARGET_BRANCH" \
+            --state open \
+            --json number \
+            --jq '.[0].number')"
+
           if [ -n "$existing" ]; then
             gh pr edit "$existing" \
               --repo "$GITHUB_REPOSITORY" \
               --title "chore: upstream sync conflict review $date" \
               --body "$body"
+
             echo "Updated existing conflict review PR #$existing"
           else
             gh pr create \
@@ -162,6 +221,8 @@ jobs:
               --body "$body" \
               --head "$SYNC_BRANCH" \
               --base "$TARGET_BRANCH"
+
+            echo "Created new conflict review PR."
           fi
 
       - name: Open issue on merge conflict
@@ -169,33 +230,39 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          date="$(date +%Y-%m-%d)"
+
           gh issue create \
             --repo "$GITHUB_REPOSITORY" \
-            --title "⚠️ Upstream sync conflict — $(date +%Y-%m-%d)" \
-            --body "The nightly upstream sync from \`sst/opencode\` detected merge conflicts on $(date +%Y-%m-%d).
+            --title "⚠️ Upstream sync conflict — $date" \
+            --body "The upstream sync from \`sst/opencode\` detected merge conflicts on $date.
 
           Conflicted files:
           \`${{ steps.merge.outputs.conflicted_files }}\`
 
-          A draft PR was also opened/updated for review using the \`$SYNC_BRANCH\` branch.
+          A draft PR was also opened or updated using the \`$SYNC_BRANCH\` branch.
 
-          Manual intervention is required to sync the latest upstream changes into \`$TARGET_BRANCH\`. Please resolve conflicts and merge manually." \
+          Manual intervention is required to sync the latest upstream changes into \`$TARGET_BRANCH\`." \
             --label bug
 
       - name: Fail on merge conflict
         if: always() && steps.merge.outputs.result == 'conflict'
-        run: exit 1
+        run: |
+          exit 1
 
       - name: Open issue on validation failure
         if: always() && (steps.typecheck.outcome == 'failure' || steps.tests.outcome == 'failure')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          date="$(date +%Y-%m-%d)"
+
           gh issue create \
             --repo "$GITHUB_REPOSITORY" \
-            --title "⚠️ Upstream sync validation failed — $(date +%Y-%m-%d)" \
-            --body "The nightly upstream sync from \`sst/opencode\` merged successfully on $(date +%Y-%m-%d) but failed validation (typecheck or tests).
+            --title "⚠️ Upstream sync validation failed — $date" \
+            --body "The upstream sync from \`sst/opencode\` merged successfully on $date but failed validation.
 
-          The sync branch \`$SYNC_BRANCH\` has been pushed. Manual review is required before merging into \`$TARGET_BRANCH\`." \
+          The sync branch \`$SYNC_BRANCH\` has been pushed.
+
+          Manual review is required before merging into \`$TARGET_BRANCH\`." \
             --label bug
- 
