@@ -1,28 +1,13 @@
-import { Context, Effect, Layer, Schema } from "effect"
-import { Ref } from "@opencode-ai/schema/location"
+import { Context, Effect, Layer } from "effect"
+import { Info, Ref, response } from "@opencode-ai/schema/location"
 import { Project } from "./project"
-import { AbsolutePath, optionalOmitUndefined } from "./schema"
-import { WorkspaceV2 } from "./workspace"
 
 export * as Location from "./location"
 
-export { Ref }
-
-export class Info extends Schema.Class<Info>("Location.Info")({
-  directory: AbsolutePath,
-  workspaceID: optionalOmitUndefined(WorkspaceV2.ID),
-  project: Schema.Struct({
-    id: Project.ID,
-    directory: AbsolutePath,
-  }),
-}) {}
+export { Info, Ref, response }
 
 export interface Interface extends Info {
   readonly vcs?: Project.Vcs
-}
-
-export function response<S extends Schema.Top>(data: S) {
-  return Schema.Struct({ location: Info, data })
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Location") {}

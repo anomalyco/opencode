@@ -3,7 +3,7 @@ import { RelativePath } from "@opencode-ai/core/schema"
 import { Effect } from "effect"
 import { HttpServerResponse } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
-import { Api } from "../api"
+import { Api } from "@opencode-ai/protocol/api"
 import { response } from "../groups/location"
 
 export const FileSystemHandler = HttpApiBuilder.group(Api, "server.fs", (handlers) =>

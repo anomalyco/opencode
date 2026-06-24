@@ -6,10 +6,14 @@ import { Effect, Queue } from "effect"
 import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import * as Socket from "effect/unstable/socket/Socket"
-import { Api } from "../api"
+import { Api } from "@opencode-ai/protocol/api"
 import { CorsConfig, isAllowedRequestOrigin } from "../cors"
-import { ForbiddenError, PtyNotFoundError } from "../errors"
-import { PTY_CONNECT_TICKET_QUERY, PTY_CONNECT_TOKEN_HEADER, PTY_CONNECT_TOKEN_HEADER_VALUE } from "../groups/pty"
+import { ForbiddenError, PtyNotFoundError } from "@opencode-ai/protocol/errors"
+import {
+  PTY_CONNECT_TICKET_QUERY,
+  PTY_CONNECT_TOKEN_HEADER,
+  PTY_CONNECT_TOKEN_HEADER_VALUE,
+} from "@opencode-ai/protocol/groups/pty"
 import { response } from "../groups/location"
 import { PtyEnvironment } from "../pty-environment"
 

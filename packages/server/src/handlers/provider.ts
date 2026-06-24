@@ -1,9 +1,8 @@
 import { Catalog } from "@opencode-ai/core/catalog"
-import { ProviderV2 } from "@opencode-ai/core/provider"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
-import { Api } from "../api"
-import { ProviderNotFoundError } from "../errors"
+import { Api } from "@opencode-ai/protocol/api"
+import { ProviderNotFoundError } from "@opencode-ai/protocol/errors"
 import { response } from "../groups/location"
 
 export const ProviderHandler = HttpApiBuilder.group(Api, "server.provider", (handlers) =>

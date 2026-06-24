@@ -1,6 +1,6 @@
 import { Reference } from "@opencode-ai/core/reference"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
-import { Api } from "../api"
+import { Api } from "@opencode-ai/protocol/api"
 import { response } from "../groups/location"
 
 export const ReferenceHandler = HttpApiBuilder.group(Api, "server.reference", (handlers) =>

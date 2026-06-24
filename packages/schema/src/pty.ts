@@ -33,3 +33,23 @@ const Exited = define({ type: "pty.exited", schema: { id: ID, exitCode: NonNegat
 const Deleted = define({ type: "pty.deleted", schema: { id: ID } })
 export const Event = { Created, Updated, Exited, Deleted, Definitions: inventory(Created, Updated, Exited, Deleted) }
 export const PtyEvent = Event
+
+export const CreateInput = Schema.Struct({
+  command: Schema.optional(Schema.String),
+  args: Schema.optional(Schema.Array(Schema.String)),
+  cwd: Schema.optional(Schema.String),
+  title: Schema.optional(Schema.String),
+  env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+})
+export type CreateInput = typeof CreateInput.Type
+
+export const UpdateInput = Schema.Struct({
+  title: Schema.optional(Schema.String),
+  size: Schema.optional(
+    Schema.Struct({
+      rows: Schema.Int.check(Schema.isGreaterThan(0)),
+      cols: Schema.Int.check(Schema.isGreaterThan(0)),
+    }),
+  ),
+})
+export type UpdateInput = typeof UpdateInput.Type

@@ -1,7 +1,6 @@
 import { CommandV2 } from "@opencode-ai/core/command"
-import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
-import { Api } from "../api"
+import { Api } from "@opencode-ai/protocol/api"
 import { response } from "../groups/location"
 
 export const CommandHandler = HttpApiBuilder.group(Api, "server.command", (handlers) =>

@@ -1,6 +1,6 @@
 import { SkillV2 } from "@opencode-ai/core/skill"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
-import { Api } from "../api"
+import { Api } from "@opencode-ai/protocol/api"
 import { response } from "../groups/location"
 
 export const SkillHandler = HttpApiBuilder.group(Api, "server.skill", (handlers) =>

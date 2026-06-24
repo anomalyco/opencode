@@ -2,12 +2,10 @@ export * as Project from "./project"
 
 import { Schema } from "effect"
 import { define, inventory } from "./event"
-import { NonNegativeInt, optionalOmitUndefined, withStatics } from "./schema"
+import { NonNegativeInt, optionalOmitUndefined } from "./schema"
+import { ProjectID } from "./project-id"
 
-export const ID = Schema.String.pipe(
-  Schema.brand("Project.ID"),
-  withStatics((schema) => ({ global: schema.make("global") })),
-)
+export const ID = ProjectID
 export type ID = typeof ID.Type
 
 export const Vcs = Schema.Literal("git")

@@ -1,15 +1,15 @@
 import { SessionV2 } from "@opencode-ai/core/session"
 import { DateTime, Effect } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
-import { Api } from "../api"
-import { SessionsCursor } from "../groups/session"
+import { Api } from "@opencode-ai/protocol/api"
+import { SessionsCursor } from "@opencode-ai/protocol/groups/session"
 import {
   ConflictError,
   InvalidCursorError,
   ServiceUnavailableError,
   SessionNotFoundError,
   UnknownError,
-} from "../errors"
+} from "@opencode-ai/protocol/errors"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 
 const DefaultSessionsLimit = 50
