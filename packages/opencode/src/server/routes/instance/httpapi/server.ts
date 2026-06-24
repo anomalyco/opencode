@@ -65,8 +65,7 @@ import { lazy } from "@/util/lazy"
 import { CorsConfig, isAllowedCorsOrigin, type CorsOptions } from "@opencode-ai/server/cors"
 import { serveUIEffect } from "@/server/shared/ui"
 import { ServerAuth } from "@/server/auth"
-import { InstanceHttpApi, RootHttpApi } from "./api"
-import { Api } from "@opencode-ai/server/api"
+import { InstanceHttpApi, RootHttpApi, ServerApi } from "./api"
 import { PublicApi } from "./public"
 import {
   authorizationLayer,
@@ -165,7 +164,7 @@ const instanceApiRoutes = HttpApiBuilder.layer(InstanceHttpApi).pipe(
 const instanceRoutes = instanceApiRoutes.pipe(
   Layer.provide([httpApiAuthLayer, workspaceRoutingLive, instanceContextLayer, schemaErrorLayer]),
 )
-const serverRoutes = HttpApiBuilder.layer(Api).pipe(
+const serverRoutes = HttpApiBuilder.layer(ServerApi).pipe(
   Layer.provide(handlers),
   Layer.provide(PluginPtyEnvironment.layer),
   Layer.provide([serverHttpApiAuthLayer, v2SchemaErrorLayer]),

@@ -1,6 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Cause, DateTime, Deferred, Effect, Exit, Fiber, Layer, Schema, Stream } from "effect"
 import { EventV2 } from "@opencode-ai/core/event"
+import { Event } from "@opencode-ai/schema/event"
 import { Database } from "@opencode-ai/core/database/database"
 import { EventSequenceTable, EventTable } from "@opencode-ai/core/event/sql"
 import { Location } from "@opencode-ai/core/location"
@@ -16,10 +17,6 @@ const locationLayer = Layer.succeed(
     location({ directory: AbsolutePath.make("project"), workspaceID: WorkspaceV2.ID.make("wrk_test") }),
   ),
 )
-const eventLayer = Layer.mergeAll(EventV2.defaultLayer, Database.defaultLayer)
-const it = testEffect(eventLayer.pipe(Layer.provideMerge(locationLayer)))
-const itWithoutLocation = testEffect(eventLayer)
-
 const Message = EventV2.define({
   type: "test.message",
   schema: {
@@ -82,6 +79,15 @@ const SyncTimestamp = EventV2.define({
   },
 })
 
+const eventLayer = Layer.mergeAll(
+  EventV2.layerWith({
+    definitions: [Message, SyncMessage, SyncSent, GlobalMessage, VersionedMessage, SyncTimestamp],
+  }).pipe(Layer.provide(Database.defaultLayer)),
+  Database.defaultLayer,
+)
+const it = testEffect(eventLayer.pipe(Layer.provideMerge(locationLayer)))
+const itWithoutLocation = testEffect(eventLayer)
+
 describe("EventV2", () => {
   it.effect("publishes events with the current location", () =>
     Effect.gen(function* () {
@@ -122,26 +128,21 @@ describe("EventV2", () => {
     }),
   )
 
-  it.effect("stores definitions in the exported registry", () =>
-    Effect.sync(() => {
-      expect(EventV2.registry.get(Message.type)).toBe(Message)
-    }),
-  )
-
-  it.effect("keeps the latest sync definition in the registry", () =>
+  it.effect("selects the latest durable definition independent of declaration order", () =>
     Effect.sync(() => {
       const latest = EventV2.define({
         type: "test.out-of-order",
         durable: { version: 2, aggregate: "id" },
         schema: { id: Schema.String },
       })
-      EventV2.define({
+      const historical = EventV2.define({
         type: "test.out-of-order",
         durable: { version: 1, aggregate: "id" },
         schema: { id: Schema.String },
       })
 
-      expect(EventV2.registry.get("test.out-of-order")).toBe(latest)
+      expect(Event.latest([latest, historical]).get("test.out-of-order")).toBe(latest)
+      expect(Event.latest([historical, latest]).get("test.out-of-order")).toBe(latest)
     }),
   )
 
@@ -407,6 +408,7 @@ describe("EventV2", () => {
       const continueRead = yield* Deferred.make<void>()
       let pause = true
       const eventLayer = EventV2.layerWith({
+        definitions: [SyncMessage],
         beforeAggregateRead: () =>
           pause
             ? Deferred.succeed(readStarted, undefined).pipe(Effect.andThen(Deferred.await(continueRead)))

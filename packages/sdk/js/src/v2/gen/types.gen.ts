@@ -88,6 +88,7 @@ export type Event =
   | EventWorkspaceStatus
   | EventWorktreeReady
   | EventWorktreeFailed
+  | EventIdeInstalled
   | EventServerConnected
   | EventGlobalDisposed
   | EventServerInstanceDisposed
@@ -1599,6 +1600,13 @@ export type GlobalEvent = {
       }
     | {
         id: string
+        type: "ide.installed"
+        properties: {
+          ide: string
+        }
+      }
+    | {
+        id: string
         type: "server.connected"
         properties: {
           [key: string]: unknown
@@ -2833,6 +2841,7 @@ export type V2Event =
   | V2EventWorkspaceStatus
   | V2EventWorktreeReady
   | V2EventWorktreeFailed
+  | V2EventIdeInstalled
   | V2EventServerConnected
   | V2EventGlobalDisposed
 
@@ -5902,6 +5911,23 @@ export type V2EventWorktreeFailed = {
   }
 }
 
+export type V2EventIdeInstalled = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  type: "ide.installed"
+  data: {
+    ide: string
+  }
+}
+
 export type V2EventServerConnected = {
   id: string
   metadata?: {
@@ -6873,6 +6899,14 @@ export type EventWorktreeFailed = {
   type: "worktree.failed"
   properties: {
     message: string
+  }
+}
+
+export type EventIdeInstalled = {
+  id: string
+  type: "ide.installed"
+  properties: {
+    ide: string
   }
 }
 

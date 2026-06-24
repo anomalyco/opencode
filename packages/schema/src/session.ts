@@ -7,6 +7,7 @@ import { Model } from "./model"
 import { Project } from "./project"
 import { DateTimeUtcFromMillis, optionalOmitUndefined, RelativePath } from "./schema"
 import { SessionID } from "./session-id"
+import { SessionEvent } from "./session-event"
 
 export const ID = SessionID.ID
 export type ID = SessionID.ID
@@ -44,3 +45,5 @@ export const ListAnchor = Schema.Struct({
   direction: Schema.Literals(["previous", "next"]),
 })
 export type ListAnchor = typeof ListAnchor.Type
+
+export const Event = SessionEvent

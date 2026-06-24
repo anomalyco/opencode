@@ -1,31 +1,16 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { SessionID } from "./schema"
-import { Effect, Layer, Context, Schema } from "effect"
+import { Effect, Layer, Context } from "effect"
+import { Todo as TodoSchema } from "@opencode-ai/schema/todo"
 import { Database } from "@opencode-ai/core/database/database"
 import { eq } from "drizzle-orm"
 import { asc } from "drizzle-orm"
 import { TodoTable } from "@opencode-ai/core/session/sql"
 import { EventV2Bridge } from "@/event-v2-bridge"
-import { EventV2 } from "@opencode-ai/core/event"
 
-export const Info = Schema.Struct({
-  content: Schema.String.annotate({ description: "Brief description of the task" }),
-  status: Schema.String.annotate({
-    description: "Current status of the task: pending, in_progress, completed, cancelled",
-  }),
-  priority: Schema.String.annotate({ description: "Priority level of the task: high, medium, low" }),
-}).annotate({ identifier: "Todo" })
-export type Info = Schema.Schema.Type<typeof Info>
-
-export const Event = {
-  Updated: EventV2.define({
-    type: "todo.updated",
-    schema: {
-      sessionID: SessionID,
-      todos: Schema.Array(Info),
-    },
-  }),
-}
+export const Info = TodoSchema.Info
+export type Info = TodoSchema.Info
+export const Event = TodoSchema.Event
 
 export interface Interface {
   readonly update: (input: { sessionID: SessionID; todos: Info[] }) => Effect.Effect<void>

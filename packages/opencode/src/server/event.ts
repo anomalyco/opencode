@@ -11,3 +11,5 @@ export const InstanceDisposed = Schema.Struct({
   type: Schema.Literal("server.instance.disposed"),
   properties: Schema.Struct({ directory: Schema.String }),
 }).annotate({ identifier: "Event.server.instance.disposed" })
+
+export * as ServerEvent from "./event"
