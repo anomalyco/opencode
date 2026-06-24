@@ -54,6 +54,8 @@ export function hints(template: string) {
 export const Default = {
   INIT: "init",
   REVIEW: "review",
+  COMPACT: "compact",
+  SUMMARIZE: "summarize",
 } as const
 
 export interface Interface {
@@ -93,6 +95,20 @@ export const layer = Layer.effect(
         },
         subtask: true,
         hints: hints(PROMPT_REVIEW),
+      }
+      commands[Default.COMPACT] = {
+        name: Default.COMPACT,
+        description: "compress session history to preserve key information",
+        source: "command",
+        template: "",
+        hints: [],
+      }
+      commands[Default.SUMMARIZE] = {
+        name: Default.SUMMARIZE,
+        description: "generate a concise summary of the session",
+        source: "command",
+        template: "",
+        hints: [],
       }
 
       for (const [name, command] of Object.entries(cfg.command ?? {})) {
