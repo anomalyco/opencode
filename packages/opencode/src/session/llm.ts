@@ -21,6 +21,7 @@ import { EventV2Bridge } from "@/event-v2-bridge"
 import { EventV2 } from "@opencode-ai/core/event"
 import { Wildcard } from "@/util/wildcard"
 import { SessionID } from "@/session/schema"
+import { MCP } from "@/mcp"
 import { Auth } from "@/auth"
 import { EffectBridge } from "@/effect/bridge"
 import { RuntimeFlags } from "@/effect/runtime-flags"
@@ -64,6 +65,7 @@ const live: Layer.Layer<
   never,
   | Auth.Service
   | Config.Service
+  | MCP.Service
   | Provider.Service
   | Plugin.Service
   | Permission.Service
@@ -75,6 +77,7 @@ const live: Layer.Layer<
   Effect.gen(function* () {
     const auth = yield* Auth.Service
     const config = yield* Config.Service
+    const mcp = yield* MCP.Service
     const provider = yield* Provider.Service
     const plugin = yield* Plugin.Service
     const perm = yield* Permission.Service
@@ -107,6 +110,7 @@ const live: Layer.Layer<
         ...input,
         provider: item,
         auth: info,
+        mcp,
         plugin,
         flags,
         isWorkflow,
@@ -390,6 +394,7 @@ export const defaultLayer = Layer.suspend(() =>
   layer.pipe(
     Layer.provide(Auth.defaultLayer),
     Layer.provide(Config.defaultLayer),
+    Layer.provide(MCP.defaultLayer),
     Layer.provide(Provider.defaultLayer),
     Layer.provide(Plugin.defaultLayer),
     Layer.provide(
@@ -404,6 +409,7 @@ export const hasToolCalls = LLMRequestPrep.hasToolCalls
 export const node = LayerNode.make(layer, [
   Auth.node,
   Config.node,
+  MCP.node,
   Provider.node,
   Plugin.node,
   Permission.node,
