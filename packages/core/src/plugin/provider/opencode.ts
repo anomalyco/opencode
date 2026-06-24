@@ -8,9 +8,9 @@ import { EventV2 } from "../../event"
 import { Credential } from "../../credential"
 import { Integration } from "../../integration"
 import { ModelV2 } from "../../model"
-import { ModelRequest } from "../../model-request"
 import { ProviderV2 } from "../../provider"
 import { ConfigProviderV1 } from "../../v1/config/provider"
+import { ConfigProviderOptionsV1 } from "../../v1/config/provider-options"
 import { ConfigV1 } from "../../v1/config/config"
 
 const defaultServer = "https://console.opencode.ai"
@@ -142,15 +142,14 @@ export const OpencodePlugin = define<HttpClient.HttpClient | EventV2.Service | S
             if (config.modalities?.input !== undefined) model.capabilities.input = [...config.modalities.input]
             if (config.modalities?.output !== undefined) model.capabilities.output = [...config.modalities.output]
             const packageName = config.provider?.npm ?? item.npm
-            ModelRequest.assign(model.request, {
-              headers: config.headers,
-              ...ModelRequest.normalizeAiSdkOptions(packageName, withoutCredentials(config.options)),
-            })
+            const lowerer = ConfigProviderOptionsV1.get(packageName)
+            Object.assign(model.request.headers, config.headers)
+            Object.assign(model.request.body, lowerer.request(withoutCredentials(config.options)))
             if (config.variants !== undefined) {
               model.variants = Object.entries(config.variants).map(([id, options]) => ({
                 id: ModelV2.VariantID.make(id),
                 headers: { ...(options.headers ?? {}) },
-                ...ModelRequest.normalizeAiSdkOptions(packageName, withoutCredentials(options)),
+                body: lowerer.request(withoutCredentials(options)),
               }))
             }
             if (config.release_date !== undefined) {
