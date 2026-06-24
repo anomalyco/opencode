@@ -91,7 +91,7 @@ export function SessionComposerRegion(props: {
   })
   const projectServerCtx = createMemo(() => {
     const conn = projectServer()
-    if (conn) return global.createServerCtx(conn)
+    if (conn) return global.ensureServerCtx(conn)
   })
   const projects = createMemo(() =>
     search.draftId ? (projectServerCtx()?.projects.list() ?? []) : layout.projects.list(),
