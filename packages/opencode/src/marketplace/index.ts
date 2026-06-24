@@ -6,10 +6,8 @@ import * as Registry from "./registry"
 import * as Source from "./source"
 import * as Install from "./install"
 import { InstalledPkg, MARKETPLACE_META_FILE } from "./types"
-import type { PackageEntry } from "./types"
 
 export interface Interface {
-  readonly search: (query: string) => Effect.Effect<readonly PackageEntry[]>
   readonly install: (pkgName: string, source: string) => Effect.Effect<void, Error>
   readonly uninstall: (name: string) => Effect.Effect<void>
   readonly list: () => Effect.Effect<readonly InstalledPkg[]>
@@ -53,18 +51,6 @@ export const layer = Layer.effect(
     const writeStore = (store: Record<string, InstalledPkg>): Effect.Effect<void> =>
       fs.writeWithDirs(metaFile, JSON.stringify(store, null, 2)).pipe(Effect.catch(() => Effect.void))
 
-    const search: Interface["search"] = (query: string) =>
-      Effect.gen(function* () {
-        const all = yield* registrySvc.all()
-        if (!query) return all
-        const lower = query.toLowerCase()
-        return all.filter(
-          (p) =>
-            p.name.toLowerCase().includes(lower) ||
-            (p.description ?? "").toLowerCase().includes(lower),
-        )
-      })
-
     const installPkg: Interface["install"] = (pkgName: string, sourceStr: string) =>
       Effect.gen(function* () {
         const fetched = yield* sourceSvc.fetch(pkgName, sourceStr)
@@ -94,7 +80,7 @@ export const layer = Layer.effect(
         const entry = store[name]
         if (!entry) return
 
-        const assets = entry.assets ?? new Install.Assets({ skills: [], agents: [], plugins: [] })
+        const assets = entry.assets ?? new Install.Assets({ skills: [], agents: []})
         yield* installSvc.uninstall(name, assets)
 
         delete store[name]
@@ -114,7 +100,6 @@ export const layer = Layer.effect(
       })
 
     return Service.of({
-      search,
       install: installPkg,
       uninstall: uninstallPkg,
       list,

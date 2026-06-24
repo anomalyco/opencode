@@ -2,7 +2,6 @@ import { Effect } from "effect"
 import { cmd } from "./cmd"
 import { effectCmd, fail } from "../effect-cmd"
 import { Marketplace } from "@/marketplace"
-import { UI } from "../ui"
 
 export const MarketplaceCommand = cmd({
   command: "marketplace",
@@ -10,41 +9,12 @@ export const MarketplaceCommand = cmd({
   describe: "discover, install, and manage opencode packages",
   builder: (yargs) =>
     yargs
-      .command(MarketplaceSearchCommand)
       .command(MarketplaceInstallCommand)
       .command(MarketplaceUninstallCommand)
       .command(MarketplaceListCommand)
       .command(MarketplaceInfoCommand)
       .demandCommand(),
   async handler() {},
-})
-
-const MarketplaceSearchCommand = effectCmd({
-  command: "search [query]",
-  describe: "search available packages",
-  instance: false,
-  builder: (yargs) =>
-    yargs.positional("query", {
-      type: "string",
-      describe: "search query",
-    }),
-  handler: Effect.fn("Cli.marketplace.search")(function* (args) {
-    const svc = yield* Marketplace.Service
-    const query = String(args.query ?? "")
-    const results = yield* svc.search(query)
-    if (results.length === 0) {
-      process.stdout.write("No packages found.\n")
-      return
-    }
-    for (const pkg of results) {
-      const src = pkg.source as { type: string; repo?: string; url?: string; path?: string }
-      process.stdout.write(`${pkg.name}\n`)
-      if (pkg.description) process.stdout.write(`  ${pkg.description}\n`)
-      process.stdout.write(`  source: ${sourceLabel(src)}\n`)
-      if (pkg.version) process.stdout.write(`  version: ${pkg.version}\n`)
-      process.stdout.write("\n")
-    }
-  }),
 })
 
 const MarketplaceInstallCommand = effectCmd({

@@ -163,21 +163,6 @@ describe("Install", () => {
       ),
     )
 
-    it.live("discovers plugins via package.json exports", () =>
-      Effect.scoped(
-        Effect.gen(function* () {
-          const dir = yield* tmpdirEffect()
-          yield* Effect.promise(() =>
-            writeFile(dir, "package.json", JSON.stringify({ exports: { "./server": "./server.js" } })),
-          )
-
-          const svc = yield* Install.Service
-          const assets = yield* svc.discover(dir)
-          expect(assets.plugins).toHaveLength(1)
-        }),
-      ),
-    )
-
     it.live("returns empty assets for empty directory", () =>
       Effect.scoped(
         Effect.gen(function* () {
@@ -186,7 +171,6 @@ describe("Install", () => {
           const assets = yield* svc.discover(dir)
           expect(assets.skills).toEqual([])
           expect(assets.agents).toEqual([])
-          expect(assets.plugins).toEqual([])
         }),
       ),
     )
@@ -372,65 +356,6 @@ describe("Source", () => {
 })
 
 describe("Marketplace", () => {
-  describe("search", () => {
-    const mockRegistry = Layer.succeed(Registry.Service, Registry.Service.of({
-      all: (query?: string) => {
-        const entries: PackageEntry[] = [
-          { name: "test-pkg", description: "A test package", version: "1.0.0", source: { type: "github" as const, repo: "user/test-pkg" } },
-          { name: "other-pkg", description: "Another package", source: { type: "url" as const, url: "https://example.com/pkg" } },
-        ]
-        if (!query) return Effect.succeed(entries)
-        return Effect.succeed(entries.filter((p) => p.name.includes(query) || p.description?.includes(query)))
-      },
-      fetchIndex: () => Effect.succeed([]),
-      scanLocal: () => Effect.succeed([]),
-    }))
-
-    const it = testEffect(
-      Marketplace.layer.pipe(
-        Layer.provide(mockRegistry),
-        Layer.provide(Source.layer),
-        Layer.provide(Install.layer),
-        Layer.provide(fsLayer),
-        Layer.provide(Global.defaultLayer),
-      ),
-    )
-
-    it.effect("returns all packages without query", () =>
-      Effect.gen(function* () {
-        const svc = yield* Marketplace.Service
-        const result = yield* svc.search("")
-        expect(result).toHaveLength(2)
-      }),
-    )
-
-    it.effect("filters by name", () =>
-      Effect.gen(function* () {
-        const svc = yield* Marketplace.Service
-        const result = yield* svc.search("test")
-        expect(result).toHaveLength(1)
-        expect(result[0].name).toBe("test-pkg")
-      }),
-    )
-
-    it.effect("filters by description", () =>
-      Effect.gen(function* () {
-        const svc = yield* Marketplace.Service
-        const result = yield* svc.search("another")
-        expect(result).toHaveLength(1)
-        expect(result[0].name).toBe("other-pkg")
-      }),
-    )
-
-    it.effect("returns empty for no match", () =>
-      Effect.gen(function* () {
-        const svc = yield* Marketplace.Service
-        const result = yield* svc.search("nonexistent")
-        expect(result).toEqual([])
-      }),
-    )
-  })
-
   describe("install, list, info, uninstall", () => {
     test("install records the package", async () => {
       const stateDir = await (async () => {
@@ -451,8 +376,8 @@ describe("Marketplace", () => {
         }))
 
         const mockInstall = Layer.succeed(Install.Service, Install.Service.of({
-          discover: () => Effect.succeed(new Install.Assets({ skills: [], agents: [], plugins: [] })),
-          install: (_name, installDir) => Effect.succeed({ assets: new Install.Assets({ skills: [], agents: [], plugins: [] }), targetDir: installDir }),
+          discover: () => Effect.succeed(new Install.Assets({ skills: [], agents: []})),
+          install: (_name, installDir) => Effect.succeed({ assets: new Install.Assets({ skills: [], agents: []}), targetDir: installDir }),
           uninstall: () => Effect.void,
         }))
 
@@ -500,8 +425,8 @@ describe("Marketplace", () => {
         }))
 
         const mockInstall = Layer.succeed(Install.Service, Install.Service.of({
-          discover: () => Effect.succeed(new Install.Assets({ skills: [], agents: [], plugins: [] })),
-          install: (_name, installDir) => Effect.succeed({ assets: new Install.Assets({ skills: [], agents: [], plugins: [] }), targetDir: installDir }),
+          discover: () => Effect.succeed(new Install.Assets({ skills: [], agents: []})),
+          install: (_name, installDir) => Effect.succeed({ assets: new Install.Assets({ skills: [], agents: []}), targetDir: installDir }),
           uninstall: () => Effect.void,
         }))
 
@@ -551,8 +476,8 @@ describe("Marketplace", () => {
         }))
 
         const mockInstall = Layer.succeed(Install.Service, Install.Service.of({
-          discover: () => Effect.succeed(new Install.Assets({ skills: [], agents: [], plugins: [] })),
-          install: (_name, installDir) => Effect.succeed({ assets: new Install.Assets({ skills: [], agents: [], plugins: [] }), targetDir: installDir }),
+          discover: () => Effect.succeed(new Install.Assets({ skills: [], agents: []})),
+          install: (_name, installDir) => Effect.succeed({ assets: new Install.Assets({ skills: [], agents: []}), targetDir: installDir }),
           uninstall: () => Effect.void,
         }))
 
@@ -598,8 +523,8 @@ describe("Marketplace", () => {
         }))
 
         const mockInstall = Layer.succeed(Install.Service, Install.Service.of({
-          discover: () => Effect.succeed(new Install.Assets({ skills: [], agents: [], plugins: [] })),
-          install: (_name, installDir) => Effect.succeed({ assets: new Install.Assets({ skills: [], agents: [], plugins: [] }), targetDir: installDir }),
+          discover: () => Effect.succeed(new Install.Assets({ skills: [], agents: []})),
+          install: (_name, installDir) => Effect.succeed({ assets: new Install.Assets({ skills: [], agents: [] }), targetDir: installDir }),
           uninstall: () => Effect.void,
         }))
 
@@ -645,8 +570,8 @@ describe("Marketplace", () => {
         }))
 
         const mockInstall = Layer.succeed(Install.Service, Install.Service.of({
-          discover: () => Effect.succeed(new Install.Assets({ skills: [], agents: [], plugins: [] })),
-          install: (_name, installDir) => Effect.succeed({ assets: new Install.Assets({ skills: [], agents: [], plugins: [] }), targetDir: installDir }),
+          discover: () => Effect.succeed(new Install.Assets({ skills: [], agents: []})),
+          install: (_name, installDir) => Effect.succeed({ assets: new Install.Assets({ skills: [], agents: []}), targetDir: installDir }),
           uninstall: () => Effect.void,
         }))
 

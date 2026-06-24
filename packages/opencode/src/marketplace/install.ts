@@ -7,7 +7,6 @@ import { Glob } from "@opencode-ai/core/util/glob"
 export class Assets extends Schema.Class<Assets>("Marketplace.Assets")({
   skills: Schema.Array(Schema.String),
   agents: Schema.Array(Schema.String),
-  plugins: Schema.Array(Schema.String),
 }) {}
 
 export interface InstallResult {
@@ -56,19 +55,17 @@ export const layer = Layer.effect(
 
     const discover: Interface["discover"] = (dir: string) =>
       Effect.gen(function* () {
-        const [allSkills, allAgents, allPlugins] = yield* Effect.all(
+        const [allSkills, allAgents] = yield* Effect.all(
           [
             scanFiles(dir, "**/SKILL.md"),
             scanFiles(dir, "{agents,agent}/**/*.md"),
-            readPluginDirs(dir),
           ],
           { concurrency: 3 },
         )
 
         return new Assets({
           skills: allSkills,
-          agents: allAgents,
-          plugins: allPlugins,
+          agents: allAgents
         })
       })
 
