@@ -39,6 +39,19 @@ describe("session.retry.delay", () => {
     expect(delays).toStrictEqual([2000, 4000, 8000, 16000, 30000, 30000, 30000, 30000, 30000, 30000])
   })
 
+  test("caps delay at 30 seconds when headers present but lack retry-after", () => {
+    // Real 5xx responses almost always carry headers (content-type, date, ...).
+    // The fallback path must still respect RETRY_MAX_DELAY_NO_HEADERS.
+    const error = apiError({ "content-type": "application/json" })
+    const delays = Array.from({ length: 10 }, (_, index) => SessionRetry.delay(index + 1, error))
+    expect(delays).toStrictEqual([2000, 4000, 8000, 16000, 30000, 30000, 30000, 30000, 30000, 30000])
+  })
+
+  test("caps delay at 30 seconds when retry-after header is unparseable", () => {
+    const error = apiError({ "retry-after": "not-a-number" })
+    expect(SessionRetry.delay(8, error)).toBe(30000)
+  })
+
   test("prefers retry-after-ms when shorter than exponential", () => {
     const error = apiError({ "retry-after-ms": "1500" })
     expect(SessionRetry.delay(4, error)).toBe(1500)
