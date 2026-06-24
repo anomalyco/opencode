@@ -5,6 +5,7 @@ export interface OpenAICompatibleProfile {
 
 export const profiles = {
   baseten: { provider: "baseten", baseURL: "https://inference.baseten.co/v1" },
+  blueclaw: { provider: "blueclaw", baseURL: "https://openai.blueclaw.network/v1" },
   cerebras: { provider: "cerebras", baseURL: "https://api.cerebras.ai/v1" },
   deepinfra: { provider: "deepinfra", baseURL: "https://api.deepinfra.com/v1/openai" },
   deepseek: { provider: "deepseek", baseURL: "https://api.deepseek.com/v1" },
