@@ -34,7 +34,7 @@ describe("tool.skill", () => {
   it.instance("execute returns skill content block with files", () =>
     Effect.gen(function* () {
       const dir = (yield* TestInstance).directory
-      const skill = path.join(dir, ".opencode", "skill", "tool-skill#v1")
+      const skill = path.join(dir, ".opencode", "skill", "tool-skill")
       yield* Effect.promise(() =>
         Bun.write(
           path.join(skill, "SKILL.md"),

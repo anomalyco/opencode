@@ -23,7 +23,7 @@ describe("SkillTool", () => {
     ).pipe(
       Effect.flatMap((tmp) =>
         Effect.gen(function* () {
-          const directory = path.join(tmp.path, "effect#v1")
+          const directory = path.join(tmp.path, "effect")
           const location = path.join(directory, "SKILL.md")
           const reference = path.join(directory, "reference.md")
           yield* Effect.promise(() => fs.mkdir(directory, { recursive: true }))
