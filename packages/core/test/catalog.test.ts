@@ -61,7 +61,7 @@ describe("CatalogV2", () => {
       yield* credentials.create({
         integrationID,
         label: "First",
-        value: new Credential.Key({ type: "key", key: "first", metadata: { tenant: "one" } }),
+        value: Credential.Key.make({ type: "key", key: "first", metadata: { tenant: "one" } }),
       })
 
       expect((yield* catalog.provider.available()).map((provider) => provider.id)).toEqual([ProviderV2.ID.make("test")])
@@ -69,10 +69,39 @@ describe("CatalogV2", () => {
       yield* credentials.create({
         integrationID,
         label: "Second",
-        value: new Credential.Key({ type: "key", key: "second", metadata: { tenant: "two" } }),
+        value: Credential.Key.make({ type: "key", key: "second", metadata: { tenant: "two" } }),
       })
       expect((yield* catalog.provider.available()).map((provider) => provider.id)).toEqual([ProviderV2.ID.make("test")])
       expect(required(yield* catalog.provider.get(ProviderV2.ID.make("test"))).request.body).toEqual({})
+    }).pipe(Effect.provide(layer))
+  })
+
+  it.effect("derives availability from a provider's integration", () => {
+    const integrationID = Integration.ID.make("gateway")
+    const providerID = ProviderV2.ID.make("remote")
+    const layer = Catalog.locationLayer.pipe(
+      Layer.fresh,
+      Layer.provideMerge(EventV2.defaultLayer),
+      Layer.provideMerge(locationLayer),
+      Layer.provideMerge(Credential.defaultLayer.pipe(Layer.fresh)),
+    )
+
+    return Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      yield* (yield* Integration.Service).transform((editor) => editor.update(integrationID, () => {}))
+      yield* catalog.transform((editor) =>
+        editor.provider.update(providerID, (provider) => {
+          provider.integrationID = integrationID
+        }),
+      )
+      expect(yield* catalog.provider.available()).toEqual([])
+
+      yield* (yield* Credential.Service).create({
+        integrationID,
+        value: Credential.Key.make({ type: "key", key: "secret" }),
+      })
+
+      expect((yield* catalog.provider.available()).map((provider) => provider.id)).toEqual([providerID])
     }).pipe(Effect.provide(layer))
   })
 
