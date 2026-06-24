@@ -15,6 +15,13 @@
   font-style: normal;
 }
 
+@media (display-mode: standalone) {
+  /* WebKit excludes safe-area insets from dvh in installed apps. */
+  #root {
+    height: 100vh;
+  }
+}
+
 @layer components {
   @keyframes session-progress-whip {
     0% {

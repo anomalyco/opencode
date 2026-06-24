@@ -6,6 +6,7 @@ import { CommandPlugin } from "@opencode-ai/core/plugin/command"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { location } from "../fixture/location"
 import { testEffect } from "../lib/effect"
+import { host } from "./host"
 
 const directory = AbsolutePath.make("/repo/packages/app")
 const project = AbsolutePath.make("/repo")
@@ -21,8 +22,11 @@ describe("CommandPlugin.Plugin", () => {
   it.effect("registers built-in init and review commands", () =>
     Effect.gen(function* () {
       const command = yield* CommandV2.Service
-      yield* CommandPlugin.Plugin.effect.pipe(
-        Effect.provideService(CommandV2.Service, command),
+      yield* CommandPlugin.Plugin.effect(
+        host({
+          command: { transform: command.transform, reload: command.reload },
+        }),
+      ).pipe(
         Effect.provideService(
           Location.Service,
           Location.Service.of(location({ directory }, { projectDirectory: project })),
