@@ -5,6 +5,11 @@ export namespace Hash {
     return createHash("sha1").update(input).digest("hex")
   }
 
+  /** The first 14 characters of the SHA1 hash are used as a short identifier to distinguish different git stores. */
+  export function short(input: string): string {
+    return fast(input).substring(0, 14)
+  }
+  
   export function sha256(input: string | Buffer): string {
     return createHash("sha256").update(input).digest("hex")
   }

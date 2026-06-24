@@ -15,8 +15,14 @@ import { testEffect } from "./lib/effect"
 
 const it = testEffect(Layer.mergeAll(ProjectV2.defaultLayer, Database.defaultLayer, ProjectDirectories.defaultLayer))
 
-function remoteID(remote: string) {
-  return ProjectV2.ID.make(Hash.fast(`git-remote:${remote}`))
+function remoteID(remote: string, store: string) {
+  const storeHash = Hash.short(store)
+  return Project.ID.make(Hash.fast(`git-remote:${remote}|${storeHash}`))
+}
+
+function rootID(root: string, store: string) {
+  const storeHash = Hash.short(store)
+  return Project.ID.make(Hash.fast(`git-root:${root}|${storeHash}`))
 }
 
 function abs(value: string) {
@@ -88,7 +94,8 @@ describe("ProjectV2.resolve", () => {
 
       const result = yield* project.resolve(abs(tmp.path))
 
-      expect(result.id).toBe(ProjectV2.ID.make(yield* Effect.promise(() => rootCommit(tmp.path))))
+      const store = path.join(yield* Effect.promise(() => fs.realpath(tmp.path)), ".git")
+      expect(result.id).toBe(rootID(yield* Effect.promise(() => rootCommit(tmp.path)), store))
       expect(result.directory).toBe(yield* real(tmp.path))
       expect(result.previous).toBeUndefined()
       expect(result.vcs?.type).toBe("git")
@@ -106,9 +113,11 @@ describe("ProjectV2.resolve", () => {
 
       const result = yield* project.resolve(abs(tmp.path))
 
-      expect(result.id).toBe(remoteID("github.com/Acme/App"))
-      expect(result.id).not.toBe(ProjectV2.ID.make(yield* Effect.promise(() => rootCommit(tmp.path))))
+      const store = path.join(yield* Effect.promise(() => fs.realpath(tmp.path)), ".git")
+      expect(result.id).toBe(remoteID("github.com/Acme/App", store))
+      expect(result.id).not.toBe(Project.ID.make(yield* Effect.promise(() => rootCommit(tmp.path))))
       expect(result.directory).toBe(yield* real(tmp.path))
+      expect(result.previous).toBeUndefined()
       expect(result.vcs?.type).toBe("git")
     }),
   )
@@ -130,8 +139,14 @@ describe("ProjectV2.resolve", () => {
       const a = yield* project.resolve(abs(ssh.path))
       const b = yield* project.resolve(abs(https.path))
 
-      expect(a.id).toBe(remoteID("github.com/owner/repo"))
-      expect(b.id).toBe(a.id)
+      // 两个独立 clone 的 store 不同，所以 ID 不同
+      const storeSsh = path.join(yield* Effect.promise(() => fs.realpath(ssh.path)), ".git")
+      const storeHttps = path.join(yield* Effect.promise(() => fs.realpath(https.path)), ".git")
+      expect(a.id).not.toBe(Project.ID.global)
+      expect(b.id).not.toBe(Project.ID.global)
+      expect(a.id).toBe(remoteID("github.com/owner/repo", storeSsh))
+      expect(b.id).toBe(remoteID("github.com/owner/repo", storeHttps))
+      expect(a.id).not.toBe(b.id)
     }),
   )
 
@@ -146,7 +161,8 @@ describe("ProjectV2.resolve", () => {
 
       const result = yield* project.resolve(abs(tmp.path))
 
-      expect(result.id).toBe(ProjectV2.ID.make(yield* Effect.promise(() => rootCommit(tmp.path))))
+      const store = path.join(yield* Effect.promise(() => fs.realpath(tmp.path)), ".git")
+      expect(result.id).toBe(rootID(yield* Effect.promise(() => rootCommit(tmp.path)), store))
     }),
   )
 
@@ -162,8 +178,9 @@ describe("ProjectV2.resolve", () => {
 
       const result = yield* project.resolve(abs(tmp.path))
 
-      expect(result.previous).toBe(ProjectV2.ID.make("old-id"))
-      expect(result.id).toBe(remoteID("github.com/owner/repo"))
+      const store = path.join(yield* Effect.promise(() => fs.realpath(tmp.path)), ".git")
+      expect(result.previous).toBe(Project.ID.make("old-id"))
+      expect(result.id).toBe(remoteID("github.com/owner/repo", store))
     }),
   )
 
@@ -215,9 +232,10 @@ describe("ProjectV2.resolve", () => {
 
       const result = yield* project.resolve(abs(worktree))
 
+      const store = path.join(yield* Effect.promise(() => fs.realpath(tmp.path)), ".git")
       expect(result.directory).toBe(yield* real(worktree))
-      expect(result.previous).toBe(ProjectV2.ID.make("old-id"))
-      expect(result.id).toBe(remoteID("github.com/owner/repo"))
+      expect(result.previous).toBe(Project.ID.make("old-id"))
+      expect(result.id).toBe(remoteID("github.com/owner/repo", store))
       expect(result.vcs?.type).toBe("git")
     }),
   )

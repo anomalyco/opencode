@@ -29,8 +29,20 @@ const encoder = new TextEncoder()
 const layer = Layer.mergeAll(Project.defaultLayer, Database.defaultLayer, CrossSpawnSpawner.defaultLayer)
 const it = testEffect(layer)
 
-function remoteProjectID(remote: string) {
-  return ProjectV2.ID.make(Hash.fast(`git-remote:${remote}`))
+function run<A, E>(fn: (svc: Project.Interface) => Effect.Effect<A, E>) {
+  return Effect.gen(function* () {
+    const svc = yield* Project.Service
+    return yield* fn(svc)
+  })
+}
+
+function remoteProjectID(remote: string, store: string) {
+  const storeHash = Hash.short(store)
+  return ProjectID.make(Hash.fast(`git-remote:${remote}|${storeHash}`))
+}
+
+function storePath(tmp: string) {
+  return path.join(tmp, ".git")
 }
 
 /**
@@ -173,7 +185,7 @@ describe("Project.fromDirectory", () => {
 
       const result = yield* project.fromDirectory(tmp)
 
-      expect(result.project.id).toBe(remoteProjectID("github.com/Test-Org/Test-Repo"))
+      expect(project.id).toBe(remoteProjectID("github.com/Test-Org/Test-Repo", storePath(tmp)))
     }),
   )
 
@@ -188,8 +200,10 @@ describe("Project.fromDirectory", () => {
       const result = yield* project.fromDirectory(ssh)
       const next = yield* project.fromDirectory(https)
 
-      expect(result.project.id).toBe(remoteProjectID("github.com/owner/repo"))
-      expect(next.project.id).toBe(result.project.id)
+      // 不同 store → 不同 ID
+      expect(a.id).toBe(remoteProjectID("github.com/owner/repo", storePath(ssh)))
+      expect(b.id).toBe(remoteProjectID("github.com/owner/repo", storePath(https)))
+      expect(a.id).not.toBe(b.id)
     }),
   )
 
@@ -198,9 +212,8 @@ describe("Project.fromDirectory", () => {
       const { db } = yield* Database.Service
       const tmp = yield* tmpdirScoped({ git: true })
       const projects = yield* Project.Service
-      const rootResult = yield* projects.fromDirectory(tmp)
-      const rootProject = rootResult.project
-      const remoteID = remoteProjectID("github.com/acme/app")
+      const { project: rootProject } = yield* projects.fromDirectory(tmp)
+      const remoteID = remoteProjectID("github.com/acme/app", storePath(tmp))
       const sessionID = crypto.randomUUID() as SessionID
       const workspaceID = WorkspaceV2.ID.ascending()
 
@@ -348,7 +361,7 @@ describe("Project.fromDirectory with worktrees", () => {
     }),
   )
 
-  it.live("separate clones of the same repo should share project ID", () =>
+  it.live("separate clones of the same repo should have different project IDs", () =>
     Effect.gen(function* () {
       const project = yield* Project.Service
       const tmp = yield* tmpdirScoped({ git: true })
@@ -362,10 +375,10 @@ describe("Project.fromDirectory with worktrees", () => {
       yield* Effect.promise(() => $`git clone --bare ${tmp} ${bare}`.quiet())
       yield* Effect.promise(() => $`git clone ${bare} ${clone}`.quiet())
 
-      const result = yield* project.fromDirectory(tmp)
-      const next = yield* project.fromDirectory(clone)
+      const { project: a } = yield* run((svc) => svc.fromDirectory(tmp))
+      const { project: b } = yield* run((svc) => svc.fromDirectory(clone))
 
-      expect(next.project.id).toBe(result.project.id)
+      expect(b.id).not.toBe(a.id)
     }),
   )
 
