@@ -60,7 +60,7 @@ import { ServerHealthIndicator } from "@/components/server/server-row"
 import { type ServerHealth } from "@/utils/server-health"
 import { Persist, persisted } from "@/utils/persist"
 import { useMarked } from "@opencode-ai/ui/context/marked"
-import { preloadMarkdown } from "@opencode-ai/ui/markdown-cache"
+import { preloadMarkdown } from "@opencode-ai/session-ui/markdown-cache"
 
 const HOME_SESSION_LIMIT = 64
 const HOME_ROW_LAYOUT =
