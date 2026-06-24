@@ -137,7 +137,9 @@ ${message.summary}
 <recent-context>
 ${message.recent}
 </recent-context>
-</conversation-checkpoint>`,
+</conversation-checkpoint>
+
+Continue responding in the same language as the conversation.`,
           metadata: message.metadata,
         }),
       ]
