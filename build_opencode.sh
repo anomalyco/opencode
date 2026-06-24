@@ -14,4 +14,4 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR/packages/opencode"
 
-bun run build -- --single --skip-install
+bun run build -- --single --skip-install --skip-embed-web-ui
