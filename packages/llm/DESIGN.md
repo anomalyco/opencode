@@ -176,7 +176,7 @@ const request = LLM.request({
 })
 
 // Current API: this performs one provider turn, despite the broad name.
-const response = yield* LLM.generate(request)
+const response = yield * LLM.generate(request)
 
 // Current API: execution also needs LLMClient.layer and RequestExecutor services.
 ```
@@ -242,14 +242,15 @@ executable tools. Call-level values override model defaults.
 Provider-specific options are inferred from the concrete model:
 
 ```ts
-yield* LLM.generate({
-  model: OpenAI.model("gpt-4.1-mini"),
-  prompt: "Hello",
-  provider: {
-    store: false,
-    // OpenAI-specific autocomplete here; no `{ openai: ... }` nesting.
-  },
-})
+yield *
+  LLM.generate({
+    model: OpenAI.model("gpt-4.1-mini"),
+    prompt: "Hello",
+    provider: {
+      store: false,
+      // OpenAI-specific autocomplete here; no `{ openai: ... }` nesting.
+    },
+  })
 ```
 
 Code choosing between providers dynamically must narrow the model before using
@@ -278,12 +279,14 @@ provider.
 ### Inline input
 
 ```ts
-const result = yield* LLM.generate({
-  model,
-  system: "You are concise.",
-  prompt: "Summarize this pull request.",
-  generation: { maxTokens: 500 },
-})
+const result =
+  yield *
+  LLM.generate({
+    model,
+    system: "You are concise.",
+    prompt: "Summarize this pull request.",
+    generation: { maxTokens: 500 },
+  })
 ```
 
 ### Reusable portable request
@@ -296,7 +299,7 @@ const request = LLM.request({
 })
 
 // Bind process-local execution behavior only when running.
-const result = yield* LLM.generate({ model, request })
+const result = yield * LLM.generate({ model, request })
 ```
 
 `LLM.request(...)` returns a plain immutable object. Use ordinary object spread
@@ -362,11 +365,13 @@ const tools = {
   }),
 }
 
-const result = yield* LLM.generate({
-  model,
-  prompt: "What is the weather in London?",
-  tools,
-})
+const result =
+  yield *
+  LLM.generate({
+    model,
+    prompt: "What is the weather in London?",
+    tools,
+  })
 
 // The runtime advertises definitions, dispatches calls, records results, and
 // continues provider turns automatically.
@@ -387,15 +392,14 @@ successful result with `stopReason: "max-turns"`, not an Effect failure.
 ### Custom stopping
 
 ```ts
-const result = yield* LLM.generate({
-  model,
-  prompt,
-  tools,
-  stopWhen: StopWhen.any(
-    StopWhen.turnCount(8),
-    StopWhen.hasToolCall("finalize"),
-  ),
-})
+const result =
+  yield *
+  LLM.generate({
+    model,
+    prompt,
+    tools,
+    stopWhen: StopWhen.any(StopWhen.turnCount(8), StopWhen.hasToolCall("finalize")),
+  })
 ```
 
 `stopWhen` accepts one predicate. Composition is explicit through combinators
@@ -427,17 +431,13 @@ const request = LLM.request({
   tools: Tool.toDefinitions(tools),
 })
 
-const events = yield* LLM.stream(request).pipe(Stream.runCollect)
+const events = yield * LLM.stream(request).pipe(Stream.runCollect)
 const call = Array.from(events).find(LLMEvent.is.toolCall)
 
 if (call && !call.providerExecuted) {
-  const dispatched = yield* ToolRuntime.dispatch(tools, call)
+  const dispatched = yield * ToolRuntime.dispatch(tools, call)
   const followUp = LLM.updateRequest(request, {
-    messages: [
-      ...request.messages,
-      Message.assistant([call]),
-      Message.tool({ ...call, result: dispatched.result }),
-    ],
+    messages: [...request.messages, Message.assistant([call]), Message.tool({ ...call, result: dispatched.result })],
   })
   // Caller must invoke the provider again and repeat the loop.
 }
@@ -452,17 +452,19 @@ OpenCode and other durable runtimes need to own persistence, tool settlement,
 and continuation. They use the explicit turn API:
 
 ```ts
-const result = yield* LLM.generateTurn({
-  model,
-  request,
-  // Definitions only. generateTurn never dispatches local handlers.
-  tools: {
-    getWeather: Tool.definition({
-      description: "Get current weather for a city.",
-      parameters: WeatherInput,
-    }),
-  },
-})
+const result =
+  yield *
+  LLM.generateTurn({
+    model,
+    request,
+    // Definitions only. generateTurn never dispatches local handlers.
+    tools: {
+      getWeather: Tool.definition({
+        description: "Get current weather for a city.",
+        parameters: WeatherInput,
+      }),
+    },
+  })
 
 // Persist the TurnResult and settle calls durably before the next turn.
 for (const call of result.toolCalls) {
@@ -494,19 +496,21 @@ const request = LLM.request({
   },
 })
 
-const result = yield* LLM.generate({
-  model,
-  request,
-  tools: {
-    getWeather: Tool.make({
-      description: "Get current weather for a city.",
-      parameters: WeatherInput,
-      success: WeatherOutput,
-      execute: getWeather,
-      formatError,
-    }),
-  },
-})
+const result =
+  yield *
+  LLM.generate({
+    model,
+    request,
+    tools: {
+      getWeather: Tool.make({
+        description: "Get current weather for a city.",
+        parameters: WeatherInput,
+        success: WeatherOutput,
+        execute: getWeather,
+        formatError,
+      }),
+    },
+  })
 ```
 
 Definitions and handlers match by record key. Before the first provider call,
@@ -516,13 +520,15 @@ binding. Missing or incompatible bindings fail with a typed tool-binding error.
 Provider-hosted tools are distinct typed values:
 
 ```ts
-const result = yield* LLM.generate({
-  model: OpenAI.model("gpt-4.1"),
-  prompt: "Find today's relevant announcements.",
-  tools: {
-    search: OpenAI.tool.webSearch({ searchContextSize: "medium" }),
-  },
-})
+const result =
+  yield *
+  LLM.generate({
+    model: OpenAI.model("gpt-4.1"),
+    prompt: "Find today's relevant announcements.",
+    tools: {
+      search: OpenAI.tool.webSearch({ searchContextSize: "medium" }),
+    },
+  })
 ```
 
 Hosted tools do not pretend to have local handlers, and callers do not inspect a
@@ -589,11 +595,13 @@ const Weather = Schema.Struct({
   highCelsius: Schema.Number,
 })
 
-const result = yield* LLM.generate({
-  model,
-  prompt: "Give me today's weather for London.",
-  output: Weather,
-})
+const result =
+  yield *
+  LLM.generate({
+    model,
+    prompt: "Give me today's weather for London.",
+    output: Weather,
+  })
 
 // Inferred from Weather.
 result.output.city
@@ -612,11 +620,13 @@ Advanced callers may override the strategy when exact provider semantics matter.
 
 ```ts
 // Current API is a separate operation and always forces a synthetic tool.
-const result = yield* LLM.generateObject({
-  model,
-  prompt,
-  schema: Weather,
-})
+const result =
+  yield *
+  LLM.generateObject({
+    model,
+    prompt,
+    schema: Weather,
+  })
 ```
 
 The proposal unifies generation and lets capabilities choose the strategy rather
@@ -679,11 +689,12 @@ cache boundaries where explicit caching is supported and does nothing on the wir
 where providers cache implicitly.
 
 ```ts
-yield* LLM.generate({
-  model,
-  prompt,
-  cache: "none", // Explicit opt-out.
-})
+yield *
+  LLM.generate({
+    model,
+    prompt,
+    cache: "none", // Explicit opt-out.
+  })
 ```
 
 Granular cache policy remains available as an advanced request option.
@@ -705,13 +716,14 @@ silently inherit custom retry policies.
 ### Timeouts
 
 ```ts
-yield* LLM.generate({
-  model,
-  prompt,
-  timeout: "2 minutes",       // Entire run, including tools.
-  turnTimeout: "30 seconds",  // Each provider turn.
-  tools,
-})
+yield *
+  LLM.generate({
+    model,
+    prompt,
+    timeout: "2 minutes", // Entire run, including tools.
+    turnTimeout: "30 seconds", // Each provider turn.
+    tools,
+  })
 ```
 
 Exact Duration input spelling follows Effect conventions. Individual tools may
@@ -740,10 +752,11 @@ retry, or redirect control flow.
 ```ts
 const model = OpenAI.model("gpt-4.1", {
   hooks: {
-    request: (request) => Effect.succeed({
-      ...request,
-      metadata: { ...request.metadata, tenant: "acme" },
-    }),
+    request: (request) =>
+      Effect.succeed({
+        ...request,
+        metadata: { ...request.metadata, tenant: "acme" },
+      }),
     body: (body, context) => auditBody(body, context),
     transport: (request) => signInternalGatewayRequest(request),
     event: (event) => redactProviderMetadata(event),
@@ -775,15 +788,16 @@ The request customization ladder is:
 5. Experimental provider-definition or protocol patching
 
 ```ts
-yield* LLM.generate({
-  model,
-  prompt,
-  http: {
-    headers: { "x-experimental": "1" },
-    query: { debug: "true" },
-    body: { newlyReleasedProviderField: true },
-  },
-})
+yield *
+  LLM.generate({
+    model,
+    prompt,
+    http: {
+      headers: { "x-experimental": "1" },
+      query: { debug: "true" },
+      body: { newlyReleasedProviderField: true },
+    },
+  })
 ```
 
 Raw overlays are intentional last-resort support for provider features that ship
@@ -905,7 +919,7 @@ Schemas live in a dedicated namespace/subpath instead of flooding root exports:
 ```ts
 import { LLMSchema } from "@opencode-ai/ai/schema"
 
-const request = yield* Schema.decodeUnknown(LLMSchema.Request)(input)
+const request = yield * Schema.decodeUnknown(LLMSchema.Request)(input)
 ```
 
 Schemas cover only serializable domain values:
@@ -928,10 +942,7 @@ Provider authoring is public but experimental.
 ### Declarative provider definition
 
 ```ts
-import {
-  Provider,
-  Protocol,
-} from "@opencode-ai/ai/provider"
+import { Provider, Protocol } from "@opencode-ai/ai/provider"
 
 export const ExampleAI = Provider.define({
   id: "example",
@@ -996,9 +1007,7 @@ SDK integrations that motivated this package.
 const PatchedResponses = OpenAIResponses.with({
   body: {
     fromRequest: (request) =>
-      OpenAIResponses.body.fromRequest(request).pipe(
-        Effect.map((body) => ({ ...body, custom_field: true })),
-      ),
+      OpenAIResponses.body.fromRequest(request).pipe(Effect.map((body) => ({ ...body, custom_field: true }))),
   },
   stream: {
     step: patchResponsesStep,
@@ -1042,45 +1051,45 @@ providers, and there is no preferred all-providers barrel.
 
 ## Defaults
 
-| Concern | Default |
-| --- | --- |
-| `LLM.generate` semantics | Complete Model Run |
-| `LLM.generateTurn` semantics | Exactly one Provider Turn |
-| Maximum turns | 20 |
-| Turn-limit outcome | Successful `max-turns` result |
-| Tool execution | Automatic in runs |
-| Tool concurrency | Concurrent, bounded, deterministic result order |
-| Prompt caching | `auto` |
-| Retries | Conservative, pre-output transient failures only |
-| Structured output | Capability-selected native or tool strategy |
-| Capability mismatch | Typed failure before network execution |
-| Unknown model capability | Conservative protocol baseline |
-| Telemetry content | Metadata only |
-| Cost | Estimated aggregate or unavailable |
-| Cancellation | Interruption/rejection, never successful completion |
+| Concern                      | Default                                             |
+| ---------------------------- | --------------------------------------------------- |
+| `LLM.generate` semantics     | Complete Model Run                                  |
+| `LLM.generateTurn` semantics | Exactly one Provider Turn                           |
+| Maximum turns                | 20                                                  |
+| Turn-limit outcome           | Successful `max-turns` result                       |
+| Tool execution               | Automatic in runs                                   |
+| Tool concurrency             | Concurrent, bounded, deterministic result order     |
+| Prompt caching               | `auto`                                              |
+| Retries                      | Conservative, pre-output transient failures only    |
+| Structured output            | Capability-selected native or tool strategy         |
+| Capability mismatch          | Typed failure before network execution              |
+| Unknown model capability     | Conservative protocol baseline                      |
+| Telemetry content            | Metadata only                                       |
+| Cost                         | Estimated aggregate or unavailable                  |
+| Cancellation                 | Interruption/rejection, never successful completion |
 
 ## Clean-break Migration
 
 The redesign intentionally removes or changes these current concepts:
 
-| Current | Proposed |
-| --- | --- |
-| `@opencode-ai/llm` | `@opencode-ai/ai` |
-| Mandatory `LLM.request({ model, ... })` | Inline calls or model-free portable requests |
-| `LLM.generate` means one turn | `LLM.generate` means complete run |
-| `LLMClient.generate/stream` | `LLM.generateTurn/streamTurn` for one turn |
-| `LLMClient.layer` requirement | Standard Effect requirements exposed directly |
-| Public `Route` mental model | Hidden behind executable `Model` |
-| `Provider.make` structural helper | Experimental declarative `Provider.define` |
-| Schema classes as canonical values | Plain immutable values plus schema subpath |
-| `LLM.updateRequest` | Object spread |
-| `Tool.toDefinitions` in normal calls | Named executable tool records |
-| Manual `ToolRuntime.dispatch` loop | Automatic run dispatch; explicit turn API for orchestration |
-| `providerOptions: { openai: ... }` | Model-typed `provider: ...` |
-| `generateObject` | Typed `output` option on `generate` |
-| One event union for provider output | Separate `TurnEvent` and `RunEvent` unions |
-| `providerExecuted` dispatch check | Distinct hosted-tool constructors |
-| One wrapped `LLMError` | Tagged domain error union |
+| Current                                 | Proposed                                                    |
+| --------------------------------------- | ----------------------------------------------------------- |
+| `@opencode-ai/llm`                      | `@opencode-ai/ai`                                           |
+| Mandatory `LLM.request({ model, ... })` | Inline calls or model-free portable requests                |
+| `LLM.generate` means one turn           | `LLM.generate` means complete run                           |
+| `LLMClient.generate/stream`             | `LLM.generateTurn/streamTurn` for one turn                  |
+| `LLMClient.layer` requirement           | Standard Effect requirements exposed directly               |
+| Public `Route` mental model             | Hidden behind executable `Model`                            |
+| `Provider.make` structural helper       | Experimental declarative `Provider.define`                  |
+| Schema classes as canonical values      | Plain immutable values plus schema subpath                  |
+| `LLM.updateRequest`                     | Object spread                                               |
+| `Tool.toDefinitions` in normal calls    | Named executable tool records                               |
+| Manual `ToolRuntime.dispatch` loop      | Automatic run dispatch; explicit turn API for orchestration |
+| `providerOptions: { openai: ... }`      | Model-typed `provider: ...`                                 |
+| `generateObject`                        | Typed `output` option on `generate`                         |
+| One event union for provider output     | Separate `TurnEvent` and `RunEvent` unions                  |
+| `providerExecuted` dispatch check       | Distinct hosted-tool constructors                           |
+| One wrapped `LLMError`                  | Tagged domain error union                                   |
 
 OpenCode should migrate to `generateTurn` / `streamTurn`, preserving its durable
 prompt admission, persistence, permission, tool settlement, and continuation
