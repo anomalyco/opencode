@@ -6,23 +6,19 @@
 // undici is a hard dependency, but we still import it lazily inside the guard
 // so browser bundlers don't pull undici (and its node:* deps) into the bundle
 // when the SDK is loaded in a non-Node environment.
+//
+// The promise is cached so concurrent first calls share a single Agent —
+// without this, two parallel calls could each create and race to assign an
+// Agent, leaving the loser orphaned (never closed).
 type UndiciAgent = InstanceType<typeof import("undici").Agent>
 
-let nodeDispatcher: UndiciAgent | undefined | null
-
-async function ensureDispatcher() {
-  if (nodeDispatcher !== undefined) return nodeDispatcher
-  if (typeof process === "undefined" || !process.versions || process.versions.bun) {
-    nodeDispatcher = null
-    return null
-  }
-  const { Agent } = await import("undici")
-  nodeDispatcher = new Agent({ headersTimeout: 0, bodyTimeout: 0 })
-  return nodeDispatcher
-}
+const nodeDispatcher: Promise<UndiciAgent | null> =
+  typeof process === "undefined" || !process.versions || process.versions.bun
+    ? Promise.resolve(null)
+    : import("undici").then(({ Agent }) => new Agent({ headersTimeout: 0, bodyTimeout: 0 }))
 
 export async function nodeFetchWithDispatcher(req: Request) {
-  const dispatcher = await ensureDispatcher()
+  const dispatcher = await nodeDispatcher
   if (!dispatcher) return fetch(req)
   return fetch(req, { dispatcher } as RequestInit)
 }
