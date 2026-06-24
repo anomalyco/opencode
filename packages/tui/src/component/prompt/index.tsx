@@ -424,12 +424,7 @@ export function Prompt(props: PromptProps) {
           dialog.clear()
 
           // replace summarized text parts with the actual text
-          const text = store.prompt.parts
-            .filter((p) => p.type === "text")
-            .reduce((acc, p) => {
-              if (!p.source) return acc
-              return acc.replace(p.source.text.value, p.text)
-            }, store.prompt.input)
+          const text = expandPastedTextPlaceholders(store.prompt.input, store.prompt.parts)
 
           const nonTextParts = store.prompt.parts.filter((p) => p.type !== "text")
 

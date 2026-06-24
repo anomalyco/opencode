@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test"
-import { expandTrackedPastedText, stripPromptPartIDs } from "../../src/prompt/part"
+import { expandPastedTextPlaceholders, expandTrackedPastedText, stripPromptPartIDs } from "../../src/prompt/part"
+
+function pastedTextPart(marker: string, text: string) {
+  return { type: "text" as const, text, source: { text: { value: marker } } }
+}
 
 describe("prompt part", () => {
   test("strips persisted IDs from reused parts", () => {
@@ -49,5 +53,34 @@ describe("prompt part", () => {
         },
       ]),
     ).toBe(`keep ${marker} then alpha\nbeta\ngamma tail`)
+  })
+
+  test("expands placeholders with dollar sequences literally", () => {
+    const marker = "[Pasted ~1 lines]"
+    for (const pasted of ["const cost = ${price}$$", "echo $&foo", "a $` b", "x $' y", "price $1 each"]) {
+      expect(expandPastedTextPlaceholders(`see ${marker} here`, [pastedTextPart(marker, pasted)])).toBe(
+        `see ${pasted} here`,
+      )
+    }
+  })
+
+  test("expands repeated same-line-count placeholders in order", () => {
+    const marker = "[Pasted ~2 lines]"
+    expect(
+      expandPastedTextPlaceholders(`${marker} and ${marker}`, [
+        pastedTextPart(marker, "first"),
+        pastedTextPart(marker, "second"),
+      ]),
+    ).toBe("first and second")
+  })
+
+  test("leaves non pasted-text parts untouched", () => {
+    const marker = "[Pasted ~1 lines]"
+    expect(
+      expandPastedTextPlaceholders(`see ${marker} here`, [
+        { type: "file", url: "data:," },
+        pastedTextPart(marker, "$$$"),
+      ]),
+    ).toBe("see $$$ here")
   })
 })
