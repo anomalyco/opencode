@@ -23,10 +23,16 @@ const cloneGitHub = (
     const repo = source.replace(/^(github:|gh:)/, "")
     const dest = path.join(cacheRoot, pkgName)
 
-    const exists = yield* Effect.promise(() =>
-      import("fs/promises").then((f) => f.stat(dest).then(() => true).catch(() => false)),
-    )
-    if (exists) return { dir: dest, sourceUrl: `https://github.com/${repo}` }
+    const valid = yield* Effect.promise(async (): Promise<boolean> => {
+      try {
+        const entries = await import("fs/promises").then((f) => f.readdir(dest))
+        return entries.length > 0 && entries.some((e) => e !== ".git")
+      } catch {
+        return false
+      }
+    })
+    if (valid) return { dir: dest, sourceUrl: `https://github.com/${repo}` }
+    yield* Effect.promise(() => import("fs/promises").then((f) => f.rm(dest, { recursive: true, force: true })))
 
     const url = `https://github.com/${repo}.git`
     const result = yield* Effect.promise(() =>
@@ -46,10 +52,16 @@ const downloadUrl = (
   Effect.gen(function* () {
     const dest = path.join(cacheRoot, pkgName)
 
-    const exists = yield* Effect.promise(() =>
-      import("fs/promises").then((f) => f.stat(dest).then(() => true).catch(() => false)),
-    )
-    if (exists) return { dir: dest, sourceUrl: url }
+    const valid = yield* Effect.promise(async (): Promise<boolean> => {
+      try {
+        const entries = await import("fs/promises").then((f) => f.readdir(dest))
+        return entries.length > 0
+      } catch {
+        return false
+      }
+    })
+    if (valid) return { dir: dest, sourceUrl: url }
+    yield* Effect.promise(() => import("fs/promises").then((f) => f.rm(dest, { recursive: true, force: true })))
 
     const buf = yield* Effect.promise((): Promise<ArrayBuffer | null> =>
       globalThis.fetch(url).then((r) => (r.ok ? r.arrayBuffer() : null)).catch(() => null),
@@ -79,10 +91,16 @@ const copyLocal = (
   Effect.gen(function* () {
     const dest = path.join(cacheRoot, pkgName)
 
-    const exists = yield* Effect.promise(() =>
-      import("fs/promises").then((f) => f.stat(dest).then(() => true).catch(() => false)),
-    )
-    if (exists) return { dir: dest, sourceUrl: filePath }
+    const valid = yield* Effect.promise(async (): Promise<boolean> => {
+      try {
+        const entries = await import("fs/promises").then((f) => f.readdir(dest))
+        return entries.length > 0
+      } catch {
+        return false
+      }
+    })
+    if (valid) return { dir: dest, sourceUrl: filePath }
+    yield* Effect.promise(() => import("fs/promises").then((f) => f.rm(dest, { recursive: true, force: true })))
 
     yield* Effect.promise(() => import("fs/promises").then((f) => f.mkdir(dest, { recursive: true })))
     const resolved = filePath.startsWith("/") ? filePath : path.resolve(filePath)
