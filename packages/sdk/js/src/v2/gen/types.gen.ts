@@ -688,6 +688,10 @@ export type SessionStatus =
   | {
       type: "busy"
     }
+  | {
+      type: "image_processing"
+      model: string
+    }
 
 export type QuestionOption = {
   /**
@@ -1935,6 +1939,7 @@ export type Config = {
   enabled_providers?: Array<string>
   model?: string
   small_model?: string
+  image_model?: string
   default_agent?: string
   username?: string
   mode?: {
@@ -9676,6 +9681,10 @@ export type SessionPromptData = {
       providerID: string
       modelID: string
     }
+    imageModel?: {
+      providerID: string
+      modelID: string
+    }
     agent?: string
     noReply?: boolean
     tools?: {
@@ -10020,6 +10029,10 @@ export type SessionPromptAsyncData = {
   body?: {
     messageID?: string
     model?: {
+      providerID: string
+      modelID: string
+    }
+    imageModel?: {
       providerID: string
       modelID: string
     }

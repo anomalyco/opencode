@@ -38,6 +38,7 @@ import { DataProvider } from "./context/data"
 import { LocationProvider } from "./context/location"
 import { LocalProvider, useLocal } from "./context/local"
 import { DialogModel } from "./component/dialog-model"
+import { DialogImageModel } from "./component/dialog-image-model"
 import { useConnected } from "./component/use-connected"
 import { DialogMcp } from "./component/dialog-mcp"
 import { DialogStatus } from "./component/dialog-status"
@@ -644,6 +645,15 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         hidden: true,
         run: () => {
           local.model.cycle(-1)
+        },
+      },
+      {
+        name: "image_model.list",
+        title: "Switch image model",
+        category: "Agent",
+        slashName: "image-models",
+        run: () => {
+          dialog.replace(() => <DialogImageModel />)
         },
       },
       {

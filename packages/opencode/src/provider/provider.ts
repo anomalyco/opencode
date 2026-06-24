@@ -1137,6 +1137,7 @@ export interface Interface {
   ) => Effect.Effect<{ providerID: ProviderV2.ID; modelID: string } | undefined>
   readonly getSmallModel: (providerID: ProviderV2.ID) => Effect.Effect<Model | undefined>
   readonly defaultModel: () => Effect.Effect<{ providerID: ProviderV2.ID; modelID: ModelV2.ID }, DefaultModelError>
+  readonly getImageModel: () => Effect.Effect<{ providerID: ProviderV2.ID; modelID: ModelV2.ID } | undefined>
 }
 
 interface State {
@@ -1183,6 +1184,13 @@ function cost(c: ModelsDev.Model["cost"]): Model["cost"] {
     }
   }
   return result
+}
+
+function supportsImages(model: Model): boolean {
+  return !!(
+    model.capabilities.input?.image ||
+    model.capabilities.output?.image
+  )
 }
 
 function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model): Model {
@@ -1911,9 +1919,9 @@ export const layer = Layer.effect(
       return undefined
     })
 
-    const defaultModel = Effect.fn("Provider.defaultModel")(function* () {
-      const cfg = yield* config.get()
-      if (cfg.model) return parseModel(cfg.model)
+     const defaultModel = Effect.fn("Provider.defaultModel")(function* () {
+       const cfg = yield* config.get()
+       if (cfg.model) return parseModel(cfg.model)
 
       const s = yield* InstanceState.get(state)
       const recent = yield* fs.readJson(path.join(Global.Path.state, "model.json")).pipe(
@@ -1945,7 +1953,20 @@ export const layer = Layer.effect(
       }
     })
 
-    return Service.of({ list, getProvider, getModel, getLanguage, closest, getSmallModel, defaultModel })
+     const getImageModel = Effect.fn("Provider.getImageModel")(function* () {
+       const s = yield* InstanceState.get(state)
+       for (const [providerID, provider] of Object.entries(s.providers)) {
+         // Look for models that support images
+         for (const [modelID, model] of Object.entries(provider.models)) {
+           if (supportsImages(model)) {
+             return { providerID: ProviderV2.ID.make(providerID), modelID: ModelV2.ID.make(modelID) }
+           }
+         }
+       }
+       return undefined
+     })
+
+     return Service.of({ list, getProvider, getModel, getLanguage, closest, getSmallModel, defaultModel, getImageModel })
   }),
 )
 

@@ -29,6 +29,10 @@ export const Info = Schema.Union([
   Schema.Struct({
     type: Schema.Literal("busy"),
   }),
+  Schema.Struct({
+    type: Schema.Literal("image_processing"),
+    model: Schema.String,
+  }),
 ]).annotate({ identifier: "SessionStatus" })
 export type Info = Schema.Schema.Type<typeof Info>
 

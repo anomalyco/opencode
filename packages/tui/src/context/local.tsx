@@ -149,12 +149,17 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           modelID: string
         }[]
         variant: Record<string, string | undefined>
+        imageModel: {
+          providerID: string
+          modelID: string
+        } | undefined
       }>({
         ready: false,
         model: {},
         recent: [],
         favorite: [],
         variant: {},
+        imageModel: undefined,
       })
 
       const filePath = path.join(paths.state, "model.json")
@@ -172,6 +177,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           recent: modelStore.recent,
           favorite: modelStore.favorite,
           variant: modelStore.variant,
+          imageModel: modelStore.imageModel,
         })
       }
 
@@ -183,6 +189,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           if (Array.isArray(value.favorite)) setModelStore("favorite", value.favorite)
           if (typeof value.variant === "object" && value.variant !== null)
             setModelStore("variant", value.variant as Record<string, string | undefined>)
+          if (typeof value.imageModel === "object" && value.imageModel !== null)
+            setModelStore("imageModel", value.imageModel as { providerID: string; modelID: string })
         })
         .catch(() => {})
         .finally(() => {
@@ -259,6 +267,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               provider: "Connect a provider",
               model: "No provider selected",
               reasoning: false,
+              supportsImages: false,
             }
           }
           const provider = sync.data.provider.find((item) => item.id === value.providerID)
@@ -267,8 +276,48 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             provider: provider?.name ?? value.providerID,
             model: info?.name ?? value.modelID,
             reasoning: info?.capabilities?.reasoning ?? false,
+            supportsImages: !!(info?.capabilities?.input?.image || info?.capabilities?.output?.image),
           }
         }),
+        imageModel: {
+          current() {
+            const im = modelStore.imageModel
+            if (!im) return undefined
+            if (im.providerID === "__disabled__") return im
+            return im
+          },
+          parsed: createMemo(() => {
+            const im = modelStore.imageModel
+            if (!im) return undefined
+            if (im.providerID === "__disabled__") return { provider: "Disabled", model: "Image preprocessing off" }
+            const provider = sync.data.provider.find((x) => x.id === im.providerID)
+            const info = provider?.models[im.modelID]
+            return {
+              provider: provider?.name ?? im.providerID,
+              model: info?.name ?? im.modelID,
+            }
+          }),
+          set(model: { providerID: string; modelID: string }) {
+            if (!isModelValid(model)) {
+              toast.show({
+                message: `Model ${model.providerID}/${model.modelID} is not valid`,
+                variant: "warning",
+                duration: 3000,
+              })
+              return
+            }
+            setModelStore("imageModel", model)
+            save()
+          },
+          setDisabled() {
+            setModelStore("imageModel", { providerID: "__disabled__", modelID: "__disabled__" })
+            save()
+          },
+          clear() {
+            setModelStore("imageModel", undefined)
+            save()
+          },
+        },
         cycle(direction: 1 | -1) {
           const current = currentModel()
           if (!current) return

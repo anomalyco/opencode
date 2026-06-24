@@ -167,6 +167,10 @@ export const RunCommand = effectCmd({
         alias: ["m"],
         describe: "model to use in the format of provider/model",
       })
+      .option("image-model", {
+        type: "string",
+        describe: "model to use for analyzing images in the format of provider/model",
+      })
       .option("agent", {
         type: "string",
         describe: "agent to use",
@@ -843,6 +847,7 @@ export const RunCommand = effectCmd({
             sessionID,
             agent,
             model,
+            imageModel: pick(args["image-model"]),
             variant: args.variant,
             parts: [...files, { type: "text", text: message }],
           })

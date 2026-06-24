@@ -46,6 +46,7 @@ import { Cause, Effect, Exit, Latch, Layer, Option, Scope, Context, Schema, Type
 import { InstanceState } from "@/effect/instance-state"
 import { TaskTool, type TaskPromptOps } from "@/tool/task"
 import { SessionRunState } from "./run-state"
+import { ImagePreprocess } from "./image-preprocess"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Database } from "@opencode-ai/core/database/database"
@@ -121,11 +122,11 @@ export const layer = Layer.effect(
     const sessions = yield* Session.Service
     const agents = yield* Agent.Service
     const provider = yield* Provider.Service
+    const config = yield* Config.Service
     const processor = yield* SessionProcessor.Service
     const compaction = yield* SessionCompaction.Service
     const plugin = yield* Plugin.Service
     const commands = yield* Command.Service
-    const config = yield* Config.Service
     const permission = yield* Permission.Service
     const fsys = yield* FSUtil.Service
     const mcp = yield* MCP.Service
@@ -1169,7 +1170,22 @@ export const layer = Layer.effect(
         yield* sessions.setPermission({ sessionID: session.id, permission: permissions })
       }
 
-      if (input.noReply === true) return message
+      const textParts = message.parts.filter((p): p is SessionV1.TextPart => p.type === "text")
+      const preprocessResult = yield* ImagePreprocess.preprocessImages({
+        sessionID: input.sessionID,
+        message,
+        imageModel: input.imageModel,
+        textParts,
+        sessions,
+        provider,
+        config,
+        status,
+      }).pipe(
+        Effect.tapError((err) => Effect.logError("image preprocessing failed, using original message", { error: err })),
+        Effect.catch(() => Effect.succeed(message)),
+      )
+
+      if (input.noReply === true) return preprocessResult
       return yield* loop({ sessionID: input.sessionID })
     })
 
@@ -1599,8 +1615,8 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(LSP.defaultLayer),
     Layer.provide(ToolRegistry.defaultLayer),
     Layer.provide(Truncate.defaultLayer),
-    Layer.provide(Provider.defaultLayer),
     Layer.provide(Config.defaultLayer),
+    Layer.provide(Provider.defaultLayer),
     Layer.provide(Instruction.defaultLayer),
     Layer.provide(FSUtil.defaultLayer),
     Layer.provide(Plugin.defaultLayer),
@@ -1630,6 +1646,7 @@ export const PromptInput = Schema.Struct({
   sessionID: SessionID,
   messageID: Schema.optional(MessageID),
   model: Schema.optional(ModelRef),
+  imageModel: Schema.optional(ModelRef),
   agent: Schema.optional(Schema.String),
   noReply: Schema.optional(Schema.Boolean),
   tools: Schema.optional(Schema.Record(Schema.String, Schema.Boolean)).annotate({

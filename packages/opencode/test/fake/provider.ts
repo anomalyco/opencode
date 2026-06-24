@@ -74,6 +74,9 @@ export namespace ProviderTest {
           defaultModel: Effect.fn("TestProvider.defaultModel")(() =>
             Effect.succeed({ providerID: row.id, modelID: mdl.id }),
           ),
+          getImageModel: Effect.fn("TestProvider.getImageModel")(() =>
+            Effect.succeed(undefined),
+          ),
           ...override,
         }),
       ),

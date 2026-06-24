@@ -61,6 +61,12 @@ const GeneratedAgent = Schema.Struct({
   systemPrompt: Schema.String,
 })
 
+export interface FileAnalysis {
+  filepath: string;
+  description: string;
+  mime: string;
+}
+
 export interface Interface {
   readonly get: (agent: string) => Effect.Effect<Info>
   readonly list: () => Effect.Effect<Info[]>
@@ -432,9 +438,9 @@ export const layer = Layer.effect(
           })
         }
 
-        return yield* Effect.promise(() => generateObject(params).then((r) => r.object))
-      }),
-    })
+return yield* Effect.promise(() => generateObject(params).then((r) => r.object))
+       }),
+      })
   }),
 )
 

@@ -401,7 +401,7 @@ function unsupportedParts(msgs: ModelMessage[], model: Provider.Model): ModelMes
       const name = filename ? `"${filename}"` : modality
       return {
         type: "text" as const,
-        text: `ERROR: Cannot read ${name} (this model does not support ${modality} input). Inform the user.`,
+        text: `[Image content unavailable — no image model configured. ${name} (${modality} not supported by this model)]`,
       }
     })
 
