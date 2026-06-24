@@ -57,6 +57,8 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { LocationServiceMap } from "@opencode-ai/core/location-layer"
+import { tool } from "ai"
+import { z } from "zod"
 
 const summary = Layer.succeed(
   SessionSummary.Service,
@@ -116,8 +118,10 @@ function makeMcp(instructions: MCP.ServerInstructions[] = [], toolNames: string[
       status: () => Effect.succeed({}),
       clients: () => Effect.succeed({}),
       instructions: () => Effect.succeed(instructions),
-      toolNames: () => Effect.succeed(toolNames),
-      tools: () => Effect.succeed({}),
+      tools: () =>
+        Effect.succeed(
+          Object.fromEntries(toolNames.map((name) => [name, tool({ description: "", inputSchema: z.object({}) })])),
+        ),
       prompts: () => Effect.succeed({}),
       resources: () => Effect.succeed({}),
       resourceTemplates: () => Effect.succeed({}),
@@ -272,7 +276,7 @@ const withMcpInstructions = testEffect(
         instructions: "Use lookup before mutate.",
       },
     ],
-    mcpToolNames: ["mcp__guide-server__lookup"],
+    mcpToolNames: ["guide-server_lookup"],
   }),
 )
 const unix = process.platform !== "win32" ? it.instance : it.instance.skip

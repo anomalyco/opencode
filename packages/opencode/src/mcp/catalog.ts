@@ -113,7 +113,7 @@ export function fetch<T extends { name: string }>(
 
 export const sanitize = (value: string) => value.replace(/[^a-zA-Z0-9_-]/g, "_")
 
-export const toolPrefix = (clientName: string) => "mcp__" + sanitize(clientName) + "__"
+export const toolPrefix = (clientName: string) => sanitize(clientName) + "_"
 
 export const toolName = (clientName: string, name: string) => toolPrefix(clientName) + sanitize(name)
 

@@ -108,7 +108,8 @@ export const layer = Layer.effect(
       }),
 
       mcp: Effect.fn("SystemPrompt.mcp")(function* (agent: Agent.Info) {
-        const [instructions, toolNames] = yield* Effect.all([mcp.instructions(), mcp.toolNames()])
+        const [instructions, tools] = yield* Effect.all([mcp.instructions(), mcp.tools()])
+        const toolNames = Object.keys(tools)
         const disabled = Permission.disabled(toolNames, agent.permission)
         const available = instructions.filter((item) => {
           const prefix = McpCatalog.toolPrefix(item.name)

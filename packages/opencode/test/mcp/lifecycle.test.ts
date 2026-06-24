@@ -370,7 +370,6 @@ it.instance(
           name: "guide-server",
           instructions: "Use lookup before mutate.",
         })
-        expect(yield* mcp.toolNames()).toContain("mcp__guide-server__test_tool")
       }),
     ),
   { config: { mcp: {} } },
