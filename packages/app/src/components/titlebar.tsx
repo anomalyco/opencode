@@ -276,7 +276,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                 const conn = global.servers
                   .list()
                   .find((item) => ServerConnection.key(item) === (route.server ?? server.key))
-                return conn ? { route, sdk: global.createServerCtx(conn).sdk } : undefined
+                return conn ? { route, sdk: global.ensureServerCtx(conn).sdk } : undefined
               },
               ({ route, sdk }) =>
                 sdk.client.session
@@ -348,7 +348,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
               }
 
               const fallback = global.servers.list().flatMap((conn) => {
-                const project = global.createServerCtx(conn).projects.list()[0]
+                const project = global.ensureServerCtx(conn).projects.list()[0]
                 return project ? [{ server: ServerConnection.key(conn), project }] : []
               })[0]
               if (!fallback) return
@@ -515,7 +515,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
 
                           const serverCtx = createMemo(() => {
                             const conn = server.list.find((item) => ServerConnection.key(item) === tab.server)
-                            return conn ? global.createServerCtx(conn) : undefined
+                            return conn ? global.ensureServerCtx(conn) : undefined
                           })
                           const sdk = createMemo(() => serverCtx()?.sdk ?? null)
                           const cachedSession = createMemo(() => {
@@ -562,7 +562,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                             createRoot((dispose) => {
                               try {
                                 void ctx.sync
-                                  .createDirSyncContext(sess.directory)
+                                  .ensureDirSyncContext(sess.directory)
                                   .session.sync(sess.id)
                                   .catch(() => {})
                                   .finally(dispose)
@@ -923,7 +923,7 @@ function TabNavItem(props: {
   const global = useGlobal()
   const serverCtx = createMemo(() => {
     const conn = global.servers.list().find((item) => ServerConnection.key(item) === props.server)
-    if (conn) return global.createServerCtx(conn)
+    if (conn) return global.ensureServerCtx(conn)
   })
 
   return (

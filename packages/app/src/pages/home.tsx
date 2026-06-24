@@ -154,7 +154,7 @@ export function NewHome() {
   const focusedServerCtx = createMemo(() => {
     const conn = focusedServer()
     if (!conn) return
-    return global.createServerCtx(conn)
+    return global.ensureServerCtx(conn)
   })
   const focusedSync = () => focusedServerCtx()?.sync ?? sync()
   const projects = createMemo(() => focusedServerCtx()?.projects.list() ?? layout.projects.list())
@@ -216,7 +216,7 @@ export function NewHome() {
         prefetched.add(key)
         createRoot((dispose) => {
           try {
-            const directory = ctx.sync.createDirSyncContext(record.session.directory)
+            const directory = ctx.sync.ensureDirSyncContext(record.session.directory)
             void directory.session
               .sync(record.session.id)
               .then(() => {
@@ -288,7 +288,7 @@ export function NewHome() {
     const key = ServerConnection.key(conn)
     if (
       !global
-        .createServerCtx(conn)
+        .ensureServerCtx(conn)
         .projects.list()
         .some((project) => project.worktree === directory)
     )
@@ -299,7 +299,7 @@ export function NewHome() {
   function addProjects(conn: ServerConnection.Any, directories: string[]) {
     const directory = directories[0]
     if (!directory) return
-    const ctx = global.createServerCtx(conn)
+    const ctx = global.ensureServerCtx(conn)
     directories.forEach(ctx.projects.open)
     ctx.projects.touch(directory)
     setSelection({ server: ServerConnection.key(conn), directory })
@@ -313,7 +313,7 @@ export function NewHome() {
   }
 
   function openProjectNewSession(conn: ServerConnection.Any, directory: string) {
-    const ctx = global.createServerCtx(conn)
+    const ctx = global.ensureServerCtx(conn)
     ctx.projects.open(directory)
     ctx.projects.touch(directory)
     tabs.newDraft({ server: ServerConnection.key(conn), directory })
@@ -342,7 +342,7 @@ export function NewHome() {
     const conn = focusedServer()
     if (!conn) return
     const directory = project?.worktree ?? session.directory
-    const ctx = global.createServerCtx(conn)
+    const ctx = global.ensureServerCtx(conn)
     global.sessionPlacement.set({
       server: ServerConnection.key(conn),
       leafID: session.id,
@@ -391,7 +391,7 @@ export function NewHome() {
             const next = closeHomeProject(
               state.selection,
               ServerConnection.key(conn),
-              global.createServerCtx(conn).projects,
+              global.ensureServerCtx(conn).projects,
               directory,
             )
             if (next) setSelection(next)
@@ -528,7 +528,7 @@ function HomeProjectColumn(props: {
           {(item) => {
             const key = ServerConnection.key(item)
             const healthy = () => !!global.servers.health[key]?.healthy
-            const serverCtx = global.createServerCtx(item)
+            const serverCtx = global.ensureServerCtx(item)
             const collapsed = () => !!state.collapsed[key]
             return (
               <div class="flex max-h-[min(572px,calc(100vh_-_300px))] min-w-0 flex-col gap-1 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -1204,7 +1204,7 @@ export function LegacyHome() {
   })
 
   function openProject(server: ServerConnection.Any, directory: string) {
-    const serverCtx = global.createServerCtx(server)
+    const serverCtx = global.ensureServerCtx(server)
     serverCtx.projects.open(directory)
     serverCtx.projects.touch(directory)
     navigate(`/${base64Encode(directory)}`)
