@@ -1,3 +1,4 @@
+import { statSync } from "node:fs"
 import { isAbsolute, resolve } from "path"
 import type { ToolCall, ToolCallContent, ToolCallLocation, ToolCallUpdate, ToolKind } from "@agentclientprotocol/sdk"
 
@@ -75,10 +76,10 @@ export function toLocations(toolName: string, input: ToolInput, cwd?: string): T
 
   switch (tool) {
     case "bash":
-    case "shell": {
-      const workdir = shellWorkdir(input, cwd)
-      return workdir ? [{ path: workdir }] : []
-    }
+    case "shell":
+      // Workdir is a directory; Zed expects file locations and logs an error
+      // when it tries to read bytes from a directory. Expose it via rawInput.cwd instead.
+      return []
 
     case "read":
     case "edit":
@@ -93,7 +94,7 @@ export function toLocations(toolName: string, input: ToolInput, cwd?: string): T
     case "context":
     case "context7_resolve_library_id":
     case "context7_get_library_docs":
-      return locationFrom(input.path)
+      return locationFrom(input.path).filter(isFileLocation)
 
     default:
       return []
@@ -309,6 +310,14 @@ export const buildRunningToolUpdate = runningToolUpdate
 export const buildDuplicateRunningToolUpdate = duplicateRunningToolUpdate
 export const buildCompletedToolUpdate = completedToolUpdate
 export const buildErrorToolUpdate = errorToolUpdate
+
+function isFileLocation(location: ToolCallLocation): boolean {
+  try {
+    return statSync(location.path).isFile()
+  } catch {
+    return false
+  }
+}
 
 function locationFrom(...values: unknown[]): ToolCallLocation[] {
   return Array.from(
