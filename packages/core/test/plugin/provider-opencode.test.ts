@@ -121,6 +121,11 @@ describe("OpencodePlugin", () => {
       ({ authorization, server }) =>
         Effect.gen(function* () {
           const credentials = yield* Credential.Service
+          const catalog = yield* Catalog.Service
+          yield* catalog.transform((draft) => {
+            draft.provider.update(ProviderV2.ID.make("remote"), () => {})
+            draft.model.update(ProviderV2.ID.make("remote"), ModelV2.ID.make("stale"), () => {})
+          })
           yield* credentials.create({
             integrationID: Integration.ID.make("opencode"),
             value: new Credential.Key({
@@ -132,7 +137,6 @@ describe("OpencodePlugin", () => {
 
           yield* addPlugin()
 
-          const catalog = yield* Catalog.Service
           const provider = required(yield* catalog.provider.get(ProviderV2.ID.make("remote")))
           expect(provider).toMatchObject({
             name: "Remote",
@@ -168,6 +172,7 @@ describe("OpencodePlugin", () => {
           expect(
             required(yield* catalog.model.get(ProviderV2.ID.make("remote"), ModelV2.ID.make("disabled"))).enabled,
           ).toBe(false)
+          expect(yield* catalog.model.get(ProviderV2.ID.make("remote"), ModelV2.ID.make("stale"))).toBeUndefined()
           expect(authorization).toContain("Bearer secret")
         }),
       ({ server }) => Effect.promise(() => server.stop(true)),
