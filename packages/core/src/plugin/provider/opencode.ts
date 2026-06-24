@@ -169,7 +169,7 @@ export const OpencodePlugin = define<HttpClient.HttpClient | EventV2.Service | S
           if (item.api !== undefined) provider.api = { ...item.api }
           if (item.request !== undefined) {
             Object.assign(provider.request.headers, item.request.headers)
-            Object.assign(provider.request.body, item.request.body)
+            Object.assign(provider.request.body, withoutApiKey(item.request.body))
           }
         })
         const providerApi = catalog.provider.get(providerID)?.provider.api
@@ -191,7 +191,7 @@ export const OpencodePlugin = define<HttpClient.HttpClient | EventV2.Service | S
             if (config.request !== undefined) {
               ModelRequest.assign(model.request, {
                 headers: config.request.headers,
-                ...ModelRequest.normalizeAiSdkOptions(packageName, config.request.body ?? {}),
+                ...ModelRequest.normalizeAiSdkOptions(packageName, withoutApiKey(config.request.body)),
               })
               if (config.request.variant !== undefined) model.request.variant = config.request.variant
             }
@@ -204,7 +204,7 @@ export const OpencodePlugin = define<HttpClient.HttpClient | EventV2.Service | S
                 }
                 ModelRequest.assign(existing, {
                   headers: variant.headers,
-                  ...ModelRequest.normalizeAiSdkOptions(packageName, variant.body ?? {}),
+                  ...ModelRequest.normalizeAiSdkOptions(packageName, withoutApiKey(variant.body)),
                 })
               }
             }
@@ -267,6 +267,10 @@ function fetchProviders(http: HttpClient.HttpClient, value: CredentialValue) {
         )
       }),
     )
+}
+
+function withoutApiKey(body: Readonly<Record<string, unknown>> | undefined) {
+  return Object.fromEntries(Object.entries(body ?? {}).filter(([key]) => key !== "apiKey"))
 }
 
 function poll(http: HttpClient.HttpClient, server: string, deviceCode: string, interval: Duration.Duration) {

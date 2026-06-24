@@ -86,8 +86,13 @@ describe("OpencodePlugin", () => {
                   providers: {
                     remote: {
                       name: "Remote",
+                      request: { body: { apiKey: "centralized-secret", custom: "value" } },
                       models: {
-                        model: { name: "Remote Model" },
+                        model: {
+                          name: "Remote Model",
+                          request: { body: { apiKey: "model-secret", temperature: 0.5 } },
+                          variants: [{ id: "high", body: { apiKey: "variant-secret", temperature: 0.2 } }],
+                        },
                       },
                     },
                   },
@@ -115,10 +120,13 @@ describe("OpencodePlugin", () => {
           expect(yield* catalog.provider.get(ProviderV2.ID.make("remote"))).toMatchObject({
             name: "Remote",
             integrationID: "opencode",
+            request: { body: { custom: "value" } },
           })
-          expect((yield* catalog.model.get(ProviderV2.ID.make("remote"), ModelV2.ID.make("model")))?.name).toBe(
-            "Remote Model",
-          )
+          expect(yield* catalog.model.get(ProviderV2.ID.make("remote"), ModelV2.ID.make("model"))).toMatchObject({
+            name: "Remote Model",
+            request: { body: { custom: "value" }, generation: { temperature: 0.5 } },
+            variants: [{ id: "high", body: {}, generation: { temperature: 0.2 } }],
+          })
           expect(authorization).toContain("Bearer secret")
         }),
       ({ server }) => Effect.promise(() => server.stop(true)),
