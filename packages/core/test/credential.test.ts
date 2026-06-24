@@ -14,7 +14,7 @@ describe("Credential", () => {
       const created = yield* credentials.create({
         integrationID,
         label: "Work",
-        value: new Credential.Key({ type: "key", key: "secret" }),
+        value: Credential.Key.make({ type: "key", key: "secret" }),
       })
 
       expect(yield* credentials.list(integrationID)).toEqual([created])
@@ -24,7 +24,7 @@ describe("Credential", () => {
       const replacement = yield* credentials.create({
         integrationID,
         label: "Replacement",
-        value: new Credential.Key({ type: "key", key: "replacement" }),
+        value: Credential.Key.make({ type: "key", key: "replacement" }),
       })
       expect(yield* credentials.list(integrationID)).toEqual([replacement])
 

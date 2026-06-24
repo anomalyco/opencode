@@ -1,18 +1,25 @@
 import { createEffect, Suspense, type ParentProps } from "solid-js"
-import { useNavigate } from "@solidjs/router"
+import { useNavigate, useParams } from "@solidjs/router"
 import { DebugBar } from "@/components/debug-bar"
 import { HelpButton } from "@/components/help-button"
 import { Titlebar, type TitlebarUpdate } from "@/components/titlebar"
+import { useNotification } from "@/context/notification"
 import { usePlatform } from "@/context/platform"
 import { setNavigate } from "@/utils/notification-click"
 import { setV2Toast, ToastRegion } from "@/utils/toast"
 
 export default function NewLayout(props: ParentProps) {
   const platform = usePlatform()
+  const notification = useNotification()
   const navigate = useNavigate()
+  const params = useParams<{ id?: string }>()
   setNavigate(navigate)
 
   createEffect(() => setV2Toast(true))
+  createEffect(() => {
+    if (!notification.ready() || !params.id) return
+    notification.session.markViewed(params.id)
+  })
 
   const update: TitlebarUpdate = {
     version: () => {

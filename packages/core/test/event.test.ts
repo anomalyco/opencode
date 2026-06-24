@@ -4,9 +4,8 @@ import { EventV2 } from "@opencode-ai/core/event"
 import { Database } from "@opencode-ai/core/database/database"
 import { EventSequenceTable, EventTable } from "@opencode-ai/core/event/sql"
 import { Location } from "@opencode-ai/core/location"
-import { AbsolutePath } from "@opencode-ai/core/schema"
+import { AbsolutePath, DateTimeUtcFromMillis } from "@opencode-ai/core/schema"
 import { WorkspaceV2 } from "@opencode-ai/core/workspace"
-import { V2Schema } from "@opencode-ai/core/v2-schema"
 import { eq } from "drizzle-orm"
 import { location } from "./fixture/location"
 import { testEffect } from "./lib/effect"
@@ -79,24 +78,11 @@ const SyncTimestamp = EventV2.define({
   },
   schema: {
     id: Schema.String,
-    timestamp: V2Schema.DateTimeUtcFromMillis,
+    timestamp: DateTimeUtcFromMillis,
   },
 })
 
 describe("EventV2", () => {
-  it.effect("derives stable namespaced external IDs", () =>
-    Effect.sync(() => {
-      const input = { namespace: "opencord.agent-input", key: "input-1" }
-
-      expect(EventV2.ID.fromExternal(input)).toBe(EventV2.ID.fromExternal(input))
-      expect(EventV2.ID.fromExternal(input)).toMatch(/^evt_[a-f0-9]{64}$/)
-      expect(EventV2.ID.fromExternal({ ...input, namespace: "another-app" })).not.toBe(EventV2.ID.fromExternal(input))
-      expect(EventV2.ID.fromExternal({ namespace: "a:b", key: "c" })).not.toBe(
-        EventV2.ID.fromExternal({ namespace: "a", key: "b:c" }),
-      )
-    }),
-  )
-
   it.effect("publishes events with the current location", () =>
     Effect.gen(function* () {
       const events = yield* EventV2.Service

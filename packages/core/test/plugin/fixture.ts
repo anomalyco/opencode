@@ -9,6 +9,7 @@ import { RepositoryCache } from "@opencode-ai/core/repository-cache"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { SkillDiscovery } from "@opencode-ai/core/skill/discovery"
 import { Effect, Layer } from "effect"
+import { FetchHttpClient } from "effect/unstable/http"
 import { tempLocationLayer } from "../fixture/location"
 
 export const PluginTestLayer = Layer.mergeAll(FileSystem.locationLayer, PluginV2.locationLayer).pipe(
@@ -16,6 +17,7 @@ export const PluginTestLayer = Layer.mergeAll(FileSystem.locationLayer, PluginV2
     Layer.mergeAll(
       Credential.defaultLayer,
       EventV2.defaultLayer,
+      FetchHttpClient.layer,
       FSUtil.defaultLayer,
       Global.defaultLayer,
       Layer.succeed(

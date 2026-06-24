@@ -647,7 +647,7 @@ export const layer = Layer.effect(
         }
         const timeout = requestTimeout(s, clientName, mcpConfig, defaultTimeout)
         for (const mcpTool of listed) {
-          const key = "mcp__" + McpCatalog.sanitize(clientName) + "__" + McpCatalog.sanitize(mcpTool.name)
+          const key = McpCatalog.sanitize(clientName) + "_" + McpCatalog.sanitize(mcpTool.name)
           result[key] = McpCatalog.convertTool(mcpTool, client, timeout)
         }
       }

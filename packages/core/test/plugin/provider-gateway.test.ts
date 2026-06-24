@@ -43,7 +43,7 @@ describe("GatewayPlugin", () => {
       const aisdk = yield* AISDK.Service
       yield* addPlugin()
       const result = yield* aisdk.runSDK({
-        model: new ModelV2.Info({
+        model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.make("gateway"), ModelV2.ID.make("model")),
           api: { id: ModelV2.ID.make("model"), type: "aisdk", package: "test-provider" },
         }),
@@ -63,7 +63,7 @@ describe("GatewayPlugin", () => {
       yield* addPlugin()
 
       const result = yield* aisdk.runSDK({
-        model: new ModelV2.Info({
+        model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.make("vercel"), ModelV2.ID.make("anthropic/claude-sonnet-4")),
           api: {
             id: ModelV2.ID.make("anthropic/claude-sonnet-4"),
@@ -89,7 +89,7 @@ describe("GatewayPlugin", () => {
 
       for (const modelID of vercelGatewayModels) {
         const ignored = yield* aisdk.runSDK({
-          model: new ModelV2.Info({
+          model: ModelV2.Info.make({
             ...ModelV2.Info.empty(ProviderV2.ID.make("vercel"), ModelV2.ID.make(modelID)),
             api: { id: ModelV2.ID.make(modelID), type: "aisdk", package: "test-provider" },
           }),
@@ -99,7 +99,7 @@ describe("GatewayPlugin", () => {
         expect(ignored.sdk).toBeUndefined()
 
         const result = yield* aisdk.runSDK({
-          model: new ModelV2.Info({
+          model: ModelV2.Info.make({
             ...ModelV2.Info.empty(ProviderV2.ID.make("vercel"), ModelV2.ID.make(modelID)),
             api: { id: ModelV2.ID.make(modelID), type: "aisdk", package: "test-provider" },
           }),

@@ -509,7 +509,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
 export function createServerSyncContext(serverSDK: ServerSDK) {
   const inner = createServerSyncContextInner(serverSDK)
   return Object.assign(inner, {
-    createDirSyncContext: createRefCountMap(
+    ensureDirSyncContext: createRefCountMap(
       (dir) => createDirSyncContext(dir, inner, serverSDK),
       (dir) => inner.disableMcp(dir),
       directoryKey,
@@ -531,7 +531,7 @@ export const { use: useServerSync, provider: ServerSyncProvider } = createSimple
     return createMemo<ServerSync>(() => {
       const conn = props.server?.() ?? server.current
       if (!conn) throw new Error(language.t("error.serverSDK.noServerAvailable"))
-      return global.createServerCtx(conn).sync
+      return global.ensureServerCtx(conn).sync
     })
   },
 })
