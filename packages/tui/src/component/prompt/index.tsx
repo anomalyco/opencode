@@ -9,7 +9,7 @@ import {
   type Renderable,
 } from "@opentui/core"
 import type { CommandContext } from "@opentui/keymap"
-import { createEffect, createMemo, onMount, createSignal, onCleanup, on, Show, Switch, Match } from "solid-js"
+import { createEffect, createMemo, onMount, createSignal, onCleanup, on, Show, Switch, Match, For } from "solid-js"
 import "opentui-spinner/solid"
 import path from "path"
 import { fileURLToPath } from "url"
@@ -24,6 +24,7 @@ import { useSDK } from "../../context/sdk"
 import { useRoute } from "../../context/route"
 import { useProject } from "../../context/project"
 import { useSync } from "../../context/sync"
+import { useChain } from "../../context/chain"
 import { useEvent } from "../../context/event"
 import { editorSelectionKey, useEditorContext, type EditorSelection } from "../../context/editor"
 import { normalizePromptContent, openEditor } from "../../editor"
@@ -153,6 +154,7 @@ export function Prompt(props: PromptProps) {
   const route = useRoute()
   const project = useProject()
   const sync = useSync()
+  const chain = useChain()
   const tuiConfig = useTuiConfig()
   const dialog = useDialog()
   const toast = useToast()
@@ -208,6 +210,8 @@ export function Prompt(props: PromptProps) {
   const [cursorVersion, setCursorVersion] = createSignal(0)
   const currentProviderLabel = createMemo(() => local.model.parsed().provider)
   const hasRightContent = createMemo(() => Boolean(props.right))
+  // Id of the queued chain job currently being edited in the prompt, if any.
+  const [editingJobID, setEditingJobID] = createSignal<string>()
 
   function promptModelWarning() {
     toast.show({
@@ -224,6 +228,43 @@ export function Prompt(props: PromptProps) {
     setDismissedEditorSelectionKey(editorSelectionKey(editorContext()))
     editor.clearSelection()
   }
+
+  // Load a queued chain job's text into the prompt for editing. Stashes any
+  // in-progress draft so it can be restored when the edit finishes/cancels.
+  let editStash: { input: string; parts: PromptInfo["parts"] } | undefined
+  function beginEditJob(jobID: string) {
+    if (editingJobID()) return
+    const job = chain.jobs.find((j) => j.id === jobID)
+    if (!job) return
+    editStash = { input: store.prompt.input, parts: unwrap(store.prompt.parts) }
+    setEditingJobID(jobID)
+    input.setText(job.text)
+    input.extmarks.clear()
+    setStore("prompt", { input: job.text, parts: [] })
+    setStore("extmarkToPartIndex", new Map())
+    input.gotoBufferEnd()
+  }
+  function endEditJob() {
+    setEditingJobID(undefined)
+    const restore = editStash
+    editStash = undefined
+    input.extmarks.clear()
+    input.setText(restore?.input ?? "")
+    setStore("prompt", { input: restore?.input ?? "", parts: restore?.parts ?? [] })
+    setStore("extmarkToPartIndex", new Map())
+    restoreExtmarksFromParts(restore?.parts ?? [])
+    input.gotoBufferEnd()
+  }
+
+  // If the job being edited gets consumed (its turn starts) mid-edit, discard
+  // the edit, restore the previous draft, and tell the user it already ran.
+  createEffect(() => {
+    const id = editingJobID()
+    if (!id) return
+    if (chain.has(id)) return
+    endEditJob()
+    toast.show({ message: "Queued message already started; edit discarded", variant: "warning" })
+  })
   const fileStyleId = syntax().getStyleId("extmark.file")!
   const agentStyleId = syntax().getStyleId("extmark.agent")!
   const pasteStyleId = syntax().getStyleId("extmark.paste")!
@@ -619,7 +660,11 @@ export function Prompt(props: PromptProps) {
   })
 
   onCleanup(() => {
-    if (store.prompt.input) {
+    // Mid-edit unmount: the input holds the queued message's text, not the
+    // user's draft. Stash the original draft (saved in editStash) instead.
+    if (editingJobID() && editStash) {
+      if (editStash.input) stashed = { prompt: { input: editStash.input, parts: editStash.parts }, cursor: 0 }
+    } else if (store.prompt.input) {
       stashed = { prompt: unwrap(store.prompt), cursor: input.cursorOffset }
     }
     setInputTarget(undefined)
@@ -845,6 +890,14 @@ export function Prompt(props: PromptProps) {
   useBindings(() => {
     return {
       target: inputTarget,
+      enabled: inputTarget() !== undefined && editingJobID() !== undefined,
+      bindings: [{ key: "escape", desc: "Cancel edit", group: "Prompt", cmd: () => endEditJob() }],
+    }
+  })
+
+  useBindings(() => {
+    return {
+      target: inputTarget,
       enabled: (() => {
         cursorVersion()
         return inputTarget() !== undefined && store.mode === "shell" && input?.visualCursor.offset === 0
@@ -948,6 +1001,57 @@ export function Prompt(props: PromptProps) {
       setStore("prompt", "input", input.plainText)
       syncExtmarksWithPromptParts()
     }
+
+    // Editing a queued chain message: Enter applies the new text (or cancels if
+    // emptied) and returns to the normal prompt — never sends to the session.
+    const editingID = editingJobID()
+    if (editingID) {
+      if (auto()?.visible) return false
+      const next = store.prompt.input.trim()
+      if (next) chain.update(editingID, next)
+      else toast.show({ message: "Empty edit ignored; queued message unchanged", variant: "info" })
+      endEditJob()
+      return true
+    }
+
+    // /queue-edit-N: open queued message N (1-based) for editing. Handled before
+    // session creation since it only manipulates the existing queue.
+    const editMatch = /^\/queue-edit-(\d+)\s*$/.exec(store.prompt.input.trim())
+    if (editMatch) {
+      const index = Number(editMatch[1]) - 1
+      const job = chain.jobs[index]
+      if (!job) {
+        toast.show({ message: `No queued message #${editMatch[1]}`, variant: "warning" })
+        return false
+      }
+      input.clear()
+      input.extmarks.clear()
+      setStore("prompt", { input: "", parts: [] })
+      setStore("extmarkToPartIndex", new Map())
+      beginEditJob(job.id)
+      return true
+    }
+
+    // /queue-remove-X: drop queued message X (1-based) from the queue. If it is
+    // the one currently being edited, the edit is cancelled via endEditJob.
+    const removeMatch = /^\/queue-remove-(\d+)\s*$/.exec(store.prompt.input.trim())
+    if (removeMatch) {
+      const index = Number(removeMatch[1]) - 1
+      const job = chain.jobs[index]
+      if (!job) {
+        toast.show({ message: `No queued message #${removeMatch[1]}`, variant: "warning" })
+        return false
+      }
+      if (editingJobID() === job.id) endEditJob()
+      chain.remove(job.id)
+      input.clear()
+      input.extmarks.clear()
+      setStore("prompt", { input: "", parts: [] })
+      setStore("extmarkToPartIndex", new Map())
+      toast.show({ message: `Removed queued message #${removeMatch[1]}`, variant: "info" })
+      return true
+    }
+
     if (props.disabled) return false
     if (workspace.creating() || move.creating()) return false
     if (auto()?.visible) return false
@@ -1029,6 +1133,35 @@ export function Prompt(props: PromptProps) {
 
     // Filter out text parts (pasted content) since they're now expanded inline
     const nonTextParts = store.prompt.parts.filter((part) => part.type !== "text")
+
+    // Intercept chained queue commands before any server call so the argument
+    // text is captured and nothing is sent into the current turn. Longest names
+    // first so /queue-com and /queue-new win over the /queue prefix.
+    const chainMatch = /^\/(queue-com|queue-new|queue)(?:\s+([\s\S]*))?$/.exec(inputText.trim())
+    if (chainMatch) {
+      if (!props.sessionID) {
+        toast.show({ message: "Chained messages need an active session", variant: "warning" })
+        return false
+      }
+      const text = (chainMatch[2] ?? "").trim()
+      if (!text) {
+        toast.show({ message: `Usage: /${chainMatch[1]} <message>`, variant: "warning" })
+        return false
+      }
+      chain.enqueue({
+        kind: chainMatch[1] === "queue-com" ? "compact" : chainMatch[1] === "queue-new" ? "fresh" : "followup",
+        text,
+        parts: nonTextParts.filter((part) => part.type === "file"),
+        sessionID: props.sessionID,
+      })
+      history.append({ ...store.prompt, mode: store.mode })
+      input.extmarks.clear()
+      setStore("prompt", { input: "", parts: [] })
+      setStore("extmarkToPartIndex", new Map())
+      input.clear()
+      props.onSubmit?.()
+      return true
+    }
 
     // Capture mode before it gets reset
     const currentMode = store.mode
@@ -1281,6 +1414,7 @@ export function Prompt(props: PromptProps) {
 
   const highlight = createMemo(() => {
     if (leader()) return theme.border
+    if (editingJobID()) return theme.primary
     if (store.mode === "shell") return theme.primary
     const agent = local.agent.current()
     if (!agent) return theme.border
@@ -1304,6 +1438,11 @@ export function Prompt(props: PromptProps) {
 
   const placeholderText = createMemo(() => {
     if (props.showPlaceholder === false) return undefined
+    if (editingJobID()) {
+      const index = chain.jobs.findIndex((j) => j.id === editingJobID())
+      if (index === -1) return `Editing queued message — Enter to apply, Esc to cancel`
+      return `Editing queued message #${index + 1} — Enter to apply, Esc to cancel`
+    }
     if (store.mode === "shell") {
       if (!shell().length) return undefined
       const example = shell()[store.placeholder % shell().length]
@@ -1351,6 +1490,41 @@ export function Prompt(props: PromptProps) {
             bottomLeft: "╹",
           }}
         >
+          <Show when={chain.jobs.length > 0}>
+            <box paddingLeft={2} paddingRight={2} paddingTop={1} flexShrink={0} gap={0} backgroundColor={theme.backgroundElement}>
+              <For each={chain.jobs}>
+                {(job, index) => {
+                  const being = createMemo(() => editingJobID() === job.id)
+                  const kindTag = job.kind === "compact" ? "com" : job.kind === "fresh" ? "new" : "queue"
+                  const oneLine = createMemo(() =>
+                    Locale.truncate(
+                      job.text.replace(/\s+/g, " ").trim(),
+                      Math.max(10, Math.floor(dimensions().width) - 16),
+                    ),
+                  )
+                  return (
+                    <box
+                      flexDirection="row"
+                      gap={1}
+                      border={["left"]}
+                      borderColor={being() ? theme.primary : theme.border}
+                      customBorderChars={SplitBorder.customBorderChars}
+                      paddingLeft={1}
+                    >
+                      <text fg={theme.textMuted}>
+                        <span style={{ fg: being() ? theme.primary : theme.textMuted, bold: true }}>{`${index() + 1})`}</span>
+                        <span style={{ fg: theme.textMuted }}>{` [${kindTag}] `}</span>
+                        <span style={{ fg: being() ? theme.text : theme.textMuted }}>{oneLine()}</span>
+                        <Show when={being()}>
+                          <span style={{ fg: theme.primary }}> — editing</span>
+                        </Show>
+                      </text>
+                    </box>
+                  )
+                }}
+              </For>
+            </box>
+          </Show>
           <box
             paddingLeft={2}
             paddingRight={2}

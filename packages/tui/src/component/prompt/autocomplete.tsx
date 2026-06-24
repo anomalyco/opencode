@@ -9,6 +9,7 @@ import { useEditorContext } from "../../context/editor"
 import { useProject } from "../../context/project"
 import { useSDK } from "../../context/sdk"
 import { useSync } from "../../context/sync"
+import { useChain } from "../../context/chain"
 import { useData } from "../../context/data"
 import { getScrollAcceleration } from "../../util/scroll"
 import { useTuiPaths } from "../../context/runtime"
@@ -87,6 +88,7 @@ export function Autocomplete(props: {
   const editor = useEditorContext()
   const sdk = useSDK()
   const sync = useSync()
+  const chain = useChain()
   const data = useData()
   const project = useProject()
   const slashes = useCommandSlashes()
@@ -446,6 +448,46 @@ export function Autocomplete(props: {
 
   const commands = createMemo((): AutocompleteOption[] => {
     const results: AutocompleteOption[] = [...slashes()]
+
+    if (props.sessionID) {
+      const insertCommand = (name: string) => {
+        const newText = "/" + name + " "
+        const cursor = props.input().logicalCursor
+        props.input().deleteRange(0, 0, cursor.row, cursor.col)
+        props.input().insertText(newText)
+        props.input().cursorOffset = Bun.stringWidth(newText)
+      }
+      results.push(
+        {
+          display: "/queue",
+          description: "Run a follow-up in this chat after the agent fully finishes answering",
+          onSelect: () => insertCommand("queue"),
+        },
+        {
+          display: "/queue-com",
+          description: "Compact this session, then run a follow-up with only the summary as context",
+          onSelect: () => insertCommand("queue-com"),
+        },
+        {
+          display: "/queue-new",
+          description: "Run a follow-up in a brand-new conversation after this turn finishes",
+          onSelect: () => insertCommand("queue-new"),
+        },
+      )
+      chain.jobs.forEach((job, index) => {
+        const preview = job.text.replace(/\s+/g, " ").slice(0, 40)
+        results.push({
+          display: `/queue-edit-${index + 1}`,
+          description: `Edit queued message #${index + 1}: ${preview}`,
+          onSelect: () => insertCommand(`queue-edit-${index + 1}`),
+        })
+        results.push({
+          display: `/queue-remove-${index + 1}`,
+          description: `Remove queued message #${index + 1}: ${preview}`,
+          onSelect: () => insertCommand(`queue-remove-${index + 1}`),
+        })
+      })
+    }
 
     for (const serverCommand of sync.data.command) {
       if (serverCommand.source === "skill") continue

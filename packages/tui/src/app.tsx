@@ -37,6 +37,7 @@ import { SyncProvider, useSync } from "./context/sync"
 import { DataProvider } from "./context/data"
 import { LocationProvider } from "./context/location"
 import { LocalProvider, useLocal } from "./context/local"
+import { ChainProvider } from "./context/chain"
 import { DialogModel } from "./component/dialog-model"
 import { useConnected } from "./component/use-connected"
 import { DialogMcp } from "./component/dialog-mcp"
@@ -298,6 +299,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                               <DataProvider>
                                                 <ThemeProvider mode={mode}>
                                                   <LocalProvider>
+                                                   <ChainProvider>
                                                     <PromptStashProvider>
                                                       <DialogProvider>
                                                         <FrecencyProvider>
@@ -316,6 +318,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                                         </FrecencyProvider>
                                                       </DialogProvider>
                                                     </PromptStashProvider>
+                                                   </ChainProvider>
                                                   </LocalProvider>
                                                 </ThemeProvider>
                                               </DataProvider>

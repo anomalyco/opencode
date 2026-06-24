@@ -156,3 +156,39 @@ const table = sqliteTable("session", {
 - Keep delivery vocabulary explicit. Prompts steer by default and promote at the next safe provider-turn boundary while the current drain requires continuation. An explicit `queue` input remains pending until the Session would otherwise become idle; promote one queued input at that boundary, then reevaluate continuation before promoting another. Promoting any new user input resets the selected agent's provider-turn allowance; a batch of steers resets it once.
 - Keep EventV2 replay owner claims separate from clustered Session execution ownership.
 - Keep the System Context algebra, registry, and built-ins in `src/system-context`; keep Context Source producers with their observed domains, and keep Session History selection plus Context Epoch persistence Session-owned.
+
+## Custom Features
+
+These are project-specific features added on top of upstream opencode. Document any new one here so future agents can extend it without re-deriving the design.
+
+### Queued follow-ups (the "chain" feature)
+
+**What it does.** Lets the user queue follow-up messages from the prompt that fire **only after the agent has completely finished the current turn** — not mid-turn. The default TUI behavior of typing while busy uses `steer` delivery, which can inject between provider steps; the chain feature instead waits for true idle. Messages chain: each waits its turn, runs to full completion, then the next runs. Mixed permutations of the three variants chain correctly.
+
+**Three variants (slash commands typed in the prompt):**
+
+- `/queue <msg>` — kind `"followup"`. Plain follow-up in the **same** session, sent after the current turn fully completes.
+- `/queue-com <msg>` — kind `"compact"`. Compacts the **same** session first (a compaction checkpoint slices model context server-side and renders as the visible boundary), then answers in place. No new chat.
+- `/queue-new <msg>` — kind `"fresh"`. Opens a **brand-new standalone** session and answers there. Must NOT set `parentID` — a `parentID` makes opencode render the session as a sub-agent and hides the prompt input (see `packages/tui/src/routes/session/index.tsx` `visible` memo, ~line 235).
+
+**Queue management commands:**
+
+- `/queue-edit-N` — load queued message N (1-based) into the prompt for editing. Enter applies (`chain.update`), empty input leaves it unchanged, Esc cancels. If the edited job is consumed mid-edit, the edit is discarded and the draft restored (a `createEffect` watches `chain.has(id)`).
+- `/queue-remove-N` — remove queued message N (1-based) from the queue. Cancels the edit first if that job is being edited.
+
+**Architecture (TUI-only; ephemeral — jobs live in memory, lost on TUI restart, like the upstream queue).**
+
+- `packages/tui/src/context/chain.tsx` — the orchestrator context (`ChainProvider` / `useChain`). Holds a `createStore` of `{ jobs: ChainJob[], running: boolean }`. Exposes `jobs`, `running`, `enqueue`, `update`, `remove`, `has`, `clear`.
+  - `pump()` is a single-flight async loop (guarded by `store.running`) that processes jobs FIFO. It threads a `head` session forward: a `fresh` job advances the head to its new session; `followup`/`compact` keep it. `head ?? job.sessionID` seeds the first job from where the command was typed.
+  - `dispatch(job, sourceID)` waits for the source turn to fully finish (`waitForIdle`), then per kind: `followup` → `prompt` same session; `compact` → `summarize` (which awaits compaction server-side before resolving, so no extra status polling) then `prompt`; `fresh` → `create` (no `parentID`) + `navigate` + `prompt`. Returns the session the message landed in (the next head).
+  - `waitForIdle`/`waitForBusy` poll `sync.session.status(sessionID)` (returns `"idle"`/`"working"`/`"compacting"`, see `packages/tui/src/context/sync.tsx` ~line 567). After each dispatch the pump calls `waitForBusy(ranIn)` so the next job doesn't read a stale `"idle"` from the just-finished turn.
+- `packages/tui/src/app.tsx` — `<ChainProvider>` is mounted just inside `<LocalProvider>`, **above** the session route, so a `/queue-new` navigation doesn't tear down the queue.
+- `packages/tui/src/component/prompt/index.tsx` — in `submitInner`, intercepts (before any server call) `/queue`, `/queue-com`, `/queue-new` (longest-name-first regex so prefixes don't collide), `/queue-edit-N`, and `/queue-remove-N`. Also: edit-mode state (`editingJobID` signal, `beginEditJob`/`endEditJob`), the mid-edit cancellation effect, the Esc-to-cancel binding, the edit-mode placeholder/highlight, and the per-job rectangles rendered above the input (`<For each={chain.jobs}>` with serial number, kind tag, one-line truncated text).
+- `packages/tui/src/component/prompt/autocomplete.tsx` — registers `/queue`, `/queue-com`, `/queue-new` static entries plus dynamic `/queue-edit-N` and `/queue-remove-N` entries (one pair per queued job, with a text preview). All gated on an active `sessionID`.
+
+**Key invariants for future edits:**
+
+- `parentID` must stay omitted for `fresh` sessions (else the prompt is hidden).
+- `session.create` takes `model: { id, providerID, variant }`; `session.prompt` takes `model: { providerID, modelID }`. Don't mix these.
+- `summarize` resolves only after compaction is written server-side — rely on the awaited promise, don't add status polling after it (a no-op summarize would otherwise stall on a `waitForBusy` timeout).
+- Reactivity: reads of `chain.jobs` / `chain.has(...)` inside a `createMemo`/`createEffect`/`<For>` are tracked by SolidJS dynamically; no need to wrap them.
