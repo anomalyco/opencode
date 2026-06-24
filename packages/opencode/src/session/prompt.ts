@@ -427,7 +427,7 @@ export const layer = Layer.effect(
         messageID: summaryUserMsg.id,
         sessionID,
         type: "text",
-        text: "Summarize the task tool output above and continue with your task.",
+        text: "Summarize the task tool output above and continue with your task. Respond in the same language as the conversation.",
         synthetic: true,
       } satisfies SessionV1.TextPart)
     })
@@ -465,7 +465,7 @@ export const layer = Layer.effect(
               id: PartID.ascending(),
               messageID: userMsg.id,
               sessionID: input.sessionID,
-              text: "The following tool was executed by the user",
+              text: "The following tool was executed by the user. Continue in the same language as the conversation.",
               synthetic: true,
             }
             yield* sessions.updatePart(userPart)
@@ -1315,7 +1315,7 @@ export const layer = Layer.effect(
                     "The user sent the following message:",
                     p.text,
                     "",
-                    "Please address this message and continue with your tasks.",
+                    "Please address this message and continue with your tasks. Respond in the same language as the user's message.",
                     "</system-reminder>",
                   ].join("\n")
                 }
