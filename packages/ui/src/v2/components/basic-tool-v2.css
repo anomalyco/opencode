@@ -5,12 +5,12 @@
 }
 
 [data-component="basic-tool-v2"] {
-  --bt-title: var(--text-text-base);
-  --bt-sep: var(--text-text-muted);
-  --bt-subtitle: var(--text-text-muted);
-  --bt-args: var(--text-text-muted);
-  --bt-chevron: var(--text-text-faint);
-  --bt-content: var(--text-text-muted);
+  --bt-title: var(--v2-text-text-base);
+  --bt-sep: var(--v2-text-text-muted);
+  --bt-subtitle: var(--v2-text-text-muted);
+  --bt-args: var(--v2-text-text-muted);
+  --bt-chevron: var(--v2-text-text-faint);
+  --bt-content: var(--v2-text-text-muted);
 
   box-sizing: border-box;
   display: flex;
@@ -40,7 +40,7 @@
   }
 
   [data-slot="basic-tool-v2-trigger"]:focus-visible {
-    outline: 2px solid var(--border-border-focus);
+    outline: 2px solid var(--v2-border-border-focus);
     outline-offset: 2px;
     border-radius: 2px;
   }

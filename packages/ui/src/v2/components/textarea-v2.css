@@ -10,8 +10,8 @@
   border-radius: 6px;
   outline: 1px solid transparent;
   outline-offset: 0;
-  background: linear-gradient(180deg, var(--alpha-light-2) 0%, var(--alpha-light-0) 100%), var(--background-bg-base);
-  box-shadow: var(--elevation-button-neutral);
+  background: linear-gradient(180deg, var(--v2-alpha-light-2) 0%, var(--v2-alpha-light-0) 100%), var(--v2-background-bg-base);
+  box-shadow: var(--v2-elevation-button-neutral);
   flex: none;
   align-self: stretch;
   transition:
@@ -22,17 +22,17 @@
 
 [data-component="textarea-v2"]:where(:hover):not([data-disabled], [data-invalid]):not(:focus-within) {
   background:
-    linear-gradient(0deg, var(--overlay-simple-overlay-hover), var(--overlay-simple-overlay-hover)),
-    linear-gradient(180deg, var(--alpha-light-2) 0%, var(--alpha-light-0) 100%), var(--background-bg-base);
+    linear-gradient(0deg, var(--v2-overlay-simple-overlay-hover), var(--v2-overlay-simple-overlay-hover)),
+    linear-gradient(180deg, var(--v2-alpha-light-2) 0%, var(--v2-alpha-light-0) 100%), var(--v2-background-bg-base);
 }
 
 [data-component="textarea-v2"]:where(:focus-within):not([data-disabled], [data-invalid]) {
-  outline-color: var(--border-border-focus);
+  outline-color: var(--v2-border-border-focus);
   box-shadow: none;
 }
 
 [data-component="textarea-v2"]:where([data-invalid]):not([data-disabled]) {
-  outline-color: var(--state-fg-danger);
+  outline-color: var(--v2-state-fg-danger);
   box-shadow: none;
 }
 
@@ -58,20 +58,20 @@
   font-size: 13px;
   line-height: 1.35;
   letter-spacing: -0.04px;
-  color: var(--text-text-base);
+  color: var(--v2-text-text-base);
   font-variation-settings: "slnt" 0;
 }
 
 [data-component="textarea-v2"] [data-slot="textarea-v2-textarea"]::placeholder {
-  color: var(--text-text-faint);
+  color: var(--v2-text-text-faint);
 }
 
 [data-component="textarea-v2"][data-invalid]:not([data-disabled]) [data-slot="textarea-v2-textarea"] {
-  color: var(--state-fg-danger);
-  caret-color: var(--state-fg-danger);
+  color: var(--v2-state-fg-danger);
+  caret-color: var(--v2-state-fg-danger);
 }
 
 [data-component="textarea-v2"][data-invalid]:not([data-disabled]) [data-slot="textarea-v2-textarea"]::placeholder {
-  color: var(--state-fg-danger);
+  color: var(--v2-state-fg-danger);
   opacity: 1;
 }
