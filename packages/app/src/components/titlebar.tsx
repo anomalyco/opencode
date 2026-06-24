@@ -421,22 +421,6 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                     if (next) tabs.select(next)
                   },
                 },
-                ...Array.from({ length: 9 }, (_, i) => {
-                  const index = i
-                  const number = index + 1
-                  return {
-                    id: `tab.${number}`,
-                    category: "tab",
-                    title: "",
-                    keybind: `mod+${number}`,
-                    disabled: layout.projects.list().length <= index,
-                    hidden: true,
-                    onSelect: () => {
-                      const tab = tabsStore[index]
-                      if (tab) tabs.select(tab)
-                    },
-                  }
-                }),
               ].filter((v) => v !== undefined)
             })
 
@@ -500,6 +484,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                       <For each={tabsStore}>
                         {(tab, i) => {
                           let ref!: HTMLDivElement
+                          useTabShortcut(i, () => tabs.select(tab))
 
                           const divider = () =>
                             i() !== 0 && (
@@ -852,6 +837,26 @@ function TitlebarUpdateIconButton(props: { state: TitlebarUpdatePillState }) {
       </button>
     </div>
   )
+}
+
+function useTabShortcut(index: () => number, onSelect: () => void) {
+  const command = useCommand()
+
+  command.register(() => {
+    const number = index() + 1
+    if (number > 9) return []
+
+    return [
+      {
+        id: `tab.${number}`,
+        category: "tab",
+        title: "",
+        keybind: `mod+${number}`,
+        hidden: true,
+        onSelect,
+      },
+    ]
+  })
 }
 
 function TabNavItem(props: {
