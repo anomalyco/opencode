@@ -22,7 +22,7 @@ import type { PromptInfo } from "../../prompt/history"
 import { useFrecency } from "../../prompt/frecency"
 import { useBindings, useCommandSlashes, useOpencodeModeStack } from "../../keymap"
 import { displayCharAt, mentionTriggerIndex } from "../../prompt/display"
-import type { FileSystemEntry } from "@opencode-ai/sdk/v2"
+import type { FileSystemEntry, ReferenceInfo } from "@opencode-ai/sdk/v2"
 
 function removeLineRange(input: string) {
   const hashIndex = input.lastIndexOf("#")
@@ -54,6 +54,29 @@ function extractLineRange(input: string) {
     },
     baseQuery: baseName,
   }
+}
+
+type ReferenceSearchReference = Pick<ReferenceInfo, "hidden" | "name" | "path">
+
+export function parseReferenceSearch(query: string, references: readonly ReferenceSearchReference[]) {
+  const slash = query.indexOf("/")
+  if (slash === -1) return
+
+  const alias = query.slice(0, slash)
+  if (!alias) return
+
+  const reference = references.find((item) => !item.hidden && item.name === alias)
+  if (!reference) return
+
+  return {
+    reference,
+    query: query.slice(slash + 1),
+    prefix: `${alias}/`,
+  }
+}
+
+function normalizeReferenceMentionPath(prefix: string, filePath: string) {
+  return prefix + filePath.replaceAll("\\", "/").replace(/\/$/, "")
 }
 
 export type AutocompleteRef = {
@@ -279,12 +302,11 @@ export function Autocomplete(props: {
 
   const references = createMemo(() => data.location.reference.list() ?? [])
 
-  const referenceMatch = createMemo(() => {
+  const referenceAliasMatch = createMemo(() => {
     if (!store.visible || store.visible === "/") return
     const { baseQuery } = extractLineRange(search())
-    const slash = baseQuery.indexOf("/")
-    const alias = slash === -1 ? baseQuery : baseQuery.slice(0, slash)
-    return references().find((item) => !item.hidden && item.name === alias)
+    if (baseQuery.includes("/")) return
+    return references().find((item) => !item.hidden && item.name === baseQuery)
   })
 
   function normalizeMentionPath(filePath: string) {
@@ -317,16 +339,18 @@ export function Autocomplete(props: {
     () => ({ query: search(), location: location() }),
     async (input) => {
       if (!store.visible || store.visible === "/") return []
-      if (referenceMatch()) return []
       const { lineRange, baseQuery } = extractLineRange(input.query ?? "")
+      if (referenceAliasMatch()) return []
+
+      const referenceSearch = parseReferenceSearch(baseQuery, references())
 
       // Get files from SDK
       const result = await sdk.client.v2.fs.find({
-        query: baseQuery,
+        query: referenceSearch?.query ?? baseQuery,
         limit: "20",
         location: {
-          directory: input.location?.directory,
-          workspace: input.location?.workspaceID ?? project.workspace.current(),
+          directory: referenceSearch?.reference.path ?? input.location?.directory,
+          workspace: referenceSearch ? undefined : input.location?.workspaceID ?? project.workspace.current(),
         },
       })
 
@@ -338,8 +362,11 @@ export function Autocomplete(props: {
         const width = props.anchor().width - 4
         options.push(
           ...result.data.data.map((item): AutocompleteOption => {
+            const mentionPath = referenceSearch
+              ? normalizeReferenceMentionPath(referenceSearch.prefix, item.path)
+              : item.path
             const { filename, part } = createFilePart(
-              item,
+              { path: mentionPath, type: item.type },
               path.join(result.data.location.directory, item.path),
               lineRange,
             )
@@ -347,7 +374,7 @@ export function Autocomplete(props: {
               display: Locale.truncateMiddle(filename, width),
               value: filename,
               isDirectory: item.type === "directory",
-              path: item.path,
+              path: mentionPath,
               onSelect: () => {
                 insertPart(filename, part)
               },
@@ -475,14 +502,14 @@ export function Autocomplete(props: {
 
   const options = createMemo((prev: AutocompleteOption[] | undefined) => {
     const filesValue = files()
-    const referenceMatchValue = referenceMatch()
+    const referenceAliasMatchValue = referenceAliasMatch()
     const agentsValue = agents()
     const referenceAliasesValue = referenceAliases()
     const commandsValue = commands()
     const searchValue = search()
 
-    if (store.visible === "@" && referenceMatchValue) {
-      return referenceAliasesValue.filter((item) => item.display === `@${referenceMatchValue.name}`)
+    if (store.visible === "@" && referenceAliasMatchValue) {
+      return referenceAliasesValue.filter((item) => item.display === `@${referenceAliasMatchValue.name}`)
     }
 
     // Files come from fff already fuzzy ranked and filtered
