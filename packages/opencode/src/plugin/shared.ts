@@ -290,6 +290,8 @@ export function readV1Plugin(
   if (tui !== undefined && typeof tui !== "function") {
     throw new TypeError(`Plugin ${spec} has invalid tui export`)
   }
+  if (mode === "detect" && kind === "server" && server === undefined) return
+  if (mode === "detect" && kind === "tui" && tui === undefined) return
   if (server !== undefined && tui !== undefined) {
     throw new TypeError(`Plugin ${spec} must default export either server() or tui(), not both`)
   }

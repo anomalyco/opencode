@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { parsePluginSpecifier } from "../../src/plugin/shared"
+import { parsePluginSpecifier, readV1Plugin } from "../../src/plugin/shared"
 
 describe("parsePluginSpecifier", () => {
   test("parses standard npm package without version", () => {
@@ -84,5 +84,23 @@ describe("parsePluginSpecifier", () => {
       pkg: "@opencode/acme",
       version: "latest",
     })
+  })
+})
+
+describe("readV1Plugin", () => {
+  test("skips plugins without the requested entrypoint in detect mode", () => {
+    const tuiOnly = { id: "demo.tui", tui: async () => {} }
+    const serverOnly = { id: "demo.server", server: async () => {} }
+
+    expect(readV1Plugin({ default: tuiOnly }, "demo-tui", "server", "detect")).toBeUndefined()
+    expect(readV1Plugin({ default: serverOnly }, "demo-server", "tui", "detect")).toBeUndefined()
+  })
+
+  test("still rejects missing entrypoints in strict mode", () => {
+    const tuiOnly = { id: "demo.tui", tui: async () => {} }
+
+    expect(() => readV1Plugin({ default: tuiOnly }, "demo-tui", "server")).toThrow(
+      "Plugin demo-tui must default export an object with server()",
+    )
   })
 })
