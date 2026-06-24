@@ -1,7 +1,12 @@
 export * as Reference from "./reference"
 
 import { Schema } from "effect"
+import { define } from "./event"
 import { AbsolutePath } from "./schema"
+
+export const Event = {
+  Updated: define({ type: "reference.updated", schema: {} }),
+}
 
 export interface LocalSource extends Schema.Schema.Type<typeof LocalSource> {}
 export const LocalSource = Schema.Struct({

@@ -18,9 +18,7 @@ export type GitSource = Reference.GitSource
 export const Source = Reference.Source
 export type Source = Reference.Source
 
-export const Event = {
-  Updated: EventV2.define({ type: "reference.updated", schema: {} }),
-}
+export const Event = Reference.Event
 
 export class Info extends Schema.Class<Info>("Reference.Info")({
   name: Schema.String,

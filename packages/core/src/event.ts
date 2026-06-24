@@ -93,7 +93,9 @@ export const layerWith = (options?: LayerOptions) =>
   Layer.effect(
     Service,
     Effect.gen(function* () {
-      const durableDefinitions = Event.durable([...EventManifest.Definitions, ...(options?.definitions ?? [])])
+      const durableDefinitions = options?.definitions
+        ? Event.durable([...EventManifest.Definitions, ...options.definitions])
+        : EventManifest.Durable
       const pubsub = {
         all: yield* PubSub.unbounded<Payload>(),
         durable: new Map<string, Set<PubSub.PubSub<void>>>(),

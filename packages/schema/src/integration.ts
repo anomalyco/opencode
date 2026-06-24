@@ -1,6 +1,7 @@
 export * as Integration from "./integration"
 
 import { Schema } from "effect"
+import { define } from "./event"
 
 export const ID = Schema.String.pipe(Schema.brand("Integration.ID"))
 export type ID = typeof ID.Type
@@ -71,6 +72,17 @@ export type Method = typeof Method.Type
 
 export const Inputs = Schema.Record(Schema.String, Schema.String).annotate({ identifier: "Integration.Inputs" })
 export type Inputs = typeof Inputs.Type
+
+export const Event = {
+  Updated: define({
+    type: "integration.updated",
+    schema: {},
+  }),
+  ConnectionUpdated: define({
+    type: "integration.connection.updated",
+    schema: { integrationID: ID },
+  }),
+}
 
 export interface Ref extends Schema.Schema.Type<typeof Ref> {}
 export const Ref = Schema.Struct({

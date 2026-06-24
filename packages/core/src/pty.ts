@@ -2,10 +2,11 @@ export * as Pty from "./pty"
 
 import type { Disp, Proc } from "#pty"
 import { Context, Effect, Layer, Schema, Types } from "effect"
+import { PtyEvent, PtyInfo } from "@opencode-ai/schema/pty"
 import { Config } from "./config"
 import { EventV2 } from "./event"
 import { Location } from "./location"
-import { NonNegativeInt, PositiveInt } from "./schema"
+import { PositiveInt } from "./schema"
 import { PtyID } from "./pty/schema"
 import { Shell } from "./shell"
 import { lazy } from "./util/lazy"
@@ -35,18 +36,7 @@ type Active = {
   listeners: Disp[]
 }
 
-export const Info = Schema.Struct({
-  id: PtyID,
-  title: Schema.String,
-  command: Schema.String,
-  args: Schema.Array(Schema.String),
-  cwd: Schema.String,
-  status: Schema.Literals(["running", "exited"]),
-  // Windows ConPTY assigns the child pid asynchronously, so 0 is valid at spawn time.
-  pid: NonNegativeInt,
-  // Present once status is "exited".
-  exitCode: Schema.optional(NonNegativeInt),
-}).annotate({ identifier: "Pty" })
+export const Info = PtyInfo
 
 export type Info = Types.DeepMutable<typeof Info.Type>
 
@@ -100,12 +90,7 @@ export class ExitedError extends Schema.TaggedErrorClass<ExitedError>()("Pty.Exi
   ptyID: PtyID,
 }) {}
 
-export const Event = {
-  Created: EventV2.define({ type: "pty.created", schema: { info: Info } }),
-  Updated: EventV2.define({ type: "pty.updated", schema: { info: Info } }),
-  Exited: EventV2.define({ type: "pty.exited", schema: { id: PtyID, exitCode: NonNegativeInt } }),
-  Deleted: EventV2.define({ type: "pty.deleted", schema: { id: PtyID } }),
-}
+export const Event = PtyEvent
 
 export interface Interface {
   readonly list: () => Effect.Effect<Info[]>

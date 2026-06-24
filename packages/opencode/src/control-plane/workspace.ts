@@ -33,6 +33,7 @@ import { Vcs } from "@/project/vcs"
 import { InstanceStore } from "@/project/instance-store"
 import { InstanceBootstrap } from "@/project/bootstrap"
 import { WorkspaceAdapterRuntime } from "./workspace-adapter-runtime"
+import { WorkspaceEvent } from "@opencode-ai/schema/workspace-event"
 
 export const Info = Schema.Struct({
   ...WorkspaceInfoSchema.fields,
@@ -40,27 +41,10 @@ export const Info = Schema.Struct({
 }).annotate({ identifier: "Workspace" })
 export type Info = WorkspaceInfo & { timeUsed: number }
 
-export const ConnectionStatus = Schema.Struct({
-  workspaceID: WorkspaceV2.ID,
-  status: Schema.Literals(["connected", "connecting", "disconnected", "error"]),
-})
-export type ConnectionStatus = Schema.Schema.Type<typeof ConnectionStatus>
+export const ConnectionStatus = WorkspaceEvent.ConnectionStatus
+export type ConnectionStatus = WorkspaceEvent.ConnectionStatus
 
-export const Event = {
-  Ready: EventV2.define({
-    type: "workspace.ready",
-    schema: {
-      name: Schema.String,
-    },
-  }),
-  Failed: EventV2.define({
-    type: "workspace.failed",
-    schema: {
-      message: Schema.String,
-    },
-  }),
-  Status: EventV2.define({ type: "workspace.status", schema: ConnectionStatus.fields }),
-}
+export const Event = WorkspaceEvent
 
 function fromRow(row: typeof WorkspaceTable.$inferSelect): Info {
   return {

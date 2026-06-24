@@ -1,10 +1,14 @@
 import { describe, expect, test } from "bun:test"
 import { SessionEvent } from "@opencode-ai/core/session/event"
+import { EventManifest as SchemaEventManifest } from "@opencode-ai/schema/event-manifest"
 import { Todo } from "@/session/todo"
 import { EventManifest } from "@/event-manifest"
 
 describe("public event manifest", () => {
   test("contains every latest public wire type once", () => {
+    expect(EventManifest.Definitions).toBe(SchemaEventManifest.Definitions)
+    expect(EventManifest.Latest).toBe(SchemaEventManifest.Latest)
+    expect(EventManifest.Durable).toBe(SchemaEventManifest.Durable)
     expect(EventManifest.Latest.size).toBe(85)
     expect(EventManifest.Latest.get("session.next.step.ended")).toBe(SessionEvent.Step.Ended)
     expect(EventManifest.Latest.get("todo.updated")).toBe(Todo.Event.Updated)
