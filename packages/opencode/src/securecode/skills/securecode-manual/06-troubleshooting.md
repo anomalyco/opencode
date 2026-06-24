@@ -61,6 +61,12 @@ Acompany endpoint 側の一時的な不調か、ネットワーク経路の問�
 
 `HTTPS_PROXY` / `HTTP_PROXY` を環境変数で渡しつつ、`sandbox.json` に proxy ホスト名を追加してください。
 
+### `sandbox.json` を編集したのに反映されない
+
+セッション起動中に `sandbox.json` を編集したら、TUI 内で `/reload_sandbox` を実行してください。会話履歴を保ったまま新しい設定で再起動します。詳細は `05-sandbox.md`。
+
+`/reload_sandbox` の実行後にエラートーストで「sandbox.json の parse に失敗しました」と出る場合、書いた JSON が壊れています。旧設定がそのまま維持されているので、JSON を直してもう一度 `/reload_sandbox` を叩いてください。
+
 ## 権限ダイアログが多すぎる
 
 破壊的操作の頻度が高いタスクでは確認が連続します。

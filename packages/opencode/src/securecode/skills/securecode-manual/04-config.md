@@ -72,7 +72,7 @@ TUI の表示まわり。`setup/tui.json.example` がそのままテンプレ。
 
 両方存在する場合は **allow / deny を union (重複除去)** で合成します。allow は global ∪ project、deny も global ∪ project。どこかで deny されていれば sandbox-runtime 側で deny が勝ちます。
 
-`sandbox.json` の編集後は **securecode を再起動** してください（実行中は読まれません）。
+どちらのファイルを編集しても TUI 内にトースト通知が出ます。`/reload_sandbox` を叩くと、会話履歴を保ったまま新しい設定が反映されます（詳細は `05-sandbox.md`）。再起動はもう不要です。
 
 > これらのファイル自体は **AI からは読みも書きも一切できません**。global / project どちらの `sandbox.json` も OS サンドボックスの `denyRead` + `denyWrite` に常時固定されているため、AI に「中身を見せて」「書き換えて」「消して作り直して」と頼んでも、OS (Seatbelt / bubblewrap) が物理的にブロックします。AI が自分の檻を広げる方向の改ざんは構造上不可能です。詳細は `05-sandbox.md`。
 
