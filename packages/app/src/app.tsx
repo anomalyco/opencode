@@ -91,7 +91,7 @@ const SessionRoute = Object.assign(
 
 const TargetSessionRoute = Object.assign(
   () => {
-    const params = useParams<{ serverKey: string }>()
+    const params = useParams<{ serverKey: string; id: string }>()
     const server = useServer()
     const conn = createMemo(() => {
       const key = requireServerKey(params.serverKey)
@@ -99,11 +99,13 @@ const TargetSessionRoute = Object.assign(
     })
 
     return (
-      <ServerSDKProvider server={conn}>
-        <ServerSyncProvider server={conn}>
-          <ResolvedTargetSessionRoute />
-        </ServerSyncProvider>
-      </ServerSDKProvider>
+      <Show when={`${params.serverKey}\0${params.id}`} keyed>
+        <ServerSDKProvider server={conn}>
+          <ServerSyncProvider server={conn}>
+            <ResolvedTargetSessionRoute />
+          </ServerSyncProvider>
+        </ServerSDKProvider>
+      </Show>
     )
   },
   { preload: Session.preload },
