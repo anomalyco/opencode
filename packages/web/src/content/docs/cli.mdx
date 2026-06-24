@@ -679,6 +679,7 @@ OpenCode can be configured using environment variables.
 | Variable                              | Type    | Description                                       |
 | ------------------------------------- | ------- | ------------------------------------------------- |
 | `OPENCODE_AUTO_SHARE`                 | boolean | Automatically share sessions                      |
+| `OPENCODE_PURE`                       | boolean | Run without external plugins                      |
 | `OPENCODE_GIT_BASH_PATH`              | string  | Path to Git Bash executable on Windows            |
 | `OPENCODE_CONFIG`                     | string  | Path to config file                               |
 | `OPENCODE_TUI_CONFIG`                 | string  | Path to TUI config file                           |
@@ -689,6 +690,8 @@ OpenCode can be configured using environment variables.
 | `OPENCODE_DISABLE_TERMINAL_TITLE`     | boolean | Disable automatic terminal title updates          |
 | `OPENCODE_PERMISSION`                 | string  | Inlined json permissions config                   |
 | `OPENCODE_DISABLE_DEFAULT_PLUGINS`    | boolean | Disable default plugins                           |
+| `OPENCODE_DISABLE_EMBEDDED_WEB_UI`    | boolean | Disable serving the embedded web UI               |
+| `OPENCODE_DISABLE_EXTERNAL_SKILLS`    | boolean | Disable loading external skills                   |
 | `OPENCODE_DISABLE_LSP_DOWNLOAD`       | boolean | Disable automatic LSP server downloads            |
 | `OPENCODE_ENABLE_EXPERIMENTAL_MODELS` | boolean | Enable experimental models                        |
 | `OPENCODE_DISABLE_AUTOCOMPACT`        | boolean | Disable automatic context compaction              |
@@ -700,6 +703,8 @@ OpenCode can be configured using environment variables.
 | `OPENCODE_FAKE_VCS`                   | string  | Fake VCS provider for testing purposes            |
 | `OPENCODE_CLIENT`                     | string  | Client identifier (defaults to `cli`)             |
 | `OPENCODE_ENABLE_EXA`                 | boolean | Enable Exa web search tools                       |
+| `OPENCODE_ENABLE_PARALLEL`            | boolean | Enable Parallel web search tools                  |
+| `OPENCODE_ENABLE_QUESTION_TOOL`       | boolean | Enable the question tool for non-default clients  |
 | `OPENCODE_SERVER_PASSWORD`            | string  | Enable basic auth for `serve`/`web`               |
 | `OPENCODE_SERVER_USERNAME`            | string  | Override basic auth username (default `opencode`) |
 | `OPENCODE_MODELS_URL`                 | string  | Custom URL for fetching models configuration      |
@@ -724,9 +729,11 @@ These environment variables enable experimental features that may change or be r
 | `OPENCODE_EXPERIMENTAL_EXA`                     | boolean | Enable experimental Exa features        |
 | `OPENCODE_EXPERIMENTAL_LSP_TY`                  | boolean | Enable TY LSP for python files          |
 | `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | boolean | Enable plan mode                        |
+| `OPENCODE_EXPERIMENTAL_REFERENCES`              | boolean | Enable project references               |
 | `OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS`    | boolean | Enable background subagent tasks        |
 | `OPENCODE_EXPERIMENTAL_EVENT_SYSTEM`            | boolean | Enable experimental event system        |
 | `OPENCODE_EXPERIMENTAL_NATIVE_LLM`              | boolean | Enable native LLM request path          |
 | `OPENCODE_EXPERIMENTAL_PARALLEL`                | boolean | Enable parallel web search execution    |
 | `OPENCODE_EXPERIMENTAL_SCOUT`                   | boolean | Enable Scout subagent                   |
+| `OPENCODE_EXPERIMENTAL_WEBSOCKETS`              | boolean | Enable WebSocket auth transport         |
 | `OPENCODE_EXPERIMENTAL_WORKSPACES`              | boolean | Enable workspace support                |
