@@ -1,6 +1,7 @@
 export * as SessionMessage from "./session-message"
 
 import { Schema } from "effect"
+import { ProviderMetadata, ToolContent } from "./llm"
 import { Model } from "./model"
 import { FileAttachment, Prompt } from "./prompt"
 import { DateTimeUtcFromMillis, withStatics } from "./schema"
@@ -13,18 +14,6 @@ export const ID = Schema.String.check(Schema.isStartsWith("msg_")).pipe(
 )
 export type ID = typeof ID.Type
 
-const ProviderMetadata = Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Unknown))
-const ToolContent = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("text"), text: Schema.String }).annotate({
-    identifier: "Tool.TextContent",
-  }),
-  Schema.Struct({
-    type: Schema.Literal("file"),
-    uri: Schema.String,
-    mime: Schema.String,
-    name: Schema.optional(Schema.String),
-  }).annotate({ identifier: "Tool.FileContent" }),
-]).pipe(Schema.toTaggedUnion("type"))
 export interface UnknownError extends Schema.Schema.Type<typeof UnknownError> {}
 export const UnknownError = Schema.Struct({
   type: Schema.Literal("unknown"),
@@ -58,7 +47,6 @@ export const User = Schema.Struct({
   files: Prompt.fields.files,
   agents: Prompt.fields.agents,
   type: Schema.Literal("user"),
-  time: Schema.Struct({ created: DateTimeUtcFromMillis }),
 }).annotate({ identifier: "Session.Message.User" })
 
 export interface Synthetic extends Schema.Schema.Type<typeof Synthetic> {}

@@ -89,7 +89,7 @@ export const layer = Layer.effect(
         ...ModelRequest.merge({ ...provider.request, generation: {}, options: {} }, model.request),
         variant: model.request.variant,
       }
-      return new ModelV2.Info({
+      return ModelV2.Info.make({
         ...model,
         api,
         request,

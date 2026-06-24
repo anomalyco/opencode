@@ -213,7 +213,7 @@ function refresh(methodID: Integration.MethodID, value: Pick<Credential.OAuth, "
   }).pipe(
     Effect.map((tokens) => {
       const next = credential(methodID, tokens)
-      return new Credential.OAuth({ ...next, metadata: next.metadata ?? value.metadata })
+      return Credential.OAuth.make({ ...next, metadata: next.metadata ?? value.metadata })
     }),
   )
 }
@@ -231,7 +231,7 @@ function request<A>(url: string, init: RequestInit) {
 
 function credential(methodID: Integration.MethodID, tokens: TokenResponse) {
   const accountID = extractAccountID(tokens)
-  return new Credential.OAuth({
+  return Credential.OAuth.make({
     type: "oauth",
     methodID,
     refresh: tokens.refresh_token,

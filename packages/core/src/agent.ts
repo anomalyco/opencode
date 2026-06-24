@@ -1,47 +1,33 @@
 export * as AgentV2 from "./agent"
 
-import { Array, Context, Effect, Layer, Schema, Types } from "effect"
+import { Array, Context, Effect, Layer, Types } from "effect"
 import { Agent } from "@opencode-ai/schema/agent"
-import { ModelV2 } from "./model"
-import { PermissionSchema } from "./permission/schema"
-import { ProviderV2 } from "./provider"
-import { PositiveInt } from "./schema"
+import { withStatics } from "./schema"
 import { State } from "./state"
 
 export const ID = Agent.ID
 export type ID = typeof ID.Type
 export const defaultID = ID.make("build")
 
-export const Color = Schema.Union([
-  Schema.String.check(Schema.isPattern(/^#[0-9a-fA-F]{6}$/)),
-  Schema.Literals(["primary", "secondary", "accent", "success", "warning", "error", "info"]),
-])
+export const Color = Agent.Color
 
-export class Info extends Schema.Class<Info>("AgentV2.Info")({
-  id: ID,
-  model: ModelV2.Ref.pipe(Schema.optional),
-  request: ProviderV2.Request,
-  system: Schema.String.pipe(Schema.optional),
-  description: Schema.String.pipe(Schema.optional),
-  mode: Schema.Literals(["subagent", "primary", "all"]),
-  hidden: Schema.Boolean,
-  color: Color.pipe(Schema.optional),
-  steps: PositiveInt.pipe(Schema.optional),
-  permissions: PermissionSchema.Ruleset,
-}) {
-  static empty(id: ID) {
-    return new Info({
-      id,
-      request: {
-        headers: {},
-        body: {},
-      },
-      mode: "all",
-      hidden: false,
-      permissions: [],
-    })
-  }
-}
+export const Info = Agent.Info.pipe(
+  withStatics((schema) => ({
+    empty(id: ID) {
+      return schema.make({
+        id,
+        request: {
+          headers: {},
+          body: {},
+        },
+        mode: "all",
+        hidden: false,
+        permissions: [],
+      })
+    },
+  })),
+)
+export type Info = Agent.Info
 
 export interface Selection {
   readonly id: ID

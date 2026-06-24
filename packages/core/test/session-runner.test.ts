@@ -2453,37 +2453,31 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
-  it.effect("bounds external session prompt cache keys", () =>
+  it.effect("bounds 64-character session prompt cache keys", () =>
     Effect.gen(function* () {
       yield* setup
-      const externalSessionID = SessionV2.ID.fromExternal({
-        namespace: "discord",
-        key: "thread-one",
-      })
-      const otherExternalSessionID = SessionV2.ID.fromExternal({
-        namespace: "discord",
-        key: "thread-two",
-      })
-      yield* insertSession(externalSessionID)
-      yield* insertSession(otherExternalSessionID)
+      const longSessionID = SessionV2.ID.make(`ses_${"a".repeat(64)}`)
+      const otherLongSessionID = SessionV2.ID.make(`ses_${"b".repeat(64)}`)
+      yield* insertSession(longSessionID)
+      yield* insertSession(otherLongSessionID)
       const session = yield* SessionV2.Service
       yield* session.prompt({
-        sessionID: externalSessionID,
-        prompt: Prompt.make({ text: "Run external session" }),
+        sessionID: longSessionID,
+        prompt: Prompt.make({ text: "Run long session" }),
         resume: false,
       })
       yield* session.prompt({
-        sessionID: otherExternalSessionID,
-        prompt: Prompt.make({ text: "Run other external session" }),
+        sessionID: otherLongSessionID,
+        prompt: Prompt.make({ text: "Run other long session" }),
         resume: false,
       })
 
       requests.length = 0
-      yield* session.resume(externalSessionID)
-      yield* session.resume(otherExternalSessionID)
+      yield* session.resume(longSessionID)
+      yield* session.resume(otherLongSessionID)
 
       const keys = requests.map((request) => request.providerOptions?.openai?.promptCacheKey)
-      expect(keys).toEqual([externalSessionID.slice(4), otherExternalSessionID.slice(4)])
+      expect(keys).toEqual([longSessionID.slice(4), otherLongSessionID.slice(4)])
       expect(keys.every((key) => typeof key === "string" && key.length === 64)).toBe(true)
       expect(keys[0]).not.toBe(keys[1])
     }),

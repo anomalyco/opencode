@@ -120,7 +120,7 @@ describe("OpencodePlugin", () => {
           })
           yield* credentials.create({
             integrationID: Integration.ID.make("opencode"),
-            value: new Credential.Key({
+            value: Credential.Key.make({
               type: "key",
               key: "secret",
               metadata: { server: server.url.origin },
@@ -176,11 +176,11 @@ describe("OpencodePlugin", () => {
       Effect.gen(function* () {
         const catalog = yield* Catalog.Service
         yield* catalog.transform((catalog) => {
-          const provider = new ProviderV2.Info({
+          const provider = ProviderV2.Info.make({
             ...ProviderV2.Info.empty(ProviderV2.ID.opencode),
             api: { type: "aisdk", package: "test-provider" },
           })
-          const model = new ModelV2.Info({
+          const model = ModelV2.Info.make({
             ...ModelV2.Info.empty(provider.id, ModelV2.ID.make("paid")),
             api: { id: ModelV2.ID.make("paid"), type: "aisdk", package: "test-provider" },
             cost: cost(1),
@@ -202,11 +202,11 @@ describe("OpencodePlugin", () => {
       Effect.gen(function* () {
         const catalog = yield* Catalog.Service
         yield* catalog.transform((catalog) => {
-          const provider = new ProviderV2.Info({
+          const provider = ProviderV2.Info.make({
             ...ProviderV2.Info.empty(ProviderV2.ID.opencode),
             api: { type: "aisdk", package: "test-provider" },
           })
-          const model = new ModelV2.Info({
+          const model = ModelV2.Info.make({
             ...ModelV2.Info.empty(provider.id, ModelV2.ID.make("free")),
             api: { id: ModelV2.ID.make("free"), type: "aisdk", package: "test-provider" },
             cost: cost(0),
@@ -228,11 +228,11 @@ describe("OpencodePlugin", () => {
       Effect.gen(function* () {
         const catalog = yield* Catalog.Service
         yield* catalog.transform((catalog) => {
-          const provider = new ProviderV2.Info({
+          const provider = ProviderV2.Info.make({
             ...ProviderV2.Info.empty(ProviderV2.ID.opencode),
             api: { type: "aisdk", package: "test-provider" },
           })
-          const model = new ModelV2.Info({
+          const model = ModelV2.Info.make({
             ...ModelV2.Info.empty(provider.id, ModelV2.ID.make("output-only")),
             api: { id: ModelV2.ID.make("output-only"), type: "aisdk", package: "test-provider" },
             cost: cost(0, 1),
@@ -256,11 +256,11 @@ describe("OpencodePlugin", () => {
       Effect.gen(function* () {
         const catalog = yield* Catalog.Service
         yield* catalog.transform((catalog) => {
-          const provider = new ProviderV2.Info({
+          const provider = ProviderV2.Info.make({
             ...ProviderV2.Info.empty(ProviderV2.ID.opencode),
             api: { type: "aisdk", package: "test-provider" },
           })
-          const model = new ModelV2.Info({
+          const model = ModelV2.Info.make({
             ...ModelV2.Info.empty(provider.id, ModelV2.ID.make("paid")),
             api: { id: ModelV2.ID.make("paid"), type: "aisdk", package: "test-provider" },
             cost: cost(1),
@@ -289,11 +289,11 @@ describe("OpencodePlugin", () => {
           })
         })
         yield* catalog.transform((catalog) => {
-          const provider = new ProviderV2.Info({
+          const provider = ProviderV2.Info.make({
             ...ProviderV2.Info.empty(ProviderV2.ID.opencode),
             api: { type: "aisdk", package: "test-provider" },
           })
-          const model = new ModelV2.Info({
+          const model = ModelV2.Info.make({
             ...ModelV2.Info.empty(provider.id, ModelV2.ID.make("paid")),
             api: { id: ModelV2.ID.make("paid"), type: "aisdk", package: "test-provider" },
             cost: cost(1),
@@ -315,7 +315,7 @@ describe("OpencodePlugin", () => {
       Effect.gen(function* () {
         const catalog = yield* Catalog.Service
         yield* catalog.transform((catalog) => {
-          const provider = new ProviderV2.Info({
+          const provider = ProviderV2.Info.make({
             ...ProviderV2.Info.empty(ProviderV2.ID.opencode),
             api: { type: "aisdk", package: "test-provider" },
             request: {
@@ -323,7 +323,7 @@ describe("OpencodePlugin", () => {
               body: { apiKey: "configured" },
             },
           })
-          const model = new ModelV2.Info({
+          const model = ModelV2.Info.make({
             ...ModelV2.Info.empty(provider.id, ModelV2.ID.make("paid")),
             api: { id: ModelV2.ID.make("paid"), type: "aisdk", package: "test-provider" },
             cost: cost(1),
@@ -347,11 +347,11 @@ describe("OpencodePlugin", () => {
       Effect.gen(function* () {
         const catalog = yield* Catalog.Service
         yield* catalog.transform((catalog) => {
-          const provider = new ProviderV2.Info({
+          const provider = ProviderV2.Info.make({
             ...ProviderV2.Info.empty(ProviderV2.ID.openai),
             api: { type: "aisdk", package: "test-provider" },
           })
-          const model = new ModelV2.Info({
+          const model = ModelV2.Info.make({
             ...ModelV2.Info.empty(provider.id, ModelV2.ID.make("paid")),
             api: { id: ModelV2.ID.make("paid"), type: "aisdk", package: "test-provider" },
             cost: cost(1),

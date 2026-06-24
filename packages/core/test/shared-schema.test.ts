@@ -7,26 +7,77 @@ import { Agent } from "@opencode-ai/schema/agent"
 import { Location } from "@opencode-ai/schema/location"
 import { Model } from "@opencode-ai/schema/model"
 import { Prompt } from "@opencode-ai/schema/prompt"
+import { Provider } from "@opencode-ai/schema/provider"
 import { Session } from "@opencode-ai/schema/session"
 import { SessionInput } from "@opencode-ai/schema/session-input"
 import { SessionMessage } from "@opencode-ai/schema/session-message"
 import { Workspace } from "@opencode-ai/schema/workspace"
+import { Command } from "@opencode-ai/schema/command"
+import { Connection } from "@opencode-ai/schema/connection"
+import { Credential } from "@opencode-ai/schema/credential"
+import { FileSystem } from "@opencode-ai/schema/filesystem"
+import { Integration } from "@opencode-ai/schema/integration"
+import { LLM } from "@opencode-ai/schema/llm"
+import { ModelRequest } from "@opencode-ai/schema/model-request"
+import { Permission } from "@opencode-ai/schema/permission"
+import { Reference } from "@opencode-ai/schema/reference"
+import { Skill } from "@opencode-ai/schema/skill"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 
 test("Core reuses the canonical shared schemas", async () => {
-  const [coreLocation, coreSessionInput, coreSessionMessage, corePrompt] = await Promise.all([
+  const [
+    coreCommand,
+    coreConnection,
+    coreCredential,
+    coreFileSystem,
+    coreIntegration,
+    coreLocation,
+    coreLLM,
+    coreModelRequest,
+    corePermission,
+    coreReference,
+    coreSessionInput,
+    coreSessionMessage,
+    corePrompt,
+    coreSkill,
+  ] = await Promise.all([
+    import("@opencode-ai/core/command"),
+    import("@opencode-ai/core/integration/connection"),
+    import("@opencode-ai/core/credential"),
+    import("@opencode-ai/core/filesystem/schema"),
+    import("@opencode-ai/core/integration"),
     import("@opencode-ai/core/location"),
+    import("@opencode-ai/llm"),
+    import("@opencode-ai/core/model-request"),
+    import("@opencode-ai/core/permission/schema"),
+    import("@opencode-ai/core/reference"),
     import("@opencode-ai/core/session/input"),
     import("@opencode-ai/core/session/message"),
     import("@opencode-ai/core/session/prompt"),
+    import("@opencode-ai/core/skill"),
   ])
 
   expect(AgentV2.ID).toBe(Agent.ID)
+  expect(Object.is(AgentV2.Info, Agent.Info)).toBe(true)
+  expect(coreCommand.Info).toBe(Command.Info)
+  expect(coreConnection.Info).toBe(Connection.Info)
+  expect(coreCredential.Value).toBe(Credential.Value)
+  expect(coreFileSystem.Entry).toBe(FileSystem.Entry)
+  expect(coreIntegration.Method).toBe(Integration.Method)
   expect(coreLocation.Ref).toBe(Location.Ref)
+  expect(coreLLM.ProviderMetadata).toBe(LLM.ProviderMetadata)
+  expect(coreLLM.ToolContent).toBe(LLM.ToolContent)
   expect(ModelV2.Ref).toBe(Model.Ref)
+  expect(Object.is(ModelV2.Info, Model.Info)).toBe(true)
+  expect(Object.is(ProviderV2.Info, Provider.Info)).toBe(true)
+  expect(coreModelRequest.Request).toBe(ModelRequest.Request)
+  expect(corePermission.Ruleset).toBe(Permission.Ruleset)
+  expect(coreReference.Source).toBe(Reference.Source)
   expect(SessionV2.Info).toBe(Session.Info)
   expect(coreSessionInput.Admitted).toBe(SessionInput.Admitted)
   expect(coreSessionMessage.Message).toBe(SessionMessage.Message)
   expect(corePrompt.Prompt).toBe(Prompt)
+  expect(Object.is(coreSkill.Source, Skill.Source)).toBe(true)
 })
 
 test("shared record schemas construct and decode plain objects", () => {

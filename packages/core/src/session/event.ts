@@ -1,5 +1,6 @@
 import { Schema } from "effect"
 import { ProviderMetadata, ToolContent } from "@opencode-ai/llm"
+import { Delivery } from "@opencode-ai/schema/session-input"
 import { EventV2 } from "../event"
 import { ModelV2 } from "../model"
 import { DateTimeUtcFromMillis, NonNegativeInt, RelativePath } from "../schema"
@@ -7,7 +8,6 @@ import { FileAttachment, Prompt } from "./prompt"
 import { SessionSchema } from "./schema"
 import { Location } from "../location"
 import { SessionMessageID } from "./message-id"
-import { SessionInput } from "./input"
 import { SessionMessage } from "./message"
 
 export { FileAttachment }
@@ -29,7 +29,7 @@ const PromptFields = {
   ...Base,
   messageID: SessionMessageID.ID,
   prompt: Prompt,
-  delivery: SessionInput.Delivery,
+  delivery: Delivery,
 }
 
 const options = {

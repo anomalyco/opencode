@@ -5,7 +5,6 @@ import { Agent } from "./agent"
 import { Location } from "./location"
 import { Model } from "./model"
 import { Project } from "./project"
-import { externalID, type ExternalID } from "./external-id"
 import { DateTimeUtcFromMillis, optionalOmitUndefined, RelativePath } from "./schema"
 import { withStatics } from "./schema"
 import { descending } from "./identifier"
@@ -17,7 +16,6 @@ export const ID = Schema.String.check(Schema.isStartsWith("ses")).pipe(
     return {
       create,
       descending: (id?: string) => (id === undefined ? create() : schema.make(id)),
-      fromExternal: (input: ExternalID) => schema.make(externalID("ses", input)),
     }
   }),
 )

@@ -481,6 +481,7 @@
       "name": "@opencode-ai/llm",
       "version": "1.17.9",
       "dependencies": {
+        "@opencode-ai/schema": "workspace:*",
         "@smithy/eventstream-codec": "4.2.14",
         "@smithy/util-utf8": "4.2.2",
         "aws4fetch": "1.0.20",
@@ -655,7 +656,6 @@
     "packages/schema": {
       "name": "@opencode-ai/schema",
       "dependencies": {
-        "@noble/hashes": "catalog:",
         "effect": "catalog:",
       },
       "devDependencies": {
@@ -957,7 +957,6 @@
     "@hono/zod-validator": "0.4.2",
     "@kobalte/core": "0.13.11",
     "@lydell/node-pty": "1.2.0-beta.12",
-    "@noble/hashes": "2.2.0",
     "@npmcli/arborist": "9.4.0",
     "@octokit/rest": "22.0.0",
     "@openauthjs/openauth": "0.0.0-20250322224806",

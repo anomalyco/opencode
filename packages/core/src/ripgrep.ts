@@ -179,7 +179,7 @@ export const layer = Layer.effect(
           Effect.map((result) =>
             result.items.map((relative) => {
               const absolute = path.resolve(input.cwd, relative)
-              return new Entry({
+              return Entry.make({
                 path: RelativePath.make(relative),
                 type: "file",
                 mime: FSUtil.mimeType(absolute),
@@ -208,7 +208,7 @@ export const layer = Layer.effect(
               .replace(/^[\\/]+/u, "")
               .replaceAll("\\", "/")
             return Effect.succeed(
-              new Entry({
+              Entry.make({
                 path: RelativePath.make(relative),
                 type: "file",
                 mime: FSUtil.mimeType(path.resolve(input.cwd, relative)),
@@ -263,8 +263,8 @@ export const layer = Layer.effect(
                 .replace(/^[\\/]+/u, "")
                 .replaceAll("\\", "/")
               const absolute = path.resolve(input.cwd, relative)
-              return new Match({
-                entry: new Entry({
+              return Match.make({
+                entry: Entry.make({
                   path: RelativePath.make(relative),
                   type: "file",
                   mime: FSUtil.mimeType(absolute),

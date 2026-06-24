@@ -8,19 +8,16 @@ import {
   RelativePath,
   withStatics,
 } from "@opencode-ai/schema/schema"
-import { externalID, type ExternalID } from "@opencode-ai/schema/external-id"
 
 export {
   AbsolutePath,
   DateTimeUtcFromMillis,
-  externalID,
   NonNegativeInt,
   optionalOmitUndefined,
   PositiveInt,
   RelativePath,
   withStatics,
 }
-export type { ExternalID }
 
 /**
  * Strip `readonly` from a nested type. Stand-in for `effect`'s `Types.DeepMutable`

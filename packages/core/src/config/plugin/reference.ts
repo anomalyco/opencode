@@ -28,7 +28,7 @@ export const Plugin = define({
             entries.set(
               name,
               local(entry)
-                ? new Reference.LocalSource({
+                ? Reference.LocalSource.make({
                     type: "local",
                     path: AbsolutePath.make(
                       localPath(directory, global.home, typeof entry === "string" ? entry : entry.path),
@@ -36,7 +36,7 @@ export const Plugin = define({
                     description: typeof entry === "string" ? undefined : entry.description,
                     hidden: typeof entry === "string" ? undefined : entry.hidden,
                   })
-                : new Reference.GitSource({
+                : Reference.GitSource.make({
                     type: "git",
                     repository: typeof entry === "string" ? entry : entry.repository,
                     branch: typeof entry === "string" ? undefined : entry.branch,

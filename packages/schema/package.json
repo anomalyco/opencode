@@ -12,7 +12,6 @@
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
-    "@noble/hashes": "catalog:",
     "effect": "catalog:"
   },
   "devDependencies": {
