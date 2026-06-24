@@ -27,9 +27,9 @@
     "zod": "catalog:"
   },
   "peerDependencies": {
-    "@opentui/core": ">=0.3.4",
-    "@opentui/keymap": ">=0.3.4",
-    "@opentui/solid": ">=0.3.4"
+    "@opentui/core": ">=0.4.2",
+    "@opentui/keymap": ">=0.4.2",
+    "@opentui/solid": ">=0.4.2"
   },
   "peerDependenciesMeta": {
     "@opentui/core": {
