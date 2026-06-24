@@ -681,23 +681,30 @@ function DiffViewer(props: { api: TuiPluginApi }) {
     },
   ]
 
-  const switchDiffOptions = createMemo(() => [
-    {
-      title: "Working tree",
-      value: "git" as const,
-      description: "Show current git changes",
-    },
-    {
-      title: "Main branch",
-      value: "branch" as const,
-      description: "Show changes compared to main branch",
-    },
-    {
-      title: "Last turn",
-      value: "last-turn" as const,
-      description: "Show changes from the last assistant turn",
-    },
-  ])
+  const switchDiffOptions = createMemo(() => {
+    const vcs = props.api.state.vcs
+    return [
+      {
+        title: "Working tree",
+        value: "git" as const,
+        description: "Show current git changes",
+      },
+      ...(vcs?.branch && vcs.default_branch && vcs.branch !== vcs.default_branch
+        ? [
+            {
+              title: "Main branch",
+              value: "branch" as const,
+              description: "Show changes compared to main branch",
+            },
+          ]
+        : []),
+      {
+        title: "Last turn",
+        value: "last-turn" as const,
+        description: "Show changes from the last assistant turn",
+      },
+    ]
+  })
 
   const openSwitchDiffDialog = () => {
     props.api.ui.dialog.replace(() => (
