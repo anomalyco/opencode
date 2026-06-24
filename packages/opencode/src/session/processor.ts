@@ -671,7 +671,9 @@ export const layer = Layer.effect(
           }
 
           case "provider-error":
-            throw new Error(value.message)
+            if (value.retryable === true) throw new Error(value.message)
+            yield* halt(new Error(value.message))
+            return
 
           case "step-start":
             if (!ctx.snapshot) ctx.snapshot = yield* snapshot.track()
