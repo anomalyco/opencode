@@ -111,7 +111,6 @@ const baseLayer = Layer.effect(
                   Entry.make({
                     path: RelativePath.make(relative + (item.type === "directory" ? path.sep : "")),
                     type: item.type,
-                    mime: item.type === "directory" ? "application/x-directory" : FSUtil.mimeType(absolute),
                   }),
                 ]
               })

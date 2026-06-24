@@ -4207,7 +4207,6 @@ export type PermissionSavedInfo = {
 export type FileSystemEntry = {
   path: string
   type: "file" | "directory"
-  mime: string
 }
 
 export type CommandV2Info = {
