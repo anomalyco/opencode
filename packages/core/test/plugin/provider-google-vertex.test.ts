@@ -170,7 +170,7 @@ describe("GoogleVertexPlugin", () => {
           yield* addPlugin()
           const provider = required(yield* catalog.provider.get(ProviderV2.ID.make("google-vertex")))
           yield* aisdk.runSDK({
-            model: new ModelV2.Info({
+            model: ModelV2.Info.make({
               ...ModelV2.Info.empty(ProviderV2.ID.make("google-vertex"), ModelV2.ID.make("gemini")),
               api: {
                 id: ModelV2.ID.make("gemini"),
@@ -295,7 +295,7 @@ describe("GoogleVertexPlugin", () => {
           const aisdk = yield* AISDK.Service
           yield* addPlugin()
           yield* aisdk.runSDK({
-            model: new ModelV2.Info({
+            model: ModelV2.Info.make({
               ...ModelV2.Info.empty(ProviderV2.ID.make("google-vertex"), ModelV2.ID.make("gemini")),
               api: {
                 id: ModelV2.ID.make("gemini"),
@@ -343,7 +343,7 @@ describe("GoogleVertexPlugin", () => {
         Effect.void,
         () =>
           aisdk.runSDK({
-            model: new ModelV2.Info({
+            model: ModelV2.Info.make({
               ...ModelV2.Info.empty(ProviderV2.ID.make("google-vertex"), ModelV2.ID.make("gemini")),
               api: {
                 id: ModelV2.ID.make("gemini"),
@@ -374,7 +374,7 @@ describe("GoogleVertexPlugin", () => {
       const calls: string[] = []
       yield* addPlugin()
       yield* aisdk.runLanguage({
-        model: new ModelV2.Info({
+        model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.make("google-vertex"), ModelV2.ID.make(" gemini-2.5-pro ")),
           api: { id: ModelV2.ID.make(" gemini-2.5-pro "), type: "aisdk", package: "test-provider" },
         }),

@@ -26,7 +26,7 @@ describe("AlibabaPlugin", () => {
       const aisdk = yield* AISDK.Service
       yield* addPlugin()
       const result = yield* aisdk.runSDK({
-        model: new ModelV2.Info({
+        model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.make("alibaba"), ModelV2.ID.make("qwen")),
           api: { id: ModelV2.ID.make("qwen"), type: "aisdk", package: "test-provider" },
         }),
@@ -43,7 +43,7 @@ describe("AlibabaPlugin", () => {
       const aisdk = yield* AISDK.Service
       yield* addPlugin()
       const result = yield* aisdk.runSDK({
-        model: new ModelV2.Info({
+        model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.make("alibaba"), ModelV2.ID.make("qwen")),
           api: { id: ModelV2.ID.make("qwen"), type: "aisdk", package: "test-provider" },
         }),
@@ -60,7 +60,7 @@ describe("AlibabaPlugin", () => {
       const aisdk = yield* AISDK.Service
       yield* addPlugin()
       const result = yield* aisdk.runSDK({
-        model: new ModelV2.Info({
+        model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.make("custom-alibaba"), ModelV2.ID.make("qwen")),
           api: { id: ModelV2.ID.make("qwen"), type: "aisdk", package: "test-provider" },
         }),
@@ -79,7 +79,7 @@ describe("AlibabaPlugin", () => {
       const plugin = yield* PluginV2.Service
       const aisdk = yield* AISDK.Service
       yield* addPlugin()
-      const item = new ModelV2.Info({
+      const item = ModelV2.Info.make({
         ...ModelV2.Info.empty(ProviderV2.ID.make("alibaba"), ModelV2.ID.make("alias")),
         api: { id: ModelV2.ID.make("qwen-plus"), type: "aisdk", package: "test-provider" },
       })

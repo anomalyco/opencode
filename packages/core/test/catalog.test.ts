@@ -61,7 +61,7 @@ describe("CatalogV2", () => {
       yield* credentials.create({
         integrationID,
         label: "First",
-        value: new Credential.Key({ type: "key", key: "first", metadata: { tenant: "one" } }),
+        value: Credential.Key.make({ type: "key", key: "first", metadata: { tenant: "one" } }),
       })
 
       expect((yield* catalog.provider.available()).map((provider) => provider.id)).toEqual([ProviderV2.ID.make("test")])
@@ -69,7 +69,7 @@ describe("CatalogV2", () => {
       yield* credentials.create({
         integrationID,
         label: "Second",
-        value: new Credential.Key({ type: "key", key: "second", metadata: { tenant: "two" } }),
+        value: Credential.Key.make({ type: "key", key: "second", metadata: { tenant: "two" } }),
       })
       expect((yield* catalog.provider.available()).map((provider) => provider.id)).toEqual([ProviderV2.ID.make("test")])
       expect(required(yield* catalog.provider.get(ProviderV2.ID.make("test"))).request.body).toEqual({})
@@ -98,7 +98,7 @@ describe("CatalogV2", () => {
 
       yield* (yield* Credential.Service).create({
         integrationID,
-        value: new Credential.Key({ type: "key", key: "secret" }),
+        value: Credential.Key.make({ type: "key", key: "secret" }),
       })
 
       expect((yield* catalog.provider.available()).map((provider) => provider.id)).toEqual([providerID])

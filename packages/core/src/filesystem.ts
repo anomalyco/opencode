@@ -108,7 +108,7 @@ const baseLayer = Layer.effect(
                 const absolute = path.join(target.absolute, item.name)
                 const relative = path.relative(target.directory, absolute)
                 return [
-                  new Entry({
+                  Entry.make({
                     path: RelativePath.make(relative + (item.type === "directory" ? path.sep : "")),
                     type: item.type,
                   }),

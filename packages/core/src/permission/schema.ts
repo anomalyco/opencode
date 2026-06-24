@@ -1,16 +1,12 @@
 export * as PermissionSchema from "./schema"
 
-import { Schema } from "effect"
+import { Permission } from "@opencode-ai/schema/permission"
 
-export const Effect = Schema.Literals(["allow", "deny", "ask"]).annotate({ identifier: "PermissionV2.Effect" })
-export type Effect = typeof Effect.Type
+export const Effect = Permission.Effect
+export type Effect = Permission.Effect
 
-export const Rule = Schema.Struct({
-  action: Schema.String,
-  resource: Schema.String,
-  effect: Effect,
-}).annotate({ identifier: "PermissionV2.Rule" })
-export type Rule = typeof Rule.Type
+export const Rule = Permission.Rule
+export type Rule = Permission.Rule
 
-export const Ruleset = Schema.mutable(Schema.Array(Rule)).annotate({ identifier: "PermissionV2.Ruleset" })
-export type Ruleset = typeof Ruleset.Type
+export const Ruleset = Permission.Ruleset
+export type Ruleset = Permission.Ruleset

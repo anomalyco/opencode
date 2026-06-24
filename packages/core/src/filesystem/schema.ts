@@ -1,22 +1,10 @@
-import { Schema } from "effect"
-import { NonNegativeInt, PositiveInt, RelativePath } from "../schema"
+import { FileSystem } from "@opencode-ai/schema/filesystem"
 
-export class Entry extends Schema.Class<Entry>("FileSystem.Entry")({
-  path: RelativePath,
-  type: Schema.Literals(["file", "directory"]),
-}) {}
+export const Entry = FileSystem.Entry
+export type Entry = FileSystem.Entry
 
-export const Submatch = Schema.Struct({
-  text: Schema.String,
-  start: NonNegativeInt,
-  end: NonNegativeInt,
-})
-export type Submatch = typeof Submatch.Type
+export const Submatch = FileSystem.Submatch
+export type Submatch = FileSystem.Submatch
 
-export class Match extends Schema.Class<Match>("FileSystem.Match")({
-  entry: Entry,
-  line: PositiveInt,
-  offset: NonNegativeInt,
-  text: Schema.String,
-  submatches: Schema.Array(Submatch),
-}) {}
+export const Match = FileSystem.Match
+export type Match = FileSystem.Match

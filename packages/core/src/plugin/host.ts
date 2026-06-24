@@ -128,12 +128,11 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
                             return {
                               ...authorization,
                               callback: authorization.callback.pipe(
-                                Effect.map(
-                                  (credential) =>
-                                    new Credential.OAuth({
-                                      ...credential,
-                                      methodID: Integration.MethodID.make(credential.methodID),
-                                    }),
+                                Effect.map((credential) =>
+                                  Credential.OAuth.make({
+                                    ...credential,
+                                    methodID: Integration.MethodID.make(credential.methodID),
+                                  }),
                                 ),
                               ),
                             }
@@ -142,12 +141,11 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
                             ...authorization,
                             callback: (code: string) =>
                               authorization.callback(code).pipe(
-                                Effect.map(
-                                  (credential) =>
-                                    new Credential.OAuth({
-                                      ...credential,
-                                      methodID: Integration.MethodID.make(credential.methodID),
-                                    }),
+                                Effect.map((credential) =>
+                                  Credential.OAuth.make({
+                                    ...credential,
+                                    methodID: Integration.MethodID.make(credential.methodID),
+                                  }),
                                 ),
                               ),
                           }
@@ -157,12 +155,11 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
                       ? {
                           refresh: (value: Credential.OAuth) =>
                             refresh(value).pipe(
-                              Effect.map(
-                                (next) =>
-                                  new Credential.OAuth({
-                                    ...next,
-                                    methodID: Integration.MethodID.make(next.methodID),
-                                  }),
+                              Effect.map((next) =>
+                                Credential.OAuth.make({
+                                  ...next,
+                                  methodID: Integration.MethodID.make(next.methodID),
+                                }),
                               ),
                             ),
                         }

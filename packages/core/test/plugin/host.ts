@@ -176,12 +176,11 @@ export function integrationHost(integration: Integration.Interface): PluginConte
                           return {
                             ...authorization,
                             callback: authorization.callback.pipe(
-                              Effect.map(
-                                (credential) =>
-                                  new Credential.OAuth({
-                                    ...credential,
-                                    methodID: Integration.MethodID.make(credential.methodID),
-                                  }),
+                              Effect.map((credential) =>
+                                Credential.OAuth.make({
+                                  ...credential,
+                                  methodID: Integration.MethodID.make(credential.methodID),
+                                }),
                               ),
                             ),
                           }
@@ -190,12 +189,11 @@ export function integrationHost(integration: Integration.Interface): PluginConte
                           ...authorization,
                           callback: (code: string) =>
                             authorization.callback(code).pipe(
-                              Effect.map(
-                                (credential) =>
-                                  new Credential.OAuth({
-                                    ...credential,
-                                    methodID: Integration.MethodID.make(credential.methodID),
-                                  }),
+                              Effect.map((credential) =>
+                                Credential.OAuth.make({
+                                  ...credential,
+                                  methodID: Integration.MethodID.make(credential.methodID),
+                                }),
                               ),
                             ),
                         }
@@ -205,12 +203,11 @@ export function integrationHost(integration: Integration.Interface): PluginConte
                     ? {
                         refresh: (value: Credential.OAuth) =>
                           refresh(value).pipe(
-                            Effect.map(
-                              (next) =>
-                                new Credential.OAuth({
-                                  ...next,
-                                  methodID: Integration.MethodID.make(next.methodID),
-                                }),
+                            Effect.map((next) =>
+                              Credential.OAuth.make({
+                                ...next,
+                                methodID: Integration.MethodID.make(next.methodID),
+                              }),
                             ),
                           ),
                       }

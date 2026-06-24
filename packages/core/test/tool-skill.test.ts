@@ -122,7 +122,7 @@ describe("SkillTool", () => {
               }),
             ).toEqual({ type: "error", value: "Unable to load skill effect" })
             deny = false
-            const flat = new SkillV2.Info({
+            const flat = SkillV2.Info.make({
               name: "public",
               description: "Public guidance",
               location: AbsolutePath.make(path.join(tmp.path, "public.md")),

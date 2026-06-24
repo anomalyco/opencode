@@ -176,12 +176,11 @@ export const layer = Layer.effect(
             ),
         }).pipe(
           Effect.map((result) =>
-            result.items.map(
-              (relative) =>
-                new Entry({
-                  path: RelativePath.make(relative),
-                  type: "file",
-                }),
+            result.items.map((relative) =>
+              Entry.make({
+                path: RelativePath.make(relative),
+                type: "file",
+              }),
             ),
           ),
           Effect.catchTag("Ripgrep.InvalidPatternError", (cause) => Effect.fail(failure(cause.message, cause))),
@@ -206,7 +205,7 @@ export const layer = Layer.effect(
               .replace(/^[\\/]+/u, "")
               .replaceAll("\\", "/")
             return Effect.succeed(
-              new Entry({
+              Entry.make({
                 path: RelativePath.make(relative),
                 type: "file",
               }),
@@ -259,8 +258,8 @@ export const layer = Layer.effect(
                 .replace(/^(?:\.[\\/])+/u, "")
                 .replace(/^[\\/]+/u, "")
                 .replaceAll("\\", "/")
-              return new Match({
-                entry: new Entry({
+              return Match.make({
+                entry: Entry.make({
                   path: RelativePath.make(relative),
                   type: "file",
                 }),

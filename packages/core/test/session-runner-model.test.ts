@@ -22,7 +22,7 @@ type Api =
   | { readonly type: "native"; readonly url?: string; readonly settings: Record<string, unknown> }
 
 const model = (api: Api, variants: ModelV2.Info["variants"] = []) =>
-  new ModelV2.Info({
+  ModelV2.Info.make({
     id: ModelV2.ID.make("test-model"),
     providerID: ProviderV2.ID.make("test-provider"),
     name: "Test model",
@@ -79,7 +79,7 @@ describe("SessionRunnerModel", () => {
   it.effect("uses merged API settings for OpenAI-compatible auth and request defaults", () =>
     Effect.gen(function* () {
       const resolved = yield* SessionRunnerModel.fromCatalogModel(
-        new ModelV2.Info({
+        ModelV2.Info.make({
           ...model({
             type: "aisdk",
             package: "@ai-sdk/openai-compatible",
@@ -114,7 +114,7 @@ describe("SessionRunnerModel", () => {
           options: { reasoningEffort: "high" },
         },
       ])
-      const catalog = new ModelV2.Info({
+      const catalog = ModelV2.Info.make({
         ...base,
         request: { ...base.request, options: { ...base.request.options, reasoningEffort: "medium" } },
       })
@@ -264,11 +264,11 @@ describe("SessionRunnerModel", () => {
   it.effect("uses resolved credentials for bearer auth", () =>
     Effect.gen(function* () {
       const resolved = yield* SessionRunnerModel.fromCatalogModel(
-        new ModelV2.Info({
+        ModelV2.Info.make({
           ...model({ type: "aisdk", package: "@ai-sdk/openai", url: "https://openai.example/v1" }),
           request: { headers: {}, body: {}, generation: {}, options: {} },
         }),
-        new Credential.Key({ type: "key", key: "secret" }),
+        Credential.Key.make({ type: "key", key: "secret" }),
       )
       const request = LLM.request({ model: resolved, prompt: "Hello" })
       const headers = yield* resolved.route.auth.apply({
@@ -285,9 +285,9 @@ describe("SessionRunnerModel", () => {
 
   it.effect("prefers stored credentials over configured auth", () =>
     Effect.gen(function* () {
-      const credential = new Credential.Key({ type: "key", key: "stored-secret", metadata: { tenant: "work" } })
+      const credential = Credential.Key.make({ type: "key", key: "stored-secret", metadata: { tenant: "work" } })
       const resolved = yield* SessionRunnerModel.fromCatalogModel(
-        new ModelV2.Info({
+        ModelV2.Info.make({
           ...model({ type: "aisdk", package: "@ai-sdk/openai", url: "https://openai.example/v1" }),
           request: { headers: {}, body: { apiKey: "configured-secret" }, generation: {}, options: {} },
         }),
