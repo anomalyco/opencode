@@ -172,14 +172,8 @@ export const fromCatalogModel = (
   )
 }
 
-export const resolve = (
-  session: SessionSchema.Info,
-  model: ModelV2.Info,
-  credential?: Credential.Value,
-) =>
-  withVariant(model, session.model?.variant).pipe(
-    Effect.flatMap((model) => fromCatalogModel(model, credential)),
-  )
+export const resolve = (session: SessionSchema.Info, model: ModelV2.Info, credential?: Credential.Value) =>
+  withVariant(model, session.model?.variant).pipe(Effect.flatMap((model) => fromCatalogModel(model, credential)))
 
 export const supported = (model: ModelV2.Info) =>
   model.api.type === "aisdk" &&

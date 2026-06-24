@@ -27313,6 +27313,9 @@
           "id": {
             "type": "string"
           },
+          "integrationID": {
+            "type": "string"
+          },
           "name": {
             "type": "string"
           },
