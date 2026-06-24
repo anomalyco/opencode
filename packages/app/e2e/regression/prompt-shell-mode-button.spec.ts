@@ -70,10 +70,11 @@ test.describe("regression: shell mode toggle button in v2 composer", () => {
 
     await button.click()
 
-    // aria-pressed reflects active shell mode
+    // aria-pressed and data-state both reflect active shell mode
     await expect(button).toHaveAttribute("aria-pressed", "true")
-    // input switches to monospace font in shell mode (font-mono! class)
-    await expect(input).toHaveClass(/font-mono/)
+    await expect(button).toHaveAttribute("data-state", "pressed")
+    // input switches to monospace font in shell mode — match the exact Tailwind class
+    await expect(input).toHaveAttribute("class", /font-mono!/)
   })
 
   test("shell mode button exits shell mode on second click", async ({ page }) => {
@@ -82,10 +83,12 @@ test.describe("regression: shell mode toggle button in v2 composer", () => {
 
     await button.click()
     await expect(button).toHaveAttribute("aria-pressed", "true")
+    await expect(button).toHaveAttribute("data-state", "pressed")
 
     await button.click()
     await expect(button).toHaveAttribute("aria-pressed", "false")
-    await expect(input).not.toHaveClass(/font-mono/)
+    await expect(button).not.toHaveAttribute("data-state", "pressed")
+    await expect(input).not.toHaveAttribute("class", /font-mono!/)
   })
 
   test("Escape exits shell mode entered via button", async ({ page }) => {
@@ -96,6 +99,7 @@ test.describe("regression: shell mode toggle button in v2 composer", () => {
     await expect(button).toHaveAttribute("aria-pressed", "true")
 
     await input.focus()
+    await expect(input).toBeFocused()
     await page.keyboard.press("Escape")
     await expect(button).toHaveAttribute("aria-pressed", "false")
   })
@@ -105,7 +109,36 @@ test.describe("regression: shell mode toggle button in v2 composer", () => {
     const input = page.locator('[data-component="prompt-input"]')
 
     await input.focus()
+    // Wait for focus to settle on the contenteditable before dispatching keydown
+    await expect(input).toBeFocused()
     await page.keyboard.press("!")
     await expect(button).toHaveAttribute("aria-pressed", "true")
+  })
+
+  test("Cmd+Shift+X keybind enters shell mode and button reflects state", async ({ page }) => {
+    const button = page.locator('[data-action="prompt-shell-mode"]')
+    const input = page.locator('[data-component="prompt-input"]')
+
+    await input.focus()
+    await expect(input).toBeFocused()
+    // mod+shift+x maps to Meta+Shift+X on macOS, Control+Shift+X elsewhere;
+    // Playwright uses the platform's native modifier via "Meta" on mac runners
+    // and "Control" on Linux/Windows. Test both via the registered command keybind.
+    await page.keyboard.press("Control+Shift+X")
+    await expect(button).toHaveAttribute("aria-pressed", "true")
+  })
+})
+
+test.describe("regression: shell mode button absent in v1 (legacy) layout", () => {
+  test("shell mode button is NOT rendered when newLayoutDesigns is false", async ({ page }) => {
+    await mockOpenCodeServer(page, baseConfig)
+    // v1 layout — newLayoutDesigns: false (omitting the key defaults to false)
+    await page.addInitScript(() => {
+      localStorage.setItem("settings.v3", JSON.stringify({ general: { newLayoutDesigns: false } }))
+    })
+    await page.goto(`/${base64Encode(directory)}/session/${sessionID}`)
+    await expectAppVisible(page.locator('[data-component="session-composer"]'))
+    // Button must not be in the DOM at all in v1 layout
+    await expect(page.locator('[data-action="prompt-shell-mode"]')).toHaveCount(0)
   })
 })
