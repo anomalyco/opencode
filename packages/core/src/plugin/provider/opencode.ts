@@ -164,6 +164,7 @@ export const OpencodePlugin = define<HttpClient.HttpClient | EventV2.Service | S
     yield* ctx.catalog.transform((catalog) => {
       for (const [providerID, item] of Object.entries(providers ?? {})) {
         catalog.provider.update(providerID, (provider) => {
+          provider.integrationID = Integration.ID.make("opencode")
           if (item.name !== undefined) provider.name = item.name
           if (item.api !== undefined) provider.api = { ...item.api }
           if (item.request !== undefined) {

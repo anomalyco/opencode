@@ -76,6 +76,35 @@ describe("CatalogV2", () => {
     }).pipe(Effect.provide(layer))
   })
 
+  it.effect("derives availability from a provider's integration", () => {
+    const integrationID = Integration.ID.make("gateway")
+    const providerID = ProviderV2.ID.make("remote")
+    const layer = Catalog.locationLayer.pipe(
+      Layer.fresh,
+      Layer.provideMerge(EventV2.defaultLayer),
+      Layer.provideMerge(locationLayer),
+      Layer.provideMerge(Credential.defaultLayer.pipe(Layer.fresh)),
+    )
+
+    return Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      yield* (yield* Integration.Service).transform((editor) => editor.update(integrationID, () => {}))
+      yield* catalog.transform((editor) =>
+        editor.provider.update(providerID, (provider) => {
+          provider.integrationID = integrationID
+        }),
+      )
+      expect(yield* catalog.provider.available()).toEqual([])
+
+      yield* (yield* Credential.Service).create({
+        integrationID,
+        value: new Credential.Key({ type: "key", key: "secret" }),
+      })
+
+      expect((yield* catalog.provider.available()).map((provider) => provider.id)).toEqual([providerID])
+    }).pipe(Effect.provide(layer))
+  })
+
   it.effect("projects environment connections without a catalog plugin", () =>
     Effect.acquireUseRelease(
       Effect.sync(() => {

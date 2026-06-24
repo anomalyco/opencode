@@ -112,7 +112,10 @@ describe("OpencodePlugin", () => {
           yield* addPlugin()
 
           const catalog = yield* Catalog.Service
-          expect((yield* catalog.provider.get(ProviderV2.ID.make("remote")))?.name).toBe("Remote")
+          expect(yield* catalog.provider.get(ProviderV2.ID.make("remote"))).toMatchObject({
+            name: "Remote",
+            integrationID: "opencode",
+          })
           expect((yield* catalog.model.get(ProviderV2.ID.make("remote"), ModelV2.ID.make("model")))?.name).toBe(
             "Remote Model",
           )

@@ -4082,6 +4082,7 @@ export type ModelV2Info = {
 
 export type ProviderV2Info = {
   id: string
+  integrationID?: string
   name: string
   disabled?: boolean
   api:
