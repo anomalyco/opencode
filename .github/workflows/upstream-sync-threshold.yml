@@ -132,8 +132,52 @@ jobs:
         continue-on-error: true
         run: .github/scripts/resolve-conflicts.sh
 
-      - name: Add manual review guidance
+      - name: Attempt protected ANR fallback resolution
+        id: protected_resolution
         if: always() && steps.threshold.outputs.should_sync == 'true' && steps.merge.outputs.result == 'conflict' && steps.resolution.outputs.can_complete_merge != 'true'
+        run: |
+          summary="/tmp/resolution-summary.md"
+          touch "$summary"
+
+          {
+            echo
+            echo "## Protected ANR Fallback Resolution"
+            echo
+          } >> "$summary"
+
+          if git diff --name-only --diff-filter=U | grep -qx "packages/opencode/src/cli/tui/worker.ts"; then
+            git checkout --ours -- packages/opencode/src/cli/tui/worker.ts
+            git add packages/opencode/src/cli/tui/worker.ts
+
+            {
+              echo "Resolved \`packages/opencode/src/cli/tui/worker.ts\` by keeping our version."
+              echo
+              echo "Reason: this file contains ANR-specific worker, telemetry, and audit behavior. Keeping ours is the safest fallback when upstream would overwrite protected ANR logic."
+              echo
+            } >> "$summary"
+          fi
+
+          remaining_conflicts="$(git diff --name-only --diff-filter=U || true)"
+
+          if [ -n "$remaining_conflicts" ]; then
+            echo "can_complete_merge=false" >> "$GITHUB_OUTPUT"
+
+            {
+              echo
+              echo "Files still requiring manual review:"
+              echo "$remaining_conflicts" | sed 's/^/- /'
+            } >> "$summary"
+          else
+            echo "can_complete_merge=true" >> "$GITHUB_OUTPUT"
+
+            {
+              echo
+              echo "No unresolved conflicts remain after protected fallback resolution."
+            } >> "$summary"
+          fi
+
+      - name: Add manual review guidance
+        if: always() && steps.threshold.outputs.should_sync == 'true' && steps.merge.outputs.result == 'conflict' && steps.resolution.outputs.can_complete_merge != 'true' && steps.protected_resolution.outputs.can_complete_merge != 'true'
         run: |
           summary="/tmp/resolution-summary.md"
           touch "$summary"
@@ -186,7 +230,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Handle conflicts requiring manual review
-        if: always() && steps.threshold.outputs.should_sync == 'true' && steps.merge.outputs.result == 'conflict' && steps.resolution.outputs.can_complete_merge != 'true'
+        if: always() && steps.threshold.outputs.should_sync == 'true' && steps.merge.outputs.result == 'conflict' && steps.resolution.outputs.can_complete_merge != 'true' && steps.protected_resolution.outputs.can_complete_merge != 'true'
         run: |
           echo "::warning::Automated conflict resolution escalated one or more files for manual review."
           echo "Review the workflow summary and uploaded conflict resolution artifacts."
@@ -200,7 +244,7 @@ jobs:
           exit 0
 
       - name: Commit automated resolution
-        if: steps.threshold.outputs.should_sync == 'true' && steps.merge.outputs.result == 'conflict' && steps.resolution.outputs.can_complete_merge == 'true'
+        if: steps.threshold.outputs.should_sync == 'true' && steps.merge.outputs.result == 'conflict' && (steps.resolution.outputs.can_complete_merge == 'true' || steps.protected_resolution.outputs.can_complete_merge == 'true')
         run: |
           if git diff --cached --quiet; then
             echo "No staged automated conflict resolutions to commit."
@@ -210,7 +254,7 @@ jobs:
 
       - name: Check sync changes
         id: sync_changes
-        if: steps.threshold.outputs.should_sync == 'true' && (steps.merge.outputs.result == 'success' || steps.resolution.outputs.can_complete_merge == 'true')
+        if: steps.threshold.outputs.should_sync == 'true' && (steps.merge.outputs.result == 'success' || steps.resolution.outputs.can_complete_merge == 'true' || steps.protected_resolution.outputs.can_complete_merge == 'true')
         run: |
           if git diff --quiet "origin/${TARGET_BRANCH}..HEAD"; then
             echo "has_changes=false" >> "$GITHUB_OUTPUT"
@@ -282,7 +326,9 @@ jobs:
 
           The workflow attempted to merge upstream changes into \`${TARGET_BRANCH}\`.
 
-          If conflicts were detected, the deterministic conflict resolver ran before escalating to manual review.
+          If conflicts were detected, the deterministic conflict resolver ran first.
+
+          If \`packages/opencode/src/cli/tui/worker.ts\` remained conflicted, the protected ANR fallback kept our version to preserve ANR-specific worker, telemetry, and audit behavior.
 
           Validation completed before this PR was created or updated.
 
