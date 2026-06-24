@@ -220,19 +220,27 @@ export async function get(
       return item && usable(item) ? ([[item.id, item]] as const) : []
     }),
   )
+  // Secondary lookup index: normalize version separators so catalog keys like
+  // "claude-sonnet-4-6" (hyphen) match API IDs like "claude-sonnet-4.6" (dot).
+  const remoteByNormalized = new Map(
+    [...remote].map(([id, item]) => [id.replace(/\./g, "-"), item] as const),
+  )
 
   // prune existing models whose api.id isn't in the endpoint response
+  const matched = new Set<string>()
   for (const [key, model] of Object.entries(result)) {
-    const m = remote.get(model.api.id)
+    const m = remote.get(model.api.id) ?? remoteByNormalized.get(model.api.id.replace(/\./g, "-"))
     if (!m) {
       delete result[key]
       continue
     }
+    matched.add(m.id)
     result[key] = build(key, m, baseURL, model)
   }
 
   // add new endpoint models not already keyed in result
   for (const [id, m] of remote) {
+    if (matched.has(id)) continue
     if (id in result) continue
     result[id] = build(id, m, baseURL)
   }
