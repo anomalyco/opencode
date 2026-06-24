@@ -170,9 +170,10 @@ export const layerWith = (options?: LayerOptions) =>
                             .get()
                             .pipe(Effect.orDie)
                           const latest = row?.seq ?? -1
-                          const encoded = Schema.encodeUnknownSync(
-                            definition.data as Schema.Codec<unknown, unknown, never, never>,
-                          )(event.data) as Record<string, unknown>
+                          const encoded = Schema.encodeUnknownSync(definition.data)(event.data) as Record<
+                            string,
+                            unknown
+                          >
                           if (input?.strictOwner && row?.ownerID && row.ownerID !== input.ownerID) {
                             yield* Effect.die(
                               new InvalidDurableEventError({
@@ -374,9 +375,7 @@ export const layerWith = (options?: LayerOptions) =>
             const payload = {
               id: event.id,
               type: definition.type,
-              data: Schema.decodeUnknownSync(definition.data as Schema.Codec<unknown, unknown, never, never>)(
-                event.data,
-              ),
+              data: Schema.decodeUnknownSync(definition.data)(event.data),
             } as Payload
             const committed = yield* commitDurableEvent(definition, payload, {
               seq: event.seq,
@@ -471,7 +470,7 @@ export const layerWith = (options?: LayerOptions) =>
           id: event.id,
           type: definition.type,
           durable: { aggregateID: event.aggregateID, seq: event.seq, version: definition.durable.version },
-          data: Schema.decodeUnknownSync(definition.data as Schema.Codec<unknown, unknown, never, never>)(event.data),
+          data: Schema.decodeUnknownSync(definition.data)(event.data),
         }
       }
 

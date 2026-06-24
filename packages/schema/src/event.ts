@@ -11,7 +11,10 @@ export const ID = Schema.String.check(Schema.isStartsWith("evt_")).pipe(
 )
 export type ID = typeof ID.Type
 
-export type Definition<Type extends string = string, DataSchema extends Schema.Top = Schema.Top> = Schema.Top & {
+export type Definition<
+  Type extends string = string,
+  DataSchema extends Schema.Codec<unknown, unknown> = Schema.Codec<unknown, unknown>,
+> = Schema.Top & {
   readonly type: Type
   readonly durable?: {
     readonly version: number
@@ -35,7 +38,10 @@ export type Payload<D extends Definition = Definition> = {
   readonly metadata?: Record<string, unknown>
 }
 
-export function define<const Type extends string, Fields extends Schema.Struct.Fields>(input: {
+export function define<
+  const Type extends string,
+  Fields extends Readonly<Record<PropertyKey, Schema.Codec<unknown, unknown>>>,
+>(input: {
   readonly type: Type
   readonly durable?: {
     readonly version: number

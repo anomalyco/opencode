@@ -1,4 +1,4 @@
-import { HttpApi, OpenApi } from "effect/unstable/httpapi"
+import { HttpApi, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { SchemaErrorMiddleware } from "./middleware/schema-error"
 import { MessageGroup } from "./groups/message"
 import { ModelGroup } from "./groups/model"
@@ -8,9 +8,8 @@ import { PermissionGroup } from "./groups/permission"
 import { FileSystemGroup } from "./groups/fs"
 import { CommandGroup } from "./groups/command"
 import { SkillGroup } from "./groups/skill"
-import { makeEventGroup } from "./groups/event"
+import { EventGroup, makeEventGroup } from "./groups/event"
 import type { Definition } from "@opencode-ai/schema/event"
-import { PublicEventManifest } from "@opencode-ai/core/public-event-manifest"
 import { AgentGroup } from "./groups/agent"
 import { HealthGroup } from "./groups/health"
 import { PtyGroup } from "./groups/pty"
@@ -22,7 +21,7 @@ import { IntegrationGroup } from "./groups/integration"
 import { CredentialGroup } from "./groups/credential"
 import { ProjectCopyGroup } from "./groups/project-copy"
 
-export const makeApi = (definitions: ReadonlyArray<Definition>) =>
+const makeApiFromGroup = <const Group extends HttpApiGroup.Any>(eventGroup: Group) =>
   HttpApi.make("server")
     .add(HealthGroup)
     .add(LocationGroup)
@@ -37,7 +36,7 @@ export const makeApi = (definitions: ReadonlyArray<Definition>) =>
     .add(FileSystemGroup)
     .add(CommandGroup)
     .add(SkillGroup)
-    .add(makeEventGroup(definitions))
+    .add(eventGroup)
     .add(PtyGroup)
     .add(QuestionGroup)
     .add(ReferenceGroup)
@@ -52,4 +51,6 @@ export const makeApi = (definitions: ReadonlyArray<Definition>) =>
     .middleware(Authorization)
     .middleware(SchemaErrorMiddleware)
 
-export const Api = makeApi(PublicEventManifest.Latest.values().toArray())
+export const makeApi = (definitions: ReadonlyArray<Definition>) => makeApiFromGroup(makeEventGroup(definitions))
+
+export const Api = makeApiFromGroup(EventGroup)
