@@ -10,66 +10,13 @@ import { Integration } from "../../integration"
 import { ModelV2 } from "../../model"
 import { ModelRequest } from "../../model-request"
 import { ProviderV2 } from "../../provider"
+import { ConfigProviderV1 } from "../../v1/config/provider"
+import { ConfigV1 } from "../../v1/config/config"
 
 const defaultServer = "https://console.opencode.ai"
 const clientID = "opencode-cli"
 const methodID = Integration.MethodID.make("device")
-const RemoteOptions = Schema.StructWithRest(
-  Schema.Struct({
-    apiKey: Schema.Any.pipe(Schema.optional),
-    headers: Schema.Record(Schema.String, Schema.String).pipe(Schema.optional),
-  }),
-  [Schema.Record(Schema.String, Schema.Any)],
-)
-const RemoteCost = Schema.Struct({
-  input: Schema.Finite,
-  output: Schema.Finite,
-  cache_read: Schema.Finite.pipe(Schema.optional),
-  cache_write: Schema.Finite.pipe(Schema.optional),
-  context_over_200k: Schema.Struct({
-    input: Schema.Finite,
-    output: Schema.Finite,
-    cache_read: Schema.Finite.pipe(Schema.optional),
-    cache_write: Schema.Finite.pipe(Schema.optional),
-  }).pipe(Schema.optional),
-})
-const RemoteModel = Schema.Struct({
-  id: ModelV2.ID.pipe(Schema.optional),
-  family: Schema.String.pipe(Schema.optional),
-  name: Schema.String.pipe(Schema.optional),
-  release_date: Schema.String.pipe(Schema.optional),
-  tool_call: Schema.Boolean.pipe(Schema.optional),
-  modalities: Schema.Struct({
-    input: Schema.Array(Schema.String).pipe(Schema.optional),
-    output: Schema.Array(Schema.String).pipe(Schema.optional),
-  }).pipe(Schema.optional),
-  provider: Schema.Struct({
-    npm: Schema.String.pipe(Schema.optional),
-    api: Schema.String.pipe(Schema.optional),
-  }).pipe(Schema.optional),
-  options: RemoteOptions.pipe(Schema.optional),
-  headers: Schema.Record(Schema.String, Schema.String).pipe(Schema.optional),
-  variants: Schema.Record(Schema.String, RemoteOptions).pipe(Schema.optional),
-  cost: RemoteCost.pipe(Schema.optional),
-  disabled: Schema.Boolean.pipe(Schema.optional),
-  limit: Schema.Struct({
-    context: Schema.Int,
-    input: Schema.Int.pipe(Schema.optional),
-    output: Schema.Int,
-  }).pipe(Schema.optional),
-})
-const RemoteProvider = Schema.Struct({
-  name: Schema.String.pipe(Schema.optional),
-  npm: Schema.String.pipe(Schema.optional),
-  api: Schema.String.pipe(Schema.optional),
-  env: Schema.Array(Schema.String).pipe(Schema.optional),
-  options: RemoteOptions.pipe(Schema.optional),
-  models: Schema.Record(Schema.String, RemoteModel).pipe(Schema.optional),
-})
-const RemoteConfig = Schema.Struct({
-  provider: Schema.Record(Schema.String, RemoteProvider),
-})
-const RemoteResponse = Schema.Struct({ config: RemoteConfig })
+const RemoteResponse = Schema.Struct({ config: ConfigV1.Info })
 const Device = Schema.Struct({
   device_code: Schema.String,
   user_code: Schema.String,
@@ -143,7 +90,7 @@ export const OpencodePlugin = define<HttpClient.HttpClient | EventV2.Service | S
     const events = yield* EventV2.Service
     const http = yield* HttpClient.HttpClient
     let connected = false
-    let providers: typeof RemoteConfig.Type.provider | undefined
+    let providers: typeof ConfigV1.Info.Type.provider | undefined
 
     const load = Effect.fn("OpencodePlugin.load")(function* () {
       const connection = yield* ctx.integration.connection.active("opencode")
@@ -218,7 +165,11 @@ export const OpencodePlugin = define<HttpClient.HttpClient | EventV2.Service | S
             if (config.cost !== undefined) {
               model.cost = remoteCost(config.cost)
             }
-            model.enabled = !config.disabled
+            model.status = config.status ?? "active"
+            model.enabled =
+              config.status !== "deprecated" &&
+              (item.whitelist === undefined || item.whitelist.includes(modelID)) &&
+              !item.blacklist?.includes(modelID)
             if (config.limit !== undefined) model.limit = { ...config.limit }
           })
         }
@@ -275,7 +226,7 @@ function withoutCredentials(body: Readonly<Record<string, unknown>> | undefined)
   return Object.fromEntries(Object.entries(body ?? {}).filter(([key]) => key !== "apiKey" && key !== "headers"))
 }
 
-function remoteCost(input: typeof RemoteCost.Type) {
+function remoteCost(input: NonNullable<(typeof ConfigProviderV1.Model.Type)["cost"]>) {
   const base = {
     input: input.input,
     output: input.output,

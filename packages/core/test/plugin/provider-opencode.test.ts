@@ -96,6 +96,7 @@ describe("OpencodePlugin", () => {
                         headers: { "x-org-id": "org" },
                         custom: "value",
                       },
+                      blacklist: ["disabled"],
                       models: {
                         model: {
                           name: "Remote Model",
@@ -108,6 +109,7 @@ describe("OpencodePlugin", () => {
                           cost: { input: 1, output: 2, cache_read: 0.1 },
                           limit: { context: 1000, output: 100 },
                         },
+                        disabled: { name: "Disabled" },
                       },
                     },
                   },
@@ -164,6 +166,9 @@ describe("OpencodePlugin", () => {
               options: {},
             },
           ])
+          expect(
+            required(yield* catalog.model.get(ProviderV2.ID.make("remote"), ModelV2.ID.make("disabled"))).enabled,
+          ).toBe(false)
           expect(authorization).toContain("Bearer secret")
         }),
       ({ server }) => Effect.promise(() => server.stop(true)),
