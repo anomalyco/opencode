@@ -123,8 +123,12 @@ describe("Snapshot", () => {
               ),
             ),
           )
-          expect(yield* Effect.promise(() => fs.stat(path.join(tmp.path, "snapshot", projectID, Hash.fast(project))))).toBeDefined()
-          expect(yield* Effect.promise(() => fs.stat(path.join(tmp.path, "snapshot", projectID, Hash.fast(linked))))).toBeDefined()
+          expect(
+            yield* Effect.promise(() => fs.stat(path.join(tmp.path, "snapshot", projectID, Hash.fast(project)))),
+          ).toBeDefined()
+          expect(
+            yield* Effect.promise(() => fs.stat(path.join(tmp.path, "snapshot", projectID, Hash.fast(linked)))),
+          ).toBeDefined()
         }),
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
     ),

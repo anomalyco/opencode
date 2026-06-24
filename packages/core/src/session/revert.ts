@@ -66,7 +66,7 @@ export const stage = Effect.fn("SessionRevert.stage")(function* (input: {
   const events = yield* EventV2.Service
   const original = input.session.revert?.snapshot
     ? Snapshot.ID.make(input.session.revert.snapshot)
-    : (yield* snapshot.capture())
+    : yield* snapshot.capture()
   const next = yield* plan({ sessionID: input.session.id, messageID: input.messageID })
   const restore = new Map<RelativePath, Snapshot.ID>()
   if (original) {
@@ -81,7 +81,10 @@ export const stage = Effect.fn("SessionRevert.stage")(function* (input: {
   const revert = {
     messageID: input.messageID,
     snapshot: original,
-    diff: files.map((file) => file.patch).join("").trim(),
+    diff: files
+      .map((file) => file.patch)
+      .join("")
+      .trim(),
     files,
   } satisfies SessionSchema.Info["revert"]
   yield* events.publish(SessionEvent.RevertEvent.Staged, {

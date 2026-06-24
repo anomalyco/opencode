@@ -96,8 +96,8 @@ export const layer = Layer.effect(
       if (patch) {
         const repository = yield* git.repo.discover(directory)
         if (!repository) return yield* new ApplyChangesError({ message: "Destination is not a Git repository" })
-        yield* git
-          .change.apply({ repository, path: directory, changes: patch })
+        yield* git.change
+          .apply({ repository, path: directory, changes: patch })
           .pipe(Effect.mapError((error) => new ApplyChangesError({ message: error.message })))
       }
 
@@ -123,14 +123,14 @@ export const layer = Layer.effect(
             untracked: "remove",
           })
           .pipe(
-          Effect.mapError(
-            (error) =>
-              new ResetSourceChangesError({
-                directory: current.location.directory,
-                message: error.message,
-                cause: error.cause,
-              }),
-          ),
+            Effect.mapError(
+              (error) =>
+                new ResetSourceChangesError({
+                  directory: current.location.directory,
+                  message: error.message,
+                  cause: error.cause,
+                }),
+            ),
           )
       }
     })

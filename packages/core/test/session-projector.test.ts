@@ -46,18 +46,52 @@ describe("SessionProjector", () => {
   it.effect("projects staged, cleared, and committed reverts", () =>
     Effect.gen(function* () {
       const db = (yield* Database.Service).db
-      yield* db.insert(ProjectTable).values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] }).run()
-      yield* db.insert(SessionTable).values({ id: sessionID, project_id: Project.ID.global, slug: "test", directory: "/project", title: "test", version: "test" }).run()
+      yield* db
+        .insert(ProjectTable)
+        .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
+        .run()
+      yield* db
+        .insert(SessionTable)
+        .values({
+          id: sessionID,
+          project_id: Project.ID.global,
+          slug: "test",
+          directory: "/project",
+          title: "test",
+          version: "test",
+        })
+        .run()
       const boundary = SessionMessage.ID.make("msg_boundary")
-      yield* db.insert(SessionMessageTable).values([assistantRow(boundary, 1), assistantRow(SessionMessage.ID.make("msg_later"), 2)]).run()
+      yield* db
+        .insert(SessionMessageTable)
+        .values([assistantRow(boundary, 1), assistantRow(SessionMessage.ID.make("msg_later"), 2)])
+        .run()
       const events = yield* EventV2.Service
-      yield* events.publish(SessionEvent.RevertEvent.Staged, { sessionID, timestamp: DateTime.makeUnsafe(1), revert: { messageID: boundary, snapshot: Snapshot.ID.make("tree"), diff: "patch", files: [] } })
-      expect((yield* db.select({ revert: SessionTable.revert }).from(SessionTable).get())?.revert).toMatchObject({ messageID: boundary, snapshot: "tree", files: [] })
+      yield* events.publish(SessionEvent.RevertEvent.Staged, {
+        sessionID,
+        timestamp: DateTime.makeUnsafe(1),
+        revert: { messageID: boundary, snapshot: Snapshot.ID.make("tree"), diff: "patch", files: [] },
+      })
+      expect((yield* db.select({ revert: SessionTable.revert }).from(SessionTable).get())?.revert).toMatchObject({
+        messageID: boundary,
+        snapshot: "tree",
+        files: [],
+      })
       yield* events.publish(SessionEvent.RevertEvent.Cleared, { sessionID, timestamp: DateTime.makeUnsafe(2) })
       expect((yield* db.select({ revert: SessionTable.revert }).from(SessionTable).get())?.revert).toBeNull()
-      yield* events.publish(SessionEvent.RevertEvent.Staged, { sessionID, timestamp: DateTime.makeUnsafe(3), revert: { messageID: boundary, files: [] } })
-      yield* events.publish(SessionEvent.RevertEvent.Committed, { sessionID, messageID: boundary, timestamp: DateTime.makeUnsafe(4) })
-      expect((yield* db.select({ id: SessionMessageTable.id }).from(SessionMessageTable).all()).map((row) => row.id)).toEqual([boundary])
+      yield* events.publish(SessionEvent.RevertEvent.Staged, {
+        sessionID,
+        timestamp: DateTime.makeUnsafe(3),
+        revert: { messageID: boundary, files: [] },
+      })
+      yield* events.publish(SessionEvent.RevertEvent.Committed, {
+        sessionID,
+        messageID: boundary,
+        timestamp: DateTime.makeUnsafe(4),
+      })
+      expect(
+        (yield* db.select({ id: SessionMessageTable.id }).from(SessionMessageTable).all()).map((row) => row.id),
+      ).toEqual([boundary])
     }),
   )
 

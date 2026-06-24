@@ -169,7 +169,8 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | Git.Service | E
                 }
 
                 if (status === "refreshed") {
-                  if (!existing) return yield* new FetchFailedError({ repository, message: "Repository is unavailable" })
+                  if (!existing)
+                    return yield* new FetchFailedError({ repository, message: "Repository is unavailable" })
                   yield* git.sync
                     .fetchRemotes(existing)
                     .pipe(Effect.mapError((error) => new FetchFailedError({ repository, message: error.message })))

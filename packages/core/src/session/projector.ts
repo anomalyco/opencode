@@ -418,13 +418,38 @@ export const layer = Layer.effectDiscard(
         const boundary = yield* db
           .select({ seq: SessionMessageTable.seq })
           .from(SessionMessageTable)
-          .where(and(eq(SessionMessageTable.session_id, event.data.sessionID), eq(SessionMessageTable.id, event.data.messageID)))
+          .where(
+            and(
+              eq(SessionMessageTable.session_id, event.data.sessionID),
+              eq(SessionMessageTable.id, event.data.messageID),
+            ),
+          )
           .get()
           .pipe(Effect.orDie)
         if (!boundary) return yield* Effect.die(`Revert boundary message not found: ${event.data.messageID}`)
-        yield* db.delete(SessionMessageTable).where(and(eq(SessionMessageTable.session_id, event.data.sessionID), gt(SessionMessageTable.seq, boundary.seq))).run().pipe(Effect.orDie)
-        yield* db.delete(SessionInputTable).where(and(eq(SessionInputTable.session_id, event.data.sessionID), or(gt(SessionInputTable.admitted_seq, boundary.seq), gt(SessionInputTable.promoted_seq, boundary.seq)))).run().pipe(Effect.orDie)
-        yield* db.update(SessionTable).set({ revert: null, time_updated: DateTime.toEpochMillis(event.data.timestamp) }).where(eq(SessionTable.id, event.data.sessionID)).run().pipe(Effect.orDie)
+        yield* db
+          .delete(SessionMessageTable)
+          .where(
+            and(eq(SessionMessageTable.session_id, event.data.sessionID), gt(SessionMessageTable.seq, boundary.seq)),
+          )
+          .run()
+          .pipe(Effect.orDie)
+        yield* db
+          .delete(SessionInputTable)
+          .where(
+            and(
+              eq(SessionInputTable.session_id, event.data.sessionID),
+              or(gt(SessionInputTable.admitted_seq, boundary.seq), gt(SessionInputTable.promoted_seq, boundary.seq)),
+            ),
+          )
+          .run()
+          .pipe(Effect.orDie)
+        yield* db
+          .update(SessionTable)
+          .set({ revert: null, time_updated: DateTime.toEpochMillis(event.data.timestamp) })
+          .where(eq(SessionTable.id, event.data.sessionID))
+          .run()
+          .pipe(Effect.orDie)
         yield* SessionContextEpoch.reset(db, event.data.sessionID)
       }),
     )
