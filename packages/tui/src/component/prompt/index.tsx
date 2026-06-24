@@ -536,13 +536,19 @@ export function Prompt(props: PromptProps) {
         enabled: Boolean(props.sessionID),
         run: async () => {
           if (!props.sessionID || !clipboard.write) return
+          // Clear input synchronously before the async clipboard write.
+          // The input's onSubmit fires a double-deferred submit() via setTimeout;
+          // if the input still contains "/session-id" when that fires, it sends
+          // the text to the LLM as a prompt.
+          input.setText("")
+          setStore("prompt", { input: "", parts: [] })
+          dialog.clear()
           await clipboard.write(props.sessionID)
           toast.show({
             variant: "success",
             message: `Copied: ${props.sessionID}`,
             duration: 3000,
           })
-          dialog.clear()
         },
       },
       {
@@ -554,6 +560,10 @@ export function Prompt(props: PromptProps) {
         enabled: Boolean(props.sessionID),
         run: async () => {
           if (!props.sessionID || !clipboard.write) return
+          // Clear input synchronously — see /session-id command for rationale.
+          input.setText("")
+          setStore("prompt", { input: "", parts: [] })
+          dialog.clear()
           const dir =
             (project.instance.path().worktree === "/" ? undefined : project.instance.path().worktree) ||
             project.instance.directory() ||
@@ -566,7 +576,6 @@ export function Prompt(props: PromptProps) {
             message: "Copied project, session title, and ID to clipboard",
             duration: 3000,
           })
-          dialog.clear()
         },
       },
       {
