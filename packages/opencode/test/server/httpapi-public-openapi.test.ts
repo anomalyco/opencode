@@ -220,10 +220,7 @@ describe("PublicApi OpenAPI v2 errors", () => {
   test("documents v2 unfinished session mutation errors", () => {
     const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
 
-    for (const route of [
-      ["post", "/api/session/{sessionID}/compact"],
-      ["post", "/api/session/{sessionID}/wait"],
-    ] as const) {
+    for (const route of [["post", "/api/session/{sessionID}/compact"]] as const) {
       expect(componentName(responseRef(spec.paths[route[1]]?.[route[0]]?.responses?.["503"]) ?? "")).toBe(
         "ServiceUnavailableError",
       )

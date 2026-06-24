@@ -8,6 +8,8 @@ export interface Coordinator<Key, E> {
   readonly run: (key: Key) => Effect.Effect<void, E>
   /** Registers one coalesced follow-up after newly recorded work. */
   readonly wake: (key: Key) => Effect.Effect<void>
+  /** Waits for active execution to finish without starting new work. */
+  readonly wait: (key: Key) => Effect.Effect<void>
   /** Stops active execution and waits for its cleanup. */
   readonly interrupt: (key: Key) => Effect.Effect<void>
 }
@@ -89,6 +91,13 @@ export const make = <Key, E>(options: {
         start(key, next, false)
       })
 
+    const wait = (key: Key): Effect.Effect<void> =>
+      Effect.suspend(() => {
+        const entry = active.get(key)
+        if (entry === undefined) return Effect.void
+        return Effect.ignore(Deferred.await(entry.done)).pipe(Effect.andThen(wait(key)))
+      })
+
     const interrupt = (key: Key): Effect.Effect<void> =>
       Effect.suspend(() => {
         const entry = active.get(key)
@@ -98,5 +107,5 @@ export const make = <Key, E>(options: {
         return Fiber.interrupt(entry.owner)
       })
 
-    return { run, wake, interrupt }
+    return { run, wake, wait, interrupt }
   })
