@@ -9,7 +9,7 @@ import { useEditorContext } from "../../context/editor"
 import { useProject } from "../../context/project"
 import { useSDK } from "../../context/sdk"
 import { useSync } from "../../context/sync"
-import { useSyncV2 } from "../../context/sync-v2"
+import { useData } from "../../context/data"
 import { getScrollAcceleration } from "../../util/scroll"
 import { useTuiPaths } from "../../context/runtime"
 import { useTuiConfig } from "../../config"
@@ -85,7 +85,7 @@ export function Autocomplete(props: {
   const editor = useEditorContext()
   const sdk = useSDK()
   const sync = useSync()
-  const syncV2 = useSyncV2()
+  const data = useData()
   const project = useProject()
   const slashes = useCommandSlashes()
   const modeStack = useOpencodeModeStack()
@@ -273,12 +273,14 @@ export function Autocomplete(props: {
     }
   }
 
+  const references = createMemo(() => data.location.reference.list() ?? [])
+
   const referenceMatch = createMemo(() => {
     if (!store.visible || store.visible === "/") return
     const { baseQuery } = extractLineRange(search())
     const slash = baseQuery.indexOf("/")
     const alias = slash === -1 ? baseQuery : baseQuery.slice(0, slash)
-    return syncV2.data.reference.find((item) => item.name === alias)
+    return references().find((item) => !item.hidden && item.name === alias)
   })
 
   function normalizeMentionPath(filePath: string) {
@@ -312,12 +314,12 @@ export function Autocomplete(props: {
     async (query) => {
       if (!store.visible || store.visible === "/") return []
       if (referenceMatch()) return []
-
       const { lineRange, baseQuery } = extractLineRange(query ?? "")
 
       // Get files from SDK
       const result = await sdk.client.v2.fs.find({
         query: baseQuery,
+        limit: "20",
         location: { workspace: project.workspace.current() },
       })
 
@@ -330,7 +332,6 @@ export function Autocomplete(props: {
         options.push(
           ...result.data.data.map((item): AutocompleteOption => {
             const { filename, url, part } = createFilePart(item.path, lineRange)
-
             return {
               display: Locale.truncateMiddle(filename, width),
               value: filename,
@@ -388,8 +389,7 @@ export function Autocomplete(props: {
   })
 
   const agents = createMemo(() => {
-    const agents = sync.data.agent
-    return agents
+    return sync.data.agent
       .filter((agent) => !agent.hidden && agent.mode !== "primary")
       .map(
         (agent): AutocompleteOption => ({
@@ -410,25 +410,27 @@ export function Autocomplete(props: {
   })
 
   const referenceAliases = createMemo(() =>
-    syncV2.data.reference.map(
-      (reference): AutocompleteOption => ({
-        display: "@" + reference.name,
-        description: " dir",
-        onSelect: () => {
-          insertPart(reference.name, {
-            type: "file",
-            mime: "application/x-directory",
-            filename: reference.name,
-            url: pathToFileURL(reference.path).href,
-            source: {
+    references()
+      .filter((reference) => !reference.hidden)
+      .map(
+        (reference): AutocompleteOption => ({
+          display: "@" + reference.name,
+          description: ` ${reference.source.type === "git" ? reference.source.repository : reference.source.path}`,
+          onSelect: () => {
+            insertPart(reference.name, {
               type: "file",
-              text: { start: 0, end: 0, value: "" },
-              path: reference.name,
-            },
-          })
-        },
-      }),
-    ),
+              mime: "application/x-directory",
+              filename: reference.name,
+              url: pathToFileURL(reference.path).href,
+              source: {
+                type: "file",
+                text: { start: 0, end: 0, value: "" },
+                path: reference.name,
+              },
+            })
+          },
+        }),
+      ),
   )
 
   const commands = createMemo((): AutocompleteOption[] => {
@@ -468,8 +470,6 @@ export function Autocomplete(props: {
     const commandsValue = commands()
     const searchValue = search()
 
-    // @<alias>/... — narrow to the matched reference, files come from fff
-    // already ranked so there is no re-ranking here.
     if (store.visible === "@" && referenceMatchValue) {
       return referenceAliasesValue.filter((item) => item.display === `@${referenceMatchValue.name}`)
     }

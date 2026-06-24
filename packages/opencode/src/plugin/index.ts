@@ -1,3 +1,4 @@
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import type {
   Hooks,
   PluginInput,
@@ -306,5 +307,7 @@ export const defaultLayer = layer.pipe(
   Layer.provide(Config.defaultLayer),
   Layer.provide(RuntimeFlags.defaultLayer),
 )
+
+export const node = LayerNode.make(layer, [EventV2Bridge.node, Config.node, RuntimeFlags.node])
 
 export * as Plugin from "."

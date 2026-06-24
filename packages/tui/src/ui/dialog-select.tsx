@@ -669,7 +669,7 @@ function Option(props: {
 
   return (
     <>
-      <Show when={props.current}>
+      <Show when={props.current && !props.gutter}>
         <text flexShrink={0} fg={text()} marginRight={0}>
           ●
         </text>

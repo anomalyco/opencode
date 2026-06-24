@@ -1,3 +1,4 @@
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import path from "path"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
@@ -1670,5 +1671,34 @@ const bashRegex = /!`([^`]+)`/g
 const argsRegex = /(?:\[Image\s+\d+\]|"[^"]*"|'[^']*'|[^\s"']+)/gi
 const placeholderRegex = /\$(\d+)/g
 const quoteTrimRegex = /^["']|["']$/g
+
+export const node = LayerNode.make(layer, [
+  SessionStatus.node,
+  Session.node,
+  Agent.node,
+  Provider.node,
+  SessionProcessor.node,
+  SessionCompaction.node,
+  Plugin.node,
+  Command.node,
+  Config.node,
+  Permission.node,
+  FSUtil.node,
+  MCP.node,
+  LSP.node,
+  ToolRegistry.node,
+  Truncate.node,
+  Image.node,
+  CrossSpawnSpawner.node,
+  Instruction.node,
+  SessionRunState.node,
+  SessionRevert.node,
+  SessionSummary.node,
+  SystemPrompt.node,
+  LLM.node,
+  EventV2Bridge.node,
+  RuntimeFlags.node,
+  Database.node,
+])
 
 export * as SessionPrompt from "./prompt"
