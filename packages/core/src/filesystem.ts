@@ -7,8 +7,8 @@ import { FSUtil } from "./fs-util"
 import { Location } from "./location"
 import { PositiveInt, RelativePath } from "./schema"
 import { FileSystemSearch } from "./filesystem/search"
-import { Entry, Match } from "./filesystem/schema"
-export { Entry, Match, Submatch } from "./filesystem/schema"
+import { Entry, Match } from "@opencode-ai/schema/filesystem"
+export { Entry, Match, Submatch } from "@opencode-ai/schema/filesystem"
 
 export const ReadInput = Schema.Struct({
   path: RelativePath,
@@ -108,10 +108,9 @@ const baseLayer = Layer.effect(
                 const absolute = path.join(target.absolute, item.name)
                 const relative = path.relative(target.directory, absolute)
                 return [
-                  new Entry({
+                  Entry.make({
                     path: RelativePath.make(relative + (item.type === "directory" ? path.sep : "")),
                     type: item.type,
-                    mime: item.type === "directory" ? "application/x-directory" : FSUtil.mimeType(absolute),
                   }),
                 ]
               })

@@ -20,6 +20,8 @@ beforeAll(async () => {
   mock.module("@solidjs/router", () => ({
     useParams: () => ({}),
     useSearchParams: () => [{}],
+    useLocation: () => ({ pathname: "", query: {} }),
+    useNavigate: () => () => undefined,
   }))
   mock.module("@opencode-ai/ui/context", () => ({
     createSimpleContext: () => ({

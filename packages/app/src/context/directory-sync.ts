@@ -187,7 +187,7 @@ export const createDirSyncContext = (
     return serverSync.child(directory)
   }
   const absolute = (path: string) => (current()[0].path.directory + "/" + path).replace("//", "/")
-  const initialMessagePageSize = 80
+  const initialMessagePageSize = 2
   const historyMessagePageSize = 200
   const inflight = new Map<string, Promise<void>>()
   const inflightDiff = new Map<string, Promise<void>>()

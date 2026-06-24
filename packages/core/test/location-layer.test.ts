@@ -52,14 +52,28 @@ const it = testEffect(
 )
 
 describe("LocationServiceMap", () => {
-  it.effect("compares equivalent location refs by value", () =>
-    Effect.sync(() => {
-      const directory = AbsolutePath.make("/project")
-      expect(Equal.equals(Location.Ref.make({ directory }), Location.Ref.make({ directory }))).toBe(true)
-      expect(Hash.hash(Location.Ref.make({ directory }))).toBe(
-        Hash.hash(Location.Ref.make({ directory, workspaceID: undefined })),
-      )
-    }),
+  it.live("reuses cached services for constructed and decoded location refs", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((dir) =>
+        Effect.scoped(
+          Effect.gen(function* () {
+            const locations = yield* LocationServiceMap
+            const directory = AbsolutePath.make(dir.path)
+            const constructed = Location.Ref.make({ directory })
+            const decoded = Schema.decodeUnknownSync(Location.Ref)({ directory })
+
+            expect(constructed).toEqual({ directory, workspaceID: undefined })
+            expect(decoded).toEqual(constructed)
+            expect(Equal.equals(constructed, decoded)).toBe(true)
+            expect(Hash.hash(constructed)).toBe(Hash.hash(decoded))
+            expect(yield* locations.contextEffect(constructed)).toBe(yield* locations.contextEffect(decoded))
+          }),
+        ),
+      ),
+    ),
   )
 
   it.live("isolates location state while sharing location policy with catalog", () =>

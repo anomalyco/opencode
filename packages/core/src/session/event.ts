@@ -1,14 +1,14 @@
 import { Schema } from "effect"
-import { ProviderMetadata, ToolContent } from "@opencode-ai/llm"
+import { ProviderMetadata, ToolContent } from "@opencode-ai/schema/llm"
+import { Delivery } from "@opencode-ai/schema/session-delivery"
 import { EventV2 } from "../event"
 import { ModelV2 } from "../model"
-import { NonNegativeInt } from "../schema"
-import { V2Schema } from "../v2-schema"
+import { DateTimeUtcFromMillis, NonNegativeInt, RelativePath } from "../schema"
 import { FileAttachment, Prompt } from "./prompt"
 import { SessionSchema } from "./schema"
 import { Location } from "../location"
-import { RelativePath } from "../schema"
 import { SessionMessageID } from "./message-id"
+import { SessionMessage } from "./message"
 
 export { FileAttachment }
 
@@ -22,14 +22,14 @@ export const Source = Schema.Struct({
 export type Source = typeof Source.Type
 
 const Base = {
-  timestamp: V2Schema.DateTimeUtcFromMillis,
+  timestamp: DateTimeUtcFromMillis,
   sessionID: SessionSchema.ID,
 }
 const PromptFields = {
   ...Base,
   messageID: SessionMessageID.ID,
   prompt: Prompt,
-  delivery: Schema.Literals(["steer", "queue"]),
+  delivery: Delivery,
 }
 
 const options = {
@@ -45,13 +45,8 @@ const stepSettlementOptions = {
   },
 } as const
 
-export const UnknownError = Schema.Struct({
-  type: Schema.Literal("unknown"),
-  message: Schema.String,
-}).annotate({
-  identifier: "Session.Error.Unknown",
-})
-export type UnknownError = typeof UnknownError.Type
+export const UnknownError = SessionMessage.UnknownError
+export type UnknownError = SessionMessage.UnknownError
 
 export const AgentSwitched = EventV2.define({
   type: "session.next.agent.switched",
