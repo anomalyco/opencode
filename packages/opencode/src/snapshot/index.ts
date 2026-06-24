@@ -82,7 +82,9 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
 
         const args = (cmd: string[]) => ["--git-dir", state.gitdir, "--work-tree", state.worktree, ...cmd]
 
-        const feed = (list: string[]) => list.join("\0") + "\0"
+        const encodeNulTerminatedPaths = (files: string[]) => files.join("\0") + "\0"
+        const encodeTopLevelLiteralPathspecs = (files: string[]) =>
+          encodeNulTerminatedPaths(files.map((file) => `:(top,literal)${file}`))
 
         const git = Effect.fnUntraced(
           function* (cmd: string[], opts?: { cwd?: string; env?: Record<string, string>; stdin?: string }) {
@@ -107,6 +109,8 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
 
         const ignore = Effect.fnUntraced(function* (files: string[]) {
           if (!files.length) return new Set<string>()
+          // check-ignore treats a leading colon as pathspec magic but accepts and echoes a protective ./ prefix.
+          const checkIgnorePaths = files.map((item) => (item.startsWith(":") ? `./${item}` : item))
           const check = yield* git(
             [
               ...quote,
@@ -120,12 +124,17 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
               "-z",
             ],
             {
-              cwd: state.directory,
-              stdin: feed(files),
+              cwd: state.worktree,
+              stdin: encodeNulTerminatedPaths(checkIgnorePaths),
             },
           )
           if (check.code !== 0 && check.code !== 1) return new Set<string>()
-          return new Set(check.text.split("\0").filter(Boolean))
+          return new Set(
+            check.text
+              .split("\0")
+              .filter(Boolean)
+              .map((item) => (item.startsWith("./:") ? item.slice(2) : item)),
+          )
         })
 
         const drop = Effect.fnUntraced(function* (files: string[]) {
@@ -136,8 +145,8 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
               ...args(["rm", "--cached", "-f", "--ignore-unmatch", "--pathspec-from-file=-", "--pathspec-file-nul"]),
             ],
             {
-              cwd: state.directory,
-              stdin: feed(files),
+              cwd: state.worktree,
+              stdin: encodeTopLevelLiteralPathspecs(files),
             },
           )
         })
@@ -147,8 +156,8 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
           const result = yield* git(
             [...cfg, ...args(["add", "--all", "--sparse", "--pathspec-from-file=-", "--pathspec-file-nul"])],
             {
-              cwd: state.directory,
-              stdin: feed(files),
+              cwd: state.worktree,
+              stdin: encodeTopLevelLiteralPathspecs(files),
             },
           )
           if (result.code === 0) return
@@ -238,7 +247,7 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
               git([...quote, ...args(["diff-files", "--name-only", "-z", "--", "."])], {
                 cwd: state.directory,
               }),
-              git([...quote, ...args(["ls-files", "--others", "--exclude-standard", "-z", "--", "."])], {
+              git([...quote, ...args(["ls-files", "--full-name", "--others", "--exclude-standard", "-z", "--", "."])], {
                 cwd: state.directory,
               }),
             ],
@@ -277,7 +286,7 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
             (yield* Effect.all(
               allow.map((item) =>
                 fs
-                  .stat(path.join(state.directory, item))
+                  .stat(path.join(state.worktree, item))
                   .pipe(Effect.catch(() => Effect.void))
                   .pipe(
                     Effect.map((stat) => {

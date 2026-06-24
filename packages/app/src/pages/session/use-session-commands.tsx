@@ -18,6 +18,8 @@ import { createSessionTabs } from "@/pages/session/helpers"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { UserMessage } from "@opencode-ai/sdk/v2"
 import { useSessionLayout } from "@/pages/session/session-layout"
+import { useTabs } from "@/context/tabs"
+import { requireServerKey } from "@/utils/session-route"
 
 export type SessionCommandContext = {
   navigateMessageByOffset: (offset: number) => void
@@ -45,6 +47,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const settings = useSettings()
   const sync = useSync()
   const terminal = useTerminal()
+  const sessionTabs = useTabs()
   const layout = useLayout()
   const navigate = useNavigate()
   const { params, tabs, view } = useSessionLayout()
@@ -381,7 +384,13 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       title: language.t("command.session.new"),
       keybind: "mod+shift+s",
       slash: "new",
-      onSelect: () => navigate(`/${params.dir}/session`),
+      onSelect: () => {
+        if (params.serverKey) {
+          sessionTabs.newDraft({ server: requireServerKey(params.serverKey), directory: sdk().directory })
+          return
+        }
+        navigate(`/${params.dir}/session`)
+      },
     }),
     sessionCommand({
       id: "session.undo",

@@ -86,6 +86,7 @@ export function fetch<T extends { name: string }>(
   client: Client,
   list: (client: Client) => Promise<T[]>,
   label: string,
+  key?: (item: T) => string,
 ) {
   return Effect.tryPromise({
     try: () => list(client),
@@ -100,7 +101,10 @@ export function fetch<T extends { name: string }>(
     Effect.map((items) => {
       const sanitizedClient = sanitize(clientName)
       return Object.fromEntries(
-        items.map((item) => [sanitizedClient + ":" + sanitize(item.name), { ...item, client: clientName }]),
+        items.map((item) => [
+          key ? clientName + ":" + key(item) : sanitizedClient + ":" + sanitize(item.name),
+          { ...item, client: clientName },
+        ]),
       )
     }),
     Effect.orElseSucceed(() => undefined),
@@ -122,6 +126,14 @@ export function resources(client: Client, timeout?: number) {
   return paginate(
     (cursor) => client.listResources(cursor === undefined ? undefined : { cursor }, { timeout }),
     (result) => result.resources,
+  )
+}
+
+export function resourceTemplates(client: Client, timeout?: number) {
+  if (!client.getServerCapabilities()?.resources) return Promise.resolve([])
+  return paginate(
+    (cursor) => client.listResourceTemplates(cursor === undefined ? undefined : { cursor }, { timeout }),
+    (result) => result.resourceTemplates,
   )
 }
 

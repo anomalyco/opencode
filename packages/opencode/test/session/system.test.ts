@@ -52,7 +52,7 @@ const it = testEffect(
             {
               name: "guide-server",
               instructions: "Use lookup before mutate.",
-              tools: ["guide-server_lookup", "guide-server_mutate"],
+              tools: ["mcp__guide-server__lookup", "mcp__guide-server__mutate"],
             },
           ]),
       }),
@@ -102,13 +102,13 @@ describe("session.system", () => {
       const prompt = yield* SystemPrompt.Service
       const output = yield* prompt.mcp({
         ...build,
-        permission: Permission.fromConfig({ "guide-server_mutate": "deny" }),
+        permission: Permission.fromConfig({ "mcp__guide-server__mutate": "deny" }),
       })
 
       expect(output).toEqual([
         [
           "Instructions from: MCP server guide-server",
-          "These instructions apply to MCP tools whose names start with `guide-server_`, and to prompts/resources from this MCP server.",
+          "These instructions apply to MCP tools whose names start with `mcp__guide-server__`, and to prompts/resources from this MCP server.",
           "",
           "Use lookup before mutate.",
         ].join("\n"),
@@ -121,7 +121,7 @@ describe("session.system", () => {
       const prompt = yield* SystemPrompt.Service
       const output = yield* prompt.mcp({
         ...build,
-        permission: Permission.fromConfig({ "guide-server_*": "deny" }),
+        permission: Permission.fromConfig({ "mcp__guide-server__*": "deny" }),
       })
 
       expect(output).toEqual([])
