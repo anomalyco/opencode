@@ -5,6 +5,29 @@
   inset: 0;
   z-index: 50;
   background-color: var(--v2-overlay-simple-overlay-scrim);
+  animation: v2-overlay-show 150ms ease-out;
+}
+
+[data-component="dialog-overlay"][data-closing] {
+  animation: v2-overlay-hide 100ms ease-in forwards;
+}
+
+@keyframes v2-overlay-show {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes v2-overlay-hide {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
 }
 
 [data-component="dialog-v2"] {
@@ -27,6 +50,7 @@
     border-radius: 6px;
     overflow: hidden;
     pointer-events: auto;
+    animation: v2-content-show 150ms ease-out;
 
     [data-slot="dialog-content"] {
       display: flex;
@@ -146,5 +170,35 @@
   &[data-size="x-large"] [data-slot="dialog-container"] {
     width: 800px;
     height: 560px;
+  }
+}
+
+[data-closing] [data-component="dialog-v2"] [data-slot="dialog-container"] {
+  animation: v2-content-hide 100ms ease-in forwards;
+}
+
+[data-closing] [data-component="dialog-overlay"] {
+  animation: v2-overlay-hide 100ms ease-in forwards;
+}
+
+@keyframes v2-content-show {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes v2-content-hide {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.97);
   }
 }
