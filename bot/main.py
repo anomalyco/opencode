@@ -120,9 +120,10 @@ async def main():
         token=VK_TOKEN, api_version=VK_API_VERSION
     ) as vk:
         try:
+            branch = subprocess.run(["git", "branch", "--show-current"], capture_output=True, text=True, cwd=workdir).stdout.strip()
             await vk.send_message(
                 PEER_ID,
-                f"🤖 OpenCode VK Gateway запущен\n\nModel: {bot_config.DEFAULT_MODEL}\nWorkdir: {workdir}",
+                f"🤖 OpenCode VK Gateway запущен\n\nModel: {bot_config.DEFAULT_MODEL}\nWorkdir: {workdir}\nBranch: {branch}",
                 keyboard=vk_keyboards.get_main_keyboard(),
             )
         except Exception as e:
