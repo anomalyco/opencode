@@ -47,13 +47,23 @@ export function resource(): { serviceName: string; serviceVersion: string; attri
   }
 }
 
+// A signal is disabled when its OTel exporter selection env var is "none".
+// This lets a deployment keep OTEL_EXPORTER_OTLP_ENDPOINT for metrics while
+// turning off traces/logs whose collector path is not available (e.g. a
+// metrics-only collector that 404s /v1/traces and /v1/logs).
+function exporterDisabled(value: string | undefined) {
+  return value?.trim().toLowerCase() === "none"
+}
+
 export function loggers() {
   if (!endpoint) return []
+  if (exporterDisabled(Flag.OTEL_LOGS_EXPORTER)) return []
   return [OtlpLogger.make({ url: `${endpoint}/v1/logs`, resource: resource(), headers })]
 }
 
 export async function tracingLayer() {
   if (!endpoint) return Layer.empty
+  if (exporterDisabled(Flag.OTEL_TRACES_EXPORTER)) return Layer.empty
   const NodeSdk = await import("@effect/opentelemetry/NodeSdk")
   const OTLP = await import("@opentelemetry/exporter-trace-otlp-http")
   const SdkBase = await import("@opentelemetry/sdk-trace-base")

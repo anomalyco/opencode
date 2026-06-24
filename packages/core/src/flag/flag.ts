@@ -14,6 +14,16 @@ function enabledByExperimental(key: string) {
 export const Flag = {
   OTEL_EXPORTER_OTLP_ENDPOINT: process.env["OTEL_EXPORTER_OTLP_ENDPOINT"],
   OTEL_EXPORTER_OTLP_HEADERS: process.env["OTEL_EXPORTER_OTLP_HEADERS"],
+  // Standard OTel signal selection. Setting either to "none" disables that
+  // signal's OTLP exporter while leaving OTEL_EXPORTER_OTLP_ENDPOINT in place
+  // for other signals (e.g. the anr metrics exporter). Read at access time
+  // because the anr env loader sets these at runtime.
+  get OTEL_TRACES_EXPORTER() {
+    return process.env["OTEL_TRACES_EXPORTER"]
+  },
+  get OTEL_LOGS_EXPORTER() {
+    return process.env["OTEL_LOGS_EXPORTER"]
+  },
 
   OPENCODE_AUTO_HEAP_SNAPSHOT: truthy("OPENCODE_AUTO_HEAP_SNAPSHOT"),
   OPENCODE_GIT_BASH_PATH: process.env["OPENCODE_GIT_BASH_PATH"],

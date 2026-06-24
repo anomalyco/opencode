@@ -284,6 +284,23 @@ This will force opencode to download the most recent versions of provider packag
 
 ---
 
+### macOS: "opencode is damaged and can't be opened"
+
+If you downloaded the macOS CLI archive (`opencode-darwin-*.zip`) through a browser and macOS reports that the binary is "damaged and can't be opened" or "corrupt", the file is fine. macOS adds a `com.apple.quarantine` flag to anything downloaded via a browser, and Gatekeeper rejects the ad-hoc-signed binary.
+
+Remove the quarantine flag and run it:
+
+```bash
+xattr -dr com.apple.quarantine ./opencode
+./opencode --version
+```
+
+Do **not** run `codesign` on the binary. opencode binaries are compiled with Bun, which appends the bundle after the Mach-O signature region. Re-signing trips over that trailing data, fails with `internal error in Code Signing subsystem`, and corrupts an otherwise-working binary.
+
+You can avoid the quarantine flag entirely by installing through a path that doesn't quarantine: `npm i -g opencode-ai`, Homebrew, or the `curl` install script.
+
+---
+
 ### Copy/paste not working on Linux
 
 Linux users need to have one of the following clipboard utilities installed for copy/paste functionality to work:
