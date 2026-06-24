@@ -1,6 +1,5 @@
 export * as FileSystemSearch from "./search"
 
-import os from "os"
 import path from "path"
 import { Context, Effect, Layer, Scope } from "effect"
 import { Fff } from "#fff"
@@ -128,8 +127,6 @@ export const fffLayer = Layer.effect(
         Fff.create({
           basePath: location.directory,
           aiMode: true,
-          enableFsRootScanning: location.directory === path.parse(location.directory).root,
-          enableHomeDirScanning: location.directory === os.homedir(),
         }),
       catch: (cause) => cause,
     }).pipe(Effect.orDie)
