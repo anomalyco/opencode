@@ -62,7 +62,14 @@ export class ProviderStatRepo extends Context.Service<ProviderStatRepo, Provider
                 totalTokens: providerStat.total_tokens,
               })
               .from(providerStat)
-              .where(and(eq(providerStat.grain, "day"), eq(providerStat.client, "all"), eq(providerStat.source, "all")))
+              .where(
+                and(
+                  eq(providerStat.grain, "day"),
+                  eq(providerStat.client, "all"),
+                  eq(providerStat.source, "all"),
+                  inArray(providerStat.tier, ["Go", "go"]),
+                ),
+              )
               .orderBy(asc(providerStat.period_key)),
           catch: (cause) => DatabaseError.make({ cause }),
         })

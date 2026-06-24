@@ -74,12 +74,21 @@ export const LocationGroup = HttpApiGroup.make("server.location")
 function ref(request: HttpServerRequest.HttpServerRequest): Location.Ref {
   const query = new URL(request.url, "http://localhost").searchParams
   const workspaceID = query.get("location[workspace]") || request.headers["x-opencode-workspace"]
+  const directory =
+    query.get("location[directory]") ||
+    (request.headers["x-opencode-directory"] ? decode(request.headers["x-opencode-directory"]) : process.cwd())
   return Location.Ref.make({
-    directory: AbsolutePath.make(
-      query.get("location[directory]") || request.headers["x-opencode-directory"] || process.cwd(),
-    ),
+    directory: AbsolutePath.make(directory),
     workspaceID: workspaceID ? WorkspaceV2.ID.make(workspaceID) : undefined,
   })
+}
+
+function decode(input: string) {
+  try {
+    return decodeURIComponent(input)
+  } catch {
+    return input
+  }
 }
 
 export const layer = Layer.effect(
