@@ -43,6 +43,7 @@ import { NonNegativeInt, optionalOmitUndefined } from "@opencode-ai/core/schema"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
+import { SessionMessageID } from "@opencode-ai/schema/session-message-id"
 
 const runtime = makeRuntime(Database.Service, Database.defaultLayer)
 
@@ -68,7 +69,14 @@ export function fromRow(row: SessionRow): Info {
         }
       : undefined
   const share = row.share_url ? { url: row.share_url } : undefined
-  const revert = row.revert ?? undefined
+  const revert = row.revert
+    ? {
+        messageID: MessageID.make(row.revert.messageID),
+        partID: row.revert.partID ? PartID.make(row.revert.partID) : undefined,
+        snapshot: row.revert.snapshot,
+        diff: row.revert.diff,
+      }
+    : undefined
   return {
     id: row.id,
     slug: row.slug,
@@ -136,7 +144,14 @@ export function toRow(info: Info) {
     tokens_reasoning: (info.tokens ?? EmptyTokens).reasoning,
     tokens_cache_read: (info.tokens ?? EmptyTokens).cache.read,
     tokens_cache_write: (info.tokens ?? EmptyTokens).cache.write,
-    revert: info.revert ?? null,
+    revert: info.revert
+      ? {
+          messageID: SessionMessageID.ID.make(info.revert.messageID),
+          partID: info.revert.partID,
+          snapshot: info.revert.snapshot,
+          diff: info.revert.diff,
+        }
+      : null,
     permission: info.permission,
     time_created: info.time.created,
     time_updated: info.time.updated,

@@ -29,6 +29,12 @@ import { SessionExecution } from "./session/execution"
 import { MessageDecodeError } from "./session/error"
 import { SessionEvent } from "./session/event"
 import { SessionInput } from "./session/input"
+import { Snapshot } from "./snapshot"
+import { SessionRevert } from "./session/revert"
+import { Revert } from "@opencode-ai/schema/revert"
+
+export const RevertState = Revert.State
+export type RevertState = Revert.State
 
 // get project -> project.locations
 //
@@ -94,6 +100,8 @@ export class PromptConflictError extends Schema.TaggedErrorClass<PromptConflictE
   sessionID: SessionSchema.ID,
   messageID: SessionMessage.ID,
 }) {}
+export const MessageNotFoundError = SessionRevert.MessageNotFoundError
+export type MessageNotFoundError = SessionRevert.MessageNotFoundError
 
 export type Error = NotFoundError | MessageDecodeError | OperationUnavailableError | PromptConflictError
 
@@ -149,18 +157,31 @@ export interface Interface {
   readonly wait: (id: SessionSchema.ID) => Effect.Effect<void, NotFoundError | OperationUnavailableError>
   readonly resume: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError | SessionRunner.RunError>
   readonly interrupt: (sessionID: SessionSchema.ID) => Effect.Effect<void>
+  readonly revert: {
+    readonly stage: (input: {
+      sessionID: SessionSchema.ID
+      messageID: SessionMessage.ID
+      files?: boolean
+    }) => Effect.Effect<Revert.State, NotFoundError | MessageNotFoundError | Snapshot.Error>
+    readonly clear: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError | Snapshot.Error>
+    readonly commit: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError>
+  }
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Session") {}
 
-export const layer = Layer.effect(
+export const layer = Layer.unwrap(
+  Effect.promise(() => import("./location-layer")).pipe(
+    Effect.map(({ LocationServiceMap }) => Layer.effect(
   Service,
   Effect.gen(function* () {
-    const db = (yield* Database.Service).db
+    const database = yield* Database.Service
+    const db = database.db
     const events = yield* EventV2.Service
     const projects = yield* ProjectV2.Service
     const execution = yield* SessionExecution.Service
     const store = yield* SessionStore.Service
+    const locations = yield* LocationServiceMap
     const decodeMessage = Schema.decodeUnknownEffect(SessionMessage.Message)
     const isDurableSessionEvent = Schema.is(SessionEvent.Durable)
     const decode = (row: typeof SessionMessageTable.$inferSelect) =>
@@ -384,13 +405,38 @@ export const layer = Layer.effect(
       interrupt: Effect.fn("V2Session.interrupt")((sessionID) =>
         Effect.uninterruptible(execution.interrupt(sessionID)),
       ),
+      revert: {
+        stage: Effect.fn("V2Session.revert.stage")(function* (input) {
+          const session = yield* result.get(input.sessionID)
+          return yield* SessionRevert.stage({ session, messageID: input.messageID, files: input.files }).pipe(
+            Effect.provideService(Database.Service, database),
+            Effect.provideService(EventV2.Service, events),
+            Effect.provide(locations.get(session.location)),
+          )
+        }),
+        clear: Effect.fn("V2Session.revert.clear")(function* (sessionID) {
+          const session = yield* result.get(sessionID)
+          yield* SessionRevert.clear(session).pipe(
+            Effect.provideService(EventV2.Service, events),
+            Effect.provide(locations.get(session.location)),
+          )
+        }),
+        commit: Effect.fn("V2Session.revert.commit")(function* (sessionID) {
+          const session = yield* result.get(sessionID)
+          yield* SessionRevert.commit(session).pipe(Effect.provideService(EventV2.Service, events))
+        }),
+      },
     })
 
-    return result
-  }),
+          return result
+        }),
+      ),
+    ),
+  ),
 )
 
 export const defaultLayer = layer.pipe(
+  Layer.provide(Layer.unwrap(Effect.promise(() => import("./location-layer")).pipe(Effect.map((m) => m.LocationServiceMap.layer)))),
   Layer.provide(SessionExecution.noopLayer),
   Layer.provide(SessionStore.defaultLayer),
   Layer.provide(SessionProjector.defaultLayer),

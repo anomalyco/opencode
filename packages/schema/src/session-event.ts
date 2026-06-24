@@ -11,6 +11,7 @@ import { SessionID } from "./session-id"
 import { Location } from "./location"
 import { SessionMessageID } from "./session-message-id"
 import { SessionMessage } from "./session-message"
+import { Revert } from "./revert"
 
 export { FileAttachment }
 
@@ -176,6 +177,7 @@ export namespace Step {
         }),
       }),
       snapshot: Schema.String.pipe(Schema.optional),
+      files: Schema.Array(RelativePath).pipe(Schema.optional),
     },
   })
   export type Ended = typeof Ended.Type
@@ -429,6 +431,20 @@ export namespace Compaction {
   export type Ended = typeof Ended.Type
 }
 
+export namespace RevertEvent {
+  export const Staged = Event.define({
+    type: "session.next.revert.staged",
+    ...options,
+    schema: { ...Base, revert: Revert.State },
+  })
+  export const Cleared = Event.define({ type: "session.next.revert.cleared", ...options, schema: Base })
+  export const Committed = Event.define({
+    type: "session.next.revert.committed",
+    ...options,
+    schema: { ...Base, messageID: SessionMessageID.ID },
+  })
+}
+
 export const DurableDefinitions = Event.inventory(
   AgentSwitched,
   ModelSwitched,
@@ -455,6 +471,9 @@ export const DurableDefinitions = Event.inventory(
   Retried,
   Compaction.Started,
   Compaction.Ended,
+  RevertEvent.Staged,
+  RevertEvent.Cleared,
+  RevertEvent.Committed,
 )
 
 export const Definitions = Event.inventory(
@@ -487,6 +506,9 @@ export const Definitions = Event.inventory(
   Compaction.Started,
   Compaction.Delta,
   Compaction.Ended,
+  RevertEvent.Staged,
+  RevertEvent.Cleared,
+  RevertEvent.Committed,
 )
 
 export const Durable = Schema.Union(DurableDefinitions, { mode: "oneOf" }).pipe(Schema.toTaggedUnion("type"))

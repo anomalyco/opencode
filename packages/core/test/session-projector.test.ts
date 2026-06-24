@@ -10,6 +10,7 @@ import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
+import { LocationServiceMap } from "@opencode-ai/core/location-layer"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { Prompt } from "@opencode-ai/core/session/prompt"
@@ -20,6 +21,7 @@ import { SessionInput } from "@opencode-ai/core/session/input"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { SessionInputTable, SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { testEffect } from "./lib/effect"
+import { Snapshot } from "@opencode-ai/core/snapshot"
 
 const it = testEffect(Layer.mergeAll(Database.defaultLayer, EventV2.defaultLayer, SessionProjector.defaultLayer))
 const sessionID = SessionV2.ID.make("ses_projector_test")
@@ -41,6 +43,24 @@ const assistantRow = (
 }
 
 describe("SessionProjector", () => {
+  it.effect("projects staged, cleared, and committed reverts", () =>
+    Effect.gen(function* () {
+      const db = (yield* Database.Service).db
+      yield* db.insert(ProjectTable).values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] }).run()
+      yield* db.insert(SessionTable).values({ id: sessionID, project_id: Project.ID.global, slug: "test", directory: "/project", title: "test", version: "test" }).run()
+      const boundary = SessionMessage.ID.make("msg_boundary")
+      yield* db.insert(SessionMessageTable).values([assistantRow(boundary, 1), assistantRow(SessionMessage.ID.make("msg_later"), 2)]).run()
+      const events = yield* EventV2.Service
+      yield* events.publish(SessionEvent.RevertEvent.Staged, { sessionID, timestamp: DateTime.makeUnsafe(1), revert: { messageID: boundary, snapshot: Snapshot.ID.make("tree"), diff: "patch", files: [] } })
+      expect((yield* db.select({ revert: SessionTable.revert }).from(SessionTable).get())?.revert).toMatchObject({ messageID: boundary, snapshot: "tree", files: [] })
+      yield* events.publish(SessionEvent.RevertEvent.Cleared, { sessionID, timestamp: DateTime.makeUnsafe(2) })
+      expect((yield* db.select({ revert: SessionTable.revert }).from(SessionTable).get())?.revert).toBeNull()
+      yield* events.publish(SessionEvent.RevertEvent.Staged, { sessionID, timestamp: DateTime.makeUnsafe(3), revert: { messageID: boundary, files: [] } })
+      yield* events.publish(SessionEvent.RevertEvent.Committed, { sessionID, messageID: boundary, timestamp: DateTime.makeUnsafe(4) })
+      expect((yield* db.select({ id: SessionMessageTable.id }).from(SessionMessageTable).all()).map((row) => row.id)).toEqual([boundary])
+    }),
+  )
+
   it.effect("orders projected messages and context by durable aggregate sequence", () =>
     Effect.gen(function* () {
       const { db } = yield* Database.Service
@@ -110,6 +130,7 @@ describe("SessionProjector", () => {
     }).pipe(
       Effect.provide(
         SessionV2.layer.pipe(
+          Layer.provide(LocationServiceMap.layer),
           Layer.provide(EventV2.defaultLayer),
           Layer.provide(Database.defaultLayer),
           Layer.provide(Project.defaultLayer),

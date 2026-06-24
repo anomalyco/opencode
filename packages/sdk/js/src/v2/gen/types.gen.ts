@@ -45,6 +45,9 @@ export type Event =
   | EventSessionNextCompactionStarted
   | EventSessionNextCompactionDelta
   | EventSessionNextCompactionEnded
+  | EventSessionNextRevertStaged
+  | EventSessionNextRevertCleared
+  | EventSessionNextRevertCommitted
   | EventMessagePartDelta
   | EventSessionDiff
   | EventSessionError
@@ -947,6 +950,7 @@ export type GlobalEvent = {
             }
           }
           snapshot?: string
+          files?: Array<string>
         }
       }
     | {
@@ -1186,6 +1190,38 @@ export type GlobalEvent = {
           reason: "auto" | "manual"
           text: string
           recent: string
+        }
+      }
+    | {
+        id: string
+        type: "session.next.revert.staged"
+        properties: {
+          timestamp: number
+          sessionID: string
+          revert: {
+            messageID: string
+            partID?: string
+            snapshot?: string
+            diff?: string
+            files?: Array<FileDiff>
+          }
+        }
+      }
+    | {
+        id: string
+        type: "session.next.revert.cleared"
+        properties: {
+          timestamp: number
+          sessionID: string
+        }
+      }
+    | {
+        id: string
+        type: "session.next.revert.committed"
+        properties: {
+          timestamp: number
+          sessionID: string
+          messageID: string
         }
       }
     | {
@@ -1644,6 +1680,9 @@ export type GlobalEvent = {
     | SyncEventSessionNextRetried
     | SyncEventSessionNextCompactionStarted
     | SyncEventSessionNextCompactionEnded
+    | SyncEventSessionNextRevertStaged
+    | SyncEventSessionNextRevertCleared
+    | SyncEventSessionNextRevertCommitted
 }
 
 /**
@@ -2729,6 +2768,13 @@ export type ServiceUnavailableError = {
   service?: string
 }
 
+export type MessageNotFoundError = {
+  _tag: "MessageNotFoundError"
+  sessionID: string
+  messageID: string
+  message: string
+}
+
 export type UnknownError1 = {
   _tag: "UnknownError"
   message: string
@@ -2790,6 +2836,9 @@ export type V2Event =
   | V2EventSessionNextCompactionStarted
   | V2EventSessionNextCompactionDelta
   | V2EventSessionNextCompactionEnded
+  | V2EventSessionNextRevertStaged
+  | V2EventSessionNextRevertCleared
+  | V2EventSessionNextRevertCommitted
   | V2EventMessagePartDelta
   | V2EventSessionDiff
   | V2EventSessionError
@@ -2979,6 +3028,14 @@ export type SessionNextRetryError = {
   metadata?: {
     [key: string]: string
   }
+}
+
+export type FileDiff = {
+  path: string
+  status: "added" | "modified" | "deleted"
+  additions: number
+  deletions: number
+  patch: string
 }
 
 export type PermissionV2Source = {
@@ -3346,6 +3403,7 @@ export type SyncEventSessionNextStepEnded = {
         }
       }
       snapshot?: string
+      files?: Array<string>
     }
   }
 }
@@ -3644,6 +3702,59 @@ export type SyncEventSessionNextCompactionEnded = {
   }
 }
 
+export type SyncEventSessionNextRevertStaged = {
+  type: "sync"
+  id: string
+  syncEvent: {
+    type: "session.next.revert.staged.1"
+    id: string
+    seq: number
+    aggregateID: string
+    data: {
+      timestamp: number
+      sessionID: string
+      revert: {
+        messageID: string
+        partID?: string
+        snapshot?: string
+        diff?: string
+        files?: Array<FileDiff>
+      }
+    }
+  }
+}
+
+export type SyncEventSessionNextRevertCleared = {
+  type: "sync"
+  id: string
+  syncEvent: {
+    type: "session.next.revert.cleared.1"
+    id: string
+    seq: number
+    aggregateID: string
+    data: {
+      timestamp: number
+      sessionID: string
+    }
+  }
+}
+
+export type SyncEventSessionNextRevertCommitted = {
+  type: "sync"
+  id: string
+  syncEvent: {
+    type: "session.next.revert.committed.1"
+    id: string
+    seq: number
+    aggregateID: string
+    data: {
+      timestamp: number
+      sessionID: string
+      messageID: string
+    }
+  }
+}
+
 export type ConfigV2ReferenceGit = {
   repository: string
   branch?: string
@@ -3741,6 +3852,13 @@ export type SessionV2Info = {
   title: string
   location: LocationRef
   subpath?: string
+  revert?: {
+    messageID: string
+    partID?: string
+    snapshot?: string
+    diff?: string
+    files?: Array<FileDiff>
+  }
 }
 
 export type SessionInputAdmitted = {
@@ -3945,6 +4063,7 @@ export type SessionMessageAssistant = {
   snapshot?: {
     start?: string
     end?: string
+    files?: Array<string>
   }
   finish?: string
   cost?: number
@@ -4641,6 +4760,7 @@ export type V2EventSessionNextStepEnded = {
       }
     }
     snapshot?: string
+    files?: Array<string>
   }
 }
 
@@ -5060,6 +5180,68 @@ export type V2EventSessionNextCompactionEnded = {
     reason: "auto" | "manual"
     text: string
     recent: string
+  }
+}
+
+export type V2EventSessionNextRevertStaged = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  type: "session.next.revert.staged"
+  data: {
+    timestamp: number
+    sessionID: string
+    revert: {
+      messageID: string
+      partID?: string
+      snapshot?: string
+      diff?: string
+      files?: Array<FileDiff>
+    }
+  }
+}
+
+export type V2EventSessionNextRevertCleared = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  type: "session.next.revert.cleared"
+  data: {
+    timestamp: number
+    sessionID: string
+  }
+}
+
+export type V2EventSessionNextRevertCommitted = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  type: "session.next.revert.committed"
+  data: {
+    timestamp: number
+    sessionID: string
+    messageID: string
   }
 }
 
@@ -6219,6 +6401,7 @@ export type EventSessionNextStepEnded = {
       }
     }
     snapshot?: string
+    files?: Array<string>
   }
 }
 
@@ -6476,6 +6659,41 @@ export type EventSessionNextCompactionEnded = {
     reason: "auto" | "manual"
     text: string
     recent: string
+  }
+}
+
+export type EventSessionNextRevertStaged = {
+  id: string
+  type: "session.next.revert.staged"
+  properties: {
+    timestamp: number
+    sessionID: string
+    revert: {
+      messageID: string
+      partID?: string
+      snapshot?: string
+      diff?: string
+      files?: Array<FileDiff>
+    }
+  }
+}
+
+export type EventSessionNextRevertCleared = {
+  id: string
+  type: "session.next.revert.cleared"
+  properties: {
+    timestamp: number
+    sessionID: string
+  }
+}
+
+export type EventSessionNextRevertCommitted = {
+  id: string
+  type: "session.next.revert.committed"
+  properties: {
+    timestamp: number
+    sessionID: string
+    messageID: string
   }
 }
 
@@ -11503,6 +11721,130 @@ export type V2SessionWaitResponses = {
 }
 
 export type V2SessionWaitResponse = V2SessionWaitResponses[keyof V2SessionWaitResponses]
+
+export type V2SessionRevertStageData = {
+  body: {
+    messageID: string
+    files?: boolean
+  }
+  path: {
+    sessionID: string
+  }
+  query?: never
+  url: "/api/session/{sessionID}/revert/stage"
+}
+
+export type V2SessionRevertStageErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * MessageNotFoundError | SessionNotFoundError
+   */
+  404: MessageNotFoundError | SessionNotFoundError
+  /**
+   * UnknownError
+   */
+  500: UnknownError1
+}
+
+export type V2SessionRevertStageError = V2SessionRevertStageErrors[keyof V2SessionRevertStageErrors]
+
+export type V2SessionRevertStageResponses = {
+  /**
+   * Success
+   */
+  200: {
+    data: {
+      messageID: string
+      partID?: string
+      snapshot?: string
+      diff?: string
+      files?: Array<FileDiff>
+    }
+  }
+}
+
+export type V2SessionRevertStageResponse = V2SessionRevertStageResponses[keyof V2SessionRevertStageResponses]
+
+export type V2SessionRevertClearData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: never
+  url: "/api/session/{sessionID}/revert/clear"
+}
+
+export type V2SessionRevertClearErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * SessionNotFoundError
+   */
+  404: SessionNotFoundError
+  /**
+   * UnknownError
+   */
+  500: UnknownError1
+}
+
+export type V2SessionRevertClearError = V2SessionRevertClearErrors[keyof V2SessionRevertClearErrors]
+
+export type V2SessionRevertClearResponses = {
+  /**
+   * <No Content>
+   */
+  204: void
+}
+
+export type V2SessionRevertClearResponse = V2SessionRevertClearResponses[keyof V2SessionRevertClearResponses]
+
+export type V2SessionRevertCommitData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: never
+  url: "/api/session/{sessionID}/revert/commit"
+}
+
+export type V2SessionRevertCommitErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * SessionNotFoundError
+   */
+  404: SessionNotFoundError
+}
+
+export type V2SessionRevertCommitError = V2SessionRevertCommitErrors[keyof V2SessionRevertCommitErrors]
+
+export type V2SessionRevertCommitResponses = {
+  /**
+   * <No Content>
+   */
+  204: void
+}
+
+export type V2SessionRevertCommitResponse = V2SessionRevertCommitResponses[keyof V2SessionRevertCommitResponses]
 
 export type V2SessionContextData = {
   body?: never
