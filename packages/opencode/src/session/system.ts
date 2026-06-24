@@ -21,7 +21,6 @@ import { Location } from "@opencode-ai/core/location"
 import { LocationServiceMap } from "@opencode-ai/core/location-layer"
 import { Reference } from "@opencode-ai/core/reference"
 import { MCP } from "@/mcp"
-import { McpCatalog } from "@/mcp/catalog"
 
 export function provider(model: Provider.Model) {
   if (model.api.id.includes("gpt-4") || model.api.id.includes("o1") || model.api.id.includes("o3"))
@@ -42,7 +41,7 @@ export function provider(model: Provider.Model) {
 export interface Interface {
   readonly environment: (model: Provider.Model) => Effect.Effect<string[]>
   readonly skills: (agent: Agent.Info) => Effect.Effect<string | undefined>
-  readonly mcp: (agent: Agent.Info) => Effect.Effect<string | undefined>
+  readonly mcp: () => Effect.Effect<string | undefined>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SystemPrompt") {}
@@ -107,19 +106,13 @@ export const layer = Layer.effect(
         ].join("\n")
       }),
 
-      mcp: Effect.fn("SystemPrompt.mcp")(function* (agent: Agent.Info) {
-        const [instructions, tools] = yield* Effect.all([mcp.instructions(), mcp.tools()])
-        const toolNames = Object.keys(tools)
-        const disabled = Permission.disabled(toolNames, agent.permission)
-        const available = instructions.filter((item) => {
-          const prefix = McpCatalog.toolPrefix(item.name)
-          return toolNames.some((name) => name.startsWith(prefix) && !disabled.has(name))
-        })
-        if (available.length === 0) return
+      mcp: Effect.fn("SystemPrompt.mcp")(function* () {
+        const instructions = yield* mcp.instructions()
+        if (instructions.length === 0) return
 
         return [
           "<mcp_instructions>",
-          ...available.flatMap((item) => [
+          ...instructions.flatMap((item) => [
             `  <server name="${item.name}">`,
             ...item.instructions.split("\n").map((line) => `    ${line}`),
             "  </server>",

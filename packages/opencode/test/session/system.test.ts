@@ -8,8 +8,6 @@ import { SystemPrompt } from "../../src/session/system"
 import { MCP } from "../../src/mcp"
 import { LocationServiceMap } from "@opencode-ai/core/location-layer"
 import { testEffect } from "../lib/effect"
-import { tool } from "ai"
-import { z } from "zod"
 
 const skills: Skill.Info[] = [
   {
@@ -44,8 +42,6 @@ const build: Agent.Info = {
   options: {},
 }
 
-const mcpTool = tool({ description: "", inputSchema: z.object({}) })
-
 const it = testEffect(
   SystemPrompt.layer.pipe(
     Layer.provide(LocationServiceMap.layer),
@@ -58,11 +54,6 @@ const it = testEffect(
               instructions: "Use lookup before mutate.",
             },
           ]),
-        tools: () =>
-          Effect.succeed({
-            "guide-server_lookup": mcpTool,
-            "guide-server_mutate": mcpTool,
-          }),
       }),
     ),
     Layer.provide(
@@ -105,13 +96,10 @@ describe("session.system", () => {
     }),
   )
 
-  it.effect("MCP output includes servers with an allowed tool", () =>
+  it.effect("MCP output includes connected server instructions", () =>
     Effect.gen(function* () {
       const prompt = yield* SystemPrompt.Service
-      const output = yield* prompt.mcp({
-        ...build,
-        permission: Permission.fromConfig({ "guide-server_mutate": "deny" }),
-      })
+      const output = yield* prompt.mcp()
 
       expect(output).toBe(
         [
@@ -122,18 +110,6 @@ describe("session.system", () => {
           "</mcp_instructions>",
         ].join("\n"),
       )
-    }),
-  )
-
-  it.effect("MCP output omits servers when all tools are denied", () =>
-    Effect.gen(function* () {
-      const prompt = yield* SystemPrompt.Service
-      const output = yield* prompt.mcp({
-        ...build,
-        permission: Permission.fromConfig({ "guide-server_*": "deny" }),
-      })
-
-      expect(output).toBeUndefined()
     }),
   )
 })
