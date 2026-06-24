@@ -58,7 +58,7 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV3 {
   readonly modelId: OpenAICompatibleChatModelId
   private readonly config: OpenAICompatibleChatConfig
   private readonly failedResponseHandler: ResponseHandler<APICallError>
-  private readonly chunkSchema // type inferred via constructor
+  private readonly chunkSchema: z.ZodType<OpenAICompatibleChatChunk | { error: { message: string } }>
 
   constructor(modelId: OpenAICompatibleChatModelId, config: OpenAICompatibleChatConfig) {
     this.modelId = modelId
@@ -378,12 +378,11 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV3 {
 
     return {
       stream: response.pipeThrough(
-        new TransformStream<ParseResult<z.infer<typeof this.chunkSchema>>, LanguageModelV3StreamPart>({
+        new TransformStream<ParseResult<OpenAICompatibleChatChunk | { error: { message: string } }>, LanguageModelV3StreamPart>({
           start(controller) {
             controller.enqueue({ type: "stream-start", warnings })
           },
 
-          // TODO we lost type safety on Chunk, most likely due to the error schema. MUST FIX
           transform(chunk, controller) {
             // Emit raw chunk if requested (before anything else)
             if (options.includeRawChunks) {
@@ -775,41 +774,44 @@ const OpenAICompatibleChatResponseSchema = z.object({
   usage: openaiCompatibleTokenUsageSchema,
 })
 
+const openAICompatibleChatChunkSchema = z.object({
+  id: z.string().nullish(),
+  created: z.number().nullish(),
+  model: z.string().nullish(),
+  choices: z.array(
+    z.object({
+      delta: z
+        .object({
+          role: z.enum(["assistant"]).nullish(),
+          content: z.string().nullish(),
+          // Copilot-specific reasoning fields
+          reasoning_text: z.string().nullish(),
+          reasoning_opaque: z.string().nullish(),
+          tool_calls: z
+            .array(
+              z.object({
+                index: z.number(),
+                id: z.string().nullish(),
+                function: z.object({
+                  name: z.string().nullish(),
+                  arguments: z.string().nullish(),
+                }),
+              }),
+            )
+            .nullish(),
+        })
+        .nullish(),
+      finish_reason: z.string().nullish(),
+    }),
+  ),
+  usage: openaiCompatibleTokenUsageSchema,
+})
+
+type OpenAICompatibleChatChunk = z.infer<typeof openAICompatibleChatChunkSchema>
+
 // limited version of the schema, focussed on what is needed for the implementation
 // this approach limits breakages when the API changes and increases efficiency
-const createOpenAICompatibleChatChunkSchema = <ERROR_SCHEMA extends z.core.$ZodType>(errorSchema: ERROR_SCHEMA) =>
-  z.union([
-    z.object({
-      id: z.string().nullish(),
-      created: z.number().nullish(),
-      model: z.string().nullish(),
-      choices: z.array(
-        z.object({
-          delta: z
-            .object({
-              role: z.enum(["assistant"]).nullish(),
-              content: z.string().nullish(),
-              // Copilot-specific reasoning fields
-              reasoning_text: z.string().nullish(),
-              reasoning_opaque: z.string().nullish(),
-              tool_calls: z
-                .array(
-                  z.object({
-                    index: z.number(),
-                    id: z.string().nullish(),
-                    function: z.object({
-                      name: z.string().nullish(),
-                      arguments: z.string().nullish(),
-                    }),
-                  }),
-                )
-                .nullish(),
-            })
-            .nullish(),
-          finish_reason: z.string().nullish(),
-        }),
-      ),
-      usage: openaiCompatibleTokenUsageSchema,
-    }),
-    errorSchema,
-  ])
+const createOpenAICompatibleChatChunkSchema = (errorSchema: z.ZodType) =>
+  z.union([openAICompatibleChatChunkSchema, errorSchema]) as z.ZodType<
+    OpenAICompatibleChatChunk | { error: { message: string } }
+  >
