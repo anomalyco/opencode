@@ -6,7 +6,7 @@ import { FSUtil } from "./fs-util"
 import { Location } from "./location"
 import { PositiveInt, RelativePath } from "./schema"
 import { FileSystemSearch } from "./filesystem/search"
-import { Entry, FileSystemEvent, Match } from "@opencode-ai/schema/filesystem"
+import { Entry, FileSystem, Match } from "@opencode-ai/schema/filesystem"
 export { Entry, Match, Submatch } from "@opencode-ai/schema/filesystem"
 
 export const ReadInput = Schema.Struct({
@@ -47,7 +47,7 @@ export class GrepInput extends Schema.Class<GrepInput>("FileSystem.GrepInput")({
   limit: PositiveInt.pipe(Schema.optional),
 }) {}
 
-export const Event = FileSystemEvent
+export const Event = FileSystem.Event
 
 export interface Interface {
   readonly read: (input: ReadInput) => Effect.Effect<{ readonly content: Uint8Array; readonly mime: string }>

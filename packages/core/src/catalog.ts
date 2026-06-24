@@ -1,7 +1,7 @@
 export * as Catalog from "./catalog"
 
 import { Array, Context, Effect, Layer, Option, Order, pipe, Schema } from "effect"
-import { CatalogEvent } from "@opencode-ai/schema/catalog"
+import { Catalog } from "@opencode-ai/schema/catalog"
 import { ModelV2 } from "./model"
 import { ProviderV2 } from "./provider"
 import { EventV2 } from "./event"
@@ -18,7 +18,7 @@ export type DefaultModel = { providerID: ProviderV2.ID; modelID: ModelV2.ID }
 
 export const PolicyActions = Schema.Literals(["provider.use"])
 
-export const Event = CatalogEvent
+export const Event = Catalog.Event
 
 type Data = {
   providers: Map<ProviderV2.ID, ProviderRecord>

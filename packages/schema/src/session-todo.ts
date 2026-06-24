@@ -22,4 +22,3 @@ const Updated = define({
   },
 })
 export const Event = { Updated, Definitions: inventory(Updated) }
-export const SessionTodoEvent = Event

@@ -2,7 +2,7 @@ export * as SessionTodo from "./todo"
 
 import { asc, eq } from "drizzle-orm"
 import { Context, Effect, Layer } from "effect"
-import { SessionTodoEvent, SessionTodoInfo } from "@opencode-ai/schema/session-todo"
+import { SessionTodo, SessionTodoInfo } from "@opencode-ai/schema/session-todo"
 import { Database } from "../database/database"
 import { EventV2 } from "../event"
 import { SessionSchema } from "./schema"
@@ -11,7 +11,7 @@ import { TodoTable } from "./sql"
 export const Info = SessionTodoInfo
 export type Info = typeof Info.Type
 
-export const Event = SessionTodoEvent
+export const Event = SessionTodo.Event
 
 export interface Interface {
   readonly update: (input: {
