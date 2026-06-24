@@ -34,6 +34,7 @@ import { MessageTable, PartTable, SessionTable } from "@opencode-ai/core/session
 import { ProviderError } from "@/provider/error"
 import { iife } from "@/util/iife"
 import { errorMessage } from "@/util/error"
+import { isContextOverflow } from "@opencode-ai/llm"
 import { isMedia } from "@/util/media"
 import type { SystemError } from "bun"
 import type { Provider } from "@/provider/provider"
@@ -713,8 +714,16 @@ export function fromError(
         },
         { cause: e },
       ).toObject()
-    case e instanceof Error:
-      return new NamedError.Unknown({ message: errorMessage(e) }, { cause: e }).toObject()
+    case e instanceof Error: {
+      const msg = errorMessage(e)
+      if (isContextOverflow(msg)) {
+        return new ContextOverflowError(
+          { message: msg, responseBody: msg },
+          { cause: e },
+        ).toObject()
+      }
+      return new NamedError.Unknown({ message: msg }, { cause: e }).toObject()
+    }
     default:
       try {
         const parsed = ProviderError.parseStreamError(e)

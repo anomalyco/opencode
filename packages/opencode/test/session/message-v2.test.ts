@@ -1487,6 +1487,28 @@ describe("session.message-v2.fromError", () => {
     expect(SessionV1.ContextOverflowError.isInstance(result)).toBe(true)
   })
 
+  test("detects context overflow from generic Error messages", () => {
+    const cases = [
+      "prompt is too long: 213462 tokens > 200000 maximum",
+      "Your input exceeds the context window of this model",
+      "The input token count (1196265) exceeds the maximum number of tokens allowed (1048575)",
+      "Please reduce the length of the messages or completion",
+      "This model's maximum context length is 8192 tokens",
+    ]
+
+    cases.forEach((message) => {
+      const error = new Error(message)
+      const result = MessageV2.fromError(error, { providerID })
+      expect(SessionV1.ContextOverflowError.isInstance(result)).toBe(true)
+    })
+  })
+
+  test("does not classify generic non-overflow Error as context overflow", () => {
+    const result = MessageV2.fromError(new Error("Network connection lost."), { providerID })
+    expect(SessionV1.ContextOverflowError.isInstance(result)).toBe(false)
+    expect(result.name).toBe("UnknownError")
+  })
+
   test("does not classify 429 no body as context overflow", () => {
     const result = MessageV2.fromError(
       new APICallError({
