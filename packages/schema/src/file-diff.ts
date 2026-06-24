@@ -10,4 +10,3 @@ export const Info = Schema.Struct({
   status: Schema.optional(Schema.Literals(["added", "deleted", "modified"])),
 }).annotate({ identifier: "SnapshotFileDiff" })
 export type Info = typeof Info.Type
-export const FileDiffInfo = Info
