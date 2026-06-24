@@ -887,8 +887,8 @@ export const layer = Layer.effect(
         return yield* storeClient(s, mcpName, client, listed, client.getInstructions()?.trim(), mcpConfig.timeout)
       }
 
-      onAuthorization?.(result.authorizationUrl)
       const callbackPromise = McpOAuthCallback.waitForCallback(result.oauthState, mcpName)
+      onAuthorization?.(result.authorizationUrl)
 
       yield* Effect.tryPromise(() => open(result.authorizationUrl)).pipe(
         Effect.flatMap((subprocess) =>
