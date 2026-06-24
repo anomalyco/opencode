@@ -386,7 +386,7 @@ export const SessionReview = (props: SessionReviewProps) => {
       >
         <div data-slot="session-review-container" class={props.classes?.container}>
           <Show when={hasDiffs()} fallback={props.empty}>
-            <div class="pb-6">
+            <div data-slot="session-review-list" class="pb-6">
               <Accordion multiple value={open()} onChange={handleChange}>
                 <For each={files()}>
                   {(file) => {

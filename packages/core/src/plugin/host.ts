@@ -6,6 +6,7 @@ import { AgentV2 } from "../agent"
 import { AISDK } from "../aisdk"
 import { Catalog } from "../catalog"
 import { CommandV2 } from "../command"
+import { Credential } from "../credential"
 import { Integration } from "../integration"
 import { ModelV2 } from "../model"
 import { PluginV2 } from "../plugin"
@@ -97,6 +98,13 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
     },
     integration: {
       reload: integration.reload,
+      connection: {
+        active: (id) => integration.connection.active(Integration.ID.make(id)),
+        resolve: (connection) =>
+          integration.connection.resolve(
+            connection.type === "credential" ? { ...connection, id: Credential.ID.make(connection.id) } : connection,
+          ),
+      },
       transform: (callback) =>
         integration.transform((draft) =>
           callback({
@@ -107,6 +115,62 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
             method: {
               list: (id) => draft.method.list(Integration.ID.make(id)),
               update: (input) => {
+                if ("authorize" in input) {
+                  const methodID = Integration.MethodID.make(input.method.id)
+                  const refresh = input.refresh
+                  draft.method.update({
+                    integrationID: Integration.ID.make(input.integrationID),
+                    method: { ...input.method, id: methodID },
+                    authorize: (inputs) =>
+                      input.authorize(inputs).pipe(
+                        Effect.map((authorization) => {
+                          if (authorization.mode === "auto") {
+                            return {
+                              ...authorization,
+                              callback: authorization.callback.pipe(
+                                Effect.map(
+                                  (credential) =>
+                                    new Credential.OAuth({
+                                      ...credential,
+                                      methodID: Integration.MethodID.make(credential.methodID),
+                                    }),
+                                ),
+                              ),
+                            }
+                          }
+                          return {
+                            ...authorization,
+                            callback: (code: string) =>
+                              authorization.callback(code).pipe(
+                                Effect.map(
+                                  (credential) =>
+                                    new Credential.OAuth({
+                                      ...credential,
+                                      methodID: Integration.MethodID.make(credential.methodID),
+                                    }),
+                                ),
+                              ),
+                          }
+                        }),
+                      ),
+                    ...(refresh
+                      ? {
+                          refresh: (value: Credential.OAuth) =>
+                            refresh(value).pipe(
+                              Effect.map(
+                                (next) =>
+                                  new Credential.OAuth({
+                                    ...next,
+                                    methodID: Integration.MethodID.make(next.methodID),
+                                  }),
+                              ),
+                            ),
+                        }
+                      : {}),
+                    ...(input.label ? { label: input.label } : {}),
+                  })
+                  return
+                }
                 if (input.method.type === "env") {
                   draft.method.update({
                     integrationID: Integration.ID.make(input.integrationID),

@@ -73,7 +73,7 @@ export const layer = Layer.effect(
       if (provider.disabled) return false
       if (typeof provider.request.body.apiKey === "string") return true
       if (integration?.connections.length) return true
-      return !integration
+      return provider.integrationID === undefined && !integration
     }
 
     const projectModel = (model: ModelV2.Info, provider: ProviderV2.Info) => {
@@ -184,7 +184,7 @@ export const layer = Layer.effect(
         available: Effect.fn("CatalogV2.provider.available")(function* () {
           const active = new Map((yield* integrations.list()).map((integration) => [integration.id, integration]))
           return (yield* result.provider.all()).filter((provider) =>
-            available(provider, active.get(Integration.ID.make(provider.id))),
+            available(provider, active.get(provider.integrationID ?? Integration.ID.make(provider.id))),
           )
         }),
       },

@@ -1,4 +1,4 @@
-import { createEffect, type ParentProps } from "solid-js"
+import { createEffect, Suspense, type ParentProps } from "solid-js"
 import { useNavigate } from "@solidjs/router"
 import { DebugBar } from "@/components/debug-bar"
 import { HelpButton } from "@/components/help-button"
@@ -28,7 +28,7 @@ export default function NewLayout(props: ParentProps) {
     <div class="relative bg-v2-background-bg-deep flex-1 min-h-0 min-w-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text">
       <Titlebar update={update} />
       <main class="flex-1 min-h-0 min-w-0 overflow-x-hidden flex flex-col items-start contain-strict">
-        {props.children}
+        <Suspense>{props.children}</Suspense>
       </main>
       {import.meta.env.DEV && <DebugBar />}
       <HelpButton />

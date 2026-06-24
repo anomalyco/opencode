@@ -90,7 +90,9 @@ export const EnvMethod = Schema.Struct({
 }).annotate({ identifier: "Integration.EnvMethod" })
 export type EnvMethod = typeof EnvMethod.Type
 
-export const Method = Schema.Union([OAuthMethod, KeyMethod, EnvMethod]).pipe(Schema.toTaggedUnion("type"))
+export const Method = Schema.Union([OAuthMethod, KeyMethod, EnvMethod])
+  .pipe(Schema.toTaggedUnion("type"))
+  .annotate({ identifier: "Integration.Method" })
 export type Method = typeof Method.Type
 
 export class Info extends Schema.Class<Info>("Integration.Info")({
@@ -100,7 +102,8 @@ export class Info extends Schema.Class<Info>("Integration.Info")({
   connections: Schema.mutable(Schema.Array(IntegrationConnection.Info)),
 }) {}
 
-export type Inputs = Readonly<{ [key: string]: string }>
+export const Inputs = Schema.Record(Schema.String, Schema.String).annotate({ identifier: "Integration.Inputs" })
+export type Inputs = typeof Inputs.Type
 
 export type OAuthAuthorization = {
   readonly url: string
@@ -108,11 +111,11 @@ export type OAuthAuthorization = {
 } & (
   | {
       readonly mode: "auto"
-      readonly callback: Effect.Effect<Credential.Value, unknown>
+      readonly callback: Effect.Effect<Credential.OAuth, unknown>
     }
   | {
       readonly mode: "code"
-      readonly callback: (code: string) => Effect.Effect<Credential.Value, unknown>
+      readonly callback: (code: string) => Effect.Effect<Credential.OAuth, unknown>
     }
 )
 
@@ -121,6 +124,7 @@ export interface OAuthImplementation {
   readonly method: OAuthMethod
   readonly authorize: (inputs: Inputs) => Effect.Effect<OAuthAuthorization, unknown, Scope.Scope>
   readonly refresh?: (credential: Credential.OAuth) => Effect.Effect<Credential.OAuth, unknown>
+  readonly label?: (credential: Credential.OAuth) => string | undefined
 }
 
 export interface KeyImplementation {
@@ -178,12 +182,17 @@ export const Event = {
     type: "integration.updated",
     schema: {},
   }),
+  ConnectionUpdated: EventV2.define({
+    type: "integration.connection.updated",
+    schema: { integrationID: ID },
+  }),
 }
 
-export type Ref = {
-  id: ID
-  name: string
-}
+export const Ref = Schema.Struct({
+  id: ID,
+  name: Schema.String,
+}).annotate({ identifier: "Integration.Ref" })
+export type Ref = typeof Ref.Type
 
 type Entry = {
   ref: Types.DeepMutable<Ref>
@@ -215,7 +224,11 @@ export interface Interface extends State.Transformable<Draft> {
   readonly list: () => Effect.Effect<Info[]>
   readonly connection: {
     /** Returns the active connection for one integration. */
-    readonly forIntegration: (id: ID) => Effect.Effect<IntegrationConnection.Info | undefined>
+    readonly active: (id: ID) => Effect.Effect<IntegrationConnection.Info | undefined>
+    /** Resolves a connection into usable credential material. */
+    readonly resolve: (
+      connection: IntegrationConnection.Info,
+    ) => Effect.Effect<Credential.Value | undefined, AuthorizationError>
     /** Runs a key method and stores the resulting credential. */
     readonly key: (input: {
       /** Integration receiving the credential. */
@@ -385,7 +398,7 @@ export const locationLayer = Layer.effect(
       return error instanceof Error ? error.message : String(error)
     }
 
-    const settle = Effect.fnUntraced(function* (attemptID: AttemptID, exit: Exit.Exit<Credential.Value, unknown>) {
+    const settle = Effect.fnUntraced(function* (attemptID: AttemptID, exit: Exit.Exit<Credential.OAuth, unknown>) {
       const now = yield* Clock.currentTimeMillis
       const result = yield* SynchronizedRef.modify(attempts, (current) => {
         const attempt = current.get(attemptID)
@@ -397,14 +410,13 @@ export const locationLayer = Layer.effect(
       })
       if (!result) return
       if (Exit.isSuccess(exit)) {
+        const implementation = state.get().integrations.get(result.integrationID)?.implementations.get(result.methodID)
         yield* credentials.create({
           integrationID: result.integrationID,
-          label: result.label,
-          value:
-            exit.value.type === "oauth"
-              ? new Credential.OAuth({ ...exit.value, methodID: result.methodID })
-              : exit.value,
+          label: result.label ?? implementation?.label?.(exit.value),
+          value: exit.value,
         })
+        yield* events.publish(Event.ConnectionUpdated, { integrationID: result.integrationID })
         yield* events.publish(Event.Updated, {})
       }
       yield* close(result.scope)
@@ -445,9 +457,28 @@ export const locationLayer = Layer.effect(
         ).toSorted((a, b) => a.name.localeCompare(b.name))
       }),
       connection: {
-        forIntegration: Effect.fn("Integration.connection.forIntegration")(function* (id) {
+        active: Effect.fn("Integration.connection.active")(function* (id) {
           const entry = state.get().integrations.get(id)
           return resolveConnections(entry, yield* credentials.list(id))[0]
+        }),
+        resolve: Effect.fn("Integration.connection.resolve")(function* (connection) {
+          if (connection.type === "env") {
+            const key = process.env[connection.name]
+            return key ? new Credential.Key({ type: "key", key }) : undefined
+          }
+          const credential = yield* credentials.get(connection.id)
+          if (!credential) return undefined
+          if (credential.value.type === "key") return credential.value
+          const implementation = state
+            .get()
+            .integrations.get(credential.integrationID)
+            ?.implementations.get(credential.value.methodID)
+          if (!implementation?.refresh) return credential.value
+          const now = yield* Clock.currentTimeMillis
+          if (credential.value.expires > now + Duration.toMillis(Duration.minutes(5))) return credential.value
+          const value = yield* authorize(implementation.refresh(credential.value))
+          yield* credentials.update(credential.id, { value })
+          return value
         }),
         key: Effect.fn("Integration.connection.key")(function* (input) {
           const method = state
@@ -460,6 +491,7 @@ export const locationLayer = Layer.effect(
             label: input.label,
             value: new Credential.Key({ type: "key", key: input.key }),
           })
+          yield* events.publish(Event.ConnectionUpdated, { integrationID: input.integrationID })
           yield* events.publish(Event.Updated, {})
         }),
         oauth: Effect.fn("Integration.connection.oauth")(function* (input) {
@@ -503,11 +535,19 @@ export const locationLayer = Layer.effect(
           })
         }),
         update: Effect.fn("Integration.connection.update")(function* (credentialID, updates) {
+          const credential = yield* credentials.get(credentialID)
           yield* credentials.update(credentialID, updates)
+          if (credential) {
+            yield* events.publish(Event.ConnectionUpdated, { integrationID: credential.integrationID })
+          }
           yield* events.publish(Event.Updated, {})
         }),
         remove: Effect.fn("Integration.connection.remove")(function* (credentialID) {
+          const credential = yield* credentials.get(credentialID)
           yield* credentials.remove(credentialID)
+          if (credential) {
+            yield* events.publish(Event.ConnectionUpdated, { integrationID: credential.integrationID })
+          }
           yield* events.publish(Event.Updated, {})
         }),
       },

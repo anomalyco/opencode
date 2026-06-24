@@ -110,12 +110,9 @@ export const ripgrepLayer = Layer.effect(
           return fuzzysort.go(input.query, items, { limit: input.limit ?? 50 }).map((item) => {
             const relative = item.target
             const type = relative.endsWith(path.sep) ? ("directory" as const) : ("file" as const)
-            const clean = type === "directory" ? relative.slice(0, -path.sep.length) : relative
-            const absolute = path.resolve(location.directory, clean)
             return new FileSystem.Entry({
               path: RelativePath.make(relative),
               type,
-              mime: type === "directory" ? "application/x-directory" : FSUtil.mimeType(absolute),
             })
           })
         }),
@@ -148,14 +145,13 @@ export const fffLayer = Layer.effect(
             pageSize: input.limit,
           })
           if (!found.ok) throw found.error
-          return found.value.items.map((item) => {
-            const absolute = path.resolve(location.directory, item.relativePath)
-            return new FileSystem.Entry({
-              path: RelativePath.make(item.relativePath.replaceAll("\\", "/")),
-              type: "file",
-              mime: FSUtil.mimeType(absolute),
-            })
-          })
+          return found.value.items.map(
+            (item) =>
+              new FileSystem.Entry({
+                path: RelativePath.make(item.relativePath.replaceAll("\\", "/")),
+                type: "file",
+              }),
+          )
         }),
       grep: (input) =>
         Effect.sync(() => {
@@ -173,7 +169,6 @@ export const fffLayer = Layer.effect(
               entry: new FileSystem.Entry({
                 path: RelativePath.make(match.relativePath.replaceAll("\\", "/")),
                 type: "file",
-                mime: FSUtil.mimeType(match.relativePath),
               }),
               line: match.lineNumber,
               offset: match.byteOffset,
@@ -220,11 +215,9 @@ export const fffLayer = Layer.effect(
             .sort((a, b) => b.score - a.score || a.path.length - b.path.length)
             .map((item) => {
               const relative = item.path.replaceAll("\\", "/").replace(/\/$/, "")
-              const absolute = path.resolve(location.directory, relative)
               return new FileSystem.Entry({
                 path: RelativePath.make(relative + (item.type === "directory" ? path.sep : "")),
                 type: item.type,
-                mime: item.type === "directory" ? "application/x-directory" : FSUtil.mimeType(absolute),
               })
             })
         }),

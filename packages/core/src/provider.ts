@@ -1,6 +1,7 @@
 export * as ProviderV2 from "./provider"
 
 import { withStatics } from "./schema"
+import { IntegrationSchema } from "./integration/schema"
 import { Schema, Types } from "effect"
 
 export const ID = Schema.String.pipe(
@@ -49,6 +50,7 @@ export type Request = typeof Request.Type
 
 export class Info extends Schema.Class<Info>("ProviderV2.Info")({
   id: ID,
+  integrationID: IntegrationSchema.ID.pipe(Schema.optional),
   name: Schema.String,
   disabled: Schema.Boolean.pipe(Schema.optional),
   api: Api,
