@@ -399,9 +399,7 @@ describe("EventV2", () => {
       const events = yield* EventV2.Service
       const aggregateID = EventV2.ID.create()
       yield* events.publish(SyncMessage, { id: aggregateID, text: "zero" })
-      const fiber = yield* events
-        .durable({ aggregateID })
-        .pipe(Stream.take(2), Stream.runCollect, Effect.forkScoped)
+      const fiber = yield* events.durable({ aggregateID }).pipe(Stream.take(2), Stream.runCollect, Effect.forkScoped)
 
       yield* events.publish(SyncMessage, { id: aggregateID, text: "one" })
 
@@ -422,20 +420,17 @@ describe("EventV2", () => {
       const readStarted = yield* Deferred.make<void>()
       const continueRead = yield* Deferred.make<void>()
       let pause = true
-      const database = Database.layerFromPath(":memory:")
       const eventLayer = EventV2.layerWith({
         beforeAggregateRead: () =>
           pause
             ? Deferred.succeed(readStarted, undefined).pipe(Effect.andThen(Deferred.await(continueRead)))
             : Effect.void,
-      }).pipe(Layer.provide(database))
+      }).pipe(Layer.provide(Database.defaultLayer))
 
       yield* Effect.gen(function* () {
         const events = yield* EventV2.Service
         const aggregateID = EventV2.ID.create()
-        const fiber = yield* events
-          .durable({ aggregateID })
-          .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
+        const fiber = yield* events.durable({ aggregateID }).pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
         yield* Deferred.await(readStarted)
 
         pause = false
@@ -445,7 +440,7 @@ describe("EventV2", () => {
         expect(Array.from(yield* Fiber.join(fiber)).map((event) => [event.durable?.seq, event.data])).toEqual([
           [0, { id: aggregateID, text: "during handoff" }],
         ])
-      }).pipe(Effect.provide(Layer.mergeAll(database, eventLayer)))
+      }).pipe(Effect.provide(Layer.mergeAll(Database.defaultLayer, eventLayer)))
     }),
   )
 
@@ -464,10 +459,7 @@ describe("EventV2", () => {
       }
 
       expect(Array.from(yield* Fiber.join(fiber)).map((event) => [event.durable?.seq, event.data])).toEqual(
-        Array.from({ length: count }, (_, index) => [
-          index,
-          { id: aggregateID, text: String(index) },
-        ]),
+        Array.from({ length: count }, (_, index) => [index, { id: aggregateID, text: String(index) }]),
       )
     }),
   )
@@ -476,9 +468,7 @@ describe("EventV2", () => {
     Effect.gen(function* () {
       const events = yield* EventV2.Service
       const aggregateID = EventV2.ID.create()
-      const fiber = yield* events
-        .durable({ aggregateID })
-        .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
+      const fiber = yield* events.durable({ aggregateID }).pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
       yield* Effect.yieldNow
 
       yield* events.publish(Message, { text: "live only" })

@@ -4,8 +4,7 @@ import type {
   IntegrationKeyMethod,
   IntegrationOAuthMethod,
 } from "@opencode-ai/sdk/v2/types"
-import type { Effect } from "effect"
-import type { Transformable } from "./registration.js"
+import type { Hooks } from "./registration.js"
 
 export type IntegrationMethod = IntegrationOAuthMethod | IntegrationKeyMethod | IntegrationEnvMethod
 export type IntegrationMethodRegistration =
@@ -30,7 +29,6 @@ export interface IntegrationDraft {
   }
 }
 
-export interface Integration extends Transformable<IntegrationDraft> {
-  get(id: string): Effect.Effect<IntegrationInfo | undefined>
-  list(): Effect.Effect<IntegrationInfo[]>
-}
+export type IntegrationHooks = Hooks<{
+  transform: IntegrationDraft
+}>

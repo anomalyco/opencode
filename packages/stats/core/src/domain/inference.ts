@@ -17,6 +17,8 @@ export type StatDimension = "model" | "provider" | "geo" | "geo_model"
 export function buildStatsQuery(periodStart: Date, periodEnd: Date, dimension: StatDimension) {
   const periodStartValue = sqlString(periodStart.toISOString())
   const periodEndValue = sqlString(periodEnd.toISOString())
+  const periodStartDateValue = sqlString(periodStart.toISOString().slice(0, 10))
+  const periodEndDateValue = sqlString(periodEnd.toISOString().slice(0, 10))
   const sourceTable = [Resource.InferenceEvent.catalog, Resource.InferenceEvent.database, Resource.InferenceEvent.table]
     .map(sqlIdentifier)
     .join(".")
@@ -95,6 +97,9 @@ WITH normalized AS (
   WHERE event_type = 'completions'
     AND model IS NOT NULL
     AND model <> ''
+    AND source = 'lite'
+    AND event_date >= ${periodStartDateValue}
+    AND event_date <= ${periodEndDateValue}
     AND event_timestamp >= ${periodStartValue}
     AND event_timestamp < ${periodEndValue}
 ), filtered AS (

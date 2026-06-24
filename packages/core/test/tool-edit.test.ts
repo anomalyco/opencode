@@ -404,7 +404,7 @@ test("keeps the locked edit schema, semantics docstring, and deferred TODOs visi
 
   expect(Object.keys(schema.properties ?? {}).sort()).toEqual(["newString", "oldString", "path", "replaceAll"])
   expect(source).toContain(
-    "Named project references\n * are read-oriented and deliberately are not accepted by mutation tools.",
+    "absolute external paths retain mutation capability through a separate\n * external_directory approval before edit approval.",
   )
   for (const todo of [
     "Port V1 fuzzy correction strategies only after exact-edit behavior is established: line-trimmed matching, block-anchor fallback, indentation correction, and similarity-threshold review.",

@@ -46,6 +46,19 @@ export type Payload<D extends Definition = Definition> = {
 export type Subscriber<D extends Definition = Definition> = (event: Payload<D>) => Effect.Effect<void>
 export type Unsubscribe = Effect.Effect<void>
 
+export const latestSequence = Effect.fn("EventV2.latestSequence")(function* (
+  db: Database.Interface["db"],
+  aggregateID: string,
+) {
+  const row = yield* db
+    .select({ seq: EventSequenceTable.seq })
+    .from(EventSequenceTable)
+    .where(eq(EventSequenceTable.aggregate_id, aggregateID))
+    .get()
+    .pipe(Effect.orDie)
+  return row?.seq ?? -1
+})
+
 export type SerializedEvent = {
   readonly id: ID
   readonly type: string
@@ -100,8 +113,7 @@ export function define<const Type extends string, Fields extends Schema.Struct.F
   ) {
     registry.set(input.type, definition)
   }
-  if (input.durable)
-    durableRegistry.set(versionedType(input.type, input.durable.version), definition)
+  if (input.durable) durableRegistry.set(versionedType(input.type, input.durable.version), definition)
   return definition as Schema.Schema<Payload<Definition<Type, Schema.Struct<Fields>>>> &
     Definition<Type, Schema.Struct<Fields>>
 }
@@ -126,10 +138,7 @@ export interface Interface {
   ) => Effect.Effect<Payload<D>>
   readonly subscribe: <D extends Definition>(definition: D) => Stream.Stream<Payload<D>>
   readonly all: () => Stream.Stream<Payload>
-  readonly durable: (input: {
-    readonly aggregateID: string
-    readonly after?: number
-  }) => Stream.Stream<Payload>
+  readonly durable: (input: { readonly aggregateID: string; readonly after?: number }) => Stream.Stream<Payload>
   /** @deprecated Use `all()` and consume the returned stream. */
   readonly listen: (listener: Subscriber) => Effect.Effect<Unsubscribe>
   readonly project: <D extends Definition>(definition: D, projector: Subscriber<D>) => Effect.Effect<void>
@@ -382,8 +391,7 @@ export const layerWith = (options?: LayerOptions) =>
         Effect.suspend(() => observer(event)).pipe(
           Effect.catchCauseIf(
             (cause) => !Cause.hasInterrupts(cause),
-            (cause) =>
-              Effect.logError("Event listener failed", { eventID: event.id, eventType: event.type, cause }),
+            (cause) => Effect.logError("Event listener failed", { eventID: event.id, eventType: event.type, cause }),
           ),
         )
 
@@ -435,9 +443,9 @@ export const layerWith = (options?: LayerOptions) =>
             const payload = {
               id: event.id,
               type: definition.type,
-              data: Schema.decodeUnknownSync(
-                definition.data as Schema.Codec<unknown, unknown, never, never>,
-              )(event.data),
+              data: Schema.decodeUnknownSync(definition.data as Schema.Codec<unknown, unknown, never, never>)(
+                event.data,
+              ),
             } as Payload
             const committed = yield* commitDurableEvent(payload, {
               seq: event.seq,
@@ -580,10 +588,7 @@ export const layerWith = (options?: LayerOptions) =>
           return subscription
         })
 
-      const durable = (input: {
-        readonly aggregateID: string
-        readonly after?: number
-      }): Stream.Stream<Payload> =>
+      const durable = (input: { readonly aggregateID: string; readonly after?: number }): Stream.Stream<Payload> =>
         Stream.unwrap(
           Effect.gen(function* () {
             const wakes = yield* subscribeDurable(input.aggregateID)
