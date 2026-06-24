@@ -1,6 +1,5 @@
 import fs from "fs/promises"
 import path from "path"
-import { pathToFileURL } from "url"
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { FSUtil } from "@opencode-ai/core/fs-util"
@@ -24,7 +23,7 @@ describe("SkillTool", () => {
     ).pipe(
       Effect.flatMap((tmp) =>
         Effect.gen(function* () {
-          const directory = path.join(tmp.path, "effect")
+          const directory = path.join(tmp.path, "effect#v1")
           const location = path.join(directory, "SKILL.md")
           const reference = path.join(directory, "reference.md")
           yield* Effect.promise(() => fs.mkdir(directory, { recursive: true }))
@@ -90,7 +89,7 @@ describe("SkillTool", () => {
               value: SkillTool.toModelOutput(info, [reference]),
             })
             expect(SkillTool.toModelOutput(info, [reference])).toContain(
-              `Base directory for this skill: ${pathToFileURL(directory).href}`,
+              `Base directory for this skill: ${directory}`,
             )
             expect(
               yield* settleTool(registry, {
