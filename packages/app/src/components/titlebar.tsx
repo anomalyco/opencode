@@ -41,6 +41,8 @@ import { tabHref, useTabs } from "@/context/tabs"
 import "./titlebar.css"
 import { useServerSDK } from "@/context/server-sdk"
 import { Session } from "@opencode-ai/sdk/v2"
+import { base64Encode } from "@opencode-ai/core/util/encode"
+import { createTabPromptState } from "@/context/prompt"
 
 type TauriDesktopWindow = {
   startDragging?: () => Promise<void>
@@ -523,13 +525,18 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                             )
                           }
 
+                          const sdk = createMemo(() => {
+                            const conn = server.list.find((s) => ServerConnection.key(s) === tab.server)
+                            if (!conn) return null
+                            const { sdk } = global.createServerCtx(conn)
+                            return sdk
+                          })
                           const [session] = createResource(
                             () => {
                               const id = tab.sessionId
-                              const conn = server.list.find((s) => ServerConnection.key(s) === tab.server)
-                              if (!conn) return null
-                              const { sdk } = global.createServerCtx(conn)
-                              return { id, sdk }
+                              const _sdk = sdk()
+                              if (!_sdk) return null
+                              return { id, sdk: _sdk }
                             },
                             ({ id, sdk }) =>
                               sdk.client.session
@@ -537,6 +544,18 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                                 .then((x) => x.data)
                                 .catch(() => undefined),
                           )
+
+                          createEffect(() => {
+                            if (tab.type !== "session") return
+                            const _sdk = sdk()
+                            if (!_sdk) return
+                            const sess = session()
+                            if (!sess) return
+                            createTabPromptState(tabs, tab, _sdk.scope, {
+                              dir: base64Encode(sess.directory),
+                              id: sess.id,
+                            })
+                          })
 
                           return (
                             <>
