@@ -1,6 +1,5 @@
 import fs from "fs/promises"
 import path from "path"
-import { pathToFileURL } from "url"
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { FSUtil } from "@opencode-ai/core/fs-util"
@@ -89,9 +88,7 @@ describe("SkillTool", () => {
               type: "text",
               value: SkillTool.toModelOutput(info, [reference]),
             })
-            expect(SkillTool.toModelOutput(info, [reference])).toContain(
-              `Base directory for this skill: ${pathToFileURL(directory).href}`,
-            )
+            expect(SkillTool.toModelOutput(info, [reference])).toContain(`Base directory for this skill: ${directory}`)
             expect(
               yield* settleTool(registry, {
                 sessionID,
@@ -122,7 +119,7 @@ describe("SkillTool", () => {
               }),
             ).toEqual({ type: "error", value: "Unable to load skill effect" })
             deny = false
-            const flat = new SkillV2.Info({
+            const flat = SkillV2.Info.make({
               name: "public",
               description: "Public guidance",
               location: AbsolutePath.make(path.join(tmp.path, "public.md")),

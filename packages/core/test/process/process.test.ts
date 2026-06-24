@@ -61,6 +61,7 @@ describe("AppProcess", () => {
           if (reason && reason._tag === "Fail") {
             expect(reason.error).toBeInstanceOf(AppProcess.AppProcessError)
             expect((reason.error as AppProcess.AppProcessError).exitCode).toBe(1)
+            expect((reason.error as AppProcess.AppProcessError).message).toContain("Command failed (exit 1)")
           } else {
             throw new Error("expected fail reason")
           }

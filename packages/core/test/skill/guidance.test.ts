@@ -9,18 +9,18 @@ import { SkillGuidance } from "@opencode-ai/core/skill/guidance"
 import { it } from "../lib/effect"
 
 const build = AgentV2.ID.make("build")
-const effect = new SkillV2.Info({
+const effect = SkillV2.Info.make({
   name: "effect",
   description: "Build applications with Effect",
   location: AbsolutePath.make(path.resolve("/skills/effect/SKILL.md")),
   content: "Effect guidance",
 })
-const hidden = new SkillV2.Info({
+const hidden = SkillV2.Info.make({
   name: "hidden",
   location: AbsolutePath.make(path.resolve("/skills/hidden/SKILL.md")),
   content: "Undescribed guidance",
 })
-const denied = new SkillV2.Info({
+const denied = SkillV2.Info.make({
   name: "denied",
   description: "Must not be advertised",
   location: AbsolutePath.make(path.resolve("/skills/denied/SKILL.md")),
@@ -32,7 +32,7 @@ const layer = (list: () => SkillV2.Info[]) =>
 
 describe("SkillGuidance", () => {
   it.effect("renders described agent skills and reconciles the complete available list", () => {
-    const agent = new AgentV2.Info({
+    const agent = AgentV2.Info.make({
       ...AgentV2.Info.empty(build),
       permissions: [{ action: "skill", resource: "denied", effect: "deny" }],
     })
@@ -69,7 +69,7 @@ describe("SkillGuidance", () => {
   })
 
   it.effect("omits guidance when the selected agent denies all skills", () => {
-    const agent = new AgentV2.Info({
+    const agent = AgentV2.Info.make({
       ...AgentV2.Info.empty(build),
       permissions: [{ action: "skill", resource: "*", effect: "deny" }],
     })
@@ -85,7 +85,7 @@ describe("SkillGuidance", () => {
   })
 
   it.effect("omits guidance when a resource-specific denial follows the global denial", () => {
-    const agent = new AgentV2.Info({
+    const agent = AgentV2.Info.make({
       ...AgentV2.Info.empty(build),
       permissions: [
         { action: "skill", resource: "*", effect: "deny" },
@@ -104,7 +104,7 @@ describe("SkillGuidance", () => {
   })
 
   it.effect("retains specifically allowed skills after a global denial", () => {
-    const agent = new AgentV2.Info({
+    const agent = AgentV2.Info.make({
       ...AgentV2.Info.empty(build),
       permissions: [
         { action: "skill", resource: "*", effect: "deny" },
@@ -120,7 +120,7 @@ describe("SkillGuidance", () => {
   })
 
   it.effect("omits guidance when a specifically allowed skill is denied again", () => {
-    const agent = new AgentV2.Info({
+    const agent = AgentV2.Info.make({
       ...AgentV2.Info.empty(build),
       permissions: [
         { action: "skill", resource: "*", effect: "deny" },
