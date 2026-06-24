@@ -103,6 +103,45 @@ describe("Bedrock Converse route", () => {
     }),
   )
 
+  it.effect("passes thinking through additionalModelRequestFields", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<BedrockConverse.BedrockConverseBody>(
+        LLM.updateRequest(baseRequest, {
+          providerOptions: { bedrock: { thinking: { type: "enabled", budgetTokens: 4096 } } },
+        }),
+      )
+      expect(prepared.body.additionalModelRequestFields).toEqual({
+        thinking: { type: "enabled", budget_tokens: 4096 },
+      })
+    }),
+  )
+
+  it.effect("passes both topK and thinking through additionalModelRequestFields", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<BedrockConverse.BedrockConverseBody>(
+        LLM.updateRequest(baseRequest, {
+          generation: { maxTokens: 64, temperature: 0, topK: 40 },
+          providerOptions: { bedrock: { thinking: { type: "enabled", budgetTokens: 8192 } } },
+        }),
+      )
+      expect(prepared.body.additionalModelRequestFields).toEqual({
+        top_k: 40,
+        thinking: { type: "enabled", budget_tokens: 8192 },
+      })
+    }),
+  )
+
+  it.effect("rejects thinking without budgetTokens", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.prepare(
+        LLM.updateRequest(baseRequest, {
+          providerOptions: { bedrock: { thinking: { type: "enabled" } } },
+        }),
+      ).pipe(Effect.flip)
+      expect(error.message).toContain("Bedrock thinking provider option requires budgetTokens")
+    }),
+  )
+
   it.effect("lowers chronological system updates to wrapped user text in order", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare<BedrockConverse.BedrockConverseBody>(
