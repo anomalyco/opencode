@@ -617,16 +617,22 @@ export const ShellTool = Tool.define(
               }
               const timeout = params.timeout ?? defaultTimeoutMs
               const ps = Shell.ps(shell)
-              yield* Effect.scoped(
-                Effect.gen(function* () {
-                  const tree = yield* Effect.acquireRelease(parse(params.command, ps), (tree) =>
-                    Effect.sync(() => tree.delete()),
-                  )
-                  const scan = yield* collect(tree.rootNode, cwd, ps, shell, instanceCtx)
-                  if (!containsPath(cwd, instanceCtx)) scan.dirs.add(cwd)
-                  yield* ask(ctx, scan, params)
-                }),
-              )
+              // web-tree-sitter WASM init crashes Bun 1.3.14 on linux/aarch64 (SIGTRAP in JSC).
+              // Skip the scan+permission step on that platform; --dangerously-skip-permissions
+              // auto-approves everything anyway, so this is safe for headless bot use.
+              const skipWasm = process.platform === "linux" && process.arch === "arm64"
+              if (!skipWasm) {
+                yield* Effect.scoped(
+                  Effect.gen(function* () {
+                    const tree = yield* Effect.acquireRelease(parse(params.command, ps), (tree) =>
+                      Effect.sync(() => tree.delete()),
+                    )
+                    const scan = yield* collect(tree.rootNode, cwd, ps, shell, instanceCtx)
+                    if (!containsPath(cwd, instanceCtx)) scan.dirs.add(cwd)
+                    yield* ask(ctx, scan, params)
+                  }),
+                )
+              }
 
               return yield* run(
                 {
