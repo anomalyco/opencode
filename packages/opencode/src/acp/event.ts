@@ -74,6 +74,8 @@ export class Subscription {
         return this.handlePartUpdated(event)
       case "message.part.delta":
         return this.handlePartDelta(event)
+      case "file.watcher.updated":
+        return this.handleFileUpdated(event)
     }
   }
 
@@ -195,6 +197,23 @@ export class Subscription {
           },
         },
       })
+    }
+  }
+
+  private async handleFileUpdated(event: Extract<Event, { type: "file.watcher.updated" }>) {
+    const props = event.properties
+    if (props.event === "unlink" || !this.input.connection.writeTextFile) return
+
+    const sessions = await Effect.runPromise(this.input.session.list())
+    for (const session of sessions) {
+      if (props.file.startsWith(session.cwd)) {
+        const content = await Bun.file(props.file).text()
+        await this.input.connection.writeTextFile({
+          sessionId: session.id,
+          path: props.file,
+          content,
+        })
+      }
     }
   }
 
