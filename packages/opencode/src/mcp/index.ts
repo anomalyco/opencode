@@ -140,6 +140,7 @@ interface CreateResult {
   mcpClient?: MCPClient
   status: Status
   defs?: MCPToolDef[]
+  instructions?: string
 }
 
 interface AuthResult {
@@ -155,11 +156,19 @@ interface State {
   status: Record<string, Status>
   clients: Record<string, MCPClient>
   defs: Record<string, MCPToolDef[]>
+  instructions: Record<string, string>
+}
+
+export interface ServerInstructions {
+  name: string
+  instructions: string
+  tools: string[]
 }
 
 export interface Interface {
   readonly status: () => Effect.Effect<Record<string, Status>>
   readonly clients: () => Effect.Effect<Record<string, MCPClient>>
+  readonly instructions: () => Effect.Effect<ServerInstructions[]>
   readonly tools: () => Effect.Effect<Record<string, Tool>>
   readonly prompts: () => Effect.Effect<Record<string, PromptInfo & { client: string }>>
   readonly resources: (clientName?: string) => Effect.Effect<Record<string, ResourceInfo & { client: string }>>
@@ -383,7 +392,7 @@ export const layer = Layer.effect(
           if (!listed) {
             return yield* Effect.fail(new Error("Failed to get tools"))
           }
-          return { mcpClient, status, defs: listed } satisfies CreateResult
+          return { mcpClient, status, defs: listed, instructions: mcpClient.getInstructions()?.trim() } satisfies CreateResult
         }).pipe(
           Effect.catchCause((cause) =>
             Effect.tryPromise(() => mcpClient.close()).pipe(Effect.ignore, Effect.andThen(Effect.failCause(cause))),
@@ -430,6 +439,7 @@ export const layer = Layer.effect(
         if (s.clients[name] !== client) return
         delete s.clients[name]
         delete s.defs[name]
+        delete s.instructions[name]
         s.status[name] = { status: "failed", error: "Connection closed" }
         bridge.fork(
           Effect.logWarning("MCP connection closed", { server: name }).pipe(
@@ -484,6 +494,7 @@ export const layer = Layer.effect(
           status: {},
           clients: {},
           defs: {},
+          instructions: {},
         }
 
         yield* Effect.forEach(
@@ -505,6 +516,7 @@ export const layer = Layer.effect(
               if (result.mcpClient) {
                 s.clients[key] = result.mcpClient
                 s.defs[key] = result.defs!
+                if (result.instructions) s.instructions[key] = result.instructions
                 watch(s, key, result.mcpClient, bridge, mcp.timeout)
               }
             }),
@@ -516,6 +528,7 @@ export const layer = Layer.effect(
             const clients = Object.values(s.clients)
             s.clients = {}
             s.defs = {}
+            s.instructions = {}
             yield* Effect.forEach(
               clients,
               (client) =>
@@ -545,6 +558,7 @@ export const layer = Layer.effect(
       const client = s.clients[name]
       delete s.clients[name]
       delete s.defs[name]
+      delete s.instructions[name]
       if (!client) return Effect.void
       return Effect.tryPromise(() => client.close()).pipe(Effect.ignore)
     }
@@ -554,6 +568,7 @@ export const layer = Layer.effect(
       name: string,
       client: MCPClient,
       listed: MCPToolDef[],
+      instructions: string | undefined,
       timeout?: number,
     ) {
       const bridge = yield* EffectBridge.make()
@@ -561,6 +576,8 @@ export const layer = Layer.effect(
       s.status[name] = { status: "connected" }
       s.clients[name] = client
       s.defs[name] = listed
+      if (instructions) s.instructions[name] = instructions
+      else delete s.instructions[name]
       watch(s, name, client, bridge, timeout)
       if (previous) yield* Effect.tryPromise(() => previous.close()).pipe(Effect.ignore)
       return s.status[name]
@@ -590,6 +607,18 @@ export const layer = Layer.effect(
       return s.clients
     })
 
+    const instructions = Effect.fn("MCP.instructions")(function* () {
+      const s = yield* InstanceState.get(state)
+      return Object.entries(s.instructions)
+        .filter(([name]) => s.status[name]?.status === "connected")
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([name, item]) => ({
+          name,
+          instructions: item,
+          tools: (s.defs[name] ?? []).map((tool) => McpCatalog.toolName(name, tool.name)),
+        }))
+    })
+
     const createAndStore = Effect.fn("MCP.createAndStore")(function* (name: string, mcp: ConfigMCPV1.Info) {
       const s = yield* InstanceState.get(state)
       const result = yield* create(name, mcp)
@@ -601,7 +630,7 @@ export const layer = Layer.effect(
         return result.status
       }
 
-      return yield* storeClient(s, name, result.mcpClient, result.defs!, mcp.timeout)
+      return yield* storeClient(s, name, result.mcpClient, result.defs!, result.instructions, mcp.timeout)
     })
 
     const add = Effect.fn("MCP.add")(function* (name: string, mcp: ConfigMCPV1.Info) {
@@ -647,7 +676,7 @@ export const layer = Layer.effect(
         }
         const timeout = requestTimeout(s, clientName, mcpConfig, defaultTimeout)
         for (const mcpTool of listed) {
-          const key = McpCatalog.sanitize(clientName) + "_" + McpCatalog.sanitize(mcpTool.name)
+          const key = McpCatalog.toolName(clientName, mcpTool.name)
           result[key] = McpCatalog.convertTool(mcpTool, client, timeout)
         }
       }
@@ -855,7 +884,7 @@ export const layer = Layer.effect(
 
         const s = yield* InstanceState.get(state)
         yield* auth.clearOAuthState(mcpName)
-        return yield* storeClient(s, mcpName, client, listed, mcpConfig.timeout)
+        return yield* storeClient(s, mcpName, client, listed, client.getInstructions()?.trim(), mcpConfig.timeout)
       }
 
       const callbackPromise = McpOAuthCallback.waitForCallback(result.oauthState, mcpName)
@@ -942,6 +971,7 @@ export const layer = Layer.effect(
     return Service.of({
       status,
       clients,
+      instructions,
       tools,
       prompts,
       resources,
