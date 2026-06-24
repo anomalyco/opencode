@@ -6,20 +6,10 @@ import { Location } from "./location"
 import { Model } from "./model"
 import { Project } from "./project"
 import { DateTimeUtcFromMillis, optionalOmitUndefined, RelativePath } from "./schema"
-import { withStatics } from "./schema"
-import { descending } from "./identifier"
+import { SessionID } from "./session-id"
 
-export const ID = Schema.String.check(Schema.isStartsWith("ses")).pipe(
-  Schema.brand("SessionID"),
-  withStatics((schema) => {
-    const create = () => schema.make("ses_" + descending())
-    return {
-      create,
-      descending: (id?: string) => (id === undefined ? create() : schema.make(id)),
-    }
-  }),
-)
-export type ID = typeof ID.Type
+export const ID = SessionID.ID
+export type ID = SessionID.ID
 
 export interface Info extends Schema.Schema.Type<typeof Info> {}
 export const Info = Schema.Struct({

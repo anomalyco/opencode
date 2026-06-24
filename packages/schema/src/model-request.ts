@@ -1,6 +1,7 @@
 export * as ModelRequest from "./model-request"
 
 import { Effect, Schema } from "effect"
+import { Provider } from "./provider"
 
 export interface Generation extends Schema.Schema.Type<typeof Generation> {}
 export const Generation = Schema.Struct({
@@ -16,8 +17,7 @@ export const Generation = Schema.Struct({
 
 export interface Request extends Schema.Schema.Type<typeof Request> {}
 export const Request = Schema.Struct({
-  headers: Schema.Record(Schema.String, Schema.String),
-  body: Schema.Record(Schema.String, Schema.Any),
+  ...Provider.Request.fields,
   generation: Generation.pipe(
     Schema.optionalKey,
     Schema.withConstructorDefault(Effect.succeed({})),

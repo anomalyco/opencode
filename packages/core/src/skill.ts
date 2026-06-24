@@ -20,21 +20,7 @@ export type UrlSource = Skill.UrlSource
 export const EmbeddedSource = Skill.EmbeddedSource
 export type EmbeddedSource = Skill.EmbeddedSource
 
-export const Source = Object.assign(Skill.Source, {
-  equals: (a: Skill.Source, b: Skill.Source) => {
-    if (a.type !== b.type) return false
-    if (a.type === "directory" && b.type === "directory") return a.path === b.path
-    if (a.type === "url" && b.type === "url") return a.url === b.url
-    if (a.type === "embedded" && b.type === "embedded") return a.skill.name === b.skill.name
-    return false
-  },
-  key: (source: Skill.Source) =>
-    source.type === "directory"
-      ? `directory:${source.path}`
-      : source.type === "url"
-        ? `url:${source.url}`
-        : `embedded:${source.skill.name}`,
-})
+export const Source = Skill.Source
 export type Source = typeof Source.Type
 
 export const Info = Skill.Info

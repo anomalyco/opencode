@@ -2,7 +2,6 @@ export * as AgentV2 from "./agent"
 
 import { Array, Context, Effect, Layer, Types } from "effect"
 import { Agent } from "@opencode-ai/schema/agent"
-import { withStatics } from "./schema"
 import { State } from "./state"
 
 export const ID = Agent.ID
@@ -11,22 +10,7 @@ export const defaultID = ID.make("build")
 
 export const Color = Agent.Color
 
-export const Info = Agent.Info.pipe(
-  withStatics((schema) => ({
-    empty(id: ID) {
-      return schema.make({
-        id,
-        request: {
-          headers: {},
-          body: {},
-        },
-        mode: "all",
-        hidden: false,
-        permissions: [],
-      })
-    },
-  })),
-)
+export const Info = Agent.Info
 export type Info = Agent.Info
 
 export interface Selection {

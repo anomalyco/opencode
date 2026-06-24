@@ -4,7 +4,7 @@ import { Schema } from "effect"
 import { Model } from "./model"
 import { Permission } from "./permission"
 import { Provider } from "./provider"
-import { PositiveInt } from "./schema"
+import { PositiveInt, withStatics } from "./schema"
 
 export const ID = Schema.String.pipe(Schema.brand("AgentV2.ID"))
 export type ID = typeof ID.Type
@@ -27,4 +27,11 @@ export const Info = Schema.Struct({
   color: Color.pipe(Schema.optional),
   steps: PositiveInt.pipe(Schema.optional),
   permissions: Permission.Ruleset,
-}).annotate({ identifier: "AgentV2.Info" })
+})
+  .annotate({ identifier: "AgentV2.Info" })
+  .pipe(
+    withStatics((schema) => ({
+      empty: (id: ID) =>
+        schema.make({ id, request: { headers: {}, body: {} }, mode: "all", hidden: false, permissions: [] }),
+    })),
+  )

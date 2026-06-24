@@ -6,8 +6,9 @@ import { SessionV2 } from "@opencode-ai/core/session"
 import { Agent } from "@opencode-ai/schema/agent"
 import { Location } from "@opencode-ai/schema/location"
 import { Model } from "@opencode-ai/schema/model"
-import { Prompt } from "@opencode-ai/schema/prompt"
+import { AgentAttachment, FileAttachment, Prompt, Source } from "@opencode-ai/schema/prompt"
 import { Provider } from "@opencode-ai/schema/provider"
+import { Project } from "@opencode-ai/schema/project"
 import { Session } from "@opencode-ai/schema/session"
 import { SessionInput } from "@opencode-ai/schema/session-input"
 import { SessionMessage } from "@opencode-ai/schema/session-message"
@@ -22,6 +23,7 @@ import { ModelRequest } from "@opencode-ai/schema/model-request"
 import { Permission } from "@opencode-ai/schema/permission"
 import { Reference } from "@opencode-ai/schema/reference"
 import { Skill } from "@opencode-ai/schema/skill"
+import { AbsolutePath, DateTimeUtcFromMillis } from "@opencode-ai/schema/schema"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 
 test("Core reuses the canonical shared schemas", async () => {
@@ -35,11 +37,14 @@ test("Core reuses the canonical shared schemas", async () => {
     coreLLM,
     coreModelRequest,
     corePermission,
+    coreProject,
     coreReference,
     coreSessionInput,
     coreSessionMessage,
     corePrompt,
     coreSkill,
+    coreV2Schema,
+    coreWorkspace,
   ] = await Promise.all([
     import("@opencode-ai/core/command"),
     import("@opencode-ai/core/integration/connection"),
@@ -50,34 +55,116 @@ test("Core reuses the canonical shared schemas", async () => {
     import("@opencode-ai/llm"),
     import("@opencode-ai/core/model-request"),
     import("@opencode-ai/core/permission/schema"),
+    import("@opencode-ai/core/project/schema"),
     import("@opencode-ai/core/reference"),
     import("@opencode-ai/core/session/input"),
     import("@opencode-ai/core/session/message"),
     import("@opencode-ai/core/session/prompt"),
     import("@opencode-ai/core/skill"),
+    import("@opencode-ai/core/v2-schema"),
+    import("@opencode-ai/core/workspace"),
   ])
 
-  expect(AgentV2.ID).toBe(Agent.ID)
-  expect(Object.is(AgentV2.Info, Agent.Info)).toBe(true)
-  expect(coreCommand.Info).toBe(Command.Info)
-  expect(coreConnection.Info).toBe(Connection.Info)
-  expect(coreCredential.Value).toBe(Credential.Value)
-  expect(coreFileSystem.Entry).toBe(FileSystem.Entry)
-  expect(coreIntegration.Method).toBe(Integration.Method)
-  expect(coreLocation.Ref).toBe(Location.Ref)
-  expect(coreLLM.ProviderMetadata).toBe(LLM.ProviderMetadata)
-  expect(coreLLM.ToolContent).toBe(LLM.ToolContent)
-  expect(ModelV2.Ref).toBe(Model.Ref)
-  expect(Object.is(ModelV2.Info, Model.Info)).toBe(true)
-  expect(Object.is(ProviderV2.Info, Provider.Info)).toBe(true)
-  expect(coreModelRequest.Request).toBe(ModelRequest.Request)
-  expect(corePermission.Ruleset).toBe(Permission.Ruleset)
-  expect(coreReference.Source).toBe(Reference.Source)
-  expect(SessionV2.Info).toBe(Session.Info)
-  expect(coreSessionInput.Admitted).toBe(SessionInput.Admitted)
-  expect(coreSessionMessage.Message).toBe(SessionMessage.Message)
-  expect(corePrompt.Prompt).toBe(Prompt)
-  expect(Object.is(coreSkill.Source, Skill.Source)).toBe(true)
+  const schemas = [
+    [AgentV2.ID, Agent.ID],
+    [AgentV2.Color, Agent.Color],
+    [AgentV2.Info, Agent.Info],
+    [coreCommand.Info, Command.Info],
+    [coreConnection.CredentialInfo, Connection.CredentialInfo],
+    [coreConnection.EnvInfo, Connection.EnvInfo],
+    [coreConnection.Info, Connection.Info],
+    [coreCredential.ID, Credential.ID],
+    [coreCredential.OAuth, Credential.OAuth],
+    [coreCredential.Key, Credential.Key],
+    [coreCredential.Value, Credential.Value],
+    [coreFileSystem.Entry, FileSystem.Entry],
+    [coreFileSystem.Submatch, FileSystem.Submatch],
+    [coreFileSystem.Match, FileSystem.Match],
+    [coreIntegration.When, Integration.When],
+    [coreIntegration.TextPrompt, Integration.TextPrompt],
+    [coreIntegration.SelectPrompt, Integration.SelectPrompt],
+    [coreIntegration.Prompt, Integration.Prompt],
+    [coreIntegration.OAuthMethod, Integration.OAuthMethod],
+    [coreIntegration.KeyMethod, Integration.KeyMethod],
+    [coreIntegration.EnvMethod, Integration.EnvMethod],
+    [coreIntegration.Method, Integration.Method],
+    [coreIntegration.Inputs, Integration.Inputs],
+    [coreIntegration.Ref, Integration.Ref],
+    [coreLocation.Ref, Location.Ref],
+    [coreLLM.ProviderMetadata, LLM.ProviderMetadata],
+    [coreLLM.ToolTextContent, LLM.ToolTextContent],
+    [coreLLM.ToolFileContent, LLM.ToolFileContent],
+    [coreLLM.ToolContent, LLM.ToolContent],
+    [ModelV2.ID, Model.ID],
+    [ModelV2.VariantID, Model.VariantID],
+    [ModelV2.Ref, Model.Ref],
+    [ModelV2.Family, Model.Family],
+    [ModelV2.Capabilities, Model.Capabilities],
+    [ModelV2.Cost, Model.Cost],
+    [ModelV2.Api, Model.Api],
+    [ModelV2.Info, Model.Info],
+    [ProviderV2.ID, Provider.ID],
+    [ProviderV2.AISDK, Provider.AISDK],
+    [ProviderV2.Native, Provider.Native],
+    [ProviderV2.Api, Provider.Api],
+    [ProviderV2.Request, Provider.Request],
+    [ProviderV2.Info, Provider.Info],
+    [coreModelRequest.Generation, ModelRequest.Generation],
+    [coreModelRequest.Request, ModelRequest.Request],
+    [corePermission.Effect, Permission.Effect],
+    [corePermission.Rule, Permission.Rule],
+    [corePermission.Ruleset, Permission.Ruleset],
+    [coreProject.ID, Project.ID],
+    [coreReference.LocalSource, Reference.LocalSource],
+    [coreReference.GitSource, Reference.GitSource],
+    [coreReference.Source, Reference.Source],
+    [SessionV2.ID, Session.ID],
+    [SessionV2.Info, Session.Info],
+    [SessionV2.ListAnchor, Session.ListAnchor],
+    [coreSessionInput.Delivery, SessionInput.Delivery],
+    [coreSessionInput.Admitted, SessionInput.Admitted],
+    [coreSessionMessage.ID, SessionMessage.ID],
+    [coreSessionMessage.UnknownError, SessionMessage.UnknownError],
+    [coreSessionMessage.AgentSwitched, SessionMessage.AgentSwitched],
+    [coreSessionMessage.ModelSwitched, SessionMessage.ModelSwitched],
+    [coreSessionMessage.User, SessionMessage.User],
+    [coreSessionMessage.Synthetic, SessionMessage.Synthetic],
+    [coreSessionMessage.System, SessionMessage.System],
+    [coreSessionMessage.Shell, SessionMessage.Shell],
+    [coreSessionMessage.ToolStatePending, SessionMessage.ToolStatePending],
+    [coreSessionMessage.ToolStateRunning, SessionMessage.ToolStateRunning],
+    [coreSessionMessage.ToolStateCompleted, SessionMessage.ToolStateCompleted],
+    [coreSessionMessage.ToolStateError, SessionMessage.ToolStateError],
+    [coreSessionMessage.ToolState, SessionMessage.ToolState],
+    [coreSessionMessage.AssistantTool, SessionMessage.AssistantTool],
+    [coreSessionMessage.AssistantText, SessionMessage.AssistantText],
+    [coreSessionMessage.AssistantReasoning, SessionMessage.AssistantReasoning],
+    [coreSessionMessage.AssistantContent, SessionMessage.AssistantContent],
+    [coreSessionMessage.Assistant, SessionMessage.Assistant],
+    [coreSessionMessage.Compaction, SessionMessage.Compaction],
+    [coreSessionMessage.Message, SessionMessage.Message],
+    [corePrompt.Source, Source],
+    [corePrompt.FileAttachment, FileAttachment],
+    [corePrompt.AgentAttachment, AgentAttachment],
+    [corePrompt.Prompt, Prompt],
+    [coreSkill.DirectorySource, Skill.DirectorySource],
+    [coreSkill.UrlSource, Skill.UrlSource],
+    [coreSkill.EmbeddedSource, Skill.EmbeddedSource],
+    [coreSkill.Source, Skill.Source],
+    [coreSkill.Info, Skill.Info],
+    [coreV2Schema.DateTimeUtcFromMillis, DateTimeUtcFromMillis],
+    [coreWorkspace.ID, Workspace.ID],
+  ]
+  for (const [core, shared] of schemas) expect(core).toBe(shared)
+
+  expect(Agent.Info.empty(Agent.ID.make("test"))).toEqual(AgentV2.Info.empty(AgentV2.ID.make("test")))
+  expect(Model.Info.empty(Provider.ID.make("test"), Model.ID.make("model"))).toEqual(
+    ModelV2.Info.empty(ProviderV2.ID.make("test"), ModelV2.ID.make("model")),
+  )
+  expect(Provider.Info.empty(Provider.ID.make("test"))).toEqual(ProviderV2.Info.empty(ProviderV2.ID.make("test")))
+  expect(Skill.Source.key(Skill.DirectorySource.make({ type: "directory", path: AbsolutePath.make("/tmp") }))).toBe(
+    "directory:/tmp",
+  )
 })
 
 test("shared record schemas construct and decode plain objects", () => {

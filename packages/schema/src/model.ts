@@ -3,6 +3,7 @@ export * as Model from "./model"
 import { Schema } from "effect"
 import { ModelRequest } from "./model-request"
 import { Provider } from "./provider"
+import { withStatics } from "./schema"
 
 export const ID = Schema.String.pipe(Schema.brand("ModelV2.ID"))
 export type ID = typeof ID.Type
@@ -80,4 +81,24 @@ export const Info = Schema.Struct({
     input: Schema.Int.pipe(Schema.optional),
     output: Schema.Int,
   }),
-}).annotate({ identifier: "ModelV2.Info" })
+})
+  .annotate({ identifier: "ModelV2.Info" })
+  .pipe(
+    withStatics((schema) => ({
+      empty: (providerID: Provider.ID, modelID: ID) =>
+        schema.make({
+          id: modelID,
+          providerID,
+          name: modelID,
+          api: { id: modelID, type: "native", settings: {} },
+          capabilities: { tools: false, input: [], output: [] },
+          request: { headers: {}, body: {}, generation: {}, options: {} },
+          variants: [],
+          time: { released: 0 },
+          cost: [],
+          status: "active",
+          enabled: true,
+          limit: { context: 0, output: 0 },
+        }),
+    })),
+  )

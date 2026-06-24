@@ -54,4 +54,16 @@ export const Info = Schema.Struct({
   disabled: Schema.Boolean.pipe(Schema.optional),
   api: Api,
   request: Request,
-}).annotate({ identifier: "ProviderV2.Info" })
+})
+  .annotate({ identifier: "ProviderV2.Info" })
+  .pipe(
+    withStatics((schema) => ({
+      empty: (id: ID) =>
+        schema.make({
+          id,
+          name: id,
+          api: { type: "native", settings: {} },
+          request: { headers: {}, body: {} },
+        }),
+    })),
+  )

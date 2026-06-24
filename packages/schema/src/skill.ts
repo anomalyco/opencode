@@ -31,7 +31,24 @@ export const EmbeddedSource = Schema.Struct({
 }).annotate({ identifier: "SkillV2.EmbeddedSource" })
 
 export type Source = DirectorySource | UrlSource | EmbeddedSource
-export const Source = Schema.Union([DirectorySource, UrlSource, EmbeddedSource]).pipe(
-  Schema.toTaggedUnion("type"),
-  Schema.annotate({ identifier: "SkillV2.Source" }),
+export const Source = Object.assign(
+  Schema.Union([DirectorySource, UrlSource, EmbeddedSource]).pipe(
+    Schema.toTaggedUnion("type"),
+    Schema.annotate({ identifier: "SkillV2.Source" }),
+  ),
+  {
+    equals: (a: Source, b: Source) => {
+      if (a.type !== b.type) return false
+      if (a.type === "directory" && b.type === "directory") return a.path === b.path
+      if (a.type === "url" && b.type === "url") return a.url === b.url
+      if (a.type === "embedded" && b.type === "embedded") return a.skill.name === b.skill.name
+      return false
+    },
+    key: (source: Source) =>
+      source.type === "directory"
+        ? `directory:${source.path}`
+        : source.type === "url"
+          ? `url:${source.url}`
+          : `embedded:${source.skill.name}`,
+  },
 )

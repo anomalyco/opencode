@@ -3,17 +3,18 @@ export * as SessionInput from "./session-input"
 import { Schema } from "effect"
 import { Prompt } from "./prompt"
 import { DateTimeUtcFromMillis, NonNegativeInt } from "./schema"
-import { Session } from "./session"
-import { SessionMessage } from "./session-message"
+import { SessionDelivery } from "./session-delivery"
+import { SessionID } from "./session-id"
+import { SessionMessageID } from "./session-message-id"
 
-export const Delivery = Schema.Literals(["steer", "queue"])
-export type Delivery = typeof Delivery.Type
+export const Delivery = SessionDelivery.Delivery
+export type Delivery = SessionDelivery.Delivery
 
 export interface Admitted extends Schema.Schema.Type<typeof Admitted> {}
 export const Admitted = Schema.Struct({
   admittedSeq: NonNegativeInt,
-  id: SessionMessage.ID,
-  sessionID: Session.ID,
+  id: SessionMessageID.ID,
+  sessionID: SessionID.ID,
   prompt: Prompt,
   delivery: Delivery,
   timeCreated: DateTimeUtcFromMillis,

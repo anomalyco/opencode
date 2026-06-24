@@ -1,7 +1,6 @@
 import { Types } from "effect"
 import { Model } from "@opencode-ai/schema/model"
 import { ProviderV2 } from "./provider"
-import { withStatics } from "./schema"
 
 export const ID = Model.ID
 export type ID = typeof ID.Type
@@ -24,44 +23,7 @@ export type Ref = typeof Ref.Type
 export const Api = Model.Api
 export type Api = Model.Api
 
-export const Info = Model.Info.pipe(
-  withStatics((schema) => ({
-    empty(providerID: ProviderV2.ID, modelID: ID) {
-      return schema.make({
-        id: modelID,
-        providerID,
-        name: modelID,
-        api: {
-          id: modelID,
-          type: "native",
-          settings: {},
-        },
-        capabilities: {
-          tools: false,
-          input: [],
-          output: [],
-        },
-        request: {
-          headers: {},
-          body: {},
-          generation: {},
-          options: {},
-        },
-        variants: [],
-        time: {
-          released: 0,
-        },
-        cost: [],
-        status: "active",
-        enabled: true,
-        limit: {
-          context: 0,
-          output: 0,
-        },
-      })
-    },
-  })),
-)
+export const Info = Model.Info
 export type Info = Model.Info
 
 export type MutableInfo = Omit<Types.DeepMutable<Info>, "api"> & {
