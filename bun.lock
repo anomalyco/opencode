@@ -668,6 +668,7 @@
       "version": "1.17.9",
       "dependencies": {
         "cross-spawn": "catalog:",
+        "undici": "8.3.0",
       },
       "devDependencies": {
         "@hey-api/openapi-ts": "0.90.10",
@@ -676,14 +677,7 @@
         "@types/node": "catalog:",
         "@typescript/native-preview": "catalog:",
         "typescript": "catalog:",
-        "undici": "8.3.0",
       },
-      "peerDependencies": {
-        "undici": "^8.0.0",
-      },
-      "optionalPeers": [
-        "undici",
-      ],
     },
     "packages/server": {
       "name": "@opencode-ai/server",

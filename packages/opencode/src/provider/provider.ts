@@ -2,12 +2,12 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import os from "os"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import fuzzysort from "fuzzysort"
-import { Agent } from "undici"
 import { Config } from "@/config/config"
 import { mapValues, mergeDeep, omit, pickBy, sortBy } from "remeda"
 import { NoSuchModelError, type Provider as SDK } from "ai"
 import { Npm } from "@opencode-ai/core/npm"
 import { Hash } from "@opencode-ai/core/util/hash"
+import { createUndiciDispatcher } from "@opencode-ai/core/util/undici-dispatcher"
 import { Plugin } from "../plugin"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { type LanguageModelV3 } from "@ai-sdk/provider"
@@ -90,13 +90,6 @@ function timeoutController(ms: number) {
     signal: ctl.signal,
     clear: () => clearTimeout(id),
   }
-}
-
-function createUndiciDispatcher(timeout: unknown) {
-  if (typeof process !== "object" || (process.versions as Record<string, string | undefined>).bun) return undefined
-  const headersTimeout = timeout === false ? 0 : typeof timeout === "number" && timeout > 0 ? timeout : undefined
-  if (headersTimeout === undefined) return undefined
-  return new Agent({ headersTimeout })
 }
 
 function googleVertexAnthropicBaseURL(project: string | undefined, location: string | undefined) {

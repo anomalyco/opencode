@@ -27,18 +27,10 @@
     "@types/cross-spawn": "catalog:",
     "@types/node": "catalog:",
     "@typescript/native-preview": "catalog:",
-    "typescript": "catalog:",
-    "undici": "8.3.0"
+    "typescript": "catalog:"
   },
   "dependencies": {
-    "cross-spawn": "catalog:"
-  },
-  "peerDependencies": {
-    "undici": "^8.0.0"
-  },
-  "peerDependenciesMeta": {
-    "undici": {
-      "optional": true
-    }
+    "cross-spawn": "catalog:",
+    "undici": "8.3.0"
   }
 }

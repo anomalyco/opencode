@@ -2,19 +2,12 @@ export * as AISDK from "./aisdk"
 
 import type { LanguageModelV3 } from "@ai-sdk/provider"
 import { Cause, Context, Effect, Layer, Schema, Scope } from "effect"
-import { Agent } from "undici"
 import { ModelV2 } from "./model"
 import { ProviderV2 } from "./provider"
 import { State } from "./state"
+import { createUndiciDispatcher } from "./util/undici-dispatcher"
 
 type SDK = any
-
-function createUndiciDispatcher(timeout: unknown) {
-  if (typeof process !== "object" || (process.versions as Record<string, string | undefined>).bun) return undefined
-  const headersTimeout = timeout === false ? 0 : typeof timeout === "number" && timeout > 0 ? timeout : undefined
-  if (headersTimeout === undefined) return undefined
-  return new Agent({ headersTimeout })
-}
 
 export interface SDKEvent {
   readonly model: ModelV2.Info
