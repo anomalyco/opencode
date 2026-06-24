@@ -11,7 +11,7 @@
 #   ./run-voice-dev.sh logs-path      # print log file path only
 #
 # Env:
-#   XAI_API_KEY              set in this script for local dev (override via env)
+#   XAI_API_KEY              required — export before running (https://console.x.ai)
 #   OPENCODE_PORT            default 4096
 #   OPENCODE_WORKSPACE       default repo root (parent of packages/)
 #   VOICE_MODE               converse (default) | ask
@@ -22,8 +22,10 @@ set -euo pipefail
 
 SIDECAR_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Local dev key — do not commit this file to a public repo.
-export XAI_API_KEY="${XAI_API_KEY:-xai-CC5ymgXYeM6OMMGV05DuExGyZJiihQQuY7P2llVdW5aBoyxrzJ5ol4TPEG5zApk744RAeZdKhsZpHxO0}"
+if [ -z "${XAI_API_KEY:-}" ]; then
+  echo "error: XAI_API_KEY is not set — export it before running this script" >&2
+  exit 1
+fi
 
 REPO_ROOT="$(cd "$SIDECAR_DIR/../.." && pwd)"
 RUN_DIR="$SIDECAR_DIR/.voice-dev"
