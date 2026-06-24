@@ -16,18 +16,17 @@ import {
 } from "effect"
 import { Integration } from "@opencode-ai/schema/integration"
 import { Credential } from "./credential"
-import { IntegrationSchema } from "./integration/schema"
 import { withStatics } from "./schema"
 import { State } from "./state"
 import { Identifier } from "./util/identifier"
 import { EventV2 } from "./event"
 import { IntegrationConnection } from "./integration/connection"
 
-export const ID = IntegrationSchema.ID
-export type ID = IntegrationSchema.ID
+export const ID = Integration.ID
+export type ID = Integration.ID
 
-export const MethodID = IntegrationSchema.MethodID
-export type MethodID = IntegrationSchema.MethodID
+export const MethodID = Integration.MethodID
+export type MethodID = Integration.MethodID
 
 export const AttemptID = Schema.String.pipe(
   Schema.brand("Integration.AttemptID"),
@@ -102,10 +101,6 @@ export interface EnvImplementation {
 }
 
 export type Implementation = OAuthImplementation | KeyImplementation | EnvImplementation
-
-function isOAuthImplementation(implementation: Implementation): implementation is OAuthImplementation {
-  return implementation.method.type === "oauth"
-}
 
 export class Attempt extends Schema.Class<Attempt>("Integration.Attempt")({
   attemptID: AttemptID,

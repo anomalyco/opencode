@@ -3,8 +3,8 @@ export * as Credential from "./credential"
 import { asc, eq } from "drizzle-orm"
 import { Context, Effect, Layer, Schema } from "effect"
 import { Credential } from "@opencode-ai/schema/credential"
+import { Integration } from "@opencode-ai/schema/integration"
 import { Database } from "./database/database"
-import { IntegrationSchema } from "./integration/schema"
 import { CredentialTable } from "./credential/sql"
 
 export const ID = Credential.ID
@@ -21,7 +21,7 @@ export type Value = Credential.Value
 
 export class Info extends Schema.Class<Info>("Credential.Info")({
   id: ID,
-  integrationID: IntegrationSchema.ID,
+  integrationID: Integration.ID,
   label: Schema.String,
   value: Value,
 }) {}
@@ -30,12 +30,12 @@ export interface Interface {
   /** Returns every stored credential. */
   readonly all: () => Effect.Effect<Info[]>
   /** Returns stored credentials belonging to one integration. */
-  readonly list: (integrationID: IntegrationSchema.ID) => Effect.Effect<Info[]>
+  readonly list: (integrationID: Integration.ID) => Effect.Effect<Info[]>
   /** Returns one stored credential by ID. */
   readonly get: (id: ID) => Effect.Effect<Info | undefined>
   /** Replaces any credential for an integration and returns the new record. */
   readonly create: (input: {
-    readonly integrationID: IntegrationSchema.ID
+    readonly integrationID: Integration.ID
     readonly value: Value
     readonly label?: string
   }) => Effect.Effect<Info>
