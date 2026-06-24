@@ -286,7 +286,7 @@ const live: Layer.Layer<
             Object.entries(prepared.params).filter(([, v]) => v !== undefined) as Array<[string, unknown]>,
           )
         }
-        yield* logMessages === "info" ? Effect.logInfo("LLM request", payload) : Effect.logDebug("LLM request", payload)
+        yield* Effect.logInfo("LLM request", payload)
       }
 
       yield* Effect.logInfo("llm runtime selected", {
@@ -402,15 +402,10 @@ const live: Layer.Layer<
             if (result.logMessages) {
               events = events.pipe(
                 Stream.tap((event) =>
-                  result.logMessages === "info"
-                    ? Effect.logInfo("LLM response", {
-                        model,
-                        response: MessageLogger.formatEvents([event]),
-                      })
-                    : Effect.logDebug("LLM response", {
-                        model,
-                        response: MessageLogger.formatEvents([event]),
-                      }),
+                  Effect.logInfo("LLM response", {
+                    model,
+                    response: MessageLogger.formatEvents([event]),
+                  }),
                 ),
               )
             }
