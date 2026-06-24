@@ -58,7 +58,18 @@ test.describe("smoke: session timeline", () => {
       await page.mouse.wheel(0, -120)
       await page.waitForTimeout(20)
     }
-    const keys = ["prt_user_text_smoke_0032", "prt_text_2_smoke_0032", "prt_tool_apply_patch_8_smoke_0032"]
+    const keys = await scroller.evaluate((element) => {
+      const view = element.getBoundingClientRect()
+      return [...element.querySelectorAll<HTMLElement>("[data-timeline-part-id]")]
+        .filter((row) => {
+          const rect = row.getBoundingClientRect()
+          return rect.bottom > view.top && rect.top < view.bottom
+        })
+        .map((row) => row.dataset.timelinePartId)
+        .filter((id): id is string => !!id)
+        .slice(0, 3)
+    })
+    expect(keys.length).toBeGreaterThan(0)
     const positions = () =>
       scroller.evaluate((element, keys) => {
         const top = element.getBoundingClientRect().top
