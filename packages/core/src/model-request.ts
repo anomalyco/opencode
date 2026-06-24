@@ -1,34 +1,12 @@
 export * as ModelRequest from "./model-request"
 
-import { Effect, Schema } from "effect"
+import { ModelRequest } from "@opencode-ai/schema/model-request"
 
-export const Generation = Schema.Struct({
-  maxTokens: Schema.Number.pipe(Schema.optional),
-  temperature: Schema.Number.pipe(Schema.optional),
-  topP: Schema.Number.pipe(Schema.optional),
-  topK: Schema.Number.pipe(Schema.optional),
-  frequencyPenalty: Schema.Number.pipe(Schema.optional),
-  presencePenalty: Schema.Number.pipe(Schema.optional),
-  seed: Schema.Number.pipe(Schema.optional),
-  stop: Schema.String.pipe(Schema.Array, Schema.mutable, Schema.optional),
-})
-export type Generation = typeof Generation.Type
+export const Generation = ModelRequest.Generation
+export type Generation = ModelRequest.Generation
 
-export const Request = Schema.Struct({
-  headers: Schema.Record(Schema.String, Schema.String),
-  body: Schema.Record(Schema.String, Schema.Any),
-  generation: Generation.pipe(
-    Schema.optionalKey,
-    Schema.withConstructorDefault(Effect.succeed({})),
-    Schema.withDecodingDefaultKey(Effect.succeed({})),
-  ),
-  options: Schema.Record(Schema.String, Schema.Any).pipe(
-    Schema.optionalKey,
-    Schema.withConstructorDefault(Effect.succeed({})),
-    Schema.withDecodingDefaultKey(Effect.succeed({})),
-  ),
-})
-export type Request = typeof Request.Type
+export const Request = ModelRequest.Request
+export type Request = ModelRequest.Request
 
 interface MutableRequest {
   headers: Record<string, string>

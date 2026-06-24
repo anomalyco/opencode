@@ -10,7 +10,6 @@ import { produce } from "immer"
 import { Catalog } from "../../catalog"
 import { Credential } from "../../credential"
 import { Integration } from "../../integration"
-import { IntegrationConnection } from "../../integration/connection"
 import { ModelV2 } from "../../model"
 import { ModelRequest } from "../../model-request"
 import { ProviderV2 } from "../../provider"
@@ -21,7 +20,11 @@ export class ModelNotSelectedError extends Schema.TaggedErrorClass<ModelNotSelec
   {
     sessionID: SessionSchema.ID,
   },
-) {}
+) {
+  override get message() {
+    return `No model is available for session ${this.sessionID}`
+  }
+}
 
 export class ModelUnavailableError extends Schema.TaggedErrorClass<ModelUnavailableError>()(
   "SessionRunnerModel.ModelUnavailableError",
@@ -29,7 +32,11 @@ export class ModelUnavailableError extends Schema.TaggedErrorClass<ModelUnavaila
     providerID: ProviderV2.ID,
     modelID: ModelV2.ID,
   },
-) {}
+) {
+  override get message() {
+    return `Model unavailable: ${this.providerID}/${this.modelID}`
+  }
+}
 
 export class VariantUnavailableError extends Schema.TaggedErrorClass<VariantUnavailableError>()(
   "SessionRunnerModel.VariantUnavailableError",
@@ -38,7 +45,11 @@ export class VariantUnavailableError extends Schema.TaggedErrorClass<VariantUnav
     modelID: ModelV2.ID,
     variant: ModelV2.VariantID,
   },
-) {}
+) {
+  override get message() {
+    return `Variant unavailable for ${this.providerID}/${this.modelID}: ${this.variant}`
+  }
+}
 
 export class UnsupportedApiError extends Schema.TaggedErrorClass<UnsupportedApiError>()(
   "SessionRunnerModel.UnsupportedApiError",
@@ -47,9 +58,18 @@ export class UnsupportedApiError extends Schema.TaggedErrorClass<UnsupportedApiE
     modelID: ModelV2.ID,
     api: Schema.String,
   },
-) {}
+) {
+  override get message() {
+    return `Unsupported API for ${this.providerID}/${this.modelID}: ${this.api}`
+  }
+}
 
-export type Error = ModelNotSelectedError | ModelUnavailableError | VariantUnavailableError | UnsupportedApiError
+export type Error =
+  | ModelNotSelectedError
+  | ModelUnavailableError
+  | VariantUnavailableError
+  | UnsupportedApiError
+  | Integration.AuthorizationError
 
 export interface Interface {
   readonly resolve: (session: SessionSchema.Info) => Effect.Effect<Model, Error>
@@ -60,12 +80,11 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/v2
 /** Test or embedding seam for supplying a model resolver directly. */
 export const layerWith = (resolve: Interface["resolve"]) => Layer.succeed(Service, Service.of({ resolve }))
 
-const apiKey = (model: ModelV2.Info, connection?: IntegrationConnection.Info, credential?: Credential.Info) => {
-  if (credential?.value.type === "key") return Auth.value(credential.value.key)
-  if (credential?.value.type === "oauth") return Auth.value(credential.value.access)
+const apiKey = (model: ModelV2.Info, credential?: Credential.Value) => {
+  if (credential?.type === "key") return Auth.value(credential.key)
+  if (credential?.type === "oauth") return Auth.value(credential.access)
   const value = model.request.body.apiKey ?? model.api.settings?.apiKey
   if (typeof value === "string") return Auth.value(value)
-  return connection?.type === "env" ? Auth.config(connection.name) : undefined
 }
 
 const withDefaults = (model: ModelV2.Info, route: AnyRoute) => {
@@ -114,16 +133,15 @@ const apiName = (model: ModelV2.Info) =>
 
 export const fromCatalogModel = (
   model: ModelV2.Info,
-  connection?: IntegrationConnection.Info,
-  credential?: Credential.Info,
+  credential?: Credential.Value,
 ): Effect.Effect<Model, UnsupportedApiError> => {
   const resolved =
-    credential?.value.metadata === undefined
+    credential?.metadata === undefined
       ? model
       : produce(model, (draft) => {
-          Object.assign(draft.request.body, credential.value.metadata)
+          Object.assign(draft.request.body, credential.metadata)
         })
-  const key = apiKey(resolved, connection, credential)
+  const key = apiKey(resolved, credential)
   if (resolved.api.type === "aisdk" && resolved.api.package === "@ai-sdk/openai") {
     return Effect.succeed(
       withDefaults(resolved, OpenAIResponses.route)
@@ -154,15 +172,8 @@ export const fromCatalogModel = (
   )
 }
 
-export const resolve = (
-  session: SessionSchema.Info,
-  model: ModelV2.Info,
-  connection?: IntegrationConnection.Info,
-  credential?: Credential.Info,
-) =>
-  withVariant(model, session.model?.variant).pipe(
-    Effect.flatMap((model) => fromCatalogModel(model, connection, credential)),
-  )
+export const resolve = (session: SessionSchema.Info, model: ModelV2.Info, credential?: Credential.Value) =>
+  withVariant(model, session.model?.variant).pipe(Effect.flatMap((model) => fromCatalogModel(model, credential)))
 
 export const supported = (model: ModelV2.Info) =>
   model.api.type === "aisdk" &&
@@ -175,7 +186,6 @@ export const locationLayer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const catalog = yield* Catalog.Service
-    const credentials = yield* Credential.Service
     const integrations = yield* Integration.Service
     return Service.of({
       resolve: Effect.fn("SessionRunnerModel.resolve")(function* (session) {
@@ -194,12 +204,14 @@ export const locationLayer = Layer.effect(
             modelID: session.model.id,
           })
         if (!selected) return yield* new ModelNotSelectedError({ sessionID: session.id })
-        const connection = yield* integrations.connection.forIntegration(Integration.ID.make(selected.providerID))
+        const provider = yield* catalog.provider.get(selected.providerID)
+        const connection = yield* integrations.connection.active(
+          provider?.integrationID ?? Integration.ID.make(selected.providerID),
+        )
         return yield* resolve(
           session,
           selected,
-          connection,
-          connection?.type === "credential" ? yield* credentials.get(connection.id) : undefined,
+          connection ? yield* integrations.connection.resolve(connection) : undefined,
         )
       }),
     })
