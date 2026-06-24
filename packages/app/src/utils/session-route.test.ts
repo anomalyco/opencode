@@ -36,4 +36,13 @@ describe("session routes", () => {
       }),
     ).toBe(sessions.root)
   })
+
+  test("rejects a parent cycle", async () => {
+    const sessions: Record<string, { id: string; parentID?: string }> = {
+      child: { id: "child", parentID: "parent" },
+      parent: { id: "parent", parentID: "child" },
+    }
+
+    expect(rootSession(sessions.child, async (id) => sessions[id]!)).rejects.toThrow("Session parent cycle: child")
+  })
 })
