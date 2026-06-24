@@ -125,10 +125,7 @@ describe("session.system", () => {
   it.effect("MCP output omits servers when all advertised tools are denied", () =>
     Effect.gen(function* () {
       const prompt = yield* SystemPrompt.Service
-      const output = yield* prompt.mcp({
-        ...build,
-        permission: Permission.fromConfig({ "tool-server_*": "deny" }),
-      })
+      const output = yield* prompt.mcp(build, Permission.fromConfig({ "tool-server_*": "deny" }))
 
       expect(output).toBe(
         [
