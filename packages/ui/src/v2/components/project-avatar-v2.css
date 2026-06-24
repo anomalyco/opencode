@@ -98,29 +98,6 @@
   -webkit-user-drag: none;
 }
 
-[data-slot="project-avatar-surface"] [data-slot="project-avatar-loader"] {
-  position: absolute;
-  inset: -3px;
-  z-index: 2;
-  border-radius: 0;
-  background: conic-gradient(
-    from 180deg at 50% 50%,
-    var(--v2-grey-100) 0deg,
-    var(--v2-grey-1200) 0.04deg,
-    var(--v2-alpha-dark-50) 90deg,
-    var(--v2-grey-100) 360deg
-  );
-  mix-blend-mode: soft-light;
-  pointer-events: none;
-  animation: project-avatar-v2-loader-spin 1.2s linear infinite;
-}
-
-@keyframes project-avatar-v2-loader-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
 [data-component="project-avatar-v2"][data-unread] [data-slot="project-avatar-surface"] {
   -webkit-mask-image: radial-gradient(circle 4.5px at calc(100% - 1px) 1px, transparent 4.5px, black 4.5px);
   mask-image: radial-gradient(circle 4.5px at calc(100% - 1px) 1px, transparent 4.5px, black 4.5px);

@@ -79,12 +79,11 @@ export const layer = Layer.effectDiscard(
                 })
                 .pipe(
                   Effect.map((result) =>
-                    result.map(
-                      (entry) =>
-                        new FileSystem.Entry({
-                          ...entry,
-                          path: RelativePath.make(path.relative(location.directory, path.resolve(cwd, entry.path))),
-                        }),
+                    result.map((entry) =>
+                      FileSystem.Entry.make({
+                        ...entry,
+                        path: RelativePath.make(path.relative(location.directory, path.resolve(cwd, entry.path))),
+                      }),
                     ),
                   ),
                 )

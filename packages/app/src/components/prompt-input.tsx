@@ -1157,6 +1157,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     },
     addPart,
     readClipboardImage: platform.readClipboardImage,
+    getPathForFile: platform.getPathForFile,
   })
 
   const fileAttachmentInput = () => (
@@ -1378,7 +1379,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const providersShouldFadeIn = createMemo((prev) => prev ?? providersLoading())
 
   const [promptReady] = createResource(
-    () => prompt.ready().promise,
+    () => prompt.ready.promise,
     (p) => p,
   )
 

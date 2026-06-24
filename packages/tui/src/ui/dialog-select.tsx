@@ -25,6 +25,7 @@ export interface DialogSelectProps<T> {
   titleView?: JSX.Element
   placeholder?: string
   footer?: JSX.Element
+  emptyView?: JSX.Element
   options: DialogSelectOption<T>[]
   flat?: boolean
   ref?: (ref: DialogSelectRef<T>) => void
@@ -527,9 +528,11 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
         <Show
           when={grouped().length > 0}
           fallback={
-            <box paddingLeft={4} paddingRight={4} paddingTop={1}>
-              <text fg={theme.textMuted}>No results found</text>
-            </box>
+            props.emptyView ?? (
+              <box paddingLeft={4} paddingRight={4} paddingTop={1}>
+                <text fg={theme.textMuted}>No results found</text>
+              </box>
+            )
           }
         >
           <scrollbox
