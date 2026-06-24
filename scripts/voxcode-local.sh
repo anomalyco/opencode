@@ -101,14 +101,15 @@ if [ -z "${XAI_API_KEY:-}" ]; then
 fi
 
 cat <<EOF
-Run these commands:
+This script only rebuilds — it does not launch the TUI.
+
+Run these commands in a new shell:
 
   export PATH="$BIN:\$PATH"
-  export XAI_API_KEY="xai-…"   # if not already set
+  export XAI_API_KEY="xai-…"   # required for /voice
 
-  voxcode web                  # browser UI + voice (recommended)
-  voxcode                      # terminal UI + voice
-  voxcode tui ./your-project   # TUI in a project directory
+  voxcode tui $ROOT            # terminal UI
+  voxcode web                  # browser UI + voice
 
 Optional checks:
 

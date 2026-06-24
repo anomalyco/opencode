@@ -294,6 +294,7 @@ export const dict = {
   "prompt.voice.status.transcribing": "Transcribing",
   "prompt.voice.status.working": "Working",
   "prompt.voice.status.speaking": "Speaking",
+  "prompt.voice.status.awaitingReply": "Want more detail?",
   "prompt.voice.error.noSession": "Open a session before using voice",
 
   "prompt.toast.pasteUnsupported.title": "Unsupported attachment",

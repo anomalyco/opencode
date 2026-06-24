@@ -1,4 +1,5 @@
-import { existsSync } from "node:fs"
+import { appendFileSync, existsSync, mkdirSync } from "node:fs"
+import { homedir } from "node:os"
 import { join } from "node:path"
 import type { Subprocess } from "bun"
 import { findSidecarRoot } from "./paths"
@@ -12,6 +13,16 @@ export function voicePort() {
     throw new Error(`invalid voice port: ${raw}`)
   }
   return port
+}
+
+function sidecarLogPath() {
+  const dir = join(process.env.XDG_STATE_HOME ?? join(homedir(), ".local", "state"), "opencode")
+  mkdirSync(dir, { recursive: true })
+  return join(dir, "voice-sidecar.log")
+}
+
+function quietSidecarLogs() {
+  return process.env.VOXCODE_SIDECAR_LOGS !== "1"
 }
 
 async function sidecarHealthy(port: number) {
@@ -66,6 +77,9 @@ export async function startSidecar(exeDir: string) {
   const sidecarRoot = findSidecarRoot(exeDir)
   await ensureSidecarInstalled(sidecarRoot)
 
+  const logPath = sidecarLogPath()
+  appendFileSync(logPath, `\n--- voxcode sidecar ${new Date().toISOString()} ---\n`)
+
   const child = Bun.spawn({
     cmd: [pythonCommand(), "-m", "voice_sidecar", "serve", "--host", "127.0.0.1", "--port", String(port)],
     cwd: sidecarRoot,
@@ -73,10 +87,23 @@ export async function startSidecar(exeDir: string) {
       ...process.env,
       PYTHONPATH: join(sidecarRoot, "src"),
       PYTHONUNBUFFERED: "1",
+      VOICE_SIDECAR_LOG_LEVEL: quietSidecarLogs() ? "warning" : "info",
     },
     stdout: "ignore",
-    stderr: "inherit",
+    stderr: quietSidecarLogs() ? "pipe" : "inherit",
   })
+
+  if (quietSidecarLogs() && child.stderr && typeof child.stderr !== "number") {
+    const reader = child.stderr.getReader()
+    void (async () => {
+      const decoder = new TextDecoder()
+      while (true) {
+        const chunk = await reader.read()
+        if (chunk.done) break
+        appendFileSync(logPath, decoder.decode(chunk.value))
+      }
+    })()
+  }
 
   const deadline = Date.now() + 30_000
   while (Date.now() < deadline) {
@@ -85,6 +112,9 @@ export async function startSidecar(exeDir: string) {
     }
     if (await sidecarHealthy(port)) {
       process.stderr.write(`voxcode: voice sidecar ready on http://127.0.0.1:${port}\n`)
+      if (quietSidecarLogs()) {
+        process.stderr.write(`voxcode: sidecar logs → ${logPath}\n`)
+      }
       return { child, port }
     }
     await Bun.sleep(200)

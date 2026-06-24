@@ -1,15 +1,15 @@
-import { Show } from "solid-js"
 import { useTheme } from "../context/theme"
 import type { TuiVoicePhase } from "../voice/runtime"
 
 export function VoiceStatus(props: { phase: () => TuiVoicePhase; label: () => string }) {
   const { theme } = useTheme()
+  const enabled = () => props.phase() !== "off"
 
   return (
-    <Show when={props.phase() !== "off"}>
-      <box flexShrink={0} paddingLeft={1} paddingRight={1} paddingTop={0} paddingBottom={0}>
-        <text style={{ fg: theme.info }}>{props.label()}</text>
-      </box>
-    </Show>
+    <box flexShrink={0} paddingBottom={1}>
+      <text style={{ fg: enabled() ? theme.info : theme.textMuted }}>
+        {enabled() ? props.label() : "Voice · off (/voice to enable)"}
+      </text>
+    </box>
   )
 }

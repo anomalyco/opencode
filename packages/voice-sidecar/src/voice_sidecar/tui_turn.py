@@ -10,7 +10,8 @@ from .opencode import OpencodeClient, OpencodeError
 from .stream import XaiStreamingSTT
 from .stt import STTError
 from .tts import TTSError, default_tts
-from .voice_stream import _speak_text
+from .speech_summary import speak_text
+from .speech_plan import plan_final_speech
 
 
 async def run_tui_turn(
@@ -32,13 +33,17 @@ async def run_tui_turn(
         lambda: client.run_turn(session_id, text, agent, log_model=False),
     )
     reply = reply or "(no reply)"
-    speak = _speak_text(reply)
+    plan = plan_final_speech(reply)
+    parts = [str(part) for part in plan.get("parts") or [] if str(part).strip()]
+    speak = " ".join(parts).strip() or speak_text(reply)
 
     payload: dict[str, object] = {
         "status": "ok",
         "transcript": text,
         "reply": reply,
         "speak": speak,
+        "speakParts": parts,
+        "hasOffer": bool(plan.get("hasOffer")),
     }
 
     if not speak:

@@ -64,6 +64,7 @@ export type PromptProps = {
   onSubmit?: () => void
   ref?: (ref: PromptRef | undefined) => void
   hint?: JSX.Element
+  header?: JSX.Element
   right?: JSX.Element
   showPlaceholder?: boolean
   placeholders?: {
@@ -1360,6 +1361,7 @@ export function Prompt(props: PromptProps) {
             flexGrow={1}
             width="100%"
           >
+            <Show when={props.header}>{props.header}</Show>
             <textarea
               width="100%"
               placeholder={placeholderText()}

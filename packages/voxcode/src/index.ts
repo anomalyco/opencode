@@ -3,14 +3,14 @@
 import { dirname } from "node:path"
 import { runOpencode } from "./opencode"
 import { startSidecar, watchSidecar } from "./sidecar"
-import { requireXaiApiKey } from "./xai"
+import { requireXaiApiKey, xaiApiKeyStatus } from "./xai"
 
 const HELP = `voxcode — OpenCode with voice (local)
 
 Usage:
-  voxcode [project]           start terminal UI with voice
-  voxcode tui [project]       terminal UI — press F3 for voice mode
-  voxcode web [flags]         start web UI with voice
+  voxcode [project]           start terminal UI (voice via /voice when XAI_API_KEY is set)
+  voxcode tui [project]       same as above
+  voxcode web [flags]         start web UI with voice (requires XAI_API_KEY)
   voxcode <opencode cmd> …    pass through to opencode (no voice)
 
 Environment:
@@ -73,10 +73,20 @@ async function main() {
     process.exit(await runOpencode(process.execPath, parsed.opencodeArgs))
   }
 
-  requireXaiApiKey()
+  const xai = xaiApiKeyStatus()
+  if (parsed.mode === "web" && !xai.ok) {
+    requireXaiApiKey()
+  }
 
   const exeDir = dirname(process.execPath)
-  const { child: sidecar } = await startSidecar(exeDir)
+  let sidecar: Awaited<ReturnType<typeof startSidecar>>["child"]
+  if (xai.ok) {
+    sidecar = (await startSidecar(exeDir)).child
+  } else {
+    sidecar = undefined
+    process.stderr.write(`voxcode: voice disabled — ${xai.reason}\n`)
+    process.stderr.write("voxcode: starting without voice sidecar. Export XAI_API_KEY, then use /voice in the TUI.\n")
+  }
 
   let stopping = false
   watchSidecar(sidecar, () => {

@@ -40,6 +40,9 @@ import type {
 import { useLocal } from "../../context/local"
 import { VoiceStatus } from "../../component/voice-status"
 import { createTuiVoice } from "../../voice/runtime"
+import { buildVoiceProgressSnapshot, collectActiveTurnParts } from "../../voice/progress"
+import { describeAssistantParts, logMissingAssistantReply, readSpeakableAssistantText } from "../../voice/reply"
+import { voiceLogStage } from "../../voice/log"
 import { Locale } from "../../util/locale"
 import { webSearchProviderLabel } from "../../util/tool-display"
 import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
@@ -142,7 +145,6 @@ const sessionBindingCommands = [
   "session.parent",
   "session.child.next",
   "session.child.previous",
-  "voice.toggle",
 ] as const
 
 const sessionGlobalBindingCommands = [
@@ -420,6 +422,124 @@ export function Session() {
 
   const local = useLocal()
 
+  const [voiceTurnExpectedUsers, setVoiceTurnExpectedUsers] = createSignal(0)
+  const [voiceTurnSeq, setVoiceTurnSeq] = createSignal(0)
+  let lastReplyDebugKey = ""
+
+  const voiceAssistantReply = createMemo(() => {
+    voiceTurnSeq()
+    const expected = voiceTurnExpectedUsers()
+    if (expected === 0) return undefined
+    const sessionMessages = messages()
+    for (const message of sessionMessages) {
+      if (message.role === "assistant") sync.data.part[message.id]
+    }
+
+    const users = sessionMessages.filter((message) => message.role === "user")
+    if (users.length < expected) return undefined
+    const userMessage = users[expected - 1]
+    if (!userMessage) return undefined
+
+    const read = (messageID: string) => readSpeakableAssistantText(sync.data.part[messageID] ?? [])
+
+    const linked = sessionMessages.filter(
+      (message): message is AssistantMessage =>
+        message.role === "assistant" && message.parentID === userMessage.id,
+    )
+    for (let i = linked.length - 1; i >= 0; i--) {
+      const text = read(linked[i]!.id)
+      if (text) return text
+    }
+
+    const afterUser = sessionMessages.filter(
+      (message): message is AssistantMessage => message.role === "assistant" && message.id > userMessage.id,
+    )
+    for (let i = afterUser.length - 1; i >= 0; i--) {
+      const text = read(afterUser[i]!.id)
+      if (text) return text
+    }
+
+    for (let i = sessionMessages.length - 1; i >= 0; i--) {
+      const message = sessionMessages[i]
+      if (!message || message.role !== "assistant") continue
+      const text = read(message.id)
+      if (text) return text
+    }
+  })
+
+  const assistantReplyForVoiceTurn = () => {
+    const reply = voiceAssistantReply()
+    if (reply?.trim()) {
+      const key = `found:${reply.length}`
+      if (lastReplyDebugKey !== key) {
+        lastReplyDebugKey = key
+        voiceLogStage("REPLY", `found ${reply.length} chars preview="${reply.slice(0, 60)}"`)
+      }
+      return reply
+    }
+
+    const expected = voiceTurnExpectedUsers()
+    if (expected === 0) return undefined
+
+    const sessionMessages = messages()
+    const users = sessionMessages.filter((message) => message.role === "user")
+    const status = sync.data.session_status[route.sessionID]
+    const sessionState = sync.session.status(route.sessionID)
+    const userID = users[expected - 1]?.id
+    const linked = sessionMessages
+      .filter((message) => message.role === "assistant" && message.parentID === userID)
+      .map((message) => message.id)
+    const afterUser = userID
+      ? sessionMessages
+          .filter((message) => message.role === "assistant" && message.id > userID)
+          .map((message) => message.id)
+      : []
+    const lastAssistant = sessionMessages.findLast((message) => message.role === "assistant")
+    const lastParts = lastAssistant ? (sync.data.part[lastAssistant.id] ?? []) : []
+
+    const key = [
+      users.length,
+      expected,
+      userID,
+      linked.length,
+      afterUser.length,
+      status?.type ?? "none",
+      sessionState,
+      describeAssistantParts(lastParts),
+    ].join("|")
+
+    if (lastReplyDebugKey === key) return undefined
+    lastReplyDebugKey = key
+
+    if (users.length < expected) {
+      voiceLogStage("REPLY", `waiting user message ${users.length}/${expected}`)
+      return undefined
+    }
+
+    voiceLogStage(
+      "REPLY",
+      [
+        `missing user=${userID}`,
+        `users=${users.length}/${expected}`,
+        `linked=${linked.length}`,
+        `afterUser=${afterUser.length}`,
+        `sessionStatus=${status?.type ?? "none"}`,
+        `syncStatus=${sessionState}`,
+        `lastAssistant=${lastAssistant?.id ?? "none"}`,
+        `lastParts=[${describeAssistantParts(lastParts)}]`,
+      ].join(" "),
+    )
+    logMissingAssistantReply({
+      userID,
+      users: users.length,
+      expected,
+      linked,
+      afterUser,
+      partsForMessage: (messageID) => sync.data.part[messageID] ?? [],
+    })
+    return undefined
+  }
+
   const voice = createTuiVoice({
     opencodeUrl: () => sdk.url,
     serverUrl: () => sdk.serverUrl,
@@ -427,6 +547,49 @@ export function Session() {
     sessionID: () => route.sessionID,
     agent: () => local.agent.current()?.name,
     enabled: () => visible() && !disabled(),
+    working: () => {
+      const status = sync.data.session_status[route.sessionID]
+      if (status?.type === "retry") return true
+      return sync.session.status(route.sessionID) !== "idle"
+    },
+    submitTranscript: (text) => {
+      lastReplyDebugKey = ""
+      const usersBefore = messages().filter((message) => message.role === "user").length
+      setVoiceTurnExpectedUsers(usersBefore + 1)
+      setVoiceTurnSeq((value) => value + 1)
+      voiceLogStage("REPLY", `turn-start usersBefore=${usersBefore} expected=${usersBefore + 1}`)
+      const ref = prompt ?? promptRef.current
+      if (!ref) {
+        toast.show({
+          message: "voice: type /voice in the prompt to enable",
+          variant: "error",
+          duration: 5000,
+        })
+        return
+      }
+      ref.set({ input: text, parts: [] })
+      ref.submit()
+    },
+    onTranscript: (text) => {
+      if (!text.trim()) return
+      const ref = prompt ?? promptRef.current
+      if (!ref) return
+      ref.set({ input: text, parts: [] })
+    },
+    assistantReplyForVoiceTurn,
+    progressSnapshot: () => {
+      const expected = voiceTurnExpectedUsers()
+      if (expected === 0) return undefined
+      const users = messages().filter((message) => message.role === "user")
+      const activeUserMessageID = users[expected - 1]?.id ?? users.at(-1)?.id
+      if (!activeUserMessageID) return undefined
+      const parts = collectActiveTurnParts({
+        messages: messages(),
+        partsForMessage: (messageID) => sync.data.part[messageID] ?? [],
+        activeUserMessageID,
+      })
+      return buildVoiceProgressSnapshot(parts)
+    },
     onError: (message) => {
       toast.show({
         message,
@@ -434,6 +597,21 @@ export function Session() {
         duration: 5000,
       })
     },
+  })
+
+  createEffect(() => {
+    if (!voice.active()) return
+    if (!voice.awaitingSpeak()) return
+    voiceTurnSeq()
+    voiceTurnExpectedUsers()
+    voiceAssistantReply()
+    const reply = voiceAssistantReply()
+    const sessionState = sync.session.status(route.sessionID)
+    const status = sync.data.session_status[route.sessionID]
+    if (status?.type === "retry" || sessionState !== "idle") return
+    if (!reply?.trim()) return
+    voiceLogStage("TTS", `session-trigger ${reply.length} chars`)
+    void voice.speakAssistantReply(reply)
   })
 
   onCleanup(() => voice.stop())
@@ -728,6 +906,18 @@ export function Session() {
       },
       run: () => {
         thinking.set(nextThinkingMode(thinkingMode()))
+        dialog.clear()
+      },
+    },
+    {
+      title: "Toggle voice mode",
+      value: "voice.toggle",
+      category: "Session",
+      slash: {
+        name: "voice",
+      },
+      run: () => {
+        voice.toggle()
         dialog.clear()
       },
     },
@@ -1127,21 +1317,6 @@ export function Session() {
 
   useBindings(() => ({
     mode: OPENCODE_BASE_MODE,
-    enabled: () => visible() && !disabled(),
-    commands: [
-      {
-        name: "voice.toggle",
-        title: "Toggle voice mode",
-        category: "Session",
-        namespace: "palette",
-        run: () => voice.toggle(),
-      },
-    ],
-    bindings: tuiConfig.keybinds.get("voice.toggle"),
-  }))
-
-  useBindings(() => ({
-    mode: OPENCODE_BASE_MODE,
     enabled: foregroundTasks().length > 0,
     priority: 1,
     bindings: tuiConfig.keybinds.get("session.background"),
@@ -1327,7 +1502,6 @@ export function Session() {
                   <SubagentFooter />
                 </Show>
                 <Show when={visible()}>
-                  <VoiceStatus phase={voice.phase} label={voice.label} />
                   <pluginRuntime.Slot
                     name="session_prompt"
                     mode="replace"
@@ -1341,6 +1515,9 @@ export function Session() {
                       visible={visible()}
                       ref={bind}
                       disabled={disabled()}
+                      header={
+                        <VoiceStatus phase={voice.phase} label={voice.label} />
+                      }
                       onSubmit={() => {
                         toBottom()
                       }}

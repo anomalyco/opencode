@@ -1,21 +1,45 @@
-import { spawn } from "node:child_process"
+import { spawn, type ChildProcess } from "node:child_process"
 import { writeFile, unlink } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { voiceLogStage } from "./log"
+
+let player: ChildProcess | undefined
+
+export function stopMp3() {
+  if (!player) return
+  voiceLogStage("PLAY", "stop player")
+  player.kill("SIGTERM")
+  player = undefined
+}
 
 function run(command: string, args: string[]) {
   return new Promise<void>((resolve, reject) => {
+    stopMp3()
+    voiceLogStage("PLAY", `spawn ${command} ${args.join(" ")}`)
     const child = spawn(command, args, { stdio: "ignore" })
-    child.on("error", reject)
+    player = child
+    child.on("error", (error) => {
+      if (player === child) player = undefined
+      voiceLogStage("PLAY", `spawn error ${error.message}`)
+      reject(error)
+    })
     child.on("exit", (code) => {
-      if (code === 0) resolve()
-      else reject(new Error(`${command} exited with code ${code}`))
+      if (player === child) player = undefined
+      if (code === 0 || code === null) {
+        voiceLogStage("PLAY", `${command} exit ok`)
+        resolve()
+        return
+      }
+      voiceLogStage("PLAY", `${command} exit code=${code}`)
+      reject(new Error(`${command} exited with code ${code}`))
     })
   })
 }
 
 export async function playMp3(bytes: Uint8Array) {
   const file = join(tmpdir(), `opencode-voice-${Date.now()}.mp3`)
+  voiceLogStage("PLAY", `write ${bytes.length} bytes → ${file}`)
   await writeFile(file, bytes)
   try {
     if (process.platform === "darwin") {
@@ -27,8 +51,8 @@ export async function playMp3(bytes: Uint8Array) {
         try {
           await run(command, ["--really-quiet", file])
           return
-        } catch {
-          // try next player
+        } catch (error) {
+          voiceLogStage("PLAY", `${command} failed ${error instanceof Error ? error.message : error}`)
         }
       }
     }

@@ -69,6 +69,7 @@ import { PromptImageAttachments } from "./prompt-input/image-attachments"
 import { PromptDragOverlay } from "./prompt-input/drag-overlay"
 import { promptPlaceholder } from "./prompt-input/placeholder"
 import { createVoiceComposerState, voiceComposerBorderClass, voiceSidecarBaseUrl } from "./prompt-input/voice"
+import { buildVoiceProgressSnapshot, collectActiveTurnParts } from "./prompt-input/voice-progress"
 import { PromptVoiceComposer } from "./prompt-input/voice-composer"
 import { showToast } from "@/utils/toast"
 import { ImagePreview } from "@opencode-ai/ui/image-preview"
@@ -346,6 +347,21 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   })
   const info = createMemo(() => (props.controls.session.id ? sync().session.get(props.controls.session.id) : undefined))
   const working = createMemo(() => sync().data.session_working(props.controls.session.id ?? ""))
+  const voiceTranscriptRef: { apply?: (text: string) => void; submit?: () => void } = {}
+  let voiceTurnUserMessageID: string | undefined
+  let voiceTurnExpectedUsers = 0
+  const beginVoiceTurn = () => {
+    const sessionID = props.controls.session.id
+    voiceTurnUserMessageID = undefined
+    if (!sessionID) return
+    const messages = sync().data.message[sessionID] ?? []
+    voiceTurnExpectedUsers = messages.filter((message) => message.role === "user").length + 1
+  }
+  const submitVoiceTurn = (text: string) => {
+    beginVoiceTurn()
+    voiceTranscriptRef.apply?.(text)
+    voiceTranscriptRef.submit?.()
+  }
   const voice = createVoiceComposerState({
     working,
     connect: {
@@ -354,6 +370,54 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       directory: () => sdk().directory,
       sessionID: () => props.controls.session.id,
       agent: () => props.controls.agents.current,
+      onTranscript: (text) => {
+        voiceTranscriptRef.apply?.(text)
+      },
+      onSpeechFinal: (text) => {
+        submitVoiceTurn(text)
+      },
+      onRedirect: (text) => {
+        submitVoiceTurn(text)
+      },
+      progressSnapshot: () => {
+        const sessionID = props.controls.session.id
+        if (!sessionID) return undefined
+        const messages = sync().data.message[sessionID] ?? []
+        const activeUserMessageID =
+          voiceTurnUserMessageID ?? messages.filter((message) => message.role === "user").at(-1)?.id
+        if (!activeUserMessageID) return undefined
+        const parts = collectActiveTurnParts({
+          messages,
+          partsForMessage: (messageID) => sync().data.part[messageID] ?? [],
+          activeUserMessageID,
+        })
+        return buildVoiceProgressSnapshot(parts)
+      },
+      assistantReplyForVoiceTurn: () => {
+        const sessionID = props.controls.session.id
+        if (!sessionID || voiceTurnExpectedUsers === 0) return undefined
+        const messages = sync().data.message[sessionID] ?? []
+        const users = messages.filter((message) => message.role === "user")
+        if (users.length < voiceTurnExpectedUsers) return undefined
+
+        const userMessage = users[voiceTurnExpectedUsers - 1]
+        if (!userMessage) return undefined
+        if (!voiceTurnUserMessageID) voiceTurnUserMessageID = userMessage.id
+
+        const assistants = messages.filter(
+          (message) => message.role === "assistant" && message.parentID === voiceTurnUserMessageID,
+        )
+        for (let i = assistants.length - 1; i >= 0; i--) {
+          const message = assistants[i]
+          const parts = sync().data.part[message.id] ?? []
+          const text = parts
+            .filter((part) => part.type === "text" && !part.synthetic)
+            .map((part) => ("text" in part ? part.text : ""))
+            .join("")
+            .trim()
+          if (text) return text
+        }
+      },
       onError: (message) => {
         showToast({
           title: message.startsWith("prompt.")
@@ -896,6 +960,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     ),
   )
 
+  voiceTranscriptRef.apply = (text: string) => {
+    if (!text.trim()) return
+    const images = imageAttachments()
+    const parts: Prompt = [{ type: "text", content: text, start: 0, end: text.length }, ...images]
+    mirror.input = true
+    prompt.set(parts, text.length)
+    renderEditorWithCursor(parts)
+  }
+
   const parseFromDOM = (): Prompt => {
     const parts: Prompt = []
     let position = 0
@@ -1232,6 +1305,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       onAbort: props.onAbort,
       onSubmit: props.onSubmit,
     })
+
+  voiceTranscriptRef.submit = () => {
+    void handleSubmit(new Event("submit"))
+  }
 
   const handleKeyDown = (event: KeyboardEvent) => {
     if ((event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "u") {

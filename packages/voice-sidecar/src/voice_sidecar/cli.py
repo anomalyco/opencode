@@ -178,14 +178,17 @@ def cmd_devices(_args: argparse.Namespace) -> int:
 
 def cmd_serve(args: argparse.Namespace) -> int:
     """Run the Phase 2 voice HTTP service."""
+    import os
+
     import uvicorn
 
+    log_level = os.environ.get("VOICE_SIDECAR_LOG_LEVEL") or "warning"
     uvicorn.run(
         "voice_sidecar.server:create_app",
         factory=True,
         host=args.host,
         port=args.port,
-        log_level="info",
+        log_level=log_level,
     )
     return 0
 

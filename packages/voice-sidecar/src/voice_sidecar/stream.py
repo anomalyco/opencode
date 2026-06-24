@@ -43,7 +43,8 @@ _PLACEHOLDER_KEYS = frozenset(
 
 def require_xai_api_key() -> str:
     """Return a trimmed ``XAI_API_KEY`` or raise ``STTError`` with a clear message."""
-    key = os.environ.get("XAI_API_KEY", "").strip()
+    key = os.environ.get("XAI_API_KEY", "")
+    key = key.strip().replace("\r", "").replace("\n", "")
     if not key:
         raise STTError("XAI_API_KEY is not set")
     if key in _PLACEHOLDER_KEYS or key.lower() in _PLACEHOLDER_KEYS:
@@ -53,6 +54,10 @@ def require_xai_api_key() -> str:
     if len(key) < 70:
         raise STTError(
             f"XAI_API_KEY looks truncated ({len(key)} chars) — copy the full key from https://console.x.ai"
+        )
+    if any(char.isspace() for char in key):
+        raise STTError(
+            "XAI_API_KEY contains whitespace — re-export it on one line with no spaces: export XAI_API_KEY='xai-…'"
         )
     return key
 

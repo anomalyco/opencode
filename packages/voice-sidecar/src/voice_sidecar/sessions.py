@@ -14,6 +14,8 @@ class VoiceSession:
     opencode_session_id: str
     directory: str
     agent: str | None
+    composer: bool
+    terminal_mic: bool
     created_at: float
 
     def to_dict(self, *, stream_url: str) -> dict:
@@ -41,6 +43,8 @@ class VoiceSessionStore:
         opencode_session_id: str,
         directory: str,
         agent: str | None,
+        composer: bool = False,
+        terminal_mic: bool = False,
     ) -> VoiceSession:
         session = VoiceSession(
             id=f"vs_{secrets.token_urlsafe(12)}",
@@ -48,6 +52,8 @@ class VoiceSessionStore:
             opencode_session_id=opencode_session_id,
             directory=directory,
             agent=agent,
+            composer=composer,
+            terminal_mic=terminal_mic,
             created_at=time.time(),
         )
         self._sessions[session.id] = session

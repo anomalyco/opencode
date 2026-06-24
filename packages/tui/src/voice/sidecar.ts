@@ -1,29 +1,17 @@
-import { hostedVoiceSidecarUrl } from "@/utils/hosted-url"
-
-export type VoiceSidecarStatus = "listening" | "transcribing" | "working" | "speaking" | "idle"
+import { voiceSidecarBaseUrl } from "./play"
 
 export type VoiceSidecarEvent =
   | { type: "ready"; voiceID: string; opencodeSessionID: string; sampleRate: number; encoding: string }
-  | { type: "status"; state: VoiceSidecarStatus; text?: string; reason?: string; retry?: number }
+  | { type: "status"; state: string; text?: string; reason?: string; retry?: number }
   | { type: "transcript"; text: string; final: boolean; speechFinal: boolean }
   | { type: "reply"; text: string }
   | { type: "tts"; format: string; encoding: string; data: string }
-  | { type: "speak"; skipped?: boolean; done?: boolean }
+  | { type: "speak"; skipped?: boolean }
   | { type: "error"; message: string }
 
 export type VoiceSessionInfo = {
   id: string
   stream: string
-  opencode: {
-    url: string
-    sessionID: string
-    directory: string
-    agent?: string
-  }
-}
-
-export function voiceSidecarBaseUrl() {
-  return hostedVoiceSidecarUrl()
 }
 
 export async function createVoiceSidecarSession(input: {
@@ -32,7 +20,7 @@ export async function createVoiceSidecarSession(input: {
   sessionID?: string
   agent?: string
   server?: string
-  composer?: boolean
+  terminalMic?: boolean
 }): Promise<VoiceSessionInfo> {
   const base = (input.sidecarUrl ?? voiceSidecarBaseUrl()).replace(/\/+$/, "")
   const res = await fetch(`${base}/voice/session`, {
@@ -43,7 +31,8 @@ export async function createVoiceSidecarSession(input: {
       sessionID: input.sessionID,
       agent: input.agent,
       server: input.server,
-      composer: input.composer ?? true,
+      composer: true,
+      terminalMic: input.terminalMic ?? true,
     }),
   })
   const data = await res.json().catch(() => ({}))
@@ -54,9 +43,20 @@ export async function createVoiceSidecarSession(input: {
   return data as VoiceSessionInfo
 }
 
+function speechFinal(event: { speechFinal?: boolean; speech_final?: boolean }) {
+  return event.speechFinal === true || event.speech_final === true
+}
+
 export function parseVoiceSidecarEvent(raw: string): VoiceSidecarEvent | undefined {
   try {
-    return JSON.parse(raw) as VoiceSidecarEvent
+    const event = JSON.parse(raw) as VoiceSidecarEvent & { speech_final?: boolean }
+    if (event.type === "transcript") {
+      return {
+        ...event,
+        speechFinal: speechFinal(event),
+      }
+    }
+    return event
   } catch {
     return undefined
   }
