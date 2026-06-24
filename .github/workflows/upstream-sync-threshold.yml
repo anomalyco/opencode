@@ -132,8 +132,7 @@ jobs:
         continue-on-error: true
         run: .github/scripts/resolve-conflicts.sh
 
-      - name: Attempt guarded resolution for escalated conflicts
-        id: guarded_resolution
+      - name: Add manual review guidance
         if: always() && steps.threshold.outputs.should_sync == 'true' && steps.merge.outputs.result == 'conflict' && steps.resolution.outputs.can_complete_merge != 'true'
         run: |
           summary="/tmp/resolution-summary.md"
@@ -141,267 +140,30 @@ jobs:
 
           {
             echo
-            echo "## Guarded Second-Pass Resolution"
+            echo "## Manual Review Guidance"
             echo
-            echo "The first resolver escalated one or more files. This step attempts to safely resolve those remaining files only when the conflict matches a high-confidence protected-code pattern."
+            echo "The workflow automatically resolved the conflicts that matched safe deterministic rules."
             echo
-            echo "The guarded resolver will not force speculative merges. If confidence is low, the file remains escalated for manual review."
+            echo "One or more files still require manual review because the resolver could not safely determine the correct resolution."
+            echo
+            echo "### What this means"
+            echo
+            echo "The sync is partially handled. The remaining conflict should be reviewed by a developer or AI coding agent before the sync PR is created."
+            echo
+            echo "### Recommended approach"
+            echo
+            echo "1. Preserve ANR-specific behavior first."
+            echo "2. Bring in compatible upstream changes where safe."
+            echo "3. Do not blindly accept upstream if it removes ANR authentication, telemetry, CLI, release, workflow, desktop, or backend behavior."
+            echo "4. After resolving the file, run validation before opening or updating the sync PR."
+            echo
+            echo "### Available resolution options"
+            echo
+            echo "- **Keep ours** when upstream would overwrite ANR-specific behavior."
+            echo "- **Take upstream** only when upstream is clearly safe and does not remove ANR customizations."
+            echo "- **Manual merge** when both sides contain important changes."
+            echo "- **Add a reusable rule** only after confirming the same conflict pattern is safe to resolve the same way in future syncs."
           } >> "$summary"
-
-          python3 <<'PY'
-import pathlib
-import subprocess
-
-summary = pathlib.Path("/tmp/resolution-summary.md")
-
-
-def run(cmd, check=False):
-    return subprocess.run(cmd, text=True, capture_output=True, check=check)
-
-
-unmerged = run(["git", "diff", "--name-only", "--diff-filter=U"]).stdout.splitlines()
-
-anr_protected_keywords = [
-    "anr",
-    "opencode_flavor",
-    "opencode_anr",
-    "loadanrconfig",
-    "opencode_anr_env_file",
-    "reconstructtelemetrycontextfromenv",
-    "initializeotel",
-]
-
-risk_keywords = [
-    "auth",
-    "federation",
-    "credential",
-    "token",
-    "login",
-    "telemetry",
-    "otel",
-    "audit",
-    "logger",
-    "src/cli",
-    "tui",
-    "worker",
-    "release",
-    "workflow",
-    "desktop",
-    "tauri",
-    "electron",
-    "infra",
-    "backend",
-    "aws",
-    "sst",
-]
-
-
-def has_any(text, keywords):
-    low = text.lower()
-    return any(k in low for k in keywords)
-
-
-def split_conflict_file(text):
-    lines = text.splitlines()
-    output = []
-    hunks = []
-    i = 0
-
-    while i < len(lines):
-        line = lines[i]
-
-        if not line.startswith("<<<<<<<"):
-            output.append(line)
-            i += 1
-            continue
-
-        marker_start = line
-        i += 1
-        ours = []
-
-        while i < len(lines) and not lines[i].startswith("======="):
-            ours.append(lines[i])
-            i += 1
-
-        if i >= len(lines):
-            return None, []
-
-        marker_sep = lines[i]
-        i += 1
-        theirs = []
-
-        while i < len(lines) and not lines[i].startswith(">>>>>>>"):
-            theirs.append(lines[i])
-            i += 1
-
-        if i >= len(lines):
-            return None, []
-
-        marker_end = lines[i]
-        i += 1
-
-        hunks.append({
-            "start": marker_start,
-            "sep": marker_sep,
-            "end": marker_end,
-            "ours": ours,
-            "theirs": theirs,
-        })
-
-        output.append({"__CONFLICT_HUNK__": len(hunks) - 1})
-
-    return output, hunks
-
-
-def build_text(template, decisions):
-    final = []
-
-    for item in template:
-        if isinstance(item, dict) and "__CONFLICT_HUNK__" in item:
-            idx = item["__CONFLICT_HUNK__"]
-            final.extend(decisions[idx])
-        else:
-            final.append(item)
-
-    return "\n".join(final) + "\n"
-
-
-def preview_hunk(hunk, max_lines=80):
-    lines = []
-    lines.append(hunk["start"])
-    lines.extend(hunk["ours"])
-    lines.append(hunk["sep"])
-    lines.extend(hunk["theirs"])
-    lines.append(hunk["end"])
-
-    if len(lines) > max_lines:
-        return "\n".join(lines[:max_lines]) + "\n...truncated..."
-
-    return "\n".join(lines)
-
-
-resolved_files = []
-still_manual = []
-
-with summary.open("a", encoding="utf-8") as out:
-    for file_name in unmerged:
-        path = pathlib.Path(file_name)
-
-        if not path.exists():
-            still_manual.append(file_name)
-            out.write(f"\n### File requiring review: `{file_name}`\n\n")
-            out.write("The file was listed as conflicted but was not available for analysis.\n")
-            continue
-
-        text = path.read_text(errors="replace")
-        template, hunks = split_conflict_file(text)
-
-        if template is None or not hunks:
-            still_manual.append(file_name)
-            out.write(f"\n### File requiring review: `{file_name}`\n\n")
-            out.write("The guarded resolver could not parse the conflict markers safely.\n")
-            continue
-
-        file_context = f"{file_name}\n{text}"
-        detected_risk = has_any(file_context, risk_keywords)
-
-        decisions = []
-        explanations = []
-        can_resolve_file = True
-
-        for hunk in hunks:
-            ours = "\n".join(hunk["ours"])
-            theirs = "\n".join(hunk["theirs"])
-
-            ours_has_anr = has_any(ours, anr_protected_keywords)
-            theirs_has_anr = has_any(theirs, anr_protected_keywords)
-
-            if ours_has_anr and not theirs_has_anr:
-                decisions.append(hunk["ours"])
-                explanations.append("Kept ours for one conflict hunk because ANR-protected logic appeared only on our side.")
-            else:
-                can_resolve_file = False
-                decisions.append(None)
-                explanations.append("Could not safely resolve one conflict hunk automatically.")
-
-        out.write(f"\n### File analyzed by guarded resolver: `{file_name}`\n\n")
-        out.write("**Plain-English summary:**\n\n")
-        out.write("This file still had unresolved merge markers after the first deterministic resolver ran. ")
-        out.write("The guarded resolver checked whether the conflict could be resolved safely by preserving ANR-protected code.\n\n")
-
-        out.write("**Detected risk:** ")
-        out.write("Yes\n\n" if detected_risk else "No obvious high-risk path/content keyword detected\n\n")
-
-        out.write("**Guarded recommendation:**\n\n")
-
-        if can_resolve_file:
-            new_text = build_text(template, decisions)
-            path.write_text(new_text, encoding="utf-8")
-            run(["git", "add", file_name], check=True)
-            resolved_files.append(file_name)
-
-            out.write("The resolver automatically kept our side for all remaining conflict hunks because ANR-protected logic appeared only on our side. ")
-            out.write("This preserves ANR-specific behavior while still allowing validation to determine whether the sync is safe.\n\n")
-
-            out.write("**Action taken:** Guarded auto-resolution applied and staged.\n\n")
-        else:
-            still_manual.append(file_name)
-
-            out.write("Manual review is still required. The conflict did not match a high-confidence pattern that should be auto-applied.\n\n")
-
-            out.write("**Available options:**\n\n")
-            out.write("1. **Keep ours** — safest when upstream would overwrite ANR-specific behavior.\n")
-            out.write("2. **Take upstream** — only safe when upstream clearly does not remove ANR customizations.\n")
-            out.write("3. **Manual merge** — best when both ANR and upstream changes matter.\n")
-            out.write("4. **Add a reusable rule** — only after confirming this same pattern is safe in future syncs.\n\n")
-
-            out.write("**Recommended resolution:**\n\n")
-            out.write("Use manual merge. Preserve ANR-specific behavior first, then bring in compatible upstream changes. ")
-            out.write("Only convert this to a reusable rule after the same pattern is confirmed safe.\n\n")
-
-        out.write("<details>\n")
-        out.write("<summary>Conflict preview</summary>\n\n")
-        out.write("```diff\n")
-        out.write(preview_hunk(hunks[0]))
-        out.write("\n```\n\n")
-        out.write("</details>\n")
-
-with open("/tmp/guarded-resolved-files.txt", "w", encoding="utf-8") as f:
-    f.write("\n".join(resolved_files))
-
-with open("/tmp/guarded-manual-files.txt", "w", encoding="utf-8") as f:
-    f.write("\n".join(still_manual))
-PY
-
-          remaining_conflicts="$(git diff --name-only --diff-filter=U || true)"
-          resolved_files="$(cat /tmp/guarded-resolved-files.txt 2>/dev/null || true)"
-
-          {
-            echo
-            echo "### Guarded resolver result"
-            echo
-            if [ -n "$resolved_files" ]; then
-              echo "Guarded auto-resolved files:"
-              echo "$resolved_files" | sed 's/^/- /'
-              echo
-            else
-              echo "Guarded auto-resolved files: none"
-              echo
-            fi
-
-            if [ -n "$remaining_conflicts" ]; then
-              echo "Files still requiring manual review:"
-              echo "$remaining_conflicts" | sed 's/^/- /'
-            else
-              echo "No unresolved conflict files remain after guarded resolution."
-            fi
-          } >> "$summary"
-
-          if [ -n "$remaining_conflicts" ]; then
-            echo "can_complete_merge=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "can_complete_merge=true" >> "$GITHUB_OUTPUT"
-          fi
 
       - name: Publish conflict resolution summary
         if: always() && steps.threshold.outputs.should_sync == 'true' && steps.merge.outputs.result == 'conflict'
@@ -419,14 +181,12 @@ PY
           name: upstream-sync-conflict-resolution
           path: |
             /tmp/resolution-summary.md
-            /tmp/guarded-resolved-files.txt
-            /tmp/guarded-manual-files.txt
             .github/conflict-rules.conf
             .github/conflict-escalations.log
           if-no-files-found: ignore
 
       - name: Handle conflicts requiring manual review
-        if: always() && steps.threshold.outputs.should_sync == 'true' && steps.merge.outputs.result == 'conflict' && steps.resolution.outputs.can_complete_merge != 'true' && steps.guarded_resolution.outputs.can_complete_merge != 'true'
+        if: always() && steps.threshold.outputs.should_sync == 'true' && steps.merge.outputs.result == 'conflict' && steps.resolution.outputs.can_complete_merge != 'true'
         run: |
           echo "::warning::Automated conflict resolution escalated one or more files for manual review."
           echo "Review the workflow summary and uploaded conflict resolution artifacts."
@@ -440,7 +200,7 @@ PY
           exit 0
 
       - name: Commit automated resolution
-        if: steps.threshold.outputs.should_sync == 'true' && steps.merge.outputs.result == 'conflict' && (steps.resolution.outputs.can_complete_merge == 'true' || steps.guarded_resolution.outputs.can_complete_merge == 'true')
+        if: steps.threshold.outputs.should_sync == 'true' && steps.merge.outputs.result == 'conflict' && steps.resolution.outputs.can_complete_merge == 'true'
         run: |
           if git diff --cached --quiet; then
             echo "No staged automated conflict resolutions to commit."
@@ -450,7 +210,7 @@ PY
 
       - name: Check sync changes
         id: sync_changes
-        if: steps.threshold.outputs.should_sync == 'true' && (steps.merge.outputs.result == 'success' || steps.resolution.outputs.can_complete_merge == 'true' || steps.guarded_resolution.outputs.can_complete_merge == 'true')
+        if: steps.threshold.outputs.should_sync == 'true' && (steps.merge.outputs.result == 'success' || steps.resolution.outputs.can_complete_merge == 'true')
         run: |
           if git diff --quiet "origin/${TARGET_BRANCH}..HEAD"; then
             echo "has_changes=false" >> "$GITHUB_OUTPUT"
@@ -522,9 +282,7 @@ PY
 
           The workflow attempted to merge upstream changes into \`${TARGET_BRANCH}\`.
 
-          If conflicts were detected, the deterministic conflict resolver ran first.
-
-          If files were still escalated, the guarded second-pass resolver attempted to safely resolve high-confidence ANR-protected conflicts.
+          If conflicts were detected, the deterministic conflict resolver ran before escalating to manual review.
 
           Validation completed before this PR was created or updated.
 
