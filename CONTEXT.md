@@ -57,13 +57,6 @@ The bounded projection of a Core-executed tool result persisted in Session histo
 **Managed Tool Output File**:
 A temporary file created under OpenCode's shared tool-output directory to retain complete output that was too large for Session history.
 
-**Model Request Options**:
-Provider-semantic model settings selected from the Catalog and active Session variant before the LLM protocol adapter encodes them for a provider request.
-_Avoid_: Request body, wire options
-
-**Generation Controls**:
-Provider-neutral sampling and output controls, partitioned from provider semantics and compatibility wire fields when model metadata enters the Catalog.
-
 **PTY Environment**:
 The host-supplied environment overlay applied by the server when creating a PTY, observed for the request Location and resolved PTY working directory.
 
@@ -114,8 +107,6 @@ The host-supplied environment overlay applied by the server when creating a PTY,
 - A **Baseline System Context** durably preserves the exact joined text used for the active provider-cache prefix.
 - Completed compaction starts a new **Context Epoch** on the next provider attempt, folding the current complete **System Context** into a fresh baseline and removing earlier **Mid-Conversation System Messages** from active model history.
 - A model/provider switch preserves the current **Context Epoch** and chronological conversation history; the new selection applies to the next provider turn.
-- **Model Request Options** remain provider-semantic through Catalog resolution. The Session runner maps them into the LLM package's provider-option namespace; the selected protocol adapter alone owns provider wire encoding.
-- **Generation Controls**, protocol-semantic **Model Request Options**, and compatibility request body fields are separate Catalog domains. A shared ingestion adapter partitions legacy and models.dev AI-SDK-shaped options before routing.
 - The **PTY Environment** is a server concern rather than a Core PTY concern. PTY creation merges caller values, then the host overlay, then Core-forced terminal invariants such as `TERM` and `OPENCODE_TERMINAL`.
 - A **PTY Environment** adapter observes plugins in the request Location while passing the resolved PTY working directory to the hook; standalone servers use an empty adapter.
 - A **Mid-Conversation System Message** lowers to the provider's native chronological instruction role when supported and to a wrapped chronological fallback otherwise.

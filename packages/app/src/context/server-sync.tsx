@@ -29,7 +29,8 @@ import { createRefreshQueue } from "./global-sync/queue"
 import { directoryKey } from "./global-sync/utils"
 import { PathKey } from "@/utils/path-key"
 import { createDirSyncContext } from "./directory-sync"
-import { createSimpleContext, NormalizedProviderListResponse } from "@opencode-ai/ui/context"
+import { createSimpleContext } from "@opencode-ai/ui/context"
+import { NormalizedProviderListResponse } from "@opencode-ai/session-ui/context"
 import { createRefCountMap } from "@/utils/refcount"
 import { useGlobal } from "./global"
 import { ServerConnection, useServer } from "./server"
@@ -509,7 +510,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
 export function createServerSyncContext(serverSDK: ServerSDK) {
   const inner = createServerSyncContextInner(serverSDK)
   return Object.assign(inner, {
-    createDirSyncContext: createRefCountMap(
+    ensureDirSyncContext: createRefCountMap(
       (dir) => createDirSyncContext(dir, inner, serverSDK),
       (dir) => inner.disableMcp(dir),
       directoryKey,
@@ -531,7 +532,7 @@ export const { use: useServerSync, provider: ServerSyncProvider } = createSimple
     return createMemo<ServerSync>(() => {
       const conn = props.server?.() ?? server.current
       if (!conn) throw new Error(language.t("error.serverSDK.noServerAvailable"))
-      return global.createServerCtx(conn).sync
+      return global.ensureServerCtx(conn).sync
     })
   },
 })

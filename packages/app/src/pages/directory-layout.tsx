@@ -1,4 +1,4 @@
-import { DataProvider } from "@opencode-ai/ui/context"
+import { DataProvider } from "@opencode-ai/session-ui/context"
 import { showToast } from "@/utils/toast"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { useLocation, useNavigate, useParams } from "@solidjs/router"
@@ -11,6 +11,7 @@ import { decode64 } from "@/utils/base64"
 import { Schema } from "effect"
 import type { ServerConnection } from "@/context/server"
 import { sessionHref } from "@/utils/session-route"
+import { useGlobal } from "@/context/global"
 
 export function DirectoryDataProvider(
   props: ParentProps<{
@@ -23,6 +24,7 @@ export function DirectoryDataProvider(
   const navigate = useNavigate()
   const params = useParams()
   const sync = useSync()
+  const global = useGlobal()
   const directory = () => (typeof props.directory === "function" ? props.directory() : props.directory)
   const slug = createMemo(() => base64Encode(directory()))
   const href = (sessionID: string) => {
@@ -52,7 +54,11 @@ export function DirectoryDataProvider(
     <DataProvider
       data={sync().data}
       directory={directory()}
-      onNavigateToSession={(sessionID: string) => navigate(href(sessionID))}
+      onNavigateToSession={(sessionID: string) => {
+        const server = props.server?.()
+        if (server && params.id) global.sessionPlacement.inherit(server, params.id, sessionID)
+        navigate(href(sessionID))
+      }}
       onSessionHref={href}
     >
       <LocalProvider>{props.children}</LocalProvider>

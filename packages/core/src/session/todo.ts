@@ -1,30 +1,17 @@
 export * as SessionTodo from "./todo"
 
 import { asc, eq } from "drizzle-orm"
-import { Context, Effect, Layer, Schema } from "effect"
+import { Context, Effect, Layer } from "effect"
+import { SessionTodo, SessionTodoInfo } from "@opencode-ai/schema/session-todo"
 import { Database } from "../database/database"
 import { EventV2 } from "../event"
 import { SessionSchema } from "./schema"
 import { TodoTable } from "./sql"
 
-export const Info = Schema.Struct({
-  content: Schema.String.annotate({ description: "Brief description of the task" }),
-  status: Schema.String.annotate({
-    description: "Current status of the task: pending, in_progress, completed, cancelled",
-  }),
-  priority: Schema.String.annotate({ description: "Priority level of the task: high, medium, low" }),
-}).annotate({ identifier: "SessionTodo.Info" })
+export const Info = SessionTodoInfo
 export type Info = typeof Info.Type
 
-export const Event = {
-  Updated: EventV2.define({
-    type: "todo.updated",
-    schema: {
-      sessionID: SessionSchema.ID,
-      todos: Schema.Array(Info),
-    },
-  }),
-}
+export const Event = SessionTodo.Event
 
 export interface Interface {
   readonly update: (input: {

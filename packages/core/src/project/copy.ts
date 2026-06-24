@@ -13,6 +13,7 @@ import { Slug } from "../util/slug"
 import { EventV2 } from "../event"
 import { Database } from "../database/database"
 import { Location } from "../location"
+import { ProjectDirectoriesEvent } from "@opencode-ai/schema/project-directories"
 
 export const StrategyID = Schema.Trim.pipe(Schema.check(Schema.isNonEmpty()), Schema.brand("ProjectCopy.StrategyID"))
 export type StrategyID = typeof StrategyID.Type
@@ -106,12 +107,7 @@ export interface Strategy {
   readonly list: (directory: AbsolutePath) => Effect.Effect<ListEntry[], Git.WorktreeError | DirectoryUnavailableError>
 }
 
-export const Event = {
-  Updated: EventV2.define({
-    type: "project.directories.updated",
-    schema: { projectID: Project.ID },
-  }),
-}
+export const Event = ProjectDirectoriesEvent
 
 export interface Interface {
   readonly register: (strategy: Strategy) => Effect.Effect<void, DuplicateStrategyError>
