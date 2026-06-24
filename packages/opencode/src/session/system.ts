@@ -21,6 +21,8 @@ import { Location } from "@opencode-ai/core/location"
 import { LocationServiceMap } from "@opencode-ai/core/location-layer"
 import { PluginBoot } from "@opencode-ai/core/plugin/boot"
 import { Reference } from "@opencode-ai/core/reference"
+import { McpCatalog } from "@/mcp/catalog"
+import { MCP } from "@/mcp"
 
 export function provider(model: Provider.Model) {
   if (model.api.id.includes("gpt-4") || model.api.id.includes("o1") || model.api.id.includes("o3"))
@@ -41,6 +43,7 @@ export function provider(model: Provider.Model) {
 export interface Interface {
   readonly environment: (model: Provider.Model) => Effect.Effect<string[]>
   readonly skills: (agent: Agent.Info) => Effect.Effect<string | undefined>
+  readonly mcp: (agent: Agent.Info) => Effect.Effect<string[]>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SystemPrompt") {}
@@ -49,6 +52,7 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const skill = yield* Skill.Service
+    const mcp = yield* MCP.Service
     const locations = yield* LocationServiceMap
 
     return Service.of({
@@ -104,14 +108,30 @@ export const layer = Layer.effect(
           Skill.fmt(list, { verbose: true }),
         ].join("\n")
       }),
+
+      mcp: Effect.fn("SystemPrompt.mcp")(function* (agent: Agent.Info) {
+        return (yield* mcp.instructions())
+          .filter((item) => {
+            if (item.tools.length === 0) return false
+            return Permission.disabled(item.tools, agent.permission).size < item.tools.length
+          })
+          .map(
+            (item) =>
+              `Instructions from: MCP server ${item.name}\nThese instructions apply to MCP tools whose names start with \`${McpCatalog.sanitize(item.name)}_\`, and to prompts/resources from this MCP server.\n\n${item.instructions}`,
+          )
+      }),
     })
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(Skill.defaultLayer), Layer.provide(LocationServiceMap.layer))
+export const defaultLayer = layer.pipe(
+  Layer.provide(Skill.defaultLayer),
+  Layer.provide(MCP.defaultLayer),
+  Layer.provide(LocationServiceMap.layer),
+)
 
 const locationServiceMapNode = LayerNode.make(LocationServiceMap.layer, [])
 
-export const node = LayerNode.make(layer, [Skill.node, locationServiceMapNode])
+export const node = LayerNode.make(layer, [Skill.node, MCP.node, locationServiceMapNode])
 
 export * as SystemPrompt from "./system"

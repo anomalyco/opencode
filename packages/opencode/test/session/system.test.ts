@@ -5,6 +5,7 @@ import { NamedError } from "@opencode-ai/core/util/error"
 import { Skill } from "../../src/skill"
 import { Permission } from "../../src/permission"
 import { SystemPrompt } from "../../src/session/system"
+import { MCP } from "../../src/mcp"
 import { LocationServiceMap } from "@opencode-ai/core/location-layer"
 import { testEffect } from "../lib/effect"
 
@@ -45,6 +46,18 @@ const it = testEffect(
   SystemPrompt.layer.pipe(
     Layer.provide(LocationServiceMap.layer),
     Layer.provide(
+      Layer.mock(MCP.Service, {
+        instructions: () =>
+          Effect.succeed([
+            {
+              name: "guide-server",
+              instructions: "Use lookup before mutate.",
+              tools: ["guide-server_lookup", "guide-server_mutate"],
+            },
+          ]),
+      }),
+    ),
+    Layer.provide(
       Layer.succeed(
         Skill.Service,
         Skill.Service.of({
@@ -81,6 +94,37 @@ describe("session.system", () => {
       expect(middle).toBeGreaterThan(alpha)
       expect(zeta).toBeGreaterThan(middle)
       expect(output).not.toContain("manual-skill")
+    }),
+  )
+
+  it.effect("MCP output includes servers with an allowed tool", () =>
+    Effect.gen(function* () {
+      const prompt = yield* SystemPrompt.Service
+      const output = yield* prompt.mcp({
+        ...build,
+        permission: Permission.fromConfig({ "guide-server_mutate": "deny" }),
+      })
+
+      expect(output).toEqual([
+        [
+          "Instructions from: MCP server guide-server",
+          "These instructions apply to MCP tools whose names start with `guide-server_`, and to prompts/resources from this MCP server.",
+          "",
+          "Use lookup before mutate.",
+        ].join("\n"),
+      ])
+    }),
+  )
+
+  it.effect("MCP output omits servers when all tools are denied", () =>
+    Effect.gen(function* () {
+      const prompt = yield* SystemPrompt.Service
+      const output = yield* prompt.mcp({
+        ...build,
+        permission: Permission.fromConfig({ "guide-server_*": "deny" }),
+      })
+
+      expect(output).toEqual([])
     }),
   )
 })

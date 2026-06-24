@@ -56,6 +56,7 @@ import { reply, TestLLMServer } from "../lib/llm-server"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
+import { LocationServiceMap } from "@opencode-ai/core/location-layer"
 
 const summary = Layer.succeed(
   SessionSummary.Service,
@@ -108,7 +109,7 @@ function errorTool(parts: SessionV1.Part[]) {
   return part?.state.status === "error" ? (part as ErrorToolPart) : undefined
 }
 
-function makeMcp(instructions: string[] = []) {
+function makeMcp(instructions: MCP.ServerInstructions[] = []) {
   return Layer.succeed(
     MCP.Service,
     MCP.Service.of({
@@ -166,7 +167,7 @@ const blockingProcessor = Layer.succeed(
   }),
 )
 
-function makePrompt(input?: { mcpInstructions?: string[]; processor?: "blocking" }) {
+function makePrompt(input?: { mcpInstructions?: MCP.ServerInstructions[]; processor?: "blocking" }) {
   const deps = Layer.mergeAll(
     Session.defaultLayer,
     Snapshot.defaultLayer,
@@ -225,18 +226,24 @@ function makePrompt(input?: { mcpInstructions?: string[]; processor?: "blocking"
     Layer.provideMerge(registry),
     Layer.provideMerge(trunc),
     Layer.provide(Instruction.defaultLayer),
-    Layer.provide(SystemPrompt.defaultLayer),
+    Layer.provide(
+      SystemPrompt.layer.pipe(
+        Layer.provide(Skill.defaultLayer),
+        Layer.provide(LocationServiceMap.layer),
+        Layer.provide(deps),
+      ),
+    ),
     Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
     Layer.provideMerge(deps),
     Layer.provide(summary),
   )
 }
 
-function makeHttp(input?: { mcpInstructions?: string[]; processor?: "blocking" }) {
+function makeHttp(input?: { mcpInstructions?: MCP.ServerInstructions[]; processor?: "blocking" }) {
   return Layer.mergeAll(TestLLMServer.layer, makePrompt(input))
 }
 
-function makeHttpNoLLMServer(input?: { mcpInstructions?: string[]; processor?: "blocking" }) {
+function makeHttpNoLLMServer(input?: { mcpInstructions?: MCP.ServerInstructions[]; processor?: "blocking" }) {
   return makePrompt(input)
 }
 
@@ -246,12 +253,11 @@ const raceNoLLMServer = testEffect(makeHttpNoLLMServer({ processor: "blocking" }
 const withMcpInstructions = testEffect(
   makeHttp({
     mcpInstructions: [
-      [
-        "Instructions from: MCP server guide-server",
-        "These instructions apply to MCP tools whose names start with `guide-server_`, and to prompts/resources from this MCP server.",
-        "",
-        "Use lookup before mutate.",
-      ].join("\n"),
+      {
+        name: "guide-server",
+        instructions: "Use lookup before mutate.",
+        tools: ["guide-server_lookup"],
+      },
     ],
   }),
 )

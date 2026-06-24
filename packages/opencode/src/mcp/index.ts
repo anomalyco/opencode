@@ -158,10 +158,16 @@ interface State {
   instructions: Record<string, string>
 }
 
+export interface ServerInstructions {
+  name: string
+  instructions: string
+  tools: string[]
+}
+
 export interface Interface {
   readonly status: () => Effect.Effect<Record<string, Status>>
   readonly clients: () => Effect.Effect<Record<string, MCPClient>>
-  readonly instructions: () => Effect.Effect<string[]>
+  readonly instructions: () => Effect.Effect<ServerInstructions[]>
   readonly tools: () => Effect.Effect<Record<string, Tool>>
   readonly prompts: () => Effect.Effect<Record<string, PromptInfo & { client: string }>>
   readonly resources: () => Effect.Effect<Record<string, ResourceInfo & { client: string }>>
@@ -602,10 +608,13 @@ export const layer = Layer.effect(
       return Object.entries(s.instructions)
         .filter(([name]) => s.status[name]?.status === "connected")
         .sort(([a], [b]) => a.localeCompare(b))
-        .map(
-          ([name, item]) =>
-            `Instructions from: MCP server ${name}\nThese instructions apply to MCP tools whose names start with \`${McpCatalog.sanitize(name)}_\`, and to prompts/resources from this MCP server.\n\n${item}`,
-        )
+        .map(([name, item]) => ({
+          name,
+          instructions: item,
+          tools: (s.defs[name] ?? []).map(
+            (tool) => McpCatalog.sanitize(name) + "_" + McpCatalog.sanitize(tool.name),
+          ),
+        }))
     })
 
     const createAndStore = Effect.fn("MCP.createAndStore")(function* (name: string, mcp: ConfigMCPV1.Info) {

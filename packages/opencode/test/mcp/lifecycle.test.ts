@@ -337,7 +337,7 @@ it.instance(
 )
 
 it.instance(
-  "instructions() returns connected server instructions with tool prefix guidance",
+  "instructions() returns connected server instructions with tool names",
   () =>
     MCP.Service.use((mcp: MCPNS.Interface) =>
       Effect.gen(function* () {
@@ -350,14 +350,11 @@ it.instance(
           command: ["echo", "test"],
         })
 
-        expect(yield* mcp.instructions()).toContain(
-          [
-            "Instructions from: MCP server guide-server",
-            "These instructions apply to MCP tools whose names start with `guide-server_`, and to prompts/resources from this MCP server.",
-            "",
-            "Use lookup before mutate.",
-          ].join("\n"),
-        )
+        expect(yield* mcp.instructions()).toContainEqual({
+          name: "guide-server",
+          instructions: "Use lookup before mutate.",
+          tools: ["guide-server_test_tool"],
+        })
       }),
     ),
   { config: { mcp: {} } },
@@ -386,8 +383,8 @@ it.instance(
         })
 
         const instructions = yield* mcp.instructions()
-        expect(instructions.some((item) => item.includes("temporary-server"))).toBe(false)
-        expect(instructions.some((item) => item.includes("blank-server"))).toBe(false)
+        expect(instructions.some((item) => item.name === "temporary-server")).toBe(false)
+        expect(instructions.some((item) => item.name === "blank-server")).toBe(false)
       }),
     ),
   { config: { mcp: {} } },
