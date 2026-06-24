@@ -950,6 +950,7 @@ export const layer = Layer.effect(
           }
         }
         ctx.assistantMessage.error = error
+        ctx.assistantMessage.finish = "error"
         yield* events.publish(Session.Event.Error, {
           sessionID: ctx.assistantMessage.sessionID,
           error: ctx.assistantMessage.error,
