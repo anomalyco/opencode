@@ -5,7 +5,13 @@ import { TuiConfig } from "@/config/tui"
 import { resolveDiffStyle, resolveModelInfo, resolveRunTuiConfig } from "@/cli/cmd/run/runtime.boot"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 
-function model(id: string, providerID: string, context: number, variants?: Record<string, Record<string, never>>) {
+function model(
+  id: string,
+  providerID: string,
+  context: number,
+  variants?: Record<string, Record<string, never>>,
+  input?: number,
+) {
   return {
     id,
     providerID,
@@ -46,6 +52,7 @@ function model(id: string, providerID: string, context: number, variants?: Recor
     },
     limit: {
       context,
+      ...(input === undefined ? {} : { input }),
       output: 8192,
     },
     status: "active" as const,
@@ -277,6 +284,43 @@ describe("run runtime boot", () => {
       limits: {
         "openai/gpt-5": 128000,
         "anthropic/sonnet": 200000,
+      },
+    })
+  })
+
+  test("uses input window for split-window model limits", async () => {
+    const sdk = new OpencodeClient()
+    const configured = {
+      providers: [
+        {
+          id: "openai",
+          name: "OpenAI",
+          source: "api" as const,
+          env: [],
+          options: {},
+          models: {
+            "gpt-5.5": model("gpt-5.5", "openai", 400_000, undefined, 272_000),
+            "gpt-4.1": model("gpt-4.1", "openai", 128_000),
+          },
+        },
+      ],
+      default: {},
+    }
+    spyOn(sdk.config, "providers").mockImplementation(() =>
+      Promise.resolve({
+        data: configured,
+        error: undefined,
+        request: new Request("https://opencode.test"),
+        response: new Response(),
+      }),
+    )
+
+    await expect(resolveModelInfo(sdk, "/workspace", { providerID: "openai", modelID: "gpt-5.5" })).resolves.toEqual({
+      providers: configured.providers,
+      variants: [],
+      limits: {
+        "openai/gpt-5.5": 272_000,
+        "openai/gpt-4.1": 128_000,
       },
     })
   })

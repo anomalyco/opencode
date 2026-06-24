@@ -56,6 +56,7 @@ import { useTuiConfig } from "../../config"
 import { usePromptWorkspace } from "./workspace"
 import { usePromptMove } from "./move"
 import { readLocalAttachment } from "./local-attachment"
+import { contextPercent } from "../../util/model"
 
 export type PromptProps = {
   sessionID?: string
@@ -268,10 +269,10 @@ export function Prompt(props: PromptProps) {
     if (tokens <= 0) return
 
     const model = sync.data.provider.find((item) => item.id === last.providerID)?.models[last.modelID]
-    const pct = model?.limit.context ? `${Math.round((tokens / model.limit.context) * 100)}%` : undefined
+    const pct = contextPercent(tokens, model)
     const cost = session?.cost ?? 0
     return {
-      context: pct ? `${Locale.number(tokens)} (${pct})` : Locale.number(tokens),
+      context: pct === undefined ? Locale.number(tokens) : `${Locale.number(tokens)} (${pct}%)`,
       cost: cost > 0 ? money.format(cost) : undefined,
     }
   })

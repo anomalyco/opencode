@@ -1,4 +1,4 @@
-import type { Provider } from "@opencode-ai/sdk/v2"
+import type { Model, Provider } from "@opencode-ai/sdk/v2"
 
 export function parse(value: string) {
   const [providerID, ...modelID] = value.split("/")
@@ -25,4 +25,17 @@ export function name(
   modelID: string,
 ) {
   return get(list, providerID, modelID)?.name ?? modelID
+}
+
+export function contextLimit(model: Pick<Model, "limit"> | undefined) {
+  const input = model?.limit.input
+  if (typeof input === "number" && input > 0) return input
+
+  const context = model?.limit.context
+  if (typeof context === "number" && context > 0) return context
+}
+
+export function contextPercent(tokens: number, model: Pick<Model, "limit"> | undefined) {
+  const limit = contextLimit(model)
+  return limit ? Math.round((tokens / limit) * 100) : undefined
 }

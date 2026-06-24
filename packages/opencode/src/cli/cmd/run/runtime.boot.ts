@@ -85,6 +85,14 @@ function runTuiConfig(config: Config | undefined): RunTuiConfig {
   }
 }
 
+function contextLimit(limit: { input?: number; context?: number } | undefined) {
+  const input = limit?.input
+  if (typeof input === "number" && input > 0) return input
+
+  const context = limit?.context
+  if (typeof context === "number" && context > 0) return context
+}
+
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -112,10 +120,8 @@ const layer = Layer.effect(
       const limits = Object.fromEntries(
         providers.flatMap((provider) =>
           Object.entries(provider.models ?? {}).flatMap(([modelID, info]) => {
-            const limit = info?.limit?.context
-            if (typeof limit !== "number" || limit <= 0) {
-              return []
-            }
+            const limit = contextLimit(info?.limit)
+            if (!limit) return []
 
             return [[`${provider.id}/${modelID}`, limit] as const]
           }),
