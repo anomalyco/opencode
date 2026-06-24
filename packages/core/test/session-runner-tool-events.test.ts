@@ -112,6 +112,29 @@ test("binary failure emits no success event", async () => {
   expect(published.some((event) => event.type === "session.next.tool.failed.1")).toBe(true)
 })
 
+test("xml-style tool call in text emits error and sets hasTextBasedToolCall", async () => {
+  const { published, publisher } = capture()
+  const textID = "text-0"
+
+  await Effect.runPromise(publisher.publish(LLMEvent.textStart({ id: textID })))
+  await Effect.runPromise(
+    publisher.publish(
+      LLMEvent.textDelta({
+        id: textID,
+        text: '<tool_call>\ntool_use\n{"name": "read", "path": "foo.txt"}\n</tool_call>',
+      }),
+    ),
+  )
+  await Effect.runPromise(publisher.publish(LLMEvent.textEnd({ id: textID })))
+
+  const textEnded = published.find((event) => event.type === "session.next.text.ended.1")
+  expect(textEnded).toBeDefined()
+  expect((textEnded!.data as any).text).toContain("[ERROR]")
+  expect((textEnded!.data as any).text).toContain("read")
+  expect((textEnded!.data as any).text).not.toContain("tool_use")
+  expect(publisher.hasTextBasedToolCall()).toBe(true)
+})
+
 test("old success event data containing result still decodes", () => {
   const decoded = Schema.decodeUnknownSync(SessionEvent.Tool.Success.data)({
     sessionID,
