@@ -423,6 +423,28 @@ it.instance(
 )
 
 it.instance(
+  "keeps resource identities distinct when server names contain separators",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "a"
+        getOrCreateClientState("a").resources = [{ name: "first", uri: "b:c" }]
+        getOrCreateClientState("a").resourceTemplates = [{ name: "first", uriTemplate: "b:{id}" }]
+        yield* mcp.add("a", { type: "local", command: ["echo", "test"] })
+
+        lastCreatedClientName = "a:b"
+        getOrCreateClientState("a:b").resources = [{ name: "second", uri: "c" }]
+        getOrCreateClientState("a:b").resourceTemplates = [{ name: "second", uriTemplate: "{id}" }]
+        yield* mcp.add("a:b", { type: "local", command: ["echo", "test"] })
+
+        expect(Object.keys(yield* mcp.resources()).sort()).toEqual(["a%3Ab:c", "a:b:c"])
+        expect(Object.keys(yield* mcp.resourceTemplates()).sort()).toEqual(["a%3Ab:{id}", "a:b:{id}"])
+      }),
+    ),
+  { config: { mcp: {} } },
+)
+
+it.instance(
   "follows empty cursors",
   () =>
     MCP.Service.use((mcp: MCPNS.Interface) =>

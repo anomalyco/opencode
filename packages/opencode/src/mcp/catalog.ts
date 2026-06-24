@@ -102,7 +102,7 @@ export function fetch<T extends { name: string }>(
       const sanitizedClient = sanitize(clientName)
       return Object.fromEntries(
         items.map((item) => [
-          key ? clientName + ":" + key(item) : sanitizedClient + ":" + sanitize(item.name),
+          key ? encodeURIComponent(clientName) + ":" + key(item) : sanitizedClient + ":" + sanitize(item.name),
           { ...item, client: clientName },
         ]),
       )
