@@ -78,7 +78,7 @@ export function Dialog(props: DialogProps) {
                 >
                   <path
                     d="M12.4446 3.55469L3.55566 12.4436M3.55566 3.55469L12.4446 12.4436"
-                    stroke="#808080"
+                    stroke="currentColor"
                     stroke-linejoin="round"
                   />
                 </svg>

@@ -26,7 +26,7 @@ describe("ReferenceGuidance", () => {
                 name: "docs",
                 path: AbsolutePath.make("/docs"),
                 description: "Use for product documentation",
-                source: new Reference.LocalSource({
+                source: Reference.LocalSource.make({
                   type: "local",
                   path: AbsolutePath.make("/docs"),
                   description: "Use for product documentation",
@@ -63,7 +63,7 @@ describe("ReferenceGuidance", () => {
               new Reference.Info({
                 name: "docs",
                 path: AbsolutePath.make("/docs"),
-                source: new Reference.LocalSource({ type: "local", path: AbsolutePath.make("/docs") }),
+                source: Reference.LocalSource.make({ type: "local", path: AbsolutePath.make("/docs") }),
               }),
             ]),
         }),

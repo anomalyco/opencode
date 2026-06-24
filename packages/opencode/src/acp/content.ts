@@ -80,10 +80,17 @@ export function contentBlockToParts(block: ContentBlock): PromptPart[] {
           const parsed = new URL(block.resource.uri)
           if (parsed.protocol === "file:") {
             const line = parsed.hash.match(/^#L(\d+)/)?.[1]
+            let filepath: string
+            try {
+              filepath = fileURLToPath(parsed)
+            } catch {
+              filepath = decodeURIComponent(parsed.pathname)
+            }
+            if (path.sep === "\\") filepath = filepath.replace(/\\/g, "/")
             return [
               {
                 type: "text",
-                text: `[${fileURLToPath(parsed)}${line ? `:${line}` : ""}]\n${block.resource.text}`,
+                text: `[${filepath}${line ? `:${line}` : ""}]\n${block.resource.text}`,
               },
             ]
           }

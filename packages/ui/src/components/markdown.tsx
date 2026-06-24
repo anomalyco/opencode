@@ -1,6 +1,5 @@
 import { useMarked } from "../context/marked"
 import { useI18n } from "../context/i18n"
-import DOMPurify from "dompurify"
 import morphdom from "morphdom"
 import { checksum } from "@opencode-ai/core/util/encode"
 import {
@@ -25,15 +24,10 @@ import {
 } from "./markdown-worker"
 import { markdownBlockKey, type MarkdownToken } from "./markdown-worker-protocol"
 import { shouldResetCodeTokens, type RenderedCodeState } from "./markdown-code-state"
-
-type Entry = {
-  raw: string
-  hash: string
-  html: string
-}
+import { getCachedMarkdown, sanitizeMarkdown, touchCachedMarkdown, type MarkdownCacheEntry } from "./markdown-cache"
 
 type RenderedBlock =
-  | (Entry & { key: string; mode: Exclude<Block["mode"], "code"> })
+  | (MarkdownCacheEntry & { key: string; mode: Exclude<Block["mode"], "code"> })
   | {
       key: string
       mode: "code"
@@ -51,40 +45,11 @@ type RenderResult = {
   blocks: RenderedBlock[]
 }
 
-const max = 200
-const cache = new Map<string, Entry>()
 const renderedCodeTokens = new WeakMap<HTMLDivElement, RenderedCodeState>()
-
-if (typeof window !== "undefined" && DOMPurify.isSupported) {
-  DOMPurify.addHook("afterSanitizeAttributes", (node: Element) => {
-    if (!(node instanceof HTMLAnchorElement)) return
-    if (node.target !== "_blank") return
-
-    const rel = node.getAttribute("rel") ?? ""
-    const set = new Set(rel.split(/\s+/).filter(Boolean))
-    set.add("noopener")
-    set.add("noreferrer")
-    node.setAttribute("rel", Array.from(set).join(" "))
-  })
-}
-
-const config = {
-  USE_PROFILES: { html: true, mathMl: true },
-  SANITIZE_NAMED_PROPS: true,
-  FORBID_TAGS: ["style"],
-  FORBID_CONTENTS: ["style", "script"],
-  ADD_TAGS: ["svg", "path"],
-  ADD_ATTR: ["d", "viewBox", "preserveAspectRatio", "xmlns", "target"],
-}
 
 const iconPaths = {
   copy: '<path d="M6.2513 6.24935V2.91602H17.0846V13.7493H13.7513M13.7513 6.24935V17.0827H2.91797V6.24935H13.7513Z" stroke="currentColor" stroke-linecap="round"/>',
   check: '<path d="M5 11.9657L8.37838 14.7529L15 5.83398" stroke="currentColor" stroke-linecap="square"/>',
-}
-
-function sanitize(html: string) {
-  if (!DOMPurify.isSupported) return ""
-  return DOMPurify.sanitize(html, config)
 }
 
 function escape(text: string) {
@@ -283,17 +248,6 @@ function setupCodeCopy(root: HTMLDivElement, getLabels: () => CopyLabels) {
   }
 }
 
-function touch(key: string, value: Entry) {
-  cache.delete(key)
-  cache.set(key, value)
-
-  if (cache.size <= max) return
-
-  const first = cache.keys().next().value
-  if (!first) return
-  cache.delete(first)
-}
-
 function initialResult(text: string, key: string | undefined, projection: Projection, owner: string): RenderResult {
   if (!text) return { text, blocks: [] }
   const base = key ?? checksum(text)
@@ -301,7 +255,7 @@ function initialResult(text: string, key: string | undefined, projection: Projec
     const blocks = projection.blocks.flatMap((block, index) => {
       if (block.mode === "code") return []
       const cacheKey = `${base}:${index}:${block.mode}`
-      const cached = cache.get(cacheKey)
+      const cached = getCachedMarkdown(cacheKey)
       if (cached?.raw !== block.raw) return []
       return [{ key: `${owner}:${cacheKey}`, mode: block.mode, ...cached }]
     })
@@ -387,16 +341,16 @@ export function Markdown(
           }
 
           if (key) {
-            const cached = cache.get(key)
+            const cached = getCachedMarkdown(key)
             if (cached?.raw === block.raw) {
-              touch(key, cached)
+              touchCachedMarkdown(key, cached)
               return { key: blockKey, mode: block.mode, ...cached }
             }
           }
 
           const hash = checksum(block.raw)
-          const safe = sanitize(await Promise.resolve(marked.parse(block.src)))
-          if (key && hash) touch(key, { raw: block.raw, hash, html: safe })
+          const safe = sanitizeMarkdown(await Promise.resolve(marked.parse(block.src)))
+          if (key && hash) touchCachedMarkdown(key, { raw: block.raw, hash, html: safe })
           return { key: blockKey, mode: block.mode, raw: block.raw, hash: hash ?? "", html: safe }
         }),
       )

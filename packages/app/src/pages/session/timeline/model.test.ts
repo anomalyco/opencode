@@ -15,37 +15,29 @@ describe("timeline model", () => {
     expect(selectVisibleUserMessages(users)).toBe(users)
   })
 
-  test("loads pages until a visible user turn is added", async () => {
-    let loaded = 10
-    let visible = 2
+  test("loads exactly one opaque cursor page", async () => {
     let calls = 0
     const anchors: Array<string | boolean> = []
 
     await loadOlderTimeline({
       sessionID: () => "ses_test",
-      loaded: () => loaded,
-      visible: () => visible,
       more: () => true,
       loading: () => false,
       loadMore: async () => {
         calls += 1
-        loaded += 3
-        if (calls === 2) visible += 1
       },
       before: () => anchors.push("before"),
       after: (done) => anchors.push("after", done),
     })
 
-    expect(calls).toBe(2)
-    expect(anchors).toEqual(["before", "after", false, "after", true])
+    expect(calls).toBe(1)
+    expect(anchors).toEqual(["before", "after", true])
   })
 
   test("stops when a page adds no raw messages", async () => {
     let calls = 0
     await loadOlderTimeline({
       sessionID: () => "ses_test",
-      loaded: () => 10,
-      visible: () => 2,
       more: () => true,
       loading: () => false,
       loadMore: async () => {
@@ -62,8 +54,6 @@ describe("timeline model", () => {
 
     await loadOlderTimeline({
       sessionID: () => sessionID,
-      loaded: () => 10,
-      visible: () => 2,
       more: () => true,
       loading: () => false,
       loadMore: async () => {
@@ -83,8 +73,6 @@ describe("timeline model", () => {
     await expect(
       loadOlderTimeline({
         sessionID: () => "ses_test",
-        loaded: () => 10,
-        visible: () => 2,
         more: () => true,
         loading: () => false,
         loadMore: async () => {

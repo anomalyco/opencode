@@ -1,6 +1,7 @@
 export * as Reference from "./reference"
 
 import { Context, Effect, Layer, Schema, Scope, Types } from "effect"
+import { Reference } from "@opencode-ai/schema/reference"
 import { Global } from "./global"
 import { EventV2 } from "./event"
 import { Repository } from "./repository"
@@ -8,23 +9,14 @@ import { RepositoryCache } from "./repository-cache"
 import { AbsolutePath } from "./schema"
 import { State } from "./state"
 
-export class LocalSource extends Schema.Class<LocalSource>("Reference.LocalSource")({
-  type: Schema.Literal("local"),
-  path: AbsolutePath,
-  description: Schema.String.pipe(Schema.optional),
-  hidden: Schema.Boolean.pipe(Schema.optional),
-}) {}
+export const LocalSource = Reference.LocalSource
+export type LocalSource = Reference.LocalSource
 
-export class GitSource extends Schema.Class<GitSource>("Reference.GitSource")({
-  type: Schema.Literal("git"),
-  repository: Schema.String,
-  branch: Schema.String.pipe(Schema.optional),
-  description: Schema.String.pipe(Schema.optional),
-  hidden: Schema.Boolean.pipe(Schema.optional),
-}) {}
+export const GitSource = Reference.GitSource
+export type GitSource = Reference.GitSource
 
-export const Source = Schema.Union([LocalSource, GitSource]).pipe(Schema.toTaggedUnion("type"))
-export type Source = typeof Source.Type
+export const Source = Reference.Source
+export type Source = Reference.Source
 
 export const Event = {
   Updated: EventV2.define({ type: "reference.updated", schema: {} }),
