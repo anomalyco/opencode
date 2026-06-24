@@ -36,7 +36,7 @@ const assistantRow = (
     id: _,
     type,
     ...data
-  } = encodeMessage(new SessionMessage.Assistant({ id, type: "assistant", agent: "build", model, content: [], time }))
+  } = encodeMessage(SessionMessage.Assistant.make({ id, type: "assistant", agent: "build", model, content: [], time }))
   return { id, session_id: sessionID, type, seq, time_created: DateTime.toEpochMillis(time.created), data }
 }
 
@@ -69,7 +69,7 @@ describe("SessionProjector", () => {
           sessionID,
           messageID: SessionMessage.ID.make("msg_first"),
           timestamp: created,
-          prompt: new Prompt({ text: "first" }),
+          prompt: Prompt.make({ text: "first" }),
           delivery: "steer",
         },
         { id: EventV2.ID.make("evt_z") },
@@ -80,7 +80,7 @@ describe("SessionProjector", () => {
           sessionID,
           messageID: SessionMessage.ID.make("msg_second"),
           timestamp: created,
-          prompt: new Prompt({ text: "second" }),
+          prompt: Prompt.make({ text: "second" }),
           delivery: "steer",
         },
         { id: EventV2.ID.make("evt_a") },
@@ -145,7 +145,7 @@ describe("SessionProjector", () => {
       const admitted = yield* SessionInput.admit(db, events, {
         id,
         sessionID,
-        prompt: new Prompt({ text: "promote me" }),
+        prompt: Prompt.make({ text: "promote me" }),
         delivery: "steer",
       })
       if (!admitted) return yield* Effect.die("Prompt admission failed")
@@ -154,7 +154,7 @@ describe("SessionProjector", () => {
         sessionID,
         timestamp: admitted.timeCreated,
         messageID: id,
-        prompt: new Prompt({ text: "promote me" }),
+        prompt: Prompt.make({ text: "promote me" }),
         delivery: "steer",
       })
 
@@ -334,7 +334,7 @@ describe("SessionProjector", () => {
 
   it.effect("does not revive a stale incomplete in-memory assistant projection", () =>
     Effect.gen(function* () {
-      const stale = new SessionMessage.Assistant({
+      const stale = SessionMessage.Assistant.make({
         id: SessionMessage.ID.make("msg_assistant_stale"),
         type: "assistant",
         agent: "build",
@@ -342,7 +342,7 @@ describe("SessionProjector", () => {
         content: [],
         time: { created },
       })
-      const completed = new SessionMessage.Assistant({
+      const completed = SessionMessage.Assistant.make({
         id: SessionMessage.ID.make("msg_assistant_completed"),
         type: "assistant",
         agent: "build",
@@ -466,15 +466,15 @@ describe("SessionProjector", () => {
         Schema.decodeUnknownSync(SessionMessage.Message)({ ...row.data, id: row.id, type: row.type }),
       )
       expect(messages).toEqual([
-        new SessionMessage.Assistant({
+        SessionMessage.Assistant.make({
           id: SessionMessage.ID.make("msg_assistant_completed"),
           type: "assistant",
           agent: "build",
           model,
-          content: [new SessionMessage.AssistantText({ type: "text", id: "text-stale", text: "" })],
+          content: [SessionMessage.AssistantText.make({ type: "text", id: "text-stale", text: "" })],
           time: { created: DateTime.makeUnsafe(1), completed: DateTime.makeUnsafe(2) },
         }),
-        new SessionMessage.Assistant({
+        SessionMessage.Assistant.make({
           id: SessionMessage.ID.make("msg_assistant_stale"),
           type: "assistant",
           agent: "build",

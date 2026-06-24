@@ -277,6 +277,7 @@
         "@opencode-ai/effect-sqlite-node": "workspace:*",
         "@opencode-ai/llm": "workspace:*",
         "@opencode-ai/plugin": "workspace:*",
+        "@opencode-ai/schema": "workspace:*",
         "@openrouter/ai-sdk-provider": "2.9.0",
         "@opentelemetry/api": "1.9.0",
         "@opentelemetry/context-async-hooks": "2.6.1",
@@ -480,6 +481,7 @@
       "name": "@opencode-ai/llm",
       "version": "1.17.9",
       "dependencies": {
+        "@opencode-ai/schema": "workspace:*",
         "@smithy/eventstream-codec": "4.2.14",
         "@smithy/util-utf8": "4.2.2",
         "aws4fetch": "1.0.20",
@@ -650,6 +652,17 @@
         "@opentui/keymap",
         "@opentui/solid",
       ],
+    },
+    "packages/schema": {
+      "name": "@opencode-ai/schema",
+      "dependencies": {
+        "effect": "catalog:",
+      },
+      "devDependencies": {
+        "@tsconfig/bun": "catalog:",
+        "@types/bun": "catalog:",
+        "@typescript/native-preview": "catalog:",
+      },
     },
     "packages/script": {
       "name": "@opencode-ai/script",
@@ -1803,6 +1816,8 @@
     "@opencode-ai/llm": ["@opencode-ai/llm@workspace:packages/llm"],
 
     "@opencode-ai/plugin": ["@opencode-ai/plugin@workspace:packages/plugin"],
+
+    "@opencode-ai/schema": ["@opencode-ai/schema@workspace:packages/schema"],
 
     "@opencode-ai/script": ["@opencode-ai/script@workspace:packages/script"],
 

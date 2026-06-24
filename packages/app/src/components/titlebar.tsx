@@ -41,6 +41,8 @@ import { tabHref, useTabs } from "@/context/tabs"
 import "./titlebar.css"
 import { useServerSDK } from "@/context/server-sdk"
 import { Session } from "@opencode-ai/sdk/v2"
+import { base64Encode } from "@opencode-ai/core/util/encode"
+import { createTabPromptState } from "@/context/prompt"
 
 type TauriDesktopWindow = {
   startDragging?: () => Promise<void>
@@ -419,22 +421,6 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                     if (next) tabs.select(next)
                   },
                 },
-                ...Array.from({ length: 9 }, (_, i) => {
-                  const index = i
-                  const number = index + 1
-                  return {
-                    id: `tab.${number}`,
-                    category: "tab",
-                    title: "",
-                    keybind: `mod+${number}`,
-                    disabled: layout.projects.list().length <= index,
-                    hidden: true,
-                    onSelect: () => {
-                      const tab = tabsStore[index]
-                      if (tab) tabs.select(tab)
-                    },
-                  }
-                }),
               ].filter((v) => v !== undefined)
             })
 
@@ -498,6 +484,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                       <For each={tabsStore}>
                         {(tab, i) => {
                           let ref!: HTMLDivElement
+                          useTabShortcut(i, () => tabs.select(tab))
 
                           const divider = () =>
                             i() !== 0 && (
@@ -523,13 +510,18 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                             )
                           }
 
+                          const sdk = createMemo(() => {
+                            const conn = server.list.find((s) => ServerConnection.key(s) === tab.server)
+                            if (!conn) return null
+                            const { sdk } = global.createServerCtx(conn)
+                            return sdk
+                          })
                           const [session] = createResource(
                             () => {
                               const id = tab.sessionId
-                              const conn = server.list.find((s) => ServerConnection.key(s) === tab.server)
-                              if (!conn) return null
-                              const { sdk } = global.createServerCtx(conn)
-                              return { id, sdk }
+                              const _sdk = sdk()
+                              if (!_sdk) return null
+                              return { id, sdk: _sdk }
                             },
                             ({ id, sdk }) =>
                               sdk.client.session
@@ -537,6 +529,18 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                                 .then((x) => x.data)
                                 .catch(() => undefined),
                           )
+
+                          createEffect(() => {
+                            if (tab.type !== "session") return
+                            const _sdk = sdk()
+                            if (!_sdk) return
+                            const sess = session()
+                            if (!sess) return
+                            createTabPromptState(tabs, tab, _sdk.scope, {
+                              dir: base64Encode(sess.directory),
+                              id: sess.id,
+                            })
+                          })
 
                           return (
                             <>
@@ -835,6 +839,26 @@ function TitlebarUpdateIconButton(props: { state: TitlebarUpdatePillState }) {
   )
 }
 
+function useTabShortcut(index: () => number, onSelect: () => void) {
+  const command = useCommand()
+
+  command.register(() => {
+    const number = index() + 1
+    if (number > 9) return []
+
+    return [
+      {
+        id: `tab.${number}`,
+        category: "tab",
+        title: "",
+        keybind: `mod+${number}`,
+        hidden: true,
+        onSelect,
+      },
+    ]
+  })
+}
+
 function TabNavItem(props: {
   ref?: HTMLDivElement
   href: string
@@ -863,7 +887,7 @@ function TabNavItem(props: {
   return (
     <div
       ref={props.ref}
-      class="group relative flex h-7 min-w-24 max-w-60 flex-row items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-[6px] bg-[var(--tab-bg)] px-1.5 [--tab-bg:var(--v2-background-bg-deep)] hover:[--tab-bg:var(--v2-background-bg-layer-02)] data-[active='true']:[--tab-bg:var(--v2-background-bg-layer-02)]"
+      class="group relative flex h-7 w-56 shrink-0 flex-row items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-[6px] bg-[var(--tab-bg)] px-1.5 [--tab-bg:var(--v2-background-bg-deep)] hover:[--tab-bg:var(--v2-background-bg-layer-02)] data-[active='true']:[--tab-bg:var(--v2-background-bg-layer-02)]"
       data-active={props.active}
       onMouseDown={(event) => {
         if (event.button !== 1) return
@@ -937,7 +961,7 @@ function DraftTabItem(props: {
     <div
       ref={props.ref}
       data-active={props.active}
-      class="group relative shrink-0 flex h-7 max-w-60 flex-row items-center gap-1.5 overflow-hidden rounded-[6px] bg-[var(--tab-bg)] pl-1.5 pr-8 whitespace-nowrap [--tab-bg:var(--v2-background-bg-deep)] hover:[--tab-bg:var(--v2-background-bg-layer-02)] data-[active='true']:[--tab-bg:var(--v2-overlay-simple-overlay-pressed)] focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[var(--v2-border-border-focus)]"
+      class="group relative flex h-7 w-56 shrink-0 flex-row items-center gap-1.5 overflow-hidden rounded-[6px] bg-[var(--tab-bg)] pl-1.5 pr-8 whitespace-nowrap [--tab-bg:var(--v2-background-bg-deep)] hover:[--tab-bg:var(--v2-background-bg-layer-02)] data-[active='true']:[--tab-bg:var(--v2-overlay-simple-overlay-pressed)] focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[var(--v2-border-border-focus)]"
       onMouseDown={(event) => {
         if (event.button !== 1) return
         closeTab(event)
@@ -982,7 +1006,7 @@ function NewSessionTabItem(props: { ref?: HTMLDivElement; href: string; title: s
   return (
     <div
       ref={props.ref}
-      class="group relative shrink-0 flex h-7 max-w-60 flex-row items-center gap-1.5 overflow-hidden rounded-[6px] bg-[var(--v2-overlay-simple-overlay-pressed)] pl-1.5 pr-8 whitespace-nowrap focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[var(--v2-border-border-focus)]"
+      class="group relative flex h-7 w-56 shrink-0 flex-row items-center gap-1.5 overflow-hidden rounded-[6px] bg-[var(--v2-overlay-simple-overlay-pressed)] pl-1.5 pr-8 whitespace-nowrap focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[var(--v2-border-border-focus)]"
       onMouseDown={(event) => {
         if (event.button !== 1) return
         closeTab(event)
