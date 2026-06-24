@@ -40,6 +40,8 @@ import { Icon, type IconProps } from "@opencode-ai/ui/icon"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { IconButton } from "@opencode-ai/ui/icon-button"
+import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
+import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { Select } from "@opencode-ai/ui/select"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { ModelSelectorPopover } from "@/components/dialog-select-model"
@@ -1617,9 +1619,27 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       disabled={store.mode !== "normal"}
                       tabIndex={store.mode === "normal" ? undefined : -1}
                       aria-label={language.t("prompt.action.attachFile")}
-                    />
-                  </TooltipKeybind>
-                  <Show when={showAgentControl()}>
+                     />
+                   </TooltipKeybind>
+                   <TooltipKeybind
+                     placement="top"
+                     title={language.t("command.prompt.mode.shell")}
+                     keybind={command.keybind("prompt.mode.shell")}
+                   >
+                     <IconButtonV2
+                       data-action="prompt-shell-mode"
+                       type="button"
+                       variant="ghost-muted"
+                       size="normal"
+                       class="size-7 rounded-md"
+                       state={store.mode === "shell" ? "pressed" : undefined}
+                       onClick={() => setMode(store.mode === "shell" ? "normal" : "shell")}
+                       aria-label={language.t("command.prompt.mode.shell")}
+                       aria-pressed={store.mode === "shell"}
+                       icon={<IconV2 name="console" size="small" />}
+                     />
+                   </TooltipKeybind>
+                   <Show when={showAgentControl()}>
                     <ComposerAgentControl state={agentControlState()} />
                   </Show>
                   <Show when={newSession() && !selectedProject()}>
