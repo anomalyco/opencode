@@ -6,10 +6,13 @@ import { Location } from "./location"
 import { Model } from "./model"
 import { Project } from "./project"
 import { DateTimeUtcFromMillis, optionalOmitUndefined, RelativePath } from "./schema"
+import { SessionEvent } from "./session-event"
 import { SessionID } from "./session-id"
 
-export const ID = SessionID.ID
-export type ID = SessionID.ID
+export const ID = SessionID
+export type ID = SessionID
+
+export const Event = SessionEvent
 
 export interface Info extends Schema.Schema.Type<typeof Info> {}
 export const Info = Schema.Struct({

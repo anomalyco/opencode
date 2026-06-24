@@ -2,11 +2,12 @@ import { describe, expect, test } from "bun:test"
 import { LegacyEvent } from "../src/legacy-event"
 import { PermissionV1 } from "../src/permission-v1"
 import { QuestionV1 } from "../src/question-v1"
+import { Project } from "../src/project"
 import { SessionV1 } from "../src/session-v1"
 
 describe("legacy public event schemas", () => {
-  test("keeps the seven durable SessionV1 definitions", () => {
-    expect(SessionV1.Events.map((event) => event.type)).toEqual([
+  test("owns all SessionV1 definitions", () => {
+    expect(SessionV1.Event.Definitions.map((event) => event.type)).toEqual([
       "session.created",
       "session.updated",
       "session.deleted",
@@ -14,9 +15,14 @@ describe("legacy public event schemas", () => {
       "message.removed",
       "message.part.updated",
       "message.part.removed",
+      "message.part.delta",
+      "session.diff",
+      "session.error",
     ])
-    expect(SessionV1.Events.every((event) => event.durable?.aggregate === "sessionID")).toBe(true)
-    expect(SessionV1.Events.every((event) => event.durable?.version === 1)).toBe(true)
+    const durable = SessionV1.Event.Definitions.filter((event) => event.durable !== undefined)
+    expect(durable).toHaveLength(7)
+    expect(durable.every((event) => event.durable?.aggregate === "sessionID")).toBe(true)
+    expect(durable.every((event) => event.durable?.version === 1)).toBe(true)
   })
 
   test("owns the legacy transient public definitions", () => {
@@ -29,7 +35,7 @@ describe("legacy public event schemas", () => {
       QuestionV1.Event.Asked.type,
       QuestionV1.Event.Replied.type,
       QuestionV1.Event.Rejected.type,
-      LegacyEvent.ProjectUpdated.type,
+      Project.Event.Updated.type,
       LegacyEvent.CommandExecuted.type,
     ]).toEqual([
       "message.part.delta",

@@ -1,10 +1,9 @@
 export * as ModelsDev from "./models-dev"
 
-import { define } from "./event"
+import { define, inventory } from "./event"
 
-export const Event = {
-  Refreshed: define({
-    type: "models-dev.refreshed",
-    schema: {},
-  }),
-}
+const Refreshed = define({
+  type: "models-dev.refreshed",
+  schema: {},
+})
+export const Event = { Refreshed, Definitions: inventory(Refreshed) }

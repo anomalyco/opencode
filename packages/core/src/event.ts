@@ -9,7 +9,7 @@ import { EventSequenceTable, EventTable } from "./event/sql"
 import { Location } from "./location"
 import { LayerNode } from "./effect/layer-node"
 import { isDeepStrictEqual } from "node:util"
-import { EventManifest } from "./event-manifest"
+import { Durable } from "@opencode-ai/schema/durable-event-manifest"
 
 export const ID = Event.ID
 export type ID = import("@opencode-ai/schema/event").ID
@@ -86,23 +86,19 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Ev
 
 export interface LayerOptions {
   readonly beforeAggregateRead?: (aggregateID: string) => Effect.Effect<void>
-  readonly definitions?: ReadonlyArray<Definition>
 }
 
 export const layerWith = (options?: LayerOptions) =>
   Layer.effect(
     Service,
     Effect.gen(function* () {
-      const durableDefinitions = options?.definitions
-        ? Event.durable([...EventManifest.Definitions, ...options.definitions])
-        : EventManifest.Durable
       const pubsub = {
         all: yield* PubSub.unbounded<Payload>(),
         durable: new Map<string, Set<PubSub.PubSub<void>>>(),
         typed: new Map<string, PubSub.PubSub<Payload>>(),
       }
       const projectors = new Map<string, Subscriber[]>()
-      // Projectors intentionally retain type-only dispatch. Exact type+version dispatch is a separate replay design.
+      // TODO: Bind durable projectors to exact type+version before supporting incompatible historical payloads.
       const listeners = new Array<Subscriber>()
       const { db } = yield* Database.Service
 
@@ -368,7 +364,7 @@ export const layerWith = (options?: LayerOptions) =>
         options?: { readonly publish?: boolean; readonly ownerID?: string; readonly strictOwner?: boolean },
       ) {
         return Effect.gen(function* () {
-          const definition = durableDefinitions.get(event.type)
+          const definition = Durable.get(event.type)
           if (!definition?.durable) {
             yield* Effect.die(
               new InvalidDurableEventError({ type: event.type, message: `Unknown durable event type ${event.type}` }),
@@ -464,7 +460,7 @@ export const layerWith = (options?: LayerOptions) =>
       const streamAll = (): Stream.Stream<Payload> => Stream.fromPubSub(pubsub.all)
 
       const decodeSerializedEvent = (event: SerializedEvent) => {
-        const definition = durableDefinitions.get(event.type)
+        const definition = Durable.get(event.type)
         if (!definition?.durable) {
           throw new InvalidDurableEventError({ type: event.type, message: `Unknown durable event type ${event.type}` })
         }

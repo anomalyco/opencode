@@ -1,6 +1,7 @@
 export * as EventManifest from "./event-manifest"
 
 import { Catalog } from "./catalog"
+import { Durable } from "./durable-event-manifest"
 import { Event } from "./event"
 import { FileSystem } from "./filesystem"
 import { FileSystemWatcher } from "./filesystem-watcher"
@@ -13,6 +14,7 @@ import { ModelsDev } from "./models-dev"
 import { Permission } from "./permission"
 import { PermissionV1 } from "./permission-v1"
 import { Plugin } from "./plugin"
+import { Project } from "./project"
 import { ProjectDirectories } from "./project-directories"
 import { Pty } from "./pty"
 import { Question } from "./question"
@@ -29,77 +31,54 @@ import { VcsEvent } from "./vcs-event"
 import { WorkspaceEvent } from "./workspace-event"
 import { WorktreeEvent } from "./worktree-event"
 
-export const CoreDefinitions = Event.inventory(...SessionV1.Events, ...SessionEvent.Definitions)
-export const CoreLatest = Event.latest(CoreDefinitions)
-export const CoreDurable = Event.durable(CoreDefinitions)
+const sessionV1DurableDefinitions = SessionV1.Event.Definitions.filter((definition) => definition.durable !== undefined)
+const sessionV1LiveDefinitions = SessionV1.Event.Definitions.filter((definition) => definition.durable === undefined)
 
-export const FoundationDefinitions = Event.inventory(
-  ModelsDev.Event.Refreshed,
-  Integration.Event.Updated,
-  Integration.Event.ConnectionUpdated,
-  Catalog.Event.Updated,
-  ...CoreDefinitions,
+const coreDefinitions = Event.inventory(...sessionV1DurableDefinitions, ...SessionEvent.Definitions)
+
+const foundationDefinitions = Event.inventory(
+  ...ModelsDev.Event.Definitions,
+  ...Integration.Event.Definitions,
+  ...Catalog.Event.Definitions,
+  ...coreDefinitions,
 )
 
-export const FeatureDefinitions = Event.inventory(
-  FileSystem.Event.Edited,
-  Reference.Event.Updated,
-  Permission.Event.Asked,
-  Permission.Event.Replied,
-  Plugin.Event.Added,
-  ProjectDirectories.Event.Updated,
-  FileSystemWatcher.Event.Updated,
-  Pty.Event.Created,
-  Pty.Event.Updated,
-  Pty.Event.Exited,
-  Pty.Event.Deleted,
-  Question.Event.Asked,
-  Question.Event.Replied,
-  Question.Event.Rejected,
+const featureDefinitions = Event.inventory(
+  ...FileSystem.Event.Definitions,
+  ...Reference.Event.Definitions,
+  ...Permission.Event.Definitions,
+  ...Plugin.Event.Definitions,
+  ...ProjectDirectories.Event.Definitions,
+  ...FileSystemWatcher.Event.Definitions,
+  ...Pty.Event.Definitions,
+  ...Question.Event.Definitions,
 )
 
-export const PublicDefinitions = Event.inventory(
-  ...FoundationDefinitions,
-  ...FeatureDefinitions,
-  SessionTodo.Event.Updated,
+export const ServerDefinitions = Event.inventory(
+  ...foundationDefinitions,
+  ...featureDefinitions,
+  ...SessionTodo.Event.Definitions,
 )
-export const PublicLatest = Event.latest(PublicDefinitions)
-export const PublicDurable = Event.durable(PublicDefinitions)
 
 export const Definitions = Event.inventory(
-  ...FoundationDefinitions,
-  SessionV1.PartDelta,
-  SessionV1.Diff,
-  SessionV1.Error,
-  InstallationEvent.Updated,
-  InstallationEvent.UpdateAvailable,
-  ...FeatureDefinitions,
-  SessionTodo.Event.Updated,
-  LspEvent.Updated,
-  PermissionV1.Event.Asked,
-  PermissionV1.Event.Replied,
-  TuiEvent.PromptAppend,
-  TuiEvent.CommandExecute,
-  TuiEvent.ToastShow,
-  TuiEvent.SessionSelect,
-  McpEvent.ToolsChanged,
-  McpEvent.BrowserOpenFailed,
-  LegacyEvent.CommandExecuted,
-  LegacyEvent.ProjectUpdated,
-  SessionStatusEvent.Status,
-  SessionStatusEvent.Idle,
-  QuestionV1.Event.Asked,
-  QuestionV1.Event.Replied,
-  QuestionV1.Event.Rejected,
-  SessionCompactionEvent.Compacted,
-  VcsEvent.BranchUpdated,
-  WorkspaceEvent.Ready,
-  WorkspaceEvent.Failed,
-  WorkspaceEvent.Status,
-  WorktreeEvent.Ready,
-  WorktreeEvent.Failed,
-  ServerEvent.Connected,
-  ServerEvent.Disposed,
+  ...foundationDefinitions,
+  ...sessionV1LiveDefinitions,
+  ...InstallationEvent.Definitions,
+  ...featureDefinitions,
+  ...SessionTodo.Event.Definitions,
+  ...LspEvent.Definitions,
+  ...PermissionV1.Event.Definitions,
+  ...TuiEvent.Definitions,
+  ...McpEvent.Definitions,
+  ...LegacyEvent.Definitions,
+  ...Project.Event.Definitions,
+  ...SessionStatusEvent.Definitions,
+  ...QuestionV1.Event.Definitions,
+  ...SessionCompactionEvent.Definitions,
+  ...VcsEvent.Definitions,
+  ...WorkspaceEvent.Definitions,
+  ...WorktreeEvent.Definitions,
+  ...ServerEvent.Definitions,
 )
 export const Latest = Event.latest(Definitions)
-export const Durable = Event.durable(Definitions)
+export { Durable }

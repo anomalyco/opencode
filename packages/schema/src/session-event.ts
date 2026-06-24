@@ -7,7 +7,7 @@ import { Delivery } from "./session-delivery"
 import { Model } from "./model"
 import { DateTimeUtcFromMillis, NonNegativeInt, RelativePath } from "./schema"
 import { FileAttachment, Prompt } from "./prompt"
-import { Session } from "./session"
+import { SessionID } from "./session-id"
 import { Location } from "./location"
 import { SessionMessageID } from "./session-message-id"
 import { SessionMessage } from "./session-message"
@@ -25,7 +25,7 @@ export type Source = typeof Source.Type
 
 const Base = {
   timestamp: DateTimeUtcFromMillis,
-  sessionID: Session.ID,
+  sessionID: SessionID,
 }
 const PromptFields = {
   ...Base,

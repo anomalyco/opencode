@@ -16,3 +16,5 @@ export const UpdateAvailable = Event.define({
     version: Schema.String,
   },
 })
+
+export const Definitions = Event.inventory(Updated, UpdateAvailable)

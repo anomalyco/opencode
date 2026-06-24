@@ -17,3 +17,5 @@ export const Failed = Event.define({
     message: Schema.String,
   },
 })
+
+export const Definitions = Event.inventory(Ready, Failed)

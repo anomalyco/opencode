@@ -2,10 +2,10 @@ export * as WorkspaceEvent from "./workspace-event"
 
 import { Schema } from "effect"
 import { Event } from "./event"
-import { Workspace } from "./workspace"
+import { WorkspaceID } from "./workspace-id"
 
 export const ConnectionStatus = Schema.Struct({
-  workspaceID: Workspace.ID,
+  workspaceID: WorkspaceID,
   status: Schema.Literals(["connected", "connecting", "disconnected", "error"]),
 })
 export type ConnectionStatus = typeof ConnectionStatus.Type
@@ -28,3 +28,5 @@ export const Status = Event.define({
   type: "workspace.status",
   schema: ConnectionStatus.fields,
 })
+
+export const Definitions = Event.inventory(Ready, Failed, Status)

@@ -6,6 +6,8 @@ import { SessionID } from "./session-id"
 export const Compacted = Event.define({
   type: "session.compacted",
   schema: {
-    sessionID: SessionID.ID,
+    sessionID: SessionID,
   },
 })
+
+export const Definitions = Event.inventory(Compacted)

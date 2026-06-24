@@ -9,3 +9,5 @@ export const BranchUpdated = Event.define({
     branch: Schema.optional(Schema.String),
   },
 })
+
+export const Definitions = Event.inventory(BranchUpdated)

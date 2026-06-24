@@ -49,7 +49,7 @@ export const User = Schema.Struct({
 export interface Synthetic extends Schema.Schema.Type<typeof Synthetic> {}
 export const Synthetic = Schema.Struct({
   ...Base,
-  sessionID: SessionID.ID,
+  sessionID: SessionID,
   text: Schema.String,
   type: Schema.Literal("synthetic"),
 }).annotate({ identifier: "Session.Message.Synthetic" })

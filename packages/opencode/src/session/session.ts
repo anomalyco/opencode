@@ -43,7 +43,6 @@ import { NonNegativeInt, optionalOmitUndefined } from "@opencode-ai/core/schema"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
-import { SessionV1PublicEvent } from "@opencode-ai/schema/session-v1"
 
 const runtime = makeRuntime(Database.Service, Database.defaultLayer)
 
@@ -312,8 +311,8 @@ export const Event = {
   Created: SessionV1.Event.Created,
   Updated: SessionV1.Event.Updated,
   Deleted: SessionV1.Event.Deleted,
-  Diff: SessionV1PublicEvent.Diff,
-  Error: SessionV1PublicEvent.Error,
+  Diff: SessionV1.Event.Diff,
+  Error: SessionV1.Event.Error,
 }
 
 export function plan(input: { slug: string; time: { created: number } }, instance: InstanceContext) {

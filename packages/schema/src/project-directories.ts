@@ -1,12 +1,11 @@
 export * as ProjectDirectories from "./project-directories"
 
-import { define } from "./event"
+import { define, inventory } from "./event"
 import { Project } from "./project"
 
-export const Event = {
-  Updated: define({
-    type: "project.directories.updated",
-    schema: { projectID: Project.ID },
-  }),
-}
+const Updated = define({
+  type: "project.directories.updated",
+  schema: { projectID: Project.ID },
+})
+export const Event = { Updated, Definitions: inventory(Updated) }
 export const ProjectDirectoriesEvent = Event

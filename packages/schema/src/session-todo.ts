@@ -1,7 +1,7 @@
 export * as SessionTodo from "./session-todo"
 
 import { Schema } from "effect"
-import { define } from "./event"
+import { define, inventory } from "./event"
 import { SessionID } from "./session-id"
 
 export const Info = Schema.Struct({
@@ -14,13 +14,12 @@ export const Info = Schema.Struct({
 export type Info = typeof Info.Type
 export const SessionTodoInfo = Info
 
-export const Event = {
-  Updated: define({
-    type: "todo.updated",
-    schema: {
-      sessionID: SessionID.ID,
-      todos: Schema.Array(Info),
-    },
-  }),
-}
+const Updated = define({
+  type: "todo.updated",
+  schema: {
+    sessionID: SessionID,
+    todos: Schema.Array(Info),
+  },
+})
+export const Event = { Updated, Definitions: inventory(Updated) }
 export const SessionTodoEvent = Event

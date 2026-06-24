@@ -9,3 +9,5 @@ export const Installed = Event.define({
     ide: Schema.String,
   },
 })
+
+export const Definitions = Event.inventory(Installed)

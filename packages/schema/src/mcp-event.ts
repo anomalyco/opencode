@@ -17,3 +17,5 @@ export const BrowserOpenFailed = Event.define({
     url: Schema.String,
   },
 })
+
+export const Definitions = Event.inventory(ToolsChanged, BrowserOpenFailed)

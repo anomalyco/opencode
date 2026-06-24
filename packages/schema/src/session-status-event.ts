@@ -34,7 +34,7 @@ export type Info = Schema.Schema.Type<typeof Info>
 export const Status = Event.define({
   type: "session.status",
   schema: {
-    sessionID: SessionID.ID,
+    sessionID: SessionID,
     status: Info,
   },
 })
@@ -43,6 +43,8 @@ export const Status = Event.define({
 export const Idle = Event.define({
   type: "session.idle",
   schema: {
-    sessionID: SessionID.ID,
+    sessionID: SessionID,
   },
 })
+
+export const Definitions = Event.inventory(Status, Idle)

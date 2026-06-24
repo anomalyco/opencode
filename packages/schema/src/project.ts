@@ -1,6 +1,7 @@
 export * as Project from "./project"
 
 import { Schema } from "effect"
+import { define, inventory } from "./event"
 import { NonNegativeInt, optionalOmitUndefined, withStatics } from "./schema"
 
 export const ID = Schema.String.pipe(
@@ -37,3 +38,6 @@ export const Info = Schema.Struct({
   sandboxes: Schema.Array(Schema.String),
 }).annotate({ identifier: "Project" })
 export type Info = typeof Info.Type
+
+const Updated = define({ type: "project.updated", schema: Info.fields })
+export const Event = { Updated, Definitions: inventory(Updated) }

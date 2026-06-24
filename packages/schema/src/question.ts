@@ -1,7 +1,7 @@
 export * as Question from "./question"
 
 import { Schema } from "effect"
-import { define } from "./event"
+import { define, inventory } from "./event"
 import { ascending } from "./identifier"
 import { SessionID } from "./session-id"
 import { withStatics } from "./schema"
@@ -44,7 +44,7 @@ export type Tool = typeof Tool.Type
 
 export const Request = Schema.Struct({
   id: ID,
-  sessionID: SessionID.ID,
+  sessionID: SessionID,
   questions: Schema.Array(Info).annotate({ description: "Questions to ask" }),
   tool: Tool.pipe(Schema.optional),
 }).annotate({ identifier: "QuestionV2.Request" })
@@ -60,21 +60,20 @@ export const Reply = Schema.Struct({
 }).annotate({ identifier: "QuestionV2.Reply" })
 export type Reply = typeof Reply.Type
 
-export const Event = {
-  Asked: define({ type: "question.v2.asked", schema: Request.fields }),
-  Replied: define({
-    type: "question.v2.replied",
-    schema: {
-      sessionID: SessionID.ID,
-      requestID: ID,
-      answers: Schema.Array(Answer),
-    },
-  }),
-  Rejected: define({
-    type: "question.v2.rejected",
-    schema: {
-      sessionID: SessionID.ID,
-      requestID: ID,
-    },
-  }),
-}
+const Asked = define({ type: "question.v2.asked", schema: Request.fields })
+const Replied = define({
+  type: "question.v2.replied",
+  schema: {
+    sessionID: SessionID,
+    requestID: ID,
+    answers: Schema.Array(Answer),
+  },
+})
+const Rejected = define({
+  type: "question.v2.rejected",
+  schema: {
+    sessionID: SessionID,
+    requestID: ID,
+  },
+})
+export const Event = { Asked, Replied, Rejected, Definitions: inventory(Asked, Replied, Rejected) }

@@ -1,8 +1,7 @@
 export * as Catalog from "./catalog"
 
-import { define } from "./event"
+import { define, inventory } from "./event"
 
-export const Event = {
-  Updated: define({ type: "catalog.updated", schema: {} }),
-}
+const Updated = define({ type: "catalog.updated", schema: {} })
+export const Event = { Updated, Definitions: inventory(Updated) }
 export const CatalogEvent = Event

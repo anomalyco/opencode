@@ -1,15 +1,14 @@
 export * as FileSystem from "./filesystem"
 
 import { Schema } from "effect"
-import { define } from "./event"
+import { define, inventory } from "./event"
 import { NonNegativeInt, PositiveInt, RelativePath } from "./schema"
 
-export const Event = {
-  Edited: define({
-    type: "file.edited",
-    schema: { file: Schema.String },
-  }),
-}
+const Edited = define({
+  type: "file.edited",
+  schema: { file: Schema.String },
+})
+export const Event = { Edited, Definitions: inventory(Edited) }
 export const FileSystemEvent = Event
 
 export interface Entry extends Schema.Schema.Type<typeof Entry> {}

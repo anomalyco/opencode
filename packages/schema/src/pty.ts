@@ -1,7 +1,7 @@
 export * as Pty from "./pty"
 
 import { Schema } from "effect"
-import { define } from "./event"
+import { define, inventory } from "./event"
 import { ascending } from "./identifier"
 import { NonNegativeInt } from "./schema"
 import { withStatics } from "./schema"
@@ -27,10 +27,9 @@ export const Info = Schema.Struct({
 }).annotate({ identifier: "Pty" })
 export const PtyInfo = Info
 
-export const Event = {
-  Created: define({ type: "pty.created", schema: { info: Info } }),
-  Updated: define({ type: "pty.updated", schema: { info: Info } }),
-  Exited: define({ type: "pty.exited", schema: { id: ID, exitCode: NonNegativeInt } }),
-  Deleted: define({ type: "pty.deleted", schema: { id: ID } }),
-}
+const Created = define({ type: "pty.created", schema: { info: Info } })
+const Updated = define({ type: "pty.updated", schema: { info: Info } })
+const Exited = define({ type: "pty.exited", schema: { id: ID, exitCode: NonNegativeInt } })
+const Deleted = define({ type: "pty.deleted", schema: { id: ID } })
+export const Event = { Created, Updated, Exited, Deleted, Definitions: inventory(Created, Updated, Exited, Deleted) }
 export const PtyEvent = Event

@@ -1,7 +1,7 @@
 export * as Permission from "./permission"
 
 import { Schema } from "effect"
-import { define } from "./event"
+import { define, inventory } from "./event"
 import { ascending } from "./identifier"
 import { SessionID } from "./session-id"
 import { withStatics } from "./schema"
@@ -22,7 +22,7 @@ export const Source = Schema.Union([
 export type Source = typeof Source.Type
 
 const RequestFields = {
-  sessionID: SessionID.ID,
+  sessionID: SessionID,
   action: Schema.String,
   resources: Schema.Array(Schema.String),
   save: Schema.Array(Schema.String).pipe(Schema.optional),
@@ -39,17 +39,16 @@ export type Request = typeof Request.Type
 export const Reply = Schema.Literals(["once", "always", "reject"]).annotate({ identifier: "PermissionV2.Reply" })
 export type Reply = typeof Reply.Type
 
-export const Event = {
-  Asked: define({ type: "permission.v2.asked", schema: Request.fields }),
-  Replied: define({
-    type: "permission.v2.replied",
-    schema: {
-      sessionID: SessionID.ID,
-      requestID: ID,
-      reply: Reply,
-    },
-  }),
-}
+const Asked = define({ type: "permission.v2.asked", schema: Request.fields })
+const Replied = define({
+  type: "permission.v2.replied",
+  schema: {
+    sessionID: SessionID,
+    requestID: ID,
+    reply: Reply,
+  },
+})
+export const Event = { Asked, Replied, Definitions: inventory(Asked, Replied) }
 
 export const Effect = Schema.Literals(["allow", "deny", "ask"]).annotate({ identifier: "PermissionV2.Effect" })
 export type Effect = typeof Effect.Type

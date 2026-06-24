@@ -35,7 +35,6 @@ import { isMedia } from "@/util/media"
 import type { SystemError } from "bun"
 import type { Provider } from "@/provider/provider"
 import { Effect, Schema } from "effect"
-import { SessionV1PublicEvent } from "@opencode-ai/schema/session-v1"
 
 export const node = LayerNode.group([Database.node])
 
@@ -59,7 +58,7 @@ export const Event = {
   Updated: SessionV1.Event.MessageUpdated,
   Removed: SessionV1.Event.MessageRemoved,
   PartUpdated: SessionV1.Event.PartUpdated,
-  PartDelta: SessionV1PublicEvent.PartDelta,
+  PartDelta: SessionV1.Event.PartDelta,
   PartRemoved: SessionV1.Event.PartRemoved,
 }
 

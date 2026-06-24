@@ -1,11 +1,11 @@
 export * as PermissionV1 from "./permission-v1"
 
 import { Schema } from "effect"
-import { define } from "./event"
+import { define, inventory } from "./event"
 import { ascending } from "./identifier"
 import { Project } from "./project"
 import { withStatics } from "./schema"
-import { Session } from "./session"
+import { SessionID } from "./session-id"
 
 export const ID = Schema.String.check(Schema.isStartsWith("per")).pipe(
   Schema.brand("PermissionID"),
@@ -26,7 +26,7 @@ export type Ruleset = typeof Ruleset.Type
 
 export const Request = Schema.Struct({
   id: ID,
-  sessionID: Session.ID,
+  sessionID: SessionID,
   permission: Schema.String,
   patterns: Schema.Array(Schema.String),
   metadata: Schema.Record(Schema.String, Schema.Unknown),
@@ -58,11 +58,10 @@ export const ReplyInput = Schema.Struct({ requestID: ID, ...ReplyBody.fields }).
 })
 export type ReplyInput = typeof ReplyInput.Type
 
-export const Event = {
-  Asked: define({ type: "permission.asked", schema: Request.fields }),
-  Replied: define({
-    type: "permission.replied",
-    schema: { sessionID: Session.ID, requestID: ID, reply: Reply },
-  }),
-}
+const Asked = define({ type: "permission.asked", schema: Request.fields })
+const Replied = define({
+  type: "permission.replied",
+  schema: { sessionID: SessionID, requestID: ID, reply: Reply },
+})
+export const Event = { Asked, Replied, Definitions: inventory(Asked, Replied) }
 export const PermissionV1Event = Event

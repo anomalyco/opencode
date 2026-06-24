@@ -9,8 +9,8 @@ import { Provider } from "./provider"
 import { Model } from "./model"
 import { NonNegativeInt, optionalOmitUndefined, withStatics } from "./schema"
 import { ascending } from "./identifier"
-import { Session } from "./session"
-import { Workspace } from "./workspace"
+import { SessionID } from "./session-id"
+import { WorkspaceID } from "./workspace-id"
 
 const Timestamp = Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0))
 
@@ -80,7 +80,7 @@ export type OutputFormat = Schema.Schema.Type<typeof Format>
 
 const partBase = {
   id: PartID,
-  sessionID: Session.ID,
+  sessionID: SessionID,
   messageID: MessageID,
 }
 
@@ -541,13 +541,13 @@ const SessionModel = Schema.Struct({
 })
 
 export const SessionInfo = Schema.Struct({
-  id: Session.ID,
+  id: SessionID,
   slug: Schema.String,
   projectID: Project.ID,
-  workspaceID: optionalOmitUndefined(Workspace.ID),
+  workspaceID: optionalOmitUndefined(WorkspaceID),
   directory: Schema.String,
   path: optionalOmitUndefined(Schema.String),
-  parentID: optionalOmitUndefined(Session.ID),
+  parentID: optionalOmitUndefined(SessionID),
   summary: optionalOmitUndefined(SessionSummary),
   cost: optionalOmitUndefined(Schema.Finite),
   tokens: optionalOmitUndefined(SessionTokens),
@@ -568,12 +568,12 @@ export const SessionInfo = Schema.Struct({
 }).annotate({ identifier: "Session" })
 export type SessionInfo = typeof SessionInfo.Type
 
-export const Event = {
+const events = {
   Created: define({
     type: "session.created",
     ...options,
     schema: {
-      sessionID: Session.ID,
+      sessionID: SessionID,
       info: SessionInfo,
     },
   }),
@@ -581,7 +581,7 @@ export const Event = {
     type: "session.updated",
     ...options,
     schema: {
-      sessionID: Session.ID,
+      sessionID: SessionID,
       info: SessionInfo,
     },
   }),
@@ -589,7 +589,7 @@ export const Event = {
     type: "session.deleted",
     ...options,
     schema: {
-      sessionID: Session.ID,
+      sessionID: SessionID,
       info: SessionInfo,
     },
   }),
@@ -597,7 +597,7 @@ export const Event = {
     type: "message.updated",
     ...options,
     schema: {
-      sessionID: Session.ID,
+      sessionID: SessionID,
       info: Info,
     },
   }),
@@ -605,7 +605,7 @@ export const Event = {
     type: "message.removed",
     ...options,
     schema: {
-      sessionID: Session.ID,
+      sessionID: SessionID,
       messageID: MessageID,
     },
   }),
@@ -613,7 +613,7 @@ export const Event = {
     type: "message.part.updated",
     ...options,
     schema: {
-      sessionID: Session.ID,
+      sessionID: SessionID,
       part: Part,
       time: Schema.Finite,
     },
@@ -622,27 +622,17 @@ export const Event = {
     type: "message.part.removed",
     ...options,
     schema: {
-      sessionID: Session.ID,
+      sessionID: SessionID,
       messageID: MessageID,
       partID: PartID,
     },
   }),
 }
 
-export const Events = inventory(
-  Event.Created,
-  Event.Updated,
-  Event.Deleted,
-  Event.MessageUpdated,
-  Event.MessageRemoved,
-  Event.PartUpdated,
-  Event.PartRemoved,
-)
-
 export const PartDelta = define({
   type: "message.part.delta",
   schema: {
-    sessionID: Session.ID,
+    sessionID: SessionID,
     messageID: MessageID,
     partID: PartID,
     field: Schema.String,
@@ -653,7 +643,7 @@ export const PartDelta = define({
 export const Diff = define({
   type: "session.diff",
   schema: {
-    sessionID: Session.ID,
+    sessionID: SessionID,
     diff: Schema.Array(FileDiff.Info),
   },
 })
@@ -661,13 +651,26 @@ export const Diff = define({
 export const Error = define({
   type: "session.error",
   schema: {
-    sessionID: Schema.optional(Session.ID),
+    sessionID: Schema.optional(SessionID),
     error: Assistant.fields.error,
   },
 })
 
-export const SessionV1PublicEvent = {
+export const Event = {
+  ...events,
   PartDelta,
   Diff,
   Error,
+  Definitions: inventory(
+    events.Created,
+    events.Updated,
+    events.Deleted,
+    events.MessageUpdated,
+    events.MessageRemoved,
+    events.PartUpdated,
+    events.PartRemoved,
+    PartDelta,
+    Diff,
+    Error,
+  ),
 }

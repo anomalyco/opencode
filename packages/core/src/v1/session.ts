@@ -10,7 +10,6 @@ export {
   Assistant,
   CompactionPart,
   Event,
-  Events,
   FilePart,
   FilePartInput,
   FilePartSource,

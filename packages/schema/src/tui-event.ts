@@ -51,6 +51,8 @@ export const ToastShow = Event.define({
 export const SessionSelect = Event.define({
   type: "tui.session.select",
   schema: {
-    sessionID: SessionID.ID.annotate({ description: "Session ID to navigate to" }),
+    sessionID: SessionID.annotate({ description: "Session ID to navigate to" }),
   },
 })
+
+export const Definitions = Event.inventory(PromptAppend, CommandExecute, ToastShow, SessionSelect)

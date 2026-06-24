@@ -1,10 +1,10 @@
 export * as QuestionV1 from "./question-v1"
 
 import { Schema } from "effect"
-import { define } from "./event"
+import { define, inventory } from "./event"
 import { ascending } from "./identifier"
 import { withStatics } from "./schema"
-import { Session } from "./session"
+import { SessionID } from "./session-id"
 import { SessionV1 } from "./session-v1"
 
 export const ID = Schema.String.check(Schema.isStartsWith("que")).pipe(
@@ -34,7 +34,7 @@ export const Tool = Schema.Struct({ messageID: SessionV1.MessageID, callID: Sche
 })
 export const Request = Schema.Struct({
   id: ID,
-  sessionID: Session.ID,
+  sessionID: SessionID,
   questions: Schema.Array(Info).annotate({ description: "Questions to ask" }),
   tool: Schema.optional(Tool),
 }).annotate({ identifier: "QuestionRequest" })
@@ -44,15 +44,23 @@ export const Reply = Schema.Struct({
     description: "User answers in order of questions (each answer is an array of selected labels)",
   }),
 }).annotate({ identifier: "QuestionReply" })
-export const Replied = Schema.Struct({ sessionID: Session.ID, requestID: ID, answers: Schema.Array(Answer) }).annotate({
+export const Replied = Schema.Struct({
+  sessionID: SessionID,
+  requestID: ID,
+  answers: Schema.Array(Answer),
+}).annotate({
   identifier: "QuestionReplied",
 })
-export const Rejected = Schema.Struct({ sessionID: Session.ID, requestID: ID }).annotate({
+export const Rejected = Schema.Struct({ sessionID: SessionID, requestID: ID }).annotate({
   identifier: "QuestionRejected",
 })
 
+const Asked = define({ type: "question.asked", schema: Request.fields })
+const RepliedEvent = define({ type: "question.replied", schema: Replied.fields })
+const RejectedEvent = define({ type: "question.rejected", schema: Rejected.fields })
 export const Event = {
-  Asked: define({ type: "question.asked", schema: Request.fields }),
-  Replied: define({ type: "question.replied", schema: Replied.fields }),
-  Rejected: define({ type: "question.rejected", schema: Rejected.fields }),
+  Asked,
+  Replied: RepliedEvent,
+  Rejected: RejectedEvent,
+  Definitions: inventory(Asked, RepliedEvent, RejectedEvent),
 }
