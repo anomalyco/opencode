@@ -20,7 +20,6 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Location } from "@opencode-ai/core/location"
 import { LocationServiceMap } from "@opencode-ai/core/location-layer"
 import { Reference } from "@opencode-ai/core/reference"
-import { McpCatalog } from "@/mcp/catalog"
 import { MCP } from "@/mcp"
 
 export function provider(model: Provider.Model) {
@@ -115,19 +114,13 @@ export const layer = Layer.effect(
         if (available.length === 0) return
 
         return [
-          "MCP servers may provide instructions for using their tools, prompts, and resources.",
-          "Each entry applies to tools matching its tool prefix and to prompts and resources from that server.",
-          "<mcp_server_instructions>",
+          "<mcp_instructions>",
           ...available.flatMap((item) => [
-            "  <mcp_server>",
-            `    <name>${item.name}</name>`,
-            `    <tool_prefix>mcp__${McpCatalog.sanitize(item.name)}__</tool_prefix>`,
-            "    <instructions>",
-            ...item.instructions.split("\n").map((line) => `      ${line}`),
-            "    </instructions>",
-            "  </mcp_server>",
+            `  <server name="${item.name}">`,
+            ...item.instructions.split("\n").map((line) => `    ${line}`),
+            "  </server>",
           ]),
-          "</mcp_server_instructions>",
+          "</mcp_instructions>",
         ].join("\n")
       }),
     })

@@ -107,17 +107,11 @@ describe("session.system", () => {
 
       expect(output).toBe(
         [
-          "MCP servers may provide instructions for using their tools, prompts, and resources.",
-          "Each entry applies to tools matching its tool prefix and to prompts and resources from that server.",
-          "<mcp_server_instructions>",
-          "  <mcp_server>",
-          "    <name>guide-server</name>",
-          "    <tool_prefix>mcp__guide-server__</tool_prefix>",
-          "    <instructions>",
-          "      Use lookup before mutate.",
-          "    </instructions>",
-          "  </mcp_server>",
-          "</mcp_server_instructions>",
+          "<mcp_instructions>",
+          '  <server name="guide-server">',
+          "    Use lookup before mutate.",
+          "  </server>",
+          "</mcp_instructions>",
         ].join("\n"),
       )
     }),
