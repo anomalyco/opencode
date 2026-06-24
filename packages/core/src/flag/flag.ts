@@ -5,6 +5,11 @@ export function truthy(key: string) {
   return value === "true" || value === "1"
 }
 
+export function number(key: string, fallback = 0) {
+  const value = Number(process.env[key])
+  return Number.isFinite(value) ? value : fallback
+}
+
 const copy = process.env["OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT"]
 const fff = process.env["OPENCODE_DISABLE_FFF"]
 
@@ -74,5 +79,16 @@ export const Flag = {
   },
   get OPENCODE_CLIENT() {
     return process.env["OPENCODE_CLIENT"] ?? "cli"
+  },
+
+  // Idle per-directory instance eviction for long-running `serve` (opt-in; 0 = disabled).
+  get OPENCODE_INSTANCE_IDLE_TTL_MS() {
+    return number("OPENCODE_INSTANCE_IDLE_TTL_MS")
+  },
+  get OPENCODE_INSTANCE_MAX() {
+    return number("OPENCODE_INSTANCE_MAX")
+  },
+  get OPENCODE_INSTANCE_SWEEP_MS() {
+    return number("OPENCODE_INSTANCE_SWEEP_MS")
   },
 }
