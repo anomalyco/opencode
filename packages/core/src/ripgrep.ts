@@ -5,7 +5,6 @@ import { ChildProcess } from "effect/unstable/process"
 import path from "path"
 import { LayerNode } from "./effect/layer-node"
 import { Entry, Match } from "./filesystem/schema"
-import { FSUtil } from "./fs-util"
 import { AppProcess, collectStream, waitForAbort } from "./process"
 import { NonNegativeInt, PositiveInt, RelativePath } from "./schema"
 import { RipgrepBinary } from "./ripgrep/binary"
@@ -177,14 +176,13 @@ export const layer = Layer.effect(
             ),
         }).pipe(
           Effect.map((result) =>
-            result.items.map((relative) => {
-              const absolute = path.resolve(input.cwd, relative)
-              return new Entry({
-                path: RelativePath.make(relative),
-                type: "file",
-                mime: FSUtil.mimeType(absolute),
-              })
-            }),
+            result.items.map(
+              (relative) =>
+                new Entry({
+                  path: RelativePath.make(relative),
+                  type: "file",
+                }),
+            ),
           ),
           Effect.catchTag("Ripgrep.InvalidPatternError", (cause) => Effect.fail(failure(cause.message, cause))),
         ),
@@ -211,7 +209,6 @@ export const layer = Layer.effect(
               new Entry({
                 path: RelativePath.make(relative),
                 type: "file",
-                mime: FSUtil.mimeType(path.resolve(input.cwd, relative)),
               }),
             )
           },
@@ -262,12 +259,10 @@ export const layer = Layer.effect(
                 .replace(/^(?:\.[\\/])+/u, "")
                 .replace(/^[\\/]+/u, "")
                 .replaceAll("\\", "/")
-              const absolute = path.resolve(input.cwd, relative)
               return new Match({
                 entry: new Entry({
                   path: RelativePath.make(relative),
                   type: "file",
-                  mime: FSUtil.mimeType(absolute),
                 }),
                 line: match.line_number,
                 offset: match.absolute_offset,

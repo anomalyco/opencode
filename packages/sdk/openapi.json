@@ -27726,12 +27726,9 @@
           "type": {
             "type": "string",
             "enum": ["file", "directory"]
-          },
-          "mime": {
-            "type": "string"
           }
         },
-        "required": ["path", "type", "mime"],
+        "required": ["path", "type"],
         "additionalProperties": false
       },
       "CommandV2Info": {

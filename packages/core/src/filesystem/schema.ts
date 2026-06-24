@@ -4,7 +4,6 @@ import { NonNegativeInt, PositiveInt, RelativePath } from "../schema"
 export class Entry extends Schema.Class<Entry>("FileSystem.Entry")({
   path: RelativePath,
   type: Schema.Literals(["file", "directory"]),
-  mime: Schema.String,
 }) {}
 
 export const Submatch = Schema.Struct({

@@ -338,7 +338,6 @@ export const list = Effect.fn("ReadTool.list")(function* (fs: FSUtil.Interface, 
         return new FileSystem.Entry({
           path: RelativePath.make(item.name + (type === "directory" ? path.sep : "")),
           type,
-          mime: type === "directory" ? "application/x-directory" : FSUtil.mimeType(target),
         })
       }),
     { concurrency: 16 },
