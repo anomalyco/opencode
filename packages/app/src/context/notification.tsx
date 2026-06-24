@@ -207,7 +207,7 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
 
     const lookup = async (directory: string, sessionID?: string) => {
       if (!sessionID) return undefined
-      const sync = serverSync().createDirSyncContext(directory)
+      const sync = serverSync().ensureDirSyncContext(directory)
       const session = sync.session.get(sessionID)
       if (session) return session
       return sync.session

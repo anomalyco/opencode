@@ -88,7 +88,7 @@ export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext(
         },
       },
       sessionPlacement,
-      createServerCtx(conn: ServerConnection.Any) {
+      ensureServerCtx(conn: ServerConnection.Any) {
         return ensureServerCtx(conn)
       },
     }
