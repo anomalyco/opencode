@@ -1,12 +1,12 @@
 import type { Effect, Scope } from "effect"
 import type { PluginContext } from "./context.js"
 
-export interface Plugin {
+export interface Plugin<R = Scope.Scope> {
   readonly id: string
-  readonly effect: (context: PluginContext) => Effect.Effect<void, never, Scope.Scope>
+  readonly effect: (context: PluginContext) => Effect.Effect<void, never, R>
 }
 
-export function define(plugin: Plugin) {
+export function define<R = Scope.Scope>(plugin: Plugin<R>) {
   return plugin
 }
 

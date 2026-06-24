@@ -18,7 +18,7 @@ describe("Reference", () => {
       const references = yield* Reference.Service
       const scope = yield* Scope.make()
       const path = AbsolutePath.make("/docs")
-      const source = new Reference.LocalSource({
+      const source = Reference.LocalSource.make({
         type: "local",
         path,
         description: "Use for API documentation",
@@ -44,7 +44,7 @@ describe("Reference", () => {
     Effect.gen(function* () {
       const references = yield* Reference.Service
       const repository = Repository.parseRemote("owner/repo")
-      const source = new Reference.GitSource({ type: "git", repository: "owner/repo", branch: "main" })
+      const source = Reference.GitSource.make({ type: "git", repository: "owner/repo", branch: "main" })
       yield* references.transform((editor) => editor.add("sdk", source))
 
       expect(yield* references.list()).toEqual([
@@ -67,7 +67,7 @@ describe("Reference", () => {
     Effect.gen(function* () {
       const references = yield* Reference.Service
       const repository = Repository.parseRemote("owner/repo")
-      const source = new Reference.GitSource({
+      const source = Reference.GitSource.make({
         type: "git",
         repository: "owner/repo",
         description: "Use for SDK implementation details",

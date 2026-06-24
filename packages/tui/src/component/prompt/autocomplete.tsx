@@ -261,7 +261,7 @@ export function Autocomplete(props: {
       filename,
       part: {
         type: "file" as const,
-        mime: item.mime,
+        mime: item.type === "directory" ? "application/x-directory" : "text/plain",
         filename,
         url: urlObj.href,
         source: {
@@ -305,11 +305,7 @@ export function Autocomplete(props: {
       startLine: input.lineStart,
       endLine: input.lineEnd > input.lineStart ? input.lineEnd : undefined,
     }
-    const { filename, part } = createFilePart(
-      { path: item, type: "file", mime: "text/plain" },
-      input.filePath,
-      lineRange,
-    )
+    const { filename, part } = createFilePart({ path: item, type: "file" }, input.filePath, lineRange)
     const index = store.visible === "@" ? store.index : props.input().cursorOffset
 
     setStore("visible", false)

@@ -8,6 +8,10 @@ import { Persist, persisted } from "@/utils/persist"
 import { useServerSDK } from "./server-sdk"
 import type { ServerScope } from "@/utils/server-scope"
 import { useSDK } from "./sdk"
+import { useTabs, type Tab } from "./tabs"
+import { useServer } from "./server"
+import { requireServerKey } from "@/utils/session-route"
+import { useSettings } from "./settings"
 
 interface PartBase {
   content: string
@@ -258,14 +262,23 @@ export function createPromptState() {
   }
 }
 
+export const createTabPromptState = (
+  tabs: ReturnType<typeof useTabs>,
+  tab: Tab,
+  ...args: Parameters<typeof createPromptSession>
+) => tabs.state(tab, "prompt", () => createPromptSession(...args))
+
 export const { use: usePrompt, provider: PromptProvider } = createSimpleContext({
   name: "Prompt",
   gate: false,
   init: () => {
-    const params = useParams()
+    const params = useParams<{ serverKey?: string; id?: string }>()
     const sdk = useSDK()
     const [search] = useSearchParams<{ draftId?: string }>()
     const serverSDK = useServerSDK()
+    const server = useServer()
+    const tabs = useTabs()
+    const settings = useSettings()
     const cache = new Map<string, PromptCacheEntry>()
 
     const disposeAll = () => {
@@ -288,7 +301,25 @@ export const { use: usePrompt, provider: PromptProvider } = createSimpleContext(
     }
 
     const owner = getOwner()
+    const tab = createMemo<Tab | undefined>(() => {
+      if (!settings.general.newLayoutDesigns()) return
+      if (search.draftId) {
+        return tabs.store.find((item) => item.type === "draft" && item.draftID === search.draftId)
+      }
+      if (!params.id) return
+      const serverKey = params.serverKey ? requireServerKey(params.serverKey) : server.key
+      return (
+        tabs.store.find(
+          (item) => item.type === "session" && item.server === serverKey && item.sessionId === params.id,
+        ) ?? { type: "session", server: serverKey, sessionId: params.id }
+      )
+    })
     const load = (scope: Scope) => {
+      const current = tab()
+      if (current) {
+        return createTabPromptState(tabs, current, serverSDK().scope, scope)
+      }
+
       const key = scopeKey(scope)
       const existing = cache.get(key)
       if (existing) {

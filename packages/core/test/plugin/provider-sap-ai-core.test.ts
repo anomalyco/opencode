@@ -47,7 +47,7 @@ function withEnv<A, E, R>(vars: Record<string, string | undefined>, effect: () =
 }
 
 function model(providerID: string) {
-  return new ModelV2.Info({
+  return ModelV2.Info.make({
     ...ModelV2.Info.empty(ProviderV2.ID.make(providerID), ModelV2.ID.make("sap-model")),
     api: { id: ModelV2.ID.make("sap-model"), type: "aisdk", package: fixtureProvider },
   })
