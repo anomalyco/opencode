@@ -162,6 +162,7 @@ interface State {
 export interface ServerInstructions {
   name: string
   instructions: string
+  tools: string[]
 }
 
 export interface Interface {
@@ -614,6 +615,7 @@ export const layer = Layer.effect(
         .map(([name, item]) => ({
           name,
           instructions: item,
+          tools: (s.defs[name] ?? []).map((tool) => McpCatalog.toolName(name, tool.name)),
         }))
     })
 

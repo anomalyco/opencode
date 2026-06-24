@@ -52,6 +52,12 @@ const it = testEffect(
             {
               name: "guide-server",
               instructions: "Use lookup before mutate.",
+              tools: [],
+            },
+            {
+              name: "tool-server",
+              instructions: "Prefer search before update.",
+              tools: ["tool-server_search", "tool-server_update"],
             },
           ]),
       }),
@@ -99,7 +105,30 @@ describe("session.system", () => {
   it.effect("MCP output includes connected server instructions", () =>
     Effect.gen(function* () {
       const prompt = yield* SystemPrompt.Service
-      const output = yield* prompt.mcp()
+      const output = yield* prompt.mcp(build)
+
+      expect(output).toBe(
+        [
+          "<mcp_instructions>",
+          '  <server name="guide-server">',
+          "    Use lookup before mutate.",
+          "  </server>",
+          '  <server name="tool-server">',
+          "    Prefer search before update.",
+          "  </server>",
+          "</mcp_instructions>",
+        ].join("\n"),
+      )
+    }),
+  )
+
+  it.effect("MCP output omits servers when all advertised tools are denied", () =>
+    Effect.gen(function* () {
+      const prompt = yield* SystemPrompt.Service
+      const output = yield* prompt.mcp({
+        ...build,
+        permission: Permission.fromConfig({ "tool-server_*": "deny" }),
+      })
 
       expect(output).toBe(
         [

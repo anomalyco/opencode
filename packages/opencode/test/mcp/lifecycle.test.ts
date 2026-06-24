@@ -369,6 +369,7 @@ it.instance(
         expect(yield* mcp.instructions()).toContainEqual({
           name: "guide-server",
           instructions: "Use lookup before mutate.",
+          tools: ["guide-server_test_tool"],
         })
       }),
     ),

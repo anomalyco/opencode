@@ -1360,7 +1360,7 @@ export const layer = Layer.effect(
               sys.skills(agent),
               sys.environment(model),
               instruction.system().pipe(Effect.orDie),
-              sys.mcp(),
+              sys.mcp(agent),
               MessageV2.toModelMessagesEffect(msgs, model),
             ])
             const system = [

@@ -266,6 +266,7 @@ const withMcpInstructions = testEffect(
       {
         name: "guide-server",
         instructions: "Use lookup before mutate.",
+        tools: ["guide-server_lookup"],
       },
     ],
   }),

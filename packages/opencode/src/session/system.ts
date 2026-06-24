@@ -41,7 +41,7 @@ export function provider(model: Provider.Model) {
 export interface Interface {
   readonly environment: (model: Provider.Model) => Effect.Effect<string[]>
   readonly skills: (agent: Agent.Info) => Effect.Effect<string | undefined>
-  readonly mcp: () => Effect.Effect<string | undefined>
+  readonly mcp: (agent: Agent.Info) => Effect.Effect<string | undefined>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SystemPrompt") {}
@@ -106,8 +106,10 @@ export const layer = Layer.effect(
         ].join("\n")
       }),
 
-      mcp: Effect.fn("SystemPrompt.mcp")(function* () {
-        const instructions = yield* mcp.instructions()
+      mcp: Effect.fn("SystemPrompt.mcp")(function* (agent: Agent.Info) {
+        const instructions = (yield* mcp.instructions()).filter(
+          (item) => item.tools.length === 0 || Permission.disabled(item.tools, agent.permission).size < item.tools.length,
+        )
         if (instructions.length === 0) return
 
         return [
