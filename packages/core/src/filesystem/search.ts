@@ -9,6 +9,7 @@ import { FSUtil } from "../fs-util"
 import { Location } from "../location"
 import { Ripgrep } from "../ripgrep"
 import { RelativePath } from "../schema"
+import { Flag } from "../flag/flag"
 
 export interface Interface {
   readonly find: (input: FileSystem.FindInput) => Effect.Effect<FileSystem.Entry[]>
@@ -58,12 +59,11 @@ export const ripgrepLayer = Layer.effect(
             })
             .pipe(
               Effect.map((result) =>
-                result.map(
-                  (entry) =>
-                    new FileSystem.Entry({
-                      ...entry,
-                      path: RelativePath.make(path.relative(location.directory, path.resolve(cwd, entry.path))),
-                    }),
+                result.map((entry) =>
+                  FileSystem.Entry.make({
+                    ...entry,
+                    path: RelativePath.make(path.relative(location.directory, path.resolve(cwd, entry.path))),
+                  }),
                 ),
               ),
               Effect.orDie,
@@ -84,15 +84,14 @@ export const ripgrepLayer = Layer.effect(
             })
             .pipe(
               Effect.map((result) =>
-                result.map(
-                  (match) =>
-                    new FileSystem.Match({
-                      ...match,
-                      entry: new FileSystem.Entry({
-                        ...match.entry,
-                        path: RelativePath.make(path.relative(location.directory, path.resolve(cwd, match.entry.path))),
-                      }),
+                result.map((match) =>
+                  FileSystem.Match.make({
+                    ...match,
+                    entry: FileSystem.Entry.make({
+                      ...match.entry,
+                      path: RelativePath.make(path.relative(location.directory, path.resolve(cwd, match.entry.path))),
                     }),
+                  }),
                 ),
               ),
               Effect.orDie,
@@ -109,12 +108,9 @@ export const ripgrepLayer = Layer.effect(
           return fuzzysort.go(input.query, items, { limit: input.limit ?? 50 }).map((item) => {
             const relative = item.target
             const type = relative.endsWith(path.sep) ? ("directory" as const) : ("file" as const)
-            const clean = type === "directory" ? relative.slice(0, -path.sep.length) : relative
-            const absolute = path.resolve(location.directory, clean)
-            return new FileSystem.Entry({
+            return FileSystem.Entry.make({
               path: RelativePath.make(relative),
               type,
-              mime: type === "directory" ? "application/x-directory" : FSUtil.mimeType(absolute),
             })
           })
         }),
@@ -138,11 +134,6 @@ export const fffLayer = Layer.effect(
     }).pipe(Effect.orDie)
     if (!result.ok) return yield* Effect.die(result.error)
     yield* Effect.addFinalizer(() => Effect.sync(() => result.value.destroy()).pipe(Effect.ignore))
-    const scanned = yield* Effect.tryPromise({
-      try: () => result.value.waitForScan(5_000),
-      catch: (cause) => cause,
-    }).pipe(Effect.orDie)
-    if (!scanned.ok || !scanned.value) return yield* Effect.die(scanned.ok ? "fff scan timed out" : scanned.error)
     return Service.of({
       glob: (input) =>
         Effect.sync(() => {
@@ -152,14 +143,12 @@ export const fffLayer = Layer.effect(
             pageSize: input.limit,
           })
           if (!found.ok) throw found.error
-          return found.value.items.map((item) => {
-            const absolute = path.resolve(location.directory, item.relativePath)
-            return new FileSystem.Entry({
+          return found.value.items.map((item) =>
+            FileSystem.Entry.make({
               path: RelativePath.make(item.relativePath.replaceAll("\\", "/")),
               type: "file",
-              mime: FSUtil.mimeType(absolute),
-            })
-          })
+            }),
+          )
         }),
       grep: (input) =>
         Effect.sync(() => {
@@ -173,11 +162,10 @@ export const fffLayer = Layer.effect(
           if (!found.ok) throw found.error
           return found.value.items.map((match) => {
             const bytes = Buffer.from(match.lineContent)
-            return new FileSystem.Match({
-              entry: new FileSystem.Entry({
+            return FileSystem.Match.make({
+              entry: FileSystem.Entry.make({
                 path: RelativePath.make(match.relativePath.replaceAll("\\", "/")),
                 type: "file",
-                mime: FSUtil.mimeType(match.relativePath),
               }),
               line: match.lineNumber,
               offset: match.byteOffset,
@@ -224,11 +212,9 @@ export const fffLayer = Layer.effect(
             .sort((a, b) => b.score - a.score || a.path.length - b.path.length)
             .map((item) => {
               const relative = item.path.replaceAll("\\", "/").replace(/\/$/, "")
-              const absolute = path.resolve(location.directory, relative)
-              return new FileSystem.Entry({
+              return FileSystem.Entry.make({
                 path: RelativePath.make(relative + (item.type === "directory" ? path.sep : "")),
                 type: item.type,
-                mime: item.type === "directory" ? "application/x-directory" : FSUtil.mimeType(absolute),
               })
             })
         }),
@@ -236,4 +222,6 @@ export const fffLayer = Layer.effect(
   }),
 )
 
-export const defaultLayer = Layer.unwrap(Effect.sync(() => (Fff.available() ? fffLayer : ripgrepLayer)))
+export const locationLayer = Layer.unwrap(
+  Effect.sync(() => (Flag.OPENCODE_DISABLE_FFF || !Fff.available() ? ripgrepLayer : fffLayer)),
+)

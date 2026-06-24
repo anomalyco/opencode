@@ -1,3 +1,4 @@
+import type { Argv } from "yargs"
 import { Auth } from "../../auth"
 import { cmd } from "./cmd"
 import { CliError, effectCmd, fail } from "../effect-cmd"
@@ -298,7 +299,9 @@ export const ProvidersListCommand = effectCmd({
 export const ProvidersLoginCommand = effectCmd({
   command: "login [url]",
   describe: "log in to a provider",
-  builder: (yargs) =>
+  // URL login skips instance bootstrap, which would load remote config with the stale token and crash before re-auth.
+  instance: (args) => !args.url,
+  builder: (yargs: Argv) =>
     yargs
       .positional("url", {
         describe: "opencode auth provider",
@@ -472,25 +475,6 @@ export const ProvidersLoginCommand = effectCmd({
       yield* Prompt.log.info(
         "Cloudflare AI Gateway can be configured with CLOUDFLARE_GATEWAY_ID, CLOUDFLARE_ACCOUNT_ID, and CLOUDFLARE_API_TOKEN environment variables. Read more: https://opencode.ai/docs/providers/#cloudflare-ai-gateway",
       )
-    }
-
-    if (provider === "snowflake-cortex") {
-      const account = yield* promptValue(
-        yield* Prompt.text({
-          message: "Snowflake Account Identifier",
-          placeholder: "xy12345.us-east-1",
-          validate: (x) => (x && x.length > 0 ? undefined : "Required"),
-        }),
-      )
-      const pat = yield* promptValue(
-        yield* Prompt.password({
-          message: "Programmatic Access Token (PAT)",
-          validate: (x) => (x && x.length > 0 ? undefined : "Required"),
-        }),
-      )
-      yield* Effect.orDie(authSvc.set(provider, { type: "api", key: pat, metadata: { account } }))
-      yield* Prompt.outro("Done")
-      return
     }
 
     const key = yield* Prompt.password({

@@ -1,15 +1,14 @@
 export * as FileSystem from "./filesystem"
 
 import path from "path"
-import { pathToFileURL } from "url"
-import { Context, Effect, Layer, Option, Schema } from "effect"
+import { Context, Effect, Layer, Schema } from "effect"
 import { EventV2 } from "./event"
 import { FSUtil } from "./fs-util"
 import { Location } from "./location"
 import { PositiveInt, RelativePath } from "./schema"
 import { FileSystemSearch } from "./filesystem/search"
-import { Entry, Match } from "./filesystem/schema"
-export { Entry, Match, Submatch } from "./filesystem/schema"
+import { Entry, Match } from "@opencode-ai/schema/filesystem"
+export { Entry, Match, Submatch } from "@opencode-ai/schema/filesystem"
 
 export const ReadInput = Schema.Struct({
   path: RelativePath,
@@ -59,7 +58,7 @@ export const Event = {
 }
 
 export interface Interface {
-  readonly read: (input: ReadInput) => Effect.Effect<Content>
+  readonly read: (input: ReadInput) => Effect.Effect<{ readonly content: Uint8Array; readonly mime: string }>
   readonly list: (input?: ListInput) => Effect.Effect<Entry[]>
   readonly find: (input: FindInput) => Effect.Effect<Entry[]>
   readonly glob: (input: GlobInput) => Effect.Effect<readonly Entry[]>
@@ -91,27 +90,9 @@ const baseLayer = Layer.effect(
         const target = yield* resolve(input.path)
         const info = yield* fs.stat(target.real).pipe(Effect.orDie)
         if (info.type !== "File") return yield* Effect.die(new Error("Path is not a file"))
-        const bytes = yield* fs.readFile(target.real).pipe(Effect.orDie)
-        const mime = FSUtil.mimeType(target.real)
-        if (!bytes.includes(0)) {
-          const content = yield* Effect.sync(() => new TextDecoder("utf-8", { fatal: true }).decode(bytes)).pipe(
-            Effect.option,
-          )
-          if (Option.isSome(content))
-            return {
-              uri: pathToFileURL(target.real).href,
-              name: path.basename(target.real),
-              content: content.value,
-              encoding: "utf8" as const,
-              mime,
-            }
-        }
         return {
-          uri: pathToFileURL(target.real).href,
-          name: path.basename(target.real),
-          content: Buffer.from(bytes).toString("base64"),
-          encoding: "base64" as const,
-          mime,
+          content: yield* fs.readFile(target.real).pipe(Effect.orDie),
+          mime: FSUtil.mimeType(target.real),
         }
       }),
       list: Effect.fn("FileSystem.list")(function* (input = {}) {
@@ -127,10 +108,9 @@ const baseLayer = Layer.effect(
                 const absolute = path.join(target.absolute, item.name)
                 const relative = path.relative(target.directory, absolute)
                 return [
-                  new Entry({
+                  Entry.make({
                     path: RelativePath.make(relative + (item.type === "directory" ? path.sep : "")),
                     type: item.type,
-                    mime: item.type === "directory" ? "application/x-directory" : FSUtil.mimeType(absolute),
                   }),
                 ]
               })
@@ -142,6 +122,6 @@ const baseLayer = Layer.effect(
   }),
 )
 
-export const layer = baseLayer.pipe(Layer.provide(FileSystemSearch.defaultLayer), Layer.provide(FSUtil.defaultLayer))
+export const layer = baseLayer.pipe(Layer.provide(FileSystemSearch.locationLayer), Layer.provide(FSUtil.defaultLayer))
 
 export const locationLayer = layer

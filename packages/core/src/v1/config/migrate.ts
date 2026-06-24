@@ -139,7 +139,14 @@ function mcp(info: typeof ConfigV1.Info.Type) {
 function migrateMcp(info: ConfigMCPV1.Info) {
   const disabled = info.enabled === undefined ? undefined : !info.enabled
   if (info.type === "local")
-    return { type: info.type, command: info.command, environment: info.environment, disabled, timeout: info.timeout }
+    return {
+      type: info.type,
+      command: info.command,
+      cwd: info.cwd,
+      environment: info.environment,
+      disabled,
+      timeout: info.timeout,
+    }
   return {
     type: info.type,
     url: info.url,

@@ -10,6 +10,7 @@ import {
   SessionNotFoundError,
   UnknownError,
 } from "../errors"
+import { AbsolutePath } from "@opencode-ai/core/schema"
 
 const DefaultSessionsLimit = 50
 
@@ -59,6 +60,68 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                 : undefined,
             },
           }
+        }),
+      )
+      .handle(
+        "session.create",
+        Effect.fn(function* (ctx) {
+          return {
+            data: yield* session.create({
+              id: ctx.payload.id,
+              agent: ctx.payload.agent,
+              model: ctx.payload.model,
+              location: ctx.payload.location ?? { directory: AbsolutePath.make(process.cwd()) },
+            }),
+          }
+        }),
+      )
+      .handle(
+        "session.get",
+        Effect.fn(function* (ctx) {
+          return {
+            data: yield* session.get(ctx.params.sessionID).pipe(
+              Effect.catchTag(
+                "Session.NotFoundError",
+                (error) =>
+                  new SessionNotFoundError({
+                    sessionID: error.sessionID,
+                    message: `Session not found: ${error.sessionID}`,
+                  }),
+              ),
+            ),
+          }
+        }),
+      )
+      .handle(
+        "session.switchAgent",
+        Effect.fn(function* (ctx) {
+          yield* session.switchAgent({ sessionID: ctx.params.sessionID, agent: ctx.payload.agent }).pipe(
+            Effect.catchTag("Session.NotFoundError", (error) =>
+              Effect.fail(
+                new SessionNotFoundError({
+                  sessionID: error.sessionID,
+                  message: `Session not found: ${error.sessionID}`,
+                }),
+              ),
+            ),
+          )
+          return HttpApiSchema.NoContent.make()
+        }),
+      )
+      .handle(
+        "session.switchModel",
+        Effect.fn(function* (ctx) {
+          yield* session.switchModel({ sessionID: ctx.params.sessionID, model: ctx.payload.model }).pipe(
+            Effect.catchTag("Session.NotFoundError", (error) =>
+              Effect.fail(
+                new SessionNotFoundError({
+                  sessionID: error.sessionID,
+                  message: `Session not found: ${error.sessionID}`,
+                }),
+              ),
+            ),
+          )
+          return HttpApiSchema.NoContent.make()
         }),
       )
       .handle(

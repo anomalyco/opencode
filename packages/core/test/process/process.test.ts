@@ -61,6 +61,7 @@ describe("AppProcess", () => {
           if (reason && reason._tag === "Fail") {
             expect(reason.error).toBeInstanceOf(AppProcess.AppProcessError)
             expect((reason.error as AppProcess.AppProcessError).exitCode).toBe(1)
+            expect((reason.error as AppProcess.AppProcessError).message).toContain("Command failed (exit 1)")
           } else {
             throw new Error("expected fail reason")
           }
@@ -144,7 +145,7 @@ describe("AppProcess", () => {
             const script = `const fs=require('fs');fs.writeFileSync(${JSON.stringify(ready)},String(process.pid));process.on('SIGTERM',()=>{fs.writeFileSync(${JSON.stringify(settled)},'settled');process.exit(0)});setInterval(()=>{},60000)`
             return Effect.gen(function* () {
               const svc = yield* AppProcess.Service
-              const exit = yield* Effect.exit(svc.run(cmd("-e", script), { timeout: "1 second" }))
+              const exit = yield* Effect.exit(svc.run(cmd("-e", script), { timeout: "250 millis" }))
               expect(Exit.isFailure(exit)).toBe(true)
               expect(yield* waitForFile(ready)).toMatch(/^\d+$/)
               expect(yield* waitForFile(settled)).toBe("settled")

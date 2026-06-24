@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { Cause, Context, Effect, Exit, Layer } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 
-const { buildLayer: build, group, replace } = LayerNode
+const { buildLayer: build, group, replace, replaceWithNode } = LayerNode
 const node = LayerNode.make
 
 class Value extends Context.Service<Value, { readonly value: string }>()("test/Value") {}
@@ -30,7 +30,7 @@ describe("app graph", () => {
   })
 
   test("applies overrides before dependency materialization", async () => {
-    const replacement = node(Layer.succeed(Value, Value.of({ value: "simulation" })), [])
+    const replacement = Layer.succeed(Value, Value.of({ value: "simulation" }))
     const graph = build(greeting, { replacements: [replace(value, replacement)] })
     const result = Effect.gen(function* () {
       return (yield* Greeting).text
@@ -102,7 +102,7 @@ describe("app graph", () => {
       ),
       [value],
     )
-    const replacement = node(Layer.succeed(Value, Value.of({ value: "simulation" })), [])
+    const replacement = Layer.succeed(Value, Value.of({ value: "simulation" }))
     const graph = build(group([left, right]), { replacements: [replace(value, replacement)] })
 
     const result = Effect.gen(function* () {
@@ -153,7 +153,7 @@ describe("app graph", () => {
     )
     const result = Effect.gen(function* () {
       return (yield* Greeting).text
-    }).pipe(Effect.provide(build(greeting, { replacements: [replace(value, replacement)] })))
+    }).pipe(Effect.provide(build(greeting, { replacements: [replaceWithNode(value, replacement)] })))
 
     expect(await Effect.runPromise(result)).toBe("hello replacement")
   })
@@ -161,15 +161,12 @@ describe("app graph", () => {
   test("does not acquire unreachable replacements", async () => {
     let acquisitions = 0
     const unreachable = node(Layer.succeed(Value, Value.of({ value: "unreachable" })), [])
-    const replacement = node(
-      Layer.effect(
-        Value,
-        Effect.sync(() => {
-          acquisitions++
-          return Value.of({ value: "replacement" })
-        }),
-      ),
-      [],
+    const replacement = Layer.effect(
+      Value,
+      Effect.sync(() => {
+        acquisitions++
+        return Value.of({ value: "replacement" })
+      }),
     )
 
     await Effect.runPromise(
@@ -200,7 +197,7 @@ describe("app graph", () => {
     const consumer = node(greetingImplementation, [value])
     ;(replacement.dependencies as LayerNode.Node<unknown, unknown>[]).push(consumer)
 
-    expect(() => build(consumer, { replacements: [replace(value, replacement)] })).toThrow(
+    expect(() => build(consumer, { replacements: [replaceWithNode(value, replacement)] })).toThrow(
       "Cycle detected in app graph: layer#1 -> layer#2 -> layer#1",
     )
   })
