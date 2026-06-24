@@ -241,6 +241,74 @@ describe("Project.fromDirectory", () => {
       ).toBe(remoteID)
     }),
   )
+
+  it.live("reuses existing project via sandbox match when remote URL changes", () =>
+    Effect.gen(function* () {
+      const { db } = yield* Database.Service
+      const project = yield* Project.Service
+      const tmp = yield* tmpdirScoped({ git: true })
+      yield* Effect.promise(() => $`git remote add origin git@github.com:initial/owner.git`.cwd(tmp).quiet())
+
+      const initial = yield* project.fromDirectory(tmp)
+      const initialID = initial.project.id
+      expect(initialID).toBe(remoteProjectID("github.com/initial/owner"))
+
+      const sessionID = crypto.randomUUID() as SessionID
+      const workspaceID = WorkspaceV2.ID.ascending()
+      yield* db
+        .insert(SessionTable)
+        .values({
+          id: sessionID,
+          project_id: initialID,
+          slug: sessionID,
+          directory: tmp,
+          title: "sandbox-reuse",
+          version: "0.0.0-test",
+          time_created: Date.now(),
+          time_updated: Date.now(),
+        })
+        .run()
+        .pipe(Effect.orDie)
+      yield* db
+        .insert(WorkspaceTable)
+        .values({ id: workspaceID, type: "local", name: "sandbox-reuse", project_id: initialID })
+        .run()
+        .pipe(Effect.orDie)
+
+      // Register the directory as a sandbox of the initial project so the
+      // sandbox-match path in fromDirectory can fire. In normal use this
+      // happens when a worktree is opened (Phase 2 adds the linked
+      // worktree to sandboxes); we use addSandbox here to keep the test
+      // independent of `git worktree` plumbing.
+      yield* project.addSandbox(initialID, tmp)
+
+      // Simulate a remote URL change (e.g. after forking the repo). The
+      // next resolve will compute a different project ID from the new
+      // remote, so `data.id` will no longer match `initialID`.
+      yield* Effect.promise(() =>
+        $`git remote set-url origin git@github.com:renamed/owner.git`.cwd(tmp).quiet(),
+      )
+
+      const result = yield* project.fromDirectory(tmp)
+
+      // The sandbox-match path should reuse the initial project, not
+      // create a new one or migrate to a new project ID.
+      expect(result.project.id).toBe(initialID)
+      expect(result.project.sandboxes).toContain(tmp)
+      expect(
+        yield* db.select().from(ProjectTable).where(eq(ProjectTable.id, initialID)).get().pipe(Effect.orDie),
+      ).toBeDefined()
+      expect(yield* project.list()).toHaveLength(1)
+      expect(
+        (yield* db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get().pipe(Effect.orDie))
+          ?.project_id,
+      ).toBe(initialID)
+      expect(
+        (yield* db.select().from(WorkspaceTable).where(eq(WorkspaceTable.id, workspaceID)).get().pipe(Effect.orDie))
+          ?.project_id,
+      ).toBe(initialID)
+    }),
+  )
 })
 
 describe("Project.fromDirectory git failure paths", () => {

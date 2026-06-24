@@ -1,5 +1,5 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { and, eq, sql } from "drizzle-orm"
+import { and, eq, ne, sql } from "drizzle-orm"
 import { Database } from "@opencode-ai/core/database/database"
 import { ProjectDirectoryTable, ProjectTable } from "@opencode-ai/core/project/sql"
 import { ProjectDirectories } from "@opencode-ai/core/project/directories"
@@ -249,14 +249,29 @@ export const layer = Layer.effect(
       // sandboxes contain this directory, prefer the existing project. This
       // prevents duplicate projects when a git remote URL changes (causing a
       // different project ID to be computed) and the daemon restarts.
+      //
+      // `sandboxes` is a JSON-serialized text array (see
+      // `database/path.ts#absoluteArrayColumn`), so we look it up via
+      // SQLite's `json_each` for a precise, case-sensitive match against
+      // `data.directory` — the canonical git worktree root returned by
+      // `projectV2.resolve`. Matching on the raw input `directory` would be
+      // redundant: only `data.directory` is ever persisted to `sandboxes`
+      // (see Phase 2 upsert and the `addSandbox` path), so the two values
+      // only ever differ when the user opened a subdirectory of the repo,
+      // in which case `data.directory` is the right thing to look up.
       if (data.vcs) {
         const absDir = AbsolutePath.make(data.directory)
-        const allProjects = yield* db.select().from(ProjectTable).all().pipe(Effect.orDie)
-        const sandboxOwner = allProjects.find(
-          (p) =>
-            p.id !== data.id &&
-            (p.sandboxes.includes(absDir) || p.sandboxes.includes(AbsolutePath.make(directory))),
-        )
+        const sandboxOwner = yield* db
+          .select()
+          .from(ProjectTable)
+          .where(
+            and(
+              ne(ProjectTable.id, data.id),
+              sql`EXISTS (SELECT 1 FROM json_each(${ProjectTable.sandboxes}) WHERE json_each.value = ${absDir})`,
+            ),
+          )
+          .get()
+          .pipe(Effect.orDie)
         if (sandboxOwner) {
           yield* Effect.logInfo("fromDirectory sandbox match", {
             directory,
@@ -276,6 +291,16 @@ export const layer = Layer.effect(
           yield* saveProjectDirectory({ projectID: sandboxOwner.id, directory: absDir })
           const updated = { ...existing, sandboxes }
           yield* emitUpdated(updated)
+          // Phase 2 is intentionally skipped:
+          //   * `migrateProjectId` would rename the existing project from
+          //     `data.previous` to `data.id` (or delete it as a duplicate),
+          //     but the sandbox match is precisely the case where we want
+          //     to KEEP `sandboxOwner` as the canonical owner of this
+          //     directory and its sessions. Running migration would discard
+          //     the real project and strand the existing sessions.
+          //   * The regular upsert would create a second project row at
+          //     `data.id`, which is the exact duplicate this branch exists
+          //     to prevent.
           return { project: updated, sandbox: data.directory }
         }
       }
