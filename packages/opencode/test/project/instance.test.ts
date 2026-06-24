@@ -47,6 +47,18 @@ describe("InstanceStore", () => {
     }),
   )
 
+  it.live("uses the opened directory as worktree for non-git instances", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      const store = yield* InstanceStore.Service
+      const ctx = yield* store.load({ directory: dir })
+
+      expect(ctx.directory).toBe(dir)
+      expect(ctx.worktree).toBe(dir)
+      expect(ctx.project.worktree).toBe(dir)
+    }),
+  )
+
   it.live("runs bootstrap with InstanceRef provided", () =>
     Effect.gen(function* () {
       const dir = yield* tmpdirScoped({ git: true })

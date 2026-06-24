@@ -242,8 +242,9 @@ export const layer = Layer.effect(
     const fromDirectory = Effect.fn("Project.fromDirectory")(function* (directory: string) {
       yield* Effect.logInfo("fromDirectory", { directory })
 
-      const data = yield* projectV2.resolve(AbsolutePath.make(directory))
-      const worktree = data.id === ProjectV2.ID.make("global") && !data.vcs ? "/" : data.directory
+      const opened = AbsolutePath.make(FSUtil.resolve(directory))
+      const data = yield* projectV2.resolve(opened)
+      const worktree = data.vcs ? data.directory : opened
 
       // Phase 2: upsert
       const projectID = ProjectV2.ID.make(data.id)

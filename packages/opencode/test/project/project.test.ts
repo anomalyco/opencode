@@ -152,6 +152,8 @@ describe("Project.fromDirectory", () => {
       const tmp = yield* tmpdirScoped()
       const result = yield* project.fromDirectory(tmp)
       expect(result.project.id).toBe(ProjectV2.ID.global)
+      expect(result.project.worktree).toBe(tmp)
+      expect(result.sandbox).toBe(tmp)
     }),
   )
 

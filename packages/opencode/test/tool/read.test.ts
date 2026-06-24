@@ -215,6 +215,19 @@ describe("tool.read external_directory permission", () => {
     }),
   )
 
+  it.live("uses opened directory-relative read permission in non-git projects", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      yield* put(path.join(dir, "src", "secret.ts"), "shh")
+
+      const { items, next } = asks()
+      yield* exec(dir, { filePath: path.join(dir, "src", "secret.ts") }, next)
+      const read = items.find((item) => item.permission === "read")
+      expect(read).toBeDefined()
+      expect(read!.patterns).toEqual([path.join("src", "secret.ts")])
+    }),
+  )
+
   it.live("asks for directory-scoped external_directory permission when reading external directory", () =>
     Effect.gen(function* () {
       const outer = yield* tmpdirScoped()
