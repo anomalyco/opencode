@@ -41,7 +41,37 @@ const cloneGitHub = (
       ),
     )
     if (result.code === 0) return { dir: dest, sourceUrl: `https://github.com/${repo}` }
-    return yield* Effect.die(new Error(`Failed to clone ${url}`))
+    return yield* Effect.fail(new Error(`Failed to clone ${url}`))
+  }).pipe(Effect.catch(() => Effect.succeed({ dir: "", sourceUrl: "" } as FetchResult)))
+
+const cloneGitLab = (
+  pkgName: string,
+  source: string,
+  cacheRoot: string,
+): Effect.Effect<FetchResult> =>
+  Effect.gen(function* () {
+    const repo = source.replace(/^(gitlab:|gl:)/, "")
+    const dest = path.join(cacheRoot, pkgName)
+
+    const valid = yield* Effect.promise(async (): Promise<boolean> => {
+      try {
+        const entries = await import("fs/promises").then((f) => f.readdir(dest))
+        return entries.length > 0 && entries.some((e) => e !== ".git")
+      } catch {
+        return false
+      }
+    })
+    if (valid) return { dir: dest, sourceUrl: `https://gitlab.com/${repo}` }
+    yield* Effect.promise(() => import("fs/promises").then((f) => f.rm(dest, { recursive: true, force: true })))
+
+    const url = `https://gitlab.com/${repo}.git`
+    const result = yield* Effect.promise(() =>
+      import("@/util/process").then(({ Process }) =>
+        Process.run(["git", "clone", "--depth", "1", url, dest], { nothrow: true }),
+      ),
+    )
+    if (result.code === 0) return { dir: dest, sourceUrl: `https://gitlab.com/${repo}` }
+    return yield* Effect.fail(new Error(`Failed to clone ${url}`))
   }).pipe(Effect.catch(() => Effect.succeed({ dir: "", sourceUrl: "" } as FetchResult)))
 
 const downloadUrl = (
@@ -66,7 +96,7 @@ const downloadUrl = (
     const buf = yield* Effect.promise((): Promise<ArrayBuffer | null> =>
       globalThis.fetch(url).then((r) => (r.ok ? r.arrayBuffer() : null)).catch(() => null),
     )
-    if (!buf) return yield* Effect.die(new Error(`Failed to download ${url}`))
+    if (!buf) return yield* Effect.fail(new Error(`Failed to download ${url}`))
 
     const tmp = `${dest}.tmp`
     yield* Effect.promise(() => import("fs/promises").then((f) => f.writeFile(tmp, Buffer.from(buf))))
@@ -118,6 +148,9 @@ export const layer = Layer.effect(
       Effect.gen(function* () {
         if (source.startsWith("github:") || source.startsWith("gh:")) {
           return yield* cloneGitHub(pkgName, source, cacheRoot)
+        }
+        if (source.startsWith("gitlab:") || source.startsWith("gl:")) {
+          return yield* cloneGitLab(pkgName, source, cacheRoot)
         }
         if (source.startsWith("http://") || source.startsWith("https://")) {
           return yield* downloadUrl(pkgName, source, cacheRoot)

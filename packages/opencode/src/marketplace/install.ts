@@ -18,7 +18,7 @@ export interface InstallResult {
 export interface Interface {
   readonly discover: (dir: string) => Effect.Effect<Assets>
   readonly install: (pkgName: string, installDir: string) => Effect.Effect<InstallResult>
-  readonly uninstall: (pkgName: string, installDir: string, assets: Assets) => Effect.Effect<void>
+  readonly uninstall: (pkgName: string, assets: Assets) => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/MarketplaceInstall") {}
@@ -90,7 +90,7 @@ export const layer = Layer.effect(
         return { assets, targetDir: installDir }
       })
 
-    const doUninstall: Interface["uninstall"] = (pkgName: string, _installDir: string, assets: Assets) =>
+    const doUninstall: Interface["uninstall"] = (pkgName: string, assets: Assets) =>
       Effect.gen(function* () {
         if (assets.skills.length > 0) {
           yield* rmDir(path.join(global.config, "skills", pkgName)).pipe(Effect.ignore)

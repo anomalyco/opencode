@@ -56,7 +56,7 @@ const MarketplaceInstallCommand = effectCmd({
     yargs
       .positional("source", {
         type: "string",
-        describe: "package source (github:user/repo, url, or local path)",
+        describe: "package source (github:user/repo, gitlab:user/repo, url, or local path)",
       })
       .option("name", {
         type: "string",
@@ -64,19 +64,15 @@ const MarketplaceInstallCommand = effectCmd({
         describe: "package name (default: auto-detected)",
       }),
   handler: Effect.fn("Cli.marketplace.install")(function* (args) {
-    const raw = String(args.source ?? "")
-    if (!raw) return yield* fail("source is required (e.g. github:user/repo, url, or path)")
-
-    const sourceStr = raw.startsWith("github:") || raw.startsWith("gh:")
-      ? raw
-      : raw.startsWith("http://") || raw.startsWith("https://")
-        ? raw
-        : raw
+    const sourceStr = String(args.source ?? "")
+    if (!sourceStr) return yield* fail("source is required (e.g. github:user/repo, url, or path)")
 
     const pkgName = String(args.name ?? sourceStr.split("/").pop() ?? sourceStr.split(":").pop() ?? "package")
 
     const svc = yield* Marketplace.Service
-    yield* svc.install(pkgName, sourceStr)
+    yield* svc.install(pkgName, sourceStr).pipe(
+      Effect.catch((e) => fail(e.message)),
+    )
     process.stdout.write(`Installed "${pkgName}" from ${sourceStr}\n`)
   }),
 })
@@ -151,6 +147,8 @@ function sourceLabel(source: { type: string; repo?: string; url?: string; path?:
   switch (source.type) {
     case "github":
       return `github:${source.repo}`
+    case "gitlab":
+      return `gitlab:${source.repo}`
     case "url":
       return source.url ?? "url"
     case "local":

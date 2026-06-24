@@ -10,7 +10,7 @@ import type { PackageEntry } from "./types"
 
 export interface Interface {
   readonly search: (query: string) => Effect.Effect<readonly PackageEntry[]>
-  readonly install: (pkgName: string, source: string) => Effect.Effect<void>
+  readonly install: (pkgName: string, source: string) => Effect.Effect<void, Error>
   readonly uninstall: (name: string) => Effect.Effect<void>
   readonly list: () => Effect.Effect<readonly InstalledPkg[]>
   readonly info: (name: string) => Effect.Effect<InstalledPkg | undefined>
@@ -68,17 +68,24 @@ export const layer = Layer.effect(
     const installPkg: Interface["install"] = (pkgName: string, sourceStr: string) =>
       Effect.gen(function* () {
         const fetched = yield* sourceSvc.fetch(pkgName, sourceStr)
-        yield* installSvc.install(pkgName, fetched.dir)
+        if (!fetched.dir || !fetched.sourceUrl) {
+          return yield* Effect.fail(new Error(`Failed to fetch "${pkgName}" from "${sourceStr}"`))
+        }
+        const result = yield* installSvc.install(pkgName, fetched.dir)
 
         const existing = yield* readStore()
         existing[pkgName] = new InstalledPkg({
           name: pkgName,
           source: sourceStr,
           sourceUrl: fetched.sourceUrl,
+          assets: result.assets,
           installedAt: Date.now(),
-          installDir: fetched.dir,
         })
         yield* writeStore(existing)
+
+        yield* Effect.promise(() =>
+          import("fs/promises").then((f) => f.rm(fetched.dir, { recursive: true, force: true })),
+        ).pipe(Effect.ignore)
       })
 
     const uninstallPkg: Interface["uninstall"] = (name: string) =>
@@ -87,8 +94,8 @@ export const layer = Layer.effect(
         const entry = store[name]
         if (!entry) return
 
-        const assets = yield* installSvc.discover(entry.installDir)
-        yield* installSvc.uninstall(name, entry.installDir, assets)
+        const assets = entry.assets ?? new Install.Assets({ skills: [], agents: [], plugins: [] })
+        yield* installSvc.uninstall(name, assets)
 
         delete store[name]
         yield* writeStore(store)

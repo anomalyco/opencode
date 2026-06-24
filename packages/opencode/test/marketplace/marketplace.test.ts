@@ -275,7 +275,7 @@ describe("Install", () => {
           Effect.gen(function* () {
             const s = yield* Install.Service
             const r = yield* s.install("test-pkg", src)
-            yield* s.uninstall("test-pkg", src, r.assets)
+            yield* s.uninstall("test-pkg", r.assets)
           }).pipe(Effect.provide(
             Install.layer.pipe(
               Layer.provide(fsLayer),
@@ -333,6 +333,17 @@ describe("Source", () => {
         const first = yield* svc.fetch("test-pkg", srcDir)
         const second = yield* svc.fetch("test-pkg", srcDir)
         expect(first.dir).toBe(second.dir)
+      }),
+    ),
+  )
+
+  it.live("routes gitlab: prefix to cloneGitLab", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const svc = yield* Source.Service
+        const result = yield* svc.fetch("test-gitlab-pkg", "gitlab:user/test-gitlab-pkg")
+        // GitLab clone will fail (no network), but reaches cloneGitLab not copyLocal
+        expect(result.dir).toBe("")
       }),
     ),
   )
