@@ -101,10 +101,6 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
   const counterZoom = () => (windows() && titlebarZoom() < 1 ? 1 / titlebarZoom() : 1)
   const minHeight = () => {
     const height = useV2Titlebar() ? v2TitlebarHeight : legacyTitlebarHeight
-    if (useV2Titlebar() && mobile()) {
-      const inset = bottom() ? "env(safe-area-inset-bottom, 0px)" : "env(safe-area-inset-top, 0px)"
-      return `calc(${height}px + ${inset})`
-    }
     if (mac()) return `${height / zoom()}px`
     if (windows()) return `${height / Math.min(titlebarZoom(), 1)}px`
     return undefined
@@ -246,8 +242,6 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
       }}
       style={{
         "min-height": minHeight(),
-        "padding-top": useV2Titlebar() && mobile() && !bottom() ? "env(safe-area-inset-top, 0px)" : undefined,
-        "padding-bottom": bottom() ? "env(safe-area-inset-bottom, 0px)" : undefined,
         "padding-left": mac() && !mobile() ? `${84 / zoom()}px` : 0,
         width: electronWindows() ? `env(titlebar-area-width, calc(100vw - ${windowsControlsWidth()}))` : undefined,
         "max-width": electronWindows()
