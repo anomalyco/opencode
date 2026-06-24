@@ -21,6 +21,7 @@ const transportCalls: Array<{
 // auth flow (which calls provider.state()) or a simple UnauthorizedError.
 let simulateAuthFlow = true
 let connectSucceedsImmediately = false
+let saveTokensOnConnect = false
 let serverCapabilities: { tools?: object; resources?: object } = { tools: {} }
 let listToolsCalls = 0
 
@@ -32,6 +33,7 @@ void mock.module("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({
           state?: () => Promise<string>
           redirectToAuthorization?: (url: URL) => Promise<void>
           saveCodeVerifier?: (v: string) => Promise<void>
+          saveTokens?: (tokens: { access_token: string; token_type: string }) => Promise<void>
         }
       | undefined
     constructor(url: URL, options?: { authProvider?: unknown }) {
@@ -43,7 +45,11 @@ void mock.module("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({
       })
     }
     async start() {
-      if (connectSucceedsImmediately) return
+      if (connectSucceedsImmediately) {
+        if (saveTokensOnConnect)
+          await this.authProvider?.saveTokens?.({ access_token: "new-token", token_type: "bearer" })
+        return
+      }
 
       // Simulate what the real SDK transport does on 401:
       // It calls auth() which eventually calls provider.state(), then
@@ -123,6 +129,7 @@ beforeEach(() => {
   transportCalls.length = 0
   simulateAuthFlow = true
   connectSucceedsImmediately = false
+  saveTokensOnConnect = false
   serverCapabilities = { tools: {} }
   listToolsCalls = 0
 })
@@ -228,7 +235,7 @@ mcpTest.instance("state() returns existing state when one is saved", () =>
 )
 
 mcpTest.instance(
-  "authenticate() stores a connected client when auth completes without redirect",
+  "authenticate() stores a connected client when stored credentials connect without redirect",
   () =>
     MCP.Service.use((mcp) =>
       Effect.gen(function* () {
@@ -241,6 +248,7 @@ mcpTest.instance(
 
         simulateAuthFlow = false
         connectSucceedsImmediately = true
+        saveTokensOnConnect = true
 
         const result = yield* mcp.authenticate("test-oauth-connect")
         expect(result.status).toBe("connected")
@@ -266,6 +274,7 @@ mcpTest.instance(
 
         simulateAuthFlow = false
         connectSucceedsImmediately = true
+        saveTokensOnConnect = true
         serverCapabilities = { resources: {} }
 
         const result = yield* mcp.authenticate("test-oauth-resources")
