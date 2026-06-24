@@ -54,7 +54,7 @@ export function convertTool(mcpTool: MCPToolDef, client: Client, timeout?: numbe
       const result = await client.callTool(
         {
           name: mcpTool.name,
-          arguments: (args || {}) as Record<string, unknown>,
+          arguments: cleanToolArguments(args, inputSchema),
         },
         CallToolResultSchema,
         {
@@ -79,6 +79,26 @@ export function convertTool(mcpTool: MCPToolDef, client: Client, timeout?: numbe
       }
     },
   })
+}
+
+// Some providers (notably OpenAI/GPT) fill omitted optional string parameters
+// with empty strings. MCP servers treat "" as an explicit value rather than
+// "unset", which breaks tools whose optionals carry distinct semantics
+// (e.g. Slack search cursor/after/before returning no results). Drop the
+// empty-string values for optional declared properties so the field is omitted
+// from the tools/call request, matching the Anthropic path. See #33341.
+export function cleanToolArguments(args: unknown, schema: JSONSchema7): Record<string, unknown> {
+  if (!args || typeof args !== "object" || Array.isArray(args)) return {}
+  const required = new Set(
+    Array.isArray(schema.required) ? schema.required.filter((item): item is string => typeof item === "string") : [],
+  )
+  const properties = schema.properties ?? {}
+  const cleaned: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(args as Record<string, unknown>)) {
+    if (value === "" && !required.has(key) && key in properties) continue
+    cleaned[key] = value
+  }
+  return cleaned
 }
 
 export function fetch<T extends { name: string }>(
