@@ -23265,9 +23265,6 @@
           },
           {
             "$ref": "#/components/schemas/V2EventGlobalDisposed"
-          },
-          {
-            "$ref": "#/components/schemas/V2EventServerConnected"
           }
         ]
       },
