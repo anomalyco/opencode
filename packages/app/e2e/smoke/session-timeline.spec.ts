@@ -718,7 +718,6 @@ async function navigateToSession(page: Page, directory: string, sessionId: strin
 }
 
 async function switchTitlebarSession(page: Page, sessionID: string, title: string) {
-  console.log(process.env)
   const href = `/server/${base64Encode(fixture.serverKey)}/session/${sessionID}`
   const tab = page.locator(`[data-slot="titlebar-tabs"] a[href="${href}"]`).first()
   await expect(tab).toBeVisible()
