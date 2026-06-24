@@ -4,7 +4,6 @@ import { Event } from "@opencode-ai/schema/event"
 import { PublicEventManifest } from "@opencode-ai/core/public-event-manifest"
 import { Command } from "@/command"
 import { Workspace } from "@/control-plane/workspace"
-import { Ide } from "@/ide"
 import { Installation } from "@/installation"
 import { LSP } from "@/lsp/lsp"
 import { MCP } from "@/mcp"
@@ -12,12 +11,13 @@ import { Permission } from "@/permission"
 import { Project } from "@/project/project"
 import { Vcs } from "@/project/vcs"
 import { Question } from "@/question"
-import { ServerEvent } from "@/server/event"
+import { Event as ServerEvent } from "@/server/event"
 import { TuiEvent } from "@/server/tui-event"
 import { MessageV2 } from "@/session/message-v2"
 import { Session } from "@/session/session"
 import { SessionCompaction } from "@/session/compaction"
 import { SessionStatus } from "@/session/status"
+import { Todo } from "@/session/todo"
 import { Worktree } from "@/worktree"
 
 export const Definitions = Event.inventory(
@@ -28,6 +28,7 @@ export const Definitions = Event.inventory(
   Installation.Event.Updated,
   Installation.Event.UpdateAvailable,
   ...PublicEventManifest.FeatureDefinitions,
+  Todo.Event.Updated,
   LSP.Event.Updated,
   Permission.Event.Asked,
   Permission.Event.Replied,
@@ -51,9 +52,8 @@ export const Definitions = Event.inventory(
   Workspace.Event.Status,
   Worktree.Event.Ready,
   Worktree.Event.Failed,
-  Ide.Event.Installed,
-  ServerEvent.Event.Connected,
-  ServerEvent.Event.Disposed,
+  ServerEvent.Connected,
+  ServerEvent.Disposed,
 )
 
 export const Latest = Event.latest(Definitions)

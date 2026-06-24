@@ -1,7 +1,7 @@
 import { EventV2 } from "@opencode-ai/core/event"
 import { PublicEventManifest } from "@opencode-ai/core/public-event-manifest"
 import { Location } from "@opencode-ai/core/location"
-import type { Definition } from "@opencode-ai/schema/event"
+import type { Definition } from "@opencode-ai/core/event"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 
@@ -12,7 +12,7 @@ const fields = {
   location: Schema.optional(Location.Ref),
 }
 
-const schema = (definitions: ReadonlyArray<Definition>) =>
+const schema = <const Definitions extends ReadonlyArray<Definition>>(definitions: Definitions) =>
   Schema.Union([
     ...definitions.map((definition) =>
       Schema.Struct({
@@ -32,7 +32,7 @@ const schema = (definitions: ReadonlyArray<Definition>) =>
         ]),
   ]).annotate({ identifier: "V2Event" })
 
-export const makeEventGroup = (definitions: ReadonlyArray<Definition>) =>
+export const makeEventGroup = <const Definitions extends ReadonlyArray<Definition>>(definitions: Definitions) =>
   HttpApiGroup.make("server.event")
     .add(
       HttpApiEndpoint.get("event.subscribe", "/api/event", {
@@ -47,5 +47,19 @@ export const makeEventGroup = (definitions: ReadonlyArray<Definition>) =>
     )
     .annotateMerge(OpenApi.annotations({ title: "events", description: "Experimental event stream route." }))
 
-export const EventGroup = makeEventGroup(PublicEventManifest.Latest.values().toArray())
-export type Event = Schema.Schema.Type<ReturnType<typeof schema>>
+const EventSchema = schema(PublicEventManifest.Definitions)
+
+export const EventGroup = HttpApiGroup.make("server.event")
+  .add(
+    HttpApiEndpoint.get("event.subscribe", "/api/event", {
+      success: EventSchema,
+    }).annotateMerge(
+      OpenApi.annotations({
+        identifier: "v2.event.subscribe",
+        summary: "Subscribe to events",
+        description: "Subscribe to native event payloads for the server.",
+      }),
+    ),
+  )
+  .annotateMerge(OpenApi.annotations({ title: "events", description: "Experimental event stream route." }))
+export type Event = typeof EventSchema.Type
