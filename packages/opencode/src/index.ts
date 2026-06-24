@@ -29,8 +29,10 @@ import { DbCommand } from "./cli/cmd/db"
 import { errorMessage } from "./util/error"
 import { PluginCommand } from "./cli/cmd/plug"
 import { Heap } from "./cli/heap"
+import { installBrokenPipeHandler } from "./cli/broken-pipe"
 
 const args = hideBin(process.argv)
+installBrokenPipeHandler()
 
 function show(out: string) {
   const text = out.trimStart()

@@ -10,12 +10,19 @@ import { Heap } from "@/cli/heap"
 import { AppRuntime } from "@/effect/app-runtime"
 import { Effect } from "effect"
 import { disposeAllInstancesAndEmitGlobalDisposed } from "@/server/global-lifecycle"
+import { exitOnBrokenPipe, installBrokenPipeHandler } from "@/cli/broken-pipe"
 
 Heap.start()
 
-const onUnhandledRejection = (_error: unknown) => {}
+const uninstallBrokenPipeHandler = installBrokenPipeHandler()
 
-const onUncaughtException = (_error: Error) => {}
+const onUnhandledRejection = (error: unknown) => {
+  exitOnBrokenPipe(error)
+}
+
+const onUncaughtException = (error: Error) => {
+  exitOnBrokenPipe(error)
+}
 
 process.on("unhandledRejection", onUnhandledRejection)
 process.on("uncaughtException", onUncaughtException)
@@ -74,6 +81,7 @@ export const rpc = {
     if (server) await server.stop(true)
     process.off("unhandledRejection", onUnhandledRejection)
     process.off("uncaughtException", onUncaughtException)
+    uninstallBrokenPipeHandler()
   },
 }
 
