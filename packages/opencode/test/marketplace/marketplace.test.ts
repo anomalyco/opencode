@@ -150,19 +150,15 @@ describe("Install", () => {
       ),
     )
 
-    it.live("discovers agents, tools, and mcp servers", () =>
+    it.live("discovers agents", () =>
       Effect.scoped(
         Effect.gen(function* () {
           const dir = yield* tmpdirEffect()
           yield* Effect.promise(() => writeFile(dir, "agents/my-agent.md", "# Agent"))
-          yield* Effect.promise(() => writeFile(dir, "tools/my-tool.ts", "export {}"))
-          yield* Effect.promise(() => writeFile(dir, "mcp.json", "{}"))
 
           const svc = yield* Install.Service
           const assets = yield* svc.discover(dir)
           expect(assets.agents).toHaveLength(1)
-          expect(assets.tools).toHaveLength(1)
-          expect(assets.mcpServers).toHaveLength(1)
         }),
       ),
     )
@@ -190,10 +186,7 @@ describe("Install", () => {
           const assets = yield* svc.discover(dir)
           expect(assets.skills).toEqual([])
           expect(assets.agents).toEqual([])
-          expect(assets.tools).toEqual([])
-          expect(assets.commands).toEqual([])
           expect(assets.plugins).toEqual([])
-          expect(assets.mcpServers).toEqual([])
         }),
       ),
     )
@@ -298,6 +291,7 @@ describe("Install", () => {
         expect(exists).toBe(false)
       })
     })
+
   })
 })
 
@@ -446,8 +440,8 @@ describe("Marketplace", () => {
         }))
 
         const mockInstall = Layer.succeed(Install.Service, Install.Service.of({
-          discover: () => Effect.succeed(new Install.Assets({ skills: [], agents: [], tools: [], commands: [], plugins: [], mcpServers: [] })),
-          install: (_name, installDir) => Effect.succeed({ assets: new Install.Assets({ skills: [], agents: [], tools: [], commands: [], plugins: [], mcpServers: [] }), targetDir: installDir }),
+          discover: () => Effect.succeed(new Install.Assets({ skills: [], agents: [], plugins: [] })),
+          install: (_name, installDir) => Effect.succeed({ assets: new Install.Assets({ skills: [], agents: [], plugins: [] }), targetDir: installDir }),
           uninstall: () => Effect.void,
         }))
 
@@ -495,8 +489,8 @@ describe("Marketplace", () => {
         }))
 
         const mockInstall = Layer.succeed(Install.Service, Install.Service.of({
-          discover: () => Effect.succeed(new Install.Assets({ skills: [], agents: [], tools: [], commands: [], plugins: [], mcpServers: [] })),
-          install: (_name, installDir) => Effect.succeed({ assets: new Install.Assets({ skills: [], agents: [], tools: [], commands: [], plugins: [], mcpServers: [] }), targetDir: installDir }),
+          discover: () => Effect.succeed(new Install.Assets({ skills: [], agents: [], plugins: [] })),
+          install: (_name, installDir) => Effect.succeed({ assets: new Install.Assets({ skills: [], agents: [], plugins: [] }), targetDir: installDir }),
           uninstall: () => Effect.void,
         }))
 
@@ -546,8 +540,8 @@ describe("Marketplace", () => {
         }))
 
         const mockInstall = Layer.succeed(Install.Service, Install.Service.of({
-          discover: () => Effect.succeed(new Install.Assets({ skills: [], agents: [], tools: [], commands: [], plugins: [], mcpServers: [] })),
-          install: (_name, installDir) => Effect.succeed({ assets: new Install.Assets({ skills: [], agents: [], tools: [], commands: [], plugins: [], mcpServers: [] }), targetDir: installDir }),
+          discover: () => Effect.succeed(new Install.Assets({ skills: [], agents: [], plugins: [] })),
+          install: (_name, installDir) => Effect.succeed({ assets: new Install.Assets({ skills: [], agents: [], plugins: [] }), targetDir: installDir }),
           uninstall: () => Effect.void,
         }))
 
@@ -593,8 +587,8 @@ describe("Marketplace", () => {
         }))
 
         const mockInstall = Layer.succeed(Install.Service, Install.Service.of({
-          discover: () => Effect.succeed(new Install.Assets({ skills: [], agents: [], tools: [], commands: [], plugins: [], mcpServers: [] })),
-          install: (_name, installDir) => Effect.succeed({ assets: new Install.Assets({ skills: [], agents: [], tools: [], commands: [], plugins: [], mcpServers: [] }), targetDir: installDir }),
+          discover: () => Effect.succeed(new Install.Assets({ skills: [], agents: [], plugins: [] })),
+          install: (_name, installDir) => Effect.succeed({ assets: new Install.Assets({ skills: [], agents: [], plugins: [] }), targetDir: installDir }),
           uninstall: () => Effect.void,
         }))
 
@@ -640,8 +634,8 @@ describe("Marketplace", () => {
         }))
 
         const mockInstall = Layer.succeed(Install.Service, Install.Service.of({
-          discover: () => Effect.succeed(new Install.Assets({ skills: [], agents: [], tools: [], commands: [], plugins: [], mcpServers: [] })),
-          install: (_name, installDir) => Effect.succeed({ assets: new Install.Assets({ skills: [], agents: [], tools: [], commands: [], plugins: [], mcpServers: [] }), targetDir: installDir }),
+          discover: () => Effect.succeed(new Install.Assets({ skills: [], agents: [], plugins: [] })),
+          install: (_name, installDir) => Effect.succeed({ assets: new Install.Assets({ skills: [], agents: [], plugins: [] }), targetDir: installDir }),
           uninstall: () => Effect.void,
         }))
 
@@ -668,5 +662,6 @@ describe("Marketplace", () => {
         )
       }
     })
+
   })
 })

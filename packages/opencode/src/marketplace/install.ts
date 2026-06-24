@@ -7,10 +7,7 @@ import { Glob } from "@opencode-ai/core/util/glob"
 export class Assets extends Schema.Class<Assets>("Marketplace.Assets")({
   skills: Schema.Array(Schema.String),
   agents: Schema.Array(Schema.String),
-  tools: Schema.Array(Schema.String),
-  commands: Schema.Array(Schema.String),
   plugins: Schema.Array(Schema.String),
-  mcpServers: Schema.Array(Schema.String),
 }) {}
 
 export interface InstallResult {
@@ -59,25 +56,19 @@ export const layer = Layer.effect(
 
     const discover: Interface["discover"] = (dir: string) =>
       Effect.gen(function* () {
-        const [allSkills, allAgents, allTools, allCommands, allPlugins, allMcp] = yield* Effect.all(
+        const [allSkills, allAgents, allPlugins] = yield* Effect.all(
           [
             scanFiles(dir, "**/SKILL.md"),
             scanFiles(dir, "{agents,agent}/**/*.md"),
-            scanFiles(dir, "{tools,tool}/**/*.{ts,js}"),
-            scanFiles(dir, "{commands,command}/**/*.md"),
             readPluginDirs(dir),
-            scanFiles(dir, "mcp.json"),
           ],
-          { concurrency: 6 },
+          { concurrency: 3 },
         )
 
         return new Assets({
           skills: allSkills,
           agents: allAgents,
-          tools: allTools,
-          commands: allCommands,
           plugins: allPlugins,
-          mcpServers: allMcp,
         })
       })
 
@@ -94,18 +85,8 @@ export const layer = Layer.effect(
           ).pipe(Effect.ignore)
         }
         for (const agentPath of assets.agents) {
-          const rel = path.relative(installDir, agentPath)
-          yield* copyFile(agentPath, path.join(global.config, "agents", path.basename(rel)), fs).pipe(Effect.ignore)
+          yield* copyFile(agentPath, path.join(global.config, "agents", path.basename(agentPath)), fs).pipe(Effect.ignore)
         }
-        for (const toolPath of assets.tools) {
-          const rel = path.relative(installDir, toolPath)
-          yield* copyFile(toolPath, path.join(global.config, "tools", path.basename(rel)), fs).pipe(Effect.ignore)
-        }
-        for (const cmdPath of assets.commands) {
-          const rel = path.relative(installDir, cmdPath)
-          yield* copyFile(cmdPath, path.join(global.config, "commands", path.basename(rel)), fs).pipe(Effect.ignore)
-        }
-
         return { assets, targetDir: installDir }
       })
 
@@ -116,12 +97,6 @@ export const layer = Layer.effect(
         }
         for (const ap of assets.agents) {
           yield* rmFile(path.join(global.config, "agents", path.basename(ap))).pipe(Effect.ignore)
-        }
-        for (const tp of assets.tools) {
-          yield* rmFile(path.join(global.config, "tools", path.basename(tp))).pipe(Effect.ignore)
-        }
-        for (const cp of assets.commands) {
-          yield* rmFile(path.join(global.config, "commands", path.basename(cp))).pipe(Effect.ignore)
         }
       })
 
