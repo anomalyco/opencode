@@ -578,7 +578,7 @@
         "npm-package-arg": "13.0.2",
         "open": "10.1.2",
         "opencode-gitlab-auth": "2.1.0",
-        "opencode-kiro": "0.2.1",
+        "opencode-kiro": "0.3.1",
         "opencode-poe-auth": "0.0.1",
         "opentui-spinner": "catalog:",
         "partial-json": "0.1.7",
@@ -4423,7 +4423,7 @@
 
     "opencode-gitlab-auth": ["opencode-gitlab-auth@2.1.0", "", { "dependencies": { "@fastify/rate-limit": "^10.2.0", "@opencode-ai/plugin": "*", "fastify": "^5.2.0", "open": "^10.0.0" } }, "sha512-ZCDYaY0V8Se6hOH2tqZqqcskrd0xLTgfiGhU0J1igkUP52oFtN9eSwxOPLT0ctvNXUq8b+zOmJ4sskAQoC/IUA=="],
 
-    "opencode-kiro": ["opencode-kiro@0.2.1", "", { "dependencies": { "kiro-acp-ai-provider": "2.1.0" }, "peerDependencies": { "@opencode-ai/plugin": "*" } }, "sha512-HqXXtMeieXaLnc4JSobbNtlR0cTNQgcTrWPaGbC7UwVYmq28iXmezMpiY2QcQsWNKqN6uD6Xe64p8yJ0Mu4b2Q=="],
+    "opencode-kiro": ["opencode-kiro@0.3.1", "", { "dependencies": { "kiro-acp-ai-provider": "2.1.0" }, "peerDependencies": { "@opencode-ai/plugin": "*" } }, "sha512-XovFusmWWIOdMZLwDLb1hvIsNG/58zI+RDjVqF1oWxq6Q/OWu/Pggyber+J5jeHxh9HW02JkSL/3Xr9LiUoxMg=="],
 
     "opencode-poe-auth": ["opencode-poe-auth@0.0.1", "", { "dependencies": { "open": "^10.0.0", "poe-oauth": "*" }, "peerDependencies": { "@opencode-ai/plugin": "*" } }, "sha512-cXqTlS6AXHzo1oBdosnxbT47ZJEZ9WXn050X8Re6wZ1vaNnTpB/l2fMQt90evT7RBK0fB8UjXQUDMKyd7bbiqg=="],
 
