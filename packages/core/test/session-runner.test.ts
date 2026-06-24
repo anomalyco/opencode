@@ -253,6 +253,7 @@ const execution = Layer.effect(
     return SessionExecution.Service.of({
       resume: coordinator.run,
       wake: coordinator.wake,
+      wait: coordinator.wait,
       interrupt: coordinator.interrupt,
     })
   }),

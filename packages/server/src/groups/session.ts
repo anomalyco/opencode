@@ -212,7 +212,7 @@ export const SessionGroup = HttpApiGroup.make("server.session")
     HttpApiEndpoint.post("session.wait", "/api/session/:sessionID/wait", {
       params: { sessionID: SessionV2.ID },
       success: HttpApiSchema.NoContent,
-      error: [SessionNotFoundError, ServiceUnavailableError],
+      error: SessionNotFoundError,
     })
       .middleware(SessionLocationMiddleware)
       .annotateMerge(
