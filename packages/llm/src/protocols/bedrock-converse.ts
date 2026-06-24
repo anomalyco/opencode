@@ -385,9 +385,25 @@ const lowerSystem = (
   system: ReadonlyArray<LLMRequest["system"][number]>,
 ): BedrockSystemBlock[] => system.flatMap((part) => textWithCache(breakpoints, part.text, part.cache))
 
+const bedrockOptions = (request: LLMRequest) => request.providerOptions?.bedrock
+
+const lowerThinking = Effect.fn("BedrockConverse.lowerThinking")(function* (request: LLMRequest) {
+  const thinking = bedrockOptions(request)?.thinking
+  if (!ProviderShared.isRecord(thinking) || thinking.type !== "enabled") return undefined
+  const budget =
+    typeof thinking.budgetTokens === "number"
+      ? thinking.budgetTokens
+      : typeof thinking.budget_tokens === "number"
+        ? thinking.budget_tokens
+        : undefined
+  if (budget === undefined) return yield* ProviderShared.invalidRequest("Bedrock thinking provider option requires budgetTokens")
+  return { type: "enabled" as const, budget_tokens: budget }
+})
+
 const fromRequest = Effect.fn("BedrockConverse.fromRequest")(function* (request: LLMRequest) {
   const toolChoice = request.toolChoice ? yield* lowerToolChoice(request.toolChoice) : undefined
   const generation = request.generation
+  const thinking = yield* lowerThinking(request)
   // Bedrock-Claude shares Anthropic's 4-breakpoint cap. Spend the budget in
   // tools → system → messages order to favour the highest-impact prefixes.
   const breakpoints = BedrockCache.breakpoints()
@@ -421,7 +437,14 @@ const fromRequest = Effect.fn("BedrockConverse.fromRequest")(function* (request:
     toolConfig,
     // Converse's base inferenceConfig has no topK; Anthropic/Nova accept it
     // as a model-specific field, so it goes through additionalModelRequestFields.
-    additionalModelRequestFields: generation?.topK === undefined ? undefined : { top_k: generation.topK },
+    // Extended thinking (Claude 3.7+ on Bedrock) is also passed here.
+    additionalModelRequestFields:
+      generation?.topK === undefined && thinking === undefined
+        ? undefined
+        : {
+            ...(generation?.topK !== undefined ? { top_k: generation.topK } : {}),
+            ...(thinking !== undefined ? { thinking } : {}),
+          },
   }
 })
 
