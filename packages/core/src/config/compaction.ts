@@ -12,4 +12,5 @@ export class Info extends Schema.Class<Info>("ConfigV2.Compaction")({
   prune: Schema.Boolean.pipe(Schema.optional),
   keep: Keep.pipe(Schema.optional),
   buffer: NonNegativeInt.pipe(Schema.optional),
+  pinFirstUserTurn: Schema.Boolean.pipe(Schema.optional),
 }) {}

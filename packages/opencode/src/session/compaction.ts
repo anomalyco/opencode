@@ -205,7 +205,11 @@ export const layer = Layer.effect(
       const budget = preserveRecentBudget({ cfg: input.cfg, model: input.model })
       const all = turns(input.messages)
       if (!all.length) return { head: input.messages, tail_start_id: undefined }
-      const recent = all.slice(-limit)
+      let recent = all.slice(-limit)
+      const pinFirst = input.cfg.compaction?.pin_first_user_turn === true
+      if (pinFirst && all.length > 0 && !recent.some((t) => t.id === all[0].id)) {
+        recent = [all[0], ...recent]
+      }
       const sizes = yield* Effect.forEach(
         recent,
         (turn) =>

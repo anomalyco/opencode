@@ -59,6 +59,7 @@ type Settings = {
   readonly auto: boolean
   readonly buffer: number
   readonly tokens: number
+  readonly pinFirstUserTurn: boolean
 }
 
 type Dependencies = {
@@ -125,25 +126,42 @@ const settings = (documents: readonly Config.Entry[]) => {
       auto: current.auto ?? result.auto,
       buffer: current.buffer ?? result.buffer,
       tokens: current.keep?.tokens ?? result.tokens,
+      pinFirstUserTurn: current.pinFirstUserTurn ?? result.pinFirstUserTurn,
     }),
-    { auto: true, buffer: DEFAULT_BUFFER, tokens: DEFAULT_KEEP_TOKENS },
+    { auto: true, buffer: DEFAULT_BUFFER, tokens: DEFAULT_KEEP_TOKENS, pinFirstUserTurn: false },
   )
 }
 
 const select = (
   entries: readonly Entry[],
   tokens: number,
+  pinFirstUserTurn?: boolean,
 ): { readonly head: string; readonly recent: string } | undefined => {
   const conversation = entries
     .filter((entry) => entry.message.type !== "compaction")
     .map((entry) => serialize(entry.message))
     .filter(Boolean)
   if (conversation.length === 0) return
+  let firstUserIdx = -1
+  if (pinFirstUserTurn) {
+    let convIdx = 0
+    for (const entry of entries) {
+      if (entry.message.type === "compaction") continue
+      const text = serialize(entry.message)
+      if (!text) continue
+      if (entry.message.type === "user") {
+        firstUserIdx = convIdx
+        break
+      }
+      convIdx++
+    }
+  }
   let total = 0
   let split = conversation.length
   let splitPrefix = ""
   let splitSuffix = ""
   for (let index = conversation.length - 1; index >= 0; index--) {
+    if (pinFirstUserTurn && index < firstUserIdx) break
     const next = total + Token.estimate(conversation[index])
     if (next > tokens) {
       const remaining = Math.max(0, tokens - total) * 4
@@ -178,7 +196,7 @@ export const make = (dependencies: Dependencies) => {
     const context = input.model.route.defaults.limits?.context
     if (context === undefined || context <= 0) return false
     const output = input.request.generation?.maxTokens ?? input.model.route.defaults.limits?.output ?? 0
-    const selected = select(input.entries, config.tokens)
+    const selected = select(input.entries, config.tokens, config.pinFirstUserTurn)
     const previousSummary = input.entries.find((entry) => entry.message.type === "compaction")?.message
     if (!selected || (selected.head.length === 0 && previousSummary?.type !== "compaction")) return false
     const summaryPrompt = buildPrompt({

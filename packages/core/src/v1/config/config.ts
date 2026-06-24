@@ -161,6 +161,10 @@ export const Info = Schema.Struct({
       reserved: Schema.optional(NonNegativeInt).annotate({
         description: "Token buffer for compaction. Leaves enough window to avoid overflow during compaction.",
       }),
+      pin_first_user_turn: Schema.optional(Schema.Boolean).annotate({
+        description:
+          "Preserve the first user message verbatim during compaction, keeping the prompt prefix stable for cache (default: false)",
+      }),
     }),
   ),
   experimental: Schema.optional(
