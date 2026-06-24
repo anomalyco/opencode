@@ -1,10 +1,9 @@
 import { describe, expect } from "bun:test"
 import { LLM } from "@opencode-ai/llm"
 import { LLMClient } from "@opencode-ai/llm/route"
-import { ConfigProvider, DateTime, Effect } from "effect"
+import { DateTime, Effect } from "effect"
 import { Headers } from "effect/unstable/http"
 import { Credential } from "@opencode-ai/core/credential"
-import { Integration } from "@opencode-ai/core/integration"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ProjectV2 } from "@opencode-ai/core/project"
@@ -262,27 +261,23 @@ describe("SessionRunnerModel", () => {
     }),
   )
 
-  it.effect("preserves environment-backed bearer auth", () =>
+  it.effect("uses resolved credentials for bearer auth", () =>
     Effect.gen(function* () {
       const resolved = yield* SessionRunnerModel.fromCatalogModel(
         new ModelV2.Info({
           ...model({ type: "aisdk", package: "@ai-sdk/openai", url: "https://openai.example/v1" }),
           request: { headers: {}, body: {}, generation: {}, options: {} },
         }),
-        { type: "env", name: "TEST_PROVIDER_API_KEY" },
+        new Credential.Key({ type: "key", key: "secret" }),
       )
       const request = LLM.request({ model: resolved, prompt: "Hello" })
-      const headers = yield* resolved.route.auth
-        .apply({
-          request,
-          method: "POST",
-          url: "https://openai.example/v1/responses",
-          body: "{}",
-          headers: Headers.empty,
-        })
-        .pipe(
-          Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env: { TEST_PROVIDER_API_KEY: "secret" } }))),
-        )
+      const headers = yield* resolved.route.auth.apply({
+        request,
+        method: "POST",
+        url: "https://openai.example/v1/responses",
+        body: "{}",
+        headers: Headers.empty,
+      })
 
       expect(headers.authorization).toBe("Bearer secret")
     }),
@@ -290,18 +285,12 @@ describe("SessionRunnerModel", () => {
 
   it.effect("prefers stored credentials over configured auth", () =>
     Effect.gen(function* () {
-      const credential = new Credential.Info({
-        id: Credential.ID.create(),
-        integrationID: Integration.ID.make("test-provider"),
-        label: "Work",
-        value: new Credential.Key({ type: "key", key: "stored-secret", metadata: { tenant: "work" } }),
-      })
+      const credential = new Credential.Key({ type: "key", key: "stored-secret", metadata: { tenant: "work" } })
       const resolved = yield* SessionRunnerModel.fromCatalogModel(
         new ModelV2.Info({
           ...model({ type: "aisdk", package: "@ai-sdk/openai", url: "https://openai.example/v1" }),
           request: { headers: {}, body: { apiKey: "configured-secret" }, generation: {}, options: {} },
         }),
-        { type: "credential", id: credential.id, label: credential.label },
         credential,
       )
       const headers = yield* resolved.route.auth.apply({

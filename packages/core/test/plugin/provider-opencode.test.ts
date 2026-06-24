@@ -73,13 +73,34 @@ describe("OpencodePlugin", () => {
             port: 0,
             fetch: (request) => {
               authorization.push(request.headers.get("authorization"))
+              const origin = new URL(request.url).origin
               return Response.json({
                 config: {
-                  providers: {
+                  enterprise: { url: origin },
+                  provider: {
                     remote: {
                       name: "Remote",
+                      npm: "@ai-sdk/openai-compatible",
+                      api: `${origin}/v1`,
+                      env: ["REMOTE_API_KEY"],
+                      options: {
+                        apiKey: "{env:REMOTE_API_KEY}",
+                        headers: { "x-org-id": "org" },
+                        custom: "value",
+                      },
                       models: {
-                        model: { name: "Remote Model" },
+                        model: {
+                          name: "Remote Model",
+                          family: "remote",
+                          release_date: "2026-01-02",
+                          tool_call: true,
+                          modalities: { input: ["text", "image"], output: ["text"] },
+                          options: { apiKey: "model-secret", temperature: 0.5 },
+                          variants: { high: { apiKey: "variant-secret", temperature: 0.2 } },
+                          cost: { input: 1, output: 2, cache_read: 0.1 },
+                          limit: { context: 1000, output: 100 },
+                        },
+                        disabled: { name: "Disabled", status: "deprecated" },
                       },
                     },
                   },
@@ -92,6 +113,11 @@ describe("OpencodePlugin", () => {
       ({ authorization, server }) =>
         Effect.gen(function* () {
           const credentials = yield* Credential.Service
+          const catalog = yield* Catalog.Service
+          yield* catalog.transform((draft) => {
+            draft.provider.update(ProviderV2.ID.make("remote"), () => {})
+            draft.model.update(ProviderV2.ID.make("remote"), ModelV2.ID.make("stale"), () => {})
+          })
           yield* credentials.create({
             integrationID: Integration.ID.make("opencode"),
             value: new Credential.Key({
@@ -103,11 +129,42 @@ describe("OpencodePlugin", () => {
 
           yield* addPlugin()
 
-          const catalog = yield* Catalog.Service
-          expect((yield* catalog.provider.get(ProviderV2.ID.make("remote")))?.name).toBe("Remote")
-          expect((yield* catalog.model.get(ProviderV2.ID.make("remote"), ModelV2.ID.make("model")))?.name).toBe(
-            "Remote Model",
-          )
+          const provider = required(yield* catalog.provider.get(ProviderV2.ID.make("remote")))
+          expect(provider).toMatchObject({
+            name: "Remote",
+            integrationID: "opencode",
+            api: {
+              type: "aisdk",
+              package: "@ai-sdk/openai-compatible",
+              url: `${server.url.origin}/v1`,
+            },
+          })
+          expect(provider.request).toEqual({ headers: { "x-org-id": "org" }, body: { custom: "value" } })
+          expect(yield* (yield* Integration.Service).get(Integration.ID.make("remote"))).toBeUndefined()
+
+          const model = required(yield* catalog.model.get(ProviderV2.ID.make("remote"), ModelV2.ID.make("model")))
+          expect(model).toMatchObject({
+            name: "Remote Model",
+            family: "remote",
+            capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
+            cost: [{ input: 1, output: 2, cache: { read: 0.1, write: 0 } }],
+            limit: { context: 1000, output: 100 },
+          })
+          expect(model.request).toMatchObject({ body: { custom: "value" }, generation: { temperature: 0.5 } })
+          expect(model.request.body).toEqual({ custom: "value" })
+          expect(model.variants).toEqual([
+            {
+              id: ModelV2.VariantID.make("high"),
+              headers: {},
+              body: {},
+              generation: { temperature: 0.2 },
+              options: {},
+            },
+          ])
+          expect(
+            required(yield* catalog.model.get(ProviderV2.ID.make("remote"), ModelV2.ID.make("disabled"))).enabled,
+          ).toBe(false)
+          expect(yield* catalog.model.get(ProviderV2.ID.make("remote"), ModelV2.ID.make("stale"))).toBeUndefined()
           expect(authorization).toContain("Bearer secret")
         }),
       ({ server }) => Effect.promise(() => server.stop(true)),
