@@ -96,7 +96,6 @@ describe("OpencodePlugin", () => {
                         headers: { "x-org-id": "org" },
                         custom: "value",
                       },
-                      blacklist: ["disabled"],
                       models: {
                         model: {
                           name: "Remote Model",
@@ -109,7 +108,7 @@ describe("OpencodePlugin", () => {
                           cost: { input: 1, output: 2, cache_read: 0.1 },
                           limit: { context: 1000, output: 100 },
                         },
-                        disabled: { name: "Disabled" },
+                        disabled: { name: "Disabled", status: "deprecated" },
                       },
                     },
                   },

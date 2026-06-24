@@ -166,10 +166,7 @@ export const OpencodePlugin = define<HttpClient.HttpClient | EventV2.Service | S
               model.cost = remoteCost(config.cost)
             }
             model.status = config.status ?? "active"
-            model.enabled =
-              config.status !== "deprecated" &&
-              (item.whitelist === undefined || item.whitelist.includes(modelID)) &&
-              !item.blacklist?.includes(modelID)
+            model.enabled = config.status !== "deprecated"
             if (config.limit !== undefined) model.limit = { ...config.limit }
           })
         }
