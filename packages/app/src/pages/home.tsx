@@ -32,7 +32,6 @@ import {
   displayName,
   getProjectAvatarSource,
   homeProjectDirectories,
-  homeProjectNavigation,
   type HomeProjectSelection,
   projectForSession,
   sortedRootSessions,
@@ -125,6 +124,7 @@ export function NewHome() {
   const global = useGlobal()
   const command = useCommand()
   const notification = useNotification()
+  const tabs = useTabs()
   let focusSessionSearch: (() => void) | undefined
   const [state, setState] = createStore({
     search: "",
@@ -261,21 +261,11 @@ export function NewHome() {
     openProjectNewSession(conn, project.worktree)
   }
 
-  function navigateOnServer(conn: ServerConnection.Any, href: string) {
-    const next = homeProjectNavigation(server.key, ServerConnection.key(conn), href)
-    if (!next.server) {
-      navigate(next.href)
-      return
-    }
-    pendingHomeNavigation = next
-    server.setActive(next.server)
-  }
-
   function openProjectNewSession(conn: ServerConnection.Any, directory: string) {
     const ctx = global.createServerCtx(conn)
     ctx.projects.open(directory)
     ctx.projects.touch(directory)
-    navigateOnServer(conn, `/${base64Encode(directory)}/session`)
+    tabs.newDraft({ server: ServerConnection.key(conn), directory })
   }
 
   function editProject(conn: ServerConnection.Any, project: LocalProject) {
@@ -304,7 +294,7 @@ export function NewHome() {
     const ctx = global.createServerCtx(conn)
     ctx.projects.open(directory)
     ctx.projects.touch(directory)
-    navigateOnServer(conn, `/server/${base64Encode(ServerConnection.key(conn))}/session/${session.id}`)
+    navigate(`/server/${base64Encode(ServerConnection.key(conn))}/session/${session.id}`)
   }
 
   function chooseProject(conn: ServerConnection.Any) {
