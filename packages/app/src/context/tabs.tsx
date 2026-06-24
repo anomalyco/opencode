@@ -115,13 +115,15 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
     const actions = {
       addSessionTab: (tab: Omit<SessionTab, "type">) => {
         const next = { type: "session" as const, ...tab }
-        if (closing.has(tabKey(next))) return
+        const existing = store.find((item) => tabKey(item) === tabKey(next))
+        if (existing) return existing
         setStore(
           produce((tabs) => {
             if (tabs.some((item) => tabKey(item) === tabKey(next))) return
             tabs.push(next)
           }),
         )
+        return next
       },
       draft(draftID: string) {
         const tab = store.find((item) => item.type === "draft" && item.draftID === draftID)
