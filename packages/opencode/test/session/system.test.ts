@@ -52,9 +52,9 @@ const it = testEffect(
             {
               name: "guide-server",
               instructions: "Use lookup before mutate.",
-              tools: ["mcp__guide-server__lookup", "mcp__guide-server__mutate"],
             },
           ]),
+        toolNames: () => Effect.succeed(["mcp__guide-server__lookup", "mcp__guide-server__mutate"]),
       }),
     ),
     Layer.provide(

@@ -109,13 +109,14 @@ function errorTool(parts: SessionV1.Part[]) {
   return part?.state.status === "error" ? (part as ErrorToolPart) : undefined
 }
 
-function makeMcp(instructions: MCP.ServerInstructions[] = []) {
+function makeMcp(instructions: MCP.ServerInstructions[] = [], toolNames: string[] = []) {
   return Layer.succeed(
     MCP.Service,
     MCP.Service.of({
       status: () => Effect.succeed({}),
       clients: () => Effect.succeed({}),
       instructions: () => Effect.succeed(instructions),
+      toolNames: () => Effect.succeed(toolNames),
       tools: () => Effect.succeed({}),
       prompts: () => Effect.succeed({}),
       resources: () => Effect.succeed({}),
@@ -168,7 +169,11 @@ const blockingProcessor = Layer.succeed(
   }),
 )
 
-function makePrompt(input?: { mcpInstructions?: MCP.ServerInstructions[]; processor?: "blocking" }) {
+function makePrompt(input?: {
+  mcpInstructions?: MCP.ServerInstructions[]
+  mcpToolNames?: string[]
+  processor?: "blocking"
+}) {
   const deps = Layer.mergeAll(
     Session.defaultLayer,
     Snapshot.defaultLayer,
@@ -181,7 +186,7 @@ function makePrompt(input?: { mcpInstructions?: MCP.ServerInstructions[]; proces
     Config.defaultLayer,
     ProviderSvc.defaultLayer,
     lsp,
-    makeMcp(input?.mcpInstructions),
+    makeMcp(input?.mcpInstructions, input?.mcpToolNames),
     FSUtil.defaultLayer,
     BackgroundJob.defaultLayer,
     status,
@@ -240,11 +245,19 @@ function makePrompt(input?: { mcpInstructions?: MCP.ServerInstructions[]; proces
   )
 }
 
-function makeHttp(input?: { mcpInstructions?: MCP.ServerInstructions[]; processor?: "blocking" }) {
+function makeHttp(input?: {
+  mcpInstructions?: MCP.ServerInstructions[]
+  mcpToolNames?: string[]
+  processor?: "blocking"
+}) {
   return Layer.mergeAll(TestLLMServer.layer, makePrompt(input))
 }
 
-function makeHttpNoLLMServer(input?: { mcpInstructions?: MCP.ServerInstructions[]; processor?: "blocking" }) {
+function makeHttpNoLLMServer(input?: {
+  mcpInstructions?: MCP.ServerInstructions[]
+  mcpToolNames?: string[]
+  processor?: "blocking"
+}) {
   return makePrompt(input)
 }
 
@@ -257,9 +270,9 @@ const withMcpInstructions = testEffect(
       {
         name: "guide-server",
         instructions: "Use lookup before mutate.",
-        tools: ["mcp__guide-server__lookup"],
       },
     ],
+    mcpToolNames: ["mcp__guide-server__lookup"],
   }),
 )
 const unix = process.platform !== "win32" ? it.instance : it.instance.skip

@@ -162,13 +162,13 @@ interface State {
 export interface ServerInstructions {
   name: string
   instructions: string
-  tools: string[]
 }
 
 export interface Interface {
   readonly status: () => Effect.Effect<Record<string, Status>>
   readonly clients: () => Effect.Effect<Record<string, MCPClient>>
   readonly instructions: () => Effect.Effect<ServerInstructions[]>
+  readonly toolNames: () => Effect.Effect<string[]>
   readonly tools: () => Effect.Effect<Record<string, Tool>>
   readonly prompts: () => Effect.Effect<Record<string, PromptInfo & { client: string }>>
   readonly resources: (clientName?: string) => Effect.Effect<Record<string, ResourceInfo & { client: string }>>
@@ -615,10 +615,14 @@ export const layer = Layer.effect(
         .map(([name, item]) => ({
           name,
           instructions: item,
-          tools: (s.defs[name] ?? []).map(
-            (tool) => "mcp__" + McpCatalog.sanitize(name) + "__" + McpCatalog.sanitize(tool.name),
-          ),
         }))
+    })
+
+    const toolNames = Effect.fn("MCP.toolNames")(function* () {
+      const s = yield* InstanceState.get(state)
+      return Object.entries(s.defs)
+        .filter(([name]) => s.status[name]?.status === "connected")
+        .flatMap(([name, defs]) => defs.map((tool) => McpCatalog.toolName(name, tool.name)))
     })
 
     const createAndStore = Effect.fn("MCP.createAndStore")(function* (name: string, mcp: ConfigMCPV1.Info) {
@@ -678,7 +682,7 @@ export const layer = Layer.effect(
         }
         const timeout = requestTimeout(s, clientName, mcpConfig, defaultTimeout)
         for (const mcpTool of listed) {
-          const key = "mcp__" + McpCatalog.sanitize(clientName) + "__" + McpCatalog.sanitize(mcpTool.name)
+          const key = McpCatalog.toolName(clientName, mcpTool.name)
           result[key] = McpCatalog.convertTool(mcpTool, client, timeout)
         }
       }
@@ -974,6 +978,7 @@ export const layer = Layer.effect(
       status,
       clients,
       instructions,
+      toolNames,
       tools,
       prompts,
       resources,

@@ -21,6 +21,7 @@ import { Location } from "@opencode-ai/core/location"
 import { LocationServiceMap } from "@opencode-ai/core/location-layer"
 import { Reference } from "@opencode-ai/core/reference"
 import { MCP } from "@/mcp"
+import { McpCatalog } from "@/mcp/catalog"
 
 export function provider(model: Provider.Model) {
   if (model.api.id.includes("gpt-4") || model.api.id.includes("o1") || model.api.id.includes("o3"))
@@ -107,9 +108,11 @@ export const layer = Layer.effect(
       }),
 
       mcp: Effect.fn("SystemPrompt.mcp")(function* (agent: Agent.Info) {
-        const available = (yield* mcp.instructions()).filter((item) => {
-          if (item.tools.length === 0) return false
-          return Permission.disabled(item.tools, agent.permission).size < item.tools.length
+        const [instructions, toolNames] = yield* Effect.all([mcp.instructions(), mcp.toolNames()])
+        const disabled = Permission.disabled(toolNames, agent.permission)
+        const available = instructions.filter((item) => {
+          const prefix = McpCatalog.toolPrefix(item.name)
+          return toolNames.some((name) => name.startsWith(prefix) && !disabled.has(name))
         })
         if (available.length === 0) return
 
