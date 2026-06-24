@@ -1,5 +1,7 @@
 import { EventV2 } from "@opencode-ai/core/event"
+import { PublicEventManifest } from "@opencode-ai/core/public-event-manifest"
 import { Location } from "@opencode-ai/core/location"
+import type { Definition } from "@opencode-ai/core/event"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 
@@ -10,25 +12,47 @@ const fields = {
   location: Schema.optional(Location.Ref),
 }
 
-const Event = Schema.Union([
-  ...EventV2.definitions().map((definition) =>
-    Schema.Struct({
-      ...fields,
-      type: Schema.Literal(definition.type),
-      data: definition.data as Schema.Struct<{}>,
-    }).annotate({ identifier: `V2Event.${definition.type}` }),
-  ),
-  Schema.Struct({
-    ...fields,
-    type: Schema.Literal("server.connected"),
-    data: Schema.Struct({}),
-  }).annotate({ identifier: "V2Event.server.connected" }),
-]).annotate({ identifier: "V2Event" })
+const schema = <const Definitions extends ReadonlyArray<Definition>>(definitions: Definitions) =>
+  Schema.Union([
+    ...definitions.map((definition) =>
+      Schema.Struct({
+        ...fields,
+        type: Schema.Literal(definition.type),
+        data: definition.data,
+      }).annotate({ identifier: `V2Event.${definition.type}` }),
+    ),
+    ...(definitions.some((definition) => definition.type === "server.connected")
+      ? []
+      : [
+          Schema.Struct({
+            ...fields,
+            type: Schema.Literal("server.connected"),
+            data: Schema.Struct({}),
+          }).annotate({ identifier: "V2Event.server.connected" }),
+        ]),
+  ]).annotate({ identifier: "V2Event" })
+
+export const makeEventGroup = <const Definitions extends ReadonlyArray<Definition>>(definitions: Definitions) =>
+  HttpApiGroup.make("server.event")
+    .add(
+      HttpApiEndpoint.get("event.subscribe", "/api/event", {
+        success: schema(definitions),
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.event.subscribe",
+          summary: "Subscribe to events",
+          description: "Subscribe to native event payloads for the server.",
+        }),
+      ),
+    )
+    .annotateMerge(OpenApi.annotations({ title: "events", description: "Experimental event stream route." }))
+
+const EventSchema = schema(PublicEventManifest.Definitions)
 
 export const EventGroup = HttpApiGroup.make("server.event")
   .add(
     HttpApiEndpoint.get("event.subscribe", "/api/event", {
-      success: Event,
+      success: EventSchema,
     }).annotateMerge(
       OpenApi.annotations({
         identifier: "v2.event.subscribe",
@@ -38,5 +62,4 @@ export const EventGroup = HttpApiGroup.make("server.event")
     ),
   )
   .annotateMerge(OpenApi.annotations({ title: "events", description: "Experimental event stream route." }))
-
-export type Event = typeof Event.Type
+export type Event = typeof EventSchema.Type

@@ -11,7 +11,6 @@ import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { Database } from "@opencode-ai/core/database/database"
 import { makeRuntime } from "@opencode-ai/core/effect/runtime"
 import { EventV2Bridge } from "@/event-v2-bridge"
-import { EventV2 } from "@opencode-ai/core/event"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 
@@ -38,7 +37,6 @@ import { WorkspaceV2 } from "@opencode-ai/core/workspace"
 import { SessionID, MessageID, PartID } from "./schema"
 
 import type { Provider } from "@/provider/provider"
-import { Permission } from "@/permission"
 import { Global } from "@opencode-ai/core/global"
 import { Effect, Layer, Option, Context, Schema, Types } from "effect"
 import { NonNegativeInt, optionalOmitUndefined } from "@opencode-ai/core/schema"
@@ -309,69 +307,12 @@ export type GlobalListInput = {
   archived?: boolean
 }
 
-const CreatedEventSchema = Schema.Struct({
-  sessionID: SessionID,
-  info: Info,
-})
-
-const UpdatedShare = Schema.Struct({
-  url: Schema.optional(Schema.NullOr(Schema.String)),
-})
-
-const UpdatedTime = Schema.Struct({
-  created: Schema.optional(Schema.NullOr(NonNegativeInt)),
-  updated: Schema.optional(Schema.NullOr(NonNegativeInt)),
-  compacting: Schema.optional(Schema.NullOr(NonNegativeInt)),
-  archived: Schema.optional(Schema.NullOr(ArchivedTimestamp)),
-})
-
-const UpdatedInfo = Schema.Struct({
-  id: Schema.optional(Schema.NullOr(SessionID)),
-  slug: Schema.optional(Schema.NullOr(Schema.String)),
-  projectID: Schema.optional(Schema.NullOr(ProjectV2.ID)),
-  workspaceID: Schema.optional(Schema.NullOr(WorkspaceV2.ID)),
-  directory: Schema.optional(Schema.NullOr(Schema.String)),
-  path: Schema.optional(Schema.NullOr(Schema.String)),
-  parentID: Schema.optional(Schema.NullOr(SessionID)),
-  summary: Schema.optional(Schema.NullOr(Summary)),
-  cost: Schema.optional(Schema.Finite),
-  tokens: Schema.optional(Tokens),
-  share: Schema.optional(UpdatedShare),
-  title: Schema.optional(Schema.NullOr(Schema.String)),
-  agent: Schema.optional(Schema.NullOr(Schema.String)),
-  model: Schema.optional(Schema.NullOr(Model)),
-  version: Schema.optional(Schema.NullOr(Schema.String)),
-  metadata: Schema.optional(Schema.NullOr(Metadata)),
-  time: Schema.optional(UpdatedTime),
-  permission: Schema.optional(Schema.NullOr(PermissionV1.Ruleset)),
-  revert: Schema.optional(Schema.NullOr(Revert)),
-})
-
-const UpdatedEventSchema = Schema.Struct({
-  sessionID: SessionID,
-  info: UpdatedInfo,
-})
-
 export const Event = {
   Created: SessionV1.Event.Created,
   Updated: SessionV1.Event.Updated,
   Deleted: SessionV1.Event.Deleted,
-  Diff: EventV2.define({
-    type: "session.diff",
-    schema: {
-      sessionID: SessionID,
-      diff: Schema.Array(Snapshot.FileDiff),
-    },
-  }),
-  Error: EventV2.define({
-    type: "session.error",
-    schema: {
-      sessionID: Schema.optional(SessionID),
-      // Reuses SessionV1.Assistant.fields.error (already Schema.optional) so
-      // the derived schema keeps the same discriminated-union shape on the event stream.
-      error: SessionV1.Assistant.fields.error,
-    },
-  }),
+  Diff: SessionV1.Event.Diff,
+  Error: SessionV1.Event.Error,
 }
 
 export function plan(input: { slug: string; time: { created: number } }, instance: InstanceContext) {

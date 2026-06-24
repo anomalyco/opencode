@@ -6,19 +6,9 @@ import { Deferred, Effect, Layer, Context } from "effect"
 import os from "os"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { EventV2Bridge } from "@/event-v2-bridge"
-import { EventV2 } from "@opencode-ai/core/event"
+import { PermissionV1Event } from "@opencode-ai/schema/permission-v1"
 
-export const Event = {
-  Asked: EventV2.define({ type: "permission.asked", schema: PermissionV1.Request.fields }),
-  Replied: EventV2.define({
-    type: "permission.replied",
-    schema: {
-      sessionID: PermissionV1.Request.fields.sessionID,
-      requestID: PermissionV1.ID,
-      reply: PermissionV1.Reply,
-    },
-  }),
-}
+export const Event = PermissionV1Event
 
 export interface Interface {
   readonly ask: (input: PermissionV1.AskInput) => Effect.Effect<void, PermissionV1.Error>

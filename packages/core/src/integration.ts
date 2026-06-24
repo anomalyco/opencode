@@ -136,16 +136,7 @@ export class AuthorizationError extends Schema.TaggedErrorClass<AuthorizationErr
 
 export type Error = CodeRequiredError | AuthorizationError
 
-export const Event = {
-  Updated: EventV2.define({
-    type: "integration.updated",
-    schema: {},
-  }),
-  ConnectionUpdated: EventV2.define({
-    type: "integration.connection.updated",
-    schema: { integrationID: ID },
-  }),
-}
+export const Event = Integration.Event
 
 export const Ref = Integration.Ref
 export type Ref = Integration.Ref

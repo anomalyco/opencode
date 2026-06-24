@@ -2,29 +2,20 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { InstanceState } from "@/effect/instance-state"
 import { EffectBridge } from "@/effect/bridge"
 import type { InstanceContext } from "@/project/instance-context"
-import { SessionID, MessageID } from "@/session/schema"
 import { Effect, Layer, Context, Schema } from "effect"
 import { Config } from "@/config/config"
 import { MCP } from "../mcp"
 import { Skill } from "../skill"
-import { EventV2 } from "@opencode-ai/core/event"
 import PROMPT_INITIALIZE from "./template/initialize.txt"
 import PROMPT_REVIEW from "./template/review.txt"
+import { LegacyEvent } from "@opencode-ai/schema/legacy-event"
 
 type State = {
   commands: Record<string, Info>
 }
 
 export const Event = {
-  Executed: EventV2.define({
-    type: "command.executed",
-    schema: {
-      name: Schema.String,
-      sessionID: SessionID,
-      arguments: Schema.String,
-      messageID: MessageID,
-    },
-  }),
+  Executed: LegacyEvent.CommandExecuted,
 }
 
 export const Info = Schema.Struct({

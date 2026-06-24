@@ -14,7 +14,7 @@ export interface Admitted extends Schema.Schema.Type<typeof Admitted> {}
 export const Admitted = Schema.Struct({
   admittedSeq: NonNegativeInt,
   id: SessionMessageID.ID,
-  sessionID: SessionID.ID,
+  sessionID: SessionID,
   prompt: Prompt,
   delivery: Delivery,
   timeCreated: DateTimeUtcFromMillis,

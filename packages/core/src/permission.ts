@@ -7,45 +7,31 @@ import { Location } from "./location"
 import { AgentV2 } from "./agent"
 import { SessionV2 } from "./session"
 import { SessionStore } from "./session/store"
-import { withStatics } from "./schema"
-import { Identifier } from "./util/identifier"
 import { Wildcard } from "./util/wildcard"
 import { PermissionSaved } from "./permission/saved"
 
 export { Effect, Rule, Ruleset } from "@opencode-ai/schema/permission"
 const missingAgentPermissions: Permission.Ruleset = [{ action: "*", resource: "*", effect: "deny" }]
 
-export const ID = Schema.String.check(Schema.isStartsWith("per")).pipe(
-  Schema.brand("PermissionV2.ID"),
-  withStatics((schema) => ({ create: (id?: string) => schema.make(id ?? "per_" + Identifier.ascending()) })),
-)
+export const ID = Permission.ID
 export type ID = typeof ID.Type
 
-export const Source = Schema.Union([
-  Schema.Struct({
-    type: Schema.Literal("tool"),
-    messageID: Schema.String,
-    callID: Schema.String,
-  }),
-]).annotate({ identifier: "PermissionV2.Source" })
+export const Source = Permission.Source
 export type Source = typeof Source.Type
 
 const RequestFields = {
-  sessionID: SessionV2.ID,
-  action: Schema.String,
-  resources: Schema.Array(Schema.String),
-  save: Schema.Array(Schema.String).pipe(Schema.optional),
-  metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
-  source: Source.pipe(Schema.optional),
+  sessionID: Permission.Request.fields.sessionID,
+  action: Permission.Request.fields.action,
+  resources: Permission.Request.fields.resources,
+  save: Permission.Request.fields.save,
+  metadata: Permission.Request.fields.metadata,
+  source: Permission.Request.fields.source,
 }
 
-export const Request = Schema.Struct({
-  id: ID,
-  ...RequestFields,
-}).annotate({ identifier: "PermissionV2.Request" })
+export const Request = Permission.Request
 export type Request = typeof Request.Type
 
-export const Reply = Schema.Literals(["once", "always", "reject"]).annotate({ identifier: "PermissionV2.Reply" })
+export const Reply = Permission.Reply
 export type Reply = typeof Reply.Type
 
 export const AssertInput = Schema.Struct({
@@ -68,17 +54,7 @@ export const AskResult = Schema.Struct({
 }).annotate({ identifier: "PermissionV2.AskResult" })
 export type AskResult = typeof AskResult.Type
 
-export const Event = {
-  Asked: EventV2.define({ type: "permission.v2.asked", schema: Request.fields }),
-  Replied: EventV2.define({
-    type: "permission.v2.replied",
-    schema: {
-      sessionID: SessionV2.ID,
-      requestID: ID,
-      reply: Reply,
-    },
-  }),
-}
+export const Event = Permission.Event
 
 export class RejectedError extends Schema.TaggedErrorClass<RejectedError>()("PermissionV2.RejectedError", {}) {}
 
