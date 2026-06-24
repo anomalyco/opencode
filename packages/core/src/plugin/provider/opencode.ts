@@ -118,11 +118,6 @@ export const OpencodePlugin = define<HttpClient.HttpClient | EventV2.Service | S
           Object.assign(provider.request.body, withoutCredentials(item.options))
         })
 
-        const modelIDs = new Set(Object.keys(item.models ?? {}))
-        for (const model of catalog.provider.get(providerID)?.models.values() ?? []) {
-          if (!modelIDs.has(model.id)) catalog.model.remove(providerID, model.id)
-        }
-
         for (const [modelID, config] of Object.entries(item.models ?? {})) {
           catalog.model.update(providerID, modelID, (model) => {
             if (config.family !== undefined) model.family = config.family
