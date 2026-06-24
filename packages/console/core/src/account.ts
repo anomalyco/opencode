@@ -38,25 +38,35 @@ export namespace Account {
         .select({ email: AuthTable.subject })
         .from(AuthTable)
         .where(and(eq(AuthTable.accountID, account.id), eq(AuthTable.provider, "email")))
-      const users = await tx
-        .select({ id: UserTable.id })
-        .from(UserTable)
-        .where(eq(UserTable.accountID, account.id))
+      const users = await tx.select({ id: UserTable.id }).from(UserTable).where(eq(UserTable.accountID, account.id))
       if (users.length > 0) {
         await tx
           .update(KeyTable)
           .set({ timeDeleted: sql`now()` })
-          .where(inArray(KeyTable.userID, users.map((user) => user.id)))
+          .where(
+            inArray(
+              KeyTable.userID,
+              users.map((user) => user.id),
+            ),
+          )
       }
       await tx
         .update(UserTable)
         .set({ accountID: null, email: null, name: "", timeDeleted: sql`now()` })
         .where(eq(UserTable.accountID, account.id))
       if (emails.length > 0) {
-        await tx.delete(CouponTable).where(inArray(CouponTable.email, emails.map((row) => row.email)))
+        await tx.delete(CouponTable).where(
+          inArray(
+            CouponTable.email,
+            emails.map((row) => row.email),
+          ),
+        )
       }
       await tx.delete(AuthTable).where(eq(AuthTable.accountID, account.id))
-      await tx.update(AccountTable).set({ timeDeleted: sql`now()` }).where(eq(AccountTable.id, account.id))
+      await tx
+        .update(AccountTable)
+        .set({ timeDeleted: sql`now()` })
+        .where(eq(AccountTable.id, account.id))
     })
   })
 
