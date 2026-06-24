@@ -1,0 +1,31 @@
+Run a long-lived command in the background and get notified whenever it emits a new line on stdout. The tool returns immediately after arming the monitor; each subsequent non-empty stdout line wakes the model with a new message. Use this for watching files, processes, or any event source that produces one line per event.
+
+IMPORTANT:
+- The command must keep running and emit ONE line per NEW event. It must not exit immediately.
+- Emit only on a real change. Never re-print content that has not changed — a loop that re-runs `tail -N`, `cat`, or `tail -5` re-emits the same lines every cycle, so once the watched job stops writing you get the same lines flooding back forever as bogus events. Prefer a streaming watcher that emits each new line exactly once.
+- Do not re-arm the same monitor repeatedly. If you need to change the watch, stop the old one first (or use a different description).
+- If the command exits on its own (e.g., the chosen watcher is not installed), you will get a wake-up message telling you it exited, so you can re-arm with a portable command.
+
+COVERAGE — silence is not success:
+- When watching a job or process for an outcome, your filter must match EVERY terminal state, not just the happy path. A monitor that greps only for the success marker stays silent through a crash, a hang, or an OOM kill — and silence looks exactly like "still running." Before arming, ask: if this process died right now, would my filter emit anything? If not, widen it.
+  - Wrong (silent on crash): `tail -F run.log | grep --line-buffered 'step='`
+  - Right: `tail -F run.log | grep -E --line-buffered 'step=|Traceback|Error|FAILED|Killed|OOM'`
+- If you cannot enumerate the failure signatures, broaden the grep alternation rather than narrow it — some extra noise beats missing a crashloop.
+
+STREAMS & BUFFERING:
+- Only stdout becomes events; stderr is not watched. For a command you run directly, merge stderr in so its failures reach your filter: `python train.py 2>&1 | grep -E --line-buffered ...`. (No effect when you `tail -F` an existing log — that file holds only what its writer redirected.)
+- Every pipe stage must flush per line or matches sit unseen in its buffer: `grep` needs `--line-buffered`, `awk` needs `fflush()`. Avoid `| head -N` — it cannot flush and delivers nothing until N matches accumulate.
+- In poll loops, swallow transient failures (`curl ... || true`) so one bad request doesn't kill the monitor.
+
+PATTERNS:
+- File changes: prefer `tail -F PATH` (follows forever, emits each new line once). If you must poll (e.g. a remote file over ssh), print only what changed, not a full re-dump — not `tail -5` / `cat` in a loop.
+- Directory changes: hash in a loop but emit ONLY when the hash changes: `while :; do h=$(find PATH -type f | sort | md5sum); [ "$h" != "$p" ] && echo "$h"; p=$h; sleep 2; done`. Do not echo the hash every iteration.
+- FINITE job (a build/run that will end): poll and EXIT the loop on a terminal state, so the monitor ends instead of polling a finished job forever:
+  `while :; do line=$(grep -E 'DONE|FAILED' PATH | tail -1); [ -n "$line" ] && { echo "$line"; break; }; sleep 5; done`
+  Do NOT rely on `tail -f PATH | grep -m1 DONE` to end cleanly: grep exits on the match, but tail only sees the closed pipe on its next write, so if the log goes quiet after the match the pipeline hangs until timeoutMs.
+- Poll intervals: 30s+ for remote APIs (rate limits), 0.5–1s for local checks.
+
+Parameters:
+- command: the shell command to run (must keep running and emit one line per event)
+- description: short description of what is being watched (used in event messages)
+- timeoutMs: optional maximum lifetime of the monitor in milliseconds; if omitted, it runs until the process exits or the session ends
