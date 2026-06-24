@@ -168,10 +168,7 @@ const blockingProcessor = Layer.succeed(
   }),
 )
 
-function makePrompt(input?: {
-  mcpInstructions?: MCP.ServerInstructions[]
-  processor?: "blocking"
-}) {
+function makePrompt(input?: { mcpInstructions?: MCP.ServerInstructions[]; processor?: "blocking" }) {
   const deps = Layer.mergeAll(
     Session.defaultLayer,
     Snapshot.defaultLayer,
@@ -243,17 +240,11 @@ function makePrompt(input?: {
   )
 }
 
-function makeHttp(input?: {
-  mcpInstructions?: MCP.ServerInstructions[]
-  processor?: "blocking"
-}) {
+function makeHttp(input?: { mcpInstructions?: MCP.ServerInstructions[]; processor?: "blocking" }) {
   return Layer.mergeAll(TestLLMServer.layer, makePrompt(input))
 }
 
-function makeHttpNoLLMServer(input?: {
-  mcpInstructions?: MCP.ServerInstructions[]
-  processor?: "blocking"
-}) {
+function makeHttpNoLLMServer(input?: { mcpInstructions?: MCP.ServerInstructions[]; processor?: "blocking" }) {
   return makePrompt(input)
 }
 
@@ -537,27 +528,29 @@ it.instance("loop calls LLM and returns assistant message", () =>
   }),
 )
 
-withMcpInstructions.instance("loop includes MCP instructions in model system context", () =>
-  Effect.gen(function* () {
-    const { llm } = yield* useServerConfig(providerCfg)
-    const prompt = yield* SessionPrompt.Service
-    const sessions = yield* Session.Service
-    const chat = yield* sessions.create({
-      title: "Pinned",
-      permission: [{ permission: "*", pattern: "*", action: "allow" }],
-    })
-    yield* llm.hang
-    yield* user(chat.id, "hello")
+withMcpInstructions.instance(
+  "loop includes MCP instructions in model system context",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({
+        title: "Pinned",
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+      yield* llm.hang
+      yield* user(chat.id, "hello")
 
-    const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
-    yield* awaitWithTimeout(llm.wait(1), "timed out waiting for MCP instruction request", "10 seconds")
+      const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
+      yield* awaitWithTimeout(llm.wait(1), "timed out waiting for MCP instruction request", "10 seconds")
 
-    const hits = yield* llm.hits
-    const body = JSON.stringify(hits[0]?.body)
-    expect(body).toContain('<server name=\\"guide-server\\">')
-    expect(body).toContain("Use lookup before mutate.")
-    yield* Fiber.interrupt(fiber)
-  }),
+      const hits = yield* llm.hits
+      const body = JSON.stringify(hits[0]?.body)
+      expect(body).toContain('<server name=\\"guide-server\\">')
+      expect(body).toContain("Use lookup before mutate.")
+      yield* Fiber.interrupt(fiber)
+    }),
   15_000,
 )
 

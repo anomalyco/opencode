@@ -392,7 +392,12 @@ export const layer = Layer.effect(
           if (!listed) {
             return yield* Effect.fail(new Error("Failed to get tools"))
           }
-          return { mcpClient, status, defs: listed, instructions: mcpClient.getInstructions()?.trim() } satisfies CreateResult
+          return {
+            mcpClient,
+            status,
+            defs: listed,
+            instructions: mcpClient.getInstructions()?.trim(),
+          } satisfies CreateResult
         }).pipe(
           Effect.catchCause((cause) =>
             Effect.tryPromise(() => mcpClient.close()).pipe(Effect.ignore, Effect.andThen(Effect.failCause(cause))),
