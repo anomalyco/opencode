@@ -266,8 +266,10 @@ frontmatter.
 `mode` is one of `"primary"`, `"subagent"`, `"all"`.
 
 Allowed top-level frontmatter fields: `name, model, variant, description, mode,
-hidden, color, steps, options, permission, disable, temperature, top_p`. Any
-unknown field is silently routed into `options`.
+hidden, color, steps, options, permission, tools, disable, temperature, top_p`.
+`tools` is recognized for backwards compatibility but deprecated; prefer
+`permission` for new or updated agents. Any other unknown field is silently
+routed into `options`.
 
 To disable a built-in agent: `agent: { build: { disable: true } }`, or in a
 file, `disable: true` in frontmatter.
@@ -393,6 +395,7 @@ tokens support `{env:VAR}` interpolation (and `{file:path}`); the shell-style
 
 ```json
 "permission": {
+  "*": "ask",
   "edit": "deny",
   "bash": { "git *": "allow", "rm *": "deny", "*": "ask" },
   "external_directory": { "~/secrets/**": "deny", "*": "allow" }
@@ -409,11 +412,20 @@ rules last.
 `permission: "allow"` (a string at the top level) is shorthand for "allow
 everything" and is rarely what the user wants.
 
+Use top-level `"*"` as a catch-all permission key. Permission keys are matched
+against the underlying tool name, so `"*": "deny"` can create a default-deny
+agent and later entries can allow specific built-in, custom, or MCP tools.
+
 Known permission keys: `read, edit, glob, grep, list, bash, task,
 external_directory, todowrite, question, webfetch, websearch, lsp, doom_loop,
 skill`. Some of these (`todowrite,
 question, webfetch, websearch, doom_loop`) only accept a flat
 action, not a per-pattern object.
+
+There is no special `mcp` permission group. MCP tool names are prefixed with
+the sanitized server name, so control them with wildcard permission keys such
+as `"github_*": "deny"` or by starting with `"*": "deny"` and allowing the
+tools the agent should keep.
 
 `external_directory` patterns are filesystem paths (use `~/`, absolute paths,
 or globs like `~/projects/**`).
