@@ -8,6 +8,7 @@ import { Project } from "./project"
 import { DateTimeUtcFromMillis, optionalOmitUndefined, RelativePath } from "./schema"
 import { SessionEvent } from "./session-event"
 import { SessionID } from "./session-id"
+import { Revert } from "./revert"
 
 export const ID = SessionID
 export type ID = SessionID
@@ -39,6 +40,7 @@ export const Info = Schema.Struct({
   title: Schema.String,
   location: Location.Ref,
   subpath: RelativePath.pipe(Schema.optional),
+  revert: Revert.State.pipe(Schema.optional),
 }).annotate({ identifier: "SessionV2.Info" })
 
 export const ListAnchor = Schema.Struct({

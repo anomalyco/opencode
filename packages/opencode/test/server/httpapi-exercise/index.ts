@@ -981,6 +981,28 @@ const scenarios: Scenario[] = [
     }))
     .json(404, object, "status"),
   http.protected
+    .post("/api/session/{sessionID}/revert/stage", "v2.session.revert.stage")
+    .at((ctx) => ({
+      path: route("/api/session/{sessionID}/revert/stage", { sessionID: "ses_httpapi_missing" }),
+      headers: { ...ctx.headers(), "content-type": "application/json" },
+      body: { messageID: "msg_httpapi_missing" },
+    }))
+    .json(404, object, "status"),
+  http.protected
+    .post("/api/session/{sessionID}/revert/clear", "v2.session.revert.clear")
+    .at((ctx) => ({
+      path: route("/api/session/{sessionID}/revert/clear", { sessionID: "ses_httpapi_missing" }),
+      headers: ctx.headers(),
+    }))
+    .json(404, object, "status"),
+  http.protected
+    .post("/api/session/{sessionID}/revert/commit", "v2.session.revert.commit")
+    .at((ctx) => ({
+      path: route("/api/session/{sessionID}/revert/commit", { sessionID: "ses_httpapi_missing" }),
+      headers: ctx.headers(),
+    }))
+    .json(404, object, "status"),
+  http.protected
     .get("/api/session/{sessionID}/message", "v2.session.messages")
     .at((ctx) => ({
       path: route("/api/session/{sessionID}/message", { sessionID: "ses_httpapi_missing" }),

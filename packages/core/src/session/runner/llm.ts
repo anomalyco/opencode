@@ -35,6 +35,7 @@ import { SessionRunnerModel } from "./model"
 import { createLLMEventPublisher } from "./publish-llm-event"
 import { toLLMMessages } from "./to-llm-message"
 import { MAX_STEPS_PROMPT } from "./max-steps"
+import { Snapshot } from "../../snapshot"
 
 /**
  * Runs one durable coding-agent Session until it settles.
@@ -100,6 +101,7 @@ export const layer = Layer.effect(
     const skillGuidance = yield* SkillGuidance.Service
     const referenceGuidance = yield* ReferenceGuidance.Service
     const config = yield* Config.Service
+    const snapshots = yield* Snapshot.Service
     const db = (yield* Database.Service).db
     const compaction = SessionCompaction.make({ events, llm, config: yield* config.entries() })
     const getSession = Effect.fn("SessionRunner.getSession")(function* (sessionID: SessionSchema.ID) {
@@ -205,6 +207,7 @@ export const layer = Layer.effect(
       })
       if (yield* compaction.compactIfNeeded({ sessionID: session.id, entries, model, request }))
         return yield* Effect.die(continueAfterCompaction(currentStep))
+      const startSnapshot = yield* snapshots.capture()
       const publisher = createLLMEventPublisher(events, {
         sessionID: session.id,
         agent: agent.id,
@@ -213,6 +216,7 @@ export const layer = Layer.effect(
           providerID: ProviderV2.ID.make(model.provider),
           ...(session.model?.variant === undefined ? {} : { variant: session.model.variant }),
         },
+        snapshot: startSnapshot,
       })
       const withPublication = Semaphore.makeUnsafe(1).withPermit
       const publish = (event: LLMEvent, outputPaths: ReadonlyArray<string> = []) =>
@@ -301,6 +305,23 @@ export const layer = Layer.effect(
             const failure = Cause.squash(settled.cause)
             const message = failure instanceof Error ? failure.message : String(failure)
             yield* withPublication(publisher.failUnsettledTools(`Tool execution failed: ${message}`))
+          }
+          const stepSettlement = publisher.stepSettlement()
+          if (stepSettlement && !publisher.hasProviderError()) {
+            const endSnapshot = yield* snapshots.capture()
+            const files = startSnapshot && endSnapshot
+              ? yield* snapshots.files({ from: startSnapshot, to: endSnapshot }).pipe(Effect.catch(() => Effect.succeed(undefined)))
+              : undefined
+            yield* withPublication(events.publish(SessionEvent.Step.Ended, {
+              sessionID: session.id,
+              timestamp: yield* DateTime.now,
+              assistantMessageID: yield* publisher.startAssistant(),
+              finish: stepSettlement.finish,
+              cost: 0,
+              tokens: stepSettlement.tokens,
+              snapshot: endSnapshot,
+              files,
+            }))
           }
           if (publisher.hasProviderError())
             yield* withPublication(publisher.failUnsettledTools("Tool execution interrupted"))

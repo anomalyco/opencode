@@ -6,6 +6,7 @@ import { SessionsCursor } from "../groups/session"
 import {
   ConflictError,
   InvalidCursorError,
+  MessageNotFoundError,
   ServiceUnavailableError,
   SessionNotFoundError,
   UnknownError,
@@ -206,6 +207,90 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
         }),
       )
       .handle(
+        "session.revert.stage",
+        Effect.fn(function* (ctx) {
+          return {
+            data: yield* session.revert.stage({ ...ctx.params, ...ctx.payload }).pipe(
+              Effect.catchTag(
+                "Session.NotFoundError",
+                (error) =>
+                  new SessionNotFoundError({
+                    sessionID: error.sessionID,
+                    message: `Session not found: ${error.sessionID}`,
+                  }),
+              ),
+              Effect.catchTag(
+                "Session.MessageNotFoundError",
+                (error) =>
+                  new MessageNotFoundError({
+                    sessionID: error.sessionID,
+                    messageID: error.messageID,
+                    message: `Message not found: ${error.messageID}`,
+                  }),
+              ),
+              Effect.catchTag("Snapshot.Error", (error) => {
+                const ref = `err_${crypto.randomUUID().slice(0, 8)}`
+                return Effect.logError("failed to stage session revert", { cause: error }).pipe(
+                  Effect.andThen(
+                    Effect.fail(
+                      new UnknownError({
+                        message: "Unexpected server error. Check server logs for details.",
+                        ref,
+                      }),
+                    ),
+                  ),
+                )
+              }),
+            ),
+          }
+        }),
+      )
+      .handle(
+        "session.revert.clear",
+        Effect.fn(function* (ctx) {
+          yield* session.revert.clear(ctx.params.sessionID).pipe(
+            Effect.catchTag(
+              "Session.NotFoundError",
+              (error) =>
+                new SessionNotFoundError({
+                  sessionID: error.sessionID,
+                  message: `Session not found: ${error.sessionID}`,
+                }),
+            ),
+            Effect.catchTag("Snapshot.Error", (error) => {
+              const ref = `err_${crypto.randomUUID().slice(0, 8)}`
+              return Effect.logError("failed to clear session revert", { cause: error }).pipe(
+                Effect.andThen(
+                  Effect.fail(
+                    new UnknownError({
+                      message: "Unexpected server error. Check server logs for details.",
+                      ref,
+                    }),
+                  ),
+                ),
+              )
+            }),
+          )
+          return HttpApiSchema.NoContent.make()
+        }),
+      )
+      .handle(
+        "session.revert.commit",
+        Effect.fn(function* (ctx) {
+          yield* session.revert.commit(ctx.params.sessionID).pipe(
+            Effect.catchTag(
+              "Session.NotFoundError",
+              (error) =>
+                new SessionNotFoundError({
+                  sessionID: error.sessionID,
+                  message: `Session not found: ${error.sessionID}`,
+                }),
+            ),
+          )
+          return HttpApiSchema.NoContent.make()
+        }),
+      )
+      .handle(
         "session.context",
         Effect.fn(function* (ctx) {
           return {
@@ -222,14 +307,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                 const ref = `err_${crypto.randomUUID().slice(0, 8)}`
                 return Effect.logError("failed to decode session message").pipe(
                   Effect.annotateLogs({ ref, sessionID: error.sessionID, messageID: error.messageID }),
-                  Effect.andThen(
-                    Effect.fail(
-                      new UnknownError({
-                        message: "Unexpected server error. Check server logs for details.",
-                        ref,
-                      }),
-                    ),
-                  ),
+                  Effect.andThen(Effect.fail(new UnknownError({ message: "Unexpected server error. Check server logs for details.", ref }))),
                 )
               }),
             ),
