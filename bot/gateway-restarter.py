@@ -398,7 +398,7 @@ class VKLongPollReloader:
             try:
                 result = subprocess.run(
                     ["git"] + list(args),
-                    cwd=str(SCRIPT_DIR),
+                    cwd=str(SCRIPT_DIR.parent),
                     capture_output=True,
                     text=True,
                     timeout=timeout,

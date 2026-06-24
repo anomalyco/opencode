@@ -898,9 +898,9 @@ class VKLongPoll:
             # Топ процесс
             if "processes" in data and data["processes"]:
                 top_proc = data["processes"][0]
-                mem = top_proc.get("memory", "N/A")
+                mem_bytes = top_proc.get("memory_bytes", 0)
                 mem_pct = top_proc.get("mem_pct", "0")
-                lines.append(f"📈 Top: {mem} ({mem_pct}%)")
+                lines.append(f"📈 Top: {_format_mib(mem_bytes // 1024 // 1024)} ({mem_pct}%)")
 
             return lines
         except (asyncio.TimeoutError, aiohttp.ClientError, Exception):
@@ -1136,13 +1136,13 @@ class VKLongPoll:
             if "processes" in data and data["processes"]:
                 lines.append("**📊 Топ процессов по памяти:**")
                 for i, proc in enumerate(data["processes"][:5], 1):
-                    mem = proc.get("memory", "N/A")
+                    mem_bytes = proc.get("memory_bytes", 0)
                     mem_pct = proc.get("mem_pct", "0")
                     cmd = proc.get("command", "")
                     # Обрезаем длинные команды
                     if len(cmd) > 60:
                         cmd = cmd[:57] + "..."
-                    lines.append(f"{i}. {mem} ({mem_pct}%) - {cmd}")
+                    lines.append(f"{i}. {_format_mib(mem_bytes // 1024 // 1024)} ({mem_pct}%) - {cmd}")
 
             await self.vk.send_message(user_id, "\n".join(lines))
         except asyncio.TimeoutError:
