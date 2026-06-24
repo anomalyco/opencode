@@ -313,6 +313,11 @@ export const dict = {
 
   "dialog.directory.search.placeholder": "Search folders",
   "dialog.directory.empty": "No folders found",
+  "dialog.directory.action.selectFile": "Select file",
+  "dialog.directory.action.selectFolder": "Select folder",
+  "dialog.directory.root": "Root",
+  "dialog.directory.parent": "Parent",
+  "dialog.directory.readError": "Unable to read this folder",
 
   "app.server.unreachable": "Could not reach {{server}}",
   "app.server.retrying": "Retrying automatically...",
@@ -584,6 +589,8 @@ export const dict = {
   "home.title": "Home",
   "home.projects": "Projects",
   "home.project.add": "Add project",
+  "home.server.collapse": "Collapse server projects",
+  "home.server.expand": "Expand server projects",
   "home.sessions.search.placeholder": "Search sessions",
   "home.sessions.search.sessions": "Sessions",
   "home.sessions.search.noResults": "No sessions found for {{query}}",
@@ -834,6 +841,9 @@ export const dict = {
   "settings.general.row.showTerminal.description": "Show the terminal button in the desktop title bar",
   "settings.general.row.showStatus.title": "Server status",
   "settings.general.row.showStatus.description": "Show the server status button in the title bar",
+  "settings.general.row.mobileTitlebarBottom.title": "Bottom navigation",
+  "settings.general.row.mobileTitlebarBottom.description":
+    "Place the title bar and session tabs at the bottom of the screen on mobile",
   "settings.general.row.showCustomAgents.title": "Custom agents",
   "settings.general.row.showCustomAgents.description": "Show the agent picker in the composer",
   "settings.general.row.reasoningSummaries.title": "Show reasoning summaries",
