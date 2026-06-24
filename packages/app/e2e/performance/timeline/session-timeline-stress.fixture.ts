@@ -344,9 +344,7 @@ export const fixture = {
     targetMessageIDs: targetMessages
       .filter((message) => message.info.role === "user")
       .map((message) => message.info.id),
-    childMessageIDs: childMessages
-      .filter((message) => message.info.role === "user")
-      .map((message) => message.info.id),
+    childMessageIDs: childMessages.filter((message) => message.info.role === "user").map((message) => message.info.id),
     targetPartIDs: targetMessages.flatMap((message) =>
       orderedParts(message)
         .filter(renderable)

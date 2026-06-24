@@ -1149,7 +1149,8 @@ export default function Page() {
     })
   }
   const onHistoryScroll = () => {
-    if (historyRequest || historyLoading() || !autoScroll.userScrolled() || !scroller || scroller.scrollTop >= 200) return
+    if (historyRequest || historyLoading() || !autoScroll.userScrolled() || !scroller || scroller.scrollTop >= 200)
+      return
     void loadOlder()
   }
 

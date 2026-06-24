@@ -47,17 +47,15 @@ export async function installStressSessionTabs(page: Page, input?: { draftID?: s
       )
       localStorage.setItem(
         "opencode.global.dat:tabs",
-        JSON.stringify(
-          [
-            ...sessionIDs.map((sessionId) => ({
-              type: "session",
-              server,
-              dirBase64,
-              sessionId,
-            })),
-            ...(draftID ? [{ type: "draft", draftID, server, directory }] : []),
-          ],
-        ),
+        JSON.stringify([
+          ...sessionIDs.map((sessionId) => ({
+            type: "session",
+            server,
+            dirBase64,
+            sessionId,
+          })),
+          ...(draftID ? [{ type: "draft", draftID, server, directory }] : []),
+        ]),
       )
     },
     {

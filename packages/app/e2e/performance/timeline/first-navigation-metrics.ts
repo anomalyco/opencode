@@ -18,9 +18,7 @@ export function summarizeFirstNavigation(samples: FirstNavigationSample[]) {
   const categories = samples.map(category)
   const stable = categories.findIndex(
     (value, index) =>
-      value === "destination" &&
-      categories[index + 1] === "destination" &&
-      categories[index + 2] === "destination",
+      value === "destination" && categories[index + 1] === "destination" && categories[index + 2] === "destination",
   )
   return {
     samples: samples.length,

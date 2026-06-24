@@ -72,7 +72,8 @@ export async function measureFirstNavigation(
   )
   await input.navigate()
   await page.waitForFunction(() => {
-    const samples = (window as Window & { __firstNavigationProbe?: FirstNavigationProbe }).__firstNavigationProbe?.samples
+    const samples = (window as Window & { __firstNavigationProbe?: FirstNavigationProbe }).__firstNavigationProbe
+      ?.samples
     if (!samples) return false
     return samples.length >= 3 && samples.slice(-3).every((sample) => sample.destination && !sample.source)
   })
