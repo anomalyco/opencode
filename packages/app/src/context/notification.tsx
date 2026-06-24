@@ -7,7 +7,6 @@ import { useServerSync } from "./server-sync"
 import { usePlatform } from "@/context/platform"
 import { useLanguage } from "@/context/language"
 import { useSettings } from "@/context/settings"
-import { Binary } from "@opencode-ai/core/util/binary"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { decode64 } from "@/utils/base64"
 import { EventSessionError } from "@opencode-ai/sdk/v2"
@@ -208,12 +207,12 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
 
     const lookup = async (directory: string, sessionID?: string) => {
       if (!sessionID) return undefined
-      const [syncStore] = serverSync().child(directory, { bootstrap: false })
-      const match = Binary.search(syncStore.session, sessionID, (s) => s.id)
-      if (match.found) return syncStore.session[match.index]
-      return serverSDK()
-        .client.session.get({ directory, sessionID })
-        .then((x) => x.data)
+      const sync = serverSync().createDirSyncContext(directory)
+      const session = sync.session.get(sessionID)
+      if (session) return session
+      return sync.session
+        .sync(sessionID)
+        .then(() => sync.session.get(sessionID))
         .catch(() => undefined)
     }
 
