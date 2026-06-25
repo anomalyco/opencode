@@ -1,7 +1,7 @@
 import { Session } from "@opencode-ai/schema/session"
 import { SessionMessage } from "@opencode-ai/schema/session-message"
-import { Context, Schema } from "effect"
-import { HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, OpenApi } from "effect/unstable/httpapi"
+import { Schema } from "effect"
+import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { InvalidCursorError, SessionNotFoundError, UnknownError } from "../errors"
 
 export const SessionMessagesQuery = Schema.Struct({
@@ -21,34 +21,31 @@ export const SessionMessagesQuery = Schema.Struct({
   ),
 }).annotate({ identifier: "SessionMessagesQuery" })
 
-export const makeMessageGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLocationMiddleware: Context.Key<I, S>) =>
-  HttpApiGroup.make("server.message")
-    .add(
-      HttpApiEndpoint.get("session.messages", "/api/session/:sessionID/message", {
-        params: { sessionID: Session.ID },
-        query: SessionMessagesQuery,
-        success: Schema.Struct({
-          data: Schema.Array(SessionMessage.Message),
-          cursor: Schema.Struct({
-            previous: Schema.String.pipe(Schema.optional),
-            next: Schema.String.pipe(Schema.optional),
-          }),
-        }).annotate({ identifier: "SessionMessagesResponse" }),
-        error: [InvalidCursorError, SessionNotFoundError, UnknownError],
-      })
-        .middleware(sessionLocationMiddleware)
-        .annotateMerge(
-          OpenApi.annotations({
-            identifier: "v2.session.messages",
-            summary: "Get session messages",
-            description:
-              "Retrieve projected messages for a session. Items keep the requested order across pages; use cursor.next or cursor.previous to move through the ordered timeline.",
-          }),
-        ),
-    )
-    .annotateMerge(
+export const MessageGroup = HttpApiGroup.make("server.message")
+  .add(
+    HttpApiEndpoint.get("session.messages", "/api/session/:sessionID/message", {
+      params: { sessionID: Session.ID },
+      query: SessionMessagesQuery,
+      success: Schema.Struct({
+        data: Schema.Array(SessionMessage.Message),
+        cursor: Schema.Struct({
+          previous: Schema.String.pipe(Schema.optional),
+          next: Schema.String.pipe(Schema.optional),
+        }),
+      }).annotate({ identifier: "SessionMessagesResponse" }),
+      error: [InvalidCursorError, SessionNotFoundError, UnknownError],
+    }).annotateMerge(
       OpenApi.annotations({
-        title: "messages",
-        description: "Experimental message routes.",
+        identifier: "v2.session.messages",
+        summary: "Get session messages",
+        description:
+          "Retrieve projected messages for a session. Items keep the requested order across pages; use cursor.next or cursor.previous to move through the ordered timeline.",
       }),
-    )
+    ),
+  )
+  .annotateMerge(
+    OpenApi.annotations({
+      title: "messages",
+      description: "Experimental message routes.",
+    }),
+  )

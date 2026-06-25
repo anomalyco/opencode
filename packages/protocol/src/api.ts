@@ -1,7 +1,7 @@
 import { Context } from "effect"
 import { HttpApi, HttpApiGroup, HttpApiMiddleware, OpenApi } from "effect/unstable/httpapi"
 import { SchemaErrorMiddleware } from "./middleware/schema-error"
-import { makeMessageGroup } from "./groups/message"
+import { MessageGroup } from "./groups/message"
 import { ModelGroup } from "./groups/model"
 import { ProviderGroup } from "./groups/provider"
 import { makeSessionGroup } from "./groups/session"
@@ -9,9 +9,8 @@ import { makePermissionGroup } from "./groups/permission"
 import { FileSystemGroup } from "./groups/fs"
 import { CommandGroup } from "./groups/command"
 import { SkillGroup } from "./groups/skill"
-import { makeEventGroup } from "./groups/event"
+import { EventGroup, makeEventGroup } from "./groups/event"
 import type { Definition } from "@opencode-ai/schema/event"
-import { EventManifest } from "@opencode-ai/schema/event-manifest"
 import { AgentGroup } from "./groups/agent"
 import { HealthGroup } from "./groups/health"
 import { PtyGroup } from "./groups/pty"
@@ -23,6 +22,7 @@ import { IntegrationGroup } from "./groups/integration"
 import { CredentialGroup } from "./groups/credential"
 import { ProjectCopyGroup } from "./groups/project-copy"
 
+// Protocol owns middleware placement, while Server injects concrete keys so Core service identities stay downstream.
 const makeApiFromGroup = <
   const Group extends HttpApiGroup.Any,
   LocationId extends HttpApiMiddleware.AnyId,
@@ -39,7 +39,7 @@ const makeApiFromGroup = <
     .add(LocationGroup.middleware(locationMiddleware))
     .add(AgentGroup.middleware(locationMiddleware))
     .add(makeSessionGroup(sessionLocationMiddleware))
-    .add(makeMessageGroup(sessionLocationMiddleware))
+    .add(MessageGroup.middleware(sessionLocationMiddleware))
     .add(ModelGroup.middleware(locationMiddleware))
     .add(ProviderGroup.middleware(locationMiddleware))
     .add(IntegrationGroup.middleware(locationMiddleware))
@@ -83,9 +83,4 @@ export const makeDefaultApi = <
 >(options: {
   readonly locationMiddleware: Context.Key<LocationId, LocationService>
   readonly sessionLocationMiddleware: Context.Key<SessionLocationId, SessionLocationService>
-}) =>
-  makeApi({
-    definitions: EventManifest.ServerDefinitions,
-    locationMiddleware: options.locationMiddleware,
-    sessionLocationMiddleware: options.sessionLocationMiddleware,
-  })
+}) => makeApiFromGroup(EventGroup, options.locationMiddleware, options.sessionLocationMiddleware)
