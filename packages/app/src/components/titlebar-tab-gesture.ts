@@ -4,6 +4,10 @@ export function isTabCloseTarget(target: EventTarget | null) {
   return target instanceof Element && !!target.closest('[data-slot="tab-close"]')
 }
 
+export function canStartTabDrag(pointerType: string) {
+  return pointerType !== "touch"
+}
+
 export function isPrimaryPointerPressed(buttons: number) {
   return (buttons & 1) !== 0
 }

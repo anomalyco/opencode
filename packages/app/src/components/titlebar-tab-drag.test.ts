@@ -3,6 +3,7 @@ import { captureTabDragLayout, insertIndexFromVirtualLayout } from "./titlebar-t
 import {
   canOpenTabRename,
   captureTabPointerDown,
+  canStartTabDrag,
   createTabDragPreview,
   forwardTabRef,
   isPrimaryPointerPressed,
@@ -108,5 +109,11 @@ describe("titlebar tab gestures", () => {
     expect(isPrimaryPointerPressed(3)).toBe(true)
     expect(isPrimaryPointerPressed(0)).toBe(false)
     expect(isPrimaryPointerPressed(2)).toBe(false)
+  })
+
+  test("preserves native panning for touch pointers", () => {
+    expect(canStartTabDrag("mouse")).toBe(true)
+    expect(canStartTabDrag("pen")).toBe(true)
+    expect(canStartTabDrag("touch")).toBe(false)
   })
 })

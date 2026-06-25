@@ -24,6 +24,7 @@ import { createTabPromptState } from "@/context/prompt"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import {
   captureTabPointerDown,
+  canStartTabDrag,
   createTabDragPreview,
   isPrimaryPointerPressed,
   isTabCloseTarget,
@@ -103,7 +104,7 @@ function SessionTabSlot(props: {
     <div
       data-titlebar-tab-slot
       data-tab-key={props.id}
-      class="flex shrink-0 touch-none"
+      class="flex shrink-0"
       classList={{
         hidden: !session(),
         "ml-1.5 border-l border-[var(--v2-background-bg-layer-02)] pl-1.5": !props.first(),
@@ -335,6 +336,7 @@ export function TitlebarTabStrip(props: {
 
   function onPointerDown(id: string, event: PointerEvent) {
     if (event.button !== 0 || drag.active) return
+    if (!canStartTabDrag(event.pointerType)) return
     if (isTabCloseTarget(event.target)) return
     const tabEl = (event.currentTarget as HTMLElement).querySelector<HTMLDivElement>("[data-titlebar-tab]")
     if (!tabEl) return
@@ -508,7 +510,7 @@ export function TitlebarTabStrip(props: {
                   <div
                     data-titlebar-tab-slot
                     data-tab-key={id}
-                    class="flex shrink-0 touch-none"
+                    class="flex shrink-0"
                     classList={{
                       "ml-1.5 border-l border-[var(--v2-background-bg-layer-02)] pl-1.5": !first(),
                       "pointer-events-none": drag.active,
