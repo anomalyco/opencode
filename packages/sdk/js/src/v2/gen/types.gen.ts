@@ -663,11 +663,11 @@ export type Todo = {
   /**
    * Current status of the task: pending, in_progress, completed, cancelled
    */
-  status: "pending" | "in_progress" | "completed" | "cancelled"
+  status: string
   /**
    * Priority level of the task: high, medium, low
    */
-  priority: "high" | "medium" | "low"
+  priority: string
 }
 
 export type SessionStatus =

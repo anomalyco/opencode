@@ -6,10 +6,10 @@ import { SessionID } from "./session-id"
 
 export const Info = Schema.Struct({
   content: Schema.String.annotate({ description: "Brief description of the task" }),
-  status: Schema.Literals(["pending", "in_progress", "completed", "cancelled"]).annotate({
+  status: Schema.String.annotate({
     description: "Current status of the task: pending, in_progress, completed, cancelled",
   }),
-  priority: Schema.Literals(["high", "medium", "low"]).annotate({
+  priority: Schema.String.annotate({
     description: "Priority level of the task: high, medium, low",
   }),
 }).annotate({ identifier: "Todo" })

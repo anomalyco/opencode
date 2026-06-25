@@ -17,15 +17,13 @@ describe("contract hygiene", () => {
     expect(Schema.encodeSync(Value)({ value: undefined })).toEqual({})
   })
 
-  test("todo status and priority are closed sets", () => {
+  test("todo status and priority preserve arbitrary strings", () => {
     const decode = Schema.decodeUnknownSync(SessionTodo.Info)
-    expect(decode({ content: "ship", status: "pending", priority: "high" })).toEqual({
+    expect(decode({ content: "ship", status: "waiting", priority: "urgent" })).toEqual({
       content: "ship",
-      status: "pending",
-      priority: "high",
+      status: "waiting",
+      priority: "urgent",
     })
-    expect(() => decode({ content: "ship", status: "waiting", priority: "high" })).toThrow()
-    expect(() => decode({ content: "ship", status: "pending", priority: "urgent" })).toThrow()
   })
 
   test("current ID constructors expose create", () => {

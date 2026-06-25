@@ -11,7 +11,6 @@ import type {
 } from "@opencode-ai/sdk/v2/types"
 import type { Effect, Scope } from "effect"
 import type { Hooks } from "./registration.js"
-import type { ReadonlyDeep } from "../options.js"
 
 export type IntegrationOAuthAuthorization = {
   readonly url: string
@@ -45,12 +44,12 @@ export type IntegrationMethodRegistration =
     }
 
 export interface IntegrationDraft {
-  list(): readonly ReadonlyDeep<IntegrationRef>[]
-  get(id: string): ReadonlyDeep<IntegrationRef> | undefined
+  list(): readonly IntegrationRef[]
+  get(id: string): IntegrationRef | undefined
   update(id: string, update: (integration: IntegrationRef) => void): void
   remove(id: string): void
   readonly method: {
-    list(integrationID: string): readonly ReadonlyDeep<IntegrationMethod>[]
+    list(integrationID: string): readonly IntegrationMethod[]
     update(input: IntegrationMethodRegistration): void
     remove(integrationID: string, method: IntegrationMethod): void
   }

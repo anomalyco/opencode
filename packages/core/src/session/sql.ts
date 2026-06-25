@@ -14,7 +14,6 @@ import { Timestamps } from "../database/schema.sql"
 import type { SystemContext } from "../system-context/index"
 import { AgentV2 } from "../agent"
 import type { Revert } from "@opencode-ai/schema/revert"
-import type { SessionTodo } from "@opencode-ai/schema/session-todo"
 
 type SessionMessageData = Omit<(typeof SessionMessage.Message)["Encoded"], "type" | "id">
 type V1MessageData = Omit<SessionV1.Info, "id" | "sessionID">
@@ -106,8 +105,8 @@ export const TodoTable = sqliteTable(
       .notNull()
       .references(() => SessionTable.id, { onDelete: "cascade" }),
     content: text().notNull(),
-    status: text().$type<SessionTodo.Info["status"]>().notNull(),
-    priority: text().$type<SessionTodo.Info["priority"]>().notNull(),
+    status: text().notNull(),
+    priority: text().notNull(),
     position: integer().notNull(),
     ...Timestamps,
   },
