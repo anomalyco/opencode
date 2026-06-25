@@ -9,8 +9,8 @@ import { DateTimeUtcFromMillis, NonNegativeInt, RelativePath } from "./schema"
 import { FileAttachment, Prompt } from "./prompt"
 import { SessionID } from "./session-id"
 import { Location } from "./location"
-import { SessionMessageID } from "./session-message-id"
 import { SessionMessage } from "./session-message"
+import { Revert } from "./revert"
 
 export { FileAttachment }
 
@@ -29,7 +29,7 @@ const Base = {
 }
 const PromptFields = {
   ...Base,
-  messageID: SessionMessageID.ID,
+  messageID: SessionMessage.ID,
   prompt: Prompt,
   delivery: Delivery,
 }
@@ -55,7 +55,7 @@ export const AgentSwitched = Event.define({
   ...options,
   schema: {
     ...Base,
-    messageID: SessionMessageID.ID,
+    messageID: SessionMessage.ID,
     agent: Schema.String,
   },
 })
@@ -66,7 +66,7 @@ export const ModelSwitched = Event.define({
   ...options,
   schema: {
     ...Base,
-    messageID: SessionMessageID.ID,
+    messageID: SessionMessage.ID,
     model: Model.Ref,
   },
 })
@@ -102,7 +102,7 @@ export const ContextUpdated = Event.define({
   ...options,
   schema: {
     ...Base,
-    messageID: SessionMessageID.ID,
+    messageID: SessionMessage.ID,
     text: Schema.String,
   },
 })
@@ -113,7 +113,7 @@ export const Synthetic = Event.define({
   ...options,
   schema: {
     ...Base,
-    messageID: SessionMessageID.ID,
+    messageID: SessionMessage.ID,
     text: Schema.String,
   },
 })
@@ -125,7 +125,7 @@ export namespace Shell {
     ...options,
     schema: {
       ...Base,
-      messageID: SessionMessageID.ID,
+      messageID: SessionMessage.ID,
       callID: Schema.String,
       command: Schema.String,
     },
@@ -150,7 +150,7 @@ export namespace Step {
     ...options,
     schema: {
       ...Base,
-      assistantMessageID: SessionMessageID.ID,
+      assistantMessageID: SessionMessage.ID,
       agent: Schema.String,
       model: Model.Ref,
       snapshot: Schema.String.pipe(Schema.optional),
@@ -163,7 +163,7 @@ export namespace Step {
     ...stepSettlementOptions,
     schema: {
       ...Base,
-      assistantMessageID: SessionMessageID.ID,
+      assistantMessageID: SessionMessage.ID,
       finish: Schema.String,
       cost: Schema.Finite,
       tokens: Schema.Struct({
@@ -176,6 +176,7 @@ export namespace Step {
         }),
       }),
       snapshot: Schema.String.pipe(Schema.optional),
+      files: Schema.Array(RelativePath).pipe(Schema.optional),
     },
   })
   export type Ended = typeof Ended.Type
@@ -185,7 +186,7 @@ export namespace Step {
     ...stepSettlementOptions,
     schema: {
       ...Base,
-      assistantMessageID: SessionMessageID.ID,
+      assistantMessageID: SessionMessage.ID,
       error: UnknownError,
     },
   })
@@ -198,7 +199,7 @@ export namespace Text {
     ...options,
     schema: {
       ...Base,
-      assistantMessageID: SessionMessageID.ID,
+      assistantMessageID: SessionMessage.ID,
       textID: Schema.String,
     },
   })
@@ -209,7 +210,7 @@ export namespace Text {
     type: "session.next.text.delta",
     schema: {
       ...Base,
-      assistantMessageID: SessionMessageID.ID,
+      assistantMessageID: SessionMessage.ID,
       textID: Schema.String,
       delta: Schema.String,
     },
@@ -221,7 +222,7 @@ export namespace Text {
     ...options,
     schema: {
       ...Base,
-      assistantMessageID: SessionMessageID.ID,
+      assistantMessageID: SessionMessage.ID,
       textID: Schema.String,
       text: Schema.String,
     },
@@ -235,7 +236,7 @@ export namespace Reasoning {
     ...options,
     schema: {
       ...Base,
-      assistantMessageID: SessionMessageID.ID,
+      assistantMessageID: SessionMessage.ID,
       reasoningID: Schema.String,
       providerMetadata: ProviderMetadata.pipe(Schema.optional),
     },
@@ -247,7 +248,7 @@ export namespace Reasoning {
     type: "session.next.reasoning.delta",
     schema: {
       ...Base,
-      assistantMessageID: SessionMessageID.ID,
+      assistantMessageID: SessionMessage.ID,
       reasoningID: Schema.String,
       delta: Schema.String,
     },
@@ -259,7 +260,7 @@ export namespace Reasoning {
     ...options,
     schema: {
       ...Base,
-      assistantMessageID: SessionMessageID.ID,
+      assistantMessageID: SessionMessage.ID,
       reasoningID: Schema.String,
       text: Schema.String,
       providerMetadata: ProviderMetadata.pipe(Schema.optional),
@@ -271,7 +272,7 @@ export namespace Reasoning {
 export namespace Tool {
   const ToolBase = {
     ...Base,
-    assistantMessageID: SessionMessageID.ID,
+    assistantMessageID: SessionMessage.ID,
     callID: Schema.String,
   }
 
@@ -399,7 +400,7 @@ export namespace Compaction {
     ...options,
     schema: {
       ...Base,
-      messageID: SessionMessageID.ID,
+      messageID: SessionMessage.ID,
       reason: Schema.Union([Schema.Literal("auto"), Schema.Literal("manual")]),
     },
   })
@@ -409,7 +410,7 @@ export namespace Compaction {
     type: "session.next.compaction.delta",
     schema: {
       ...Base,
-      messageID: SessionMessageID.ID,
+      messageID: SessionMessage.ID,
       text: Schema.String,
     },
   })
@@ -420,13 +421,27 @@ export namespace Compaction {
     ...options,
     schema: {
       ...Base,
-      messageID: SessionMessageID.ID,
+      messageID: SessionMessage.ID,
       reason: Started.data.fields.reason,
       text: Schema.String,
       recent: Schema.String,
     },
   })
   export type Ended = typeof Ended.Type
+}
+
+export namespace RevertEvent {
+  export const Staged = Event.define({
+    type: "session.next.revert.staged",
+    ...options,
+    schema: { ...Base, revert: Revert.State },
+  })
+  export const Cleared = Event.define({ type: "session.next.revert.cleared", ...options, schema: Base })
+  export const Committed = Event.define({
+    type: "session.next.revert.committed",
+    ...options,
+    schema: { ...Base, messageID: SessionMessage.ID },
+  })
 }
 
 export const DurableDefinitions = Event.inventory(
@@ -455,6 +470,9 @@ export const DurableDefinitions = Event.inventory(
   Retried,
   Compaction.Started,
   Compaction.Ended,
+  RevertEvent.Staged,
+  RevertEvent.Cleared,
+  RevertEvent.Committed,
 )
 
 export const Definitions = Event.inventory(
@@ -487,6 +505,9 @@ export const Definitions = Event.inventory(
   Compaction.Started,
   Compaction.Delta,
   Compaction.Ended,
+  RevertEvent.Staged,
+  RevertEvent.Cleared,
+  RevertEvent.Committed,
 )
 
 export const Durable = Schema.Union(DurableDefinitions, { mode: "oneOf" }).pipe(Schema.toTaggedUnion("type"))

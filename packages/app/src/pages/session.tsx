@@ -29,7 +29,7 @@ import { previewSelectedLines } from "@opencode-ai/session-ui/pierre/selection-b
 import { Button } from "@opencode-ai/ui/button"
 import { showToast } from "@/utils/toast"
 import { base64Encode, checksum } from "@opencode-ai/core/util/encode"
-import { useLocation, useSearchParams } from "@solidjs/router"
+import { useLocation, useNavigate, useSearchParams } from "@solidjs/router"
 import { NewSessionView, SessionHeader } from "@/components/session"
 import { useComments } from "@/context/comments"
 import { useServerSync } from "@/context/server-sync"
@@ -43,7 +43,11 @@ import { useSettings } from "@/context/settings"
 import { useSync } from "@/context/sync"
 import { useTerminal } from "@/context/terminal"
 import { type FollowupDraft, sendFollowupDraft } from "@/components/prompt-input/submit"
-import { createSessionComposerState, SessionComposerRegion } from "@/pages/session/composer"
+import {
+  createSessionComposerControls,
+  createSessionComposerState,
+  SessionComposerRegion,
+} from "@/pages/session/composer"
 import {
   createOpenReviewFile,
   createSessionTabs,
@@ -66,7 +70,9 @@ import { diffs as list } from "@/utils/diffs"
 import { Persist, persisted } from "@/utils/persist"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { formatServerError } from "@/utils/server-errors"
+import { legacySessionHref, requireServerKey, sessionHref } from "@/utils/session-route"
 import { useUsageExceededDialogs } from "./session/usage-exceeded-dialogs"
+import { createSessionOwnership } from "./session/session-ownership"
 
 type FollowupItem = FollowupDraft & { id: string }
 type FollowupEdit = Pick<FollowupItem, "id" | "prompt" | "context">
@@ -74,6 +80,35 @@ const emptyFollowups: FollowupItem[] = []
 
 type ChangeMode = "git" | "branch" | "turn"
 type VcsMode = "git" | "branch"
+
+const sessionViewState = () => ({
+  messageId: undefined as string | undefined,
+  mobileTab: "session" as "session" | "changes",
+  changes: "git" as ChangeMode,
+})
+
+async function runPromptRollbackMutation<T, R>(input: {
+  capturePrompt: () => { current: () => T[]; set: (value: T[]) => void; reset: () => void }
+  optimistic: (prompt: { set: (value: T[]) => void; reset: () => void }) => void
+  request: () => Promise<R>
+  complete: (result: R) => void
+  rollback: () => void
+  fail: (error: unknown) => void
+}) {
+  const prompt = input.capturePrompt()
+  const previous = prompt.current().slice()
+  batch(() => input.optimistic(prompt))
+  await input
+    .request()
+    .then(input.complete)
+    .catch((error) => {
+      batch(() => {
+        input.rollback()
+        prompt.set(previous)
+      })
+      input.fail(error)
+    })
+}
 
 export default function Page() {
   const serverSync = useServerSync()
@@ -93,7 +128,9 @@ export default function Page() {
   const terminal = useTerminal()
   const [searchParams, setSearchParams] = useSearchParams<{ prompt?: string }>()
   const location = useLocation()
+  const navigate = useNavigate()
   const { params, sessionKey, workspaceKey, tabs, view } = useSessionLayout()
+  const sessionOwnership = createSessionOwnership(sessionKey)
   const newSessionDesign = createMemo(() => settings.general.newLayoutDesigns())
 
   createEffect(() => {
@@ -119,6 +156,11 @@ export default function Page() {
   })
 
   const composer = createSessionComposerState()
+  const composerControls = createSessionComposerControls({
+    sessionKey,
+    sessionID: () => params.id,
+    queryOptions: serverSync().queryOptions,
+  })
 
   const workspaceTabs = createMemo(() => layout.tabs(workspaceKey))
 
@@ -256,9 +298,7 @@ export default function Page() {
   )
 
   const [store, setStore] = createStore({
-    messageId: undefined as string | undefined,
-    mobileTab: "session" as "session" | "changes",
-    changes: "git" as ChangeMode,
+    ...sessionViewState(),
     newSessionWorktree: "main",
     deferRender: false,
   })
@@ -282,8 +322,9 @@ export default function Page() {
     const key = sessionKey()
     if (key !== prev) {
       setStore("deferRender", true)
+      const owner = sessionOwnership.capture()
       requestAnimationFrame(() => {
-        setTimeout(() => setStore("deferRender", false), 0)
+        setTimeout(() => owner.run(() => setStore("deferRender", false)), 0)
       })
     }
     return key
@@ -516,9 +557,7 @@ export default function Page() {
         todoTimer = undefined
         if (!id) return
         if (status === "idle" && !blocked) return
-        const cached = untrack(
-          () => sync().data.todo[id] !== undefined || serverSync().data.session_todo[id] !== undefined,
-        )
+        const cached = untrack(() => sync().data.todo[id] !== undefined)
 
         todoFrame = requestAnimationFrame(() => {
           todoFrame = undefined
@@ -551,8 +590,7 @@ export default function Page() {
     on(
       sessionKey,
       () => {
-        setStore("messageId", undefined)
-        setStore("changes", "git")
+        setStore(sessionViewState())
         setUi("pendingMessage", undefined)
       },
       { defer: true },
@@ -1129,27 +1167,37 @@ export default function Page() {
 
   let captureHistoryAnchor = () => {}
   let restoreHistoryAnchor = (_done: boolean) => {}
-  let historyRequest = false
+  const historyRequests = new Set<string>()
   let historyContinuationFrame: number | undefined
   const loadOlder = async () => {
-    if (historyRequest || historyLoading()) return
-    historyRequest = true
+    const owner = sessionOwnership.capture()
+    if (historyLoading() || historyRequests.has(owner.key)) return
+    historyRequests.add(owner.key)
     const before = timeline.messages().length
     try {
-      await timeline.history.loadOlder({ before: () => captureHistoryAnchor(), after: restoreHistoryAnchor })
+      await timeline.history.loadOlder({
+        before: () => owner.run(captureHistoryAnchor),
+        after: (done) => owner.run(() => restoreHistoryAnchor(done)),
+      })
     } finally {
-      historyRequest = false
+      historyRequests.delete(owner.key)
     }
-    if (timeline.messages().length <= before) return
+    if (!owner.current() || timeline.messages().length <= before) return
     if (!autoScroll.userScrolled() || !scroller || scroller.scrollTop >= 200 || !historyMore()) return
     if (historyContinuationFrame !== undefined) cancelAnimationFrame(historyContinuationFrame)
     historyContinuationFrame = requestAnimationFrame(() => {
       historyContinuationFrame = undefined
-      onHistoryScroll()
+      owner.run(onHistoryScroll)
     })
   }
   const onHistoryScroll = () => {
-    if (historyRequest || historyLoading() || !autoScroll.userScrolled() || !scroller || scroller.scrollTop >= 200)
+    if (
+      historyRequests.has(sessionOwnership.key()) ||
+      historyLoading() ||
+      !autoScroll.userScrolled() ||
+      !scroller ||
+      scroller.scrollTop >= 200
+    )
       return
     void loadOlder()
   }
@@ -1220,23 +1268,13 @@ export default function Page() {
     })
   }
 
-  const merge = (next: NonNullable<ReturnType<typeof info>>) =>
-    sync().set("session", (list) => {
-      const idx = list.findIndex((item) => item.id === next.id)
-      if (idx < 0) return list
-      const out = list.slice()
-      out[idx] = next
-      return out
-    })
+  const merge = (next: NonNullable<ReturnType<typeof info>>, target = sync()) => target.session.remember(next)
 
-  const roll = (sessionID: string, next: NonNullable<ReturnType<typeof info>>["revert"]) =>
-    sync().set("session", (list) => {
-      const idx = list.findIndex((item) => item.id === sessionID)
-      if (idx < 0) return list
-      const out = list.slice()
-      out[idx] = { ...out[idx], revert: next }
-      return out
-    })
+  const roll = (sessionID: string, next: NonNullable<ReturnType<typeof info>>["revert"], target = sync()) => {
+    const session = target.session.get(sessionID)
+    if (!session) return
+    target.session.remember({ ...session, revert: next })
+  }
 
   const busy = (sessionID: string) => sync().data.session_working(sessionID)
 
@@ -1254,6 +1292,7 @@ export default function Page() {
 
   const followupMutation = useMutation(() => ({
     mutationFn: async (input: { sessionID: string; id: string; manual?: boolean }) => {
+      const owner = sessionOwnership.capture()
       const item = (followup.items[input.sessionID] ?? []).find((entry) => entry.id === input.id)
       if (!item) return
 
@@ -1274,7 +1313,7 @@ export default function Page() {
       if (!ok) return
 
       setFollowup("items", input.sessionID, (items) => (items ?? []).filter((entry) => entry.id !== input.id))
-      if (input.manual) resumeScroll()
+      if (input.manual) owner.run(resumeScroll)
     },
   }))
 
@@ -1363,25 +1402,23 @@ export default function Page() {
 
   const revertMutation = useMutation(() => ({
     mutationFn: async (input: { sessionID: string; messageID: string }) => {
-      const prev = prompt.current().slice()
-      const last = info()?.revert
+      const client = sdk().client
+      const target = sync()
+      const last = target.session.get(input.sessionID)?.revert
       const value = draft(input.messageID)
-      batch(() => {
-        roll(input.sessionID, { messageID: input.messageID })
-        prompt.set(value)
+      await runPromptRollbackMutation({
+        capturePrompt: prompt.capture,
+        optimistic: (prompt) => {
+          roll(input.sessionID, { messageID: input.messageID }, target)
+          prompt.set(value)
+        },
+        request: () => halt(input.sessionID).then(() => client.session.revert(input)),
+        complete: (result) => {
+          if (result.data) merge(result.data, target)
+        },
+        rollback: () => roll(input.sessionID, last, target),
+        fail,
       })
-      await halt(input.sessionID)
-        .then(() => sdk().client.session.revert(input))
-        .then((result) => {
-          if (result.data) merge(result.data)
-        })
-        .catch((err) => {
-          batch(() => {
-            roll(input.sessionID, last)
-            prompt.set(prev)
-          })
-          fail(err)
-        })
     },
   }))
 
@@ -1390,39 +1427,31 @@ export default function Page() {
       const sessionID = params.id
       if (!sessionID) return
 
+      const client = sdk().client
+      const target = sync()
       const next = userMessages().find((item) => item.id > id)
-      const prev = prompt.current().slice()
-      const last = info()?.revert
+      const last = target.session.get(sessionID)?.revert
 
-      batch(() => {
-        roll(sessionID, next ? { messageID: next.id } : undefined)
-        if (next) {
-          prompt.set(draft(next.id))
-          return
-        }
-        prompt.reset()
+      await runPromptRollbackMutation({
+        capturePrompt: prompt.capture,
+        optimistic: (promptSession) => {
+          roll(sessionID, next ? { messageID: next.id } : undefined, target)
+          if (next) {
+            promptSession.set(draft(next.id))
+            return
+          }
+          promptSession.reset()
+        },
+        request: () =>
+          !next
+            ? halt(sessionID).then(() => client.session.unrevert({ sessionID }))
+            : halt(sessionID).then(() => client.session.revert({ sessionID, messageID: next.id })),
+        complete: (result) => {
+          if (result.data) merge(result.data, target)
+        },
+        rollback: () => roll(sessionID, last, target),
+        fail,
       })
-
-      const task = !next
-        ? halt(sessionID).then(() => sdk().client.session.unrevert({ sessionID }))
-        : halt(sessionID).then(() =>
-            sdk().client.session.revert({
-              sessionID,
-              messageID: next.id,
-            }),
-          )
-
-      await task
-        .then((result) => {
-          if (result.data) merge(result.data)
-        })
-        .catch((err) => {
-          batch(() => {
-            roll(sessionID, last)
-            prompt.set(prev)
-          })
-          fail(err)
-        })
     },
   }))
 
@@ -1541,17 +1570,35 @@ export default function Page() {
   const composerRegion = (placement: "dock" | "inline") => (
     <SessionComposerRegion
       state={composer}
+      sessionKey={sessionKey()}
+      sessionID={params.id}
+      controls={composerControls()}
+      promptInput={{
+        ref: (el) => {
+          inputRef = el
+        },
+        newSessionWorktree: newSessionWorktree(),
+        onNewSessionWorktreeReset: () => setStore("newSessionWorktree", "main"),
+        onSubmit: () => {
+          comments.clear()
+          resumeScroll()
+        },
+      }}
+      todo={{
+        collapsed: view().todoCollapsed.get(),
+        onToggle: () => view().todoCollapsed.set(!view().todoCollapsed.get()),
+      }}
       ready={!store.deferRender && messagesReady()}
       centered={placement === "dock" && centered()}
       placement={placement}
-      inputRef={(el) => {
-        inputRef = el
-      }}
-      newSessionWorktree={newSessionWorktree()}
-      onNewSessionWorktreeReset={() => setStore("newSessionWorktree", "main")}
-      onSubmit={() => {
-        comments.clear()
-        resumeScroll()
+      openParent={() => {
+        const id = info()?.parentID
+        if (!id) return
+        navigate(
+          params.serverKey
+            ? sessionHref(requireServerKey(params.serverKey), id)
+            : legacySessionHref(sdk().directory, id),
+        )
       }}
       onResponseSubmit={resumeScroll}
       followup={

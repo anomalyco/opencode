@@ -31,8 +31,8 @@ import { CommandProvider } from "@/context/command"
 import { CommentsProvider } from "@/context/comments"
 import { FileProvider } from "@/context/file"
 import { ServerSDKProvider, useServerSDK } from "@/context/server-sdk"
-import { ServerSyncProvider } from "@/context/server-sync"
-import { GlobalProvider, useGlobal } from "@/context/global"
+import { ServerSyncProvider, useServerSync } from "@/context/server-sync"
+import { GlobalProvider } from "@/context/global"
 import { HighlightsProvider } from "@/context/highlights"
 import { LanguageProvider, type Locale, useLanguage } from "@/context/language"
 import { LayoutProvider } from "@/context/layout"
@@ -51,7 +51,14 @@ import LegacyLayout from "@/pages/layout"
 import NewLayout from "@/pages/layout-new"
 import { ErrorPage } from "./pages/error"
 import { useCheckServerHealth } from "./utils/server-health"
-import { legacySessionHref, requireServerKey, rootSession, sessionHref } from "./utils/session-route"
+import {
+  legacySessionHref,
+  legacySessionServer,
+  requireServerKey,
+  selectSessionLineage,
+  sessionHref,
+} from "./utils/session-route"
+import { isSessionNotFoundError } from "./utils/server-errors"
 
 import Session from "@/pages/session"
 import { NewHome, LegacyHome } from "@/pages/home"
@@ -67,7 +74,15 @@ const SessionRoute = () => {
   const tabs = useTabs()
 
   if (params.id && settings.general.newLayoutDesigns()) {
-    return <Navigate href={sessionHref(server.key, params.id)} />
+    const sessionID = params.id
+    return (
+      <Show when={tabs.ready()}>
+        {(_) => {
+          const persisted = tabs.store.filter((item) => item.type === "session")
+          return <Navigate href={sessionHref(legacySessionServer(persisted, sessionID, server.key), sessionID)} />
+        }}
+      </Show>
+    )
   }
 
   // When the new layout is enabled, the legacy new-session route (/:dir/session with no id)
@@ -95,7 +110,7 @@ const TargetSessionRoute = () => {
   })
 
   return (
-    <Show when={`${params.serverKey}\0${params.id}`} keyed>
+    <Show when={requireServerKey(params.serverKey)} keyed>
       <ServerSDKProvider server={conn}>
         <ServerSyncProvider server={conn}>
           <ResolvedTargetSessionRoute />
@@ -109,43 +124,36 @@ function ResolvedTargetSessionRoute() {
   const params = useParams<{ serverKey: string; id: string }>()
   const settings = useSettings()
   const tabs = useTabs()
-  const global = useGlobal()
-  const serverSDK = useServerSDK()
+  const sync = useServerSync()
   const serverKey = createMemo(() => requireServerKey(params.serverKey))
-  const placement = createMemo(() => global.sessionPlacement.get(serverKey(), params.id))
+  const cached = createMemo(() => sync().session.lineage.peek(params.id))
   const [resolved] = createResource(
     () => {
-      if (placement()) return
-      return { id: params.id, sdk: serverSDK() }
+      if (cached()) return
+      return { id: params.id, server: serverKey(), sync: sync() }
     },
-    async ({ id, sdk }) => {
-      const session = (await sdk.client.session.get({ sessionID: id })).data!
-      const root = await rootSession(session, (sessionID) =>
-        sdk.client.session.get({ sessionID }).then((result) => result.data!),
-      )
-      return global.sessionPlacement.set({
-        server: serverKey(),
-        leafID: session.id,
-        rootID: root.id,
-        directory: session.directory,
-      })
-    },
+    ({ id, server, sync }) =>
+      sync.session.lineage.resolve(id).catch((error) => {
+        if (isSessionNotFoundError(error, id)) tabs.removeSessionTab({ server, sessionId: id })
+        throw error
+      }),
   )
-  const directory = createMemo(() => placement()?.directory ?? resolved()?.directory)
+  const current = createMemo(() => selectSessionLineage(params.id, cached(), resolved()))
+  const directory = createMemo(() => current()?.session.directory)
   const targetDirectory = () => directory()!
 
   createEffect(() => {
-    const current = placement() ?? resolved()
-    if (!current) return
+    const session = current()
+    if (!session) return
     tabs.addSessionTab({
       server: serverKey(),
-      sessionId: current.rootID,
+      sessionId: session.root.id,
     })
   })
 
   return (
     <TargetServerScopedProviders directory={directory} sessionID={() => params.id}>
-      <Show when={!resolved.error} fallback={<ErrorPage error={resolved.error} />}>
+      <Show when={!!current() || resolved.state !== "errored"} fallback={<ErrorPage error={resolved.error} />}>
         <Show when={directory()}>
           <Show
             when={settings.general.newLayoutDesigns()}
@@ -305,7 +313,7 @@ function ServerScopedProviders(props: ServerScopedShellProps) {
     <PermissionProvider directory={props.directory}>
       <LayoutProvider>
         <NotificationProvider directory={props.directory} sessionID={props.sessionID}>
-          <ModelsProvider>{props.children}</ModelsProvider>
+          <ModelsProvider directory={props.directory}>{props.children}</ModelsProvider>
         </NotificationProvider>
       </LayoutProvider>
     </PermissionProvider>
@@ -334,7 +342,7 @@ function TargetServerScopedProviders(props: ServerScopedShellProps) {
   return (
     <PermissionProvider directory={props.directory}>
       <NotificationProvider directory={props.directory} sessionID={props.sessionID}>
-        <ModelsProvider>{props.children}</ModelsProvider>
+        <ModelsProvider directory={props.directory}>{props.children}</ModelsProvider>
       </NotificationProvider>
     </PermissionProvider>
   )

@@ -12,7 +12,6 @@ export const Info = Schema.Struct({
   priority: Schema.String.annotate({ description: "Priority level of the task: high, medium, low" }),
 }).annotate({ identifier: "Todo" })
 export type Info = typeof Info.Type
-export const SessionTodoInfo = Info
 
 const Updated = define({
   type: "todo.updated",

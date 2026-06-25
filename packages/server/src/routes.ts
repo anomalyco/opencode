@@ -12,16 +12,24 @@ import { schemaErrorLayer } from "./middleware/schema-error"
 import { PtyEnvironment } from "./pty-environment"
 
 export function createRoutes(password?: string) {
+  return makeRoutes(
+    password
+      ? ServerAuth.Config.layer({ username: "opencode", password: Option.some(password) })
+      : ServerAuth.Config.defaultLayer,
+  )
+}
+
+export function createEmbeddedRoutes() {
+  return makeRoutes(ServerAuth.Config.layer({ username: "opencode", password: Option.none() }))
+}
+
+function makeRoutes<AuthError, AuthServices>(auth: Layer.Layer<ServerAuth.Config, AuthError, AuthServices>) {
   return HttpApiBuilder.layer(Api, { openapiPath: "/openapi.json" }).pipe(
     Layer.provide(handlers),
     Layer.provide(PtyEnvironment.defaultLayer),
     Layer.provide(authorizationLayer),
     Layer.provide(schemaErrorLayer),
-    Layer.provide(
-      password
-        ? ServerAuth.Config.layer({ username: "opencode", password: Option.some(password) })
-        : ServerAuth.Config.defaultLayer,
-    ),
+    Layer.provide(auth),
     Layer.provide(LocationServiceMap.layer),
     Layer.provide(Database.defaultLayer),
     Layer.provide(EventV2.defaultLayer),

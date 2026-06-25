@@ -47,6 +47,7 @@ import * as SessionRunnerLLM from "./session/runner/llm"
 import { SessionRunnerModel } from "./session/runner/model"
 import { SystemContextBuiltIns } from "./system-context/builtins"
 import { FetchHttpClient } from "effect/unstable/http"
+import { Snapshot } from "./snapshot"
 
 export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("@opencode/example/LocationServiceMap", {
   lookup: (ref: Location.Ref) => {
@@ -96,11 +97,13 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
       Layer.provide(image),
     )
     const model = SessionRunnerModel.locationLayer.pipe(Layer.provide(services))
+    const snapshot = Snapshot.locationLayer.pipe(Layer.provide(services))
     const runner = SessionRunnerLLM.defaultLayer.pipe(
       Layer.provide(services),
       Layer.provide(model),
       Layer.provide(skillGuidance),
       Layer.provide(referenceGuidance),
+      Layer.provide(snapshot),
     )
 
     // Kick off a background project copy refresh to update locations now that we
@@ -116,6 +119,7 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
       todos,
       questions,
       model,
+      snapshot,
       runner,
       builtInTools,
       referenceGuidance,

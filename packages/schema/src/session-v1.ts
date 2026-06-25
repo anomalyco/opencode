@@ -7,7 +7,7 @@ import { PermissionV1 } from "./permission-v1"
 import { Project } from "./project"
 import { Provider } from "./provider"
 import { Model } from "./model"
-import { NonNegativeInt, optionalOmitUndefined, withStatics } from "./schema"
+import { NonNegativeInt, optional, statics } from "./schema"
 import { ascending } from "./identifier"
 import { SessionID } from "./session-id"
 import { WorkspaceID } from "./workspace-id"
@@ -16,13 +16,13 @@ const Timestamp = Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0))
 
 export const MessageID = Schema.String.check(Schema.isStartsWith("msg")).pipe(
   Schema.brand("MessageID"),
-  withStatics((schema) => ({ ascending: (id?: string) => schema.make(id ?? "msg_" + ascending()) })),
+  statics((schema) => ({ ascending: (id?: string) => schema.make(id ?? "msg_" + ascending()) })),
 )
 export type MessageID = typeof MessageID.Type
 
 export const PartID = Schema.String.check(Schema.isStartsWith("prt")).pipe(
   Schema.brand("PartID"),
-  withStatics((schema) => ({ ascending: (id?: string) => schema.make(id ?? "prt_" + ascending()) })),
+  statics((schema) => ({ ascending: (id?: string) => schema.make(id ?? "prt_" + ascending()) })),
 )
 export type PartID = typeof PartID.Type
 
@@ -510,7 +510,7 @@ const SessionSummary = Schema.Struct({
   additions: Schema.Finite,
   deletions: Schema.Finite,
   files: Schema.Finite,
-  diffs: optionalOmitUndefined(Schema.Array(FileDiff.Info)),
+  diffs: optional(Schema.Array(FileDiff.Info)),
 })
 
 const SessionTokens = Schema.Struct({
@@ -529,42 +529,42 @@ const SessionShare = Schema.Struct({
 
 const SessionRevert = Schema.Struct({
   messageID: MessageID,
-  partID: optionalOmitUndefined(PartID),
-  snapshot: optionalOmitUndefined(Schema.String),
-  diff: optionalOmitUndefined(Schema.String),
+  partID: optional(PartID),
+  snapshot: optional(Schema.String),
+  diff: optional(Schema.String),
 })
 
 const SessionModel = Schema.Struct({
   id: Model.ID,
   providerID: Provider.ID,
-  variant: optionalOmitUndefined(Schema.String),
+  variant: optional(Schema.String),
 })
 
 export const SessionInfo = Schema.Struct({
   id: SessionID,
   slug: Schema.String,
   projectID: Project.ID,
-  workspaceID: optionalOmitUndefined(WorkspaceID),
+  workspaceID: optional(WorkspaceID),
   directory: Schema.String,
-  path: optionalOmitUndefined(Schema.String),
-  parentID: optionalOmitUndefined(SessionID),
-  summary: optionalOmitUndefined(SessionSummary),
-  cost: optionalOmitUndefined(Schema.Finite),
-  tokens: optionalOmitUndefined(SessionTokens),
-  share: optionalOmitUndefined(SessionShare),
+  path: optional(Schema.String),
+  parentID: optional(SessionID),
+  summary: optional(SessionSummary),
+  cost: optional(Schema.Finite),
+  tokens: optional(SessionTokens),
+  share: optional(SessionShare),
   title: Schema.String,
-  agent: optionalOmitUndefined(Schema.String),
-  model: optionalOmitUndefined(SessionModel),
+  agent: optional(Schema.String),
+  model: optional(SessionModel),
   version: Schema.String,
-  metadata: optionalOmitUndefined(Schema.Record(Schema.String, Schema.Any)),
+  metadata: optional(Schema.Record(Schema.String, Schema.Any)),
   time: Schema.Struct({
     created: NonNegativeInt,
     updated: NonNegativeInt,
-    compacting: optionalOmitUndefined(NonNegativeInt),
-    archived: optionalOmitUndefined(Schema.Finite),
+    compacting: optional(NonNegativeInt),
+    archived: optional(Schema.Finite),
   }),
-  permission: optionalOmitUndefined(PermissionV1.Ruleset),
-  revert: optionalOmitUndefined(SessionRevert),
+  permission: optional(PermissionV1.Ruleset),
+  revert: optional(SessionRevert),
 }).annotate({ identifier: "Session" })
 export type SessionInfo = typeof SessionInfo.Type
 

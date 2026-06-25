@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import { withStatics } from "./schema"
+import { statics } from "./schema"
 
 export interface Source extends Schema.Schema.Type<typeof Source> {}
 export const Source = Schema.Struct({
@@ -18,7 +18,7 @@ export const FileAttachment = Schema.Struct({
 })
   .annotate({ identifier: "Prompt.FileAttachment" })
   .pipe(
-    withStatics((schema) => ({
+    statics((schema) => ({
       create: (input: FileAttachment) =>
         schema.make({
           uri: input.uri,
@@ -44,7 +44,7 @@ export const Prompt = Schema.Struct({
 })
   .annotate({ identifier: "Prompt" })
   .pipe(
-    withStatics((schema) => ({
+    statics((schema) => ({
       equivalence: Schema.toEquivalence(schema),
       fromUserMessage: (input: Pick<Prompt, "text" | "files" | "agents">) =>
         schema.make({

@@ -815,6 +815,20 @@ const scenarios: Scenario[] = [
     array(body.data)
   }),
   http.protected
+    .post("/api/session/{sessionID}/permission", "v2.session.permission.create")
+    .seeded((ctx) => ctx.session({ title: "Permission create owner" }))
+    .at((ctx) => ({
+      path: route("/api/session/{sessionID}/permission", { sessionID: ctx.state.id }),
+      headers: ctx.headers(),
+      body: { action: "read", resources: [".env"] },
+    }))
+    .json(200, (body) => {
+      object(body)
+      object(body.data)
+      check(typeof body.data.id === "string", "permission create should return an ID")
+      check(body.data.effect === "ask", "permission create should create a pending request")
+    }),
+  http.protected
     .get("/api/session/{sessionID}/permission", "v2.session.permission.list")
     .seeded((ctx) => ctx.session({ title: "Permission list owner" }))
     .at((ctx) => ({
@@ -822,6 +836,17 @@ const scenarios: Scenario[] = [
       headers: ctx.headers(),
     }))
     .json(200, data(array)),
+  http.protected
+    .get("/api/session/{sessionID}/permission/{requestID}", "v2.session.permission.get")
+    .seeded((ctx) => ctx.session({ title: "Permission get owner" }))
+    .at((ctx) => ({
+      path: route("/api/session/{sessionID}/permission/{requestID}", {
+        sessionID: ctx.state.id,
+        requestID: "per_httpapi_missing",
+      }),
+      headers: ctx.headers(),
+    }))
+    .json(404, object, "status"),
   http.protected
     .get("/api/session/{sessionID}/question", "v2.session.question.list")
     .seeded((ctx) => ctx.session({ title: "Question list owner" }))
@@ -977,6 +1002,28 @@ const scenarios: Scenario[] = [
     .get("/api/session/{sessionID}/context", "v2.session.context")
     .at((ctx) => ({
       path: route("/api/session/{sessionID}/context", { sessionID: "ses_httpapi_missing" }),
+      headers: ctx.headers(),
+    }))
+    .json(404, object, "status"),
+  http.protected
+    .post("/api/session/{sessionID}/revert/stage", "v2.session.revert.stage")
+    .at((ctx) => ({
+      path: route("/api/session/{sessionID}/revert/stage", { sessionID: "ses_httpapi_missing" }),
+      headers: { ...ctx.headers(), "content-type": "application/json" },
+      body: { messageID: "msg_httpapi_missing" },
+    }))
+    .json(404, object, "status"),
+  http.protected
+    .post("/api/session/{sessionID}/revert/clear", "v2.session.revert.clear")
+    .at((ctx) => ({
+      path: route("/api/session/{sessionID}/revert/clear", { sessionID: "ses_httpapi_missing" }),
+      headers: ctx.headers(),
+    }))
+    .json(404, object, "status"),
+  http.protected
+    .post("/api/session/{sessionID}/revert/commit", "v2.session.revert.commit")
+    .at((ctx) => ({
+      path: route("/api/session/{sessionID}/revert/commit", { sessionID: "ses_httpapi_missing" }),
       headers: ctx.headers(),
     }))
     .json(404, object, "status"),

@@ -112,7 +112,7 @@ export const layer = Layer.effect(
     }
 
     if (location.vcs?.type === "git") {
-      const resolved = yield* git.dir(location.directory)
+      const resolved = (yield* git.repo.discover(location.directory))?.gitDirectory
       const vcs = resolved ? yield* fs.realPath(resolved).pipe(Effect.catch(() => Effect.succeed(resolved))) : undefined
       if (vcs && !config.includes(".git") && !config.includes(vcs) && (!resolved || !config.includes(resolved))) {
         const ignore = (yield* fs.readDirectoryEntries(vcs).pipe(Effect.catch(() => Effect.succeed([])))).flatMap(

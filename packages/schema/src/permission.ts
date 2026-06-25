@@ -4,11 +4,11 @@ import { Schema } from "effect"
 import { define, inventory } from "./event"
 import { ascending } from "./identifier"
 import { SessionID } from "./session-id"
-import { withStatics } from "./schema"
+import { statics } from "./schema"
 
 export const ID = Schema.String.check(Schema.isStartsWith("per")).pipe(
   Schema.brand("PermissionV2.ID"),
-  withStatics((schema) => ({ create: (id?: string) => schema.make(id ?? "per_" + ascending()) })),
+  statics((schema) => ({ create: (id?: string) => schema.make(id ?? "per_" + ascending()) })),
 )
 export type ID = typeof ID.Type
 
