@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, onCleanup, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, onCleanup, Show, type Ref } from "solid-js"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
@@ -10,13 +10,16 @@ import { projectForSession } from "@/pages/layout/helpers"
 import { SessionTabAvatar } from "@/pages/layout/session-tab-avatar"
 import { showToast } from "@/utils/toast"
 import type { Session } from "@opencode-ai/sdk/v2"
+import { canOpenTabRename, forwardTabRef } from "./titlebar-tab-gesture"
 import "./titlebar-tab-nav.css"
 
 export function TabNavItem(props: {
-  ref?: HTMLDivElement
+  ref?: Ref<HTMLDivElement>
   href: string
   server: ServerConnection.Key
-  session: Session
+  session: () => Session | undefined
+  onTitleChange?: (title: string) => void
+  onTitleChangeFailed?: (title: string) => void
   onClose: () => void
   onNavigate: () => void
   active?: boolean
@@ -33,6 +36,7 @@ export function TabNavItem(props: {
   let tabRoot!: HTMLDivElement
   let titleEl!: HTMLSpanElement
   let committing = false
+  let measureFrame: number | undefined
 
   const closeTab = (event: MouseEvent) => {
     event.preventDefault()
@@ -42,7 +46,12 @@ export function TabNavItem(props: {
   const global = useGlobal()
   const serverCtx = createMemo(() => {
     const conn = global.servers.list().find((item) => ServerConnection.key(item) === props.server)
-    if (conn) return global.createServerCtx(conn)
+    if (conn) return global.ensureServerCtx(conn)
+  })
+  const project = createMemo(() => {
+    const session = props.session()
+    if (!session) return
+    return projectForSession(session, serverCtx()?.projects.list() ?? [])
   })
 
   const measureTitleOverflow = () => {
@@ -53,17 +62,25 @@ export function TabNavItem(props: {
     setTitleOverflowing(titleEl.scrollWidth > titleEl.clientWidth)
   }
 
+  const scheduleTitleOverflow = () => {
+    if (measureFrame !== undefined) return
+    measureFrame = requestAnimationFrame(() => {
+      measureFrame = undefined
+      measureTitleOverflow()
+    })
+  }
+
   createEffect(() => {
-    props.session.title
+    props.session()?.title
     props.forceTruncate
     editing()
-    requestAnimationFrame(measureTitleOverflow)
+    scheduleTitleOverflow()
   })
 
-  createResizeObserver(
-    () => tabRoot,
-    () => requestAnimationFrame(measureTitleOverflow),
-  )
+  createResizeObserver(() => tabRoot, scheduleTitleOverflow)
+  onCleanup(() => {
+    if (measureFrame !== undefined) cancelAnimationFrame(measureFrame)
+  })
 
   const selectTitle = () => {
     const range = document.createRange()
@@ -75,19 +92,21 @@ export function TabNavItem(props: {
 
   const rename = async (title: string) => {
     const ctx = serverCtx()
-    if (!ctx) return
-    const client = ctx.sdk.createClient({ directory: props.session.directory, throwOnError: true })
-    await client.session.update({ sessionID: props.session.id, title })
+    const session = props.session()
+    if (!ctx || !session) return
+    const client = ctx.sdk.createClient({ directory: session.directory, throwOnError: true })
+    await client.session.update({ sessionID: session.id, title })
   }
 
   const closeRename = async (save: boolean) => {
     if (committing || !editing()) return
     committing = true
 
-    const original = props.session.title
+    const original = props.session()?.title ?? ""
     const next = (titleEl.textContent ?? "").trim()
 
     titleEl.scrollLeft = 0
+    if (save && next && next !== original) props.onTitleChange?.(next)
     setEditing(false)
 
     if (!save || !next || next === original) {
@@ -98,6 +117,7 @@ export function TabNavItem(props: {
     try {
       await rename(next)
     } catch (err) {
+      props.onTitleChangeFailed?.(original)
       showToast({
         title: language.t("common.requestFailed"),
         description: err instanceof Error ? err.message : undefined,
@@ -110,14 +130,18 @@ export function TabNavItem(props: {
   createEffect(() => {
     if (editing()) return
     if (!titleEl) return
-    titleEl.textContent = props.session.title
+    const title = props.session()?.title
+    if (title === undefined) return
+    titleEl.textContent = title
   })
 
   const openRename = (event: MouseEvent) => {
     event.preventDefault()
     event.stopPropagation()
-    if (props.dragging || editing()) return
-    titleEl.textContent = props.session.title
+    if (!canOpenTabRename(props.dragging, editing(), committing)) return
+    const session = props.session()
+    if (!session) return
+    titleEl.textContent = session.title
     setEditing(true)
 
     requestAnimationFrame(() => {
@@ -148,12 +172,12 @@ export function TabNavItem(props: {
     <div
       ref={(el) => {
         tabRoot = el
-        props.ref = el
+        forwardTabRef(props.ref, el)
       }}
       data-titlebar-tab
       data-title-overflow={titleOverflowing()}
       data-editing={editing()}
-      class="group relative flex h-7 max-w-60 select-none flex-row items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-[6px] bg-[var(--tab-bg)] px-1.5 [--tab-bg:var(--v2-background-bg-deep)] hover:[--tab-bg:var(--v2-background-bg-layer-02)] data-[active='true']:[--tab-bg:var(--v2-background-bg-layer-02)] data-[dragging='true']:[--tab-bg:var(--v2-background-bg-layer-02)] data-[pressed='true']:[--tab-bg:var(--v2-background-bg-layer-02)] data-[editing='true']:[--tab-bg:var(--v2-background-bg-layer-02)]"
+      class="group relative flex h-7 min-w-24 max-w-60 select-none flex-row items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-[6px] bg-[var(--tab-bg)] px-1.5 [--tab-bg:var(--v2-background-bg-deep)] hover:[--tab-bg:var(--v2-background-bg-layer-02)] data-[active='true']:[--tab-bg:var(--v2-background-bg-layer-02)] data-[dragging='true']:[--tab-bg:var(--v2-background-bg-layer-02)] data-[pressed='true']:[--tab-bg:var(--v2-background-bg-layer-02)] data-[editing='true']:[--tab-bg:var(--v2-background-bg-layer-02)]"
       classList={{ invisible: props.hidden }}
       data-active={props.active}
       data-dragging={props.dragging}
@@ -163,10 +187,8 @@ export function TabNavItem(props: {
         closeTab(event)
       }}
     >
-      <Show when={props.session}>
+      <Show when={props.session()}>
         {(session) => {
-          const project = createMemo(() => projectForSession(session(), serverCtx()?.projects.list() ?? []))
-
           return (
             <a
               data-slot="tab-link"
@@ -193,7 +215,10 @@ export function TabNavItem(props: {
                 />
               </span>
               <span
-                ref={titleEl}
+                ref={(el) => {
+                  titleEl = el
+                  titleEl.textContent = session().title
+                }}
                 data-slot="tab-title"
                 class="min-w-0 flex-1 outline-none leading-4"
                 classList={{
@@ -211,7 +236,7 @@ export function TabNavItem(props: {
                   }
                   if (event.key !== "Escape") return
                   event.preventDefault()
-                  titleEl.textContent = props.session.title
+                  titleEl.textContent = session().title
                   void closeRename(false)
                 }}
                 onBlur={() => void closeRename(true)}
@@ -234,6 +259,10 @@ export function TabNavItem(props: {
           size="small"
           variant="ghost-muted"
           class="relative z-10 opacity-0 group-hover:opacity-100 group-data-[active=true]:opacity-100 group-data-[editing=true]:opacity-100"
+          onPointerDown={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+          }}
           onClick={closeTab}
           icon={<IconV2 name="xmark-small" />}
         />
@@ -243,12 +272,13 @@ export function TabNavItem(props: {
 }
 
 export function DraftTabItem(props: {
-  ref?: HTMLDivElement
+  ref?: Ref<HTMLDivElement>
   href: string
   title: string
   active?: boolean
   onNavigate: () => void
   onClose: () => void
+  suppressNavigation?: () => boolean
   dragging?: boolean
   pressed?: boolean
   hidden?: boolean
@@ -260,7 +290,7 @@ export function DraftTabItem(props: {
   }
   return (
     <div
-      ref={props.ref}
+      ref={(el) => forwardTabRef(props.ref, el)}
       data-titlebar-tab
       data-active={props.active}
       data-dragging={props.dragging}
@@ -273,9 +303,16 @@ export function DraftTabItem(props: {
       }}
     >
       <a
+        data-slot="tab-link"
         href={props.href}
+        draggable={false}
+        onDragStart={(event) => {
+          event.preventDefault()
+          event.stopPropagation()
+        }}
         onClick={(event) => {
           event.preventDefault()
+          if (props.suppressNavigation?.()) return
           props.onNavigate()
         }}
         class="flex h-full min-w-0 flex-1 flex-row items-center gap-1.5 overflow-hidden text-[13px] font-medium leading-5 text-v2-text-text-faint group-data-[active='true']:text-[var(--v2-text-text-base)]"
@@ -289,6 +326,10 @@ export function DraftTabItem(props: {
         <IconButtonV2
           size="small"
           variant="ghost-muted"
+          onPointerDown={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+          }}
           onMouseDown={(event) => {
             event.preventDefault()
             event.stopPropagation()

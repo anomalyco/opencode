@@ -34,7 +34,12 @@ export function captureTabDragLayout(list: HTMLElement, order: string[]) {
       if (slot.dataset.tabKey !== secondId) continue
       const tab = slot.querySelector<HTMLElement>("[data-titlebar-tab]")
       if (!tab) break
-      dividerWidth = slot.getBoundingClientRect().width - tab.getBoundingClientRect().width
+      const style = getComputedStyle(slot)
+      dividerWidth =
+        slot.getBoundingClientRect().width -
+        tab.getBoundingClientRect().width +
+        (Number.parseFloat(style.marginLeft) || 0) +
+        (Number.parseFloat(style.marginRight) || 0)
       break
     }
   }
@@ -78,15 +83,8 @@ export function insertIndexFromVirtualLayout(
   const others = order.filter((id) => id !== draggedId)
   let target = currentIndex
 
-  if (currentIndex > 0) {
-    const seam = slotLeft(others, currentIndex, layout)
-    if (pointerX < seam - deadband) target = currentIndex - 1
-  }
-
-  if (target === currentIndex && currentIndex < order.length - 1) {
-    const seam = slotLeft(others, currentIndex + 1, layout)
-    if (pointerX >= seam) target = currentIndex + 1
-  }
+  while (target > 0 && pointerX < slotLeft(others, target, layout) - deadband) target--
+  while (target < order.length - 1 && pointerX >= slotLeft(others, target + 1, layout)) target++
 
   return target
 }
@@ -105,7 +103,7 @@ export function draftOrderChanged(initial: readonly string[], final: readonly st
 }
 
 function easeOvershoot(overshoot: number) {
-  return FLOATER_OVERSHOOT_MAX * overshoot / (overshoot + FLOATER_OVERSHOOT_MAX)
+  return (FLOATER_OVERSHOOT_MAX * overshoot) / (overshoot + FLOATER_OVERSHOOT_MAX)
 }
 
 export function clampFloaterLeft(left: number, width: number, stripLeft: number, stripRight: number) {
