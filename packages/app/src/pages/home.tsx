@@ -957,7 +957,7 @@ function HomeSessionSearch(props: {
   )
 
   return (
-    <div class="mr-2 w-[calc(100%_-_8px)]">
+    <div class="w-full">
       <div ref={root} data-component="home-session-search" class="relative z-10 w-full">
         <Show when={props.open}>
           <div
@@ -1134,7 +1134,7 @@ function HomeSessionSearchResultRow(props: {
 function HomeSessionGroupHeader(props: { title: string; onNewSession?: () => void }) {
   const language = useLanguage()
   return (
-    <div class="flex h-7 min-w-0 items-center justify-between pl-[18px] pr-2">
+    <div class="flex h-7 min-w-0 items-center justify-between pl-[18px]">
       <div class={HOME_SECTION_LABEL}>{props.title}</div>
       <Show when={props.onNewSession}>
         {(onNewSession) => (
