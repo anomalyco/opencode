@@ -52,6 +52,7 @@ import NewLayout from "@/pages/layout-new"
 import { ErrorPage } from "./pages/error"
 import { useCheckServerHealth } from "./utils/server-health"
 import { legacySessionHref, requireServerKey, sessionHref } from "./utils/session-route"
+import { isSessionNotFoundError } from "./utils/server-errors"
 
 import Session from "@/pages/session"
 import { NewHome, LegacyHome } from "@/pages/home"
@@ -120,8 +121,14 @@ function ResolvedTargetSessionRoute() {
     ({ id, sync }) => sync.session.lineage.resolve(id),
   )
   const current = createMemo(() => cached() ?? resolved())
+  const missing = createMemo(() => isSessionNotFoundError(resolved.error, params.id))
   const directory = createMemo(() => current()?.session.directory)
   const targetDirectory = () => directory()!
+
+  createEffect(() => {
+    if (!missing()) return
+    tabs.removeSessionTab({ server: serverKey(), sessionId: params.id })
+  })
 
   createEffect(() => {
     const session = current()
@@ -134,7 +141,7 @@ function ResolvedTargetSessionRoute() {
 
   return (
     <TargetServerScopedProviders directory={directory} sessionID={() => params.id}>
-      <Show when={!resolved.error} fallback={<ErrorPage error={resolved.error} />}>
+      <Show when={!resolved.error || missing()} fallback={<ErrorPage error={resolved.error} />}>
         <Show when={directory()}>
           <Show
             when={settings.general.newLayoutDesigns()}
