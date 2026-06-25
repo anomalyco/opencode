@@ -35,7 +35,9 @@ describe("layer node", () => {
   test("replaces a layer by identity", async () => {
     const replacement = Layer.succeed(Value, Value.of({ value: "simulation" }))
     const program = Effect.map(Greeting, (item) => item.value).pipe(
-      Effect.provide(LayerNode.buildLayer(greeting, { tiers, replacements: [LayerNode.replace(valueLayer, replacement)] })),
+      Effect.provide(
+        LayerNode.buildLayer(greeting, { tiers, replacements: [LayerNode.replace(valueLayer, replacement)] }),
+      ),
     )
     expect(await Effect.runPromise(program)).toBe("hello simulation")
   })
@@ -74,7 +76,9 @@ describe("layer node", () => {
     )
     await Effect.runPromise(
       Effect.map(Greeting, (item) => item.value).pipe(
-        Effect.provide(LayerNode.buildLayer(greeting, { tiers, replacements: [LayerNode.replace(other, replacement)] })),
+        Effect.provide(
+          LayerNode.buildLayer(greeting, { tiers, replacements: [LayerNode.replace(other, replacement)] }),
+        ),
       ),
     )
     expect(acquisitions).toBe(0)
