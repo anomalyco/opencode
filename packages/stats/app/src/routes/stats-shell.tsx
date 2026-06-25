@@ -1,24 +1,16 @@
 import opencodeWordmarkDark from "../asset/logo-ornate-dark.svg"
 import { query } from "@solidjs/router"
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
+import { useI18n } from "../context/i18n"
+import { useLanguage } from "../context/language"
+import { route, type Locale } from "../lib/language"
 
 export type HeaderLink = { href: string; label: string }
 
-export const headerLinks = [
-  { href: "#top-models", label: "Top Models" },
-  { href: "#leaderboard", label: "Leaderboard" },
-  { href: "#session-cost", label: "Session Cost" },
-  { href: "#token-cost", label: "Token Cost" },
-  { href: "#cache-ratio", label: "Cache Ratio" },
-  { href: "#market-share", label: "Market Share" },
-  { href: "#geo-breakdown", label: "Geo Breakdown" },
-] as const
 export const githubLink = {
   href: "https://github.com/anomalyco/opencode",
   apiHref: "https://api.github.com/repos/anomalyco/opencode",
-  label: "GitHub",
   fallbackStars: "150K",
-  ariaLabel: "Star OpenCode on GitHub",
 }
 export const themePreferences = ["dark", "light", "system"] as const
 export const themeStorageKey = "opencode:stats-theme"
@@ -28,11 +20,6 @@ const compactNumberFormatter = new Intl.NumberFormat("en", {
   notation: "compact",
   maximumFractionDigits: 1,
 })
-const themePreferenceLabels = {
-  dark: "Dark",
-  light: "Light",
-  system: "System",
-} as const
 
 export const getGitHubStars = query(async () => {
   "use server"
@@ -66,9 +53,23 @@ export function applyThemePreference(preference: ThemePreference) {
 }
 
 export function Header(props: { githubStars: string; links?: readonly HeaderLink[]; brandHref?: string }) {
+  const i18n = useI18n()
+  const language = useLanguage()
   const [menuOpen, setMenuOpen] = createSignal(false)
   const [menuViewport, setMenuViewport] = createSignal(false)
-  const links = createMemo(() => props.links ?? headerLinks)
+  const links = createMemo(
+    () =>
+      props.links ?? [
+        { href: "#top-models", label: i18n.t("nav.topModels") },
+        { href: "#leaderboard", label: i18n.t("nav.leaderboard") },
+        { href: "#session-cost", label: i18n.t("nav.sessionCost") },
+        { href: "#token-cost", label: i18n.t("nav.tokenCost") },
+        { href: "#cache-ratio", label: i18n.t("nav.cacheRatio") },
+        { href: "#market-share", label: i18n.t("nav.marketShare") },
+        { href: "#geo-breakdown", label: i18n.t("nav.geoBreakdown") },
+      ],
+  )
+  const localHref = (href: string) => (href.startsWith("/") ? language.route(href) : href)
 
   createEffect(() => {
     if (typeof window === "undefined") return
@@ -101,15 +102,19 @@ export function Header(props: { githubStars: string; links?: readonly HeaderLink
   return (
     <header data-component="top" data-menu-open={menuOpen() ? "true" : undefined}>
       <div data-slot="header-bar">
-        <a data-slot="brand" href={props.brandHref ?? import.meta.env.BASE_URL} aria-label="Data home">
+        <a
+          data-slot="brand"
+          href={localHref(props.brandHref ?? import.meta.env.BASE_URL)}
+          aria-label={i18n.t("header.brandLabel")}
+        >
           <DataWordmark />
         </a>
-        <nav data-component="section-nav" aria-label="Data sections">
+        <nav data-component="section-nav" aria-label={i18n.t("header.sectionNavLabel")}>
           <ul>
             <For each={links()}>
               {(link) => (
                 <li>
-                  <a href={link.href}>{link.label}</a>
+                  <a href={localHref(link.href)}>{link.label}</a>
                 </li>
               )}
             </For>
@@ -122,20 +127,20 @@ export function Header(props: { githubStars: string; links?: readonly HeaderLink
             href={githubLink.href}
             target="_blank"
             rel="noreferrer"
-            aria-label={`${githubLink.ariaLabel} (${props.githubStars} stars)`}
+            aria-label={`${i18n.t("header.githubAria")} (${props.githubStars} stars)`}
           >
-            <strong>{githubLink.label}</strong>
+            <strong>{i18n.t("header.github")}</strong>
             <span>[{props.githubStars}]</span>
           </a>
           <a data-slot="header-button" data-variant="contrast" href="https://opencode.ai/">
-            <strong>Try OpenCode</strong>
+            <strong>{i18n.t("header.tryOpenCode")}</strong>
           </a>
           <button
             data-slot="menu-button"
             type="button"
             aria-controls="stats-mobile-nav"
             aria-expanded={menuOpen() ? "true" : "false"}
-            aria-label={menuOpen() ? "Close navigation" : "Open navigation"}
+            aria-label={menuOpen() ? i18n.t("header.closeNav") : i18n.t("header.openNav")}
             onClick={() => setMenuOpen((value) => !value)}
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -146,21 +151,26 @@ export function Header(props: { githubStars: string; links?: readonly HeaderLink
           </button>
         </div>
       </div>
-      <nav id="stats-mobile-nav" data-slot="mobile-menu" aria-label="Data sections" hidden={!menuOpen()}>
+      <nav
+        id="stats-mobile-nav"
+        data-slot="mobile-menu"
+        aria-label={i18n.t("header.sectionNavLabel")}
+        hidden={!menuOpen()}
+      >
         <a
           data-slot="mobile-menu-item"
           data-variant="github"
           href={githubLink.href}
           target="_blank"
           rel="noreferrer"
-          aria-label={`${githubLink.ariaLabel} (${props.githubStars} stars)`}
+          aria-label={`${i18n.t("header.githubAria")} (${props.githubStars} stars)`}
         >
-          <strong>{githubLink.label}</strong>
+          <strong>{i18n.t("header.github")}</strong>
           <span>[{props.githubStars}]</span>
         </a>
         <For each={links()}>
           {(link) => (
-            <a data-slot="mobile-menu-item" href={link.href} onClick={() => setMenuOpen(false)}>
+            <a data-slot="mobile-menu-item" href={localHref(link.href)} onClick={() => setMenuOpen(false)}>
               {link.label}
             </a>
           )}
@@ -207,67 +217,73 @@ export function Footer(props: {
   onThemePreferenceChange: (preference: ThemePreference) => void
   links?: readonly HeaderLink[]
 }) {
+  const i18n = useI18n()
+  const language = useLanguage()
   const [subscribeOpen, setSubscribeOpen] = createSignal(false)
+  const localHref = (href: string) => (href.startsWith("/") ? language.route(href) : href)
   const modelStats = props.links ?? [
-    { href: "#top-models", label: "Top Models" },
-    { href: "#leaderboard", label: "Leaderboard" },
-    { href: "#session-cost", label: "Session Cost" },
-    { href: "#token-cost", label: "Token Cost" },
-    { href: "#cache-ratio", label: "Cache Ratio" },
-    { href: "#market-share", label: "Market Share" },
-    { href: "#geo-breakdown", label: "Geo Breakdown" },
+    { href: "#top-models", label: i18n.t("nav.topModels") },
+    { href: "#leaderboard", label: i18n.t("nav.leaderboard") },
+    { href: "#session-cost", label: i18n.t("nav.sessionCost") },
+    { href: "#token-cost", label: i18n.t("nav.tokenCost") },
+    { href: "#cache-ratio", label: i18n.t("nav.cacheRatio") },
+    { href: "#market-share", label: i18n.t("nav.marketShare") },
+    { href: "#geo-breakdown", label: i18n.t("nav.geoBreakdown") },
   ]
   const legal = [
-    { href: "https://opencode.ai/legal/terms-of-service", label: "Terms of service" },
-    { href: "https://opencode.ai/legal/privacy-policy", label: "Privacy policy" },
+    { href: "https://opencode.ai/legal/terms-of-service", label: i18n.t("footer.terms") },
+    { href: "https://opencode.ai/legal/privacy-policy", label: i18n.t("footer.privacy") },
   ]
   const connect = [
-    { href: "mailto:hello@opencode.ai", label: "Contact us" },
-    { href: "https://opencode.ai/discord", label: "Community" },
+    { href: "mailto:hello@opencode.ai", label: i18n.t("footer.contact") },
+    { href: "https://opencode.ai/discord", label: i18n.t("footer.community") },
     { href: "https://x.com/opencode", label: "X" },
-    githubLink,
-    { href: "https://www.youtube.com/@anomaly-co", label: "YouTube" },
+    { href: githubLink.href, label: i18n.t("header.github") },
+    { href: "https://www.youtube.com/@anomaly-co", label: i18n.t("footer.youtube") },
   ]
 
   return (
     <footer data-component="footer">
-      <SectionBridge label="GEO BREAKDOWN" href="#geo-breakdown" />
+      <SectionBridge label={i18n.t("nav.geoBreakdown").toUpperCase()} href="#geo-breakdown" />
       <div data-slot="footer-grid">
-        <a data-slot="footer-mark" href="https://opencode.ai" aria-label="OpenCode home">
+        <a data-slot="footer-mark" href="https://opencode.ai" aria-label={i18n.t("footer.homeAria")}>
           <OpenCodeMark />
         </a>
-        <FooterColumn title="Model Data" links={modelStats} />
-        <FooterColumn title="Legal" links={legal} />
-        <FooterColumn title="Connect" links={connect} />
+        <FooterColumn title={i18n.t("footer.modelData")} links={modelStats} localHref={localHref} />
+        <FooterColumn title={i18n.t("footer.legal")} links={legal} localHref={localHref} />
+        <FooterColumn title={i18n.t("footer.connect")} links={connect} localHref={localHref} />
         <div data-slot="footer-column">
-          <h2>Newsletter</h2>
-          <p>Be the first to know about new releases.</p>
+          <h2>{i18n.t("footer.newsletter")}</h2>
+          <p>{i18n.t("footer.newsletterBody")}</p>
           <button data-slot="subscribe-button" type="button" onClick={() => setSubscribeOpen(true)}>
-            Subscribe
+            {i18n.t("footer.subscribe")}
           </button>
         </div>
       </div>
       <div data-slot="footer-pattern" aria-hidden="true" />
       <div data-slot="footer-bottom">
         <div>
-          <span>© 2026 Anomaly Innovations Inc.</span>
-          <span data-slot="status">All systems Operational</span>
+          <span>{i18n.t("footer.copyright")}</span>
+          <span data-slot="status">{i18n.t("footer.status")}</span>
         </div>
-        <div data-slot="theme-toggle" role="group" aria-label="Theme">
-          <For each={themePreferences}>
-            {(preference) => (
-              <button
-                data-slot="theme-option"
-                type="button"
-                aria-label={themePreferenceLabels[preference]}
-                aria-pressed={props.themePreference === preference ? "true" : "false"}
-                title={themePreferenceLabels[preference]}
-                onClick={() => props.onThemePreferenceChange(preference)}
-              >
-                <ThemePreferenceIcon preference={preference} />
-              </button>
-            )}
-          </For>
+        <div data-slot="footer-controls">
+          <FooterLanguageSwitcher />
+          <div data-slot="theme-toggle" role="group" aria-label={i18n.t("theme.groupLabel")}>
+            <For each={themePreferences}>
+              {(preference) => (
+                <button
+                  data-slot="theme-option"
+                  type="button"
+                  aria-label={i18n.t(themePreferenceLabelKey(preference))}
+                  aria-pressed={props.themePreference === preference ? "true" : "false"}
+                  title={i18n.t(themePreferenceLabelKey(preference))}
+                  onClick={() => props.onThemePreferenceChange(preference)}
+                >
+                  <ThemePreferenceIcon preference={preference} />
+                </button>
+              )}
+            </For>
+          </div>
         </div>
       </div>
       <Show when={subscribeOpen()}>
@@ -277,10 +293,36 @@ export function Footer(props: {
   )
 }
 
+function FooterLanguageSwitcher() {
+  const i18n = useI18n()
+  const language = useLanguage()
+
+  return (
+    <label data-slot="footer-language">
+      <span>{i18n.t("footer.language")}</span>
+      <select
+        value={language.locale()}
+        aria-label={i18n.t("footer.language")}
+        onChange={(event) => {
+          const locale = event.currentTarget.value as Locale
+          const url = new URL(window.location.href)
+          const current = `${url.pathname}${url.search}${url.hash}`
+          const href = `${route(locale, url.pathname)}${url.search}${url.hash}`
+          language.setLocale(locale)
+          if (href !== current) window.location.assign(href)
+        }}
+      >
+        <For each={language.locales}>{(locale) => <option value={locale}>{language.label(locale)}</option>}</For>
+      </select>
+    </label>
+  )
+}
+
 function SectionBridge(props: { label: string; href: string }) {
+  const i18n = useI18n()
   return (
     <a data-component="section-bridge" href={props.href}>
-      <span>LEAN MORE</span>
+      <span>{i18n.t("bridge.learnMore")}</span>
       <i />
       <strong>{props.label}</strong>
       <b>▸</b>
@@ -355,6 +397,7 @@ function ThemePreferenceIcon(props: { preference: ThemePreference }) {
 }
 
 function SubscribeModal(props: { onClose: () => void }) {
+  const i18n = useI18n()
   const [status, setStatus] = createSignal<"idle" | "pending" | "success" | "error">("idle")
   const [message, setMessage] = createSignal("")
   let input: HTMLInputElement | undefined
@@ -386,7 +429,12 @@ function SubscribeModal(props: { onClose: () => void }) {
       <div data-slot="modal-panel">
         <div data-slot="modal-brand">
           <img data-slot="modal-logo" src={opencodeWordmarkDark} alt="OpenCode" />
-          <button data-slot="modal-close" type="button" aria-label="Close newsletter signup" onClick={props.onClose}>
+          <button
+            data-slot="modal-close"
+            type="button"
+            aria-label={i18n.t("modal.closeNewsletter")}
+            onClick={props.onClose}
+          >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
               <path d="M4.44 4.44L11.56 11.56M11.56 4.44L4.44 11.56" stroke="currentColor" />
             </svg>
@@ -394,12 +442,8 @@ function SubscribeModal(props: { onClose: () => void }) {
         </div>
         <div data-slot="modal-body">
           <div data-slot="modal-intro">
-            <h2 id="subscribe-title">OpenCode Newsletter</h2>
-            <p>
-              Be the first to know
-              <br />
-              about new releases.
-            </p>
+            <h2 id="subscribe-title">{i18n.t("modal.title")}</h2>
+            <p>{i18n.t("modal.body")}</p>
           </div>
           <form
             data-slot="subscribe-form"
@@ -419,24 +463,24 @@ function SubscribeModal(props: { onClose: () => void }) {
                     setStatus("success")
                     return
                   }
-                  setMessage(await newsletterErrorMessage(response))
+                  setMessage(await newsletterErrorMessage(response, i18n.t("modal.error")))
                   setStatus("error")
                 },
                 () => {
-                  setMessage("Failed to subscribe")
+                  setMessage(i18n.t("modal.error"))
                   setStatus("error")
                 },
               )
             }}
           >
-            <input ref={input} type="email" name="email" placeholder="Email address" required />
+            <input ref={input} type="email" name="email" placeholder={i18n.t("modal.email")} required />
             <button type="submit" disabled={status() === "pending"}>
-              <span>{status() === "pending" ? "Subscribing..." : "Subscribe"}</span>
+              <span>{status() === "pending" ? i18n.t("modal.subscribing") : i18n.t("modal.subscribe")}</span>
             </button>
           </form>
           <div data-slot="subscribe-feedback" aria-live="polite">
             <Show when={status() === "success"}>
-              <p data-state="success">You're subscribed.</p>
+              <p data-state="success">{i18n.t("modal.success")}</p>
             </Show>
             <Show when={status() === "error"}>
               <p data-state="error">{message()}</p>
@@ -448,24 +492,30 @@ function SubscribeModal(props: { onClose: () => void }) {
   )
 }
 
-function newsletterErrorMessage(response: Response) {
+function newsletterErrorMessage(response: Response, fallback: string) {
   return response.json().then(
     (body: unknown) =>
-      body && typeof body === "object" && "error" in body && typeof body.error === "string"
-        ? body.error
-        : "Failed to subscribe",
-    () => "Failed to subscribe",
+      body && typeof body === "object" && "error" in body && typeof body.error === "string" ? body.error : fallback,
+    () => fallback,
   )
 }
 
-function FooterColumn(props: { title: string; links: readonly { href: string; label: string }[] }) {
+function FooterColumn(props: {
+  title: string
+  links: readonly { href: string; label: string }[]
+  localHref: (href: string) => string
+}) {
   return (
     <div data-slot="footer-column">
       <h2>{props.title}</h2>
       <nav aria-label={props.title}>
         <For each={props.links}>
           {(link) => (
-            <a href={link.href} target={link.href.startsWith("http") ? "_blank" : undefined} rel="noreferrer">
+            <a
+              href={props.localHref(link.href)}
+              target={link.href.startsWith("http") ? "_blank" : undefined}
+              rel="noreferrer"
+            >
               {link.label}
             </a>
           )}
@@ -473,4 +523,10 @@ function FooterColumn(props: { title: string; links: readonly { href: string; la
       </nav>
     </div>
   )
+}
+
+function themePreferenceLabelKey(preference: ThemePreference) {
+  if (preference === "dark") return "theme.dark"
+  if (preference === "light") return "theme.light"
+  return "theme.system"
 }

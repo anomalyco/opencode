@@ -128,6 +128,7 @@ import type {
   PermissionRespondResponses,
   PermissionRuleset,
   PermissionV2Reply,
+  PermissionV2Source,
   ProjectCurrentErrors,
   ProjectCurrentResponses,
   ProjectDirectoriesErrors,
@@ -341,6 +342,10 @@ import type {
   V2SessionListResponses,
   V2SessionMessagesErrors,
   V2SessionMessagesResponses,
+  V2SessionPermissionCreateErrors,
+  V2SessionPermissionCreateResponses,
+  V2SessionPermissionGetErrors,
+  V2SessionPermissionGetResponses,
   V2SessionPermissionListErrors,
   V2SessionPermissionListResponses,
   V2SessionPermissionReplyErrors,
@@ -5178,6 +5183,93 @@ export class Permission2 extends HeyApiClient {
       ThrowOnError
     >({
       url: "/api/session/{sessionID}/permission",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Create permission request
+   *
+   * Evaluate and, when approval is required, create a permission request for a session.
+   */
+  public create<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      id?: string
+      action?: string
+      resources?: Array<string>
+      save?: Array<string>
+      metadata?: {
+        [key: string]: unknown
+      }
+      source?: PermissionV2Source
+      agent?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "body", key: "id" },
+            { in: "body", key: "action" },
+            { in: "body", key: "resources" },
+            { in: "body", key: "save" },
+            { in: "body", key: "metadata" },
+            { in: "body", key: "source" },
+            { in: "body", key: "agent" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      V2SessionPermissionCreateResponses,
+      V2SessionPermissionCreateErrors,
+      ThrowOnError
+    >({
+      url: "/api/session/{sessionID}/permission",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Get permission request
+   *
+   * Retrieve a pending permission request owned by a session.
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      requestID: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "path", key: "requestID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      V2SessionPermissionGetResponses,
+      V2SessionPermissionGetErrors,
+      ThrowOnError
+    >({
+      url: "/api/session/{sessionID}/permission/{requestID}",
       ...options,
       ...params,
     })

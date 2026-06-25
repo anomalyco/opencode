@@ -2,7 +2,7 @@ export * as Revert from "./revert"
 
 import { Schema } from "effect"
 import { NonNegativeInt, RelativePath } from "./schema"
-import { SessionMessageID } from "./session-message-id"
+import { SessionMessage } from "./session-message"
 
 export const FileDiff = Schema.Struct({
   path: RelativePath,
@@ -14,7 +14,7 @@ export const FileDiff = Schema.Struct({
 export type FileDiff = typeof FileDiff.Type
 
 export const State = Schema.Struct({
-  messageID: SessionMessageID.ID,
+  messageID: SessionMessage.ID,
   partID: Schema.String.pipe(Schema.optional),
   snapshot: Schema.String.pipe(Schema.optional),
   diff: Schema.String.pipe(Schema.optional),

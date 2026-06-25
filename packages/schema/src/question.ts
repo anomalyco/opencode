@@ -4,11 +4,11 @@ import { Schema } from "effect"
 import { define, inventory } from "./event"
 import { ascending } from "./identifier"
 import { SessionID } from "./session-id"
-import { withStatics } from "./schema"
+import { statics } from "./schema"
 
 export const ID = Schema.String.check(Schema.isStartsWith("que")).pipe(
   Schema.brand("QuestionV2.ID"),
-  withStatics((schema) => ({ ascending: (id?: string) => schema.make(id ?? "que_" + ascending()) })),
+  statics((schema) => ({ ascending: (id?: string) => schema.make(id ?? "que_" + ascending()) })),
 )
 export type ID = typeof ID.Type
 
