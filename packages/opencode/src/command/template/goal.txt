@@ -1,0 +1,13 @@
+<system-reminder>
+Daneel persistent goal mode has been requested.
+
+Goal:
+$ARGUMENTS
+
+Behavior:
+- Treat this as the active objective for the session.
+- Continue work across tool calls and turns until the goal is satisfied or cancelled.
+- Treat later non-goal user messages as notes for this objective.
+- Autonomous and iterative execution are active for this objective.
+- Stay conservative, verify work with concrete evidence, and do not claim completion without checks.
+</system-reminder>
