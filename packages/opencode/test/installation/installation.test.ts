@@ -76,6 +76,27 @@ describe("installation", () => {
         }),
     )
 
+    let githubReleaseAuth: string | undefined
+    testEffect(
+      testLayer((request) => {
+        githubReleaseAuth = request.headers.authorization
+        return jsonResponse({ tag_name: "v5.0.0" })
+      }),
+    ).effect("uses GITHUB_TOKEN for GitHub release requests", () =>
+      Effect.gen(function* () {
+        const previous = process.env.GITHUB_TOKEN
+        process.env.GITHUB_TOKEN = "test-token"
+        try {
+          const result = yield* Installation.use.latest("curl")
+          expect(result).toBe("5.0.0")
+          expect(githubReleaseAuth).toBe("Bearer test-token")
+        } finally {
+          if (previous === undefined) delete process.env.GITHUB_TOKEN
+          else process.env.GITHUB_TOKEN = previous
+        }
+      }),
+    )
+
     const npmCalls: string[] = []
     testEffect(
       testLayer((request) => {

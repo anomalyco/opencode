@@ -51,6 +51,10 @@ export function isLocal() {
   return InstallationChannel === "local"
 }
 
+function githubToken() {
+  return process.env.GITHUB_TOKEN?.trim() || undefined
+}
+
 export class UpgradeFailedError extends Schema.TaggedErrorClass<UpgradeFailedError>()("UpgradeFailedError", {
   stderr: Schema.String,
 }) {
@@ -253,11 +257,12 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProce
           return data.version
         }
 
-        const response = yield* httpOk.execute(
-          HttpClientRequest.get("https://api.github.com/repos/anomalyco/opencode/releases/latest").pipe(
-            HttpClientRequest.acceptJson,
-          ),
+        const token = githubToken()
+        const request = HttpClientRequest.get("https://api.github.com/repos/anomalyco/opencode/releases/latest").pipe(
+          HttpClientRequest.acceptJson,
+          token ? HttpClientRequest.bearerToken(token) : (request) => request,
         )
+        const response = yield* httpOk.execute(request)
         const data = yield* HttpClientResponse.schemaBodyJson(GitHubRelease)(response)
         return data.tag_name.replace(/^v/, "")
       }, Effect.orDie),
