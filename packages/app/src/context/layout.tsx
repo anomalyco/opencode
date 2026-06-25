@@ -1,4 +1,4 @@
-import { createStore, produce } from "solid-js/store"
+import { createStore, produce, reconcile } from "solid-js/store"
 import { batch, createEffect, createMemo, onCleanup, onMount, type Accessor } from "solid-js"
 import { useLocation } from "@solidjs/router"
 import { createSimpleContext } from "@opencode-ai/ui/context"
@@ -73,6 +73,7 @@ type TabHandoff = {
 }
 
 export type LocalProject = Partial<Project> & { worktree: string; expanded: boolean }
+export type HomeProjectSelection = { server: ServerConnection.Key; directory?: string }
 
 export type ReviewDiffStyle = "unified" | "split"
 
@@ -289,6 +290,9 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         sessionView: {} as Record<string, SessionView>,
         handoff: {
           tabs: undefined as TabHandoff | undefined,
+        },
+        home: {
+          selection: { server: server.key } as HomeProjectSelection,
         },
       }),
     )
@@ -579,6 +583,12 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     return {
       route,
       ready,
+      home: {
+        selection: createMemo(() => store.home.selection),
+        setSelection(selection: HomeProjectSelection) {
+          setStore("home", "selection", reconcile(selection))
+        },
+      },
       handoff: {
         tabs: createMemo(() => store.handoff?.tabs),
         setTabs(dir: string, id: string) {
