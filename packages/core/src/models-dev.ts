@@ -11,11 +11,12 @@ import { InstallationChannel, InstallationVersion } from "./installation/version
 import { EventV2 } from "./event"
 import { LayerNode } from "./effect/layer-node"
 import { httpClient } from "./effect/layer-node-platform"
+import { DaneelProviderCatalog } from "./daneel/provider-catalog"
 
 export const CatalogModelStatus = Schema.Literals(["alpha", "beta", "deprecated"])
 export type CatalogModelStatus = typeof CatalogModelStatus.Type
 
-const USER_AGENT = `opencode/${InstallationChannel}/${InstallationVersion}/${Flag.OPENCODE_CLIENT}`
+const USER_AGENT = `daneel/${InstallationChannel}/${InstallationVersion}/${Flag.OPENCODE_CLIENT}`
 
 const CostTier = Schema.Struct({
   input: Schema.Finite,
@@ -120,6 +121,13 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ModelsDev") {}
 
+function withDaneelProviders(catalog: Record<string, Provider>) {
+  return {
+    ...catalog,
+    ...DaneelProviderCatalog,
+  }
+}
+
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -194,10 +202,10 @@ export const layer = Layer.effect(
 
     const populate = Effect.gen(function* () {
       const fromDisk = yield* loadFromDisk
-      if (fromDisk) return fromDisk
+      if (fromDisk) return withDaneelProviders(fromDisk)
       const snapshot = yield* loadSnapshot
-      if (snapshot) return snapshot
-      if (Flag.OPENCODE_DISABLE_MODELS_FETCH) return {}
+      if (snapshot) return withDaneelProviders(snapshot)
+      if (Flag.OPENCODE_DISABLE_MODELS_FETCH) return withDaneelProviders({})
       // Flock is cross-process: concurrent opencode CLIs can race on this cache file.
       const text = yield* Effect.scoped(
         Effect.gen(function* () {
@@ -205,7 +213,7 @@ export const layer = Layer.effect(
           return yield* fetchAndWrite()
         }),
       )
-      return JSON.parse(text) as Record<string, Provider>
+      return withDaneelProviders(JSON.parse(text) as Record<string, Provider>)
     }).pipe(Effect.withSpan("ModelsDev.populate"), Effect.orDie)
 
     const [cachedGet, invalidate] = yield* Effect.cachedInvalidateWithTTL(populate, Duration.infinity)
