@@ -93,10 +93,6 @@
   }
 }
 
-body[data-new-layout] [data-component="card"][data-variant="error"] {
-  --card-accent: var(--v2-state-fg-danger) !important;
-}
-
 body:not([data-new-layout]) [data-component="card"] {
   color: var(--text-strong);
   --card-accent: var(--icon-active);
@@ -111,5 +107,9 @@ body:not([data-new-layout]) [data-component="card"] {
 
   :where([data-card="description"], [data-slot="card-description"]) {
     color: var(--text-base);
+  }
+
+  &[data-variant="error"] {
+    --card-accent: var(--icon-critical-base) !important;
   }
 }
