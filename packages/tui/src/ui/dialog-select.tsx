@@ -9,7 +9,7 @@ import {
 import type { Binding } from "@opentui/keymap"
 import { useTheme, selectedForeground } from "../context/theme"
 import { entries, filter, flatMap, groupBy, pipe } from "remeda"
-import { batch, createEffect, createMemo, createSignal, For, Show, type JSX, on } from "solid-js"
+import { batch, createEffect, createMemo, createSignal, For, Show, type JSX, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useTerminalDimensions } from "@opentui/solid"
 import * as fuzzysort from "fuzzysort"
@@ -35,6 +35,7 @@ export interface DialogSelectProps<T> {
   skipFilter?: boolean
   renderFilter?: boolean
   locked?: boolean
+  preserveSelection?: boolean
   actions?: {
     command: string
     title: string
@@ -93,6 +94,9 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   })
   const [focusedAction, setFocusedAction] = createSignal<number>()
   const actionFocused = createMemo(() => focusedAction() !== undefined)
+  let hasSelectedValue = false
+  let selectedValue: T
+  let visibilityGeneration = 0
 
   createEffect(
     on(
@@ -102,6 +106,8 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           const currentIndex = flat().findIndex((opt) => isDeepEqual(opt.value, current))
           if (currentIndex >= 0) {
             setStore("selected", currentIndex)
+            selectedValue = flat()[currentIndex].value
+            hasSelectedValue = true
           }
         }
       },
@@ -210,6 +216,53 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   const selected = createMemo(() => flat()[store.selected])
 
   createEffect(
+    on(
+      () => props.options,
+      () => {
+        if (!props.preserveSelection || store.filter.length > 0) return
+        if (!hasSelectedValue) {
+          if (props.current !== undefined) {
+            const index = flat().findIndex((option) => isDeepEqual(option.value, props.current))
+            if (index >= 0) {
+              setStore("selected", index)
+              selectedValue = flat()[index].value
+              hasSelectedValue = true
+              return
+            }
+          }
+          const option = selected()
+          if (!option) return
+          selectedValue = option.value
+          hasSelectedValue = true
+          return
+        }
+        const index = flat().findIndex((option) => isDeepEqual(option.value, selectedValue))
+        if (index >= 0) {
+          setStore("selected", index)
+          const value = flat()[index].value
+          const generation = ++visibilityGeneration
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              if (generation !== visibilityGeneration) return
+              if (!props.preserveSelection || store.filter.length > 0) return
+              if (!isDeepEqual(selected()?.value, value)) return
+              scrollToSelection(false)
+            })
+          })
+          return
+        }
+        const next = Math.min(store.selected, flat().length - 1)
+        if (next < 0) return
+        setStore("selected", next)
+        selectedValue = flat()[next].value
+      },
+    ),
+  )
+  onCleanup(() => {
+    visibilityGeneration++
+  })
+
+  createEffect(
     on([() => store.filter, () => props.current], ([filter, current]) => {
       setTimeout(() => {
         if (filter.length > 0) {
@@ -237,7 +290,15 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     setFocusedAction(undefined)
     setStore("selected", next)
     const option = selected()
+    if (option) {
+      selectedValue = option.value
+      hasSelectedValue = true
+    }
     if (option) props.onMove?.(option)
+    scrollToSelection(center)
+  }
+
+  function scrollToSelection(center: boolean) {
     if (!scroll) return
     let remaining = store.selected
     let index = 0
