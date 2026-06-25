@@ -70,7 +70,7 @@ export function SessionComposerRegion(props: {
   const sdk = useSDK()
   const queryOptions = useQueryOptions()
   const local = useLocal()
-  const providers = useProviders()
+  const providers = useProviders(() => sdk().directory)
   const settings = useSettings()
   const server = useServer()
   const tabs = useTabs()

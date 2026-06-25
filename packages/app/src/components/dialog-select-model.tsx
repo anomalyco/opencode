@@ -12,6 +12,7 @@ import { List } from "@opencode-ai/ui/list"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { ModelTooltip } from "./model-tooltip"
 import { useLanguage } from "@/context/language"
+import { decode64 } from "@/utils/base64"
 
 const isFree = (provider: string, cost: { input: number } | undefined) =>
   provider === "opencode" && (!cost || cost.input === 0)
@@ -104,6 +105,8 @@ export function ModelSelectorPopover(props: {
     dismiss: null,
   })
   const dialog = useDialog()
+  const local = useLocal()
+  const directory = () => decode64(local.slug())
 
   const close = (dismiss: Dismiss) => {
     setStore("dismiss", dismiss)
@@ -120,7 +123,7 @@ export function ModelSelectorPopover(props: {
   const handleConnectProvider = () => {
     close("provider")
     void import("./dialog-select-provider").then((x) => {
-      dialog.show(() => <x.DialogSelectProvider />)
+      dialog.show(() => <x.DialogSelectProvider directory={directory} />)
     })
   }
   const language = useLanguage()
@@ -199,10 +202,12 @@ export function ModelSelectorPopover(props: {
 export const DialogSelectModel: Component<{ provider?: string; model?: ModelState }> = (props) => {
   const dialog = useDialog()
   const language = useLanguage()
+  const local = useLocal()
+  const directory = () => decode64(local.slug())
 
   const provider = () => {
     void import("./dialog-select-provider").then((x) => {
-      dialog.show(() => <x.DialogSelectProvider />)
+      dialog.show(() => <x.DialogSelectProvider directory={directory} />)
     })
   }
 

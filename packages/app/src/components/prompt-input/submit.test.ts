@@ -41,6 +41,7 @@ const prompt = {
     replaceComments: () => undefined,
     items: () => [],
   },
+  capture: () => prompt,
 }
 
 const clientFor = (directory: string) => {
