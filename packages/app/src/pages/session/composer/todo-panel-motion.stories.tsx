@@ -286,23 +286,21 @@ export const Playground = {
 
                 <div>
                   <SessionComposerRegion
-                    controller={
-                      createSessionComposerRegionController({
-                        state,
-                        sessionKey: () => "story-session",
-                        sessionID: () => "story-session",
-                        prompt,
-                        ready: () => true,
-                        centered: () => false,
-                        todo: { collapsed, onToggle: () => setCollapsed(!collapsed()) },
-                        followup: () => undefined,
-                        revert: () => undefined,
-                        onResponseSubmit: pin,
-                        openParent: () => {},
-                        setPromptRef: () => {},
-                        setDockRef: () => {},
-                      })
-                    }
+                    controller={createSessionComposerRegionController({
+                      state,
+                      sessionKey: () => "story-session",
+                      sessionID: () => "story-session",
+                      prompt,
+                      ready: () => true,
+                      centered: () => false,
+                      todo: { collapsed, onToggle: () => setCollapsed(!collapsed()) },
+                      followup: () => undefined,
+                      revert: () => undefined,
+                      onResponseSubmit: pin,
+                      openParent: () => {},
+                      setPromptRef: () => {},
+                      setDockRef: () => {},
+                    })}
                     promptInput={
                       <PromptInput
                         controls={controls}

@@ -135,11 +135,7 @@ export function SessionComposerRegion(props: {
               </Show>
               <Show
                 when={controller.child()}
-                fallback={
-                  <Show when={!controller.state.blocked()}>
-                    {props.promptInput}
-                  </Show>
-                }
+                fallback={<Show when={!controller.state.blocked()}>{props.promptInput}</Show>}
               >
                 <div
                   ref={controller.setPromptRef}

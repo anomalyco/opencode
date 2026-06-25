@@ -161,26 +161,24 @@ function PromptInputWithOpenDock() {
   }
   return (
     <SessionComposerRegion
-      controller={
-        createSessionComposerRegionController({
-          state,
-          sessionKey: () => "story-session",
-          sessionID: () => "story-session",
-          prompt: input.state,
-          ready: () => true,
-          centered: () => false,
-          todo: {
-            collapsed: () => controls.todoCollapsed,
-            onToggle: () => setControls("todoCollapsed", (collapsed) => !collapsed),
-          },
-          followup: () => undefined,
-          revert: () => undefined,
-          onResponseSubmit: () => {},
-          openParent: () => {},
-          setPromptRef: () => {},
-          setDockRef: () => {},
-        })
-      }
+      controller={createSessionComposerRegionController({
+        state,
+        sessionKey: () => "story-session",
+        sessionID: () => "story-session",
+        prompt: input.state,
+        ready: () => true,
+        centered: () => false,
+        todo: {
+          collapsed: () => controls.todoCollapsed,
+          onToggle: () => setControls("todoCollapsed", (collapsed) => !collapsed),
+        },
+        followup: () => undefined,
+        revert: () => undefined,
+        onResponseSubmit: () => {},
+        openParent: () => {},
+        setPromptRef: () => {},
+        setDockRef: () => {},
+      })}
       promptInput={
         <PromptInput
           controls={inputControls}

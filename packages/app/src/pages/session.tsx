@@ -1783,9 +1783,7 @@ export default function Page() {
               </Switch>
             </div>
 
-            <Show when={(params.id || !newSessionDesign()) && !mobileChanges()}>
-              {(_) => composerRegion()}
-            </Show>
+            <Show when={(params.id || !newSessionDesign()) && !mobileChanges()}>{(_) => composerRegion()}</Show>
             <Show when={!!params.id && mobileTabsBottom()}>{mobileTabs(true, true)}</Show>
           </div>
 
