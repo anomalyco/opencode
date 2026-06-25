@@ -226,6 +226,19 @@ export const layer = Layer.effect(
       const msgs = onlySubtasks
         ? [{ role: "user" as const, content: subtasks.map((p) => p.prompt).join("\n") }]
         : yield* MessageV2.toModelMessagesEffect(context, mdl)
+      const firstUserMessage = msgs.findIndex((message) => message.role === "user")
+      if (firstUserMessage === -1) return
+      const instruction = "Generate a title for this conversation:\n"
+      const messages = msgs.map((message, index) => {
+        if (index !== firstUserMessage || message.role !== "user") return message
+        return {
+          ...message,
+          content:
+            typeof message.content === "string"
+              ? instruction + message.content
+              : [{ type: "text" as const, text: instruction }, ...message.content],
+        }
+      })
       const text = yield* llm
         .stream({
           agent: ag,
@@ -236,7 +249,7 @@ export const layer = Layer.effect(
           model: mdl,
           sessionID: input.session.id,
           retries: 2,
-          messages: [{ role: "user", content: "Generate a title for this conversation:\n" }, ...msgs],
+          messages,
         })
         .pipe(
           Stream.filter(LLMEvent.is.textDelta),
