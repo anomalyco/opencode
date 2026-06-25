@@ -12,8 +12,11 @@ import { SessionTodo } from "../src/session-todo"
 import { optional } from "../src/schema"
 
 describe("contract hygiene", () => {
-  test("optional properties omit undefined while encoding", () => {
-    const Value = Schema.Struct({ value: optional(Schema.String) })
+  test("optional properties preserve transformations and omit undefined while encoding", () => {
+    const Value = Schema.Struct({ value: optional(Schema.FiniteFromString) })
+    expect(Schema.decodeUnknownSync(Value)({ value: "1" })).toEqual({ value: 1 })
+    expect(Schema.decodeUnknownSync(Value)({ value: undefined })).toEqual({ value: undefined })
+    expect(Schema.encodeSync(Value)({ value: 1 })).toEqual({ value: "1" })
     expect(Schema.encodeSync(Value)({ value: undefined })).toEqual({})
   })
 
