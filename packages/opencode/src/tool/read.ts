@@ -306,9 +306,13 @@ export const ReadTool = Tool.define<
       if (isImage || isPdfAttachment(mime)) {
         const bytes = yield* fs.readFile(filepath)
         const msg = isPdfAttachment(mime) ? "PDF read successfully" : "Image read successfully"
+        const output =
+          loaded.length > 0
+            ? `${msg}\n\n<system-reminder>\n${loaded.map((item) => item.content).join("\n\n")}\n</system-reminder>`
+            : msg
         return {
           title,
-          output: msg,
+          output,
           metadata: {
             preview: msg,
             truncated: false,
