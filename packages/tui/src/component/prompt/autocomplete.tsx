@@ -551,6 +551,7 @@ export function Autocomplete(props: {
   }
 
   function select() {
+    if (store.visible === "/" && !search()) return
     const selected = options()[store.selected]
     if (!selected) return
     hide()
