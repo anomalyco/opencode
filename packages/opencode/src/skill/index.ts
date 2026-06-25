@@ -20,6 +20,7 @@ import { isRecord } from "@/util/record"
 
 const CLAUDE_EXTERNAL_DIR = ".claude"
 const AGENTS_EXTERNAL_DIR = ".agents"
+const HOME_SKILL_DIR = "skills"
 const EXTERNAL_SKILL_PATTERN = "skills/**/SKILL.md"
 const OPENCODE_SKILL_PATTERN = "{skill,skills}/**/SKILL.md"
 const SKILL_PATTERN = "**/SKILL.md"
@@ -191,6 +192,12 @@ const discoverSkills = Effect.fnUntraced(function* (
       const root = path.join(global.home, dir)
       if (!(yield* fsys.isDir(root))) continue
       yield* scan(state, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "global" })
+    }
+
+    const root = path.join(global.home, HOME_SKILL_DIR)
+    if (yield* fsys.isDir(root)) {
+      state.dirs.add(root)
+      yield* scan(state, root, SKILL_PATTERN, { dot: true, scope: "global" })
     }
 
     const upDirs = yield* fsys
