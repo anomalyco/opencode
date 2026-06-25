@@ -46,8 +46,6 @@ describe("contract hygiene", () => {
       Project.Time,
       Project.Info,
       Pty.Info,
-      Pty.CreateInput,
-      Pty.UpdateInput,
       Session.ListAnchor,
       SessionEvent.Source,
       SessionEvent.RetryError,
