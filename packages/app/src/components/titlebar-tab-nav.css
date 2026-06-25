@@ -26,7 +26,8 @@
 }
 
 [data-titlebar-tab][data-title-overflow="true"]:hover:not([data-editing="true"]) [data-slot="tab-close"]::before,
-[data-titlebar-tab][data-title-overflow="true"][data-active="true"]:not([data-editing="true"]) [data-slot="tab-close"]::before {
+[data-titlebar-tab][data-title-overflow="true"][data-active="true"]:not([data-editing="true"])
+  [data-slot="tab-close"]::before {
   right: 100%;
 }
 
