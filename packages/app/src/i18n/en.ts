@@ -595,7 +595,7 @@ export const dict = {
   "home.sessions.search.sessions": "Sessions",
   "home.sessions.search.noResults": "No sessions found for {{query}}",
   "home.sessions.empty": "Nothing here yet",
-  "home.sessions.empty.description": "Start session to begin coding with the agent",
+  "home.sessions.empty.description": "Create a session to get started",
   "home.sessions.group.today": "Today",
   "home.sessions.group.yesterday": "Yesterday",
   "home.sessions.group.older": "Older",
