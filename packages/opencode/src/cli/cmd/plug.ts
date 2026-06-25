@@ -11,6 +11,8 @@ import { Process } from "@/util/process"
 import { UI } from "../ui"
 import { effectCmd } from "../effect-cmd"
 import { InstanceRef } from "@/effect/instance-ref"
+import { Config } from "@/config/config"
+import { ConfigPlugin } from "@/config/plugin"
 
 type Spin = {
   start: (msg: string) => void
@@ -44,6 +46,11 @@ export type PlugCtx = {
   directory: string
 }
 
+type PluginListItem = {
+  spec: string
+  scopes: Set<string>
+}
+
 const defaultPlugDeps: PlugDeps = {
   spinner: () => spinner(),
   log: {
@@ -66,6 +73,50 @@ function cause(err: unknown) {
   if (!("cause" in err)) return
   return (err as { cause?: unknown }).cause
 }
+
+function isPluginListToken(mod: string) {
+  return mod === "list" || mod === "ls"
+}
+
+function addPluginListItems(items: Map<string, PluginListItem>, origins: ConfigPlugin.Origin[] | undefined) {
+  for (const origin of origins ?? []) {
+    const spec = ConfigPlugin.pluginSpecifier(origin.spec)
+    const item =
+      items.get(spec) ??
+      ({
+        spec,
+        scopes: new Set<string>(),
+      } satisfies PluginListItem)
+    item.scopes.add(origin.scope)
+    items.set(spec, item)
+  }
+}
+
+function formatSet(values: Set<string>) {
+  return Array.from(values).sort().join(", ")
+}
+
+const listPlugins = Effect.fn("Cli.plug.list")(function* () {
+  UI.empty()
+  intro("Plugins")
+
+  const config = yield* Config.Service.use((cfg) => cfg.get())
+
+  const items = new Map<string, PluginListItem>()
+  addPluginListItems(items, config.plugin_origins)
+
+  if (items.size === 0) {
+    log.warn("No plugins configured")
+    outro("Install plugins with: opencode plugin <module>")
+    return
+  }
+
+  for (const item of Array.from(items.values()).sort((a, b) => a.spec.localeCompare(b.spec))) {
+    const hint = formatSet(item.scopes)
+    log.info(`${item.spec} ${UI.Style.TEXT_DIM}${hint}${UI.Style.TEXT_NORMAL}`)
+  }
+  outro(`${items.size} plugin(s)`)
+})
 
 export function createPlugTask(input: PlugInput, dep: PlugDeps = defaultPlugDeps) {
   const mod = input.mod
@@ -202,6 +253,11 @@ export const PluginCommand = effectCmd({
     if (!mod) {
       UI.error("module is required")
       process.exitCode = 1
+      return
+    }
+
+    if (isPluginListToken(mod)) {
+      yield* listPlugins()
       return
     }
 

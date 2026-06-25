@@ -16,6 +16,7 @@
 // cuts per-spawn cost when this suite gets bigger.
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
+import path from "path"
 import { cliIt } from "../../lib/cli-process"
 
 describe("opencode read-only commands (smoke)", () => {
@@ -28,6 +29,40 @@ describe("opencode read-only commands (smoke)", () => {
       Effect.gen(function* () {
         const r = yield* opencode.spawn(["mcp", "list"])
         opencode.expectExit(r, 0, "mcp list")
+      }),
+    60_000,
+  )
+
+  // `plugin ls/list` are read-only aliases. They must not be parsed as
+  // `plugin <module>` and try to install npm packages named after the aliases.
+  cliIt.live(
+    "plugin list aliases: exit 0 without installing alias packages",
+    ({ home, opencode }) =>
+      Effect.gen(function* () {
+        for (const alias of ["ls", "list"] as const) {
+          const r = yield* opencode.spawn(["plugin", alias], {
+            env: {
+              NPM_CONFIG_OFFLINE: "true",
+              npm_config_offline: "true",
+            },
+          })
+          opencode.expectExit(r, 0, `plugin ${alias}`)
+          const installed = yield* Effect.promise(() =>
+            Bun.file(
+              path.join(
+                home,
+                ".cache",
+                "opencode",
+                "packages",
+                `${alias}@latest`,
+                "node_modules",
+                alias,
+                "package.json",
+              ),
+            ).exists(),
+          )
+          expect(installed).toBe(false)
+        }
       }),
     60_000,
   )
