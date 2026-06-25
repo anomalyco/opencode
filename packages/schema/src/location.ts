@@ -1,6 +1,6 @@
 export * as Location from "./location"
 
-import { Effect, Schema } from "effect"
+import { Schema } from "effect"
 import { AbsolutePath, optional } from "./schema"
 import { ProjectID } from "./project-id"
 import { WorkspaceID } from "./workspace-id"
@@ -8,10 +8,7 @@ import { WorkspaceID } from "./workspace-id"
 export interface Ref extends Schema.Schema.Type<typeof Ref> {}
 export const Ref = Schema.Struct({
   directory: AbsolutePath,
-  workspaceID: Schema.optional(WorkspaceID).pipe(
-    Schema.withDecodingDefault(Effect.succeed(undefined)),
-    Schema.withConstructorDefault(Effect.succeed(undefined)),
-  ),
+  workspaceID: optional(WorkspaceID),
 }).annotate({ identifier: "Location.Ref" })
 
 export class Info extends Schema.Class<Info>("Location.Info")({

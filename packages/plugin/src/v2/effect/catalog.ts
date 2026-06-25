@@ -1,9 +1,10 @@
 import type { ModelV2Info, ProviderV2Info } from "@opencode-ai/sdk/v2/types"
+import type { ReadonlyDeep } from "../options.js"
 import type { Hooks } from "./registration.js"
 
 export interface CatalogProviderRecord {
-  readonly provider: ProviderV2Info
-  readonly models: ReadonlyMap<string, ModelV2Info>
+  readonly provider: ReadonlyDeep<ProviderV2Info>
+  readonly models: ReadonlyMap<string, ReadonlyDeep<ModelV2Info>>
 }
 
 export interface CatalogDraft {
@@ -14,7 +15,7 @@ export interface CatalogDraft {
     remove(providerID: string): void
   }
   readonly model: {
-    get(providerID: string, modelID: string): ModelV2Info | undefined
+    get(providerID: string, modelID: string): ReadonlyDeep<ModelV2Info> | undefined
     update(providerID: string, modelID: string, update: (model: ModelV2Info) => void): void
     remove(providerID: string, modelID: string): void
     readonly default: {

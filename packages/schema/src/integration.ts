@@ -1,6 +1,7 @@
 export * as Integration from "./integration"
 
 import { Schema } from "effect"
+import { optional } from "./schema"
 import { define, inventory } from "./event"
 import { Connection } from "./connection"
 import { ascending } from "./identifier"
@@ -25,8 +26,8 @@ export const TextPrompt = Schema.Struct({
   type: Schema.Literal("text"),
   key: Schema.String,
   message: Schema.String,
-  placeholder: Schema.optional(Schema.String),
-  when: Schema.optional(When),
+  placeholder: optional(Schema.String),
+  when: optional(When),
 }).annotate({ identifier: "Integration.TextPrompt" })
 
 export interface SelectPrompt extends Schema.Schema.Type<typeof SelectPrompt> {}
@@ -34,16 +35,14 @@ export const SelectPrompt = Schema.Struct({
   type: Schema.Literal("select"),
   key: Schema.String,
   message: Schema.String,
-  options: Schema.mutable(
-    Schema.Array(
-      Schema.Struct({
-        label: Schema.String,
-        value: Schema.String,
-        hint: Schema.optional(Schema.String),
-      }),
-    ),
+  options: Schema.Array(
+    Schema.Struct({
+      label: Schema.String,
+      value: Schema.String,
+      hint: optional(Schema.String),
+    }),
   ),
-  when: Schema.optional(When),
+  when: optional(When),
 }).annotate({ identifier: "Integration.SelectPrompt" })
 
 export const Prompt = Schema.Union([TextPrompt, SelectPrompt]).pipe(Schema.toTaggedUnion("type"))
@@ -54,19 +53,19 @@ export const OAuthMethod = Schema.Struct({
   id: MethodID,
   type: Schema.Literal("oauth"),
   label: Schema.String,
-  prompts: Schema.optional(Schema.mutable(Schema.Array(Prompt))),
+  prompts: optional(Schema.Array(Prompt)),
 }).annotate({ identifier: "Integration.OAuthMethod" })
 
 export interface KeyMethod extends Schema.Schema.Type<typeof KeyMethod> {}
 export const KeyMethod = Schema.Struct({
   type: Schema.Literal("key"),
-  label: Schema.optional(Schema.String),
+  label: optional(Schema.String),
 }).annotate({ identifier: "Integration.KeyMethod" })
 
 export interface EnvMethod extends Schema.Schema.Type<typeof EnvMethod> {}
 export const EnvMethod = Schema.Struct({
   type: Schema.Literal("env"),
-  names: Schema.mutable(Schema.Array(Schema.String)),
+  names: Schema.Array(Schema.String),
 }).annotate({ identifier: "Integration.EnvMethod" })
 
 export const Method = Schema.Union([OAuthMethod, KeyMethod, EnvMethod])
@@ -96,8 +95,8 @@ export const Ref = Schema.Struct({
 export class Info extends Schema.Class<Info>("Integration.Info")({
   id: ID,
   name: Schema.String,
-  methods: Schema.mutable(Schema.Array(Method)),
-  connections: Schema.mutable(Schema.Array(Connection.Info)),
+  methods: Schema.Array(Method),
+  connections: Schema.Array(Connection.Info),
 }) {}
 
 export const AttemptID = Schema.String.pipe(
@@ -124,5 +123,7 @@ export const AttemptStatus = Schema.Union([
   Schema.Struct({ status: Schema.Literal("complete"), time: AttemptTime }),
   Schema.Struct({ status: Schema.Literal("failed"), message: Schema.String, time: AttemptTime }),
   Schema.Struct({ status: Schema.Literal("expired"), time: AttemptTime }),
-]).pipe(Schema.toTaggedUnion("status"))
+])
+  .pipe(Schema.toTaggedUnion("status"))
+  .annotate({ identifier: "Integration.AttemptStatus" })
 export type AttemptStatus = typeof AttemptStatus.Type

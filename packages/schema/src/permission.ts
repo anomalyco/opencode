@@ -1,6 +1,7 @@
 export * as Permission from "./permission"
 
 import { Schema } from "effect"
+import { optional } from "./schema"
 import { define, inventory } from "./event"
 import { ascending } from "./identifier"
 import { SessionID } from "./session-id"
@@ -25,16 +26,16 @@ const RequestFields = {
   sessionID: SessionID,
   action: Schema.String,
   resources: Schema.Array(Schema.String),
-  save: Schema.Array(Schema.String).pipe(Schema.optional),
-  metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
-  source: Source.pipe(Schema.optional),
+  save: Schema.Array(Schema.String).pipe(optional),
+  metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(optional),
+  source: Source.pipe(optional),
 }
 
 export const Request = Schema.Struct({
   id: ID,
   ...RequestFields,
 }).annotate({ identifier: "PermissionV2.Request" })
-export type Request = typeof Request.Type
+export interface Request extends Schema.Schema.Type<typeof Request> {}
 
 export const Reply = Schema.Literals(["once", "always", "reject"]).annotate({ identifier: "PermissionV2.Reply" })
 export type Reply = typeof Reply.Type
@@ -60,5 +61,5 @@ export const Rule = Schema.Struct({
   effect: Effect,
 }).annotate({ identifier: "PermissionV2.Rule" })
 
-export const Ruleset = Schema.mutable(Schema.Array(Rule)).annotate({ identifier: "PermissionV2.Ruleset" })
+export const Ruleset = Schema.Array(Rule).annotate({ identifier: "PermissionV2.Ruleset" })
 export type Ruleset = typeof Ruleset.Type

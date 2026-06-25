@@ -1,6 +1,7 @@
 export * as Event from "./event"
 
 import { Schema } from "effect"
+import { optional } from "./schema"
 import { ascending } from "./identifier"
 import { Location } from "./location"
 import { statics } from "./schema"
@@ -53,12 +54,10 @@ export function define<
   return Object.assign(
     Schema.Struct({
       id: ID,
-      metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+      metadata: optional(Schema.Record(Schema.String, Schema.Unknown)),
       type: Schema.Literal(input.type),
-      durable: Schema.optional(
-        Schema.Struct({ aggregateID: Schema.String, seq: Schema.Number, version: Schema.Number }),
-      ),
-      location: Schema.optional(Location.Ref),
+      durable: optional(Schema.Struct({ aggregateID: Schema.String, seq: Schema.Number, version: Schema.Number })),
+      location: optional(Location.Ref),
       data,
     }).annotate({ identifier: input.type }),
     {
