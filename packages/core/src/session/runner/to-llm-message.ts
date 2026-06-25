@@ -70,7 +70,7 @@ const toolResult = (tool: SessionMessage.AssistantTool, providerMetadata: Provid
 const assistant = (message: SessionMessage.Assistant, model: Model) => {
   const sameModel =
     String(message.model.providerID) === String(model.provider) && String(message.model.id) === String(model.id)
-  const reuseProviderMetadata = sameModel && message.finish !== "error"
+  const reuseProviderMetadata = sameModel && message.error === undefined
   const content = message.content.flatMap((item): ContentPart[] => {
     if (item.type === "text") return [{ type: "text", text: item.text }]
     if (item.type === "reasoning")
@@ -86,11 +86,12 @@ const assistant = (message: SessionMessage.Assistant, model: Model) => {
           ? [{ type: "text", text: item.text }]
           : []
     const call = toolCall(item, reuseProviderMetadata ? item.provider?.metadata : undefined)
+    if (item.provider?.executed !== true) return [call]
     const result = toolResult(
       item,
-      reuseProviderMetadata ? (item.provider?.resultMetadata ?? item.provider?.metadata) : undefined,
+      reuseProviderMetadata ? (item.provider.resultMetadata ?? item.provider.metadata) : undefined,
     )
-    return item.provider?.executed === true && result ? [call, result] : [call]
+    return result ? [call, result] : [call]
   })
   const meaningful = content.filter((part) => {
     if (part.type === "text") return part.text !== ""

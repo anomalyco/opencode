@@ -33,9 +33,6 @@ const SessionsQueryFields = {
   search: Schema.optional(Schema.String),
 }
 
-const SessionEventSchema: Schema.Codec<typeof SessionEvent.Durable.Type, typeof SessionEvent.Durable.Encoded> =
-  Schema.make(SessionEvent.Durable.ast)
-
 const SessionsDirectoryQuery = Schema.Struct({
   ...SessionsQueryFields,
   directory: AbsolutePath,
@@ -282,7 +279,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
         query: {
           after: Schema.NumberFromString.pipe(Schema.decodeTo(NonNegativeInt), Schema.optional),
         },
-        success: HttpApiSchema.StreamSse({ data: SessionEventSchema }),
+        success: HttpApiSchema.StreamSse({ data: SessionEvent.Durable }),
         error: SessionNotFoundError,
       })
         .middleware(sessionLocationMiddleware)
