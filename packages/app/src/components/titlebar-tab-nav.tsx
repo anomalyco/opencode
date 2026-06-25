@@ -214,7 +214,6 @@ export function TabNavItem(props: {
                   directory={session().directory}
                   sessionId={session().id}
                   activeServer={props.activeServer}
-                  revealAvatarOnHover
                 />
               </span>
               <span
