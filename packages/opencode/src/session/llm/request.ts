@@ -189,7 +189,10 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
     system,
     messages,
     tools: Object.fromEntries(Object.entries(tools).toSorted(([a], [b]) => a.localeCompare(b))),
-    params,
+    params: {
+      ...params,
+      options: filterInternalOptions(params.options),
+    },
     messageTransformOptions: options,
     headers: {
       ...(input.model.providerID.startsWith("opencode")
@@ -218,6 +221,11 @@ function resolveTools(input: Pick<PrepareInput, "tools" | "agent" | "permission"
     Permission.merge(input.agent.permission, input.permission ?? []),
   )
   return Record.filter(input.tools, (_, k) => input.user.tools?.[k] !== false && !disabled.has(k))
+}
+
+function filterInternalOptions(options: Record<string, any>) {
+  const { underlyingModel, ...rest } = options
+  return rest
 }
 
 export function hasToolCalls(messages: ModelMessage[]): boolean {
