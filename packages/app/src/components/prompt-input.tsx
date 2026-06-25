@@ -1,5 +1,6 @@
 import { useFilteredList } from "@opencode-ai/ui/hooks"
 import { useSpring } from "@opencode-ai/ui/motion-spring"
+import { createMediaQuery } from "@solid-primitives/media"
 import {
   createEffect,
   on,
@@ -61,6 +62,7 @@ import {
   type PromptHistoryStoredEntry,
   promptLength,
 } from "./prompt-input/history"
+import { promptEnterKeyAction } from "./prompt-input/keyboard"
 import { createPromptSubmit, type FollowupDraft } from "./prompt-input/submit"
 import { PromptPopover, type AtOption, type SlashCommand } from "./prompt-input/slash-popover"
 import { PromptContextItems } from "./prompt-input/context-items"
@@ -218,6 +220,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const permission = usePermission()
   const language = useLanguage()
   const platform = usePlatform()
+  const mobile = createMediaQuery("(max-width: 767px)")
+  const mobileWeb = createMemo(() => platform.platform === "web" && mobile())
   const tabs = () => props.controls.session.tabs
   let editorRef!: HTMLDivElement
   let fileInputRef: HTMLInputElement | undefined
@@ -1340,7 +1344,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
 
     // Note: Shift+Enter is handled earlier, before IME check
-    if (event.key === "Enter" && !event.shiftKey) {
+    const enterAction = promptEnterKeyAction({
+      key: event.key,
+      shiftKey: event.shiftKey,
+      mobileWeb: mobileWeb(),
+    })
+    if (enterAction === "newline") {
+      addPart({ type: "text", content: "\n", start: 0, end: 0 })
+      event.preventDefault()
+      return
+    }
+    if (enterAction === "submit") {
       event.preventDefault()
       if (event.repeat) return
       if (
