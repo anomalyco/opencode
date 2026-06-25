@@ -9,7 +9,7 @@ import { Skill } from "@/skill"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
-import { ApiVcsApplyError } from "../groups/instance"
+import { ApiVcsApplyError, ApiVcsCommitError } from "../groups/instance"
 import { markInstanceForDisposal } from "../lifecycle"
 
 export const instanceHandlers = HttpApiBuilder.group(InstanceHttpApi, "instance", (handlers) =>
@@ -73,6 +73,21 @@ export const instanceHandlers = HttpApiBuilder.group(InstanceHttpApi, "instance"
       )
     })
 
+    const commitVcs = Effect.fn("InstanceHttpApi.vcsCommit")(function* (ctx: { payload: Vcs.CommitInput }) {
+      return yield* vcs.commit(ctx.payload).pipe(
+        Effect.mapError(
+          (error) =>
+            new ApiVcsCommitError({
+              name: "VcsCommitError",
+              data: {
+                message: error.message,
+                reason: error.reason,
+              },
+            }),
+        ),
+      )
+    })
+
     const getCommand = Effect.fn("InstanceHttpApi.command")(function* () {
       return yield* command.list()
     })
@@ -101,6 +116,7 @@ export const instanceHandlers = HttpApiBuilder.group(InstanceHttpApi, "instance"
       .handle("vcsDiff", getVcsDiff)
       .handle("vcsDiffRaw", getVcsDiffRaw)
       .handle("vcsApply", applyVcs)
+      .handle("vcsCommit", commitVcs)
       .handle("command", getCommand)
       .handle("agent", getAgent)
       .handle("skill", getSkill)

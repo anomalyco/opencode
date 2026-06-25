@@ -284,6 +284,21 @@ export class PatchApplyError extends Schema.TaggedErrorClass<PatchApplyError>()(
   reason: Schema.Literals(["non-git", "not-clean"]),
 }) {}
 
+export const CommitInput = Schema.Struct({
+  message: Schema.Trim.check(Schema.isNonEmpty()),
+})
+export type CommitInput = Schema.Schema.Type<typeof CommitInput>
+
+export const CommitResult = Schema.Struct({
+  committed: Schema.Boolean,
+})
+export type CommitResult = Schema.Schema.Type<typeof CommitResult>
+
+export class CommitError extends Schema.TaggedErrorClass<CommitError>()("VcsCommitError", {
+  message: Schema.String,
+  reason: Schema.Literals(["non-git", "nothing-to-commit", "failed"]),
+}) {}
+
 export interface Interface {
   readonly init: () => Effect.Effect<void>
   readonly branch: () => Effect.Effect<string | undefined>
@@ -292,6 +307,7 @@ export interface Interface {
   readonly diff: (mode: Mode, options?: DiffOptions) => Effect.Effect<FileDiff[]>
   readonly diffRaw: () => Effect.Effect<string>
   readonly apply: (input: ApplyInput) => Effect.Effect<ApplyResult, PatchApplyError>
+  readonly commit: (input: CommitInput) => Effect.Effect<CommitResult, CommitError>
 }
 
 interface State {
@@ -419,6 +435,31 @@ export const layer: Layer.Layer<Service, never, Git.Service | EventV2Bridge.Serv
           })
         }
         return { applied: true }
+      }),
+      commit: Effect.fn("Vcs.commit")(function* (input: CommitInput) {
+        const ctx = yield* InstanceState.context
+        if (ctx.project.vcs !== "git") {
+          return yield* new CommitError({
+            message: "Commit can't be performed because the project is not git-based",
+            reason: "non-git",
+          })
+        }
+
+        if (!(yield* git.status(ctx.directory)).some((item) => item.code[0] !== " " && item.code[0] !== "?")) {
+          return yield* new CommitError({
+            message: "There are no staged changes to commit",
+            reason: "nothing-to-commit",
+          })
+        }
+
+        const result = yield* git.commit(ctx.directory, input.message)
+        if (result.exitCode !== 0) {
+          return yield* new CommitError({
+            message: result.stderr.toString("utf8").trim() || "Failed to commit changes",
+            reason: "failed",
+          })
+        }
+        return { committed: true }
       }),
     })
   }),

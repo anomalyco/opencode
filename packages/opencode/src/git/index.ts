@@ -88,6 +88,7 @@ export interface Interface {
   readonly patchUntracked: (cwd: string, file: string, options?: PatchOptions) => Effect.Effect<Patch>
   readonly statUntracked: (cwd: string, file: string) => Effect.Effect<Stat | undefined>
   readonly applyPatch: (cwd: string, patch: string) => Effect.Effect<Result>
+  readonly commit: (cwd: string, message: string) => Effect.Effect<Result>
 }
 
 const kind = (code: string): Kind => {
@@ -323,6 +324,10 @@ export const layer = Layer.effect(
       return yield* run(["apply", "-"], { cwd, stdin: stdin(patch) })
     })
 
+    const commit = Effect.fn("Git.commit")(function* (cwd: string, message: string) {
+      return yield* run(["commit", "-m", message], { cwd })
+    })
+
     return Service.of({
       run,
       branch,
@@ -339,6 +344,7 @@ export const layer = Layer.effect(
       patchUntracked,
       statUntracked,
       applyPatch,
+      commit,
     })
   }),
 )

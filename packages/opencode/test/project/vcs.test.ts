@@ -154,6 +154,39 @@ describe("Vcs", () => {
       }),
     { git: true },
   )
+
+  it.instance(
+    "commit() commits staged changes successfully",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        yield* write(path.join(test.directory, "test-commit.txt"), "staged content\n")
+        yield* git(test.directory, ["add", "test-commit.txt"])
+
+        const vcs = yield* init()
+        const result = yield* vcs.commit({ message: "feat: test commit" })
+        expect(result.committed).toBe(true)
+
+        const log = yield* Git.Service.use((g) => g.run(["log", "-1", "--pretty=%B"], { cwd: test.directory }))
+        expect(log.text().trim()).toBe("feat: test commit")
+      }),
+    { git: true },
+  )
+
+  it.instance(
+    "commit() fails with nothing-to-commit when there are no staged changes",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        yield* write(path.join(test.directory, "test-commit.txt"), "unstaged content\n")
+
+        const vcs = yield* init()
+        const failure = yield* Effect.flip(vcs.commit({ message: "feat: empty commit" }))
+        expect(failure._tag).toBe("VcsCommitError")
+        expect(failure.reason).toBe("nothing-to-commit")
+      }),
+    { git: true },
+  )
 })
 
 describe("Vcs diff", () => {

@@ -2339,6 +2339,14 @@ export type VcsApplyError = {
   }
 }
 
+export type VcsCommitError = {
+  name: "VcsCommitError"
+  data: {
+    message: string
+    reason: "non-git" | "nothing-to-commit" | "failed"
+  }
+}
+
 export type Command = {
   name: string
   description?: string
@@ -8148,6 +8156,38 @@ export type VcsApplyResponses = {
 }
 
 export type VcsApplyResponse = VcsApplyResponses[keyof VcsApplyResponses]
+
+export type VcsCommitData = {
+  body?: {
+    message: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/vcs/commit"
+}
+
+export type VcsCommitErrors = {
+  /**
+   * VcsCommitError | InvalidRequestError
+   */
+  400: VcsCommitError | InvalidRequestError
+}
+
+export type VcsCommitError2 = VcsCommitErrors[keyof VcsCommitErrors]
+
+export type VcsCommitResponses = {
+  /**
+   * VCS changes committed
+   */
+  200: {
+    committed: boolean
+  }
+}
+
+export type VcsCommitResponse = VcsCommitResponses[keyof VcsCommitResponses]
 
 export type CommandListData = {
   body?: never

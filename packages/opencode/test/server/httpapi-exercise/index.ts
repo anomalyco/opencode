@@ -139,6 +139,11 @@ const scenarios: Scenario[] = [
     .inProject({ git: false })
     .at((ctx) => ({ path: "/vcs/apply", headers: ctx.headers(), body: { patch: "" } }))
     .status(400, undefined, "status"),
+  http.protected
+    .post("/vcs/commit", "vcs.commit")
+    .inProject({ git: false })
+    .at((ctx) => ({ path: "/vcs/commit", headers: ctx.headers(), body: { message: "test commit message" } }))
+    .status(400, undefined, "status"),
   http.protected.get("/command", "command.list").json(200, array, "status"),
   http.protected.get("/agent", "app.agents").json(200, array, "status"),
   http.protected.get("/skill", "app.skills").json(200, array, "status"),

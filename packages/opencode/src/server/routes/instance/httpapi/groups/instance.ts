@@ -40,6 +40,17 @@ export class ApiVcsApplyError extends Schema.ErrorClass<ApiVcsApplyError>("VcsAp
   { httpApiStatus: 400 },
 ) {}
 
+export class ApiVcsCommitError extends Schema.ErrorClass<ApiVcsCommitError>("VcsCommitError")(
+  {
+    name: Schema.Literal("VcsCommitError"),
+    data: Schema.Struct({
+      message: Schema.String,
+      reason: Schema.Literals(["non-git", "nothing-to-commit", "failed"]),
+    }),
+  },
+  { httpApiStatus: 400 },
+) {}
+
 export const InstancePaths = {
   dispose: "/instance/dispose",
   path: "/path",
@@ -48,6 +59,7 @@ export const InstancePaths = {
   vcsDiff: "/vcs/diff",
   vcsDiffRaw: "/vcs/diff/raw",
   vcsApply: "/vcs/apply",
+  vcsCommit: "/vcs/commit",
   command: "/command",
   agent: "/agent",
   skill: "/skill",
@@ -134,6 +146,18 @@ export const InstanceApi = HttpApi.make("instance")
             identifier: "vcs.apply",
             summary: "Apply VCS patch",
             description: "Apply a raw patch to the current working tree.",
+          }),
+        ),
+        HttpApiEndpoint.post("vcsCommit", InstancePaths.vcsCommit, {
+          query: WorkspaceRoutingQuery,
+          payload: Vcs.CommitInput,
+          success: described(Vcs.CommitResult, "VCS changes committed"),
+          error: ApiVcsCommitError,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "vcs.commit",
+            summary: "Commit VCS changes",
+            description: "Commit staged changes with a message.",
           }),
         ),
         HttpApiEndpoint.get("command", InstancePaths.command, {
