@@ -81,7 +81,8 @@ export const dict = {
   "home.updated": "Güncellendi",
   "home.noRows": "Henüz satır yok",
   "home.justNow": "az önce",
-  "home.heroCopy": "Gerçek kullanımda hangi modellerin öne geçtiğini, karışımın nasıl değiştiğini ve bunun maliyet için ne anlama geldiğini görün.",
+  "home.heroCopy":
+    "Gerçek kullanımda hangi modellerin öne geçtiğini, karışımın nasıl değiştiğini ve bunun maliyet için ne anlama geldiğini görün.",
   "home.loadingTitle": "Veriler yükleniyor",
   "home.loadingDescription": "Model toplamları okunuyor.",
   "home.usageTitle": "Kullanım",
@@ -135,7 +136,8 @@ export const dict = {
   "lab.notFound": "Bu laboratuvarla eşleşen model yok.",
   "lab.heroPrefix": "OpenCode'da kullanılan {{count}} {{lab}} modelini keşfedin",
   "lab.heroIncluding": "{{models}} dahil",
-  "lab.heroSuffix": "Son token kullanımını, bağlam pencerelerini, yayın tarihlerini ve modele özel verileri karşılaştırın.",
+  "lab.heroSuffix":
+    "Son token kullanımını, bağlam pencerelerini, yayın tarihlerini ve modele özel verileri karşılaştırın.",
   "lab.tokensProcessed": "İşlenen Tokenlar",
   "lab.pending": "Beklemede",
   "lab.usageAfterActivity": "Kullanım, model etkinliği ulaştıktan sonra görünür",
@@ -163,7 +165,8 @@ export const dict = {
   "model.noDataDescription": "Sıralamadan bir model açmayı deneyin.",
   "model.noMatched": "{{id}} ile eşleşen model bilgisi veya kullanım satırı yok.",
   "model.fallback": "Model",
-  "model.catalogFallback": "Paylaşılan model dizininden model bilgileri. Bu modelde etkinlik olduğunda OpenCode Go kullanımı görünür.",
+  "model.catalogFallback":
+    "Paylaşılan model dizininden model bilgileri. Bu modelde etkinlik olduğunda OpenCode Go kullanımı görünür.",
   "model.unranked": "Geçen haftaki OpenCode Go kullanımında sıralanmamış",
   "model.ranked": "Geçen haftaki OpenCode Go kullanımında #{{rank}} sırada",
   "model.observedVolume": "gözlemlenen 2M hacmin {{share}} payıyla.",

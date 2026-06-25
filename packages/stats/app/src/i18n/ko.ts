@@ -83,7 +83,8 @@ export const dict = {
   "home.updated": "업데이트됨",
   "home.noRows": "아직 행이 없습니다",
   "home.justNow": "방금 전",
-  "home.heroCopy": "실제 사용량에서 어떤 모델이 앞서고 있는지, 사용 구성이 어떻게 바뀌는지, 그것이 비용에 어떤 의미인지 확인하세요.",
+  "home.heroCopy":
+    "실제 사용량에서 어떤 모델이 앞서고 있는지, 사용 구성이 어떻게 바뀌는지, 그것이 비용에 어떤 의미인지 확인하세요.",
   "home.loadingTitle": "데이터 로딩 중",
   "home.loadingDescription": "모델 집계를 읽는 중입니다.",
   "home.usageTitle": "사용량",
@@ -165,7 +166,8 @@ export const dict = {
   "model.noDataDescription": "리더보드에서 모델을 열어보세요.",
   "model.noMatched": "{{id}}와 일치하는 모델 정보나 사용 행이 없습니다.",
   "model.fallback": "모델",
-  "model.catalogFallback": "공유 모델 인덱스의 모델 정보입니다. 이 모델에 활동이 생기면 OpenCode Go 사용량이 표시됩니다.",
+  "model.catalogFallback":
+    "공유 모델 인덱스의 모델 정보입니다. 이 모델에 활동이 생기면 OpenCode Go 사용량이 표시됩니다.",
   "model.unranked": "지난주 OpenCode Go 사용량에서 순위 없음",
   "model.ranked": "지난주 OpenCode Go 사용량에서 #{{rank}}위",
   "model.observedVolume": "관측된 2M 볼륨의 {{share}}.",

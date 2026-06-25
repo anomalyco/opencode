@@ -135,7 +135,8 @@ export const dict = {
   "lab.notFound": "Ningún modelo coincidió con este laboratorio.",
   "lab.heroPrefix": "Explora {{count}} modelos de {{lab}} usados en OpenCode",
   "lab.heroIncluding": "incluidos {{models}}",
-  "lab.heroSuffix": "Compara uso reciente de tokens, ventanas de contexto, fechas de lanzamiento y datos específicos del modelo.",
+  "lab.heroSuffix":
+    "Compara uso reciente de tokens, ventanas de contexto, fechas de lanzamiento y datos específicos del modelo.",
   "lab.tokensProcessed": "Tokens procesados",
   "lab.pending": "Pendiente",
   "lab.usageAfterActivity": "El uso aparece después de que llegue actividad del modelo",
@@ -163,7 +164,8 @@ export const dict = {
   "model.noDataDescription": "Prueba a abrir un modelo desde la clasificación.",
   "model.noMatched": "Ningún dato del modelo ni fila de uso coincidió con {{id}}.",
   "model.fallback": "Modelo",
-  "model.catalogFallback": "Datos del modelo desde el índice compartido de modelos. El uso de OpenCode Go aparecerá cuando este modelo tenga actividad.",
+  "model.catalogFallback":
+    "Datos del modelo desde el índice compartido de modelos. El uso de OpenCode Go aparecerá cuando este modelo tenga actividad.",
   "model.unranked": "Sin clasificación en el uso de OpenCode Go de la semana pasada",
   "model.ranked": "Clasificado #{{rank}} en el uso de OpenCode Go de la semana pasada",
   "model.observedVolume": "con {{share}} del volumen 2M observado.",

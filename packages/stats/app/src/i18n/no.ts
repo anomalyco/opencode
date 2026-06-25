@@ -81,7 +81,8 @@ export const dict = {
   "home.updated": "Oppdatert",
   "home.noRows": "Ingen rader ennå",
   "home.justNow": "akkurat nå",
-  "home.heroCopy": "Se hvilke modeller som vinner reell bruk, hvordan miksen endrer seg, og hva det betyr for kostnadene.",
+  "home.heroCopy":
+    "Se hvilke modeller som vinner reell bruk, hvordan miksen endrer seg, og hva det betyr for kostnadene.",
   "home.loadingTitle": "Laster data",
   "home.loadingDescription": "Leser modellaggregater.",
   "home.usageTitle": "Bruk",
@@ -163,7 +164,8 @@ export const dict = {
   "model.noDataDescription": "Prøv å åpne en modell fra rangeringen.",
   "model.noMatched": "Ingen modellfakta eller bruksrader matchet {{id}}.",
   "model.fallback": "Modell",
-  "model.catalogFallback": "Modellfakta fra den delte modellindeksen. OpenCode Go-bruk vises når denne modellen har aktivitet.",
+  "model.catalogFallback":
+    "Modellfakta fra den delte modellindeksen. OpenCode Go-bruk vises når denne modellen har aktivitet.",
   "model.unranked": "Ikke rangert i forrige ukes OpenCode Go-bruk",
   "model.ranked": "Rangert #{{rank}} i forrige ukes OpenCode Go-bruk",
   "model.observedVolume": "med {{share}} av observert 2M-volum.",

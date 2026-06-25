@@ -182,7 +182,8 @@ const en = {
   "model.noDataDescription": "Try opening a model from the leaderboard.",
   "model.noMatched": "No model facts or usage rows matched {{id}}.",
   "model.fallback": "Model",
-  "model.catalogFallback": "Model facts from the shared model index. OpenCode Go usage appears once this model has activity.",
+  "model.catalogFallback":
+    "Model facts from the shared model index. OpenCode Go usage appears once this model has activity.",
   "model.unranked": "Unranked across last week's OpenCode Go usage",
   "model.ranked": "Ranked #{{rank}} across last week's OpenCode Go usage",
   "model.observedVolume": "with {{share}} of observed 2M volume.",

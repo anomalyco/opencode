@@ -165,7 +165,8 @@ export const dict = {
   "model.noDataDescription": "ลองเปิดโมเดลจากลีดเดอร์บอร์ด",
   "model.noMatched": "ไม่มีข้อเท็จจริงของโมเดลหรือแถวการใช้งานที่ตรงกับ {{id}}",
   "model.fallback": "โมเดล",
-  "model.catalogFallback": "ข้อเท็จจริงของโมเดลจากดัชนีโมเดลที่ใช้ร่วมกัน การใช้งาน OpenCode Go จะแสดงเมื่อโมเดลนี้มีกิจกรรม",
+  "model.catalogFallback":
+    "ข้อเท็จจริงของโมเดลจากดัชนีโมเดลที่ใช้ร่วมกัน การใช้งาน OpenCode Go จะแสดงเมื่อโมเดลนี้มีกิจกรรม",
   "model.unranked": "ไม่มีอันดับในการใช้งาน OpenCode Go ของสัปดาห์ที่แล้ว",
   "model.ranked": "อันดับ #{{rank}} ในการใช้งาน OpenCode Go ของสัปดาห์ที่แล้ว",
   "model.observedVolume": "พร้อม {{share}} ของปริมาณ 2M ที่สังเกตได้",

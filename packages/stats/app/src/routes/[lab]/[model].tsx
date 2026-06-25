@@ -107,11 +107,10 @@ export default function StatsModel() {
   const modelName = createMemo(() => catalogEntry()?.name ?? stats()?.model ?? modelParam() ?? i18n.t("model.fallback"))
   const labName = createMemo(() => formatCatalogLabName(catalogEntry()?.lab ?? stats()?.provider ?? labParam()))
   const modelTitle = createMemo(() => i18n.t("model.title", { model: modelName() }))
-  const modelDescription = createMemo(
-    () => i18n.t("model.description", { model: modelName() }),
-  )
+  const modelDescription = createMemo(() => i18n.t("model.description", { model: modelName() }))
   const modelPath = createMemo(
-    () => `/data/${catalogEntry()?.id ?? [labParam(), stats()?.slug ?? modelParam()].filter((part) => part.length > 0).join("/")}`,
+    () =>
+      `/data/${catalogEntry()?.id ?? [labParam(), stats()?.slug ?? modelParam()].filter((part) => part.length > 0).join("/")}`,
   )
   const modelUrl = createMemo(() => localizedUrl(language.locale(), modelPath()))
   const statsUnfurlUrl = new URL(statsUnfurlPath, localizedUrl("en", "/data/")).toString()
@@ -261,17 +260,10 @@ function ModelHero(props: { data: StatsModelData | null; catalog: ModelCatalogEn
             <span data-slot="model-id-tag">{modelId()}</span>
           </div>
           <h1>{props.catalog?.name ?? props.data?.model ?? i18n.t("model.fallback")}</h1>
-          <Show
-            when={props.data}
-            fallback={
-              <p>{i18n.t("model.catalogFallback")}</p>
-            }
-          >
+          <Show when={props.data} fallback={<p>{i18n.t("model.catalogFallback")}</p>}>
             {(data) => (
               <p>
-                {data().rank === null
-                  ? i18n.t("model.unranked")
-                  : i18n.t("model.ranked", { rank: data().rank ?? "" })}{" "}
+                {data().rank === null ? i18n.t("model.unranked") : i18n.t("model.ranked", { rank: data().rank ?? "" })}{" "}
                 {i18n.t("model.observedVolume", { share: formatPercent(data().tokenShare) })}
               </p>
             )}
@@ -322,8 +314,14 @@ function ModelCatalogPanel(props: { data: ModelCatalogEntry }) {
   return (
     <aside data-component="model-catalog" aria-label={i18n.t("model.facts")}>
       <div data-slot="model-catalog-grid">
-        <CatalogDatum label={i18n.t("model.context")} value={formatCatalogLimit(props.data.limit?.context, i18n.t("home.unknown"))} />
-        <CatalogDatum label={i18n.t("model.output")} value={formatCatalogLimit(props.data.limit?.output, i18n.t("home.unknown"))} />
+        <CatalogDatum
+          label={i18n.t("model.context")}
+          value={formatCatalogLimit(props.data.limit?.context, i18n.t("home.unknown"))}
+        />
+        <CatalogDatum
+          label={i18n.t("model.output")}
+          value={formatCatalogLimit(props.data.limit?.output, i18n.t("home.unknown"))}
+        />
         <CatalogDatum
           label={i18n.t("model.knowledge")}
           value={formatCatalogDate(props.data.knowledge, language.tag(language.locale()), i18n.t("home.unknown"))}
@@ -332,7 +330,10 @@ function ModelCatalogPanel(props: { data: ModelCatalogEntry }) {
           label={i18n.t("model.release")}
           value={formatCatalogDate(props.data.releaseDate, language.tag(language.locale()), i18n.t("home.unknown"))}
         />
-        <CatalogDatum label={i18n.t("model.inputs")} value={formatCatalogModalities(props.data.modalities.input, i18n)} />
+        <CatalogDatum
+          label={i18n.t("model.inputs")}
+          value={formatCatalogModalities(props.data.modalities.input, i18n)}
+        />
       </div>
     </aside>
   )
@@ -360,9 +361,21 @@ function ModelOverview(props: { data: StatsModelData | null }) {
       >
         {(data) => (
           <div data-component="model-metric-grid">
-            <MetricCard label={i18n.t("model.tokens")} value={formatTokens(data().totals.tokens)} detail={i18n.t("model.lastTwoMonths")} />
-            <MetricCard label={i18n.t("model.uniqueUsers")} value={formatUsers(data().totals.uniqueUsers)} detail={i18n.t("model.lastTwoMonths")} />
-            <MetricCard label={i18n.t("model.sessions")} value={formatInteger(data().totals.sessions)} detail={i18n.t("model.completedSessions")} />
+            <MetricCard
+              label={i18n.t("model.tokens")}
+              value={formatTokens(data().totals.tokens)}
+              detail={i18n.t("model.lastTwoMonths")}
+            />
+            <MetricCard
+              label={i18n.t("model.uniqueUsers")}
+              value={formatUsers(data().totals.uniqueUsers)}
+              detail={i18n.t("model.lastTwoMonths")}
+            />
+            <MetricCard
+              label={i18n.t("model.sessions")}
+              value={formatInteger(data().totals.sessions)}
+              detail={i18n.t("model.completedSessions")}
+            />
             <MetricCard
               label={i18n.t("model.tokenShare")}
               value={formatPercent(data().tokenShare)}
@@ -388,7 +401,9 @@ function ModelUsageSection(props: { data: ModelUsagePoint[] }) {
       <SectionTitle title={i18n.t("nav.usage")} description={i18n.t("model.usageDescription")} />
       <Show
         when={props.data.some((item) => item.tokens > 0)}
-        fallback={<ModelEmptyState title={i18n.t("model.noUsageTitle")} description={i18n.t("model.noUsageDescription")} />}
+        fallback={
+          <ModelEmptyState title={i18n.t("model.noUsageTitle")} description={i18n.t("model.noUsageDescription")} />
+        }
       >
         <ModelColumnChart data={props.data} metric="tokens" ariaLabel={i18n.t("model.dailyTokenChart")} />
       </Show>
@@ -400,10 +415,7 @@ function ModelUsersSection(props: { data: ModelUsagePoint[] }) {
   const i18n = useI18n()
   return (
     <section id="users" data-section="model-panel">
-      <SectionTitle
-        title={i18n.t("model.uniqueUsers")}
-        description={i18n.t("model.usersDescription")}
-      />
+      <SectionTitle title={i18n.t("model.uniqueUsers")} description={i18n.t("model.usersDescription")} />
       <Show
         when={props.data.some((item) => item.users > 0)}
         fallback={
@@ -541,12 +553,19 @@ function ModelEfficiencySection(props: { data: StatsModelData | null; catalog: M
       <Show
         when={props.data}
         fallback={
-          <ModelEmptyState title={i18n.t("model.noEfficiencyTitle")} description={i18n.t("model.noEfficiencyDescription")} />
+          <ModelEmptyState
+            title={i18n.t("model.noEfficiencyTitle")}
+            description={i18n.t("model.noEfficiencyDescription")}
+          />
         }
       >
         {(data) => (
           <div data-component="model-metric-grid" data-variant="dense">
-            <MetricCard label={i18n.t("model.cost")} value={formatMoney(data().totals.cost)} detail={i18n.t("model.totalSpend")} />
+            <MetricCard
+              label={i18n.t("model.cost")}
+              value={formatMoney(data().totals.cost)}
+              detail={i18n.t("model.totalSpend")}
+            />
             <MetricCard
               label={i18n.t("model.costPerMillion")}
               value={
@@ -564,7 +583,11 @@ function ModelEfficiencySection(props: { data: StatsModelData | null; catalog: M
               value={formatTokens(data().totals.tokensPerSession)}
               detail={i18n.t("model.average")}
             />
-            <MetricCard label={i18n.t("model.cacheRatio")} value={formatPercent(data().totals.cacheRatio)} detail={i18n.t("model.inputTokens")} />
+            <MetricCard
+              label={i18n.t("model.cacheRatio")}
+              value={formatPercent(data().totals.cacheRatio)}
+              detail={i18n.t("model.inputTokens")}
+            />
           </div>
         )}
       </Show>
@@ -602,9 +625,7 @@ function ModelGeoBreakdownSection(props: { data: Record<UsageRange, CountryEntry
       <SectionTitle title={i18n.t("nav.geoBreakdown")} description={i18n.t("model.geoDescription")} />
       <Show
         when={data().length > 0}
-        fallback={
-          <ModelEmptyState title={i18n.t("model.noGeoTitle")} description={i18n.t("model.noGeoDescription")} />
-        }
+        fallback={<ModelEmptyState title={i18n.t("model.noGeoTitle")} description={i18n.t("model.noGeoDescription")} />}
       >
         <div data-component="geo-breakdown">
           <div data-slot="geo-map-panel">
@@ -769,7 +790,9 @@ function ModelPeersSection(props: { data: StatsModelData | null }) {
       <SectionTitle title={i18n.t("nav.peers")} description={i18n.t("model.peersDescription")} />
       <Show
         when={props.data?.peers.length}
-        fallback={<ModelEmptyState title={i18n.t("model.noPeersTitle")} description={i18n.t("model.noPeersDescription")} />}
+        fallback={
+          <ModelEmptyState title={i18n.t("model.noPeersTitle")} description={i18n.t("model.noPeersDescription")} />
+        }
       >
         <ol data-component="model-peer-list">
           <For each={props.data?.peers ?? []}>

@@ -81,7 +81,8 @@ export const dict = {
   "home.updated": "Aktualisiert",
   "home.noRows": "Noch keine Zeilen",
   "home.justNow": "gerade eben",
-  "home.heroCopy": "Sieh, welche Modelle echte Nutzung gewinnen, wie sich der Mix verschiebt und was das für die Kosten bedeutet.",
+  "home.heroCopy":
+    "Sieh, welche Modelle echte Nutzung gewinnen, wie sich der Mix verschiebt und was das für die Kosten bedeutet.",
   "home.loadingTitle": "Daten werden geladen",
   "home.loadingDescription": "Modellaggregate werden gelesen.",
   "home.usageTitle": "Nutzung",
@@ -135,7 +136,8 @@ export const dict = {
   "lab.notFound": "Keine Modelle passten zu diesem Lab.",
   "lab.heroPrefix": "Erkunde {{count}} {{lab}}-Modelle, die in OpenCode verwendet werden",
   "lab.heroIncluding": "einschließlich {{models}}",
-  "lab.heroSuffix": "Vergleiche aktuelle Tokennutzung, Kontextfenster, Veröffentlichungsdaten und modellspezifische Daten.",
+  "lab.heroSuffix":
+    "Vergleiche aktuelle Tokennutzung, Kontextfenster, Veröffentlichungsdaten und modellspezifische Daten.",
   "lab.tokensProcessed": "Verarbeitete Tokens",
   "lab.pending": "Ausstehend",
   "lab.usageAfterActivity": "Nutzung erscheint, sobald Modellaktivität vorliegt",
@@ -163,7 +165,8 @@ export const dict = {
   "model.noDataDescription": "Öffne ein Modell aus der Bestenliste.",
   "model.noMatched": "Keine Modellfakten oder Nutzungszeilen passten zu {{id}}.",
   "model.fallback": "Modell",
-  "model.catalogFallback": "Modellfakten aus dem gemeinsamen Modellindex. OpenCode Go-Nutzung erscheint, sobald dieses Modell Aktivität hat.",
+  "model.catalogFallback":
+    "Modellfakten aus dem gemeinsamen Modellindex. OpenCode Go-Nutzung erscheint, sobald dieses Modell Aktivität hat.",
   "model.unranked": "In der OpenCode Go-Nutzung der letzten Woche nicht platziert",
   "model.ranked": "Rang #{{rank}} in der OpenCode Go-Nutzung der letzten Woche",
   "model.observedVolume": "mit {{share}} des beobachteten 2M-Volumens.",

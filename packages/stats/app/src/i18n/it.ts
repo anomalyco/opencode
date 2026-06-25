@@ -81,7 +81,8 @@ export const dict = {
   "home.updated": "Aggiornato",
   "home.noRows": "Ancora nessuna riga",
   "home.justNow": "proprio ora",
-  "home.heroCopy": "Scopri quali modelli stanno vincendo nell'uso reale, come cambia il mix e cosa significa per i costi.",
+  "home.heroCopy":
+    "Scopri quali modelli stanno vincendo nell'uso reale, come cambia il mix e cosa significa per i costi.",
   "home.loadingTitle": "Caricamento dati",
   "home.loadingDescription": "Lettura degli aggregati dei modelli.",
   "home.usageTitle": "Utilizzo",
@@ -135,7 +136,8 @@ export const dict = {
   "lab.notFound": "Nessun modello corrispondeva a questo laboratorio.",
   "lab.heroPrefix": "Esplora {{count}} modelli {{lab}} usati in OpenCode",
   "lab.heroIncluding": "inclusi {{models}}",
-  "lab.heroSuffix": "Confronta l'utilizzo recente dei token, le finestre di contesto, le date di rilascio e i dati specifici del modello.",
+  "lab.heroSuffix":
+    "Confronta l'utilizzo recente dei token, le finestre di contesto, le date di rilascio e i dati specifici del modello.",
   "lab.tokensProcessed": "Token elaborati",
   "lab.pending": "In sospeso",
   "lab.usageAfterActivity": "L'utilizzo appare dopo l'arrivo dell'attività del modello",
@@ -163,7 +165,8 @@ export const dict = {
   "model.noDataDescription": "Prova ad aprire un modello dalla classifica.",
   "model.noMatched": "Nessun fatto modello o riga di utilizzo corrispondeva a {{id}}.",
   "model.fallback": "Modello",
-  "model.catalogFallback": "Fatti del modello dall'indice condiviso dei modelli. L'utilizzo di OpenCode Go appare quando questo modello ha attività.",
+  "model.catalogFallback":
+    "Fatti del modello dall'indice condiviso dei modelli. L'utilizzo di OpenCode Go appare quando questo modello ha attività.",
   "model.unranked": "Non classificato nell'utilizzo OpenCode Go della scorsa settimana",
   "model.ranked": "Posizione #{{rank}} nell'utilizzo OpenCode Go della scorsa settimana",
   "model.observedVolume": "con {{share}} del volume 2M osservato.",

@@ -83,7 +83,8 @@ export const dict = {
   "home.updated": "更新済み",
   "home.noRows": "まだ行がありません",
   "home.justNow": "たった今",
-  "home.heroCopy": "実際の利用でどのモデルが伸びているか、利用構成がどう変化しているか、それがコストに何を意味するかを確認できます。",
+  "home.heroCopy":
+    "実際の利用でどのモデルが伸びているか、利用構成がどう変化しているか、それがコストに何を意味するかを確認できます。",
   "home.loadingTitle": "データを読み込み中",
   "home.loadingDescription": "モデル集計を読み込んでいます。",
   "home.usageTitle": "使用量",
@@ -165,7 +166,8 @@ export const dict = {
   "model.noDataDescription": "ランキングからモデルを開いてみてください。",
   "model.noMatched": "{{id}}に一致するモデル情報または使用行はありません。",
   "model.fallback": "モデル",
-  "model.catalogFallback": "共有モデルインデックスのモデル情報です。このモデルにアクティビティが発生するとOpenCode Go使用量が表示されます。",
+  "model.catalogFallback":
+    "共有モデルインデックスのモデル情報です。このモデルにアクティビティが発生するとOpenCode Go使用量が表示されます。",
   "model.unranked": "先週のOpenCode Go使用量では未ランク",
   "model.ranked": "先週のOpenCode Go使用量で#{{rank}}位",
   "model.observedVolume": "観測された2M量の{{share}}。",

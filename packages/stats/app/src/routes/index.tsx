@@ -216,8 +216,7 @@ function Hero(props: { updatedAt: string | null }) {
     if (
       formatUpdatedAtLabel(
         formatUpdatedAtParts(props.updatedAt, nextTimeZone, language.tag(language.locale()), i18n.t("home.justNow")),
-      ) ===
-      formatUpdatedAtLabel(updatedAtParts("UTC"))
+      ) === formatUpdatedAtLabel(updatedAtParts("UTC"))
     )
       return
     const timeouts: number[] = []
@@ -993,7 +992,9 @@ function LeaderboardCard(props: {
       data-component="leader-card"
       data-size={props.size}
       data-active={props.active ? "true" : undefined}
-      href={language.route(`${import.meta.env.BASE_URL}${modelSlug(props.entry.provider)}/${modelSlug(props.entry.model)}`)}
+      href={language.route(
+        `${import.meta.env.BASE_URL}${modelSlug(props.entry.provider)}/${modelSlug(props.entry.model)}`,
+      )}
       role="listitem"
       tabIndex={0}
       aria-label={`${String(props.entry.rank).padStart(2, "0")} ${props.entry.model} ${i18n.t("chart.byAuthor", { author: props.entry.author })}`}
@@ -1110,7 +1111,9 @@ function MarketShareSection(props: { data: StatsHomeData["market"] }) {
         <p>
           <span>[*]</span>
           <strong>
-            {inspecting() ? formatMarketDate(activeDay(), i18n.t("home.noData")) : formatMarketRange(data(), i18n.t("home.noData"))}
+            {inspecting()
+              ? formatMarketDate(activeDay(), i18n.t("home.noData"))
+              : formatMarketRange(data(), i18n.t("home.noData"))}
           </strong>
         </p>
         <div hidden>
@@ -1311,7 +1314,9 @@ function GeoBreakdownSection(props: { data: StatsHomeData["country"] }) {
               {(country) => (
                 <div data-slot="geo-active-country">
                   <span>#{String(country().rank).padStart(2, "0")}</span>
-                  <strong>{formatCountryName(country().country, language.tag(language.locale()), i18n.t("home.unknown"))}</strong>
+                  <strong>
+                    {formatCountryName(country().country, language.tag(language.locale()), i18n.t("home.unknown"))}
+                  </strong>
                   <p>
                     <b>{formatGeoTokens(country().tokens)}</b>
                     <em>{formatGeoShare(country().share)}</em>
@@ -1444,7 +1449,9 @@ function GeoCountryList(props: {
             >
               <span>{String(country.rank).padStart(2, "0")}</span>
               <i />
-              <strong>{formatCountryName(country.country, language.tag(language.locale()), i18n.t("home.unknown"))}</strong>
+              <strong>
+                {formatCountryName(country.country, language.tag(language.locale()), i18n.t("home.unknown"))}
+              </strong>
               <em>{formatGeoTokens(country.tokens)}</em>
               <b>{formatGeoShare(country.share)}</b>
             </button>
@@ -1661,9 +1668,7 @@ function CacheRatioSection(props: { data: StatsHomeData["cacheRatio"] }) {
       <SectionTitle title={i18n.t("home.cacheRatioTitle")} description={i18n.t("home.cacheRatioDescription")} />
       <Show
         when={visible().length > 0}
-        fallback={
-          <EmptyState title={i18n.t("home.noCacheTitle")} description={i18n.t("home.noCacheDescription")} />
-        }
+        fallback={<EmptyState title={i18n.t("home.noCacheTitle")} description={i18n.t("home.noCacheDescription")} />}
       >
         <CacheRatioChart data={visible()} activeIndex={selectedIndex()} onActiveIndexChange={setActiveIndex} />
       </Show>
@@ -1790,10 +1795,7 @@ function SessionCostSection(props: { data: StatsHomeData["sessionCost"] }) {
       <Show
         when={visible().length > 0}
         fallback={
-          <EmptyState
-            title={i18n.t("home.noSessionCostTitle")}
-            description={i18n.t("home.noSessionCostDescription")}
-          />
+          <EmptyState title={i18n.t("home.noSessionCostTitle")} description={i18n.t("home.noSessionCostDescription")} />
         }
       >
         <SessionCostChart data={visible()} activeIndex={selectedIndex()} onActiveIndexChange={setActiveIndex} />

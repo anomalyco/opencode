@@ -81,7 +81,8 @@ export const dict = {
   "home.updated": "Mis à jour",
   "home.noRows": "Aucune ligne pour l'instant",
   "home.justNow": "à l'instant",
-  "home.heroCopy": "Voyez quels modèles gagnent en usage réel, comment la répartition évolue et ce que cela signifie pour les coûts.",
+  "home.heroCopy":
+    "Voyez quels modèles gagnent en usage réel, comment la répartition évolue et ce que cela signifie pour les coûts.",
   "home.loadingTitle": "Chargement des données",
   "home.loadingDescription": "Lecture des agrégats de modèles.",
   "home.usageTitle": "Utilisation",
@@ -135,7 +136,8 @@ export const dict = {
   "lab.notFound": "Aucun modèle ne correspondait à ce laboratoire.",
   "lab.heroPrefix": "Explorez {{count}} modèles {{lab}} utilisés dans OpenCode",
   "lab.heroIncluding": "dont {{models}}",
-  "lab.heroSuffix": "Comparez l'utilisation récente des tokens, les fenêtres de contexte, les dates de sortie et les données propres aux modèles.",
+  "lab.heroSuffix":
+    "Comparez l'utilisation récente des tokens, les fenêtres de contexte, les dates de sortie et les données propres aux modèles.",
   "lab.tokensProcessed": "Tokens traités",
   "lab.pending": "En attente",
   "lab.usageAfterActivity": "L'utilisation apparaît après l'arrivée de l'activité du modèle",
@@ -144,7 +146,8 @@ export const dict = {
   "lab.usageTitle": "Utilisation des tokens {{lab}}",
   "lab.usageDescription": "Volume quotidien de tokens OpenCode sur les deux derniers mois.",
   "lab.noUsageTitle": "Aucune utilisation pour l'instant",
-  "lab.noUsageDescription": "L'utilisation récente des tokens apparaîtra ici dès que ce laboratoire aura de l'activité.",
+  "lab.noUsageDescription":
+    "L'utilisation récente des tokens apparaîtra ici dès que ce laboratoire aura de l'activité.",
   "lab.dailyTokenChart": "Graphique quotidien d'utilisation des tokens {{lab}}",
   "lab.dailyTokens": "Tokens quotidiens",
   "lab.tokens": "tokens",
@@ -163,7 +166,8 @@ export const dict = {
   "model.noDataDescription": "Essayez d'ouvrir un modèle depuis le classement.",
   "model.noMatched": "Aucun fait de modèle ni aucune ligne d'utilisation ne correspondait à {{id}}.",
   "model.fallback": "Modèle",
-  "model.catalogFallback": "Faits du modèle issus de l'index partagé des modèles. L'utilisation OpenCode Go apparaîtra dès que ce modèle aura de l'activité.",
+  "model.catalogFallback":
+    "Faits du modèle issus de l'index partagé des modèles. L'utilisation OpenCode Go apparaîtra dès que ce modèle aura de l'activité.",
   "model.unranked": "Non classé dans l'utilisation OpenCode Go de la semaine dernière",
   "model.ranked": "Classé #{{rank}} dans l'utilisation OpenCode Go de la semaine dernière",
   "model.observedVolume": "avec {{share}} du volume 2M observé.",

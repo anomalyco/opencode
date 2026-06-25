@@ -62,9 +62,7 @@ export default function StatsLab() {
   const [themePreference, setThemePreference] = createSignal<ThemePreference>("system")
   const labName = createMemo(() => lab()?.name ?? formatCatalogLabName(labParam()))
   const labTitle = createMemo(() => i18n.t("lab.title", { lab: labName() }))
-  const labDescription = createMemo(
-    () => i18n.t("lab.description", { lab: labName() }),
-  )
+  const labDescription = createMemo(() => i18n.t("lab.description", { lab: labName() }))
   const labPath = createMemo(() => `/data/${lab()?.id ?? labParam()}`)
   const labUrl = createMemo(() => localizedUrl(language.locale(), labPath()))
   const statsUnfurlUrl = new URL(statsUnfurlPath, localizedUrl("en", "/data/")).toString()
@@ -212,7 +210,9 @@ function LabHero(props: { lab: ModelCatalogLab; stats: StatsLabData | null }) {
             {props.stats
               ? i18n.t("lab.shareOfUsage", { share: formatPercent(props.stats.tokenShare) })
               : latest()
-                ? i18n.t("lab.latestRelease", { date: formatCatalogDate(latest(), language.tag(language.locale()), i18n.t("home.unknown")) })
+                ? i18n.t("lab.latestRelease", {
+                    date: formatCatalogDate(latest(), language.tag(language.locale()), i18n.t("home.unknown")),
+                  })
                 : i18n.t("lab.usageAfterActivity")}
           </p>
         </div>
@@ -240,12 +240,7 @@ function LabUsageSection(props: { lab: ModelCatalogLab; data: StatsLabData | nul
       </p>
       <Show
         when={usage().some((item) => item.tokens > 0)}
-        fallback={
-          <LabEmptyState
-            title={i18n.t("lab.noUsageTitle")}
-            description={i18n.t("lab.noUsageDescription")}
-          />
-        }
+        fallback={<LabEmptyState title={i18n.t("lab.noUsageTitle")} description={i18n.t("lab.noUsageDescription")} />}
       >
         <div
           data-component="model-usage-chart"

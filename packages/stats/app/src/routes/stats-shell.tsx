@@ -102,7 +102,11 @@ export function Header(props: { githubStars: string; links?: readonly HeaderLink
   return (
     <header data-component="top" data-menu-open={menuOpen() ? "true" : undefined}>
       <div data-slot="header-bar">
-        <a data-slot="brand" href={localHref(props.brandHref ?? import.meta.env.BASE_URL)} aria-label={i18n.t("header.brandLabel")}>
+        <a
+          data-slot="brand"
+          href={localHref(props.brandHref ?? import.meta.env.BASE_URL)}
+          aria-label={i18n.t("header.brandLabel")}
+        >
           <DataWordmark />
         </a>
         <nav data-component="section-nav" aria-label={i18n.t("header.sectionNavLabel")}>
@@ -147,7 +151,12 @@ export function Header(props: { githubStars: string; links?: readonly HeaderLink
           </button>
         </div>
       </div>
-      <nav id="stats-mobile-nav" data-slot="mobile-menu" aria-label={i18n.t("header.sectionNavLabel")} hidden={!menuOpen()}>
+      <nav
+        id="stats-mobile-nav"
+        data-slot="mobile-menu"
+        aria-label={i18n.t("header.sectionNavLabel")}
+        hidden={!menuOpen()}
+      >
         <a
           data-slot="mobile-menu-item"
           data-variant="github"
@@ -303,9 +312,7 @@ function FooterLanguageSwitcher() {
           if (href !== current) window.location.assign(href)
         }}
       >
-        <For each={language.locales}>
-          {(locale) => <option value={locale}>{language.label(locale)}</option>}
-        </For>
+        <For each={language.locales}>{(locale) => <option value={locale}>{language.label(locale)}</option>}</For>
       </select>
     </label>
   )
@@ -422,7 +429,12 @@ function SubscribeModal(props: { onClose: () => void }) {
       <div data-slot="modal-panel">
         <div data-slot="modal-brand">
           <img data-slot="modal-logo" src={opencodeWordmarkDark} alt="OpenCode" />
-          <button data-slot="modal-close" type="button" aria-label={i18n.t("modal.closeNewsletter")} onClick={props.onClose}>
+          <button
+            data-slot="modal-close"
+            type="button"
+            aria-label={i18n.t("modal.closeNewsletter")}
+            onClick={props.onClose}
+          >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
               <path d="M4.44 4.44L11.56 11.56M11.56 4.44L4.44 11.56" stroke="currentColor" />
             </svg>
@@ -499,7 +511,11 @@ function FooterColumn(props: {
       <nav aria-label={props.title}>
         <For each={props.links}>
           {(link) => (
-            <a href={props.localHref(link.href)} target={link.href.startsWith("http") ? "_blank" : undefined} rel="noreferrer">
+            <a
+              href={props.localHref(link.href)}
+              target={link.href.startsWith("http") ? "_blank" : undefined}
+              rel="noreferrer"
+            >
               {link.label}
             </a>
           )}

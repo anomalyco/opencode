@@ -163,7 +163,8 @@ export const dict = {
   "model.noDataDescription": "Spróbuj otworzyć model z rankingu.",
   "model.noMatched": "Żadne fakty modelu ani wiersze użycia nie pasowały do {{id}}.",
   "model.fallback": "Model",
-  "model.catalogFallback": "Fakty modelu ze wspólnego indeksu modeli. Użycie OpenCode Go pojawi się, gdy ten model będzie mieć aktywność.",
+  "model.catalogFallback":
+    "Fakty modelu ze wspólnego indeksu modeli. Użycie OpenCode Go pojawi się, gdy ten model będzie mieć aktywność.",
   "model.unranked": "Bez pozycji w użyciu OpenCode Go z zeszłego tygodnia",
   "model.ranked": "Pozycja #{{rank}} w użyciu OpenCode Go z zeszłego tygodnia",
   "model.observedVolume": "z {{share}} obserwowanego wolumenu 2M.",
