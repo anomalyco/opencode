@@ -44,6 +44,7 @@ import { useNotification } from "@/context/notification"
 import {
   closeHomeProject,
   displayName,
+  errorMessage,
   getProjectAvatarSource,
   homeProjectDirectories,
   type HomeProjectSelection,
@@ -64,6 +65,7 @@ import { Persist, persisted } from "@/utils/persist"
 import { useMarked } from "@opencode-ai/ui/context/marked"
 import { preloadMarkdown } from "@opencode-ai/session-ui/markdown-cache"
 import { archiveHomeSession } from "./home-session-archive"
+import { showToast } from "@/utils/toast"
 
 const HOME_SESSION_LIMIT = 64
 const HOME_ROW_LAYOUT =
@@ -367,10 +369,12 @@ export function NewHome() {
   }
 
   async function archiveSession(session: Session) {
+    const conn = focusedServer()
     const ctx = focusedServerCtx()
-    if (!ctx) return
+    if (!conn || !ctx) return
     const [, setStore] = ctx.sync.child(session.directory)
     await archiveHomeSession({
+      server: ServerConnection.key(conn),
       session,
       update: (value) => ctx.sdk.client.session.update(value),
       remove: () =>
@@ -380,6 +384,11 @@ export function NewHome() {
             if (match.found) draft.session.splice(match.index, 1)
           }),
         ),
+      onError: (error) =>
+        showToast({
+          title: language.t("common.requestFailed"),
+          description: errorMessage(error, language.t("common.requestFailed")),
+        }),
     })
   }
 
