@@ -8,11 +8,11 @@ import { SessionTodoDock } from "@/pages/session/composer/session-todo-dock"
 import type { SessionComposerRegionController } from "./session-composer-region-controller"
 
 export function SessionComposerRegion(props: {
-  createController: () => SessionComposerRegionController
+  controller: SessionComposerRegionController
   promptInput: JSX.Element
 }) {
   const language = useLanguage()
-  const controller = props.createController()
+  const controller = props.controller
   const rolled = () => {
     const revert = controller.revert()
     return revert?.items.length ? revert : undefined

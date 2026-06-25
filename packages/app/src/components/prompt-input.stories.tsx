@@ -161,7 +161,7 @@ function PromptInputWithOpenDock() {
   }
   return (
     <SessionComposerRegion
-      createController={() =>
+      controller={
         createSessionComposerRegionController({
           state,
           sessionKey: () => "story-session",
