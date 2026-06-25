@@ -13,12 +13,15 @@ import {
 } from "effect/unstable/http"
 
 export const create = Effect.fn("OpenCode.create")(function* () {
-  // LocationServiceMap uses this same Layer value, so Effect memoization shares one host-level registry.
+  const applicationTools = ApplicationTools.layer
   const { handler, permissions, tools } = yield* Effect.all({
-    handler: HttpRouter.toHttpEffect(createEmbeddedRoutes().pipe(Layer.provide(HttpServer.layerServices))),
+    // Reusing this Layer value lets registration and every Location share one memoized host-level registry.
+    handler: HttpRouter.toHttpEffect(
+      createEmbeddedRoutes().pipe(Layer.provide(applicationTools), Layer.provide(HttpServer.layerServices)),
+    ),
     permissions: PermissionSaved.Service,
     tools: ApplicationTools.Service,
-  }).pipe(Effect.provide(Layer.merge(ApplicationTools.layer, PermissionSaved.defaultLayer)))
+  }).pipe(Effect.provide(Layer.merge(applicationTools, PermissionSaved.defaultLayer)))
   const httpClient = HttpClient.make(
     Effect.fnUntraced(function* (request) {
       const response = yield* handler.pipe(
