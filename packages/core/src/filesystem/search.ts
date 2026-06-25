@@ -10,6 +10,7 @@ import { Location } from "../location"
 import { Ripgrep } from "../ripgrep"
 import { RelativePath } from "../schema"
 import { Flag } from "../flag/flag"
+import { normalizeFindEntries } from "./find"
 
 export interface Interface {
   readonly find: (input: FileSystem.FindInput) => Effect.Effect<FileSystem.Entry[]>
@@ -215,15 +216,7 @@ export const fffLayer = Layer.effect(
               score: found.value.scores[index]?.total ?? 0,
             }))
           })()
-          return items
-            .sort((a, b) => b.score - a.score || a.path.length - b.path.length)
-            .map((item) => {
-              const relative = item.path.replaceAll("\\", "/").replace(/\/$/, "")
-              return FileSystem.Entry.make({
-                path: RelativePath.make(relative + (item.type === "directory" ? path.sep : "")),
-                type: item.type,
-              })
-            })
+          return normalizeFindEntries(input.query, input.limit ?? 50, items, input.type !== "file")
         }),
     })
   }),

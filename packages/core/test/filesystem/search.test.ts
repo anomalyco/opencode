@@ -1,8 +1,9 @@
-import { describe, expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { Effect } from "effect"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
+import { normalizeFindEntries } from "@opencode-ai/core/filesystem/find"
 import { AbsolutePath, RelativePath } from "@opencode-ai/core/schema"
 import { tmpdir } from "../fixture/tmpdir"
 import { testEffect } from "../lib/effect"
@@ -40,4 +41,27 @@ describe("Ripgrep", () => {
       }),
     ),
   )
+})
+
+describe("FileSystemSearch", () => {
+  test("includes matching ancestor directories from fff file results", () => {
+    const result = normalizeFindEntries("feature", 10, [
+      { path: "feature/client/index.ts", type: "file", score: 100 },
+    ])
+
+    expect(result.map((item) => ({ path: item.path, type: item.type }))).toEqual([
+      { path: RelativePath.make("feature" + path.sep), type: "directory" },
+      { path: RelativePath.make("feature/client/index.ts"), type: "file" },
+    ])
+  })
+
+  test("does not add ancestors when only the file name matches", () => {
+    const result = normalizeFindEntries("index", 10, [
+      { path: "feature/client/index.ts", type: "file", score: 100 },
+    ])
+
+    expect(result.map((item) => ({ path: item.path, type: item.type }))).toEqual([
+      { path: RelativePath.make("feature/client/index.ts"), type: "file" },
+    ])
+  })
 })
