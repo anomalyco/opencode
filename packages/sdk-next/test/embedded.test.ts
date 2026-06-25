@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { Flag } from "@opencode-ai/core/flag/flag"
-import { Effect, Schema } from "effect"
+import { Effect, Option, Schema, Stream } from "effect"
 
 test("embedded client uses the real router and handlers", async () => {
   const directory = await mkdtemp(join(tmpdir(), "opencode-embedded-"))
@@ -39,8 +39,31 @@ test("embedded client uses the real router and handlers", async () => {
         resume: false,
       })
       const context = yield* opencode.sessions.context({ sessionID })
-      const missing = yield* Effect.flip(
-        opencode.sessions.get({ sessionID: Session.ID.make(`ses_missing_${crypto.randomUUID()}`) }),
+      const event = yield* opencode.sessions
+        .events({ sessionID })
+        .pipe(Stream.take(1), Stream.runHead, Effect.map(Option.getOrUndefined))
+      const modelMessage = Option.fromNullishOr(context.find((message) => message.type === "model-switched")).pipe(
+        Option.getOrThrow,
+      )
+      const message = yield* opencode.sessions.message({ sessionID, messageID: modelMessage.id })
+      yield* opencode.sessions.interrupt({ sessionID })
+      const other = yield* opencode.sessions.create({
+        location: Location.Ref.make({ directory: AbsolutePath.make(directory) }),
+      })
+      const missingSessionID = Session.ID.make(`ses_missing_${crypto.randomUUID()}`)
+      const missing = yield* Effect.all(
+        [
+          opencode.sessions.events({ sessionID: missingSessionID }).pipe(Stream.runHead, Effect.flip),
+          opencode.sessions.interrupt({ sessionID: missingSessionID }).pipe(Effect.flip),
+          opencode.sessions.message({ sessionID: missingSessionID, messageID: modelMessage.id }).pipe(Effect.flip),
+        ],
+        { concurrency: "unbounded" },
+      )
+      const missingMessage = yield* Effect.flip(
+        opencode.sessions.message({
+          sessionID: other.id,
+          messageID: modelMessage.id,
+        }),
       )
 
       expect(created.id).toBe(sessionID)
@@ -49,7 +72,14 @@ test("embedded client uses the real router and handlers", async () => {
       expect(page.data.some((session) => session.id === sessionID)).toBe(true)
       expect(admitted.sessionID).toBe(sessionID)
       expect(context.some((message) => message.type === "model-switched")).toBe(true)
-      expect(missing._tag).toBe("SessionNotFoundError")
+      expect(event).toMatchObject({ type: "session.next.model.switched", durable: { seq: 1 } })
+      expect(message).toEqual(modelMessage)
+      expect(missing.map((error) => error._tag)).toEqual([
+        "SessionNotFoundError",
+        "SessionNotFoundError",
+        "SessionNotFoundError",
+      ])
+      expect(missingMessage._tag).toBe("MessageNotFoundError")
     })
     await Effect.runPromise(Effect.scoped(program))
   } finally {

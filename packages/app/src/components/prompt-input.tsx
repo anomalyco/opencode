@@ -1423,10 +1423,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       projectOpen: false,
       projectSearch: "",
     })
-    if (
-      pathKey(worktree) === pathKey(selectedProject()?.worktree ?? "") &&
-      server === selectedProject()?.server?.key
-    ) {
+    if (pathKey(worktree) === pathKey(selectedProject()?.worktree ?? "") && server === selectedProject()?.server?.key) {
       restoreFocus()
       return
     }
@@ -1448,8 +1445,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       ),
       label: displayName(project),
       selected:
-        selectedProject()?.worktree === project.worktree &&
-        selectedProject()?.server?.key === project.server?.key,
+        selectedProject()?.worktree === project.worktree && selectedProject()?.server?.key === project.server?.key,
       onSelect: () => selectProject(project.worktree, project.server?.key),
     })),
   )

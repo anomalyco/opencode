@@ -3,7 +3,7 @@ import { SessionInput } from "@opencode-ai/schema/session-input"
 import { Prompt } from "@opencode-ai/schema/prompt"
 import { Session } from "@opencode-ai/schema/session"
 import { Project } from "@opencode-ai/schema/project"
-import { AbsolutePath, PositiveInt, RelativePath, statics } from "@opencode-ai/schema/schema"
+import { AbsolutePath, NonNegativeInt, PositiveInt, RelativePath, statics } from "@opencode-ai/schema/schema"
 import { Workspace } from "@opencode-ai/schema/workspace"
 import { Context, Encoding, Result, Schema, Struct } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
@@ -20,6 +20,7 @@ import { Agent } from "@opencode-ai/schema/agent"
 import { Model } from "@opencode-ai/schema/model"
 import { Location } from "@opencode-ai/schema/location"
 import { Revert } from "@opencode-ai/schema/revert"
+import { SessionEvent } from "@opencode-ai/schema/session-event"
 
 const SessionsQueryFields = {
   workspace: Workspace.ID.pipe(Schema.optional),
@@ -269,6 +270,54 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
             identifier: "v2.session.context",
             summary: "Get session context",
             description: "Retrieve the active context messages for a session (all messages after the last compaction).",
+          }),
+        ),
+    )
+    .add(
+      HttpApiEndpoint.get("session.events", "/api/session/:sessionID/event", {
+        params: { sessionID: Session.ID },
+        query: {
+          after: Schema.NumberFromString.pipe(Schema.decodeTo(NonNegativeInt), Schema.optional),
+        },
+        success: HttpApiSchema.StreamSse({ data: SessionEvent.Durable }),
+        error: SessionNotFoundError,
+      })
+        .middleware(sessionLocationMiddleware)
+        .annotateMerge(
+          OpenApi.annotations({
+            identifier: "v2.session.events",
+            summary: "Subscribe to session events",
+            description: "Replay durable events after an aggregate sequence, then continue with new durable events.",
+          }),
+        ),
+    )
+    .add(
+      HttpApiEndpoint.post("session.interrupt", "/api/session/:sessionID/interrupt", {
+        params: { sessionID: Session.ID },
+        success: HttpApiSchema.NoContent,
+        error: SessionNotFoundError,
+      })
+        .middleware(sessionLocationMiddleware)
+        .annotateMerge(
+          OpenApi.annotations({
+            identifier: "v2.session.interrupt",
+            summary: "Interrupt session execution",
+            description: "Interrupt active execution owned by this OpenCode process. Idle interruption is a no-op.",
+          }),
+        ),
+    )
+    .add(
+      HttpApiEndpoint.get("session.message", "/api/session/:sessionID/message/:messageID", {
+        params: { sessionID: Session.ID, messageID: SessionMessage.ID },
+        success: Schema.Struct({ data: SessionMessage.Message }),
+        error: [SessionNotFoundError, MessageNotFoundError],
+      })
+        .middleware(sessionLocationMiddleware)
+        .annotateMerge(
+          OpenApi.annotations({
+            identifier: "v2.session.message",
+            summary: "Get session message",
+            description: "Retrieve one projected message owned by the Session.",
           }),
         ),
     )

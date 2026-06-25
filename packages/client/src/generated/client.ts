@@ -23,6 +23,12 @@ import type {
   SessionsCommitOutput,
   SessionsContextInput,
   SessionsContextOutput,
+  SessionsEventsInput,
+  SessionsEventsOutput,
+  SessionsInterruptInput,
+  SessionsInterruptOutput,
+  SessionsMessageInput,
+  SessionsMessageOutput,
 } from "./types"
 import { ClientError } from "./client-error"
 
@@ -302,6 +308,40 @@ export function make(options: ClientOptions) {
             path: `/api/session/${encodeURIComponent(input.sessionID)}/context`,
             successStatus: 200,
             declaredStatuses: [404, 500, 400, 401],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      events: (input: SessionsEventsInput, requestOptions?: RequestOptions): AsyncIterable<SessionsEventsOutput> =>
+        sse<SessionsEventsOutput>(
+          {
+            method: "GET",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/event`,
+            query: { after: input.after },
+            successStatus: 200,
+            declaredStatuses: [404, 400, 401],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      interrupt: (input: SessionsInterruptInput, requestOptions?: RequestOptions) =>
+        request<SessionsInterruptOutput>(
+          {
+            method: "POST",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/interrupt`,
+            successStatus: 204,
+            declaredStatuses: [404, 400, 401],
+            empty: true,
+          },
+          requestOptions,
+        ),
+      message: (input: SessionsMessageInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: SessionsMessageOutput }>(
+          {
+            method: "GET",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/message/${encodeURIComponent(input.messageID)}`,
+            successStatus: 200,
+            declaredStatuses: [404, 400, 401],
             empty: false,
           },
           requestOptions,
