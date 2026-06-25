@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "1.17.9",
+  "version": "1.17.11",
   "name": "@opencode-ai/llm",
   "type": "module",
   "license": "MIT",
@@ -45,6 +45,7 @@
   "dependencies": {
     "@smithy/eventstream-codec": "4.2.14",
     "@smithy/util-utf8": "4.2.2",
+    "@opencode-ai/schema": "workspace:*",
     "aws4fetch": "1.0.20",
     "effect": "catalog:"
   }

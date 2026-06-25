@@ -17,6 +17,8 @@ export type StatDimension = "model" | "provider" | "geo" | "geo_model"
 export function buildStatsQuery(periodStart: Date, periodEnd: Date, dimension: StatDimension) {
   const periodStartValue = sqlString(periodStart.toISOString())
   const periodEndValue = sqlString(periodEnd.toISOString())
+  const periodStartDateValue = sqlString(periodStart.toISOString().slice(0, 10))
+  const periodEndDateValue = sqlString(periodEnd.toISOString().slice(0, 10))
   const sourceTable = [Resource.InferenceEvent.catalog, Resource.InferenceEvent.database, Resource.InferenceEvent.table]
     .map(sqlIdentifier)
     .join(".")
@@ -73,6 +75,7 @@ WITH normalized AS (
     session,
     COALESCE(NULLIF(workspace, ''), '') AS workspace,
     COALESCE(NULLIF(api_key, ''), '') AS api_key,
+    COALESCE(NULLIF(user_id, ''), '') AS user_id,
     status,
     duration AS duration_ms,
     time_to_first_byte AS ttfb_ms,
@@ -95,6 +98,9 @@ WITH normalized AS (
   WHERE event_type = 'completions'
     AND model IS NOT NULL
     AND model <> ''
+    AND source = 'lite'
+    AND event_date >= ${periodStartDateValue}
+    AND event_date <= ${periodEndDateValue}
     AND event_timestamp >= ${periodStartValue}
     AND event_timestamp < ${periodEndValue}
 ), filtered AS (
@@ -111,7 +117,7 @@ WITH normalized AS (
     country,
     continent,
     session,
-    COALESCE(NULLIF(workspace, ''), NULLIF(api_key, '')) AS user_key,
+    COALESCE(NULLIF(user_id, ''), NULLIF(workspace, ''), NULLIF(api_key, '')) AS user_key,
     status,
     duration_ms,
     ttfb_ms,

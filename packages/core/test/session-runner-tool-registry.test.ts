@@ -206,6 +206,7 @@ describe("ToolRegistry", () => {
 
       expect(Exit.isFailure(exit)).toBe(true)
       if (Exit.isFailure(exit)) expect(Option.getOrUndefined(Cause.findErrorOption(exit.cause))).toBe(retentionFailure)
+      expect(retentionFailure.message).toBe("Failed to write tool output: disk full")
     }),
   )
 

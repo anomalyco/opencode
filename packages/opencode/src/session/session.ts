@@ -11,7 +11,6 @@ import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { Database } from "@opencode-ai/core/database/database"
 import { makeRuntime } from "@opencode-ai/core/effect/runtime"
 import { EventV2Bridge } from "@/event-v2-bridge"
-import { EventV2 } from "@opencode-ai/core/event"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 
@@ -38,13 +37,13 @@ import { WorkspaceV2 } from "@opencode-ai/core/workspace"
 import { SessionID, MessageID, PartID } from "./schema"
 
 import type { Provider } from "@/provider/provider"
-import { Permission } from "@/permission"
 import { Global } from "@opencode-ai/core/global"
 import { Effect, Layer, Option, Context, Schema, Types } from "effect"
-import { NonNegativeInt, optionalOmitUndefined } from "@opencode-ai/core/schema"
+import { NonNegativeInt, optional } from "@opencode-ai/core/schema"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
+import { SessionMessage } from "@opencode-ai/schema/session-message"
 
 const runtime = makeRuntime(Database.Service, Database.defaultLayer)
 
@@ -70,7 +69,14 @@ export function fromRow(row: SessionRow): Info {
         }
       : undefined
   const share = row.share_url ? { url: row.share_url } : undefined
-  const revert = row.revert ?? undefined
+  const revert = row.revert
+    ? {
+        messageID: MessageID.make(row.revert.messageID),
+        partID: row.revert.partID ? PartID.make(row.revert.partID) : undefined,
+        snapshot: row.revert.snapshot,
+        diff: row.revert.diff,
+      }
+    : undefined
   return {
     id: row.id,
     slug: row.slug,
@@ -138,7 +144,14 @@ export function toRow(info: Info) {
     tokens_reasoning: (info.tokens ?? EmptyTokens).reasoning,
     tokens_cache_read: (info.tokens ?? EmptyTokens).cache.read,
     tokens_cache_write: (info.tokens ?? EmptyTokens).cache.write,
-    revert: info.revert ?? null,
+    revert: info.revert
+      ? {
+          messageID: SessionMessage.ID.make(info.revert.messageID),
+          partID: info.revert.partID,
+          snapshot: info.revert.snapshot,
+          diff: info.revert.diff,
+        }
+      : null,
     permission: info.permission,
     time_created: info.time.created,
     time_updated: info.time.updated,
@@ -165,7 +178,7 @@ const Summary = Schema.Struct({
   additions: Schema.Finite,
   deletions: Schema.Finite,
   files: Schema.Finite,
-  diffs: optionalOmitUndefined(Schema.Array(Snapshot.FileDiff)),
+  diffs: optional(Schema.Array(Snapshot.FileDiff)),
 })
 
 const Tokens = Schema.Struct({
@@ -191,21 +204,21 @@ export const ArchivedTimestamp = Schema.Finite
 const Time = Schema.Struct({
   created: NonNegativeInt,
   updated: NonNegativeInt,
-  compacting: optionalOmitUndefined(NonNegativeInt),
-  archived: optionalOmitUndefined(ArchivedTimestamp),
+  compacting: optional(NonNegativeInt),
+  archived: optional(ArchivedTimestamp),
 })
 
 const Revert = Schema.Struct({
   messageID: MessageID,
-  partID: optionalOmitUndefined(PartID),
-  snapshot: optionalOmitUndefined(Schema.String),
-  diff: optionalOmitUndefined(Schema.String),
+  partID: optional(PartID),
+  snapshot: optional(Schema.String),
+  diff: optional(Schema.String),
 })
 
 const Model = Schema.Struct({
   id: ModelV2.ID,
   providerID: ProviderV2.ID,
-  variant: optionalOmitUndefined(Schema.String),
+  variant: optional(Schema.String),
 })
 
 export const Metadata = Schema.Record(Schema.String, Schema.Any)
@@ -214,28 +227,28 @@ export const Info = Schema.Struct({
   id: SessionID,
   slug: Schema.String,
   projectID: ProjectV2.ID,
-  workspaceID: optionalOmitUndefined(WorkspaceV2.ID),
+  workspaceID: optional(WorkspaceV2.ID),
   directory: Schema.String,
-  path: optionalOmitUndefined(Schema.String),
-  parentID: optionalOmitUndefined(SessionID),
-  summary: optionalOmitUndefined(Summary),
-  cost: optionalOmitUndefined(Schema.Finite),
-  tokens: optionalOmitUndefined(Tokens),
-  share: optionalOmitUndefined(Share),
+  path: optional(Schema.String),
+  parentID: optional(SessionID),
+  summary: optional(Summary),
+  cost: optional(Schema.Finite),
+  tokens: optional(Tokens),
+  share: optional(Share),
   title: Schema.String,
-  agent: optionalOmitUndefined(Schema.String),
-  model: optionalOmitUndefined(Model),
+  agent: optional(Schema.String),
+  model: optional(Model),
   version: Schema.String,
-  metadata: optionalOmitUndefined(Metadata),
+  metadata: optional(Metadata),
   time: Time,
-  permission: optionalOmitUndefined(PermissionV1.Ruleset),
-  revert: optionalOmitUndefined(Revert),
+  permission: optional(PermissionV1.Ruleset),
+  revert: optional(Revert),
 }).annotate({ identifier: "Session" })
 export type Info = Types.DeepMutable<Schema.Schema.Type<typeof Info>>
 
 export const ProjectInfo = Schema.Struct({
   id: ProjectV2.ID,
-  name: optionalOmitUndefined(Schema.String),
+  name: optional(Schema.String),
   worktree: Schema.String,
 }).annotate({ identifier: "ProjectSummary" })
 export type ProjectInfo = Types.DeepMutable<Schema.Schema.Type<typeof ProjectInfo>>
@@ -309,69 +322,12 @@ export type GlobalListInput = {
   archived?: boolean
 }
 
-const CreatedEventSchema = Schema.Struct({
-  sessionID: SessionID,
-  info: Info,
-})
-
-const UpdatedShare = Schema.Struct({
-  url: Schema.optional(Schema.NullOr(Schema.String)),
-})
-
-const UpdatedTime = Schema.Struct({
-  created: Schema.optional(Schema.NullOr(NonNegativeInt)),
-  updated: Schema.optional(Schema.NullOr(NonNegativeInt)),
-  compacting: Schema.optional(Schema.NullOr(NonNegativeInt)),
-  archived: Schema.optional(Schema.NullOr(ArchivedTimestamp)),
-})
-
-const UpdatedInfo = Schema.Struct({
-  id: Schema.optional(Schema.NullOr(SessionID)),
-  slug: Schema.optional(Schema.NullOr(Schema.String)),
-  projectID: Schema.optional(Schema.NullOr(ProjectV2.ID)),
-  workspaceID: Schema.optional(Schema.NullOr(WorkspaceV2.ID)),
-  directory: Schema.optional(Schema.NullOr(Schema.String)),
-  path: Schema.optional(Schema.NullOr(Schema.String)),
-  parentID: Schema.optional(Schema.NullOr(SessionID)),
-  summary: Schema.optional(Schema.NullOr(Summary)),
-  cost: Schema.optional(Schema.Finite),
-  tokens: Schema.optional(Tokens),
-  share: Schema.optional(UpdatedShare),
-  title: Schema.optional(Schema.NullOr(Schema.String)),
-  agent: Schema.optional(Schema.NullOr(Schema.String)),
-  model: Schema.optional(Schema.NullOr(Model)),
-  version: Schema.optional(Schema.NullOr(Schema.String)),
-  metadata: Schema.optional(Schema.NullOr(Metadata)),
-  time: Schema.optional(UpdatedTime),
-  permission: Schema.optional(Schema.NullOr(PermissionV1.Ruleset)),
-  revert: Schema.optional(Schema.NullOr(Revert)),
-})
-
-const UpdatedEventSchema = Schema.Struct({
-  sessionID: SessionID,
-  info: UpdatedInfo,
-})
-
 export const Event = {
   Created: SessionV1.Event.Created,
   Updated: SessionV1.Event.Updated,
   Deleted: SessionV1.Event.Deleted,
-  Diff: EventV2.define({
-    type: "session.diff",
-    schema: {
-      sessionID: SessionID,
-      diff: Schema.Array(Snapshot.FileDiff),
-    },
-  }),
-  Error: EventV2.define({
-    type: "session.error",
-    schema: {
-      sessionID: Schema.optional(SessionID),
-      // Reuses SessionV1.Assistant.fields.error (already Schema.optional) so
-      // the derived schema keeps the same discriminated-union shape on the event stream.
-      error: SessionV1.Assistant.fields.error,
-    },
-  }),
+  Diff: SessionV1.Event.Diff,
+  Error: SessionV1.Event.Error,
 }
 
 export function plan(input: { slug: string; time: { created: number } }, instance: InstanceContext) {
@@ -1114,6 +1070,10 @@ export function* listGlobal(input?: {
   }
 }
 
-export const node = LayerNode.make(layer, [BackgroundJob.node, RuntimeFlags.node, Database.node, EventV2Bridge.node])
+export const node = LayerNode.make({
+  service: Service,
+  layer: layer,
+  deps: [BackgroundJob.node, RuntimeFlags.node, Database.node, EventV2Bridge.node],
+})
 
 export * as Session from "./session"
