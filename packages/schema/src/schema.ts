@@ -10,7 +10,7 @@ export const AbsolutePath = Schema.String.pipe(Schema.brand("AbsolutePath"))
 export type AbsolutePath = typeof AbsolutePath.Type
 
 export const optional = <S extends Schema.Top>(schema: S) =>
-  Schema.optional(schema).pipe(
+  Schema.optionalKey(schema).pipe(
     Schema.decodeTo(Schema.optional(Schema.toType(schema)), {
       decode: SchemaGetter.passthrough({ strict: false }),
       encode: SchemaGetter.transformOptional(Option.filter((value) => value !== undefined)),
