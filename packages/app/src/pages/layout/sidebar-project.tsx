@@ -304,8 +304,10 @@ export const SortableProject = (props: {
   const projectStore = createMemo(() => serverSync().child(props.project.worktree, { bootstrap: false })[0])
   const isWorking = createMemo(() =>
     dirs().some((directory) => {
-      const [store] = serverSync().child(directory, { bootstrap: false })
-      return Object.keys(store.session_status).some((id) => store.session_working(id))
+      return Object.keys(serverSync().session.data.session_status).some((id) => {
+        if (serverSync().session.get(id)?.directory !== directory) return false
+        return serverSync().session.data.session_working(id)
+      })
     }),
   )
   const projectSessions = createMemo(() => sortedRootSessions(projectStore(), props.sortNow()))

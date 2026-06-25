@@ -220,10 +220,9 @@ export function NewHome() {
             void directory.session
               .sync(record.session.id)
               .then(() => {
-                const store = ctx.sync.child(record.session.directory)[0]
                 return Promise.all(
-                  (store.message[record.session.id] ?? []).flatMap((message) =>
-                    (store.part[message.id] ?? []).flatMap((part) => {
+                  (ctx.sync.session.data.message[record.session.id] ?? []).flatMap((message) =>
+                    (ctx.sync.session.data.part[message.id] ?? []).flatMap((part) => {
                       if (part.type !== "text" || !part.text) return []
                       return preloadMarkdown(part.text, part.id, marked)
                     }),
@@ -343,12 +342,6 @@ export function NewHome() {
     if (!conn) return
     const directory = project?.worktree ?? session.directory
     const ctx = global.ensureServerCtx(conn)
-    global.sessionPlacement.set({
-      server: ServerConnection.key(conn),
-      leafID: session.id,
-      rootID: session.id,
-      directory: session.directory,
-    })
     ctx.projects.open(directory)
     ctx.projects.touch(directory)
     startTransition(() => {

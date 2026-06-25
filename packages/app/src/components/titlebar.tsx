@@ -512,38 +512,15 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                             return conn ? global.ensureServerCtx(conn) : undefined
                           })
                           const sdk = createMemo(() => serverCtx()?.sdk ?? null)
-                          const cachedSession = createMemo(() => {
-                            const placement = global.sessionPlacement.get(tab.server, tab.sessionId)
-                            const ctx = serverCtx()
-                            if (!placement || !ctx) return
-                            return ctx.sync
-                              .child(placement.directory, { bootstrap: false })[0]
-                              .session.find((session) => session.id === tab.sessionId)
-                          })
+                          const cachedSession = createMemo(() => serverCtx()?.sync.session.peek(tab.sessionId))
 
                           const [loadedSession] = createResource(
                             () => {
-                              if (cachedSession()) return null
                               const id = tab.sessionId
                               const ctx = serverCtx()
                               return ctx ? { id, ctx } : null
                             },
-                            ({ id, ctx }) =>
-                              ctx.sdk.client.session
-                                .get({ sessionID: id })
-                                .then((x) => {
-                                  const session = x.data
-                                  if (!session) return
-                                  if (!session.parentID)
-                                    global.sessionPlacement.set({
-                                      server: tab.server,
-                                      leafID: session.id,
-                                      rootID: session.id,
-                                      directory: session.directory,
-                                    })
-                                  return session
-                                })
-                                .catch(() => undefined),
+                            ({ id, ctx }) => ctx.sync.session.resolve(id).catch(() => undefined),
                           )
                           const session = createMemo(() => cachedSession() ?? loadedSession())
                           let prefetched = false

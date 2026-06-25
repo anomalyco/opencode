@@ -517,7 +517,7 @@ export default function Page() {
         if (!id) return
         if (status === "idle" && !blocked) return
         const cached = untrack(
-          () => sync().data.todo[id] !== undefined || serverSync().data.session_todo[id] !== undefined,
+          () => sync().data.todo[id] !== undefined,
         )
 
         todoFrame = requestAnimationFrame(() => {
