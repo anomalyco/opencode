@@ -1,6 +1,5 @@
 import type { Session } from "@opencode-ai/sdk/v2/client"
 import {
-  batch,
   createEffect,
   createMemo,
   createRoot,
@@ -26,7 +25,12 @@ import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
-import { getProjectAvatarVariant, useLayout, type LocalProject } from "@/context/layout"
+import {
+  getProjectAvatarVariant,
+  useLayout,
+  type HomeProjectSelection,
+  type LocalProject,
+} from "@/context/layout"
 import { useNavigate } from "@solidjs/router"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -47,7 +51,6 @@ import {
   errorMessage,
   getProjectAvatarSource,
   homeProjectDirectories,
-  type HomeProjectSelection,
   projectForSession,
   sortedRootSessions,
   toggleHomeProjectSelection,
@@ -149,12 +152,12 @@ export function NewHome() {
   let focusSessionSearch: (() => void) | undefined
   const [state, setState] = createStore({
     search: "",
-    selection: { server: server.key } as HomeProjectSelection,
     searchFocused: false,
   })
+  const selection = layout.home.selection
 
   const focusedServer = createMemo(
-    () => global.servers.list().find((conn) => ServerConnection.key(conn) === state.selection.server) ?? server.current,
+    () => global.servers.list().find((conn) => ServerConnection.key(conn) === selection().server) ?? server.current,
   )
   const focusedServerCtx = createMemo(() => {
     const conn = focusedServer()
@@ -163,7 +166,7 @@ export function NewHome() {
   })
   const focusedSync = () => focusedServerCtx()?.sync ?? sync()
   const projects = createMemo(() => focusedServerCtx()?.projects.list() ?? layout.projects.list())
-  const selectedProject = createMemo(() => projects().find((project) => project.worktree === state.selection.directory))
+  const selectedProject = createMemo(() => projects().find((project) => project.worktree === selection().directory))
   const newSessionProject = createMemo(
     () =>
       selectedProject() ??
@@ -191,7 +194,7 @@ export function NewHome() {
     return language.t("home.sessions.search.placeholder")
   })
   const sessionLoad = useQuery(() => ({
-    queryKey: ["home", "sessions", state.selection.server, ...projectDirectories()] as const,
+    queryKey: ["home", "sessions", selection().server, ...projectDirectories()] as const,
     queryFn: async () => {
       await Promise.all(
         projectDirectories().map((directory) =>
@@ -257,10 +260,7 @@ export function NewHome() {
   })
 
   function setSelection(next: HomeProjectSelection) {
-    batch(() => {
-      if (state.selection.server !== next.server) setState("selection", "server", next.server)
-      if (state.selection.directory !== next.directory) setState("selection", "directory", next.directory)
-    })
+    layout.home.setSelection(next)
   }
 
   function closeSearch() {
@@ -285,7 +285,7 @@ export function NewHome() {
 
   createEffect(() => {
     const list = global.servers.list()
-    if (list.some((conn) => ServerConnection.key(conn) === state.selection.server)) return
+    if (list.some((conn) => ServerConnection.key(conn) === selection().server)) return
     const conn = list.find((conn) => ServerConnection.key(conn) === server.key) ?? list[0]
     if (conn) setSelection({ server: ServerConnection.key(conn) })
   })
@@ -310,7 +310,7 @@ export function NewHome() {
         .some((project) => project.worktree === directory)
     )
       return
-    setSelection(toggleHomeProjectSelection(state.selection, key, directory))
+    setSelection(toggleHomeProjectSelection(selection(), key, directory))
   }
 
   function addProjects(conn: ServerConnection.Any, directories: string[]) {
@@ -418,7 +418,7 @@ export function NewHome() {
       <div class="mx-auto grid h-full w-full max-w-[1080px] grid-rows-[auto_minmax(0,1fr)_auto] gap-4 px-3 pb-3 lg:grid-cols-[280px_minmax(0,720px)] lg:grid-rows-1 lg:gap-8 lg:px-6 lg:pb-16">
         <HomeProjectColumn
           projects={projects()}
-          selected={state.selection}
+          selected={selection()}
           focusServer={focusServer}
           selectProject={selectProject}
           openNewSession={openProjectNewSession}
@@ -426,7 +426,7 @@ export function NewHome() {
           editProject={editProject}
           closeProject={(conn, directory) => {
             const next = closeHomeProject(
-              state.selection,
+              selection(),
               ServerConnection.key(conn),
               global.ensureServerCtx(conn).projects,
               directory,
@@ -451,8 +451,8 @@ export function NewHome() {
             loading={sessionLoad.isLoading}
             results={searchResults()}
             showProjectName={!selectedProject()}
-            server={state.selection.server}
-            activeServer={state.selection.server === server.key}
+            server={selection().server}
+            activeServer={selection().server === server.key}
             noResultsLabel={language.t("home.sessions.search.noResults", { query: search() })}
             bindFocus={(focus) => {
               focusSessionSearch = focus
@@ -489,8 +489,8 @@ export function NewHome() {
                               <HomeSessionRow
                                 record={record}
                                 showProjectName={!selectedProject()}
-                                server={state.selection.server}
-                                activeServer={state.selection.server === server.key}
+                                server={selection().server}
+                                activeServer={selection().server === server.key}
                                 openSession={openSession}
                                 archiveSession={archiveSession}
                               />
