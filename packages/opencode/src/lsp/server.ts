@@ -509,6 +509,8 @@ export const Pyright: Info = {
         : path.join(venvPath, "bin", "python")
       if (await Filesystem.exists(potentialPythonPath)) {
         initialization["pythonPath"] = potentialPythonPath
+        initialization["venvPath"] = path.dirname(venvPath)
+        initialization["venv"] = path.basename(venvPath)
         break
       }
     }

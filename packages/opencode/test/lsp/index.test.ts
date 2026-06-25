@@ -1,4 +1,5 @@
-import { describe, expect, spyOn } from "bun:test"
+import { describe, expect, spyOn, test } from "bun:test"
+import fs from "fs/promises"
 import path from "path"
 import { Deferred, Effect, Layer } from "effect"
 import { EventV2Bridge } from "@/event-v2-bridge"
@@ -7,7 +8,7 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { LSP } from "@/lsp/lsp"
 import * as LSPServer from "@/lsp/server"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { TestInstance } from "../fixture/fixture"
+import { TestInstance, tmpdir } from "../fixture/fixture"
 import { awaitWithTimeout, testEffect } from "../lib/effect"
 
 const lspLayer = (flags: Parameters<typeof RuntimeFlags.layer>[0] = {}) =>
@@ -27,6 +28,50 @@ const disabledDownloadIt = testEffect(
 )
 
 describe("lsp.spawn", () => {
+  test("pyright initialization includes project venv settings", async () => {
+    await using tmp = await tmpdir()
+    const bin = path.join(tmp.path, "bin")
+    const fakePyright = path.join(bin, process.platform === "win32" ? "pyright-langserver.cmd" : "pyright-langserver")
+    const venv = path.join(tmp.path, ".venv")
+    const python = path.join(
+      venv,
+      process.platform === "win32" ? path.join("Scripts", "python.exe") : path.join("bin", "python"),
+    )
+
+    await fs.mkdir(bin, { recursive: true })
+    await fs.mkdir(path.dirname(python), { recursive: true })
+    await Bun.write(fakePyright, process.platform === "win32" ? "@echo off\r\nexit /b 0\r\n" : "#!/bin/sh\nexit 0\n")
+    await Bun.write(python, "")
+    if (process.platform !== "win32") {
+      await fs.chmod(fakePyright, 0o755)
+      await fs.chmod(python, 0o755)
+    }
+
+    const originalPath = process.env.PATH
+    const originalVirtualEnv = process.env.VIRTUAL_ENV
+    process.env.PATH = bin + path.delimiter + (originalPath ?? "")
+    delete process.env.VIRTUAL_ENV
+
+    try {
+      const handle = await LSPServer.Pyright.spawn(tmp.path, {} as any, {
+        disableLspDownload: false,
+      } as RuntimeFlags.Info)
+
+      expect(handle).toBeDefined()
+      await (handle?.process as { exited?: Promise<unknown> } | undefined)?.exited
+      expect(handle?.initialization).toMatchObject({
+        pythonPath: python,
+        venvPath: tmp.path,
+        venv: ".venv",
+      })
+    } finally {
+      if (originalPath === undefined) delete process.env.PATH
+      else process.env.PATH = originalPath
+      if (originalVirtualEnv === undefined) delete process.env.VIRTUAL_ENV
+      else process.env.VIRTUAL_ENV = originalVirtualEnv
+    }
+  })
+
   it.instance(
     "does not spawn builtin LSP for files outside instance",
     () =>
