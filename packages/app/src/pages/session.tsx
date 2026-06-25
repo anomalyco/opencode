@@ -1568,7 +1568,9 @@ export default function Page() {
         const id = info()?.parentID
         if (!id) return
         navigate(
-          params.serverKey ? sessionHref(requireServerKey(params.serverKey), id) : legacySessionHref(sdk().directory, id),
+          params.serverKey
+            ? sessionHref(requireServerKey(params.serverKey), id)
+            : legacySessionHref(sdk().directory, id),
         )
       }}
       inputRef={(el) => {
