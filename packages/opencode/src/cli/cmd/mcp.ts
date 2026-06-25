@@ -19,8 +19,6 @@ import path from "path"
 import { Global } from "@opencode-ai/core/global"
 import { modify, applyEdits } from "jsonc-parser"
 import { Filesystem } from "@/util/filesystem"
-import { EventV2Bridge } from "@/event-v2-bridge"
-import { EventV2 } from "@opencode-ai/core/event"
 import { Effect } from "effect"
 
 function getAuthStatusIcon(status: MCP.AuthStatus): string {
@@ -258,21 +256,13 @@ export const McpAuthCommand = effectCmd({
     const spinner = prompts.spinner()
     spinner.start("Starting OAuth flow...")
 
-    // Subscribe to browser open failure events to show URL for manual opening
-    const events = yield* EventV2Bridge.Service
-    const unsubscribe = yield* events.listen((event) => {
-      if (event.type !== MCP.BrowserOpenFailed.type) return Effect.void
-      const data = event.data as EventV2.Data<typeof MCP.BrowserOpenFailed>
-      if (data.mcpName === serverName) {
-        spinner.stop("Could not open browser automatically")
-        prompts.log.warn("Please open this URL in your browser to authenticate:")
-        prompts.log.info(data.url)
+    yield* MCP.Service.use((mcp) =>
+      mcp.authenticate(serverName, (url) => {
+        spinner.stop("Authorize in your browser:")
+        prompts.log.info(url)
         spinner.start("Waiting for authorization...")
-      }
-      return Effect.void
-    })
-
-    yield* MCP.Service.use((mcp) => mcp.authenticate(serverName)).pipe(
+      }),
+    ).pipe(
       Effect.tap((status) =>
         Effect.sync(() => {
           if (status.status === "connected") {
@@ -307,7 +297,6 @@ export const McpAuthCommand = effectCmd({
           prompts.log.error(error instanceof Error ? error.message : String(error))
         }),
       ),
-      Effect.ensuring(unsubscribe),
     )
 
     prompts.outro("Done")

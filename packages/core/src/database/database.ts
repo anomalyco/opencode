@@ -60,4 +60,4 @@ export const defaultLayer = Layer.unwrap(
   }),
 ).pipe(Layer.provide(Global.defaultLayer))
 
-export const node = LayerNode.make(layerFromPath(path()), [])
+export const node = LayerNode.make({ service: Service, layer: layerFromPath(path()), deps: [] })

@@ -266,7 +266,7 @@ export function shellOutputSnapshot(state: { readonly metadata?: unknown }) {
 // For shell tools, surface the actual command as the title so it stays visible
 // before output lands; non-shell tools keep their model-provided title.
 function toolTitle(toolName: string, input: ToolInput, fallback: string | undefined) {
-  if (isShell(toolName)) return shellCommand(input) ?? stringValue(input.description) ?? fallback ?? toolName
+  if (isShell(toolName)) return shellCommand(input) ?? fallback ?? toolName
   return fallback || toolName
 }
 
