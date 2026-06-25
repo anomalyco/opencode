@@ -29,7 +29,6 @@ const capture = () => {
     subscribe: () => Stream.empty,
     all: () => Stream.empty,
     durable: () => Stream.empty,
-    follow: () => Stream.empty,
     listen: () => Effect.succeed(Effect.void),
     project: () => Effect.void,
     replay: () => Effect.void,

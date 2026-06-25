@@ -33,9 +33,8 @@ const SessionsQueryFields = {
   search: Schema.optional(Schema.String),
 }
 
-const SessionEventSchema: Schema.Codec<typeof SessionEvent.All.Type, typeof SessionEvent.All.Encoded> = Schema.make(
-  SessionEvent.All.ast,
-)
+const SessionEventSchema: Schema.Codec<typeof SessionEvent.Durable.Type, typeof SessionEvent.Durable.Encoded> =
+  Schema.make(SessionEvent.Durable.ast)
 
 const SessionsDirectoryQuery = Schema.Struct({
   ...SessionsQueryFields,
@@ -291,8 +290,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
           OpenApi.annotations({
             identifier: "v2.session.events",
             summary: "Subscribe to session events",
-            description:
-              "Replay durable events after an aggregate sequence, then continue with raw live Session events.",
+            description: "Replay durable events after an aggregate sequence, then continue with new durable events.",
           }),
         ),
     )

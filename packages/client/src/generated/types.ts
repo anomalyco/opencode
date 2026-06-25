@@ -845,22 +845,6 @@ export type SessionsEventsOutput =
   | {
       readonly id: string
       readonly metadata?: { readonly [x: string]: unknown } | undefined
-      readonly type: "session.next.text.delta"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number } | undefined
-      readonly location?:
-        | { readonly directory: string; readonly workspaceID?: string | undefined | undefined }
-        | undefined
-      readonly data: {
-        readonly timestamp: number
-        readonly sessionID: string
-        readonly assistantMessageID: string
-        readonly textID: string
-        readonly delta: string
-      }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown } | undefined
       readonly type: "session.next.text.ended"
       readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number } | undefined
       readonly location?:
@@ -877,55 +861,6 @@ export type SessionsEventsOutput =
   | {
       readonly id: string
       readonly metadata?: { readonly [x: string]: unknown } | undefined
-      readonly type: "session.next.reasoning.started"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number } | undefined
-      readonly location?:
-        | { readonly directory: string; readonly workspaceID?: string | undefined | undefined }
-        | undefined
-      readonly data: {
-        readonly timestamp: number
-        readonly sessionID: string
-        readonly assistantMessageID: string
-        readonly reasoningID: string
-        readonly providerMetadata?: { readonly [x: string]: { readonly [x: string]: unknown } } | undefined
-      }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown } | undefined
-      readonly type: "session.next.reasoning.delta"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number } | undefined
-      readonly location?:
-        | { readonly directory: string; readonly workspaceID?: string | undefined | undefined }
-        | undefined
-      readonly data: {
-        readonly timestamp: number
-        readonly sessionID: string
-        readonly assistantMessageID: string
-        readonly reasoningID: string
-        readonly delta: string
-      }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown } | undefined
-      readonly type: "session.next.reasoning.ended"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number } | undefined
-      readonly location?:
-        | { readonly directory: string; readonly workspaceID?: string | undefined | undefined }
-        | undefined
-      readonly data: {
-        readonly timestamp: number
-        readonly sessionID: string
-        readonly assistantMessageID: string
-        readonly reasoningID: string
-        readonly text: string
-        readonly providerMetadata?: { readonly [x: string]: { readonly [x: string]: unknown } } | undefined
-      }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown } | undefined
       readonly type: "session.next.tool.input.started"
       readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number } | undefined
       readonly location?:
@@ -937,22 +872,6 @@ export type SessionsEventsOutput =
         readonly assistantMessageID: string
         readonly callID: string
         readonly name: string
-      }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown } | undefined
-      readonly type: "session.next.tool.input.delta"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number } | undefined
-      readonly location?:
-        | { readonly directory: string; readonly workspaceID?: string | undefined | undefined }
-        | undefined
-      readonly data: {
-        readonly timestamp: number
-        readonly sessionID: string
-        readonly assistantMessageID: string
-        readonly callID: string
-        readonly delta: string
       }
     }
   | {
@@ -1062,6 +981,39 @@ export type SessionsEventsOutput =
   | {
       readonly id: string
       readonly metadata?: { readonly [x: string]: unknown } | undefined
+      readonly type: "session.next.reasoning.started"
+      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number } | undefined
+      readonly location?:
+        | { readonly directory: string; readonly workspaceID?: string | undefined | undefined }
+        | undefined
+      readonly data: {
+        readonly timestamp: number
+        readonly sessionID: string
+        readonly assistantMessageID: string
+        readonly reasoningID: string
+        readonly providerMetadata?: { readonly [x: string]: { readonly [x: string]: unknown } } | undefined
+      }
+    }
+  | {
+      readonly id: string
+      readonly metadata?: { readonly [x: string]: unknown } | undefined
+      readonly type: "session.next.reasoning.ended"
+      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number } | undefined
+      readonly location?:
+        | { readonly directory: string; readonly workspaceID?: string | undefined | undefined }
+        | undefined
+      readonly data: {
+        readonly timestamp: number
+        readonly sessionID: string
+        readonly assistantMessageID: string
+        readonly reasoningID: string
+        readonly text: string
+        readonly providerMetadata?: { readonly [x: string]: { readonly [x: string]: unknown } } | undefined
+      }
+    }
+  | {
+      readonly id: string
+      readonly metadata?: { readonly [x: string]: unknown } | undefined
       readonly type: "session.next.retried"
       readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number } | undefined
       readonly location?:
@@ -1094,21 +1046,6 @@ export type SessionsEventsOutput =
         readonly sessionID: string
         readonly messageID: string
         readonly reason: "auto" | "manual"
-      }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown } | undefined
-      readonly type: "session.next.compaction.delta"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number } | undefined
-      readonly location?:
-        | { readonly directory: string; readonly workspaceID?: string | undefined | undefined }
-        | undefined
-      readonly data: {
-        readonly timestamp: number
-        readonly sessionID: string
-        readonly messageID: string
-        readonly text: string
       }
     }
   | {
