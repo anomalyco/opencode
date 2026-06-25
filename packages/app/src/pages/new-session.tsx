@@ -26,7 +26,7 @@ export default function NewSessionPage() {
   const serverSync = useServerSync()
   const comments = useComments()
   const route = useSessionKey()
-  const [searchParams, setSearchParams] = useSearchParams<{ prompt?: string }>()
+  const [searchParams, setSearchParams] = useSearchParams<{ draftId?: string; prompt?: string }>()
 
   let inputRef: HTMLDivElement | undefined
 
