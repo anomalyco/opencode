@@ -109,13 +109,14 @@ function errorTool(parts: SessionV1.Part[]) {
   return part?.state.status === "error" ? (part as ErrorToolPart) : undefined
 }
 
-function makeMcp(instructions: MCP.ServerInstructions[] = []) {
+function makeMcp(input: MCP.ServerInstructions[] | Partial<MCP.Interface> = []) {
+  const overrides = Array.isArray(input) ? { instructions: () => Effect.succeed(input) } : input
   return Layer.succeed(
     MCP.Service,
     MCP.Service.of({
       status: () => Effect.succeed({}),
       clients: () => Effect.succeed({}),
-      instructions: () => Effect.succeed(instructions),
+      instructions: () => Effect.succeed([]),
       tools: () => Effect.succeed({}),
       prompts: () => Effect.succeed({}),
       resources: () => Effect.succeed({}),
@@ -132,6 +133,7 @@ function makeMcp(instructions: MCP.ServerInstructions[] = []) {
       supportsOAuth: () => Effect.succeed(false),
       hasStoredTokens: () => Effect.succeed(false),
       getAuthStatus: () => Effect.succeed("not_authenticated" as const),
+      ...overrides,
     }),
   )
 }
@@ -168,20 +170,28 @@ const blockingProcessor = Layer.succeed(
   }),
 )
 
-function makePrompt(input?: { mcpInstructions?: MCP.ServerInstructions[]; processor?: "blocking" }) {
+function makePrompt(input?: {
+  mcpInstructions?: MCP.ServerInstructions[]
+  mcp?: Partial<MCP.Interface>
+  processor?: "blocking"
+}) {
+  const mcpLayer = makeMcp(input?.mcp ?? input?.mcpInstructions)
+  const commandLayer = Command.layer.pipe(
+    Layer.provide(Layer.mergeAll(Config.defaultLayer, mcpLayer, Skill.defaultLayer)),
+  )
   const deps = Layer.mergeAll(
     Session.defaultLayer,
     Snapshot.defaultLayer,
     LLM.defaultLayer,
     Env.defaultLayer,
     AgentSvc.defaultLayer,
-    Command.defaultLayer,
+    commandLayer,
     Permission.defaultLayer,
     Plugin.defaultLayer,
     Config.defaultLayer,
     ProviderSvc.defaultLayer,
     lsp,
-    makeMcp(input?.mcpInstructions),
+    mcpLayer,
     FSUtil.defaultLayer,
     BackgroundJob.defaultLayer,
     status,
@@ -240,11 +250,19 @@ function makePrompt(input?: { mcpInstructions?: MCP.ServerInstructions[]; proces
   )
 }
 
-function makeHttp(input?: { mcpInstructions?: MCP.ServerInstructions[]; processor?: "blocking" }) {
+function makeHttp(input?: {
+  mcpInstructions?: MCP.ServerInstructions[]
+  mcp?: Partial<MCP.Interface>
+  processor?: "blocking"
+}) {
   return Layer.mergeAll(TestLLMServer.layer, makePrompt(input))
 }
 
-function makeHttpNoLLMServer(input?: { mcpInstructions?: MCP.ServerInstructions[]; processor?: "blocking" }) {
+function makeHttpNoLLMServer(input?: {
+  mcpInstructions?: MCP.ServerInstructions[]
+  mcp?: Partial<MCP.Interface>
+  processor?: "blocking"
+}) {
   return makePrompt(input)
 }
 
@@ -260,6 +278,37 @@ const withMcpInstructions = testEffect(
         tools: ["guide-server_lookup"],
       },
     ],
+  }),
+)
+const mcpPromptCalls: Array<{ client: string; name: string; args?: Record<string, string> }> = []
+const withMcpPrompt = testEffect(
+  makeHttp({
+    mcp: {
+      prompts: () =>
+        Effect.succeed({
+          "math:scientific_calculation": {
+            client: "math",
+            name: "scientific_calculation",
+            description: "Run a typed scientific calculation",
+            arguments: [{ name: "precision" }, { name: "calc_type" }],
+          },
+        } as any),
+      getPrompt: (client, name, args) =>
+        Effect.sync(() => {
+          mcpPromptCalls.push({ client, name, args })
+          return {
+            messages: [
+              {
+                role: "user",
+                content: {
+                  type: "text",
+                  text: `precision=${args?.precision}; calc_type=${args?.calc_type}`,
+                },
+              },
+            ],
+          } as any
+        }),
+    },
   }),
 )
 const unix = process.platform !== "win32" ? it.instance : it.instance.skip
@@ -1735,6 +1784,36 @@ unix(
         expect(JSON.stringify(inputs.at(-1)?.messages)).toContain("configured")
       }),
     ),
+  30_000,
+)
+
+withMcpPrompt.instance(
+  "MCP slash commands render prompts with the submitted arguments",
+  () =>
+    Effect.gen(function* () {
+      mcpPromptCalls.length = 0
+      const { llm } = yield* useServerConfig(providerCfg)
+      const { prompt, chat } = yield* boot()
+      yield* llm.text("done")
+
+      const result = yield* prompt.command({
+        sessionID: chat.id,
+        command: "math:scientific_calculation",
+        arguments: "5 batch",
+      })
+
+      expect(result.info.role).toBe("assistant")
+      expect(mcpPromptCalls).toEqual([
+        {
+          client: "math",
+          name: "scientific_calculation",
+          args: { precision: "5", calc_type: "batch" },
+        },
+      ])
+      const inputs = yield* llm.inputs
+      expect(JSON.stringify(inputs.at(-1)?.messages)).toContain("precision=5; calc_type=batch")
+    }),
+  { config: cfg },
   30_000,
 )
 

@@ -1473,27 +1473,50 @@ export const layer = Layer.effect(
 
       const raw = input.arguments.match(argsRegex) ?? []
       const args = raw.map((arg) => arg.replace(quoteTrimRegex, ""))
-      const templateCommand = yield* Effect.promise(async () => cmd.template)
+      const templateCommand = cmd.mcp
+        ? yield* mcp
+            .getPrompt(
+              cmd.mcp.client,
+              cmd.mcp.name,
+              Object.fromEntries(
+                (cmd.mcp.arguments ?? []).flatMap((argument, i) => {
+                  const value = i === (cmd.mcp?.arguments?.length ?? 0) - 1 ? args.slice(i).join(" ") : args[i]
+                  return value === undefined || value === "" ? [] : [[argument.name, value]]
+                }),
+              ),
+            )
+            .pipe(
+              Effect.map(
+                (template) =>
+                  template?.messages
+                    .map((message) => (message.content.type === "text" ? message.content.text : ""))
+                    .join("\n") || "",
+              ),
+            )
+        : yield* Effect.promise(async () => cmd.template)
 
-      const placeholders = templateCommand.match(placeholderRegex) ?? []
-      let last = 0
-      for (const item of placeholders) {
-        const value = Number(item.slice(1))
-        if (value > last) last = value
-      }
+      let template = templateCommand
+      if (!cmd.mcp) {
+        const placeholders = templateCommand.match(placeholderRegex) ?? []
+        let last = 0
+        for (const item of placeholders) {
+          const value = Number(item.slice(1))
+          if (value > last) last = value
+        }
 
-      const withArgs = templateCommand.replaceAll(placeholderRegex, (_, index) => {
-        const position = Number(index)
-        const argIndex = position - 1
-        if (argIndex >= args.length) return ""
-        if (position === last) return args.slice(argIndex).join(" ")
-        return args[argIndex]
-      })
-      const usesArgumentsPlaceholder = templateCommand.includes("$ARGUMENTS")
-      let template = withArgs.replaceAll("$ARGUMENTS", input.arguments)
+        const withArgs = templateCommand.replaceAll(placeholderRegex, (_, index) => {
+          const position = Number(index)
+          const argIndex = position - 1
+          if (argIndex >= args.length) return ""
+          if (position === last) return args.slice(argIndex).join(" ")
+          return args[argIndex]
+        })
+        const usesArgumentsPlaceholder = templateCommand.includes("$ARGUMENTS")
+        template = withArgs.replaceAll("$ARGUMENTS", input.arguments)
 
-      if (placeholders.length === 0 && !usesArgumentsPlaceholder && input.arguments.trim()) {
-        template = template + "\n\n" + input.arguments
+        if (placeholders.length === 0 && !usesArgumentsPlaceholder && input.arguments.trim()) {
+          template = template + "\n\n" + input.arguments
+        }
       }
 
       const shellMatches = ConfigMarkdown.shell(template)

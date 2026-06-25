@@ -1,6 +1,5 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { InstanceState } from "@/effect/instance-state"
-import { EffectBridge } from "@/effect/bridge"
 import type { InstanceContext } from "@/project/instance-context"
 import { Effect, Layer, Context, Schema } from "effect"
 import { Config } from "@/config/config"
@@ -30,7 +29,14 @@ export const Info = Schema.Struct({
   hints: Schema.Array(Schema.String),
 }).annotate({ identifier: "Command" })
 
-export type Info = Omit<Schema.Schema.Type<typeof Info>, "template"> & { template: Promise<string> | string }
+export type Info = Omit<Schema.Schema.Type<typeof Info>, "template"> & {
+  template: Promise<string> | string
+  mcp?: {
+    client: string
+    name: string
+    arguments?: Array<{ name: string }>
+  }
+}
 
 export function hints(template: string) {
   const result: string[] = []
@@ -63,7 +69,6 @@ export const layer = Layer.effect(
 
     const init = Effect.fn("Command.state")(function* (ctx: InstanceContext) {
       const cfg = yield* config.get()
-      const bridge = yield* EffectBridge.make()
       const commands: Record<string, Info> = {}
 
       commands[Default.INIT] = {
@@ -102,31 +107,20 @@ export const layer = Layer.effect(
       }
 
       for (const [name, prompt] of Object.entries(yield* mcp.prompts())) {
+        const placeholders = prompt.arguments?.map((_, i) => `$${i + 1}`) ?? []
         commands[name] = {
           name,
           source: "mcp",
           description: prompt.description,
           get template() {
-            return bridge.promise(
-              mcp
-                .getPrompt(
-                  prompt.client,
-                  prompt.name,
-                  prompt.arguments
-                    ? Object.fromEntries(prompt.arguments.map((argument, i) => [argument.name, `$${i + 1}`]))
-                    : {},
-                )
-                .pipe(
-                  Effect.map(
-                    (template) =>
-                      template?.messages
-                        .map((message) => (message.content.type === "text" ? message.content.text : ""))
-                        .join("\n") || "",
-                  ),
-                ),
-            )
+            return placeholders.join(" ")
           },
-          hints: prompt.arguments?.map((_, i) => `$${i + 1}`) ?? [],
+          mcp: {
+            client: prompt.client,
+            name: prompt.name,
+            arguments: prompt.arguments?.map((argument) => ({ name: argument.name })),
+          },
+          hints: placeholders,
         }
       }
 
