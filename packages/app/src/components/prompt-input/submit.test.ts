@@ -20,8 +20,10 @@ const storedSessions: Record<string, Array<{ id: string; title?: string }>> = {}
 const promoted: Array<{ directory: string; sessionID: string }> = []
 const sentShell: string[] = []
 const syncedDirectories: string[] = []
+const promotedDrafts: Array<{ draftID: string; server: string; sessionId: string }> = []
 
 let params: { id?: string } = {}
+let search: { draftId?: string } = {}
 let selected = "/repo/worktree-a"
 let variant: string | undefined
 
@@ -79,7 +81,7 @@ beforeAll(async () => {
     useNavigate: () => () => undefined,
     useParams: () => params,
     useLocation: () => ({}),
-    useSearchParams: () => [{}, () => undefined],
+    useSearchParams: () => [search, () => undefined],
   }))
 
   mock.module("@opencode-ai/sdk/v2/client", () => ({
@@ -129,7 +131,10 @@ beforeAll(async () => {
 
   mock.module("@/context/tabs", () => ({
     useTabs: () => ({
-      promoteDraft: () => undefined,
+      draft: () => ({ server: "project-server" }),
+      promoteDraft: (draftID: string, session: { server: string; sessionId: string }) => {
+        promotedDrafts.push({ draftID, ...session })
+      },
     }),
   }))
 
@@ -234,7 +239,9 @@ beforeEach(() => {
   optimistic.length = 0
   optimisticSeeded.length = 0
   promoted.length = 0
+  promotedDrafts.length = 0
   params = {}
+  search = {}
   sentShell.length = 0
   syncedDirectories.length = 0
   selected = "/repo/worktree-a"
@@ -307,6 +314,33 @@ describe("prompt submit worktree selection", () => {
     await submit.handleSubmit(event)
 
     expect(enabledAutoAccept).toEqual([{ sessionID: "session-1", directory: "/repo/worktree-a" }])
+  })
+
+  test("promotes drafts using the selected project's server", async () => {
+    search = { draftId: "draft-1" }
+    const submit = createPromptSubmit({
+      prompt,
+      info: () => undefined,
+      imageAttachments: () => [],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "normal",
+      working: () => false,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+      newSessionWorktree: () => selected,
+      onNewSessionWorktreeReset: () => undefined,
+      onSubmit: () => undefined,
+    })
+
+    await submit.handleSubmit({ preventDefault: () => undefined } as unknown as Event)
+
+    expect(promotedDrafts).toEqual([{ draftID: "draft-1", server: "project-server", sessionId: "session-1" }])
   })
 
   test("includes the selected variant on optimistic prompts", async () => {
