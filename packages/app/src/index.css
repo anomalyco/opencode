@@ -2,6 +2,92 @@
 @import "@opencode-ai/session-ui/styles";
 @import "@opencode-ai/ui/v2/styles/tailwind.css";
 
+body:not([data-new-layout]) {
+  --v2-background-bg-base: var(--background-stronger);
+  --v2-background-bg-layer-01: var(--background-stronger);
+  --v2-background-bg-layer-02: var(--surface-base);
+  --v2-text-text-base: var(--text-strong);
+  --v2-text-text-muted: var(--text-base);
+  --v2-text-text-faint: var(--text-weak);
+  --v2-text-text-accent: var(--text-interactive-base);
+  --v2-text-text-code-accent: var(--syntax-string);
+  --v2-icon-icon-base: var(--icon-base);
+  --v2-border-border-muted: var(--border-weaker-base);
+  --v2-border-border-base: var(--border-weak-base);
+  --v2-border-border-strong: var(--border-strong-base);
+  --v2-border-border-focus: var(--border-interactive-base);
+  --v2-overlay-simple-overlay-hover: var(--surface-base-hover);
+  --v2-overlay-simple-overlay-pressed: var(--surface-base-active);
+  --v2-state-bg-danger: var(--surface-critical-weak);
+  --v2-state-fg-danger: var(--text-on-critical-base);
+  --v2-state-border-danger: var(--border-critical-base);
+  --v2-state-bg-info: var(--surface-interactive-weak);
+}
+
+body:not([data-new-layout]) [data-component="markdown"] li::marker,
+body:not([data-new-layout]) [data-component="markdown"] blockquote,
+body:not([data-new-layout]) [data-component="reasoning-part"] [data-component="markdown"],
+body:not([data-new-layout]) [data-component="reasoning-part"] [data-component="markdown"] :is(strong, b),
+body:not([data-new-layout]) [data-slot="message-part-title-spinner"],
+body:not([data-new-layout]) [data-slot="message-part-directory"],
+body:not([data-new-layout]) [data-slot="permission-hint"],
+body:not([data-new-layout]) [data-slot="question-hint"],
+body:not([data-new-layout]) [data-slot="question-custom-input"]::placeholder,
+body:not([data-new-layout]) [data-component="question-answers"] [data-slot="question-text"],
+body:not([data-new-layout]) [data-component="tool-loaded-file"] {
+  color: var(--text-weak);
+}
+
+body:not([data-new-layout]) [data-component="task-tool-action"] {
+  color: var(--icon-weak);
+}
+
+body:not([data-new-layout]) [data-component="card"][data-variant="normal"] {
+  --card-accent: var(--icon-active);
+}
+
+body:not([data-new-layout]) [data-slot="message-part-todo-content"][data-completed="completed"] {
+  color: var(--text-weaker);
+}
+
+body:not([data-new-layout]) [data-slot="diagnostic-location"] {
+  color: var(--text-on-critical-weak);
+}
+
+body:not([data-new-layout]) .error-card {
+  color: var(--text-on-critical-base);
+}
+
+body:not([data-new-layout]) [data-slot="tool-error-card-content"] :where(*)::selection,
+body:not([data-new-layout]) [data-slot="tool-error-card-content"] :where(*)::-moz-selection {
+  background: var(--surface-critical-base);
+  color: var(--text-on-critical-base);
+}
+
+body:not([data-new-layout]) [data-slot="user-message-attachment"] {
+  background: var(--surface-weak);
+}
+
+body:not([data-new-layout]) [data-slot="question-option"] {
+  background-color: var(--surface-raised-stronger-non-alpha);
+}
+
+body:not([data-new-layout]) [data-slot="question-option"]:hover:not([data-picked="true"]) {
+  background-color: var(--background-base);
+}
+
+html[data-theme="oc-2"] body[data-new-layout] {
+  --text-diff-add-base: var(--v2-state-fg-success);
+  --text-diff-delete-base: var(--v2-state-fg-danger);
+  --syntax-comment: var(--v2-text-text-muted);
+  --syntax-keyword: light-dark(var(--v2-pink-800), var(--v2-pink-400));
+  --syntax-string: light-dark(var(--v2-green-800), var(--v2-green-400));
+  --syntax-primitive: light-dark(var(--v2-pink-800), var(--v2-pink-400));
+  --syntax-property: light-dark(var(--v2-orange-800), var(--v2-orange-400));
+  --syntax-type: light-dark(var(--v2-purple-800), var(--v2-purple-400));
+  --syntax-critical: light-dark(var(--v2-red-800), var(--v2-red-400));
+}
+
 @font-face {
   font-family: "JetBrainsMono Nerd Font Mono";
   src: url("/assets/JetBrainsMonoNerdFontMono-Regular.woff2") format("woff2");

@@ -280,6 +280,7 @@ function BodyDesignClass() {
     if (typeof document === "undefined") return
 
     const enabled = settings.general.newLayoutDesigns()
+    document.body.toggleAttribute("data-new-layout", enabled)
     document.body.classList.toggle("text-12-regular", !enabled)
     document.body.classList.toggle("font-(family-name:--font-family-text)", enabled)
     document.body.classList.toggle("text-[13px]", enabled)

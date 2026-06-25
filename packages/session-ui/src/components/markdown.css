@@ -163,17 +163,17 @@
     position: relative;
   }
 
-  [data-component="markdown-code"][data-code-kind="shell"] .shiki {
+  body[data-new-layout] & [data-component="markdown-code"][data-code-kind="shell"] .shiki {
     background: var(--markdown-shell-code-background);
     border-color: var(--markdown-shell-code-border);
     color: var(--markdown-shell-code-color);
   }
 
-  [data-component="markdown-code"][data-code-kind="shell"] code {
+  body[data-new-layout] & [data-component="markdown-code"][data-code-kind="shell"] code {
     color: var(--markdown-shell-code-color);
   }
 
-  [data-component="markdown-code"][data-code-kind="shell"] code span {
+  body[data-new-layout] & [data-component="markdown-code"][data-code-kind="shell"] code span {
     color: var(--markdown-shell-code-token-color) !important;
   }
 
@@ -260,28 +260,34 @@
   :not(pre) > code {
     font-family: var(--font-family-mono);
     font-feature-settings: var(--font-family-mono--font-feature-settings);
-    color: var(--v2-text-text-base);
+    color: var(--syntax-string);
     font-weight: var(--font-weight-medium);
-    padding: 2px 4px;
-    border-radius: 4px;
-    background: color-mix(in oklch, var(--v2-text-text-base) var(--markdown-inline-code-bg-mix), transparent);
   }
 
-  :not(pre) > code[data-inline-code-kind="path"] {
-    color: var(--markdown-inline-code-path-color);
-    background: color-mix(
-      in oklch,
-      var(--markdown-inline-code-path-color) var(--markdown-inline-code-bg-mix),
-      transparent
-    );
-  }
+  body[data-new-layout] & {
+    :not(pre) > code {
+      color: var(--v2-text-text-base);
+      padding: 2px 4px;
+      border-radius: 4px;
+      background: color-mix(in oklch, var(--v2-text-text-base) var(--markdown-inline-code-bg-mix), transparent);
+    }
 
-  a.external-link > code[data-inline-code-kind="url"] {
-    color: var(--markdown-inline-code-color);
-    background: none;
-    text-decoration: underline;
-    text-decoration-color: color-mix(in oklch, var(--markdown-inline-code-color) 25%, transparent);
-    text-underline-offset: 2px;
+    :not(pre) > code[data-inline-code-kind="path"] {
+      color: var(--markdown-inline-code-path-color);
+      background: color-mix(
+        in oklch,
+        var(--markdown-inline-code-path-color) var(--markdown-inline-code-bg-mix),
+        transparent
+      );
+    }
+
+    a.external-link > code[data-inline-code-kind="url"] {
+      color: var(--markdown-inline-code-color);
+      background: none;
+      text-decoration: underline;
+      text-decoration-color: color-mix(in oklch, var(--markdown-inline-code-color) 25%, transparent);
+      text-underline-offset: 2px;
+    }
   }
 
   /* Tables */

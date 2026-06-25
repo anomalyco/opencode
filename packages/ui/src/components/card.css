@@ -92,3 +92,7 @@
     padding-left: var(--card-indent);
   }
 }
+
+body[data-new-layout] [data-component="card"][data-variant="error"] {
+  --card-accent: var(--v2-state-fg-danger) !important;
+}
