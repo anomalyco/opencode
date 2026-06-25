@@ -84,7 +84,7 @@ function retry(sessionID: string, attempt: number, message: string) {
   } satisfies SdkEvent
 }
 
-function assistant(id: string) {
+function assistant(id: string, parentID = "msg-user-1") {
   return {
     id: `evt-${id}`,
     type: "message.updated",
@@ -94,6 +94,7 @@ function assistant(id: string) {
         sessionID: "session-1",
         id,
         parts: [],
+        parentID,
       }).info,
     },
   } satisfies SdkEvent
@@ -186,7 +187,12 @@ function statusMap(busy: boolean): SessionStatusMap {
   return {}
 }
 
-function assistantMessage(input: { sessionID: string; id: string; parts: SessionMessage["parts"] }): SessionMessage {
+function assistantMessage(input: {
+  sessionID: string
+  id: string
+  parts: SessionMessage["parts"]
+  parentID?: string
+}): SessionMessage {
   return {
     info: {
       id: input.id,
@@ -195,7 +201,7 @@ function assistantMessage(input: { sessionID: string; id: string; parts: Session
       time: {
         created: 1,
       },
-      parentID: "msg-user-1",
+      parentID: input.parentID ?? "msg-user-1",
       modelID: "gpt-5",
       providerID: "openai",
       mode: "chat",
@@ -2059,6 +2065,60 @@ describe("run stream transport", () => {
         }),
         expect.objectContaining({
           parts: [{ type: "text", text: "again" }],
+        }),
+      ])
+    } finally {
+      src.close()
+      await transport.close()
+    }
+  })
+
+  test("ignores stale assistant events while waiting for the current prompt", async () => {
+    const src = eventFeed()
+    const ui = footer()
+    let promptCalls = 0
+    const transport = await createSessionTransport({
+      sdk: sdk({
+        stream: src.stream,
+        promptAsync: async () => {
+          promptCalls += 1
+          return ok(undefined)
+        },
+        status: async () => ok(statusMap(false)),
+      }),
+      sessionID: "session-1",
+      thinking: true,
+      limits: () => ({}),
+      footer: ui.api,
+    })
+
+    const run = transport.runPromptTurn({
+      agent: undefined,
+      model: undefined,
+      variant: undefined,
+      prompt: { text: "current", messageID: "msg-user-2", parts: [] },
+      files: [],
+      includeFiles: false,
+    })
+
+    try {
+      await waitFor(() => (promptCalls === 1 ? true : undefined))
+      await waitFor(() => ui.events.find((event) => event.type === "turn.wait"))
+
+      src.push(assistant("msg-old", "msg-user-1"))
+      src.push(idle())
+
+      expect(
+        await Promise.race([run.then(() => "done" as const), Bun.sleep(100).then(() => "pending" as const)]),
+      ).toBe("pending")
+
+      src.push(assistant("msg-current", "msg-user-2"))
+      src.push(idle())
+
+      await Promise.race([
+        run,
+        Bun.sleep(1_000).then(() => {
+          throw new Error("turn timed out")
         }),
       ])
     } finally {

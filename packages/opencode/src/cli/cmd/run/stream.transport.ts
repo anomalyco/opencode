@@ -82,6 +82,7 @@ type StreamInput = {
 
 type Wait = {
   tick: number
+  promptMessageID?: string
   armed: boolean
   live: boolean
   onVisibleOutput?: (anchor: LocalReplayAnchor) => void
@@ -206,13 +207,17 @@ function isMatchingDisposeEvent(value: unknown, directory: string | undefined): 
   return value.payload.type === "server.instance.disposed"
 }
 
-function active(event: Event, sessionID: string): boolean {
+function active(event: Event, sessionID: string, promptMessageID?: string): boolean {
   if (sid(event) !== sessionID) {
     return false
   }
 
   if (event.type === "message.updated") {
-    return event.properties.info.role === "assistant"
+    if (event.properties.info.role !== "assistant") {
+      return false
+    }
+
+    return promptMessageID === undefined || event.properties.info.parentID === promptMessageID
   }
 
   if (event.type === "message.part.delta" || event.type === "message.part.updated") {
@@ -221,6 +226,10 @@ function active(event: Event, sessionID: string): boolean {
 
   if (event.type !== "session.status") {
     return true
+  }
+
+  if (promptMessageID !== undefined) {
+    return false
   }
 
   return event.properties.status.type !== "idle"
@@ -826,7 +835,7 @@ function createLayer(input: StreamInput) {
 
         const touch = (event: Event) => {
           const next = state.wait
-          if (!next || !active(event, input.sessionID)) {
+          if (!next || !active(event, input.sessionID, next.promptMessageID)) {
             return
           }
 
@@ -1201,6 +1210,7 @@ function createLayer(input: StreamInput) {
 
           const item: Wait = {
             tick: state.tick,
+            promptMessageID: next.prompt.messageID,
             armed: false,
             live: false,
             onVisibleOutput: next.onVisibleOutput,
