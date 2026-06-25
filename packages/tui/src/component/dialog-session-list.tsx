@@ -77,8 +77,7 @@ export function DialogSessionList() {
 
   const currentSessionID = createMemo(() => (route.data.type === "session" ? route.data.sessionID : undefined))
   const sessions = createMemo(() => {
-    const result = searchResults() ?? browseResults()
-    if (!result) return sync.data.session
+    const result = searchResults() ?? browseResults() ?? sync.data.session
     const synced = new Map(sync.data.session.map((session) => [session.id, session]))
     const ids = new Set(result.map((session) => session.id))
     const extra = [currentSessionID(), ...local.session.pinned()].flatMap((id) => {

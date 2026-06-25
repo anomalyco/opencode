@@ -94,8 +94,8 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   })
   const [focusedAction, setFocusedAction] = createSignal<number>()
   const actionFocused = createMemo(() => focusedAction() !== undefined)
-  let hasSelectedValue = false
-  let selectedValue: T
+  let selection: { value: T; category?: string } | undefined
+  let resetSelection = false
   let visibilityGeneration = 0
 
   createEffect(
@@ -106,8 +106,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           const currentIndex = flat().findIndex((opt) => isDeepEqual(opt.value, current))
           if (currentIndex >= 0) {
             setStore("selected", currentIndex)
-            selectedValue = flat()[currentIndex].value
-            hasSelectedValue = true
+            selection = flat()[currentIndex]
           }
         }
       },
@@ -219,27 +218,37 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     on(
       () => props.options,
       () => {
-        if (!props.preserveSelection || store.filter.length > 0) return
-        if (!hasSelectedValue) {
+        if (!props.preserveSelection) return
+        if (resetSelection && store.filter.length > 0) {
+          const option = flat()[0]
+          if (!option) return
+          setStore("selected", 0)
+          selection = option
+          return
+        }
+        if (!selection) {
           if (props.current !== undefined) {
             const index = flat().findIndex((option) => isDeepEqual(option.value, props.current))
             if (index >= 0) {
               setStore("selected", index)
-              selectedValue = flat()[index].value
-              hasSelectedValue = true
+              selection = flat()[index]
               return
             }
           }
           const option = selected()
           if (!option) return
-          selectedValue = option.value
-          hasSelectedValue = true
+          selection = option
           return
         }
-        const index = flat().findIndex((option) => isDeepEqual(option.value, selectedValue))
+        const previous = selection
+        const index = flat().findIndex((option) => isDeepEqual(option.value, previous.value))
         if (index >= 0) {
+          const option = flat()[index]
+          const moved = index !== store.selected || option.category !== previous.category
           setStore("selected", index)
-          const value = flat()[index].value
+          selection = option
+          if (!moved) return
+          const value = option.value
           const generation = ++visibilityGeneration
           requestAnimationFrame(() => {
             requestAnimationFrame(() => {
@@ -254,7 +263,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
         const next = Math.min(store.selected, flat().length - 1)
         if (next < 0) return
         setStore("selected", next)
-        selectedValue = flat()[next].value
+        selection = flat()[next]
       },
     ),
   )
@@ -264,9 +273,10 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
 
   createEffect(
     on([() => store.filter, () => props.current], ([filter, current]) => {
+      if (filter.length > 0) resetSelection = true
       setTimeout(() => {
         if (filter.length > 0) {
-          moveTo(0, true)
+          moveTo(0, true, false)
         } else if (current) {
           const currentIndex = flat().findIndex((opt) => isDeepEqual(opt.value, current))
           if (currentIndex >= 0) {
@@ -286,13 +296,13 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     moveTo(next, true)
   }
 
-  function moveTo(next: number, center = false) {
+  function moveTo(next: number, center = false, preserve = true) {
     setFocusedAction(undefined)
     setStore("selected", next)
     const option = selected()
     if (option) {
-      selectedValue = option.value
-      hasSelectedValue = true
+      selection = option
+      resetSelection = !preserve
     }
     if (option) props.onMove?.(option)
     scrollToSelection(center)
