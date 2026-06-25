@@ -2,41 +2,26 @@ export * as Credential from "./credential"
 
 import { asc, eq } from "drizzle-orm"
 import { Context, Effect, Layer, Schema } from "effect"
+import { Credential } from "@opencode-ai/schema/credential"
+import { Integration } from "@opencode-ai/schema/integration"
 import { Database } from "./database/database"
-import { IntegrationSchema } from "./integration/schema"
-import { NonNegativeInt, withStatics } from "./schema"
-import { Identifier } from "./util/identifier"
 import { CredentialTable } from "./credential/sql"
 
-export const ID = Schema.String.pipe(
-  Schema.brand("Credential.ID"),
-  withStatics((schema) => ({ create: () => schema.make("cred_" + Identifier.ascending()) })),
-)
-export type ID = typeof ID.Type
+export const ID = Credential.ID
+export type ID = Credential.ID
 
-export class OAuth extends Schema.Class<OAuth>("Credential.OAuth")({
-  type: Schema.Literal("oauth"),
-  methodID: IntegrationSchema.MethodID,
-  refresh: Schema.String,
-  access: Schema.String,
-  expires: NonNegativeInt,
-  metadata: Schema.optional(Schema.Record(Schema.String, Schema.Any)),
-}) {}
+export const OAuth = Credential.OAuth
+export type OAuth = Credential.OAuth
 
-export class Key extends Schema.Class<Key>("Credential.Key")({
-  type: Schema.Literal("key"),
-  key: Schema.String,
-  metadata: Schema.optional(Schema.Record(Schema.String, Schema.Any)),
-}) {}
+export const Key = Credential.Key
+export type Key = Credential.Key
 
-export const Value = Schema.Union([OAuth, Key])
-  .pipe(Schema.toTaggedUnion("type"))
-  .annotate({ identifier: "Credential.Value" })
-export type Value = Schema.Schema.Type<typeof Value>
+export const Value = Credential.Value
+export type Value = Credential.Value
 
 export class Info extends Schema.Class<Info>("Credential.Info")({
   id: ID,
-  integrationID: IntegrationSchema.ID,
+  integrationID: Integration.ID,
   label: Schema.String,
   value: Value,
 }) {}
@@ -45,12 +30,12 @@ export interface Interface {
   /** Returns every stored credential. */
   readonly all: () => Effect.Effect<Info[]>
   /** Returns stored credentials belonging to one integration. */
-  readonly list: (integrationID: IntegrationSchema.ID) => Effect.Effect<Info[]>
+  readonly list: (integrationID: Integration.ID) => Effect.Effect<Info[]>
   /** Returns one stored credential by ID. */
   readonly get: (id: ID) => Effect.Effect<Info | undefined>
   /** Replaces any credential for an integration and returns the new record. */
   readonly create: (input: {
-    readonly integrationID: IntegrationSchema.ID
+    readonly integrationID: Integration.ID
     readonly value: Value
     readonly label?: string
   }) => Effect.Effect<Info>

@@ -1,7 +1,8 @@
 export * as PluginV2 from "./plugin"
 
-import { Context, Deferred, Effect, Exit, Layer, Schema, Scope } from "effect"
+import { Context, Deferred, Effect, Exit, Layer, Scope } from "effect"
 import type { Plugin } from "@opencode-ai/plugin/v2/effect"
+import { PluginEvent, PluginID } from "@opencode-ai/schema/plugin"
 import { AgentV2 } from "./agent"
 import { AISDK } from "./aisdk"
 import { Catalog } from "./catalog"
@@ -14,17 +15,10 @@ import { Reference } from "./reference"
 import { SkillV2 } from "./skill"
 import { State } from "./state"
 
-export const ID = Schema.String.pipe(Schema.brand("Plugin.ID"))
+export const ID = PluginID
 export type ID = typeof ID.Type
 
-export const Event = {
-  Added: EventV2.define({
-    type: "plugin.added",
-    schema: {
-      id: ID,
-    },
-  }),
-}
+export const Event = PluginEvent
 
 export interface Interface {
   readonly add: (id: ID, effect: Plugin["effect"]) => Effect.Effect<void>

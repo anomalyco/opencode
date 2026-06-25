@@ -1086,12 +1086,12 @@ export const layer = Layer.effect(
           }
           if (part.type === "file") {
             result.files.push(
-              new FileAttachment({
+              FileAttachment.make({
                 uri: part.url,
                 mime: part.mime,
                 name: part.filename,
                 source: part.source
-                  ? new Source({
+                  ? Source.make({
                       start: part.source.text.start,
                       end: part.source.text.end,
                       text: part.source.text.value,
@@ -1102,10 +1102,10 @@ export const layer = Layer.effect(
           }
           if (part.type === "agent") {
             result.agents.push(
-              new AgentAttachment({
+              AgentAttachment.make({
                 name: part.name,
                 source: part.source
-                  ? new Source({
+                  ? Source.make({
                       start: part.source.start,
                       end: part.source.end,
                       text: part.source.value,
@@ -1130,7 +1130,7 @@ export const layer = Layer.effect(
           messageID: SessionMessage.ID.create(),
           timestamp: DateTime.makeUnsafe(info.time.created),
           delivery: "steer",
-          prompt: new Prompt({
+          prompt: Prompt.make({
             text: nextPrompt.text.join("\n"),
             files: nextPrompt.files,
             agents: nextPrompt.agents,
@@ -1356,13 +1356,19 @@ export const layer = Layer.effect(
 
             yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
 
-            const [skills, env, instructions, modelMsgs] = yield* Effect.all([
+            const [skills, env, instructions, mcpInstructions, modelMsgs] = yield* Effect.all([
               sys.skills(agent),
               sys.environment(model),
               instruction.system().pipe(Effect.orDie),
+              sys.mcp(agent, session.permission),
               MessageV2.toModelMessagesEffect(msgs, model),
             ])
-            const system = [...env, ...instructions, ...(skills ? [skills] : [])]
+            const system = [
+              ...env,
+              ...instructions,
+              ...(mcpInstructions ? [mcpInstructions] : []),
+              ...(skills ? [skills] : []),
+            ]
             const format = lastUser.format ?? { type: "text" as const }
             if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
             const result = yield* handle.process({

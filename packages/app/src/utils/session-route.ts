@@ -18,8 +18,13 @@ export function requireServerKey(segment: string | undefined) {
 
 type SessionParent = { id: string; parentID?: string }
 
-export async function rootSession(session: SessionParent, get: (sessionID: string) => Promise<SessionParent>) {
+export async function rootSession<T extends SessionParent>(session: T, get: (sessionID: string) => Promise<T>) {
+  const seen = new Set([session.id])
   let current = session
-  while (current.parentID) current = await get(current.parentID)
+  while (current.parentID) {
+    if (seen.has(current.parentID)) throw new Error(`Session parent cycle: ${current.parentID}`)
+    seen.add(current.parentID)
+    current = await get(current.parentID)
+  }
   return current
 }

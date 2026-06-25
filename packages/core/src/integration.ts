@@ -14,96 +14,50 @@ import {
   SynchronizedRef,
   Types,
 } from "effect"
+import { Integration } from "@opencode-ai/schema/integration"
 import { Credential } from "./credential"
-import { IntegrationSchema } from "./integration/schema"
-import { withStatics } from "./schema"
 import { State } from "./state"
-import { Identifier } from "./util/identifier"
 import { EventV2 } from "./event"
 import { IntegrationConnection } from "./integration/connection"
 
-export const ID = IntegrationSchema.ID
-export type ID = IntegrationSchema.ID
+export const ID = Integration.ID
+export type ID = Integration.ID
 
-export const MethodID = IntegrationSchema.MethodID
-export type MethodID = IntegrationSchema.MethodID
+export const MethodID = Integration.MethodID
+export type MethodID = Integration.MethodID
 
-export const AttemptID = Schema.String.pipe(
-  Schema.brand("Integration.AttemptID"),
-  withStatics((schema) => ({ create: () => schema.make("con_" + Identifier.ascending()) })),
-)
+export const AttemptID = Integration.AttemptID
 export type AttemptID = typeof AttemptID.Type
 
-export const When = Schema.Struct({
-  key: Schema.String,
-  op: Schema.Literals(["eq", "neq"]),
-  value: Schema.String,
-}).annotate({ identifier: "Integration.When" })
-export type When = typeof When.Type
+export const When = Integration.When
+export type When = Integration.When
 
-export const TextPrompt = Schema.Struct({
-  type: Schema.Literal("text"),
-  key: Schema.String,
-  message: Schema.String,
-  placeholder: Schema.optional(Schema.String),
-  when: Schema.optional(When),
-}).annotate({ identifier: "Integration.TextPrompt" })
-export type TextPrompt = typeof TextPrompt.Type
+export const TextPrompt = Integration.TextPrompt
+export type TextPrompt = Integration.TextPrompt
 
-export const SelectPrompt = Schema.Struct({
-  type: Schema.Literal("select"),
-  key: Schema.String,
-  message: Schema.String,
-  options: Schema.mutable(
-    Schema.Array(
-      Schema.Struct({
-        label: Schema.String,
-        value: Schema.String,
-        hint: Schema.optional(Schema.String),
-      }),
-    ),
-  ),
-  when: Schema.optional(When),
-}).annotate({ identifier: "Integration.SelectPrompt" })
-export type SelectPrompt = typeof SelectPrompt.Type
+export const SelectPrompt = Integration.SelectPrompt
+export type SelectPrompt = Integration.SelectPrompt
 
-export const Prompt = Schema.Union([TextPrompt, SelectPrompt]).pipe(Schema.toTaggedUnion("type"))
-export type Prompt = typeof Prompt.Type
+export const Prompt = Integration.Prompt
+export type Prompt = Integration.Prompt
 
-export const OAuthMethod = Schema.Struct({
-  id: MethodID,
-  type: Schema.Literal("oauth"),
-  label: Schema.String,
-  prompts: Schema.optional(Schema.mutable(Schema.Array(Prompt))),
-}).annotate({ identifier: "Integration.OAuthMethod" })
-export type OAuthMethod = typeof OAuthMethod.Type
+export const OAuthMethod = Integration.OAuthMethod
+export type OAuthMethod = Integration.OAuthMethod
 
-export const KeyMethod = Schema.Struct({
-  type: Schema.Literal("key"),
-  label: Schema.optional(Schema.String),
-}).annotate({ identifier: "Integration.KeyMethod" })
-export type KeyMethod = typeof KeyMethod.Type
+export const KeyMethod = Integration.KeyMethod
+export type KeyMethod = Integration.KeyMethod
 
-export const EnvMethod = Schema.Struct({
-  type: Schema.Literal("env"),
-  names: Schema.mutable(Schema.Array(Schema.String)),
-}).annotate({ identifier: "Integration.EnvMethod" })
-export type EnvMethod = typeof EnvMethod.Type
+export const EnvMethod = Integration.EnvMethod
+export type EnvMethod = Integration.EnvMethod
 
-export const Method = Schema.Union([OAuthMethod, KeyMethod, EnvMethod])
-  .pipe(Schema.toTaggedUnion("type"))
-  .annotate({ identifier: "Integration.Method" })
-export type Method = typeof Method.Type
+export const Method = Integration.Method
+export type Method = Integration.Method
 
-export class Info extends Schema.Class<Info>("Integration.Info")({
-  id: ID,
-  name: Schema.String,
-  methods: Schema.mutable(Schema.Array(Method)),
-  connections: Schema.mutable(Schema.Array(IntegrationConnection.Info)),
-}) {}
+export const Info = Integration.Info
+export type Info = Integration.Info
 
-export const Inputs = Schema.Record(Schema.String, Schema.String).annotate({ identifier: "Integration.Inputs" })
-export type Inputs = typeof Inputs.Type
+export const Inputs = Integration.Inputs
+export type Inputs = Integration.Inputs
 
 export type OAuthAuthorization = {
   readonly url: string
@@ -139,32 +93,10 @@ export interface EnvImplementation {
 
 export type Implementation = OAuthImplementation | KeyImplementation | EnvImplementation
 
-function isOAuthImplementation(implementation: Implementation): implementation is OAuthImplementation {
-  return implementation.method.type === "oauth"
-}
+export const Attempt = Integration.Attempt
+export type Attempt = Integration.Attempt
 
-export class Attempt extends Schema.Class<Attempt>("Integration.Attempt")({
-  attemptID: AttemptID,
-  url: Schema.String,
-  instructions: Schema.String,
-  mode: Schema.Literals(["auto", "code"]),
-  time: Schema.Struct({
-    created: Schema.Number,
-    expires: Schema.Number,
-  }),
-}) {}
-
-const Time = Schema.Struct({
-  created: Schema.Number,
-  expires: Schema.Number,
-})
-
-export const AttemptStatus = Schema.Union([
-  Schema.Struct({ status: Schema.Literal("pending"), time: Time }),
-  Schema.Struct({ status: Schema.Literal("complete"), time: Time }),
-  Schema.Struct({ status: Schema.Literal("failed"), message: Schema.String, time: Time }),
-  Schema.Struct({ status: Schema.Literal("expired"), time: Time }),
-]).pipe(Schema.toTaggedUnion("status"))
+export const AttemptStatus = Integration.AttemptStatus
 export type AttemptStatus = typeof AttemptStatus.Type
 
 export class CodeRequiredError extends Schema.TaggedErrorClass<CodeRequiredError>()("Integration.CodeRequired", {
@@ -177,22 +109,10 @@ export class AuthorizationError extends Schema.TaggedErrorClass<AuthorizationErr
 
 export type Error = CodeRequiredError | AuthorizationError
 
-export const Event = {
-  Updated: EventV2.define({
-    type: "integration.updated",
-    schema: {},
-  }),
-  ConnectionUpdated: EventV2.define({
-    type: "integration.connection.updated",
-    schema: { integrationID: ID },
-  }),
-}
+export const Event = Integration.Event
 
-export const Ref = Schema.Struct({
-  id: ID,
-  name: Schema.String,
-}).annotate({ identifier: "Integration.Ref" })
-export type Ref = typeof Ref.Type
+export const Ref = Integration.Ref
+export type Ref = Integration.Ref
 
 type Entry = {
   ref: Types.DeepMutable<Ref>
@@ -464,7 +384,7 @@ export const locationLayer = Layer.effect(
         resolve: Effect.fn("Integration.connection.resolve")(function* (connection) {
           if (connection.type === "env") {
             const key = process.env[connection.name]
-            return key ? new Credential.Key({ type: "key", key }) : undefined
+            return key ? Credential.Key.make({ type: "key", key }) : undefined
           }
           const credential = yield* credentials.get(connection.id)
           if (!credential) return undefined
@@ -489,7 +409,7 @@ export const locationLayer = Layer.effect(
           yield* credentials.create({
             integrationID: input.integrationID,
             label: input.label,
-            value: new Credential.Key({ type: "key", key: input.key }),
+            value: Credential.Key.make({ type: "key", key: input.key }),
           })
           yield* events.publish(Event.ConnectionUpdated, { integrationID: input.integrationID })
           yield* events.publish(Event.Updated, {})

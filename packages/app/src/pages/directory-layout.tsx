@@ -1,8 +1,8 @@
-import { DataProvider } from "@opencode-ai/ui/context"
+import { DataProvider } from "@opencode-ai/session-ui/context"
 import { showToast } from "@/utils/toast"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { useLocation, useNavigate, useParams } from "@solidjs/router"
-import { type Accessor, createEffect, createMemo, createResource, type ParentProps, Show } from "solid-js"
+import { type Accessor, createEffect, createMemo, createResource, onCleanup, type ParentProps, Show } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { LocalProvider } from "@/context/local"
 import { SDKProvider } from "@/context/sdk"
@@ -11,6 +11,7 @@ import { decode64 } from "@/utils/base64"
 import { Schema } from "effect"
 import type { ServerConnection } from "@/context/server"
 import { sessionHref } from "@/utils/session-route"
+import { useServerSync } from "@/context/server-sync"
 
 export function DirectoryDataProvider(
   props: ParentProps<{
@@ -23,6 +24,7 @@ export function DirectoryDataProvider(
   const navigate = useNavigate()
   const params = useParams()
   const sync = useSync()
+  const serverSync = useServerSync()
   const directory = () => (typeof props.directory === "function" ? props.directory() : props.directory)
   const slug = createMemo(() => base64Encode(directory()))
   const href = (sessionID: string) => {
@@ -47,6 +49,13 @@ export function DirectoryDataProvider(
         .session.sync(id)
         .catch(() => {}),
   )
+
+  createEffect(() => {
+    const sessionID = params.id
+    if (!sessionID) return
+    serverSync().session.pin(sessionID)
+    onCleanup(() => serverSync().session.unpin(sessionID))
+  })
 
   return (
     <DataProvider

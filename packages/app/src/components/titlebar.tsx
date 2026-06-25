@@ -2,6 +2,7 @@ import {
   createEffect,
   createMemo,
   createResource,
+  createRoot,
   createSignal,
   For,
   Match,
@@ -36,7 +37,9 @@ import { useGlobal } from "@/context/global"
 import { ServerConnection, useServer } from "@/context/server"
 import { tabHref, tabKey, useTabs, type Tab } from "@/context/tabs"
 import "./titlebar.css"
-import { useServerSDK } from "@/context/server-sdk"
+import { Session } from "@opencode-ai/sdk/v2"
+import { base64Encode } from "@opencode-ai/core/util/encode"
+import { createTabPromptState } from "@/context/prompt"
 
 type TauriDesktopWindow = {
   startDragging?: () => Promise<void>
@@ -95,10 +98,6 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
   const counterZoom = () => (windows() && titlebarZoom() < 1 ? 1 / titlebarZoom() : 1)
   const minHeight = () => {
     const height = useV2Titlebar() ? v2TitlebarHeight : legacyTitlebarHeight
-    if (useV2Titlebar() && mobile()) {
-      const inset = bottom() ? "env(safe-area-inset-bottom, 0px)" : "env(safe-area-inset-top, 0px)"
-      return `calc(${height}px + ${inset})`
-    }
     if (mac()) return `${height / zoom()}px`
     if (windows()) return `${height / Math.min(titlebarZoom(), 1)}px`
     return undefined
@@ -240,8 +239,6 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
       }}
       style={{
         "min-height": minHeight(),
-        "padding-top": useV2Titlebar() && mobile() && !bottom() ? "env(safe-area-inset-top, 0px)" : undefined,
-        "padding-bottom": bottom() ? "env(safe-area-inset-bottom, 0px)" : undefined,
         "padding-left": mac() && !mobile() ? `${84 / zoom()}px` : 0,
         width: electronWindows() ? `env(titlebar-area-width, calc(100vw - ${windowsControlsWidth()}))` : undefined,
         "max-width": electronWindows()
@@ -256,7 +253,6 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
       <Switch>
         <Match when={useV2Titlebar()}>
           {(_) => {
-            const serverSdk = useServerSDK()
             const navigate = useNavigate()
             const layout = useLayout()
             const global = useGlobal()
@@ -267,11 +263,15 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
             const [session] = createResource(
               () => {
                 const route = layout.route()
-                return route.type === "session" ? route : undefined
+                if (route.type !== "session") return undefined
+                const conn = global.servers
+                  .list()
+                  .find((item) => ServerConnection.key(item) === (route.server ?? server.key))
+                return conn ? { route, sdk: global.ensureServerCtx(conn).sdk } : undefined
               },
-              (route) =>
-                serverSdk()
-                  .client.session.get({ sessionID: route.sessionId })
+              ({ route, sdk }) =>
+                sdk.client.session
+                  .get({ sessionID: route.sessionId })
                   .then((x) => x.data)
                   .catch(() => {}),
             )
@@ -339,7 +339,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
               }
 
               const fallback = global.servers.list().flatMap((conn) => {
-                const project = global.createServerCtx(conn).projects.list()[0]
+                const project = global.ensureServerCtx(conn).projects.list()[0]
                 return project ? [{ server: ServerConnection.key(conn), project }] : []
               })[0]
               if (!fallback) return
@@ -415,22 +415,6 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                     if (next) tabs.select(next)
                   },
                 },
-                ...Array.from({ length: 9 }, (_, i) => {
-                  const index = i
-                  const number = index + 1
-                  return {
-                    id: `tab.${number}`,
-                    category: "tab",
-                    title: "",
-                    keybind: `mod+${number}`,
-                    disabled: layout.projects.list().length <= index,
-                    hidden: true,
-                    onSelect: () => {
-                      const tab = tabsStore[index]
-                      if (tab) tabs.select(tab)
-                    },
-                  }
-                }),
               ].filter((v) => v !== undefined)
             })
 
@@ -489,6 +473,163 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                   }}
                   onReorder={(keys) => tabsStoreActions.reorder(keys)}
                 />
+                {false && (
+                <div data-slot="titlebar-tabs" class="relative min-w-0">
+                  <div
+                    data-slot="titlebar-tabs-scroll"
+                    class="flex min-w-0 flex-row items-center gap-1.5 overflow-x-auto no-scrollbar [app-region:no-drag]"
+                    ref={(el) => {
+                      tabScrollRef = el
+                      createResizeObserver(el, refreshTabsAreOverflowing)
+                    }}
+                  >
+                    <div
+                      class="flex min-w-0 flex-row items-center gap-1.5"
+                      ref={(el) => createResizeObserver(el, refreshTabsAreOverflowing)}
+                    >
+                      <For each={tabsStore}>
+                        {(tab, i) => {
+                          let ref!: HTMLDivElement
+                          useTabShortcut(i, () => tabs.select(tab))
+
+                          const divider = () =>
+                            i() !== 0 && (
+                              <div class="w-[1.5px] h-3 shrink-0 rounded-full bg-[var(--v2-background-bg-layer-02)]" />
+                            )
+
+                          if (tab.type === "draft") {
+                            return (
+                              <>
+                                {divider()}
+                                <DraftTabItem
+                                  ref={ref}
+                                  href={tabHref(tab)}
+                                  title={language.t("command.session.new")}
+                                  active={currentTab() === tab}
+                                  onNavigate={() => {
+                                    tabs.select(tab)
+                                    ref.scrollIntoView({ behavior: "instant" })
+                                  }}
+                                  onClose={() => tabsStoreActions.removeTab(i())}
+                                />
+                              </>
+                            )
+                          }
+
+                          const serverCtx = createMemo(() => {
+                            const conn = server.list.find((item) => ServerConnection.key(item) === tab.server)
+                            return conn ? global.ensureServerCtx(conn) : undefined
+                          })
+                          const sdk = createMemo(() => serverCtx()?.sdk ?? null)
+                          const cachedSession = createMemo(() => serverCtx()?.sync.session.peek(tab.sessionId))
+
+                          const [loadedSession] = createResource(
+                            () => {
+                              const id = tab.sessionId
+                              const ctx = serverCtx()
+                              return ctx ? { id, ctx } : null
+                            },
+                            ({ id, ctx }) => ctx.sync.session.resolve(id).catch(() => undefined),
+                          )
+                          const session = createMemo(() => cachedSession() ?? loadedSession())
+                          let prefetched = false
+
+                          createEffect(() => {
+                            const ctx = serverCtx()
+                            const sess = session()
+                            if (!ctx || !sess || prefetched) return
+                            prefetched = true
+                            createRoot((dispose) => {
+                              try {
+                                void ctx.sync
+                                  .ensureDirSyncContext(sess.directory)
+                                  .session.sync(sess.id)
+                                  .catch(() => {})
+                                  .finally(dispose)
+                              } catch {
+                                dispose()
+                              }
+                            })
+                          })
+
+                          createEffect(() => {
+                            if (tab.type !== "session") return
+                            const _sdk = sdk()
+                            if (!_sdk) return
+                            const sess = session()
+                            if (!sess) return
+                            createTabPromptState(tabs, tab, _sdk.scope, {
+                              dir: base64Encode(sess.directory),
+                              id: sess.id,
+                            })
+                          })
+
+                          return (
+                            <>
+                              {divider()}
+                              <Show when={session()}>
+                                {(session) => (
+                                  <TabNavItem
+                                    ref={ref}
+                                    href={tabHref(tab)}
+                                    server={tab.server}
+                                    sessionId={tab.sessionId}
+                                    session={session()}
+                                    onNavigate={() => {
+                                      tabs.select(tab)
+
+                                      ref.scrollIntoView({ behavior: "instant" })
+                                    }}
+                                    onClose={() => tabsStoreActions.removeTab(i())}
+                                    active={currentTab() === tab}
+                                    activeServer={tab.server === server.key}
+                                    forceTruncate={tabsAreOverflowing()}
+                                  />
+                                )}
+                              </Show>
+                            </>
+                          )
+                        }}
+                      </For>
+                      <Show when={creating() && params.dir}>
+                        {(_) => {
+                          let ref!: HTMLDivElement
+
+                          onMount(() => {
+                            ref.scrollIntoView({ behavior: "instant" })
+                          })
+
+                          return (
+                            <>
+                              <div class="w-[1.5px] h-3 shrink-0 rounded-full bg-[var(--v2-background-bg-layer-02)]" />
+                              <NewSessionTabItem
+                                ref={ref}
+                                href={`/${params.dir}/session`}
+                                title={language.t("command.session.new")}
+                                onClose={() => {
+                                  const tab = tabsStore.at(-1)
+                                  if (tab) tabs.select(tab)
+                                  else navigate("/")
+                                }}
+                              />
+                            </>
+                          )
+                        }}
+                      </Show>
+                    </div>
+                  </div>
+                  <div
+                    data-slot="titlebar-tabs-fade-left"
+                    aria-hidden="true"
+                    class="pointer-events-none absolute inset-y-0 left-0 z-10 w-6 bg-[linear-gradient(to_right,var(--v2-background-bg-deep),transparent)]"
+                  />
+                  <div
+                    data-slot="titlebar-tabs-fade-right"
+                    aria-hidden="true"
+                    class="pointer-events-none absolute inset-y-0 right-0 z-10 w-6 bg-[linear-gradient(to_left,var(--v2-background-bg-deep),transparent)]"
+                  />
+                </div>
+                )}
                 <Show when={!(creating() && params.dir)}>
                   <IconButtonV2
                     type="button"
@@ -721,6 +862,164 @@ function TitlebarUpdateIconButton(props: { state: TitlebarUpdatePillState }) {
   )
 }
 
+function useTabShortcut(index: () => number, onSelect: () => void) {
+  const command = useCommand()
+
+  command.register(() => {
+    const number = index() + 1
+    if (number > 9) return []
+
+    return [
+      {
+        id: `tab.${number}`,
+        category: "tab",
+        title: "",
+        keybind: `mod+${number}`,
+        hidden: true,
+        onSelect,
+      },
+    ]
+  })
+}
+
+function TabNavItem(props: {
+  ref?: HTMLDivElement
+  href: string
+  server: ServerConnection.Key
+  sessionId?: string
+  hideClose?: boolean
+  onClose: () => void
+  onNavigate: () => void
+  active?: boolean
+  activeServer: boolean
+  forceTruncate?: boolean
+  session: Session
+}) {
+  const closeTab = (event: MouseEvent) => {
+    event.preventDefault()
+    event.stopPropagation()
+    props.onClose()
+  }
+
+  const global = useGlobal()
+  const serverCtx = createMemo(() => {
+    const conn = global.servers.list().find((item) => ServerConnection.key(item) === props.server)
+    if (conn) return global.ensureServerCtx(conn)
+  })
+
+  return (
+    <div
+      ref={props.ref}
+      class="group relative flex h-7 w-56 shrink-0 flex-row items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-[6px] bg-[var(--tab-bg)] px-1.5 [--tab-bg:var(--v2-background-bg-deep)] hover:[--tab-bg:var(--v2-background-bg-layer-02)] data-[active='true']:[--tab-bg:var(--v2-background-bg-layer-02)]"
+      data-active={props.active}
+      onMouseDown={(event) => {
+        if (event.button !== 1) return
+        closeTab(event)
+      }}
+    >
+      <Show when={props.session}>
+        {(session) => {
+          const project = createMemo(() => projectForSession(session(), serverCtx()?.projects.list() ?? []))
+
+          return (
+            <a
+              href={props.href}
+              onClick={(event) => {
+                event.preventDefault()
+                props.onNavigate()
+              }}
+              class="flex h-full min-w-0 flex-1 flex-row items-center gap-1.5 text-[13px] font-medium text-v2-text-text-faint group-data-[active='true']:text-v2-text-text-base"
+            >
+              <span data-slot="project-avatar-slot">
+                <SessionTabAvatar
+                  project={project()}
+                  directory={session().directory}
+                  sessionId={session().id}
+                  activeServer={props.activeServer}
+                />
+              </span>
+              <span class="min-w-0 flex-1">{session().title}</span>
+            </a>
+          )
+        }}
+      </Show>
+
+      <div
+        class="absolute not-group-hover:not-group-data-[active=true]:not-data-[truncate=true]:left-52 group-hover:right-0 group-data-[active=true]:right-0 data-[truncate=true]:right-0 inset-y-0 flex flex-row items-center pr-1 py-1 w-8 pl-2"
+        data-truncate={props.forceTruncate}
+      >
+        <div
+          class="absolute inset-0 rounded-r-[6px] bg-(image:--inactive-bg) group-hover:bg-(image:--active-bg) group-data-[active=true]:bg-(image:--active-bg)"
+          style={{
+            "--inactive-bg": "linear-gradient(to right, transparent 0%, var(--tab-bg) 80%)",
+            "--active-bg": "linear-gradient(90deg, transparent 0%, var(--tab-bg) 25%)",
+          }}
+        />
+        <IconButtonV2
+          size="small"
+          variant="ghost-muted"
+          class="opacity-0 group-hover:opacity-100 group-data-[active='true']:opacity-100 z-10"
+          onClick={closeTab}
+          icon={<IconV2 name="xmark-small" />}
+        />
+      </div>
+    </div>
+  )
+}
+
+function DraftTabItem(props: {
+  ref?: HTMLDivElement
+  href: string
+  title: string
+  active?: boolean
+  onNavigate: () => void
+  onClose: () => void
+}) {
+  const closeTab = (event: MouseEvent) => {
+    event.preventDefault()
+    event.stopPropagation()
+    props.onClose()
+  }
+  return (
+    <div
+      ref={props.ref}
+      data-active={props.active}
+      class="group relative flex h-7 w-56 shrink-0 flex-row items-center gap-1.5 overflow-hidden rounded-[6px] bg-[var(--tab-bg)] pl-1.5 pr-8 whitespace-nowrap [--tab-bg:var(--v2-background-bg-deep)] hover:[--tab-bg:var(--v2-background-bg-layer-02)] data-[active='true']:[--tab-bg:var(--v2-overlay-simple-overlay-pressed)] focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[var(--v2-border-border-focus)]"
+      onMouseDown={(event) => {
+        if (event.button !== 1) return
+        closeTab(event)
+      }}
+    >
+      <a
+        href={props.href}
+        onClick={(event) => {
+          event.preventDefault()
+          props.onNavigate()
+        }}
+        class="flex h-full min-w-0 flex-1 flex-row items-center gap-1.5 overflow-hidden text-[13px] font-medium leading-5 text-v2-text-text-faint group-data-[active='true']:text-[var(--v2-text-text-base)]"
+      >
+        <span class="flex size-4 shrink-0 rotate-90 items-center justify-center">
+          <IconV2 name="edit" />
+        </span>
+        <span class="truncate leading-5">{props.title}</span>
+      </a>
+      <div class="absolute right-0 inset-y-0 flex w-7 items-center justify-center">
+        <IconButtonV2
+          size="small"
+          variant="ghost-muted"
+          onMouseDown={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+          }}
+          onClick={closeTab}
+          icon={<IconV2 name="xmark-small" />}
+          aria-label="Close tab"
+        />
+      </div>
+    </div>
+  )
+}
+
 function NewSessionTabItem(props: { ref?: HTMLDivElement; href: string; title: string; onClose: () => void }) {
   const closeTab = (event: MouseEvent) => {
     event.preventDefault()
@@ -730,7 +1029,7 @@ function NewSessionTabItem(props: { ref?: HTMLDivElement; href: string; title: s
   return (
     <div
       ref={props.ref}
-      class="group relative shrink-0 flex h-7 max-w-60 flex-row items-center gap-1.5 overflow-hidden rounded-[6px] bg-[var(--v2-overlay-simple-overlay-pressed)] pl-1.5 pr-8 whitespace-nowrap focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[var(--v2-border-border-focus)]"
+      class="group relative flex h-7 w-56 shrink-0 flex-row items-center gap-1.5 overflow-hidden rounded-[6px] bg-[var(--v2-overlay-simple-overlay-pressed)] pl-1.5 pr-8 whitespace-nowrap focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[var(--v2-border-border-focus)]"
       onMouseDown={(event) => {
         if (event.button !== 1) return
         closeTab(event)
