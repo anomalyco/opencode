@@ -3,7 +3,7 @@ import { Effect, Stream } from "effect"
 import { HttpServerResponse } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import * as Sse from "effect/unstable/encoding/Sse"
-import { Api } from "@opencode-ai/protocol/api"
+import { Api } from "../api"
 
 function eventData(data: unknown): Sse.Event {
   return {

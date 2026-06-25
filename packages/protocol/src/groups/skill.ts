@@ -2,7 +2,7 @@ import { Skill } from "@opencode-ai/schema/skill"
 import { Location } from "@opencode-ai/schema/location"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
-import { LocationQuery, locationQueryOpenApi, LocationMiddleware } from "./location"
+import { LocationQuery, locationQueryOpenApi } from "./location"
 
 export const SkillGroup = HttpApiGroup.make("server.skill")
   .add(
@@ -25,4 +25,3 @@ export const SkillGroup = HttpApiGroup.make("server.skill")
       description: "Experimental skill routes.",
     }),
   )
-  .middleware(LocationMiddleware)

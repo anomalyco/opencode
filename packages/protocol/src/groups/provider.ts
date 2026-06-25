@@ -3,7 +3,7 @@ import { Location } from "@opencode-ai/schema/location"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { ProviderNotFoundError, ServiceUnavailableError } from "../errors"
-import { LocationQuery, locationQueryOpenApi, LocationMiddleware } from "./location"
+import { LocationQuery, locationQueryOpenApi } from "./location"
 
 export const ProviderGroup = HttpApiGroup.make("server.provider")
   .add(
@@ -43,4 +43,3 @@ export const ProviderGroup = HttpApiGroup.make("server.provider")
       description: "Experimental provider routes.",
     }),
   )
-  .middleware(LocationMiddleware)

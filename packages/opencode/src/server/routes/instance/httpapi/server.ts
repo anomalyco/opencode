@@ -66,7 +66,7 @@ import { CorsConfig, isAllowedCorsOrigin, type CorsOptions } from "@opencode-ai/
 import { serveUIEffect } from "@/server/shared/ui"
 import { ServerAuth } from "@/server/auth"
 import { InstanceHttpApi, RootHttpApi } from "./api"
-import { Api } from "@opencode-ai/protocol/api"
+import { Api } from "@opencode-ai/server/api"
 import { PublicApi } from "./public"
 import {
   authorizationLayer,

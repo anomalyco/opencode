@@ -1,7 +1,7 @@
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
-import { Api } from "@opencode-ai/protocol/api"
+import { Api } from "../api"
 import { ProviderNotFoundError } from "@opencode-ai/protocol/errors"
 import { response } from "../location"
 

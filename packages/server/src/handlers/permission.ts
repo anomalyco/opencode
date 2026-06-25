@@ -3,7 +3,7 @@ import { PermissionV2 } from "@opencode-ai/core/permission"
 import { PermissionSaved } from "@opencode-ai/core/permission/saved"
 import { Effect } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
-import { Api } from "@opencode-ai/protocol/api"
+import { Api } from "../api"
 import { PermissionNotFoundError } from "@opencode-ai/protocol/errors"
 import { response } from "../location"
 

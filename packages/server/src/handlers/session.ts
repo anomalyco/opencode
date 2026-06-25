@@ -1,7 +1,7 @@
 import { SessionV2 } from "@opencode-ai/core/session"
 import { DateTime, Effect } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
-import { Api } from "@opencode-ai/protocol/api"
+import { Api } from "../api"
 import { SessionsCursor } from "@opencode-ai/protocol/groups/session"
 import {
   ConflictError,

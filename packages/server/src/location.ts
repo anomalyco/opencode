@@ -2,9 +2,15 @@ import { Location } from "@opencode-ai/core/location"
 import { LocationServiceMap } from "@opencode-ai/core/location-layer"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { WorkspaceV2 } from "@opencode-ai/core/workspace"
-import { LocationMiddleware } from "@opencode-ai/protocol/groups/location"
 import { Effect, Layer } from "effect"
 import { HttpServerRequest } from "effect/unstable/http"
+import { HttpApiMiddleware } from "effect/unstable/httpapi"
+
+export type LocationServices = Layer.Success<ReturnType<(typeof LocationServiceMap)["get"]>>
+
+export class LocationMiddleware extends HttpApiMiddleware.Service<LocationMiddleware, { provides: LocationServices }>()(
+  "@opencode/HttpApiLocation",
+) {}
 
 export function response<A, E, R>(data: Effect.Effect<A, E, R>) {
   return Effect.gen(function* () {
