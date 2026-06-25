@@ -1,7 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { AbsolutePath } from "@opencode-ai/core/schema"
-import { PluginBoot } from "@opencode-ai/core/plugin/boot"
 import { Reference } from "@opencode-ai/core/reference"
 import { ReferenceGuidance } from "@opencode-ai/core/reference/guidance"
 import { SystemContext } from "@opencode-ai/core/system-context/index"
@@ -27,7 +26,7 @@ describe("ReferenceGuidance", () => {
                 name: "docs",
                 path: AbsolutePath.make("/docs"),
                 description: "Use for product documentation",
-                source: new Reference.LocalSource({
+                source: Reference.LocalSource.make({
                   type: "local",
                   path: AbsolutePath.make("/docs"),
                   description: "Use for product documentation",
@@ -36,7 +35,6 @@ describe("ReferenceGuidance", () => {
             ]),
         }),
       ),
-      Effect.provide(Layer.mock(PluginBoot.Service, { wait: () => Effect.void })),
     ),
   )
 
@@ -48,7 +46,6 @@ describe("ReferenceGuidance", () => {
     }).pipe(
       Effect.provide(ReferenceGuidance.layer),
       Effect.provide(Layer.mock(Reference.Service, { list: () => Effect.succeed([]) })),
-      Effect.provide(Layer.mock(PluginBoot.Service, { wait: () => Effect.void })),
     ),
   )
 
@@ -66,12 +63,11 @@ describe("ReferenceGuidance", () => {
               new Reference.Info({
                 name: "docs",
                 path: AbsolutePath.make("/docs"),
-                source: new Reference.LocalSource({ type: "local", path: AbsolutePath.make("/docs") }),
+                source: Reference.LocalSource.make({ type: "local", path: AbsolutePath.make("/docs") }),
               }),
             ]),
         }),
       ),
-      Effect.provide(Layer.mock(PluginBoot.Service, { wait: () => Effect.void })),
     ),
   )
 })

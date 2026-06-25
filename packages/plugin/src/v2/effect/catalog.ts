@@ -1,6 +1,5 @@
 import type { ModelV2Info, ProviderV2Info } from "@opencode-ai/sdk/v2/types"
-import type { Effect } from "effect"
-import type { Transformable } from "./registration.js"
+import type { Hooks } from "./registration.js"
 
 export interface CatalogProviderRecord {
   readonly provider: ProviderV2Info
@@ -25,17 +24,6 @@ export interface CatalogDraft {
   }
 }
 
-export interface Catalog extends Transformable<CatalogDraft> {
-  readonly provider: {
-    get(id: string): Effect.Effect<ProviderV2Info | undefined>
-    list(): Effect.Effect<ProviderV2Info[]>
-    available(): Effect.Effect<ProviderV2Info[]>
-  }
-  readonly model: {
-    get(providerID: string, modelID: string): Effect.Effect<ModelV2Info | undefined>
-    list(): Effect.Effect<ModelV2Info[]>
-    available(): Effect.Effect<ModelV2Info[]>
-    default(): Effect.Effect<ModelV2Info | undefined>
-    small(providerID: string): Effect.Effect<ModelV2Info | undefined>
-  }
-}
+export type CatalogHooks = Hooks<{
+  transform: CatalogDraft
+}>

@@ -661,6 +661,38 @@
   gap: 24px;
 }
 
+[data-page="stats"] [data-slot="footer-controls"] {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  min-width: 0;
+}
+
+[data-page="stats"] [data-slot="footer-language"] {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--stats-muted);
+  font-size: 11px;
+  line-height: 1;
+}
+
+[data-page="stats"] [data-slot="footer-language"] select {
+  height: 24px;
+  min-width: 136px;
+  margin: 0;
+  padding: 0 8px;
+  border: 1px solid var(--stats-line);
+  border-radius: 0;
+  background: var(--stats-bg);
+  color: var(--stats-text);
+  font: inherit;
+  font-size: 11px;
+  line-height: 1;
+}
+
 [data-page="stats"] [data-slot="theme-toggle"] {
   display: flex;
   align-items: center;
@@ -3736,6 +3768,11 @@
 
   [data-page="stats"] [data-slot="footer-bottom"] {
     line-height: 1.5;
+  }
+
+  [data-page="stats"] [data-slot="footer-controls"] {
+    justify-content: flex-start;
+    flex-wrap: wrap;
   }
 }
 

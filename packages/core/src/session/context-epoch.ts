@@ -9,7 +9,7 @@ import { ContextSnapshotDecodeError } from "./error"
 import { SessionEvent } from "./event"
 import { SessionHistory } from "./history"
 import { SessionInput } from "./input"
-import { SessionMessageID } from "./message-id"
+import { SessionMessage } from "./message"
 import { SessionSchema } from "./schema"
 import { SessionContextEpochTable } from "./sql"
 
@@ -64,14 +64,14 @@ const prepareOnce = Effect.fnUntraced(function* (
     return { baseline: stored.baseline, baselineSeq: stored.baseline_seq }
   }
   if (result._tag === "ReplacementReady") {
-    const baselineSeq = replacementSeq ?? (yield* SessionInput.latestSeq(db, sessionID))
+    const baselineSeq = replacementSeq ?? (yield* EventV2.latestSequence(db, sessionID))
     yield* replace(db, sessionID, baselineSeq, result.generation)
     return { baseline: result.generation.baseline, baselineSeq }
   }
 
   yield* events.publish(
     SessionEvent.ContextUpdated,
-    { sessionID, messageID: SessionMessageID.ID.create(), timestamp: yield* DateTime.now, text: result.text },
+    { sessionID, messageID: SessionMessage.ID.create(), timestamp: yield* DateTime.now, text: result.text },
     { commit: () => advance(db, sessionID, result.snapshot).pipe(Effect.orDie) },
   )
   return { baseline: stored.baseline, baselineSeq: stored.baseline_seq }
@@ -124,7 +124,7 @@ const insert = Effect.fnUntraced(function* (
   sessionID: SessionSchema.ID,
   generation: SystemContext.Generation,
 ) {
-  const baselineSeq = yield* SessionInput.latestSeq(db, sessionID)
+  const baselineSeq = yield* EventV2.latestSequence(db, sessionID)
   yield* db
     .insert(SessionContextEpochTable)
     .values({

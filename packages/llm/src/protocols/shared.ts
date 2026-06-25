@@ -19,6 +19,7 @@ export { isRecord }
 export const Json = Schema.fromJsonString(Schema.Unknown)
 export const decodeJson = Schema.decodeUnknownSync(Json)
 export const encodeJson = Schema.encodeSync(Json)
+const isJson = Schema.is(Schema.Json)
 export const JsonObject = Schema.Record(Schema.String, Schema.Unknown)
 export const optionalArray = <const S extends Schema.Top>(schema: S) => Schema.optional(Schema.Array(schema))
 export const optionalNull = <const S extends Schema.Top>(schema: S) => Schema.optional(Schema.NullOr(schema))
@@ -243,8 +244,14 @@ export const validateToolFile = (route: string, part: ToolFileContent, supported
 export const trimBaseUrl = (value: string) => value.replace(/\/+$/, "")
 
 export const toolResultText = (part: ToolResultPart) => {
-  if (part.result.type === "text" || part.result.type === "error") return String(part.result.value)
-  if (part.result.type === "content") return encodeJson(part.result.value)
+  if (part.result.type === "text") return String(part.result.value)
+  if (part.result.type === "error") {
+    const value = part.result.value
+    const prototype =
+      typeof value === "object" && value !== null && !Array.isArray(value) && Object.getPrototypeOf(value)
+    const structured = Array.isArray(value) || prototype === Object.prototype || prototype === null
+    return structured && isJson(value) ? encodeJson(value) : String(value)
+  }
   return encodeJson(part.result.value)
 }
 

@@ -111,6 +111,7 @@ import type {
   McpRemoteConfig,
   McpStatusErrors,
   McpStatusResponses,
+  ModelRef,
   MoveSessionDestination,
   OutputFormat,
   Part as Part2,
@@ -128,10 +129,13 @@ import type {
   PermissionRespondResponses,
   PermissionRuleset,
   PermissionV2Reply,
+  PermissionV2Source,
+  ProjectCommands,
   ProjectCurrentErrors,
   ProjectCurrentResponses,
   ProjectDirectoriesErrors,
   ProjectDirectoriesResponses,
+  ProjectIcon,
   ProjectInitGitErrors,
   ProjectInitGitResponses,
   ProjectListErrors,
@@ -341,6 +345,10 @@ import type {
   V2SessionListResponses,
   V2SessionMessagesErrors,
   V2SessionMessagesResponses,
+  V2SessionPermissionCreateErrors,
+  V2SessionPermissionCreateResponses,
+  V2SessionPermissionGetErrors,
+  V2SessionPermissionGetResponses,
   V2SessionPermissionListErrors,
   V2SessionPermissionListResponses,
   V2SessionPermissionReplyErrors,
@@ -353,6 +361,12 @@ import type {
   V2SessionQuestionRejectResponses,
   V2SessionQuestionReplyErrors,
   V2SessionQuestionReplyResponses,
+  V2SessionRevertClearErrors,
+  V2SessionRevertClearResponses,
+  V2SessionRevertCommitErrors,
+  V2SessionRevertCommitResponses,
+  V2SessionRevertStageErrors,
+  V2SessionRevertStageResponses,
   V2SessionSwitchAgentErrors,
   V2SessionSwitchAgentResponses,
   V2SessionSwitchModelErrors,
@@ -2605,17 +2619,8 @@ export class Project extends HeyApiClient {
       directory?: string
       workspace?: string
       name?: string
-      icon?: {
-        url?: string
-        override?: string
-        color?: string
-      }
-      commands?: {
-        /**
-         * Startup script to run when creating a new workspace (worktree)
-         */
-        start?: string
-      }
+      icon?: ProjectIcon
+      commands?: ProjectCommands
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -5068,6 +5073,91 @@ export class Agent extends HeyApiClient {
   }
 }
 
+export class Revert extends HeyApiClient {
+  /**
+   * Stage session revert
+   *
+   * Stage or move a reversible session boundary and optionally apply its file changes.
+   */
+  public stage<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      messageID?: string
+      files?: boolean
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "body", key: "messageID" },
+            { in: "body", key: "files" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      V2SessionRevertStageResponses,
+      V2SessionRevertStageErrors,
+      ThrowOnError
+    >({
+      url: "/api/session/{sessionID}/revert/stage",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Clear staged revert
+   */
+  public clear<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "sessionID" }] }])
+    return (options?.client ?? this.client).post<
+      V2SessionRevertClearResponses,
+      V2SessionRevertClearErrors,
+      ThrowOnError
+    >({
+      url: "/api/session/{sessionID}/revert/clear",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Commit staged revert
+   */
+  public commit<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "sessionID" }] }])
+    return (options?.client ?? this.client).post<
+      V2SessionRevertCommitResponses,
+      V2SessionRevertCommitErrors,
+      ThrowOnError
+    >({
+      url: "/api/session/{sessionID}/revert/commit",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Permission2 extends HeyApiClient {
   /**
    * List session permission requests
@@ -5087,6 +5177,93 @@ export class Permission2 extends HeyApiClient {
       ThrowOnError
     >({
       url: "/api/session/{sessionID}/permission",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Create permission request
+   *
+   * Evaluate and, when approval is required, create a permission request for a session.
+   */
+  public create<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      id?: string
+      action?: string
+      resources?: Array<string>
+      save?: Array<string>
+      metadata?: {
+        [key: string]: unknown
+      }
+      source?: PermissionV2Source
+      agent?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "body", key: "id" },
+            { in: "body", key: "action" },
+            { in: "body", key: "resources" },
+            { in: "body", key: "save" },
+            { in: "body", key: "metadata" },
+            { in: "body", key: "source" },
+            { in: "body", key: "agent" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      V2SessionPermissionCreateResponses,
+      V2SessionPermissionCreateErrors,
+      ThrowOnError
+    >({
+      url: "/api/session/{sessionID}/permission",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Get permission request
+   *
+   * Retrieve a pending permission request owned by a session.
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      requestID: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "path", key: "requestID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      V2SessionPermissionGetResponses,
+      V2SessionPermissionGetErrors,
+      ThrowOnError
+    >({
+      url: "/api/session/{sessionID}/permission/{requestID}",
       ...options,
       ...params,
     })
@@ -5288,11 +5465,7 @@ export class Session3 extends HeyApiClient {
     parameters?: {
       id?: string
       agent?: string
-      model?: {
-        id: string
-        providerID: string
-        variant?: string
-      }
+      model?: ModelRef
       location?: LocationRef
     },
     options?: Options<never, ThrowOnError>,
@@ -5344,7 +5517,7 @@ export class Session3 extends HeyApiClient {
   /**
    * Switch session agent
    *
-   * Switch the agent used by subsequent session activity.
+   * Switch the agent used by subsequent provider turns.
    */
   public switchAgent<ThrowOnError extends boolean = false>(
     parameters: {
@@ -5383,16 +5556,12 @@ export class Session3 extends HeyApiClient {
   /**
    * Switch session model
    *
-   * Switch the model used by subsequent session activity.
+   * Switch the model used by subsequent provider turns.
    */
   public switchModel<ThrowOnError extends boolean = false>(
     parameters: {
       sessionID: string
-      model?: {
-        id: string
-        providerID: string
-        variant?: string
-      }
+      model?: ModelRef
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -5553,6 +5722,11 @@ export class Session3 extends HeyApiClient {
       ...options,
       ...params,
     })
+  }
+
+  private _revert?: Revert
+  get revert(): Revert {
+    return (this._revert ??= new Revert({ client: this.client }))
   }
 
   private _permission?: Permission2

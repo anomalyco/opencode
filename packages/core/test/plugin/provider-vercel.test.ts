@@ -1,3 +1,4 @@
+import { AISDK } from "@opencode-ai/core/aisdk"
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
@@ -13,8 +14,9 @@ const it = testEffect(PluginTestLayer)
 
 const addPlugin = Effect.fn(function* () {
   const plugin = yield* PluginV2.Service
-  const host = yield* PluginHost.make()
-  yield* plugin.add({ id: VercelPlugin.id, effect: VercelPlugin.effect(host) })
+  const aisdk = yield* AISDK.Service
+  const host = yield* PluginHost.make(plugin)
+  yield* VercelPlugin.effect(host)
 })
 
 describe("VercelPlugin", () => {
@@ -55,19 +57,16 @@ describe("VercelPlugin", () => {
   it.effect("creates @ai-sdk/vercel SDKs for custom provider IDs", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
+      const aisdk = yield* AISDK.Service
       yield* addPlugin()
-      const event = yield* plugin.trigger(
-        "aisdk.sdk",
-        {
-          model: new ModelV2.Info({
-            ...ModelV2.Info.empty(ProviderV2.ID.make("custom-vercel"), ModelV2.ID.make("v0-1.0-md")),
-            api: { id: ModelV2.ID.make("v0-1.0-md"), type: "aisdk", package: "@ai-sdk/vercel" },
-          }),
-          package: "@ai-sdk/vercel",
-          options: { name: "custom-vercel" },
-        },
-        {},
-      )
+      const event = yield* aisdk.runSDK({
+        model: ModelV2.Info.make({
+          ...ModelV2.Info.empty(ProviderV2.ID.make("custom-vercel"), ModelV2.ID.make("v0-1.0-md")),
+          api: { id: ModelV2.ID.make("v0-1.0-md"), type: "aisdk", package: "@ai-sdk/vercel" },
+        }),
+        package: "@ai-sdk/vercel",
+        options: { name: "custom-vercel" },
+      })
       expect(event.sdk).toBeDefined()
       expect(event.sdk.languageModel("v0-1.0-md").provider).toBe("vercel.chat")
     }),

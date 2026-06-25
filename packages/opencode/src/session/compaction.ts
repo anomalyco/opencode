@@ -23,17 +23,10 @@ import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
-import { EventV2 } from "@opencode-ai/core/event"
 import { buildPrompt } from "@opencode-ai/core/session/compaction"
+import { SessionCompactionEvent } from "@opencode-ai/schema/session-compaction-event"
 
-export const Event = {
-  Compacted: EventV2.define({
-    type: "session.compacted",
-    schema: {
-      sessionID: SessionID,
-    },
-  }),
-}
+export const Event = SessionCompactionEvent
 
 export const PRUNE_MINIMUM = 20_000
 export const PRUNE_PROTECT = 40_000
