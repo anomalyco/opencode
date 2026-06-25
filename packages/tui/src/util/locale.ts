@@ -31,7 +31,10 @@ export function number(num: number): string {
   if (num >= 1000000) {
     return (num / 1000000).toFixed(1) + "M"
   } else if (num >= 1000) {
-    return (num / 1000).toFixed(1) + "K"
+    const value = (num / 1000).toFixed(1)
+    // 999_950+ rounds up to "1000.0K", so promote to "M" rather than showing a 4-digit thousands value.
+    if (value === "1000.0") return (num / 1000000).toFixed(1) + "M"
+    return value + "K"
   }
   return num.toString()
 }
