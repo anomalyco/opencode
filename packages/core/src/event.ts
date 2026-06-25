@@ -67,6 +67,11 @@ export interface Interface {
   readonly subscribe: <D extends Definition>(definition: D) => Stream.Stream<Payload<D>>
   readonly all: () => Stream.Stream<Payload>
   readonly durable: (input: { readonly aggregateID: string; readonly after?: number }) => Stream.Stream<Payload>
+  readonly follow: <A extends Payload>(input: {
+    readonly aggregateID: string
+    readonly after?: number
+    readonly matches: (event: Payload) => event is A
+  }) => Stream.Stream<A>
   /** @deprecated Use `all()` and consume the returned stream. */
   readonly listen: (listener: Subscriber) => Effect.Effect<Unsubscribe>
   readonly project: <D extends Definition>(definition: D, projector: Subscriber<D>) => Effect.Effect<void>
@@ -86,6 +91,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Ev
 
 export interface LayerOptions {
   readonly beforeAggregateRead?: (aggregateID: string) => Effect.Effect<void>
+  readonly followerCapacity?: number
 }
 
 export const layerWith = (options?: LayerOptions) =>
@@ -546,6 +552,48 @@ export const layerWith = (options?: LayerOptions) =>
           })
         })
 
+      const follow = <A extends Payload>(input: {
+        readonly aggregateID: string
+        readonly after?: number
+        readonly matches: (event: Payload) => event is A
+      }): Stream.Stream<A> =>
+        Stream.unwrap(
+          Effect.gen(function* () {
+            const pubsub = yield* PubSub.dropping<A>(options?.followerCapacity ?? 1024)
+            const subscription = yield* PubSub.subscribe(pubsub)
+            const listener = (event: Payload) =>
+              input.matches(event)
+                ? PubSub.publish(pubsub, event).pipe(
+                    Effect.flatMap((published) => (published ? Effect.void : PubSub.shutdown(pubsub))),
+                  )
+                : Effect.void
+            yield* Effect.acquireRelease(listen(listener), (unsubscribe) =>
+              unsubscribe.pipe(Effect.andThen(PubSub.shutdown(pubsub))),
+            )
+            let sequence = input.after ?? -1
+            const read: Effect.Effect<ReadonlyArray<A>> = Effect.suspend(() =>
+              readAfter(input.aggregateID, sequence),
+            ).pipe(
+              Effect.map((events) => events.flatMap((event) => (input.matches(event) ? [event] : []))),
+              Effect.tap((events) =>
+                Effect.sync(() => {
+                  sequence = events.at(-1)?.durable?.seq ?? sequence
+                }),
+              ),
+            )
+            const historical = yield* read
+            const live = Stream.fromSubscription(subscription).pipe(
+              Stream.filter((event) => {
+                if (event.durable?.aggregateID !== input.aggregateID) return true
+                if (event.durable.seq <= sequence) return false
+                sequence = event.durable.seq
+                return true
+              }),
+            )
+            return Stream.fromIterable(historical).pipe(Stream.concat(live))
+          }),
+        )
+
       const project = <D extends Definition>(definition: D, projector: Subscriber<D>): Effect.Effect<void> =>
         Effect.sync(() => {
           const list = projectors.get(definition.type) ?? []
@@ -558,6 +606,7 @@ export const layerWith = (options?: LayerOptions) =>
         subscribe,
         all: streamAll,
         durable,
+        follow,
         listen,
         project,
         replay,

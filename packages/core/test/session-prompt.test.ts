@@ -164,18 +164,25 @@ describe("SessionV2.prompt", () => {
     }),
   )
 
-  it.effect("streams durable Session events after an aggregate sequence", () =>
+  it.effect("replays durable Session events then streams raw live events", () =>
     Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
       const events = yield* EventV2.Service
       const { db } = yield* Database.Service
-      const fiber = yield* session.events({ sessionID }).pipe(Stream.take(4), Stream.runCollect, Effect.forkScoped)
+      const fiber = yield* session.events({ sessionID }).pipe(Stream.take(5), Stream.runCollect, Effect.forkScoped)
       yield* Effect.yieldNow
 
       yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "First" }), resume: false })
       yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Second" }), resume: false })
       yield* SessionInput.promoteSteers(db, events, sessionID, Number.MAX_SAFE_INTEGER)
+      yield* events.publish(SessionEvent.Text.Delta, {
+        sessionID,
+        assistantMessageID: SessionMessage.ID.create(),
+        textID: "text_1",
+        timestamp: yield* DateTime.now,
+        delta: "live",
+      })
       const streamed = Array.from(yield* Fiber.join(fiber))
 
       expect(streamed.map((event) => [event.durable?.seq, event.type])).toEqual([
@@ -183,12 +190,11 @@ describe("SessionV2.prompt", () => {
         [1, "session.next.prompt.admitted"],
         [2, "session.next.prompted"],
         [3, "session.next.prompted"],
+        [undefined, "session.next.text.delta"],
       ])
       expect(
         Array.from(
-          yield* session
-            .events({ sessionID, after: streamed[0]!.durable?.seq })
-            .pipe(Stream.take(1), Stream.runCollect),
+          yield* session.events({ sessionID, after: streamed[0].durable?.seq }).pipe(Stream.take(1), Stream.runCollect),
         ).map((event) => [event.durable?.seq, event.type]),
       ).toEqual([[1, "session.next.prompt.admitted"]])
     }),

@@ -128,7 +128,7 @@ export interface Interface {
   readonly events: (input: {
     sessionID: SessionSchema.ID
     after?: number
-  }) => Stream.Stream<SessionEvent.DurableEvent, NotFoundError>
+  }) => Stream.Stream<SessionEvent.Event, NotFoundError>
   readonly switchAgent: (input: { sessionID: SessionSchema.ID; agent: string }) => Effect.Effect<void, NotFoundError>
   readonly switchModel: (input: {
     sessionID: SessionSchema.ID
@@ -184,7 +184,10 @@ export const layer = Layer.unwrap(
           const store = yield* SessionStore.Service
           const locations = yield* LocationServiceMap
           const decodeMessage = Schema.decodeUnknownEffect(SessionMessage.Message)
-          const isDurableSessionEvent = Schema.is(SessionEvent.Durable)
+          const isSessionEvent =
+            (sessionID: SessionSchema.ID) =>
+            (event: EventV2.Payload): event is SessionEvent.Event =>
+              Schema.is(SessionEvent.All)(event) && event.data.sessionID === sessionID
           const decode = (row: typeof SessionMessageTable.$inferSelect) =>
             decodeMessage({ ...row.data, id: row.id, type: row.type }).pipe(
               Effect.mapError(
@@ -340,10 +343,16 @@ export const layer = Layer.unwrap(
             }),
             events: (input) =>
               Stream.unwrap(
-                result
-                  .get(input.sessionID)
-                  .pipe(Effect.as(events.durable({ aggregateID: input.sessionID, after: input.after }))),
-              ).pipe(Stream.filter((event): event is SessionEvent.DurableEvent => isDurableSessionEvent(event))),
+                result.get(input.sessionID).pipe(
+                  Effect.as(
+                    events.follow({
+                      aggregateID: input.sessionID,
+                      after: input.after,
+                      matches: isSessionEvent(input.sessionID),
+                    }),
+                  ),
+                ),
+              ),
             prompt: Effect.fn("V2Session.prompt")((input) =>
               Effect.uninterruptible(
                 Effect.gen(function* () {

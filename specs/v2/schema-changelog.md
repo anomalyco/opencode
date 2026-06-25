@@ -583,7 +583,7 @@ Reason:
 Compatibility:
 
 - No migration, synchronized event version, OpenAPI, or SDK regeneration is required.
-- `sessions.events({ sessionID, after? })` remains a replay-and-tail stream of every durable event in aggregate sequence order.
+- `sessions.events({ sessionID, after? })` replays every later durable event in aggregate sequence order, then tails raw live Session events. Ephemeral events never advance the recovery cursor.
 
 ## 2026-06-03: Sequential V2 Apply Patch Tool
 
