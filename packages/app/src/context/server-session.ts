@@ -471,14 +471,18 @@ export function createServerSession(client: OpencodeClient) {
       }
       case "permission.asked": {
         const permission = event.properties as PermissionRequest
-        const permissions = data.permission[permission.sessionID] ?? []
+        const permissions = data.permission[permission.sessionID]
+        if (!permissions) {
+          setData("permission", permission.sessionID, [permission])
+          return
+        }
         const result = Binary.search(permissions, permission.id, (item) => item.id)
         if (result.found) setData("permission", permission.sessionID, result.index, reconcile(permission))
         if (!result.found)
           setData(
             "permission",
             permission.sessionID,
-            produce((draft = []) => void draft.splice(result.index, 0, permission)),
+            produce((draft) => void draft.splice(result.index, 0, permission)),
           )
         return
       }
@@ -497,14 +501,18 @@ export function createServerSession(client: OpencodeClient) {
       }
       case "question.asked": {
         const question = event.properties as QuestionRequest
-        const questions = data.question[question.sessionID] ?? []
+        const questions = data.question[question.sessionID]
+        if (!questions) {
+          setData("question", question.sessionID, [question])
+          return
+        }
         const result = Binary.search(questions, question.id, (item) => item.id)
         if (result.found) setData("question", question.sessionID, result.index, reconcile(question))
         if (!result.found)
           setData(
             "question",
             question.sessionID,
-            produce((draft = []) => void draft.splice(result.index, 0, question)),
+            produce((draft) => void draft.splice(result.index, 0, question)),
           )
         return
       }
