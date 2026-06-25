@@ -51,7 +51,13 @@ import LegacyLayout from "@/pages/layout"
 import NewLayout from "@/pages/layout-new"
 import { ErrorPage } from "./pages/error"
 import { useCheckServerHealth } from "./utils/server-health"
-import { legacySessionHref, requireServerKey, selectSessionLineage, sessionHref } from "./utils/session-route"
+import {
+  legacySessionHref,
+  legacySessionServer,
+  requireServerKey,
+  selectSessionLineage,
+  sessionHref,
+} from "./utils/session-route"
 
 import Session from "@/pages/session"
 import { NewHome, LegacyHome } from "@/pages/home"
@@ -67,7 +73,15 @@ const SessionRoute = () => {
   const tabs = useTabs()
 
   if (params.id && settings.general.newLayoutDesigns()) {
-    return <Navigate href={sessionHref(server.key, params.id)} />
+    const sessionID = params.id
+    return (
+      <Show when={tabs.ready()}>
+        {(_) => {
+          const persisted = tabs.store.filter((item) => item.type === "session")
+          return <Navigate href={sessionHref(legacySessionServer(persisted, sessionID, server.key), sessionID)} />
+        }}
+      </Show>
+    )
   }
 
   // When the new layout is enabled, the legacy new-session route (/:dir/session with no id)

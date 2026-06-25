@@ -125,6 +125,16 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
         )
         return next
       },
+      reorder(keys: string[]) {
+        setStore(
+          produce((tabs) => {
+            const byKey = new Map(tabs.map((tab) => [tabKey(tab), tab]))
+            const next = keys.map((key) => byKey.get(key)).filter((tab): tab is Tab => !!tab)
+            if (next.length !== tabs.length) return
+            tabs.splice(0, tabs.length, ...next)
+          }),
+        )
+      },
       draft(draftID: string) {
         const tab = store.find((item) => item.type === "draft" && item.draftID === draftID)
         if (!tab || tab.type !== "draft") throw new Error(`Draft not found: ${draftID}`)

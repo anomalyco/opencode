@@ -1,0 +1,68 @@
+[data-titlebar-tab] [data-slot="tab-close"] {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: flex;
+  height: 28px;
+  width: 28px;
+  align-items: center;
+  justify-content: center;
+}
+
+[data-titlebar-tab] [data-slot="tab-close"]::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  height: 28px;
+  width: 16px;
+  pointer-events: none;
+  background: linear-gradient(to right, transparent, var(--tab-bg));
+  display: none;
+}
+
+[data-titlebar-tab][data-title-overflow="true"]:not([data-editing="true"]) [data-slot="tab-close"]::before {
+  display: block;
+  right: 0;
+}
+
+[data-titlebar-tab][data-title-overflow="true"]:hover:not([data-editing="true"]) [data-slot="tab-close"]::before,
+[data-titlebar-tab][data-title-overflow="true"][data-active="true"]:not([data-editing="true"]) [data-slot="tab-close"]::before {
+  right: 100%;
+}
+
+[data-titlebar-tab] [data-slot="tab-link"] {
+  padding-right: 22px;
+}
+
+[data-titlebar-tab][data-title-overflow="true"]:not(:hover):not([data-active="true"]):not([data-editing="true"])
+  [data-slot="tab-link"] {
+  padding-right: 0;
+}
+
+[data-titlebar-tab][data-editing="true"] [data-slot="tab-link"] {
+  padding-right: 22px;
+}
+
+[data-titlebar-tab] [data-slot="tab-title"] {
+  min-width: 0;
+}
+
+[data-titlebar-tab][data-editing="true"] [data-slot="tab-title"] {
+  min-width: 0;
+  max-width: 100%;
+  flex: 1 1 auto;
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+  scrollbar-width: none;
+}
+
+[data-titlebar-tab][data-editing="true"] [data-slot="tab-title"]::-webkit-scrollbar {
+  display: none;
+}
+
+[data-titlebar-tab]:hover [data-slot="tab-close"],
+[data-titlebar-tab][data-active="true"] [data-slot="tab-close"],
+[data-titlebar-tab][data-editing="true"] [data-slot="tab-close"] {
+  background: var(--tab-bg);
+}
