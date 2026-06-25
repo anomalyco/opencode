@@ -233,19 +233,11 @@ mcpTest.instance(
     Effect.gen(function* () {
       const mcp = yield* MCP.Service
       expect(transportCalls).toHaveLength(0)
-      yield* McpAuth.use.updateTokens(
-        "test-status-url",
-        { accessToken: "old-token" },
-        "https://old.example.com/mcp",
-      )
+      yield* McpAuth.use.updateTokens("test-status-url", { accessToken: "old-token" }, "https://old.example.com/mcp")
 
       expect(yield* mcp.getAuthStatus("test-status-url")).toBe("not_authenticated")
 
-      yield* McpAuth.use.updateTokens(
-        "test-status-url",
-        { accessToken: "current-token" },
-        "https://example.com/mcp",
-      )
+      yield* McpAuth.use.updateTokens("test-status-url", { accessToken: "current-token" }, "https://example.com/mcp")
       expect(yield* mcp.getAuthStatus("test-status-url")).toBe("authenticated")
 
       yield* McpAuth.use.updateTokens(
