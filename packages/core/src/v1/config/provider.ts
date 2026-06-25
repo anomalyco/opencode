@@ -117,5 +117,8 @@ export const Info = Schema.Struct({
     ),
   ),
   models: Schema.optional(Schema.Record(Schema.String, Model)),
+  discoverModels: Schema.optional(Schema.Boolean).annotate({
+    description: "Whether to discover models from the provider's /v1/models endpoint (default true)",
+  }),
 }).annotate({ identifier: "ProviderConfig" })
 export type Info = Schema.Schema.Type<typeof Info>

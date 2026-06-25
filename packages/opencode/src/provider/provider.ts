@@ -18,7 +18,9 @@ import { iife } from "@/util/iife"
 import { Global } from "@opencode-ai/core/global"
 import path from "path"
 import { pathToFileURL } from "url"
-import { Effect, Layer, Context, Schema, Types } from "effect"
+import { Duration, Effect, Exit, Layer, Context, Option, Schema, Types } from "effect"
+import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/http"
+import { httpClient } from "@opencode-ai/core/effect/layer-node-platform"
 import { EffectBridge } from "@/effect/bridge"
 import { InstanceState } from "@/effect/instance-state"
 import { EffectPromise } from "@/effect/promise"
@@ -136,6 +138,19 @@ const BUNDLED_PROVIDERS: Record<string, () => Promise<(opts: any) => BundledSDK>
 type CustomModelLoader = (sdk: any, modelID: string, options?: Record<string, any>, model?: Model) => Promise<any>
 type CustomVarsLoader = (options: Record<string, any>) => Record<string, string>
 type CustomDiscoverModels = () => Promise<Record<string, Model>>
+interface OpenAIModelsResponse {
+  data: Array<{
+    id: string
+    context_length?: number
+    max_context_length?: number
+    max_output_tokens?: number
+  }>
+}
+
+type DiscoveryResult =
+  | { action: "delete"; providerID: string }
+  | { action: "update"; providerID: string; models: Record<string, Model> }
+  | { action: "skip" }
 type CustomLoader = (provider: Info) => Effect.Effect<{
   autoload: boolean
   getModel?: CustomModelLoader
@@ -1127,6 +1142,7 @@ export type DefaultModelError = ModelNotFoundError | NoProvidersError | NoModels
 export type Error = ModelNotFoundError | InitError | NoProvidersError | NoModelsError
 
 export interface Interface {
+  readonly init: () => Effect.Effect<void>
   readonly list: () => Effect.Effect<Record<ProviderV2.ID, Info>>
   readonly getProvider: (providerID: ProviderV2.ID) => Effect.Effect<Info>
   readonly getModel: (providerID: ProviderV2.ID, modelID: ModelV2.ID) => Effect.Effect<Model, ModelNotFoundError>
@@ -1146,6 +1162,9 @@ interface State {
   sdk: Map<string, BundledSDK>
   modelLoaders: Record<string, CustomModelLoader>
   varsLoaders: Record<string, CustomVarsLoader>
+  discoveryLoaders: Record<string, CustomDiscoverModels>
+  discoveryDone: boolean
+  cfg: ConfigV1.Info
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Provider") {}
@@ -1309,6 +1328,7 @@ export const layer = Layer.effect(
     const plugin = yield* Plugin.Service
     const modelsDevSvc = yield* ModelsDev.Service
     const runtimeFlags = yield* RuntimeFlags.Service
+    const http = yield* HttpClient.HttpClient
 
     const state = yield* InstanceState.make<State>(() =>
       Effect.gen(function* () {
@@ -1560,20 +1580,6 @@ export const layer = Layer.effect(
           mergeProvider(providerID, partial)
         }
 
-        const gitlab = ProviderV2.ID.make("gitlab")
-        if (discoveryLoaders[gitlab] && providers[gitlab] && isProviderAllowed(gitlab)) {
-          yield* Effect.promise(async () => {
-            try {
-              const discovered = await discoveryLoaders[gitlab]()
-              for (const [modelID, model] of Object.entries(discovered)) {
-                if (!providers[gitlab].models[modelID]) {
-                  providers[gitlab].models[modelID] = model
-                }
-              }
-            } catch (e) {}
-          })
-        }
-
         for (const [id, provider] of Object.entries(providers)) {
           const providerID = ProviderV2.ID.make(id)
           if (!isProviderAllowed(providerID)) {
@@ -1618,7 +1624,12 @@ export const layer = Layer.effect(
           }
 
           if (Object.keys(provider.models).length === 0) {
-            delete providers[providerID]
+            // Don't delete providers that will have models discovered in init()
+            const hasDiscoveryLoader = discoveryLoaders[providerID] !== undefined
+            const hasConfigBaseURL = cfg.provider?.[providerID]?.options?.baseURL
+            if (!hasDiscoveryLoader && !hasConfigBaseURL) {
+              delete providers[providerID]
+            }
             continue
           }
         }
@@ -1630,11 +1641,243 @@ export const layer = Layer.effect(
           sdk,
           modelLoaders,
           varsLoaders,
+          discoveryLoaders,
+          discoveryDone: false,
+          cfg,
         }
       }),
     )
 
     const list = Effect.fn("Provider.list")(() => InstanceState.use(state, (s) => s.providers))
+
+    const init = Effect.fn("Provider.init")(function* () {
+      const s = yield* InstanceState.get(state)
+      if (s.discoveryDone) return
+      const cfg = s.cfg
+
+      const providersToDiscover: Array<{
+        providerID: string
+        discover?: CustomDiscoverModels
+        inlineFetch: boolean
+      }> = []
+
+      for (const [providerID, discover] of Object.entries(s.discoveryLoaders)) {
+        providersToDiscover.push({ providerID, discover, inlineFetch: false })
+      }
+
+      for (const [providerID, configProvider] of Object.entries(cfg.provider ?? {})) {
+        if (s.discoveryLoaders[providerID]) continue
+        const npm = configProvider?.npm ?? "@ai-sdk/openai-compatible"
+        if (npm !== "@ai-sdk/openai-compatible") continue
+        const baseURL = configProvider?.options?.baseURL
+        if (typeof baseURL !== "string" || baseURL === "") continue
+        if (configProvider?.discoverModels === false) continue
+        providersToDiscover.push({ providerID, inlineFetch: true })
+      }
+
+      const discoveryResults = yield* Effect.forEach(
+        providersToDiscover,
+        ({ providerID, discover, inlineFetch }): Effect.Effect<DiscoveryResult> => {
+          const provider = s.providers[ProviderV2.ID.make(providerID)]
+          if (!provider || provider.source !== "config") {
+            return Effect.succeed({ action: "skip" })
+          }
+          return discoverProviderModels(providerID, discover, inlineFetch, provider, cfg, s, http, auth)
+        },
+        { concurrency: "unbounded" },
+      )
+
+      // Apply all discovery results atomically
+      for (const result of discoveryResults) {
+        if (result.action === "skip") continue
+        const key = ProviderV2.ID.make(result.providerID)
+        if (result.action === "delete") {
+          delete s.providers[key]
+        } else {
+          const p = s.providers[key]
+          if (!p) {
+            yield* Effect.logWarning("Provider disappeared between discovery and apply", { provider: result.providerID })
+            continue
+          }
+          s.providers[key] = { ...p, models: result.models }
+        }
+      }
+      s.discoveryDone = true
+    })
+
+    function discoverProviderModels(
+      providerID: string,
+      discover: CustomDiscoverModels | undefined,
+      inlineFetch: boolean,
+      provider: Info,
+      cfg: ConfigV1.Info,
+      s: State,
+      http: HttpClient.HttpClient,
+      auth: Auth.Interface,
+    ): Effect.Effect<DiscoveryResult> {
+      return Effect.gen(function* () {
+        const api = provider.options?.baseURL ?? ""
+        if (!api) return { action: "skip" }
+
+        const authExit = yield* auth.get(ProviderV2.ID.make(providerID)).pipe(Effect.exit)
+        const authResult = Exit.isSuccess(authExit) ? authExit.value : undefined
+
+        const headers: Record<string, string> = {}
+        if (authResult?.type === "api" && authResult.key) {
+          headers["Authorization"] = `Bearer ${authResult.key}`
+        }
+        if (!headers["Authorization"] && provider.key) {
+          headers["Authorization"] = `Bearer ${provider.key}`
+        }
+        if (!headers["Authorization"] && provider.options?.apiKey) {
+          headers["Authorization"] = `Bearer ${provider.options.apiKey}`
+        }
+
+        // Helper: return "delete" if provider has no models, otherwise "skip"
+        const emptyOrSkip = (): DiscoveryResult =>
+          Object.keys(provider.models).length === 0
+            ? { action: "delete", providerID }
+            : { action: "skip" }
+
+        let discovered: Set<string>
+        let discoveredLimits: Map<string, { context: number; output: number }> | undefined
+        if (inlineFetch) {
+          const url = api.endsWith("/v1") ? `${api}/models` : `${api}/v1/models`
+          const request = HttpClientRequest.get(url).pipe(
+            HttpClientRequest.setHeaders(headers),
+          )
+          const fetchExit = yield* http.execute(request).pipe(
+            Effect.timeout("10 seconds"),
+            Effect.exit,
+          )
+          if (Exit.isFailure(fetchExit)) {
+             yield* Effect.logWarning("model discovery failed", { provider: providerID, reason: "fetch error or timeout" })
+             return emptyOrSkip()
+           }
+
+          const res = fetchExit.value
+          if (res.status < 200 || res.status >= 300) {
+             yield* Effect.logWarning("model discovery failed", { provider: providerID, reason: `non-2xx status ${res.status}` })
+             return emptyOrSkip()
+           }
+
+          const jsonExit = yield* res.json.pipe(Effect.exit)
+          if (Exit.isFailure(jsonExit)) {
+             yield* Effect.logWarning("model discovery failed", { provider: providerID, reason: "failed to parse JSON response" })
+             return emptyOrSkip()
+           }
+
+         const json = jsonExit.value as unknown as OpenAIModelsResponse
+           discovered = new Set<string>(
+             (json.data ?? [])
+               .filter((m) => typeof m.id === "string")
+               .map((m) => m.id),
+           )
+           // Parse context/output limits from API response
+           discoveredLimits = new Map<string, { context: number; output: number }>()
+           for (const m of json.data ?? []) {
+             if (typeof m.id !== "string") continue
+             const context = m.context_length ?? m.max_context_length
+             const output = m.max_output_tokens
+             if (typeof context === "number" && typeof output === "number") {
+               discoveredLimits.set(m.id, { context, output })
+             }
+           }
+        } else if (discover) {
+          const discoverExit = yield* Effect.promise(() => discover()).pipe(Effect.exit)
+          if (Exit.isFailure(discoverExit)) {
+             yield* Effect.logWarning("model discovery failed", { provider: providerID, reason: "custom discover function failed" })
+             return emptyOrSkip()
+           }
+
+          const result = discoverExit.value
+          discovered = new Set<string>(
+            Object.entries(result)
+              .filter(([_, m]) => m && typeof m.id === "string")
+              .map(([id]) => id),
+          )
+        } else {
+          return { action: "skip" }
+        }
+
+        // Build new models record — never mutate provider.models
+        const newModels = { ...provider.models }
+
+        // Filter out Models.dev models not returned by discovery (only for inlineFetch)
+        // Preserve config-defined models (they were explicitly configured by the user)
+        if (inlineFetch) {
+          const configProvider = cfg.provider?.[providerID]
+          if (configProvider) {
+            const configModelIDs = configProvider.models ? Object.keys(configProvider.models) : []
+            for (const modelID of Object.keys(newModels)) {
+              if (configModelIDs.includes(modelID)) continue
+              if (!discovered.has(modelID)) delete newModels[modelID]
+            }
+          }
+        }
+
+        // Merge discovered models into newModels
+        const npm = cfg.provider?.[providerID]?.npm ?? "@ai-sdk/openai-compatible"
+        const configProvider = cfg.provider?.[providerID]
+        const configModelIDs = configProvider?.models ? Object.keys(configProvider.models) : []
+        for (const modelID of discovered) {
+          const existing = newModels[modelID]
+          const limits = discoveredLimits?.get(modelID)
+          const context = limits?.context ?? 128000
+          const output = limits?.output ?? 128000
+
+       // Update limits for non-config models (config models preserve their limits)
+           if (existing && !configModelIDs.includes(modelID)) {
+             newModels[modelID] = { ...existing, limit: { context, output } }
+             continue
+           }
+           if (existing) {
+             // Warn when config limits exceed discovered limits
+             if (configModelIDs.includes(modelID) && limits) {
+               if (existing.limit.context > limits.context || existing.limit.output > limits.output) {
+                 yield* Effect.logWarning("config limits exceed discovered limits", {
+                   provider: providerID,
+                   model: modelID,
+                   configContext: existing.limit.context,
+                   discoveredContext: limits.context,
+                   configOutput: existing.limit.output,
+                   discoveredOutput: limits.output,
+                 })
+               }
+             }
+             continue
+           }
+
+          newModels[modelID] = {
+            id: ModelV2.ID.make(modelID),
+            providerID: ProviderV2.ID.make(providerID),
+            name: modelID,
+            api: { id: modelID, url: api, npm },
+            family: "discovered",
+            status: "active",
+            headers: {},
+            options: {},
+            cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+            limit: { context, output },
+            capabilities: {
+              temperature: false,
+              reasoning: false,
+              attachment: false,
+              toolcall: true,
+              input: { text: true, audio: false, image: false, video: false, pdf: false },
+              output: { text: true, audio: false, image: false, video: false, pdf: false },
+              interleaved: false,
+            },
+            release_date: "",
+            variants: {},
+          }
+        }
+
+        // If no models remain after discovery, signal deletion
+        if (Object.keys(newModels).length === 0) return { action: "delete", providerID }
+        return { action: "update", providerID, models: newModels }
+      })
+    }
 
     async function resolveSDK(model: Model, s: State, envs: Record<string, string | undefined>) {
       try {
@@ -1943,9 +2186,18 @@ export const layer = Layer.effect(
         providerID: provider.id,
         modelID: model.id,
       }
-    })
+   })
 
-    return Service.of({ list, getProvider, getModel, getLanguage, closest, getSmallModel, defaultModel })
+    return Service.of({
+      init: () => init(),
+      list,
+      getProvider,
+      getModel,
+      getLanguage,
+      closest,
+      getSmallModel,
+      defaultModel,
+    })
   }),
 )
 
@@ -1958,6 +2210,7 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(Plugin.defaultLayer),
     Layer.provide(ModelsDev.defaultLayer),
     Layer.provide(RuntimeFlags.defaultLayer),
+    Layer.provide(FetchHttpClient.layer),
   ),
 )
 
@@ -1987,6 +2240,7 @@ export const node = LayerNode.make(layer, [
   Plugin.node,
   ModelsDev.node,
   RuntimeFlags.node,
+  httpClient,
 ])
 
 export * as Provider from "./provider"

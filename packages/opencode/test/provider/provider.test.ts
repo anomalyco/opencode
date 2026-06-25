@@ -2,6 +2,7 @@ import { afterEach, expect, test } from "bun:test"
 import { mkdir, unlink } from "fs/promises"
 import path from "path"
 import { Effect, Layer } from "effect"
+import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
@@ -17,7 +18,7 @@ import { Provider } from "@/provider/provider"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Filesystem } from "@/util/filesystem"
 import { InstanceLayer } from "@/project/instance-layer"
-import { testEffect } from "../lib/effect"
+import { pollWithTimeout, testEffect } from "../lib/effect"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 
@@ -65,6 +66,7 @@ const providerLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
     Layer.provide(Plugin.defaultLayer),
     Layer.provide(ModelsDev.defaultLayer),
     Layer.provide(RuntimeFlags.layer(flags)),
+    Layer.provide(FetchHttpClient.layer),
   )
 
 const list = Provider.use.list()
@@ -78,6 +80,36 @@ const paid = (providers: Record<string, { models: Record<string, { cost: { input
 const languageBaseURL = (language: unknown) => (language as { config: { baseURL: string } }).config.baseURL
 
 const it = testEffect(Layer.mergeAll(Provider.defaultLayer, Env.defaultLayer, Plugin.defaultLayer))
+
+// Mock HTTP client for discovery tests - replaces globalThis.fetch mocking
+const mockHttpClientResponse = (handler: (request: HttpClientRequest.HttpClientRequest) => Response) => {
+  const client = HttpClient.make(
+    (request) => Effect.succeed(HttpClientResponse.fromWeb(request, handler(request))),
+  )
+  return Layer.succeed(HttpClient.HttpClient, client)
+}
+
+const jsonResponse = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } })
+
+const textResponse = (text: string, status = 200) =>
+  new Response(text, { status, headers: { "Content-Type": "text/html" } })
+
+const discoveryTestLayer = (handler: (request: HttpClientRequest.HttpClientRequest) => Response) =>
+  Provider.layer.pipe(
+    Layer.provide(FSUtil.defaultLayer),
+    Layer.provide(Env.defaultLayer),
+    Layer.provide(Config.defaultLayer),
+    Layer.provide(Auth.defaultLayer),
+    Layer.provide(Plugin.defaultLayer),
+    Layer.provide(ModelsDev.defaultLayer),
+    Layer.provide(RuntimeFlags.layer({})),
+    Layer.provide(mockHttpClientResponse(handler)),
+  )
+
+const discoveryTestEffect = (handler: (request: HttpClientRequest.HttpClientRequest) => Response) =>
+  testEffect(discoveryTestLayer(handler))
+
 const experimentalModels = testEffect(providerLayer({ enableExperimentalModels: true }))
 
 const alphaProviderConfig = {
@@ -1792,4 +1824,392 @@ it.effect("opencode loader keeps paid models when auth exists", () =>
     expect(none).toBe(0)
     expect(keyedCount).toBeGreaterThan(0)
   }).pipe(provideMultiInstance),
+)
+
+discoveryTestEffect(() =>
+  jsonResponse({
+    data: [
+      { id: "llama-3.1-8b", object: "model" },
+      { id: "mistral-7b", object: "model" },
+    ],
+  }),
+).instance(
+  "custom provider with baseURL discovers models from remote /models endpoint",
+  () =>
+    Effect.gen(function* () {
+      const provider = yield* Provider.Service
+      yield* provider.init()
+      const providers = yield* list
+      const p = providers[ProviderV2.ID.make("llamacpp-router")]
+      expect(p).toBeDefined()
+      yield* pollWithTimeout(
+        Effect.gen(function* () {
+          const p = (yield* list)[ProviderV2.ID.make("llamacpp-router")]
+          return p?.models["llama-3.1-8b"] && p?.models["mistral-7b"] ? (true as const) : undefined
+        }),
+        "discovered models not found",
+      )
+      const discoveredProvider = (yield* list)[ProviderV2.ID.make("llamacpp-router")]
+      expect(Object.keys(discoveredProvider.models)).toContain("llama-3.1-8b")
+      expect(Object.keys(discoveredProvider.models)).toContain("mistral-7b")
+    }),
+  {
+    config: {
+      provider: {
+        "llamacpp-router": {
+          npm: "@ai-sdk/openai-compatible",
+          name: "llama.cpp router",
+          options: {
+            baseURL: "http://localhost:8080/v1",
+            timeout: false,
+          },
+        },
+      },
+    },
+  },
+)
+
+discoveryTestEffect(() => jsonResponse({}, 500)).instance(
+  "custom provider with failing /models endpoint is removed gracefully",
+  () =>
+    Effect.gen(function* () {
+      const provider = yield* Provider.Service
+      yield* provider.init()
+      yield* pollWithTimeout(
+        Effect.gen(function* () {
+          const p = (yield* list)[ProviderV2.ID.make("failing-provider")]
+          return p === undefined ? (true as const) : undefined
+        }),
+        "provider not removed after failed discovery",
+      )
+      const providers = yield* list
+      expect(providers[ProviderV2.ID.make("failing-provider")]).toBeUndefined()
+    }),
+  {
+    config: {
+      provider: {
+        "failing-provider": {
+          npm: "@ai-sdk/openai-compatible",
+          name: "Failing Provider",
+          options: {
+            baseURL: "http://localhost:8080/v1",
+          },
+        },
+      },
+    },
+  },
+)
+
+discoveryTestEffect(() => textResponse("<html>error</html>")).instance(
+  "custom provider handles non-JSON response gracefully",
+  () =>
+    Effect.gen(function* () {
+      const provider = yield* Provider.Service
+      yield* provider.init()
+      yield* pollWithTimeout(
+        Effect.gen(function* () {
+          const p = (yield* list)[ProviderV2.ID.make("non-json-provider")]
+          return p === undefined ? (true as const) : undefined
+        }),
+        "provider not removed after non-JSON response",
+      )
+      const providers = yield* list
+      expect(providers[ProviderV2.ID.make("non-json-provider")]).toBeUndefined()
+    }),
+  {
+    config: {
+      provider: {
+        "non-json-provider": {
+          npm: "@ai-sdk/openai-compatible",
+          name: "Non-JSON Provider",
+          options: {
+            baseURL: "http://localhost:8080/v1",
+          },
+        },
+      },
+    },
+  },
+)
+
+discoveryTestEffect(() => jsonResponse({ data: [] })).instance(
+  "custom provider handles empty data array gracefully",
+  () =>
+    Effect.gen(function* () {
+      const provider = yield* Provider.Service
+      yield* provider.init()
+      yield* pollWithTimeout(
+        Effect.gen(function* () {
+          const p = (yield* list)[ProviderV2.ID.make("empty-provider")]
+          return p === undefined ? (true as const) : undefined
+        }),
+        "provider not removed after empty discovery",
+      )
+      const providers = yield* list
+      expect(providers[ProviderV2.ID.make("empty-provider")]).toBeUndefined()
+    }),
+  {
+    config: {
+      provider: {
+        "empty-provider": {
+          npm: "@ai-sdk/openai-compatible",
+          name: "Empty Provider",
+          options: {
+            baseURL: "http://localhost:8080/v1",
+          },
+        },
+      },
+    },
+  },
+)
+
+discoveryTestEffect(() =>
+  jsonResponse({
+    data: [
+      { id: "llama-3.1-8b", object: "model" },
+      { id: "mistral-7b", object: "model" },
+      { id: "gemma-2-9b", object: "model" },
+    ],
+  }),
+).instance(
+  "custom provider discovers additional models while preserving config-defined model settings",
+  () =>
+    Effect.gen(function* () {
+      const provider = yield* Provider.Service
+      yield* provider.init()
+      const providers = yield* list
+      const p = providers[ProviderV2.ID.make("llamacpp-router")]
+      expect(p).toBeDefined()
+
+      // Wait for discovery to complete
+      yield* pollWithTimeout(
+        Effect.gen(function* () {
+          const p = (yield* list)[ProviderV2.ID.make("llamacpp-router")]
+          return p?.models["mistral-7b"] && p?.models["gemma-2-9b"] ? (true as const) : undefined
+        }),
+        "discovered models not found",
+      )
+
+      const discoveredProvider = (yield* list)[ProviderV2.ID.make("llamacpp-router")]
+
+      // Config-defined model should preserve custom settings
+      expect(discoveredProvider.models["llama-3.1-8b"]).toBeDefined()
+      expect(discoveredProvider.models["llama-3.1-8b"].name).toBe("My Llama")
+      expect(discoveredProvider.models["llama-3.1-8b"].capabilities.reasoning).toBe(true)
+
+      // Discovered models should be added
+      expect(discoveredProvider.models["mistral-7b"]).toBeDefined()
+      expect(discoveredProvider.models["gemma-2-9b"]).toBeDefined()
+    }),
+  {
+    config: {
+      provider: {
+        "llamacpp-router": {
+          npm: "@ai-sdk/openai-compatible",
+          name: "llama.cpp router",
+          options: {
+            baseURL: "http://localhost:8080/v1",
+          },
+          models: {
+            "llama-3.1-8b": {
+              name: "My Llama",
+              reasoning: true,
+            },
+          },
+        },
+      },
+    },
+  },
+)
+
+discoveryTestEffect(() =>
+  jsonResponse({
+    data: [
+      { id: "llama-3.1-8b", object: "model" },
+    ],
+  }),
+).instance(
+  "discoverModels: false skips discovery and preserves config-defined models",
+  () =>
+    Effect.gen(function* () {
+      const provider = yield* Provider.Service
+      yield* provider.init()
+      yield* pollWithTimeout(
+        Effect.gen(function* () {
+          const p = (yield* list)[ProviderV2.ID.make("no-discovery-provider")]
+          return p !== undefined ? (true as const) : undefined
+        }),
+        "provider disappeared",
+      )
+      const discoveredProvider = (yield* list)[ProviderV2.ID.make("no-discovery-provider")]
+
+      // Provider should exist (not deleted by failed discovery)
+      expect(discoveredProvider).toBeDefined()
+      // Config-defined model should be preserved
+      expect(discoveredProvider.models["config-model"]).toBeDefined()
+      // Discovered model should NOT be present (discovery was skipped)
+      expect(discoveredProvider.models["llama-3.1-8b"]).toBeUndefined()
+    }),
+  {
+    config: {
+      provider: {
+        "no-discovery-provider": {
+          npm: "@ai-sdk/openai-compatible",
+          name: "No Discovery Provider",
+          discoverModels: false,
+          options: {
+            baseURL: "http://localhost:8080/v1",
+          },
+          models: {
+            "config-model": {
+              name: "Config Model",
+            },
+          },
+        },
+      },
+    },
+  },
+)
+
+discoveryTestEffect(() =>
+  jsonResponse({
+    data: [
+      { id: "llama-3.1-8b", object: "model", context_length: 131072, max_output_tokens: 8192 },
+      { id: "mistral-7b", object: "model", max_context_length: 32768, max_output_tokens: 4096 },
+    ],
+  }),
+).instance(
+  "discovered models use context_length and max_output_tokens from API response",
+  () =>
+    Effect.gen(function* () {
+      const provider = yield* Provider.Service
+      yield* provider.init()
+      yield* pollWithTimeout(
+        Effect.gen(function* () {
+          const p = (yield* list)[ProviderV2.ID.make("context-provider")]
+          return p?.models["llama-3.1-8b"] && p?.models["mistral-7b"] ? (true as const) : undefined
+        }),
+        "discovered models not found",
+      )
+      const discoveredProvider = (yield* list)[ProviderV2.ID.make("context-provider")]
+
+      // context_length field should be used for context limit
+      expect(discoveredProvider.models["llama-3.1-8b"].limit.context).toBe(131072)
+      expect(discoveredProvider.models["llama-3.1-8b"].limit.output).toBe(8192)
+
+      // max_context_length field should also work
+      expect(discoveredProvider.models["mistral-7b"].limit.context).toBe(32768)
+      expect(discoveredProvider.models["mistral-7b"].limit.output).toBe(4096)
+    }),
+  {
+    config: {
+      provider: {
+        "context-provider": {
+          npm: "@ai-sdk/openai-compatible",
+          name: "Context Provider",
+          options: {
+            baseURL: "http://localhost:8080/v1",
+          },
+        },
+      },
+    },
+  },
+)
+
+discoveryTestEffect(() =>
+  jsonResponse({
+    data: [
+      { id: "config-model", object: "model", context_length: 131072, max_output_tokens: 8192 },
+    ],
+  }),
+).instance(
+  "config-defined model limits take precedence over discovered limits",
+  () =>
+    Effect.gen(function* () {
+      const provider = yield* Provider.Service
+      yield* provider.init()
+      yield* pollWithTimeout(
+        Effect.gen(function* () {
+          const p = (yield* list)[ProviderV2.ID.make("config-limit-provider")]
+          return p !== undefined ? (true as const) : undefined
+        }),
+        "provider disappeared",
+      )
+      const discoveredProvider = (yield* list)[ProviderV2.ID.make("config-limit-provider")]
+
+      // Config-defined limits should be preserved, not overwritten by discovery
+      expect(discoveredProvider.models["config-model"].limit.context).toBe(65536)
+      expect(discoveredProvider.models["config-model"].limit.output).toBe(4096)
+    }),
+  {
+    config: {
+      provider: {
+        "config-limit-provider": {
+          npm: "@ai-sdk/openai-compatible",
+          name: "Config Limit Provider",
+          options: {
+            baseURL: "http://localhost:8080/v1",
+          },
+          models: {
+            "config-model": {
+              name: "Config Model",
+              limit: {
+                context: 65536,
+                output: 4096,
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+)
+
+discoveryTestEffect(() =>
+  jsonResponse({
+    data: [
+      { id: "overconfigured-model", object: "model", context_length: 32768, max_output_tokens: 2048 },
+    ],
+  }),
+).instance(
+  "config limits exceeding discovered limits are preserved and logged as warning",
+  () =>
+    Effect.gen(function* () {
+      const provider = yield* Provider.Service
+      yield* provider.init()
+      yield* pollWithTimeout(
+        Effect.gen(function* () {
+          const p = (yield* list)[ProviderV2.ID.make("overconfigured-provider")]
+          return p !== undefined ? (true as const) : undefined
+        }),
+        "provider disappeared",
+      )
+      const discoveredProvider = (yield* list)[ProviderV2.ID.make("overconfigured-provider")]
+
+      // Config limits that exceed discovered limits should still be preserved
+      // (a warning is logged but the user's config wins)
+      expect(discoveredProvider.models["overconfigured-model"].limit.context).toBe(131072)
+      expect(discoveredProvider.models["overconfigured-model"].limit.output).toBe(8192)
+    }),
+  {
+    config: {
+      provider: {
+        "overconfigured-provider": {
+          npm: "@ai-sdk/openai-compatible",
+          name: "Overconfigured Provider",
+          options: {
+            baseURL: "http://localhost:8080/v1",
+          },
+          models: {
+            "overconfigured-model": {
+              name: "Overconfigured Model",
+              limit: {
+                context: 131072,
+                output: 8192,
+              },
+            },
+          },
+        },
+      },
+    },
+  },
 )
