@@ -665,7 +665,7 @@ it.instance(
   "getSmallModel selects the latest model in the preferred family",
   Effect.gen(function* () {
     const model = yield* Provider.use.getSmallModel(ProviderV2.ID.make("test-provider"))
-    expect(model?.id).toBe("new-flash")
+    expect(model?.id).toBe(ModelV2.ID.make("new-flash"))
   }),
   {
     config: {
