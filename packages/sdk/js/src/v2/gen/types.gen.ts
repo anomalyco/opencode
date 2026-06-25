@@ -1129,7 +1129,7 @@ export type GlobalEvent = {
           timestamp: number
           sessionID: string
           attempt: number
-          error: SessionEventRetryError
+          error: SessionNextRetryError
         }
       }
     | {
@@ -2971,7 +2971,7 @@ export type ToolFileContent = {
 
 export type LlmToolContent = ToolTextContent | ToolFileContent
 
-export type SessionEventRetryError = {
+export type SessionNextRetryError = {
   message: string
   statusCode?: number
   isRetryable: boolean
@@ -3616,7 +3616,7 @@ export type SyncEventSessionNextRetried = {
       timestamp: number
       sessionID: string
       attempt: number
-      error: SessionEventRetryError
+      error: SessionNextRetryError
     }
   }
 }
@@ -5048,7 +5048,7 @@ export type V2EventSessionNextRetried = {
     timestamp: number
     sessionID: string
     attempt: number
-    error: SessionEventRetryError
+    error: SessionNextRetryError
   }
 }
 
@@ -6509,7 +6509,7 @@ export type EventSessionNextRetried = {
     timestamp: number
     sessionID: string
     attempt: number
-    error: SessionEventRetryError
+    error: SessionNextRetryError
   }
 }
 

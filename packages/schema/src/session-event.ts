@@ -20,7 +20,7 @@ export const Source = Schema.Struct({
   end: NonNegativeInt,
   text: Schema.String,
 }).annotate({
-  identifier: "SessionEvent.Source",
+  identifier: "session.next.event.source",
 })
 export interface Source extends Schema.Schema.Type<typeof Source> {}
 
@@ -380,7 +380,7 @@ export const RetryError = Schema.Struct({
   responseBody: Schema.String.pipe(optional),
   metadata: Schema.Record(Schema.String, Schema.String).pipe(optional),
 }).annotate({
-  identifier: "SessionEvent.RetryError",
+  identifier: "session.next.retry_error",
 })
 export interface RetryError extends Schema.Schema.Type<typeof RetryError> {}
 
