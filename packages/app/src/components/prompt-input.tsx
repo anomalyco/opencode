@@ -2196,7 +2196,9 @@ function ComposerModelControl(props: { state: ComposerModelControlState }) {
                 )}
               </Show>
               <span class="truncate">{props.state.modelName}</span>
-              <Icon name="chevron-down" size="small" class="shrink-0 text-v2-icon-icon-muted" />
+              <span class="-ml-1 shrink-0 flex size-fit">
+                <Icon name="chevron-down" size="small" class="text-v2-icon-icon-muted" />
+              </span>
             </Button>
           </TooltipKeybind>
         }
@@ -2225,7 +2227,9 @@ function ComposerModelControl(props: { state: ComposerModelControlState }) {
               )}
             </Show>
             <span class="truncate">{props.state.modelName}</span>
-            <Icon name="chevron-down" size="small" class="shrink-0 text-v2-icon-icon-muted" />
+            <span class="-ml-1 shrink-0 flex size-fit">
+              <Icon name="chevron-down" size="small" class="text-v2-icon-icon-muted" />
+            </span>
           </ModelSelectorPopover>
         </TooltipKeybind>
       </Show>
