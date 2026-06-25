@@ -22,7 +22,7 @@ export function captureTabDragLayout(list: HTMLElement, order: string[]) {
   for (const slot of slots) {
     const id = slot.dataset.tabKey
     if (!id) continue
-    const tab = slot.querySelector<HTMLElement>("[data-titlebar-tab]")
+    const tab = slot.matches("[data-titlebar-tab]") ? slot : slot.querySelector<HTMLElement>("[data-titlebar-tab]")
     if (!tab) continue
     tabWidthById.set(id, tab.getBoundingClientRect().width)
   }
@@ -33,7 +33,7 @@ export function captureTabDragLayout(list: HTMLElement, order: string[]) {
     const secondId = order[1]
     for (const slot of slots) {
       if (slot.dataset.tabKey !== secondId) continue
-      const tab = slot.querySelector<HTMLElement>("[data-titlebar-tab]")
+      const tab = slot.matches("[data-titlebar-tab]") ? slot : slot.querySelector<HTMLElement>("[data-titlebar-tab]")
       if (!tab) break
       const style = getComputedStyle(slot)
       dividerWidth =

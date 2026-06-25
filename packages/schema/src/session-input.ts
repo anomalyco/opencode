@@ -5,7 +5,7 @@ import { Prompt } from "./prompt"
 import { DateTimeUtcFromMillis, NonNegativeInt } from "./schema"
 import { SessionDelivery } from "./session-delivery"
 import { SessionID } from "./session-id"
-import { SessionMessageID } from "./session-message-id"
+import { SessionMessage } from "./session-message"
 
 export const Delivery = SessionDelivery.Delivery
 export type Delivery = SessionDelivery.Delivery
@@ -13,7 +13,7 @@ export type Delivery = SessionDelivery.Delivery
 export interface Admitted extends Schema.Schema.Type<typeof Admitted> {}
 export const Admitted = Schema.Struct({
   admittedSeq: NonNegativeInt,
-  id: SessionMessageID.ID,
+  id: SessionMessage.ID,
   sessionID: SessionID,
   prompt: Prompt,
   delivery: Delivery,

@@ -2,7 +2,7 @@ export * as Model from "./model"
 
 import { Schema } from "effect"
 import { Provider } from "./provider"
-import { withStatics } from "./schema"
+import { statics } from "./schema"
 
 export const ID = Schema.String.pipe(Schema.brand("ModelV2.ID"))
 export type ID = typeof ID.Type
@@ -83,7 +83,7 @@ export const Info = Schema.Struct({
 })
   .annotate({ identifier: "ModelV2.Info" })
   .pipe(
-    withStatics((schema) => ({
+    statics((schema) => ({
       empty: (providerID: Provider.ID, modelID: ID) =>
         schema.make({
           id: modelID,

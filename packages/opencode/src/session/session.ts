@@ -39,11 +39,11 @@ import { SessionID, MessageID, PartID } from "./schema"
 import type { Provider } from "@/provider/provider"
 import { Global } from "@opencode-ai/core/global"
 import { Effect, Layer, Option, Context, Schema, Types } from "effect"
-import { NonNegativeInt, optionalOmitUndefined } from "@opencode-ai/core/schema"
+import { NonNegativeInt, optional } from "@opencode-ai/core/schema"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
-import { SessionMessageID } from "@opencode-ai/schema/session-message-id"
+import { SessionMessage } from "@opencode-ai/schema/session-message"
 
 const runtime = makeRuntime(Database.Service, Database.defaultLayer)
 
@@ -146,7 +146,7 @@ export function toRow(info: Info) {
     tokens_cache_write: (info.tokens ?? EmptyTokens).cache.write,
     revert: info.revert
       ? {
-          messageID: SessionMessageID.ID.make(info.revert.messageID),
+          messageID: SessionMessage.ID.make(info.revert.messageID),
           partID: info.revert.partID,
           snapshot: info.revert.snapshot,
           diff: info.revert.diff,
@@ -178,7 +178,7 @@ const Summary = Schema.Struct({
   additions: Schema.Finite,
   deletions: Schema.Finite,
   files: Schema.Finite,
-  diffs: optionalOmitUndefined(Schema.Array(Snapshot.FileDiff)),
+  diffs: optional(Schema.Array(Snapshot.FileDiff)),
 })
 
 const Tokens = Schema.Struct({
@@ -204,21 +204,21 @@ export const ArchivedTimestamp = Schema.Finite
 const Time = Schema.Struct({
   created: NonNegativeInt,
   updated: NonNegativeInt,
-  compacting: optionalOmitUndefined(NonNegativeInt),
-  archived: optionalOmitUndefined(ArchivedTimestamp),
+  compacting: optional(NonNegativeInt),
+  archived: optional(ArchivedTimestamp),
 })
 
 const Revert = Schema.Struct({
   messageID: MessageID,
-  partID: optionalOmitUndefined(PartID),
-  snapshot: optionalOmitUndefined(Schema.String),
-  diff: optionalOmitUndefined(Schema.String),
+  partID: optional(PartID),
+  snapshot: optional(Schema.String),
+  diff: optional(Schema.String),
 })
 
 const Model = Schema.Struct({
   id: ModelV2.ID,
   providerID: ProviderV2.ID,
-  variant: optionalOmitUndefined(Schema.String),
+  variant: optional(Schema.String),
 })
 
 export const Metadata = Schema.Record(Schema.String, Schema.Any)
@@ -227,28 +227,28 @@ export const Info = Schema.Struct({
   id: SessionID,
   slug: Schema.String,
   projectID: ProjectV2.ID,
-  workspaceID: optionalOmitUndefined(WorkspaceV2.ID),
+  workspaceID: optional(WorkspaceV2.ID),
   directory: Schema.String,
-  path: optionalOmitUndefined(Schema.String),
-  parentID: optionalOmitUndefined(SessionID),
-  summary: optionalOmitUndefined(Summary),
-  cost: optionalOmitUndefined(Schema.Finite),
-  tokens: optionalOmitUndefined(Tokens),
-  share: optionalOmitUndefined(Share),
+  path: optional(Schema.String),
+  parentID: optional(SessionID),
+  summary: optional(Summary),
+  cost: optional(Schema.Finite),
+  tokens: optional(Tokens),
+  share: optional(Share),
   title: Schema.String,
-  agent: optionalOmitUndefined(Schema.String),
-  model: optionalOmitUndefined(Model),
+  agent: optional(Schema.String),
+  model: optional(Model),
   version: Schema.String,
-  metadata: optionalOmitUndefined(Metadata),
+  metadata: optional(Metadata),
   time: Time,
-  permission: optionalOmitUndefined(PermissionV1.Ruleset),
-  revert: optionalOmitUndefined(Revert),
+  permission: optional(PermissionV1.Ruleset),
+  revert: optional(Revert),
 }).annotate({ identifier: "Session" })
 export type Info = Types.DeepMutable<Schema.Schema.Type<typeof Info>>
 
 export const ProjectInfo = Schema.Struct({
   id: ProjectV2.ID,
-  name: optionalOmitUndefined(Schema.String),
+  name: optional(Schema.String),
   worktree: Schema.String,
 }).annotate({ identifier: "ProjectSummary" })
 export type ProjectInfo = Types.DeepMutable<Schema.Schema.Type<typeof ProjectInfo>>
