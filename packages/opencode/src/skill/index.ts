@@ -354,13 +354,10 @@ export function fmt(list: Info[], opts: { verbose: boolean }) {
   ].join("\n")
 }
 
-export const node = LayerNode.make(layer, [
-  Discovery.node,
-  Config.node,
-  EventV2Bridge.node,
-  FSUtil.node,
-  Global.node,
-  RuntimeFlags.node,
-])
+export const node = LayerNode.make({
+  service: Service,
+  layer: layer,
+  deps: [Discovery.node, Config.node, EventV2Bridge.node, FSUtil.node, Global.node, RuntimeFlags.node],
+})
 
 export * as Skill from "."

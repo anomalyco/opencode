@@ -50,14 +50,14 @@ const brokenPluginLayer = Layer.succeed(
 
 const root = LayerNode.group([ToolRegistry.node, Agent.node])
 const replacements = [
-  LayerNode.replace(Config.node, configLayer),
-  LayerNode.replace(RuntimeFlags.node, RuntimeFlags.layer()),
+  LayerNode.replace(Config.layer, configLayer),
+  LayerNode.replace(RuntimeFlags.defaultLayer, RuntimeFlags.layer()),
 ]
 
 const it = testEffect(LayerNode.buildLayer(root, { replacements }))
 const withBrokenPlugin = testEffect(
   LayerNode.buildLayer(root, {
-    replacements: [...replacements, LayerNode.replace(Plugin.node, brokenPluginLayer)],
+    replacements: [...replacements, LayerNode.replace(Plugin.layer, brokenPluginLayer)],
   }),
 )
 

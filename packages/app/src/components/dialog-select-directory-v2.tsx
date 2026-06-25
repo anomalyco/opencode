@@ -39,7 +39,7 @@ interface DialogSelectDirectoryV2Props {
 
 export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
   const global = useGlobal()
-  const { sync, sdk } = global.createServerCtx(props.server)
+  const { sync, sdk } = global.ensureServerCtx(props.server)
   const dialog = useDialog()
   const language = useLanguage()
   const policy = pickerMode(props.mode ?? "directory", props.start)

@@ -1,8 +1,8 @@
 export * as Catalog from "./catalog"
 
 import { Array, Context, Effect, Layer, Option, Order, pipe, Schema } from "effect"
+import { Catalog } from "@opencode-ai/schema/catalog"
 import { ModelV2 } from "./model"
-import { ModelRequest } from "./model-request"
 import { ProviderV2 } from "./provider"
 import { EventV2 } from "./event"
 import { Policy } from "./policy"
@@ -18,9 +18,7 @@ export type DefaultModel = { providerID: ProviderV2.ID; modelID: ModelV2.ID }
 
 export const PolicyActions = Schema.Literals(["provider.use"])
 
-export const Event = {
-  Updated: EventV2.define({ type: "catalog.updated", schema: {} }),
-}
+export const Event = Catalog.Event
 
 type Data = {
   providers: Map<ProviderV2.ID, ProviderRecord>
@@ -86,7 +84,8 @@ export const layer = Layer.effect(
               ? { ...model.api, settings: { ...provider.api.settings, ...model.api.settings } }
               : model.api
       const request = {
-        ...ModelRequest.merge({ ...provider.request, generation: {}, options: {} }, model.request),
+        headers: { ...provider.request.headers, ...model.request.headers },
+        body: { ...provider.request.body, ...model.request.body },
         variant: model.request.variant,
       }
       return ModelV2.Info.make({

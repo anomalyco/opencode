@@ -77,7 +77,9 @@ describe("TodoWriteTool", () => {
       yield* setup
       const registry = yield* ToolRegistry.Service
       const service = yield* SessionTodo.Service
-      const todoList = [{ content: "Implement slice", status: "in_progress", priority: "high" }]
+      const todoList: ReadonlyArray<SessionTodo.Info> = [
+        { content: "Implement slice", status: "in_progress", priority: "high" },
+      ]
 
       expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual([TodoWriteTool.name])
       expect(yield* settleTool(registry, call(todoList))).toEqual({
