@@ -2,11 +2,14 @@ import { createEffect, createMemo, onMount, untrack } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useSearchParams } from "@solidjs/router"
 import { NewSessionDesignView } from "@/components/session"
+import { useCommand } from "@/context/command"
 import { useComments } from "@/context/comments"
+import { useLanguage } from "@/context/language"
 import { usePrompt } from "@/context/prompt"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { useServerSync } from "@/context/server-sync"
+import { useTabs } from "@/context/tabs"
 import {
   createSessionComposerControls,
   createSessionComposerState,
@@ -20,13 +23,16 @@ import { useSessionKey } from "@/pages/session/session-layout"
  * timeline. Submitting promotes the draft into a real session (see prompt-input/submit).
  */
 export default function NewSessionPage() {
+  const command = useCommand()
   const prompt = usePrompt()
   const sdk = useSDK()
   const sync = useSync()
   const serverSync = useServerSync()
   const comments = useComments()
+  const language = useLanguage()
+  const tabs = useTabs()
   const route = useSessionKey()
-  const [searchParams, setSearchParams] = useSearchParams<{ prompt?: string }>()
+  const [searchParams, setSearchParams] = useSearchParams<{ draftId?: string; prompt?: string }>()
 
   let inputRef: HTMLDivElement | undefined
 
@@ -57,6 +63,18 @@ export default function NewSessionPage() {
       setSearchParams({ ...searchParams, prompt: undefined })
     })
   })
+
+  command.register("new-session", () => [
+    {
+      id: "tab.close",
+      title: language.t("command.tab.close"),
+      keybind: "mod+w",
+      onSelect: () => {
+        const index = tabs.store.findIndex((tab) => tab.type === "draft" && tab.draftID === searchParams.draftId)
+        if (index !== -1) tabs.removeTab(index)
+      },
+    },
+  ])
 
   onMount(() => {
     requestAnimationFrame(() => inputRef?.focus())
