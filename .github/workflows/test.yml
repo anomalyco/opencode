@@ -65,9 +65,14 @@ jobs:
 
       - name: Run unit tests
         timeout-minutes: 20
-        run: bun turbo test --output-logs=errors-only --log-order=grouped --log-prefix=task
+        run: GITHUB_ACTIONS=false bun turbo test
         env:
           OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: ${{ runner.os == 'Windows' && 'true' || 'false' }}
+
+      - name: Check generated client
+        if: runner.os == 'Linux'
+        working-directory: packages/client
+        run: bun run check:generated
 
       - name: Run HttpApi exerciser gates
         if: runner.os == 'Linux'

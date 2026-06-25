@@ -1,14 +1,49 @@
 import { describe, expect } from "bun:test"
-import { Effect, Option, Schema } from "effect"
+import { Effect, Schema } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Config } from "@opencode-ai/core/config"
 import { ConfigProviderPlugin } from "@opencode-ai/core/config/plugin/provider"
 import { Integration } from "@opencode-ai/core/integration"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { PluginV2 } from "@opencode-ai/core/plugin"
+import { PluginHost } from "@opencode-ai/core/plugin/host"
 import { ProviderV2 } from "@opencode-ai/core/provider"
-import { it, required, withEnv } from "../plugin/provider-helper"
-import { catalogHost, host, integrationHost } from "../plugin/host"
+import { testEffect } from "../lib/effect"
+import { PluginTestLayer } from "../plugin/fixture"
+
+const it = testEffect(PluginTestLayer)
+
+const addPlugin = Effect.fn(function* (config: Config.Interface) {
+  const plugin = yield* PluginV2.Service
+  const host = yield* PluginHost.make(plugin)
+  yield* ConfigProviderPlugin.Plugin.effect(host).pipe(Effect.provideService(Config.Service, config))
+})
+
+function required<T>(value: T | undefined): T {
+  if (value === undefined) throw new Error("Expected value")
+  return value
+}
+
+function withEnv<A, E, R>(vars: Record<string, string | undefined>, effect: () => Effect.Effect<A, E, R>) {
+  return Effect.acquireUseRelease(
+    Effect.sync(() => {
+      const previous = Object.fromEntries(Object.keys(vars).map((key) => [key, process.env[key]]))
+      Object.entries(vars).forEach(([key, value]) => {
+        if (value === undefined) delete process.env[key]
+        else process.env[key] = value
+      })
+      return previous
+    }),
+    effect,
+    (previous) =>
+      Effect.sync(() =>
+        Object.entries(previous).forEach(([key, value]) => {
+          if (value === undefined) delete process.env[key]
+          else process.env[key] = value
+        }),
+      ),
+  )
+}
 
 function request(headers: Record<string, string>, variant?: string) {
   return {
@@ -20,11 +55,9 @@ function request(headers: Record<string, string>, variant?: string) {
 const decode = Schema.decodeUnknownSync(Config.Info)
 
 describe("ConfigProviderPlugin.Plugin", () => {
-  it.effect("partitions existing model variant bodies without changing config shape", () =>
+  it.effect("keeps configured model variant bodies unchanged", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
-      const integrations = yield* Integration.Service
-      const plugin = yield* PluginV2.Service
       const providerID = ProviderV2.ID.opencode
       const modelID = ModelV2.ID.make("alpha-gpt-next")
       const config = Config.Service.of({
@@ -57,19 +90,13 @@ describe("ConfigProviderPlugin.Plugin", () => {
           ]),
       })
 
-      yield* plugin.add({
-        ...ConfigProviderPlugin.Plugin,
-        effect: ConfigProviderPlugin.Plugin.effect(
-          host({ catalog: catalogHost(catalog), integration: integrationHost(integrations) }),
-        ).pipe(Effect.provideService(Config.Service, config)),
-      })
+      yield* addPlugin(config)
 
       const model = required(yield* catalog.model.get(providerID, modelID))
       expect(model.variants).toMatchObject([
         {
           id: "high",
-          body: {},
-          options: {
+          body: {
             reasoningEffort: "high",
             reasoningSummary: "auto",
             include: ["reasoning.encrypted_content"],
@@ -79,11 +106,9 @@ describe("ConfigProviderPlugin.Plugin", () => {
     }),
   )
 
-  it.effect("uses the effective provider package across layered config", () =>
+  it.effect("keeps layered model variant bodies unchanged", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
-      const integrations = yield* Integration.Service
-      const plugin = yield* PluginV2.Service
       const providerID = ProviderV2.ID.opencode
       const modelID = ModelV2.ID.make("alpha-gpt-next")
       const config = Config.Service.of({
@@ -116,18 +141,12 @@ describe("ConfigProviderPlugin.Plugin", () => {
           ]),
       })
 
-      yield* plugin.add({
-        ...ConfigProviderPlugin.Plugin,
-        effect: ConfigProviderPlugin.Plugin.effect(
-          host({ catalog: catalogHost(catalog), integration: integrationHost(integrations) }),
-        ).pipe(Effect.provideService(Config.Service, config)),
-      })
+      yield* addPlugin(config)
 
       const model = required(yield* catalog.model.get(providerID, modelID))
       expect(model.variants[0]).toMatchObject({
         id: "high",
-        body: {},
-        options: { reasoningEffort: "high" },
+        body: { reasoningEffort: "high" },
       })
     }),
   )
@@ -137,7 +156,6 @@ describe("ConfigProviderPlugin.Plugin", () => {
       Effect.gen(function* () {
         const catalog = yield* Catalog.Service
         const integrations = yield* Integration.Service
-        const plugin = yield* PluginV2.Service
         const providerID = ProviderV2.ID.make("custom")
         const modelID = ModelV2.ID.make("chat")
         const config = Config.Service.of({
@@ -217,12 +235,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
             ]),
         })
 
-        yield* plugin.add({
-          ...ConfigProviderPlugin.Plugin,
-          effect: ConfigProviderPlugin.Plugin.effect(
-            host({ catalog: catalogHost(catalog), integration: integrationHost(integrations) }),
-          ).pipe(Effect.provideService(Config.Service, config)),
-        })
+        yield* addPlugin(config)
 
         const provider = required(yield* catalog.provider.get(providerID))
         const model = required(yield* catalog.model.get(providerID, modelID))

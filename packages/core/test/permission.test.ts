@@ -11,6 +11,7 @@ import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
+import { LocationServiceMap } from "@opencode-ai/core/location-layer"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionStore } from "@opencode-ai/core/session/store"
@@ -18,29 +19,26 @@ import { eq } from "drizzle-orm"
 import { location } from "./fixture/location"
 import { testEffect } from "./lib/effect"
 
-const database = Database.layerFromPath(":memory:")
 const current = Layer.succeed(
   Location.Service,
   Location.Service.of(location({ directory: AbsolutePath.make("/project") })),
 )
-const events = EventV2.layer.pipe(Layer.provide(database))
-const store = SessionStore.layer.pipe(Layer.provide(database))
 const sessions = SessionV2.layer.pipe(
-  Layer.provide(events),
-  Layer.provide(database),
-  Layer.provide(store),
+  Layer.provide(LocationServiceMap.layer),
+  Layer.provide(EventV2.defaultLayer),
+  Layer.provide(Database.defaultLayer),
+  Layer.provide(SessionStore.defaultLayer),
   Layer.provide(Project.defaultLayer),
   Layer.provide(SessionExecution.noopLayer),
 )
-const saved = PermissionSaved.layer.pipe(Layer.provide(database))
 const layer = PermissionV2.locationLayer.pipe(
-  Layer.provideMerge(database),
-  Layer.provideMerge(store),
-  Layer.provideMerge(events),
+  Layer.provideMerge(Database.defaultLayer),
+  Layer.provideMerge(SessionStore.defaultLayer),
+  Layer.provideMerge(EventV2.defaultLayer),
   Layer.provideMerge(current),
   Layer.provideMerge(sessions),
   Layer.provideMerge(SessionExecution.noopLayer),
-  Layer.provideMerge(saved),
+  Layer.provideMerge(PermissionSaved.defaultLayer),
 )
 const it = testEffect(layer)
 

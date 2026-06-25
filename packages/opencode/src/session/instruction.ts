@@ -236,6 +236,10 @@ export function loaded(messages: SessionV1.WithParts[]) {
   return extract(messages)
 }
 
-export const node = LayerNode.make(layer, [Config.node, FSUtil.node, Global.node, RuntimeFlags.node, httpClient])
+export const node = LayerNode.make({
+  service: Service,
+  layer: layer,
+  deps: [Config.node, FSUtil.node, Global.node, RuntimeFlags.node, httpClient],
+})
 
 export * as Instruction from "./instruction"

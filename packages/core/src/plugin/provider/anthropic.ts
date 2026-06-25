@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import { define } from "@opencode-ai/plugin/v2/effect"
+import { define } from "../internal"
 
 export const AnthropicPlugin = define({
   id: "anthropic",
@@ -16,8 +16,7 @@ export const AnthropicPlugin = define({
         }
       }),
     )
-    yield* ctx.aisdk.hook(
-      "sdk",
+    yield* ctx.aisdk.sdk(
       Effect.fn(function* (evt) {
         if (evt.package !== "@ai-sdk/anthropic") return
         const mod = yield* Effect.promise(() => import("@ai-sdk/anthropic"))

@@ -1,12 +1,23 @@
-import { createEffect, createMemo, onMount, untrack } from "solid-js"
+import { Show, createEffect, createMemo, createResource, untrack } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useSearchParams } from "@solidjs/router"
 import { NewSessionDesignView } from "@/components/session"
+import { PromptInput } from "@/components/prompt-input"
+import {
+  PromptProjectAddButton,
+  PromptProjectSelector,
+  createPromptProjectController,
+} from "@/components/prompt-project-selector"
 import { useComments } from "@/context/comments"
 import { usePrompt } from "@/context/prompt"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
-import { createSessionComposerState, SessionComposerRegion } from "@/pages/session/composer"
+import { useServerSync } from "@/context/server-sync"
+import { useLanguage } from "@/context/language"
+import { createPromptInputController, createPromptProjectControls } from "@/pages/session/composer"
+import { useSessionKey } from "@/pages/session/session-layout"
+import { useComposerCommands } from "@/pages/session/use-composer-commands"
+import { NEW_SESSION_CONTENT_WIDTH } from "@/pages/session/new-session-layout"
 
 /**
  * The `/new-session` draft page. Unlike `session.tsx`, this only renders the prompt
@@ -17,12 +28,26 @@ export default function NewSessionPage() {
   const prompt = usePrompt()
   const sdk = useSDK()
   const sync = useSync()
+  const serverSync = useServerSync()
   const comments = useComments()
-  const [searchParams, setSearchParams] = useSearchParams<{ prompt?: string }>()
+  const language = useLanguage()
+  const route = useSessionKey()
+  const [searchParams, setSearchParams] = useSearchParams<{ draftId?: string; prompt?: string }>()
+
+  useComposerCommands()
 
   let inputRef: HTMLDivElement | undefined
 
-  const composer = createSessionComposerState()
+  const inputController = createPromptInputController({
+    sessionKey: route.sessionKey,
+    sessionID: () => route.params.id,
+    queryOptions: serverSync().queryOptions,
+  })
+  const projectControls = createPromptProjectControls()
+  const projectController = createPromptProjectController({
+    controls: projectControls,
+    onDone: () => inputRef?.focus(),
+  })
 
   const [store, setStore] = createStore({
     worktree: "main",
@@ -45,9 +70,15 @@ export default function NewSessionPage() {
     })
   })
 
-  onMount(() => {
+  createEffect(() => {
+    if (!prompt.ready()) return
     requestAnimationFrame(() => inputRef?.focus())
   })
+  const ready = Promise.resolve()
+  const [promptReady] = createResource(
+    () => prompt.ready.promise ?? ready,
+    (promise) => promise.then(() => true),
+  )
 
   return (
     <div class="relative size-full overflow-hidden flex flex-col">
@@ -55,20 +86,39 @@ export default function NewSessionPage() {
         <div class="@container relative flex flex-col min-h-0 h-full bg-background-stronger flex-1">
           <div class="flex-1 min-h-0 overflow-hidden rounded-[10px]">
             <NewSessionDesignView>
-              <SessionComposerRegion
-                state={composer}
-                ready
-                centered={false}
-                placement="inline"
-                inputRef={(el) => {
-                  inputRef = el
-                }}
-                newSessionWorktree={newSessionWorktree()}
-                onNewSessionWorktreeReset={() => setStore("worktree", "main")}
-                onSubmit={() => comments.clear()}
-                onResponseSubmit={() => {}}
-                setPromptDockRef={() => {}}
-              />
+              <div class={NEW_SESSION_CONTENT_WIDTH}>
+                <Show
+                  when={prompt.ready() || promptReady()}
+                  fallback={
+                    <div class="w-full min-h-32 md:min-h-40 rounded-md border border-border-weak-base bg-background-base/50 px-4 py-3 text-text-weak pointer-events-none">
+                      {language.t("prompt.loading")}
+                    </div>
+                  }
+                >
+                  <div class="flex flex-col gap-3">
+                    <PromptInput
+                      controls={inputController()}
+                      variant="new-session"
+                      ref={(el) => {
+                        inputRef = el
+                      }}
+                      newSessionWorktree={newSessionWorktree()}
+                      onNewSessionWorktreeReset={() => setStore("worktree", "main")}
+                      onSubmit={() => comments.clear()}
+                      toolbar={
+                        <Show when={!projectController.selected()}>
+                          <PromptProjectAddButton controller={projectController} />
+                        </Show>
+                      }
+                    />
+                    <Show when={projectController.selected()}>
+                      <div class="flex h-7 min-w-0 items-center gap-0 px-2">
+                        <PromptProjectSelector controller={projectController} />
+                      </div>
+                    </Show>
+                  </div>
+                </Show>
+              </div>
             </NewSessionDesignView>
           </div>
         </div>

@@ -11,7 +11,11 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { location } from "./fixture/location"
 import { testEffect } from "./lib/effect"
-import { required } from "./plugin/provider-helper"
+
+function required<T>(value: T | undefined): T {
+  if (value === undefined) throw new Error("Expected value")
+  return value
+}
 
 const locationLayer = Layer.succeed(
   Location.Service,
@@ -21,12 +25,7 @@ const it = testEffect(
   Catalog.locationLayer.pipe(
     Layer.provideMerge(EventV2.defaultLayer),
     Layer.provideMerge(locationLayer),
-    Layer.provideMerge(
-      Layer.mock(Credential.Service)({
-        all: () => Effect.succeed([]),
-        list: () => Effect.succeed([]),
-      }),
-    ),
+    Layer.provideMerge(Credential.defaultLayer),
   ),
 )
 
@@ -48,40 +47,61 @@ describe("CatalogV2", () => {
 
   it.effect("derives availability from active credentials without changing provider state", () => {
     const integrationID = Integration.ID.make("test")
-    const first = {
-      id: Credential.ID.create(),
-      integrationID,
-      label: "First",
-      value: new Credential.Key({ type: "key", key: "first", metadata: { tenant: "one" } }),
-    }
-    const second = {
-      id: Credential.ID.create(),
-      integrationID,
-      label: "Second",
-      value: new Credential.Key({ type: "key", key: "second", metadata: { tenant: "two" } }),
-    }
-    let active = first
     const layer = Catalog.locationLayer.pipe(
       Layer.fresh,
       Layer.provideMerge(EventV2.defaultLayer),
       Layer.provideMerge(locationLayer),
-      Layer.provideMerge(
-        Layer.mock(Credential.Service)({
-          all: () => Effect.sync(() => [active]),
-          list: () => Effect.sync(() => [active]),
-        }),
-      ),
+      Layer.provideMerge(Credential.defaultLayer.pipe(Layer.fresh)),
     )
 
     return Effect.gen(function* () {
       const catalog = yield* Catalog.Service
+      const credentials = yield* Credential.Service
       yield* catalog.transform((editor) => editor.provider.update(ProviderV2.ID.make("test"), () => {}))
+      yield* credentials.create({
+        integrationID,
+        label: "First",
+        value: Credential.Key.make({ type: "key", key: "first", metadata: { tenant: "one" } }),
+      })
 
       expect((yield* catalog.provider.available()).map((provider) => provider.id)).toEqual([ProviderV2.ID.make("test")])
       expect(required(yield* catalog.provider.get(ProviderV2.ID.make("test"))).request.body).toEqual({})
-      active = second
+      yield* credentials.create({
+        integrationID,
+        label: "Second",
+        value: Credential.Key.make({ type: "key", key: "second", metadata: { tenant: "two" } }),
+      })
       expect((yield* catalog.provider.available()).map((provider) => provider.id)).toEqual([ProviderV2.ID.make("test")])
       expect(required(yield* catalog.provider.get(ProviderV2.ID.make("test"))).request.body).toEqual({})
+    }).pipe(Effect.provide(layer))
+  })
+
+  it.effect("derives availability from a provider's integration", () => {
+    const integrationID = Integration.ID.make("gateway")
+    const providerID = ProviderV2.ID.make("remote")
+    const layer = Catalog.locationLayer.pipe(
+      Layer.fresh,
+      Layer.provideMerge(EventV2.defaultLayer),
+      Layer.provideMerge(locationLayer),
+      Layer.provideMerge(Credential.defaultLayer.pipe(Layer.fresh)),
+    )
+
+    return Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      yield* (yield* Integration.Service).transform((editor) => editor.update(integrationID, () => {}))
+      yield* catalog.transform((editor) =>
+        editor.provider.update(providerID, (provider) => {
+          provider.integrationID = integrationID
+        }),
+      )
+      expect(yield* catalog.provider.available()).toEqual([])
+
+      yield* (yield* Credential.Service).create({
+        integrationID,
+        value: Credential.Key.make({ type: "key", key: "secret" }),
+      })
+
+      expect((yield* catalog.provider.available()).map((provider) => provider.id)).toEqual([providerID])
     }).pipe(Effect.provide(layer))
   })
 
@@ -213,16 +233,13 @@ describe("CatalogV2", () => {
           model.request.headers.shared = "model"
           model.request.body.model = true
           model.request.body.request = true
-          const options = (model.request.options ??= {})
-          options.shared = "model"
-          options.model = true
+          model.request.body.shared = "model"
         })
       })
 
       const model = required(yield* catalog.model.get(providerID, modelID))
       expect(model.request.headers).toEqual({ provider: "provider", shared: "model", model: "model" })
-      expect(model.request.body).toEqual({ provider: true, model: true, request: true })
-      expect(model.request.options).toEqual({ shared: "model", model: true })
+      expect(model.request.body).toEqual({ provider: true, model: true, request: true, shared: "model" })
     }),
   )
 
@@ -268,7 +285,7 @@ describe("CatalogV2", () => {
       expect((yield* catalog.model.default())?.id).toBe(old)
 
       configured = false
-      yield* catalog.rebuild()
+      yield* catalog.reload()
       expect((yield* catalog.model.default())?.id).toBe(newest)
     }),
   )

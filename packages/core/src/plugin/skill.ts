@@ -2,7 +2,7 @@
 
 export * as SkillPlugin from "./skill"
 
-import { define } from "@opencode-ai/plugin/v2/effect"
+import { define } from "./internal"
 import { Effect } from "effect"
 import { AbsolutePath } from "../schema"
 import { SkillV2 } from "../skill"
@@ -15,9 +15,9 @@ export const Plugin = define({
   effect: Effect.fn(function* (ctx) {
     yield* ctx.skill.transform((draft) => {
       draft.source(
-        new SkillV2.EmbeddedSource({
+        SkillV2.EmbeddedSource.make({
           type: "embedded",
-          skill: new SkillV2.Info({
+          skill: SkillV2.Info.make({
             name: "customize-opencode",
             description:
               "Use ONLY when the user is editing or creating opencode's own configuration: opencode.json, opencode.jsonc, files under .opencode/, or files under ~/.config/opencode/. Also use when creating or fixing opencode agents, subagents, commands, skills, plugins, MCP servers, or permission rules. Do not use for the user's own application code, or for any project that is not configuring opencode itself.",
