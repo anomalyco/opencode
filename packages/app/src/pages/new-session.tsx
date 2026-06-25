@@ -3,7 +3,11 @@ import { createStore } from "solid-js/store"
 import { useSearchParams } from "@solidjs/router"
 import { NewSessionDesignView } from "@/components/session"
 import { PromptInput } from "@/components/prompt-input"
-import { PromptProjectSelector, createPromptProjectController } from "@/components/prompt-project-selector"
+import {
+  PromptProjectAddButton,
+  PromptProjectSelector,
+  createPromptProjectController,
+} from "@/components/prompt-project-selector"
 import { useComments } from "@/context/comments"
 import { usePrompt } from "@/context/prompt"
 import { useSDK } from "@/context/sdk"
@@ -103,7 +107,7 @@ export default function NewSessionPage() {
                       onSubmit={() => comments.clear()}
                       toolbar={
                         <Show when={!projectController.selected()}>
-                          <PromptProjectSelector controller={projectController} empty />
+                          <PromptProjectAddButton controller={projectController} />
                         </Show>
                       }
                     />

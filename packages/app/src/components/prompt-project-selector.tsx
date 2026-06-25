@@ -100,9 +100,7 @@ export function createPromptProjectController(input: {
 
 export type PromptProjectController = ReturnType<typeof createPromptProjectController>
 
-export function PromptProjectSelector(props: { controller: PromptProjectController; empty?: boolean }) {
-  if (props.empty) return <ProjectTrigger controller={props.controller} empty />
-
+export function PromptProjectSelector(props: { controller: PromptProjectController }) {
   return (
     <Popover
       open={props.controller.open()}
@@ -191,16 +189,31 @@ export function PromptProjectSelector(props: { controller: PromptProjectControll
   )
 }
 
-function ProjectTrigger(props: ComponentProps<"button"> & { controller: PromptProjectController; empty?: boolean }) {
-  const [local, rest] = splitProps(props, ["controller", "empty", "class", "onClick"])
+export function PromptProjectAddButton(props: { controller: PromptProjectController }) {
+  return (
+    <button
+      data-action="prompt-project"
+      type="button"
+      class="flex h-7 min-w-0 max-w-[160px] items-center gap-1.5 rounded-sm px-2 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-faint transition-colors hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
+      onClick={() => props.controller.add()}
+    >
+      <Icon name="folder-add-left" size="small" class="shrink-0 text-v2-icon-icon-muted" />
+      <span class="min-w-0 truncate leading-5">{props.controller.labels.new()}</span>
+      <Icon name="chevron-down" size="small" class="shrink-0 text-v2-icon-icon-muted" />
+    </button>
+  )
+}
+
+function ProjectTrigger(props: ComponentProps<"button"> & { controller: PromptProjectController }) {
+  const [local, rest] = splitProps(props, ["controller", "class", "onClick"])
   const project = () => local.controller.selected()
   return (
     <button
       {...rest}
       data-action="prompt-project"
       type="button"
-      class={`flex h-7 min-w-0 items-center gap-1.5 rounded-sm px-2 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-faint transition-colors hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none ${local.empty ? "max-w-[160px]" : "max-w-[203px]"}`}
-      onClick={() => (local.empty ? local.controller.add() : local.controller.setOpen(true))}
+      class="flex h-7 min-w-0 max-w-[203px] items-center gap-1.5 rounded-sm px-2 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-faint transition-colors hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
+      onClick={() => local.controller.setOpen(true)}
     >
       <Show
         when={project()}
