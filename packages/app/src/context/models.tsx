@@ -152,6 +152,7 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
         return recent
       },
       (p) => p,
+      { initialValue: [] },
     )
     return {
       ready,
