@@ -57,7 +57,7 @@ export const Plugin = define({
 
         if (entry.type === "directory") {
           const files = yield* fs
-            .glob("{plugin,plugins}/*.{ts,js}", {
+            .glob("{plugin,plugins}/*.{ts,js,tsx}", {
               cwd: entry.path,
               absolute: true,
               include: "file",

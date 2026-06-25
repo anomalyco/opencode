@@ -534,6 +534,11 @@ async function activatePluginEntry(state: RuntimeState, plugin: PluginEntry, per
         id: plugin.id,
         error,
       })
+      // Surface the error to the user via toast
+      try {
+        const msg = `Plugin "${plugin.id}" failed to load: ${errorMessage(error)}`
+        state.api.ui.toast({ message: msg, variant: "error" })
+      } catch {}
       return false
     })
 

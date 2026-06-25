@@ -171,7 +171,7 @@ export const layer = Layer.effect(
 
         const dirs = yield* config.directories()
         const matches = dirs.flatMap((dir) =>
-          Glob.scanSync("{tool,tools}/*.{js,ts}", { cwd: dir, absolute: true, dot: true, symlink: true }),
+          Glob.scanSync("{tool,tools}/*.{js,ts,tsx}", { cwd: dir, absolute: true, dot: true, symlink: true }),
         )
         if (matches.length) yield* config.waitForDependencies()
         for (const match of matches) {

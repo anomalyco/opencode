@@ -1,6 +1,7 @@
 export * as TuiConfig from "./tui"
 
 import path from "path"
+import { pathToFileURL } from "url"
 import { mergeDeep, unique } from "remeda"
 import { Cause, Context, Effect, Fiber, Layer } from "effect"
 import { ConfigParse } from "@/config/parse"
@@ -8,6 +9,7 @@ import * as ConfigPaths from "@/config/paths"
 import { migrateTuiConfig } from "./tui-migrate"
 import { resolveHostAttentionSoundPaths } from "./tui-host-attention"
 import { Flag } from "@opencode-ai/core/flag/flag"
+import { Glob } from "@opencode-ai/core/util/glob"
 import { isRecord } from "@opencode-ai/tui/util/record"
 import { Global } from "@opencode-ai/core/global"
 import { FSUtil } from "@opencode-ai/core/fs-util"
@@ -205,6 +207,33 @@ const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: 
     for (const file of ConfigPaths.fileInDirectory(dir, "tui")) {
       yield* mergeFile(acc, file)
     }
+  }
+
+  try {
+    // 5. Auto-discover TUI plugins from {plugin,plugins}/*.{ts,js,tsx} directories.
+    // Users can place TUI plugin files directly in these directories without
+    // needing to declare them in a tui.json plugin array.
+    const pluginDiscoveryDirs = unique([Global.Path.config, ...directories, ...dirs].filter(Boolean))
+    for (const dir of pluginDiscoveryDirs) {
+      if (!dir || typeof dir !== "string") continue
+      const files = yield* Effect.promise(() =>
+        Glob.scan("{plugin,plugins}/*.{ts,js,tsx}", { cwd: dir, absolute: true, dot: true, symlink: true }).catch(
+          () => [] as string[],
+        ),
+      )
+      for (const file of files) {
+        const href = pathToFileURL(file).href
+        if (acc.plugin_origins.some((p) => p.spec === href || p.source === file)) continue
+        acc.plugin_origins.push({
+          spec: href,
+          scope: pluginScope(file, ctx),
+          source: file,
+        })
+      }
+    }
+    acc.plugin_origins = ConfigPlugin.deduplicatePluginOrigins(acc.plugin_origins)
+  } catch (e) {
+    yield* Effect.logWarning("tui plugin auto-discovery failed", { error: e })
   }
 
   const result = TuiConfig.resolve(

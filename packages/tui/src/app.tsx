@@ -404,6 +404,12 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
     })
     .catch((error) => {
       console.error("Failed to load TUI plugins", error)
+      toast.show({
+        variant: "error",
+        title: "Plugin Load Error",
+        message: errorMessage(error),
+        duration: 8000,
+      })
     })
     .finally(() => {
       setReady(true)
