@@ -66,9 +66,7 @@ export function createSessionComposerControls(input: {
   const providersQuery = createQuery(() => input.queryOptions.providers(pathKey(sdk().directory)))
 
   const selectProject = (worktree: string, serverKey?: string) => {
-    const conn = serverKey
-      ? server.list.find((conn) => ServerConnection.key(conn) === serverKey)
-      : projectServer()
+    const conn = serverKey ? server.list.find((conn) => ServerConnection.key(conn) === serverKey) : projectServer()
     if (search.draftId) {
       if (!conn) return
       const target = global.ensureServerCtx(conn)
@@ -94,9 +92,7 @@ export function createSessionComposerControls(input: {
   }
 
   const addProject = (title: string, serverKey?: string) => {
-    const conn = serverKey
-      ? server.list.find((conn) => ServerConnection.key(conn) === serverKey)
-      : projectServer()
+    const conn = serverKey ? server.list.find((conn) => ServerConnection.key(conn) === serverKey) : projectServer()
     if (!conn) return
     pickDirectory({
       server: conn,
@@ -125,8 +121,7 @@ export function createSessionComposerControls(input: {
     projects: {
       available: projects(),
       directory: sdk().directory,
-      server:
-        server.list.length > 1 && projectServer() ? ServerConnection.key(projectServer()!) : undefined,
+      server: server.list.length > 1 && projectServer() ? ServerConnection.key(projectServer()!) : undefined,
       select: selectProject,
       add: addProject,
     },
