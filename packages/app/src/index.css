@@ -68,6 +68,10 @@ body:not([data-new-layout]) [data-slot="user-message-attachment"] {
   background: var(--surface-weak);
 }
 
+body:not([data-new-layout]) [data-slot="user-message-text"] {
+  border-radius: 6px;
+}
+
 body:not([data-new-layout]) [data-slot="question-option"] {
   background-color: var(--surface-raised-stronger-non-alpha);
 }
