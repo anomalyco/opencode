@@ -1,4 +1,8 @@
-name: upstream-sync
+# DEPRECATED / DISABLED — replaced by upstream-sync-v2.yml.
+# The nightly schedule is commented out so this no longer runs automatically.
+# Kept as a reference / manual fallback only. Do not run it while v2 is active —
+# both push the same sync/upstream branch and would collide.
+name: upstream-sync (deprecated)
 
 on:
   workflow_dispatch:
@@ -9,9 +13,9 @@ on:
         default: "dev"
         type: string
 
-  # GitHub cron is UTC. 04:00 UTC is 11 PM Central during daylight saving time.
-  schedule:
-    - cron: "0 4 * * *"
+  # Disabled: replaced by upstream-sync-v2.yml.
+  # schedule:
+  #   - cron: "0 4 * * *"
 
 concurrency:
   group: upstream-sync

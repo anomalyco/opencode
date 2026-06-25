@@ -1,0 +1,174 @@
+# Incremental upstream sync — thin wrapper around sync-upstream.sh.
+#
+# This replaces the old threshold-based sync. It runs nightly and can also be
+# triggered manually. All real logic lives in .github/scripts/sync-upstream.sh,
+# so it runs and is tested locally exactly as it runs here:
+#   bash .github/scripts/sync-upstream.sh --batch-size 70            # dry run
+#   bash .github/scripts/sync-upstream.sh --batch-size 70 --push     # push
+#
+# Safety model:
+#   * Only ever opens/updates ONE PR from sync/upstream -> dev. NEVER pushes dev,
+#     NEVER merges. A human always merges.
+#   * Manual and nightly runs cannot clobber each other:
+#       - `concurrency` serializes runs (no two at once).
+#       - a pre-flight guard SKIPS the run if an open sync PR is already in flight,
+#         so an in-review PR (manual or nightly) is never force-pushed over.
+#   * `dry_run` (manual only) resolves+validates+reports without pushing.
+name: upstream-sync-v2
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Resolve & validate only; do not push or open a PR"
+        type: boolean
+        default: false
+      batch_size:
+        description: "Commits per merge batch"
+        type: string
+        default: "70"
+  schedule:
+    # GitHub cron is UTC. 04:00 UTC ≈ 11 PM US Central (CDT; 10 PM during CST).
+    - cron: "0 4 * * *"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+# Shared group across manual + scheduled runs so they never execute together.
+# cancel-in-progress:false => a second run queues behind the first instead of
+# cancelling it, and the in-flight-PR guard below stops it from overwriting.
+concurrency:
+  group: upstream-sync
+  cancel-in-progress: false
+
+env:
+  TARGET_BRANCH: dev
+  SYNC_BRANCH: sync/upstream
+  # true only when manually dispatched with dry_run checked; scheduled runs are live.
+  DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout target branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TARGET_BRANCH }}
+          fetch-depth: 0
+          token: ${{ github.token }}
+
+      # Guard: if a sync PR is already open (a manual or earlier nightly run left
+      # one for review), skip entirely so we don't force-push over it. The branch
+      # frees up once that PR is merged or closed.
+      - name: Skip if a sync PR is already in flight
+        id: guard
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          existing="$(gh pr list --head "$SYNC_BRANCH" --base "$TARGET_BRANCH" \
+            --state open --json number --jq '.[0].number' || true)"
+          if [ -n "$existing" ] && [ "$DRY_RUN" != "true" ]; then
+            echo "Open sync PR #$existing already in flight — skipping to avoid overwriting it."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      # App-token committer so the branch push is allowed to include upstream's
+      # workflow file changes (the plain GITHUB_TOKEN cannot push to .github/workflows).
+      - name: Setup Git Committer
+        uses: ./.github/actions/setup-git-committer
+        with:
+          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
+          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
+
+      - name: Run incremental sync
+        id: sync
+        if: steps.guard.outputs.skip != 'true'
+        run: |
+          args="--batch-size ${{ inputs.batch_size || '70' }}"
+          if [ "$DRY_RUN" != "true" ]; then
+            args="$args --push"
+          fi
+          # The script appends machine-readable results (safe_to_push, needs_review,
+          # escalated, typecheck, head) to $SYNC_GITHUB_OUTPUT.
+          SYNC_GITHUB_OUTPUT="$GITHUB_OUTPUT" bash .github/scripts/sync-upstream.sh $args
+
+      - name: Open / update the sync PR
+        if: ${{ steps.guard.outputs.skip != 'true' && env.DRY_RUN != 'true' && steps.sync.outputs.result == 'ok' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SAFE: ${{ steps.sync.outputs.safe_to_push }}
+          REVIEW: ${{ steps.sync.outputs.needs_review }}
+          ESCALATED: ${{ steps.sync.outputs.escalated }}
+          TYPECHECK: ${{ steps.sync.outputs.typecheck }}
+          HEAD_SHA: ${{ steps.sync.outputs.head }}
+        run: |
+          set -euo pipefail
+          date="$(date -u +%Y-%m-%d)"
+
+          if [ "$SAFE" = "yes" ]; then
+            title="chore(sync): upstream sync $date — ready for review"
+            body=$(cat <<EOF
+          Automated incremental upstream sync ($date).
+
+          Validation passed ✅ (full-workspace typecheck). Conflicts were resolved
+          automatically via remembered resolutions (git rerere) and conflict-rules.conf.
+
+          Tip of branch: \`$HEAD_SHA\`. Ready for review and merge into \`$TARGET_BRANCH\`.
+          EOF
+          )
+            label="upstream-sync"
+          else
+            title="chore(sync): upstream sync $date — NEEDS MANUAL REVIEW"
+            body=$(cat <<EOF
+          Automated incremental upstream sync ($date) needs a human.
+
+          - Typecheck (full workspace): **$TYPECHECK**
+          - Files left with conflict markers (textual): \`$ESCALATED\`
+
+          A \`failed\` typecheck means a *semantic* break — code that merged cleanly
+          but no longer compiles (an ANR file using an upstream API that changed).
+          Check the workflow log's "Validate" step for the exact errors; those files
+          have NO conflict markers.
+
+          To finish: resolve the conflict file(s) above and fix any typecheck errors
+          **locally with rerere enabled** so the fix is remembered next time:
+
+          \`\`\`
+          git fetch origin $SYNC_BRANCH && git checkout $SYNC_BRANCH
+          git config rerere.enabled true
+          # edit the escalated file(s), then:
+          git add -A && git commit && bun install && git push --force-with-lease
+          \`\`\`
+
+          Tip of branch: \`$HEAD_SHA\`.
+          EOF
+          )
+            label="needs-manual-review"
+          fi
+
+          existing="$(gh pr list --head "$SYNC_BRANCH" --base "$TARGET_BRANCH" \
+            --state open --json number --jq '.[0].number' || true)"
+          if [ -n "$existing" ]; then
+            gh pr edit "$existing" --title "$title" --body "$body" --add-label "$label" || true
+            echo "Updated PR #$existing"
+          else
+            gh pr create --base "$TARGET_BRANCH" --head "$SYNC_BRANCH" \
+              --title "$title" --body "$body" --label "$label" || \
+            gh pr create --base "$TARGET_BRANCH" --head "$SYNC_BRANCH" \
+              --title "$title" --body "$body"
+          fi
