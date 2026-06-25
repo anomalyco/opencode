@@ -1876,8 +1876,8 @@ export const layer = Layer.effect(
       const priority = providerID.startsWith("opencode")
         ? ["nano"]
         : providerID.startsWith("github-copilot")
-          ? ["mini", ...ModelV2.smallFamilyPriority.filter((family) => family !== "mini")]
-          : ModelV2.smallFamilyPriority
+          ? ["mini", ...smallModelFamilyPriority.filter((family) => family !== "mini")]
+          : smallModelFamilyPriority
       const models = sortBy(
         Object.values(provider.models),
         [(model) => model.release_date, "desc"],
@@ -1961,6 +1961,7 @@ export const defaultLayer = Layer.suspend(() =>
 )
 
 const priority = ["gpt-5", "claude-sonnet-4", "big-pickle", "gemini-3-pro"]
+const smallModelFamilyPriority = ["flash", "nano", "mini", "lite", "small", "fast", "haiku"]
 export function sort<T extends { id: string }>(models: T[]) {
   return sortBy(
     models,
