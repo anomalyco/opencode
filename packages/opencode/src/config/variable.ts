@@ -33,15 +33,35 @@ function dir(input: ParseSource) {
 /** Apply {env:VAR} and {file:path} substitutions to config text. */
 export async function substitute(input: SubstituteInput) {
   const missing = input.missing ?? "error"
+  const configSource = source(input)
+
+  // {env:VAR} is handled like a missing {file:path}: empty under "empty" mode,
+  // but a hard error under "error" mode so an unset variable surfaces at config
+  // load instead of as an opaque downstream failure (e.g. an empty auth header
+  // spawning an MCP server that then exits with -32000).
+  const absent = new Set<string>()
   let text = input.text.replace(/\{env:([^}]+)\}/g, (_, varName) => {
-    return (input.env?.[varName] ?? process.env[varName]) || ""
+    const value = input.env?.[varName] ?? process.env[varName]
+    if (value === undefined || value === "") {
+      if (missing === "error") absent.add(varName)
+      return ""
+    }
+    return value
   })
+  if (absent.size) {
+    const names = Array.from(absent)
+    throw new InvalidError({
+      path: configSource,
+      message: `missing environment variable${names.length > 1 ? "s" : ""}: ${names
+        .map((name) => `{env:${name}}`)
+        .join(", ")}`,
+    })
+  }
 
   const fileMatches = Array.from(text.matchAll(/\{file:[^}]+\}/g))
   if (!fileMatches.length) return text
 
   const configDir = dir(input)
-  const configSource = source(input)
   let out = ""
   let cursor = 0
 
