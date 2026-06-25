@@ -4,8 +4,8 @@ import { PermissionSaved } from "@opencode-ai/core/permission/saved"
 import { Effect } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import { Api } from "../api"
-import { PermissionNotFoundError } from "../errors"
-import { response } from "../groups/location"
+import { PermissionNotFoundError } from "@opencode-ai/protocol/errors"
+import { response } from "../location"
 
 function missingRequest(id: PermissionV2.ID) {
   return new PermissionNotFoundError({ requestID: id, message: `Permission request not found: ${id}` })

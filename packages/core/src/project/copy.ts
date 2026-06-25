@@ -13,24 +13,16 @@ import { Slug } from "../util/slug"
 import { EventV2 } from "../event"
 import { Database } from "../database/database"
 import { Location } from "../location"
+import { ProjectDirectoriesEvent } from "@opencode-ai/schema/project-directories"
+import { ProjectCopy } from "@opencode-ai/schema/project-copy"
 
-export const StrategyID = Schema.Trim.pipe(Schema.check(Schema.isNonEmpty()), Schema.brand("ProjectCopy.StrategyID"))
+export const StrategyID = ProjectCopy.StrategyID
 export type StrategyID = typeof StrategyID.Type
 
-export const CreateInput = Schema.Struct({
-  projectID: Project.ID,
-  strategy: StrategyID,
-  sourceDirectory: AbsolutePath,
-  directory: AbsolutePath,
-  name: Schema.optional(Schema.String),
-}).annotate({ identifier: "ProjectCopy.CreateInput" })
+export const CreateInput = ProjectCopy.CreateInput
 export type CreateInput = typeof CreateInput.Type
 
-export const RemoveInput = Schema.Struct({
-  projectID: Project.ID,
-  directory: AbsolutePath,
-  force: Schema.Boolean,
-}).annotate({ identifier: "ProjectCopy.RemoveInput" })
+export const RemoveInput = ProjectCopy.RemoveInput
 export type RemoveInput = typeof RemoveInput.Type
 
 export const RefreshInput = Schema.Struct({
@@ -44,9 +36,7 @@ export const RefreshResult = Schema.Struct({
 }).annotate({ identifier: "ProjectCopy.RefreshResult" })
 export type RefreshResult = typeof RefreshResult.Type
 
-export const Copy = Schema.Struct({
-  directory: AbsolutePath,
-}).annotate({ identifier: "ProjectCopy.Copy" })
+export const Copy = ProjectCopy.Copy
 export type Copy = typeof Copy.Type
 
 export const ListEntry = Schema.Struct({
@@ -106,12 +96,7 @@ export interface Strategy {
   readonly list: (directory: AbsolutePath) => Effect.Effect<ListEntry[], Git.WorktreeError | DirectoryUnavailableError>
 }
 
-export const Event = {
-  Updated: EventV2.define({
-    type: "project.directories.updated",
-    schema: { projectID: Project.ID },
-  }),
-}
+export const Event = ProjectDirectoriesEvent
 
 export interface Interface {
   readonly register: (strategy: Strategy) => Effect.Effect<void, DuplicateStrategyError>

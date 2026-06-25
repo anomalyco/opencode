@@ -2,6 +2,7 @@ import {
   createEffect,
   createMemo,
   createResource,
+  createRoot,
   createSignal,
   For,
   Match,
@@ -39,8 +40,9 @@ import { useGlobal } from "@/context/global"
 import { ServerConnection, useServer } from "@/context/server"
 import { tabHref, useTabs } from "@/context/tabs"
 import "./titlebar.css"
-import { useServerSDK } from "@/context/server-sdk"
 import { Session } from "@opencode-ai/sdk/v2"
+import { base64Encode } from "@opencode-ai/core/util/encode"
+import { createTabPromptState } from "@/context/prompt"
 
 type TauriDesktopWindow = {
   startDragging?: () => Promise<void>
@@ -99,10 +101,6 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
   const counterZoom = () => (windows() && titlebarZoom() < 1 ? 1 / titlebarZoom() : 1)
   const minHeight = () => {
     const height = useV2Titlebar() ? v2TitlebarHeight : legacyTitlebarHeight
-    if (useV2Titlebar() && mobile()) {
-      const inset = bottom() ? "env(safe-area-inset-bottom, 0px)" : "env(safe-area-inset-top, 0px)"
-      return `calc(${height}px + ${inset})`
-    }
     if (mac()) return `${height / zoom()}px`
     if (windows()) return `${height / Math.min(titlebarZoom(), 1)}px`
     return undefined
@@ -245,8 +243,6 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
       }}
       style={{
         "min-height": minHeight(),
-        "padding-top": useV2Titlebar() && mobile() && !bottom() ? "env(safe-area-inset-top, 0px)" : undefined,
-        "padding-bottom": bottom() ? "env(safe-area-inset-bottom, 0px)" : undefined,
         "padding-left": mac() && !mobile() ? `${84 / zoom()}px` : 0,
         width: electronWindows() ? `env(titlebar-area-width, calc(100vw - ${windowsControlsWidth()}))` : undefined,
         "max-width": electronWindows()
@@ -261,7 +257,6 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
       <Switch>
         <Match when={useV2Titlebar()}>
           {(_) => {
-            const serverSdk = useServerSDK()
             const navigate = useNavigate()
             const layout = useLayout()
             const global = useGlobal()
@@ -272,11 +267,15 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
             const [session] = createResource(
               () => {
                 const route = layout.route()
-                return route.type === "session" ? route : undefined
+                if (route.type !== "session") return undefined
+                const conn = global.servers
+                  .list()
+                  .find((item) => ServerConnection.key(item) === (route.server ?? server.key))
+                return conn ? { route, sdk: global.ensureServerCtx(conn).sdk } : undefined
               },
-              (route) =>
-                serverSdk()
-                  .client.session.get({ sessionID: route.sessionId })
+              ({ route, sdk }) =>
+                sdk.client.session
+                  .get({ sessionID: route.sessionId })
                   .then((x) => x.data)
                   .catch(() => {}),
             )
@@ -344,7 +343,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
               }
 
               const fallback = global.servers.list().flatMap((conn) => {
-                const project = global.createServerCtx(conn).projects.list()[0]
+                const project = global.ensureServerCtx(conn).projects.list()[0]
                 return project ? [{ server: ServerConnection.key(conn), project }] : []
               })[0]
               if (!fallback) return
@@ -421,22 +420,6 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                     if (next) tabs.select(next)
                   },
                 },
-                ...Array.from({ length: 9 }, (_, i) => {
-                  const index = i
-                  const number = index + 1
-                  return {
-                    id: `tab.${number}`,
-                    category: "tab",
-                    title: "",
-                    keybind: `mod+${number}`,
-                    disabled: layout.projects.list().length <= index,
-                    hidden: true,
-                    onSelect: () => {
-                      const tab = tabsStore[index]
-                      if (tab) tabs.select(tab)
-                    },
-                  }
-                }),
               ].filter((v) => v !== undefined)
             })
 
@@ -500,6 +483,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                       <For each={tabsStore}>
                         {(tab, i) => {
                           let ref!: HTMLDivElement
+                          useTabShortcut(i, () => tabs.select(tab))
 
                           const divider = () =>
                             i() !== 0 && (
@@ -525,20 +509,53 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                             )
                           }
 
-                          const [session] = createResource(
+                          const serverCtx = createMemo(() => {
+                            const conn = server.list.find((item) => ServerConnection.key(item) === tab.server)
+                            return conn ? global.ensureServerCtx(conn) : undefined
+                          })
+                          const sdk = createMemo(() => serverCtx()?.sdk ?? null)
+                          const cachedSession = createMemo(() => serverCtx()?.sync.session.peek(tab.sessionId))
+
+                          const [loadedSession] = createResource(
                             () => {
                               const id = tab.sessionId
-                              const conn = server.list.find((s) => ServerConnection.key(s) === tab.server)
-                              if (!conn) return null
-                              const { sdk } = global.createServerCtx(conn)
-                              return { id, sdk }
+                              const ctx = serverCtx()
+                              return ctx ? { id, ctx } : null
                             },
-                            ({ id, sdk }) =>
-                              sdk.client.session
-                                .get({ sessionID: id })
-                                .then((x) => x.data)
-                                .catch(() => undefined),
+                            ({ id, ctx }) => ctx.sync.session.resolve(id).catch(() => undefined),
                           )
+                          const session = createMemo(() => cachedSession() ?? loadedSession())
+                          let prefetched = false
+
+                          createEffect(() => {
+                            const ctx = serverCtx()
+                            const sess = session()
+                            if (!ctx || !sess || prefetched) return
+                            prefetched = true
+                            createRoot((dispose) => {
+                              try {
+                                void ctx.sync
+                                  .ensureDirSyncContext(sess.directory)
+                                  .session.sync(sess.id)
+                                  .catch(() => {})
+                                  .finally(dispose)
+                              } catch {
+                                dispose()
+                              }
+                            })
+                          })
+
+                          createEffect(() => {
+                            if (tab.type !== "session") return
+                            const _sdk = sdk()
+                            if (!_sdk) return
+                            const sess = session()
+                            if (!sess) return
+                            createTabPromptState(tabs, tab, _sdk.scope, {
+                              dir: base64Encode(sess.directory),
+                              id: sess.id,
+                            })
+                          })
 
                           return (
                             <>
@@ -847,6 +864,26 @@ function TitlebarUpdateIconButton(props: { state: TitlebarUpdatePillState }) {
   )
 }
 
+function useTabShortcut(index: () => number, onSelect: () => void) {
+  const command = useCommand()
+
+  command.register(() => {
+    const number = index() + 1
+    if (number > 9) return []
+
+    return [
+      {
+        id: `tab.${number}`,
+        category: "tab",
+        title: "",
+        keybind: `mod+${number}`,
+        hidden: true,
+        onSelect,
+      },
+    ]
+  })
+}
+
 function TabNavItem(props: {
   ref?: HTMLDivElement
   href: string
@@ -869,14 +906,14 @@ function TabNavItem(props: {
   const global = useGlobal()
   const serverCtx = createMemo(() => {
     const conn = global.servers.list().find((item) => ServerConnection.key(item) === props.server)
-    if (conn) return global.createServerCtx(conn)
+    if (conn) return global.ensureServerCtx(conn)
   })
 
   return (
     <div
       ref={props.ref}
       data-slot="titlebar-tab-item"
-      class="group relative flex h-7 min-w-24 max-w-60 flex-row items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-[6px] bg-[var(--tab-bg)] px-1.5 [--tab-bg:var(--v2-background-bg-deep)] hover:[--tab-bg:var(--v2-background-bg-layer-02)] has-[>a:focus-visible]:[--tab-bg:var(--v2-background-bg-layer-02)] data-[active='true']:[--tab-bg:var(--v2-background-bg-layer-02)]"
+      class="group relative flex h-7 w-56 shrink-0 flex-row items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-[6px] bg-[var(--tab-bg)] px-1.5 [--tab-bg:var(--v2-background-bg-deep)] hover:[--tab-bg:var(--v2-background-bg-layer-02)] has-[>a:focus-visible]:[--tab-bg:var(--v2-background-bg-layer-02)] data-[active='true']:[--tab-bg:var(--v2-background-bg-layer-02)]"
       data-active={props.active}
       onMouseDown={(event) => {
         if (event.button !== 1) return
@@ -953,7 +990,7 @@ function DraftTabItem(props: {
       ref={props.ref}
       data-slot="titlebar-tab-item"
       data-active={props.active}
-      class="group relative shrink-0 flex h-7 max-w-60 flex-row items-center gap-1.5 overflow-hidden rounded-[6px] bg-[var(--tab-bg)] pl-1.5 pr-8 whitespace-nowrap [--tab-bg:var(--v2-background-bg-deep)] hover:[--tab-bg:var(--v2-background-bg-layer-02)] has-[>a:focus-visible]:[--tab-bg:var(--v2-background-bg-layer-02)] data-[active='true']:has-[>a:focus-visible]:[--tab-bg:var(--v2-background-bg-layer-02)] data-[active='true']:[--tab-bg:var(--v2-overlay-simple-overlay-pressed)]"
+      class="group relative flex h-7 w-56 shrink-0 flex-row items-center gap-1.5 overflow-hidden rounded-[6px] bg-[var(--tab-bg)] pl-1.5 pr-8 whitespace-nowrap [--tab-bg:var(--v2-background-bg-deep)] hover:[--tab-bg:var(--v2-background-bg-layer-02)] has-[>a:focus-visible]:[--tab-bg:var(--v2-background-bg-layer-02)] data-[active='true']:has-[>a:focus-visible]:[--tab-bg:var(--v2-background-bg-layer-02)] data-[active='true']:[--tab-bg:var(--v2-overlay-simple-overlay-pressed)]"
       onMouseDown={(event) => {
         if (event.button !== 1) return
         closeTab(event)
@@ -999,7 +1036,7 @@ function NewSessionTabItem(props: { ref?: HTMLDivElement; href: string; title: s
     <div
       ref={props.ref}
       data-slot="titlebar-tab-item"
-      class="group relative shrink-0 flex h-7 max-w-60 flex-row items-center gap-1.5 overflow-hidden rounded-[6px] bg-[var(--v2-overlay-simple-overlay-pressed)] has-[>a:focus-visible]:bg-[var(--v2-background-bg-layer-02)] pl-1.5 pr-8 whitespace-nowrap"
+      class="group relative flex h-7 w-56 shrink-0 flex-row items-center gap-1.5 overflow-hidden rounded-[6px] bg-[var(--v2-overlay-simple-overlay-pressed)] has-[>a:focus-visible]:bg-[var(--v2-background-bg-layer-02)] pl-1.5 pr-8 whitespace-nowrap"
       onMouseDown={(event) => {
         if (event.button !== 1) return
         closeTab(event)

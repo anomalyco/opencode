@@ -3,6 +3,8 @@ import { createServer } from "http"
 import { escapeHtml } from "@/util/html"
 import { OAUTH_CALLBACK_PORT, OAUTH_CALLBACK_PATH, parseRedirectUri } from "./oauth-provider"
 
+const OAUTH_CALLBACK_HOST = "127.0.0.1"
+
 // Current callback server configuration (may differ from defaults if custom redirectUri is used)
 let currentPort = OAUTH_CALLBACK_PORT
 let currentPath = OAUTH_CALLBACK_PATH
@@ -162,7 +164,7 @@ export async function ensureRunning(redirectUri?: string): Promise<void> {
 
   server = createServer(handleRequest)
   await new Promise<void>((resolve, reject) => {
-    server!.listen(currentPort, () => {
+    server!.listen(currentPort, OAUTH_CALLBACK_HOST, () => {
       resolve()
     })
     server!.on("error", reject)

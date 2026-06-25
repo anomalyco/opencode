@@ -7,9 +7,6 @@ import { EventV2 } from "@opencode-ai/core/event"
 import { Location } from "@opencode-ai/core/location"
 import { Project } from "@opencode-ai/core/project"
 import { AbsolutePath } from "@opencode-ai/core/schema"
-import "@opencode-ai/core/account"
-import "@opencode-ai/core/catalog"
-import "@opencode-ai/core/session/event"
 import { Context, Effect, Layer } from "effect"
 
 export class Service extends Context.Service<Service, EventV2.Interface>()("@opencode/EventV2Bridge") {}
@@ -45,10 +42,7 @@ export const layer = Layer.effect(
           workspace: workspaceID,
           payload: { id: event.id, type: event.type, properties: event.data },
         })
-        const durable = EventV2.registry.get(event.type)?.durable
-        if (durable === undefined || event.durable === undefined) return
-        const aggregateID = (event.data as Record<string, unknown>)[durable.aggregate]
-        if (typeof aggregateID !== "string") return
+        if (event.durable === undefined) return
         GlobalBus.emit("event", {
           directory: event.location?.directory ?? ctx?.directory,
           project: ctx?.project.id,
@@ -59,7 +53,7 @@ export const layer = Layer.effect(
               id: event.id,
               type: EventV2.versionedType(event.type, event.durable.version),
               seq: event.durable.seq,
-              aggregateID,
+              aggregateID: event.durable.aggregateID,
               data: event.data,
             },
           },

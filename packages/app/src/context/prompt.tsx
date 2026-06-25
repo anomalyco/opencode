@@ -8,6 +8,10 @@ import { Persist, persisted } from "@/utils/persist"
 import { useServerSDK } from "./server-sdk"
 import type { ServerScope } from "@/utils/server-scope"
 import { useSDK } from "./sdk"
+import { useTabs, type Tab } from "./tabs"
+import { ServerConnection, useServer } from "./server"
+import { requireServerKey } from "@/utils/session-route"
+import { useSettings } from "./settings"
 
 interface PartBase {
   content: string
@@ -165,6 +169,15 @@ type PromptStore = {
 
 type Scope = { draftID: string } | { dir: string; id?: string }
 
+export function selectPromptTab(tabs: Tab[], scope: Scope, server: ServerConnection.Key) {
+  if ("draftID" in scope) return tabs.find((tab) => tab.type === "draft" && tab.draftID === scope.draftID)
+  if (!scope.id) return
+  return (
+    tabs.find((tab) => tab.type === "session" && tab.server === server && tab.sessionId === scope.id) ??
+    ({ type: "session", server, sessionId: scope.id } satisfies Tab)
+  )
+}
+
 function scopeKey(scope: Scope) {
   if ("draftID" in scope) return `draft:${scope.draftID}`
   return `${scope.dir}:${scope.id ?? WORKSPACE_KEY}`
@@ -209,7 +222,7 @@ function promptStore(): PromptStore {
 function createPromptStateValue(store: PromptStore, setStore: SetStoreFunction<PromptStore>) {
   const actions = createPromptActions(setStore)
 
-  return {
+  const value = {
     current: () => store.prompt,
     cursor: createMemo(() => store.cursor),
     dirty: () => !isPromptEqual(store.prompt, DEFAULT_PROMPT),
@@ -246,7 +259,9 @@ function createPromptStateValue(store: PromptStore, setStore: SetStoreFunction<P
     },
     set: actions.set,
     reset: actions.reset,
+    capture: () => value,
   }
+  return value
 }
 
 export function createPromptState() {
@@ -258,14 +273,23 @@ export function createPromptState() {
   }
 }
 
+export const createTabPromptState = (
+  tabs: ReturnType<typeof useTabs>,
+  tab: Tab,
+  ...args: Parameters<typeof createPromptSession>
+) => tabs.state(tab, "prompt", () => createPromptSession(...args))
+
 export const { use: usePrompt, provider: PromptProvider } = createSimpleContext({
   name: "Prompt",
   gate: false,
   init: () => {
-    const params = useParams()
+    const params = useParams<{ serverKey?: string; id?: string }>()
     const sdk = useSDK()
     const [search] = useSearchParams<{ draftId?: string }>()
     const serverSDK = useServerSDK()
+    const server = useServer()
+    const tabs = useTabs()
+    const settings = useSettings()
     const cache = new Map<string, PromptCacheEntry>()
 
     const disposeAll = () => {
@@ -288,7 +312,15 @@ export const { use: usePrompt, provider: PromptProvider } = createSimpleContext(
     }
 
     const owner = getOwner()
+    const serverKey = () => (params.serverKey ? requireServerKey(params.serverKey) : server.key)
+    const scope = () =>
+      search.draftId ? { draftID: search.draftId } : { dir: base64Encode(sdk().directory), id: params.id }
     const load = (scope: Scope) => {
+      const current = settings.general.newLayoutDesigns() ? selectPromptTab(tabs.store, scope, serverKey()) : undefined
+      if (current) {
+        return createTabPromptState(tabs, current, serverSDK().scope, scope)
+      }
+
       const key = scopeKey(scope)
       const existing = cache.get(key)
       if (existing) {
@@ -310,14 +342,13 @@ export const { use: usePrompt, provider: PromptProvider } = createSimpleContext(
       return entry.value
     }
 
-    const session = createMemo(() =>
-      load(search.draftId ? { draftID: search.draftId } : { dir: base64Encode(sdk().directory), id: params.id }),
-    )
+    const session = createMemo(() => load(scope()))
     const pick = (scope?: Scope) => (scope ? load(scope) : session())
     const ready = createPromptReady(session)
 
     return {
       ready,
+      capture: (scope?: Scope) => pick(scope).capture(),
       current: () => session().current(),
       cursor: () => session().cursor(),
       dirty: () => session().dirty(),

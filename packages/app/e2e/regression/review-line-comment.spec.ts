@@ -57,8 +57,8 @@ test("shows a comment button when a line number is hovered", async ({ page }) =>
     await page.mouse.move(0, 0)
     await lineNumber.hover()
     await expect(comment).toBeVisible({ timeout: 500 })
+    await comment.click({ timeout: 500 })
   }).toPass()
-  await comment.click()
   await expect(review.getByRole("textbox")).toBeVisible()
 })
 
