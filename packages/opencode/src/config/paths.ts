@@ -22,8 +22,12 @@ export const files = Effect.fn("ConfigPaths.projectFiles")(function* (
 
 export const directories = Effect.fn("ConfigPaths.directories")(function* (directory: string, worktree?: string) {
   const afs = yield* FSUtil.Service
+  const globalAgents = path.join(Global.Path.home, ".agents")
+  const globalAgentDirs = (yield* afs.isDir(globalAgents)) ? [globalAgents] : []
+
   return unique([
     Global.Path.config,
+    ...globalAgentDirs,
     ...(!Flag.OPENCODE_DISABLE_PROJECT_CONFIG
       ? yield* afs.up({
           targets: [".opencode"],
