@@ -30,6 +30,8 @@ import { LspTool } from "./lsp"
 import * as Truncate from "./truncate"
 import { ApplyPatchTool } from "./apply_patch"
 import { MonitorTool } from "./monitor"
+import { MonitorStopTool } from "./monitor-stop"
+import { MonitorListTool } from "./monitor-list"
 import { Glob } from "@opencode-ai/core/util/glob"
 import path from "path"
 import { pathToFileURL } from "url"
@@ -98,6 +100,8 @@ export const layer = Layer.effect(
     const lsptool = yield* LspTool
     const plan = yield* PlanExitTool
     const monitor = yield* MonitorTool
+    const monitorstop = yield* MonitorStopTool
+    const monitorlist = yield* MonitorListTool
     const webfetch = yield* WebFetchTool
     const websearch = yield* WebSearchTool
     const shell = yield* ShellTool
@@ -215,6 +219,8 @@ export const layer = Layer.effect(
           lsp: Tool.init(lsptool),
           plan: Tool.init(plan),
           monitor: Tool.init(monitor),
+          monitorStop: Tool.init(monitorstop),
+          monitorList: Tool.init(monitorlist),
         })
 
         return {
@@ -236,7 +242,7 @@ export const layer = Layer.effect(
             tool.patch,
             ...(flags.experimentalLspTool ? [tool.lsp] : []),
             ...(flags.experimentalPlanMode && flags.client === "cli" ? [tool.plan] : []),
-            ...(flags.experimentalMonitor ? [tool.monitor] : []),
+            ...(flags.experimentalMonitor ? [tool.monitor, tool.monitorStop, tool.monitorList] : []),
           ],
           task: tool.task,
           read: tool.read,

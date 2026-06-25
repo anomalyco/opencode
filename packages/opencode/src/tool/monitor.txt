@@ -3,8 +3,12 @@ Run a long-lived command in the background and get notified whenever it emits a 
 IMPORTANT:
 - The command must keep running and emit ONE line per NEW event. It must not exit immediately.
 - Emit only on a real change. Never re-print content that has not changed — a loop that re-runs `tail -N`, `cat`, or `tail -5` re-emits the same lines every cycle, so once the watched job stops writing you get the same lines flooding back forever as bogus events. Prefer a streaming watcher that emits each new line exactly once.
-- Do not re-arm the same monitor repeatedly. If you need to change the watch, stop the old one first (or use a different description).
+- Multiple monitors can run CONCURRENTLY in one session: each distinct `description` is its own independent watch (so you can watch a local file AND a remote/SSH log that can't share a single `tail`). Arming a monitor with the SAME `description` REPLACES (cancels) just that one; distinct descriptions run in parallel. Give each watch a clear, distinct description.
+- TO REPLACE/FIX A WATCH, KEEP THE SAME description. If you reword the description on a "corrected" re-arm, you create a SECOND, concurrent monitor and the original keeps running (leaked). So to fix a wrong path, re-arm with the corrected command but the IDENTICAL description.
+- TO STOP A WATCH, use the `monitor_stop` tool with the monitor's id (returned when armed) or its exact description. `bash_background_stop` does NOT work on monitors. Note that `tail -F` does NOT exit on a missing/typo'd path — it retries forever — so a wrong-path watch lingers as a live monitor until you `monitor_stop` it.
+- TO SEE WHAT'S RUNNING, use `monitor_list` — it lists every active monitor in this session with id, description, and age (oldest first), so you can find a stale or duplicate watch and stop the right one.
 - If the command exits on its own (e.g., the chosen watcher is not installed), you will get a wake-up message telling you it exited, so you can re-arm with a portable command.
+- FLOOD GUARD: a monitor that emits more than ~5000 lines is auto-stopped — you get a final "[flood guard] watcher stopped" message and the watch ends. Keep filters tight (one line per real event) so a chatty source doesn't self-terminate your monitor.
 
 COVERAGE — silence is not success:
 - When watching a job or process for an outcome, your filter must match EVERY terminal state, not just the happy path. A monitor that greps only for the success marker stays silent through a crash, a hang, or an OOM kill — and silence looks exactly like "still running." Before arming, ask: if this process died right now, would my filter emit anything? If not, widen it.
@@ -22,10 +26,9 @@ PATTERNS:
 - Directory changes: hash in a loop but emit ONLY when the hash changes: `while :; do h=$(find PATH -type f | sort | md5sum); [ "$h" != "$p" ] && echo "$h"; p=$h; sleep 2; done`. Do not echo the hash every iteration.
 - FINITE job (a build/run that will end): poll and EXIT the loop on a terminal state, so the monitor ends instead of polling a finished job forever:
   `while :; do line=$(grep -E 'DONE|FAILED' PATH | tail -1); [ -n "$line" ] && { echo "$line"; break; }; sleep 5; done`
-  Do NOT rely on `tail -f PATH | grep -m1 DONE` to end cleanly: grep exits on the match, but tail only sees the closed pipe on its next write, so if the log goes quiet after the match the pipeline hangs until timeoutMs.
+  Do NOT rely on `tail -f PATH | grep -m1 DONE` to end cleanly: grep exits on the match, but tail only sees the closed pipe on its next write, so if the log goes quiet after the match the pipeline hangs indefinitely (the monitor has no auto-timeout — it runs until the process exits or the session ends).
 - Poll intervals: 30s+ for remote APIs (rate limits), 0.5–1s for local checks.
 
 Parameters:
 - command: the shell command to run (must keep running and emit one line per event)
 - description: short description of what is being watched (used in event messages)
-- timeoutMs: optional maximum lifetime of the monitor in milliseconds; if omitted, it runs until the process exits or the session ends
