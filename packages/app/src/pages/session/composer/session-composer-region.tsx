@@ -1,14 +1,11 @@
 import { Show, createEffect, createMemo, createResource, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
-import { useNavigate, useSearchParams } from "@solidjs/router"
 import { useSpring } from "@opencode-ai/ui/motion-spring"
-import { useLayout } from "@/context/layout"
-import { PromptInput } from "@/components/prompt-input"
+import { PromptInput, type PromptInputControls, type PromptInputProps } from "@/components/prompt-input"
 import { useLanguage } from "@/context/language"
 import { usePrompt } from "@/context/prompt"
 import { useSync } from "@/context/sync"
 import { getSessionHandoff, setSessionHandoff } from "@/pages/session/handoff"
-import { useSessionKey } from "@/pages/session/session-layout"
 import { SessionPermissionDock } from "@/pages/session/composer/session-permission-dock"
 import { SessionQuestionDock } from "@/pages/session/composer/session-question-dock"
 import { SessionFollowupDock } from "@/pages/session/composer/session-followup-dock"
@@ -18,29 +15,21 @@ import { SessionTodoDock } from "@/pages/session/composer/session-todo-dock"
 import type { FollowupDraft } from "@/components/prompt-input/submit"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { NEW_SESSION_CONTENT_WIDTH } from "@/pages/session/new-session-layout"
-import { createQuery } from "@tanstack/solid-query"
-import { useQueryOptions } from "@/context/server-sync"
-import { useSDK } from "@/context/sdk"
-import { pathKey } from "@/utils/path-key"
-import { useLocal } from "@/context/local"
-import { useProviders } from "@/hooks/use-providers"
-import { useSettings } from "@/context/settings"
-import { ServerConnection, useServer } from "@/context/server"
-import { type DraftTab, useTabs } from "@/context/tabs"
-import { useDirectoryPicker } from "@/components/directory-picker"
-import { base64Encode } from "@opencode-ai/core/util/encode"
-import { legacySessionHref, requireServerKey, sessionHref } from "@/utils/session-route"
-import { useGlobal } from "@/context/global"
 
 export function SessionComposerRegion(props: {
   state: SessionComposerState
+  sessionKey: string
+  sessionID?: string
+  controls: PromptInputControls
+  promptInput: Omit<PromptInputProps, "controls" | "variant">
+  todo: {
+    collapsed: boolean
+    onToggle: () => void
+  }
   ready: boolean
   centered: boolean
   placement?: "dock" | "inline"
-  inputRef: (el: HTMLDivElement) => void
-  newSessionWorktree: string
-  onNewSessionWorktreeReset: () => void
-  onSubmit: () => void
+  openParent?: () => void
   onResponseSubmit: () => void
   followup?: {
     queue: () => boolean
@@ -61,102 +50,12 @@ export function SessionComposerRegion(props: {
   }
   setPromptDockRef: (el: HTMLDivElement) => void
 }) {
-  const navigate = useNavigate()
-  const layout = useLayout()
-  const prompt = usePrompt()
+  const prompt = props.promptInput.state ?? usePrompt()
   const language = useLanguage()
-  const route = useSessionKey()
   const sync = useSync()
-  const sdk = useSDK()
-  const queryOptions = useQueryOptions()
-  const local = useLocal()
-  const providers = useProviders()
-  const settings = useSettings()
-  const server = useServer()
-  const tabs = useTabs()
-  const global = useGlobal()
-  const pickDirectory = useDirectoryPicker()
-  const [search] = useSearchParams<{ draftId?: string }>()
-  const view = layout.view(route.sessionKey)
 
-  const draft = createMemo(() => {
-    if (!search.draftId) return
-    return tabs.store.find((tab): tab is DraftTab => tab.type === "draft" && tab.draftID === search.draftId)
-  })
-  const projectServer = createMemo(() => {
-    if (!search.draftId) return server.current
-    const target = draft()?.server
-    if (!target) return
-    return server.list.find((conn) => ServerConnection.key(conn) === target)
-  })
-  const projectServerCtx = createMemo(() => {
-    const conn = projectServer()
-    if (conn) return global.ensureServerCtx(conn)
-  })
-  const projects = createMemo(() =>
-    search.draftId ? (projectServerCtx()?.projects.list() ?? []) : layout.projects.list(),
-  )
-
-  const agentsQuery = createQuery(() => queryOptions().agents(pathKey(sdk().directory)))
-  const globalProvidersQuery = createQuery(() => queryOptions().providers(null))
-  const providersQuery = createQuery(() => queryOptions().providers(pathKey(sdk().directory)))
-  const selectProject = (worktree: string) => {
-    const conn = projectServer()
-    const target = projectServerCtx()
-    if (search.draftId) {
-      if (!conn || !target) return
-      target.projects.open(worktree)
-      target.projects.touch(worktree)
-      tabs.updateDraft(search.draftId, { server: ServerConnection.key(conn), directory: worktree })
-      return
-    }
-
-    layout.projects.open(worktree)
-    server.projects.touch(worktree)
-    navigate(`/${base64Encode(worktree)}/session`)
-  }
-  const addProject = (title: string) => {
-    const conn = projectServer()
-    if (!conn) return
-    pickDirectory({
-      server: conn,
-      title,
-      onSelect: (result) => {
-        const directory = Array.isArray(result) ? result[0] : result
-        if (directory) selectProject(directory)
-      },
-    })
-  }
-  const controls = createMemo(() => ({
-    agents: {
-      available: sync().data.agent,
-      options: local.agent.list().map((agent) => agent.name),
-      current: local.agent.current()?.name ?? "",
-      loading: agentsQuery.isLoading,
-      visible: settings.visibility.customAgents(),
-      select: local.agent.set,
-    },
-    model: {
-      selection: local.model,
-      paid: providers.paid().length > 0,
-      loading: agentsQuery.isLoading || providersQuery.isLoading || globalProvidersQuery.isLoading,
-    },
-    projects: {
-      available: projects(),
-      directory: sdk().directory,
-      select: selectProject,
-      add: addProject,
-    },
-    session: {
-      id: route.params.id,
-      tabs: layout.tabs(route.sessionKey),
-      reviewPanel: view.reviewPanel,
-    },
-    newLayoutDesigns: settings.general.newLayoutDesigns(),
-  }))
-
-  const handoffPrompt = createMemo(() => getSessionHandoff(route.sessionKey())?.prompt)
-  const info = createMemo(() => (route.params.id ? sync().session.get(route.params.id) : undefined))
+  const handoffPrompt = createMemo(() => getSessionHandoff(props.sessionKey)?.prompt)
+  const info = createMemo(() => (props.sessionID ? sync().session.get(props.sessionID) : undefined))
   const parentID = createMemo(() => info()?.parentID)
   const child = createMemo(() => !!parentID())
   const showComposer = createMemo(() => !props.state.blocked() || child())
@@ -175,11 +74,11 @@ export function SessionComposerRegion(props: {
 
   createEffect(() => {
     if (!prompt.ready()) return
-    setSessionHandoff(route.sessionKey(), { prompt: previewPrompt() })
+    setSessionHandoff(props.sessionKey, { prompt: previewPrompt() })
   })
 
   const [store, setStore] = createStore({
-    ready: false,
+    ready: props.ready || props.state.dock(),
     height: 320,
     body: undefined as HTMLDivElement | undefined,
   })
@@ -198,13 +97,17 @@ export function SessionComposerRegion(props: {
   }
 
   createEffect(() => {
-    route.sessionKey()
+    props.sessionKey
     const ready = props.ready
+    const dock = props.state.dock()
     const delay = 140
 
     clear()
-    setStore("ready", false)
-    if (!ready) return
+    if (store.ready || (!ready && !dock)) return
+    if (dock) {
+      setStore("ready", true)
+      return
+    }
 
     frame = requestAnimationFrame(() => {
       frame = undefined
@@ -218,22 +121,16 @@ export function SessionComposerRegion(props: {
   onCleanup(clear)
 
   const open = createMemo(() => store.ready && props.state.dock() && !props.state.closing())
-  const progress = useSpring(() => (open() ? 1 : 0), { visualDuration: 0.3, bounce: 0 })
+  const progress = useSpring(
+    () => (open() ? 1 : 0),
+    { visualDuration: 0.3, bounce: 0 },
+    () => `${props.sessionKey}\0${store.ready}`,
+  )
   const value = createMemo(() => Math.max(0, Math.min(1, progress())))
   const dock = createMemo(() => (store.ready && props.state.dock()) || value() > 0.001)
   const rolled = createMemo(() => (props.revert?.items.length ? props.revert : undefined))
   const lift = createMemo(() => (rolled() ? 18 : 36 * value()))
   const full = createMemo(() => Math.max(78, store.height))
-
-  const openParent = () => {
-    const id = parentID()
-    if (!id) return
-    navigate(
-      route.params.serverKey
-        ? sessionHref(requireServerKey(route.params.serverKey), id)
-        : legacySessionHref(sdk().directory, id),
-    )
-  }
 
   createEffect(() => {
     const el = store.body
@@ -290,8 +187,30 @@ export function SessionComposerRegion(props: {
         </Show>
 
         <Show when={showComposer()}>
+          <Show when={dock()}>
+            <div
+              classList={{
+                "overflow-hidden": true,
+                "pointer-events-none": value() < 0.98,
+              }}
+              style={{
+                "max-height": `${full() * value()}px`,
+              }}
+            >
+              <div ref={(el) => setStore("body", el)}>
+                <SessionTodoDock
+                  todos={props.state.todos()}
+                  collapsed={props.todo.collapsed}
+                  onToggle={props.todo.onToggle}
+                  collapseLabel={language.t("session.todo.collapse")}
+                  expandLabel={language.t("session.todo.expand")}
+                  dockProgress={value()}
+                />
+              </div>
+            </div>
+          </Show>
           <Show
-            when={promptReadyResource()}
+            when={prompt.ready() || promptReadyResource()}
             fallback={
               <>
                 <Show when={rolled()} keyed>
@@ -306,35 +225,15 @@ export function SessionComposerRegion(props: {
                     </div>
                   )}
                 </Show>
-                <div class="w-full min-h-32 md:min-h-40 rounded-md border border-border-weak-base bg-background-base/50 px-4 py-3 text-text-weak whitespace-pre-wrap pointer-events-none">
+                <div
+                  class="w-full min-h-32 md:min-h-40 rounded-md border border-border-weak-base bg-background-base/50 px-4 py-3 text-text-weak whitespace-pre-wrap pointer-events-none"
+                  style={{ "margin-top": `${-36 * value()}px` }}
+                >
                   {handoffPrompt() || language.t("prompt.loading")}
                 </div>
               </>
             }
           >
-            <Show when={dock()}>
-              <div
-                classList={{
-                  "overflow-hidden": true,
-                  "pointer-events-none": value() < 0.98,
-                }}
-                style={{
-                  "max-height": `${full() * value()}px`,
-                }}
-              >
-                <div ref={(el) => setStore("body", el)}>
-                  <SessionTodoDock
-                    sessionID={route.params.id}
-                    todos={props.state.todos()}
-                    collapsed={view.todoCollapsed.get()}
-                    onToggle={() => view.todoCollapsed.set(!view.todoCollapsed.get())}
-                    collapseLabel={language.t("session.todo.collapse")}
-                    expandLabel={language.t("session.todo.expand")}
-                    dockProgress={value()}
-                  />
-                </div>
-              </div>
-            </Show>
             <Show when={rolled()} keyed>
               {(revert) => (
                 <div
@@ -353,7 +252,7 @@ export function SessionComposerRegion(props: {
             </Show>
             <div
               classList={{
-                "relative z-10": true,
+                "relative z-30": true,
               }}
               style={{
                 "margin-top": `${-lift()}px`,
@@ -372,31 +271,28 @@ export function SessionComposerRegion(props: {
                 fallback={
                   <Show when={!props.state.blocked()}>
                     <PromptInput
-                      controls={controls()}
+                      {...props.promptInput}
+                      controls={props.controls}
                       variant={props.placement === "inline" ? "new-session" : undefined}
-                      ref={props.inputRef}
-                      newSessionWorktree={props.newSessionWorktree}
-                      onNewSessionWorktreeReset={props.onNewSessionWorktreeReset}
                       edit={props.followup?.edit}
                       onEditLoaded={props.followup?.onEditLoaded}
                       shouldQueue={props.followup?.queue}
                       onQueue={props.followup?.onQueue}
                       onAbort={props.followup?.onAbort}
-                      onSubmit={props.onSubmit}
                     />
                   </Show>
                 }
               >
                 <div
-                  ref={props.inputRef}
+                  ref={props.promptInput.ref}
                   class="w-full rounded-[12px] border border-border-weak-base bg-background-base p-3 text-16-regular text-text-weak"
                 >
                   <span>{language.t("session.child.promptDisabled")} </span>
-                  <Show when={parentID()}>
+                  <Show when={parentID() && props.openParent}>
                     <button
                       type="button"
                       class="text-text-base transition-colors hover:text-text-strong"
-                      onClick={openParent}
+                      onClick={props.openParent}
                     >
                       {language.t("session.child.backToParent")}
                     </button>

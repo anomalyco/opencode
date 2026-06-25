@@ -319,18 +319,6 @@ export const SettingsGeneralV2: Component = () => {
         </SettingsRowV2>
 
         <SettingsRowV2
-          title={language.t("settings.general.row.showSessionProgressBar.title")}
-          description={language.t("settings.general.row.showSessionProgressBar.description")}
-        >
-          <div data-action="settings-show-session-progress-bar">
-            <Switch
-              checked={settings.general.showSessionProgressBar()}
-              onChange={(checked) => settings.general.setShowSessionProgressBar(checked)}
-            />
-          </div>
-        </SettingsRowV2>
-
-        <SettingsRowV2
           title={language.t("settings.general.row.newLayoutDesigns.title")}
           description={language.t("settings.general.row.newLayoutDesigns.description")}
         >
@@ -348,7 +336,7 @@ export const SettingsGeneralV2: Component = () => {
           </div>
         </SettingsRowV2>
 
-        <Show when={mobile()}>
+        <Show when={mobile() && import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"}>
           <SettingsRowV2
             title={language.t("settings.general.row.mobileTitlebarBottom.title")}
             description={language.t("settings.general.row.mobileTitlebarBottom.description")}

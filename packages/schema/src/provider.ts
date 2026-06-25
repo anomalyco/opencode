@@ -2,11 +2,11 @@ export * as Provider from "./provider"
 
 import { Schema } from "effect"
 import { Integration } from "./integration"
-import { withStatics } from "./schema"
+import { statics } from "./schema"
 
 export const ID = Schema.String.pipe(
   Schema.brand("ProviderV2.ID"),
-  withStatics((schema) => ({
+  statics((schema) => ({
     opencode: schema.make("opencode"),
     anthropic: schema.make("anthropic"),
     openai: schema.make("openai"),
@@ -57,7 +57,7 @@ export const Info = Schema.Struct({
 })
   .annotate({ identifier: "ProviderV2.Info" })
   .pipe(
-    withStatics((schema) => ({
+    statics((schema) => ({
       empty: (id: ID) =>
         schema.make({
           id,

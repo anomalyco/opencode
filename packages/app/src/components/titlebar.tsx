@@ -1,16 +1,4 @@
-import {
-  createEffect,
-  createMemo,
-  createResource,
-  createRoot,
-  createSignal,
-  For,
-  Match,
-  onMount,
-  Show,
-  Switch,
-  untrack,
-} from "solid-js"
+import { createEffect, createMemo, createResource, createSignal, Match, Show, Switch, untrack } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLocation, useNavigate, useParams } from "@solidjs/router"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -30,19 +18,15 @@ import { useLanguage } from "@/context/language"
 import { useSettings } from "@/context/settings"
 import { WindowsAppMenu } from "./windows-app-menu"
 import { applyPath, backPath, forwardPath } from "./titlebar-history"
-import { projectForSession } from "@/pages/layout/helpers"
-import { SessionTabAvatar } from "@/pages/layout/session-tab-avatar"
+import { TitlebarTabStrip } from "@/components/titlebar-tab-strip"
 import { makeEventListener } from "@solid-primitives/event-listener"
-import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { createMediaQuery } from "@solid-primitives/media"
 import { readSessionTabsRemovedDetail, SESSION_TABS_REMOVED_EVENT } from "@/components/titlebar-session-events"
 import { useGlobal } from "@/context/global"
 import { ServerConnection, useServer } from "@/context/server"
-import { tabHref, useTabs } from "@/context/tabs"
+import { tabKey, useTabs } from "@/context/tabs"
 import "./titlebar.css"
-import { Session } from "@opencode-ai/sdk/v2"
-import { base64Encode } from "@opencode-ai/core/util/encode"
-import { createTabPromptState } from "@/context/prompt"
+import { newTabTooltipKeybind } from "./command-tooltip-keybind"
 
 type TauriDesktopWindow = {
   startDragging?: () => Promise<void>
@@ -234,6 +218,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
 
   return (
     <header
+      data-slot={useV2Titlebar() ? "titlebar-v2" : undefined}
       classList={{
         "shrink-0 relative flex flex-row": true,
         "h-9 bg-v2-background-bg-deep overflow-visible": useV2Titlebar(),
@@ -256,7 +241,6 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
       <Switch>
         <Match when={useV2Titlebar()}>
           {(_) => {
-            const navigate = useNavigate()
             const layout = useLayout()
             const global = useGlobal()
 
@@ -388,7 +372,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                   id: `tab.prev`,
                   category: "tab",
                   title: "",
-                  keybind: `mod+option+ArrowLeft`,
+                  keybind: `mod+option+ArrowLeft,ctrl+shift+tab`,
                   hidden: true,
                   onSelect: () => {
                     let index = tabsStore.findIndex((tab) => tab === currentTab())
@@ -405,7 +389,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                   id: `tab.next`,
                   category: "tab",
                   title: "",
-                  keybind: `mod+option+ArrowRight`,
+                  keybind: `mod+option+ArrowRight,ctrl+tab`,
                   hidden: true,
                   onSelect: () => {
                     let index = tabsStore.findIndex((tab) => tab === currentTab())
@@ -422,11 +406,6 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
             })
 
             const [tabsAreOverflowing, setTabsAreOverflowing] = createSignal(false)
-            let tabScrollRef!: HTMLDivElement
-
-            function refreshTabsAreOverflowing() {
-              setTabsAreOverflowing(tabScrollRef.scrollWidth > tabScrollRef.clientWidth)
-            }
 
             return (
               <div
@@ -465,194 +444,42 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                   />
                 </TooltipV2>
 
-                <div data-slot="titlebar-tabs" class="relative min-w-0">
-                  <div
-                    data-slot="titlebar-tabs-scroll"
-                    class="flex min-w-0 flex-row items-center gap-1.5 overflow-x-auto no-scrollbar [app-region:no-drag]"
-                    ref={(el) => {
-                      tabScrollRef = el
-                      createResizeObserver(el, refreshTabsAreOverflowing)
-                    }}
-                  >
-                    <div
-                      class="flex min-w-0 flex-row items-center gap-1.5"
-                      ref={(el) => createResizeObserver(el, refreshTabsAreOverflowing)}
-                    >
-                      <For each={tabsStore}>
-                        {(tab, i) => {
-                          let ref!: HTMLDivElement
-                          useTabShortcut(i, () => tabs.select(tab))
-
-                          const divider = () =>
-                            i() !== 0 && (
-                              <div class="w-[1.5px] h-3 shrink-0 rounded-full bg-[var(--v2-background-bg-layer-02)]" />
-                            )
-
-                          if (tab.type === "draft") {
-                            return (
-                              <>
-                                {divider()}
-                                <DraftTabItem
-                                  ref={ref}
-                                  href={tabHref(tab)}
-                                  title={language.t("command.session.new")}
-                                  active={currentTab() === tab}
-                                  onNavigate={() => {
-                                    tabs.select(tab)
-                                    ref.scrollIntoView({ behavior: "instant" })
-                                  }}
-                                  onClose={() => tabsStoreActions.removeTab(i())}
-                                />
-                              </>
-                            )
-                          }
-
-                          const serverCtx = createMemo(() => {
-                            const conn = server.list.find((item) => ServerConnection.key(item) === tab.server)
-                            return conn ? global.ensureServerCtx(conn) : undefined
-                          })
-                          const sdk = createMemo(() => serverCtx()?.sdk ?? null)
-                          const cachedSession = createMemo(() => {
-                            const placement = global.sessionPlacement.get(tab.server, tab.sessionId)
-                            const ctx = serverCtx()
-                            if (!placement || !ctx) return
-                            return ctx.sync
-                              .child(placement.directory, { bootstrap: false })[0]
-                              .session.find((session) => session.id === tab.sessionId)
-                          })
-
-                          const [loadedSession] = createResource(
-                            () => {
-                              if (cachedSession()) return null
-                              const id = tab.sessionId
-                              const ctx = serverCtx()
-                              return ctx ? { id, ctx } : null
-                            },
-                            ({ id, ctx }) =>
-                              ctx.sdk.client.session
-                                .get({ sessionID: id })
-                                .then((x) => {
-                                  const session = x.data
-                                  if (!session) return
-                                  if (!session.parentID)
-                                    global.sessionPlacement.set({
-                                      server: tab.server,
-                                      leafID: session.id,
-                                      rootID: session.id,
-                                      directory: session.directory,
-                                    })
-                                  return session
-                                })
-                                .catch(() => undefined),
-                          )
-                          const session = createMemo(() => cachedSession() ?? loadedSession())
-                          let prefetched = false
-
-                          createEffect(() => {
-                            const ctx = serverCtx()
-                            const sess = session()
-                            if (!ctx || !sess || prefetched) return
-                            prefetched = true
-                            createRoot((dispose) => {
-                              try {
-                                void ctx.sync
-                                  .ensureDirSyncContext(sess.directory)
-                                  .session.sync(sess.id)
-                                  .catch(() => {})
-                                  .finally(dispose)
-                              } catch {
-                                dispose()
-                              }
-                            })
-                          })
-
-                          createEffect(() => {
-                            if (tab.type !== "session") return
-                            const _sdk = sdk()
-                            if (!_sdk) return
-                            const sess = session()
-                            if (!sess) return
-                            createTabPromptState(tabs, tab, _sdk.scope, {
-                              dir: base64Encode(sess.directory),
-                              id: sess.id,
-                            })
-                          })
-
-                          return (
-                            <>
-                              {divider()}
-                              <Show when={session()}>
-                                {(session) => (
-                                  <TabNavItem
-                                    ref={ref}
-                                    href={tabHref(tab)}
-                                    server={tab.server}
-                                    sessionId={tab.sessionId}
-                                    session={session()}
-                                    onNavigate={() => {
-                                      tabs.select(tab)
-
-                                      ref.scrollIntoView({ behavior: "instant" })
-                                    }}
-                                    onClose={() => tabsStoreActions.removeTab(i())}
-                                    active={currentTab() === tab}
-                                    activeServer={tab.server === server.key}
-                                    forceTruncate={tabsAreOverflowing()}
-                                  />
-                                )}
-                              </Show>
-                            </>
-                          )
-                        }}
-                      </For>
-                      <Show when={creating() && params.dir}>
-                        {(_) => {
-                          let ref!: HTMLDivElement
-
-                          onMount(() => {
-                            ref.scrollIntoView({ behavior: "instant" })
-                          })
-
-                          return (
-                            <>
-                              <div class="w-[1.5px] h-3 shrink-0 rounded-full bg-[var(--v2-background-bg-layer-02)]" />
-                              <NewSessionTabItem
-                                ref={ref}
-                                href={`/${params.dir}/session`}
-                                title={language.t("command.session.new")}
-                                onClose={() => {
-                                  const tab = tabsStore.at(-1)
-                                  if (tab) tabs.select(tab)
-                                  else navigate("/")
-                                }}
-                              />
-                            </>
-                          )
-                        }}
-                      </Show>
-                    </div>
-                  </div>
-                  <div
-                    data-slot="titlebar-tabs-fade-left"
-                    aria-hidden="true"
-                    class="pointer-events-none absolute inset-y-0 left-0 z-10 w-6 bg-[linear-gradient(to_right,var(--v2-background-bg-deep),transparent)]"
-                  />
-                  <div
-                    data-slot="titlebar-tabs-fade-right"
-                    aria-hidden="true"
-                    class="pointer-events-none absolute inset-y-0 right-0 z-10 w-6 bg-[linear-gradient(to_left,var(--v2-background-bg-deep),transparent)]"
-                  />
-                </div>
+                <TitlebarTabStrip
+                  tabs={tabsStore}
+                  currentTab={currentTab}
+                  activeServerKey={server.key}
+                  forceTruncate={tabsAreOverflowing()}
+                  onOverflowChange={setTabsAreOverflowing}
+                  onNavigate={(tab, el) => {
+                    tabs.select(tab)
+                    el?.scrollIntoView({ behavior: "instant" })
+                  }}
+                  onClose={(tab) => {
+                    const index = tabsStore.findIndex((item) => tabKey(item) === tabKey(tab))
+                    if (index !== -1) tabsStoreActions.removeTab(index)
+                  }}
+                  onReorder={(keys) => tabsStoreActions.reorder(keys)}
+                />
                 <Show when={!(creating() && params.dir)}>
-                  <IconButtonV2
-                    type="button"
-                    variant="ghost-muted"
-                    size="large"
-                    class="shrink-0"
-                    icon={<IconV2 name="plus" />}
-                    onClick={openNewTab}
-                    aria-label={language.t("command.session.new")}
-                  />
+                  <TooltipV2
+                    placement="bottom"
+                    value={
+                      <>
+                        {language.t("command.session.new")}
+                        <KeybindV2 keys={newTabTooltipKeybind(command)} variant="neutral" />
+                      </>
+                    }
+                  >
+                    <IconButtonV2
+                      type="button"
+                      variant="ghost-muted"
+                      size="large"
+                      class="shrink-0"
+                      icon={<IconV2 name="plus" />}
+                      onClick={openNewTab}
+                      aria-label={language.t("command.session.new")}
+                    />
+                  </TooltipV2>
                 </Show>
                 <div class="flex-1" />
                 <TitlebarV2Right state={v2RightState()} />
@@ -740,7 +567,6 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                         >
                           <Button
                             variant="ghost"
-                            icon={creating() ? "new-session-active" : "new-session"}
                             class="titlebar-icon w-8 h-6 p-0 box-border"
                             disabled={layout.sidebar.opened()}
                             tabIndex={layout.sidebar.opened() ? -1 : undefined}
@@ -750,7 +576,9 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                             }}
                             aria-label={language.t("command.session.new")}
                             aria-current={creating() ? "page" : undefined}
-                          />
+                          >
+                            <IconV2 name="edit" size="small" />
+                          </Button>
                         </TooltipKeybind>
                       </div>
                     </div>
@@ -848,16 +676,16 @@ function TitlebarV2Right(props: { state: TitlebarV2RightState }) {
 
 function TitlebarUpdateIconButton(props: { state: TitlebarUpdatePillState }) {
   return (
-    <div class="relative isolate mr-3 size-5 shrink-0">
+    <div class="group relative mr-3 h-5 w-5 shrink-0 rounded-full bg-v2-background-bg-deep transition-[width] duration-150 ease-out hover:z-30 hover:w-[68px] focus-within:z-30 focus-within:w-[68px] motion-reduce:transition-none">
       <button
         type="button"
-        class="group absolute right-0 top-0 z-10 flex h-5 w-5 items-center justify-end overflow-hidden rounded-full bg-v2-icon-icon-accent/20 text-v2-icon-icon-accent transition-[width,background-color] duration-150 ease-out hover:z-30 hover:w-[68px] hover:bg-[color-mix(in_srgb,var(--v2-icon-icon-accent)_20%,var(--v2-background-bg-deep))] focus-visible:z-30 focus-visible:w-[68px] focus-visible:bg-[color-mix(in_srgb,var(--v2-icon-icon-accent)_20%,var(--v2-background-bg-deep))] focus-visible:outline-none disabled:opacity-60 motion-reduce:transition-none"
+        class="absolute right-0 top-0 z-10 flex h-5 w-5 items-center justify-end overflow-hidden rounded-full bg-v2-icon-icon-accent/20 text-v2-icon-icon-accent transition-[width,background-color] duration-150 ease-out group-hover:w-[68px] group-hover:bg-[color-mix(in_srgb,var(--v2-icon-icon-accent)_20%,var(--v2-background-bg-deep))] group-focus-within:w-[68px] group-focus-within:bg-[color-mix(in_srgb,var(--v2-icon-icon-accent)_20%,var(--v2-background-bg-deep))] focus-visible:outline-none disabled:opacity-60 motion-reduce:transition-none"
         onClick={props.state.onInstall}
         disabled={props.state.installing}
         aria-busy={props.state.installing}
         aria-label={props.state.ariaLabel}
       >
-        <span class="shrink-0 ml-[8px] mr-px text-[11px] text-v2-text-text-accent [font-weight:530] opacity-0 translate-x-2 motion-safe:transition-all duration-150 ease-out group-hover:opacity-100 group-hover:translate-x-0 group-focus-visible:opacity-100 group-focus-visible:translate-x-0 motion-reduce:translate-x-0">
+        <span class="shrink-0 ml-[8px] mr-px text-[11px] text-v2-text-text-accent [font-weight:530] opacity-0 translate-x-2 motion-safe:transition-all duration-150 ease-out group-hover:opacity-100 group-hover:translate-x-0 group-focus-within:opacity-100 group-focus-within:translate-x-0 motion-reduce:translate-x-0">
           Update
         </span>
         <span class="flex size-5 shrink-0 items-center justify-center">
@@ -871,206 +699,6 @@ function TitlebarUpdateIconButton(props: { state: TitlebarUpdatePillState }) {
           </Show>
         </span>
       </button>
-    </div>
-  )
-}
-
-function useTabShortcut(index: () => number, onSelect: () => void) {
-  const command = useCommand()
-
-  command.register(() => {
-    const number = index() + 1
-    if (number > 9) return []
-
-    return [
-      {
-        id: `tab.${number}`,
-        category: "tab",
-        title: "",
-        keybind: `mod+${number}`,
-        hidden: true,
-        onSelect,
-      },
-    ]
-  })
-}
-
-function TabNavItem(props: {
-  ref?: HTMLDivElement
-  href: string
-  server: ServerConnection.Key
-  sessionId?: string
-  hideClose?: boolean
-  onClose: () => void
-  onNavigate: () => void
-  active?: boolean
-  activeServer: boolean
-  forceTruncate?: boolean
-  session: Session
-}) {
-  const closeTab = (event: MouseEvent) => {
-    event.preventDefault()
-    event.stopPropagation()
-    props.onClose()
-  }
-
-  const global = useGlobal()
-  const serverCtx = createMemo(() => {
-    const conn = global.servers.list().find((item) => ServerConnection.key(item) === props.server)
-    if (conn) return global.ensureServerCtx(conn)
-  })
-
-  return (
-    <div
-      ref={props.ref}
-      class="group relative flex h-7 w-56 shrink-0 flex-row items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-[6px] bg-[var(--tab-bg)] px-1.5 [--tab-bg:var(--v2-background-bg-deep)] hover:[--tab-bg:var(--v2-background-bg-layer-02)] data-[active='true']:[--tab-bg:var(--v2-background-bg-layer-02)]"
-      data-active={props.active}
-      onMouseDown={(event) => {
-        if (event.button !== 1) return
-        closeTab(event)
-      }}
-    >
-      <Show when={props.session}>
-        {(session) => {
-          const project = createMemo(() => projectForSession(session(), serverCtx()?.projects.list() ?? []))
-
-          return (
-            <a
-              href={props.href}
-              onClick={(event) => {
-                event.preventDefault()
-                props.onNavigate()
-              }}
-              class="flex h-full min-w-0 flex-1 flex-row items-center gap-1.5 text-[13px] font-medium text-v2-text-text-faint group-data-[active='true']:text-v2-text-text-base"
-            >
-              <span data-slot="project-avatar-slot">
-                <SessionTabAvatar
-                  project={project()}
-                  directory={session().directory}
-                  sessionId={session().id}
-                  activeServer={props.activeServer}
-                />
-              </span>
-              <span class="min-w-0 flex-1">{session().title}</span>
-            </a>
-          )
-        }}
-      </Show>
-
-      <div
-        class="absolute not-group-hover:not-group-data-[active=true]:not-data-[truncate=true]:left-52 group-hover:right-0 group-data-[active=true]:right-0 data-[truncate=true]:right-0 inset-y-0 flex flex-row items-center pr-1 py-1 w-8 pl-2"
-        data-truncate={props.forceTruncate}
-      >
-        <div
-          class="absolute inset-0 rounded-r-[6px] bg-(image:--inactive-bg) group-hover:bg-(image:--active-bg) group-data-[active=true]:bg-(image:--active-bg)"
-          style={{
-            "--inactive-bg": "linear-gradient(to right, transparent 0%, var(--tab-bg) 80%)",
-            "--active-bg": "linear-gradient(90deg, transparent 0%, var(--tab-bg) 25%)",
-          }}
-        />
-        <IconButtonV2
-          size="small"
-          variant="ghost-muted"
-          class="opacity-0 group-hover:opacity-100 group-data-[active='true']:opacity-100 z-10"
-          onClick={closeTab}
-          icon={<IconV2 name="xmark-small" />}
-        />
-      </div>
-    </div>
-  )
-}
-
-function DraftTabItem(props: {
-  ref?: HTMLDivElement
-  href: string
-  title: string
-  active?: boolean
-  onNavigate: () => void
-  onClose: () => void
-}) {
-  const closeTab = (event: MouseEvent) => {
-    event.preventDefault()
-    event.stopPropagation()
-    props.onClose()
-  }
-  return (
-    <div
-      ref={props.ref}
-      data-active={props.active}
-      class="group relative flex h-7 w-56 shrink-0 flex-row items-center gap-1.5 overflow-hidden rounded-[6px] bg-[var(--tab-bg)] pl-1.5 pr-8 whitespace-nowrap [--tab-bg:var(--v2-background-bg-deep)] hover:[--tab-bg:var(--v2-background-bg-layer-02)] data-[active='true']:[--tab-bg:var(--v2-overlay-simple-overlay-pressed)] focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[var(--v2-border-border-focus)]"
-      onMouseDown={(event) => {
-        if (event.button !== 1) return
-        closeTab(event)
-      }}
-    >
-      <a
-        href={props.href}
-        onClick={(event) => {
-          event.preventDefault()
-          props.onNavigate()
-        }}
-        class="flex h-full min-w-0 flex-1 flex-row items-center gap-1.5 overflow-hidden text-[13px] font-medium leading-5 text-v2-text-text-faint group-data-[active='true']:text-[var(--v2-text-text-base)]"
-      >
-        <span class="flex size-4 shrink-0 rotate-90 items-center justify-center">
-          <IconV2 name="edit" />
-        </span>
-        <span class="truncate leading-5">{props.title}</span>
-      </a>
-      <div class="absolute right-0 inset-y-0 flex w-7 items-center justify-center">
-        <IconButtonV2
-          size="small"
-          variant="ghost-muted"
-          onMouseDown={(event) => {
-            event.preventDefault()
-            event.stopPropagation()
-          }}
-          onClick={closeTab}
-          icon={<IconV2 name="xmark-small" />}
-          aria-label="Close tab"
-        />
-      </div>
-    </div>
-  )
-}
-
-function NewSessionTabItem(props: { ref?: HTMLDivElement; href: string; title: string; onClose: () => void }) {
-  const closeTab = (event: MouseEvent) => {
-    event.preventDefault()
-    event.stopPropagation()
-    props.onClose()
-  }
-  return (
-    <div
-      ref={props.ref}
-      class="group relative flex h-7 w-56 shrink-0 flex-row items-center gap-1.5 overflow-hidden rounded-[6px] bg-[var(--v2-overlay-simple-overlay-pressed)] pl-1.5 pr-8 whitespace-nowrap focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[var(--v2-border-border-focus)]"
-      onMouseDown={(event) => {
-        if (event.button !== 1) return
-        closeTab(event)
-      }}
-    >
-      <a
-        href={props.href}
-        aria-current="page"
-        class="flex h-full min-w-0 flex-1 flex-row items-center gap-1.5 overflow-hidden text-[13px] font-medium leading-5 text-[var(--v2-text-text-base)]"
-      >
-        <span class="flex size-4 shrink-0 rotate-90 items-center justify-center">
-          <IconV2 name="edit" />
-        </span>
-        <span class="truncate leading-5">{props.title}</span>
-      </a>
-      <div class="absolute right-0 inset-y-0 flex w-7 items-center justify-center">
-        <IconButtonV2
-          size="small"
-          variant="ghost-muted"
-          onMouseDown={(event) => {
-            event.preventDefault()
-            event.stopPropagation()
-          }}
-          onClick={closeTab}
-          icon={<IconV2 name="xmark-small" />}
-          aria-label="Close tab"
-        />
-      </div>
     </div>
   )
 }

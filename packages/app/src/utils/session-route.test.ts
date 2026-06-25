@@ -1,8 +1,38 @@
 import { describe, expect, test } from "bun:test"
 import { ServerConnection } from "@/context/server"
-import { legacySessionHref, requireServerKey, rootSession, sessionHref } from "./session-route"
+import {
+  legacySessionHref,
+  legacySessionServer,
+  requireServerKey,
+  rootSession,
+  selectSessionLineage,
+  sessionHref,
+} from "./session-route"
 
 describe("session routes", () => {
+  test("uses the unique persisted server for a legacy session route", () => {
+    expect(
+      legacySessionServer(
+        [{ type: "session", server: ServerConnection.Key.make("server-b"), sessionId: "session-1" }],
+        "session-1",
+        ServerConnection.Key.make("server-a"),
+      ),
+    ).toBe(ServerConnection.Key.make("server-b"))
+  })
+
+  test("prefers the active server when a legacy session ID is ambiguous", () => {
+    expect(
+      legacySessionServer(
+        [
+          { type: "session", server: ServerConnection.Key.make("server-a"), sessionId: "session-1" },
+          { type: "session", server: ServerConnection.Key.make("server-b"), sessionId: "session-1" },
+        ],
+        "session-1",
+        ServerConnection.Key.make("server-b"),
+      ),
+    ).toBe(ServerConnection.Key.make("server-b"))
+  })
+
   test("builds and decodes a server-keyed session route", () => {
     const server = ServerConnection.Key.make("https://example.com:4096")
     const href = sessionHref(server, "session-1")
@@ -35,5 +65,20 @@ describe("session routes", () => {
         return session
       }),
     ).toBe(sessions.root)
+  })
+
+  test("rejects a parent cycle", async () => {
+    const sessions: Record<string, { id: string; parentID?: string }> = {
+      child: { id: "child", parentID: "parent" },
+      parent: { id: "parent", parentID: "child" },
+    }
+
+    expect(rootSession(sessions.child, async (id) => sessions[id]!)).rejects.toThrow("Session parent cycle: child")
+  })
+
+  test("ignores a resolved lineage retained from the previous route", () => {
+    const previous = { session: { id: "A" }, root: { id: "A" } }
+
+    expect(selectSessionLineage("B", undefined, previous)).toBeUndefined()
   })
 })

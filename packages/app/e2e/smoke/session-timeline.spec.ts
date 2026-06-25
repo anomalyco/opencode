@@ -362,7 +362,6 @@ async function configureSmokePage(page: Page, directory: string) {
           editToolPartsExpanded: true,
           shellToolPartsExpanded: true,
           showReasoningSummaries: true,
-          showSessionProgressBar: true,
         },
       }),
     )

@@ -1,20 +1,20 @@
 export * as Credential from "./credential"
 
 import { Schema } from "effect"
-import { Integration } from "./integration"
+import { IntegrationMethodID } from "./integration-id"
 import { ascending } from "./identifier"
-import { NonNegativeInt, withStatics } from "./schema"
+import { NonNegativeInt, statics } from "./schema"
 
 export const ID = Schema.String.pipe(
   Schema.brand("Credential.ID"),
-  withStatics((schema) => ({ create: () => schema.make("cred_" + ascending()) })),
+  statics((schema) => ({ create: () => schema.make("cred_" + ascending()) })),
 )
 export type ID = typeof ID.Type
 
 export interface OAuth extends Schema.Schema.Type<typeof OAuth> {}
 export const OAuth = Schema.Struct({
   type: Schema.Literal("oauth"),
-  methodID: Integration.MethodID,
+  methodID: IntegrationMethodID,
   refresh: Schema.String,
   access: Schema.String,
   expires: NonNegativeInt,

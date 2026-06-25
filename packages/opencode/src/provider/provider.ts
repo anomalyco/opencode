@@ -24,7 +24,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { EffectPromise } from "@/effect/promise"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { isRecord } from "@/util/record"
-import { optionalOmitUndefined } from "@opencode-ai/core/schema"
+import { optional } from "@opencode-ai/core/schema"
 import { ProviderTransform } from "./transform"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
@@ -999,8 +999,8 @@ const ProviderCost = Schema.Struct({
   input: Schema.Finite,
   output: Schema.Finite,
   cache: ProviderCacheCost,
-  tiers: optionalOmitUndefined(Schema.Array(ProviderCostTier)),
-  experimentalOver200K: optionalOmitUndefined(
+  tiers: optional(Schema.Array(ProviderCostTier)),
+  experimentalOver200K: optional(
     Schema.Struct({
       input: Schema.Finite,
       output: Schema.Finite,
@@ -1011,7 +1011,7 @@ const ProviderCost = Schema.Struct({
 
 const ProviderLimit = Schema.Struct({
   context: Schema.Finite,
-  input: optionalOmitUndefined(Schema.Finite),
+  input: optional(Schema.Finite),
   output: Schema.Finite,
 })
 
@@ -1020,7 +1020,7 @@ export const Model = Schema.Struct({
   providerID: ProviderV2.ID,
   api: ProviderApiInfo,
   name: Schema.String,
-  family: optionalOmitUndefined(Schema.String),
+  family: optional(Schema.String),
   capabilities: ProviderCapabilities,
   cost: ProviderCost,
   limit: ProviderLimit,
@@ -1028,7 +1028,7 @@ export const Model = Schema.Struct({
   options: Schema.Record(Schema.String, Schema.Any),
   headers: Schema.Record(Schema.String, Schema.String),
   release_date: Schema.String,
-  variants: optionalOmitUndefined(Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Any))),
+  variants: optional(Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Any))),
 }).annotate({ identifier: "Model" })
 export type Model = Types.DeepMutable<Schema.Schema.Type<typeof Model>>
 
@@ -1037,7 +1037,7 @@ export const Info = Schema.Struct({
   name: Schema.String,
   source: Schema.Literals(["env", "config", "custom", "api"]),
   env: Schema.Array(Schema.String),
-  key: optionalOmitUndefined(Schema.String),
+  key: optional(Schema.String),
   options: Schema.Record(Schema.String, Schema.Any),
   models: Schema.Record(Schema.String, Model),
 }).annotate({ identifier: "Provider" })

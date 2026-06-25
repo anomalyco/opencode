@@ -139,7 +139,7 @@ app
       return c.json({})
     },
   )
-  .post("/support/actions/remove-share", async (c) => {
+  .delete("/support/actions/remove-share", async (c) => {
     const authorization = c.req.header("authorization")
     const expected = `Bearer ${(Resource as unknown as Record<string, { value: string }>).SUPPORT_API_KEY.value}`
     const actual = Buffer.from(authorization ?? "")

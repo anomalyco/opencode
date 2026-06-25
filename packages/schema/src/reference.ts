@@ -1,7 +1,11 @@
 export * as Reference from "./reference"
 
 import { Schema } from "effect"
+import { define, inventory } from "./event"
 import { AbsolutePath } from "./schema"
+
+const Updated = define({ type: "reference.updated", schema: {} })
+export const Event = { Updated, Definitions: inventory(Updated) }
 
 export interface LocalSource extends Schema.Schema.Type<typeof LocalSource> {}
 export const LocalSource = Schema.Struct({
@@ -22,3 +26,11 @@ export const GitSource = Schema.Struct({
 
 export const Source = Schema.Union([LocalSource, GitSource]).pipe(Schema.toTaggedUnion("type"))
 export type Source = typeof Source.Type
+
+export class Info extends Schema.Class<Info>("Reference.Info")({
+  name: Schema.String,
+  path: AbsolutePath,
+  description: Schema.String.pipe(Schema.optional),
+  hidden: Schema.Boolean.pipe(Schema.optional),
+  source: Source,
+}) {}

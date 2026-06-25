@@ -1,6 +1,6 @@
 {
   "name": "@opencode-ai/app",
-  "version": "1.17.9",
+  "version": "1.17.11",
   "description": "",
   "type": "module",
   "exports": {
@@ -17,9 +17,9 @@
     "dev": "vite",
     "build": "vite build",
     "serve": "vite preview",
-    "test": "bun run test:unit && bun run test:virtualizer",
+    "test": "bun run test:unit && bun run test:browser",
     "test:unit": "bun test --only-failures --preload ./happydom.ts ./src",
-    "test:virtualizer": "bun test --conditions=browser --preload ./happydom.ts ./test-browser/solid-virtual.test.ts",
+    "test:browser": "bun test --conditions=browser --preload ./happydom.ts ./test-browser",
     "test:unit:watch": "bun test --watch --preload ./happydom.ts ./src",
     "test:e2e": "playwright test",
     "test:e2e:local": "playwright test",
@@ -47,6 +47,7 @@
     "@kobalte/core": "catalog:",
     "@opencode-ai/core": "workspace:*",
     "@opencode-ai/sdk": "workspace:*",
+    "@opencode-ai/session-ui": "workspace:*",
     "@opencode-ai/ui": "workspace:*",
     "@pierre/trees": "1.0.0-beta.4",
     "@sentry/solid": "catalog:",
