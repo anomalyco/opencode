@@ -599,9 +599,9 @@ describe("Config", () => {
               models: {
                 model: {
                   request: {
-                    body: { temperature: 0.3, reasoningEffort: "high", serviceTier: "priority" },
+                    body: { temperature: 0.3, reasoning_effort: "high", service_tier: "priority" },
                   },
-                  variants: [{ id: "high", body: { reasoningEffort: "high", reasoningSummary: "auto" } }],
+                  variants: [{ id: "high", body: { reasoning_effort: "high", reasoning_summary: "auto" } }],
                 },
               },
             })

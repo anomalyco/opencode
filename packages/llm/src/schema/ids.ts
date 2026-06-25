@@ -1,4 +1,7 @@
 import { Schema } from "effect"
+import { ProviderMetadata } from "@opencode-ai/schema/llm"
+
+export { ProviderMetadata }
 
 /** Stable string identifier for a protocol implementation. */
 export const ProtocolID = Schema.String
@@ -38,6 +41,3 @@ export type FinishReason = Schema.Schema.Type<typeof FinishReason>
 
 export const JsonSchema = Schema.Record(Schema.String, Schema.Unknown)
 export type JsonSchema = Schema.Schema.Type<typeof JsonSchema>
-
-export const ProviderMetadata = Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Unknown))
-export type ProviderMetadata = Schema.Schema.Type<typeof ProviderMetadata>
