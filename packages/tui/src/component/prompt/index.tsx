@@ -36,6 +36,7 @@ import { expandPastedTextPlaceholders, expandTrackedPastedText } from "../../pro
 import { usePromptStash } from "../../prompt/stash"
 import { DialogStash } from "../dialog-stash"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
+import { parsePromptSlashCommand } from "./submit-command"
 import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import type { AssistantMessage, FilePart, UserMessage } from "@opencode-ai/sdk/v2"
 import { Locale } from "../../util/locale"
@@ -1029,6 +1030,7 @@ export function Prompt(props: PromptProps) {
 
     // Filter out text parts (pasted content) since they're now expanded inline
     const nonTextParts = store.prompt.parts.filter((part) => part.type !== "text")
+    const parsedSlashCommand = parsePromptSlashCommand(inputText, sync.data.command)
 
     // Capture mode before it gets reset
     const currentMode = store.mode
@@ -1062,22 +1064,13 @@ export function Prompt(props: PromptProps) {
         command: inputText,
       })
       setStore("mode", "normal")
-    } else if (
-      inputText.startsWith("/") &&
-      sync.data.command.some((x) => x.name === inputText.split("\n")[0].split(" ")[0].slice(1))
-    ) {
+    } else if (parsedSlashCommand) {
       move.startSubmit()
-      // Parse command from first line, preserve multi-line content in arguments
-      const firstLineEnd = inputText.indexOf("\n")
-      const firstLine = firstLineEnd === -1 ? inputText : inputText.slice(0, firstLineEnd)
-      const [command, ...firstLineArgs] = firstLine.split(" ")
-      const restOfInput = firstLineEnd === -1 ? "" : inputText.slice(firstLineEnd + 1)
-      const args = firstLineArgs.join(" ") + (restOfInput ? "\n" + restOfInput : "")
 
       void sdk.client.session.command({
         sessionID,
-        command: command.slice(1),
-        arguments: args,
+        command: parsedSlashCommand.command,
+        arguments: parsedSlashCommand.arguments,
         agent: agent.name,
         model: `${selectedModel.providerID}/${selectedModel.modelID}`,
         variant,
