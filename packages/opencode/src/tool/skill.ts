@@ -51,7 +51,7 @@ export const SkillTool = Tool.define(
               info.content.trim(),
               "",
               `Base directory for this skill: ${base}`,
-              "Relative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.",
+              "Relative paths in this skill (e.g., scripts/, references/) are relative to this base directory.",
               "Note: file list is sampled.",
               "",
               "<skill_files>",
