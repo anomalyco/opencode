@@ -232,6 +232,7 @@ mcpTest.instance(
   () =>
     Effect.gen(function* () {
       const mcp = yield* MCP.Service
+      expect(transportCalls).toHaveLength(0)
       yield* McpAuth.use.updateTokens(
         "test-status-url",
         { accessToken: "old-token" },
@@ -253,6 +254,7 @@ mcpTest.instance(
         "https://example.com/mcp",
       )
       expect(yield* mcp.getAuthStatus("test-status-url")).toBe("expired")
+      expect(transportCalls).toHaveLength(0)
     }),
   { config: config("test-status-url") },
 )
