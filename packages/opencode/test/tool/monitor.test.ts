@@ -117,8 +117,11 @@ describe("MonitorTool", () => {
       // Wait briefly for the monitor to exit and trigger callbacks
       yield* Effect.sleep("500 millis")
 
+      // Output batch + exit note both arrive (order is not guaranteed: the final
+      // batch flush is detached, so assert presence, not position).
       expect(promptCalls.length).toBeGreaterThan(0)
-      expect(promptCalls[promptCalls.length - 1].text).toContain("Monitor exited")
+      expect(promptCalls.some((p) => p.text.includes("hello"))).toBe(true)
+      expect(promptCalls.some((p) => p.text.includes("Monitor exited"))).toBe(true)
     }),
   )
 })
@@ -159,7 +162,7 @@ if (process.env.OPENCODE_LIVE_MONITOR_TEST) {
 
         yield* Effect.sleep("1 second")
 
-        const events = promptCalls.filter((p) => p.text.includes("Event:"))
+        const events = promptCalls.filter((p) => p.text.includes("monitor_output"))
         expect(events.length).toBeGreaterThanOrEqual(1)
       }),
     )
@@ -215,7 +218,7 @@ if (process.env.OPENCODE_LIVE_MONITOR_TEST) {
         yield* Effect.sleep("500 millis")
 
         // Collect events
-        const events = promptCalls.filter((p) => p.text.includes("Event:"))
+        const events = promptCalls.filter((p) => p.text.includes("monitor_output"))
         expect(events.length).toBeGreaterThanOrEqual(1)
 
         // Verify event contents
@@ -278,7 +281,7 @@ if (process.env.OPENCODE_LIVE_MONITOR_TEST) {
         yield* Effect.sleep("500 millis")
 
         // Collect events
-        const events = promptCalls.filter((p) => p.text.includes("Event:"))
+        const events = promptCalls.filter((p) => p.text.includes("monitor_output"))
         expect(events.length).toBeGreaterThanOrEqual(1)
 
         // Verify event contents
