@@ -1,7 +1,7 @@
 export * as Reference from "./reference"
 
-import { Context, Effect, Layer, Schema, Scope } from "effect"
-import { castDraft } from "immer"
+import { Context, Effect, Layer, Scope, Types } from "effect"
+import { Reference } from "@opencode-ai/schema/reference"
 import { Global } from "./global"
 import { EventV2 } from "./event"
 import { Repository } from "./repository"
@@ -9,48 +9,31 @@ import { RepositoryCache } from "./repository-cache"
 import { AbsolutePath } from "./schema"
 import { State } from "./state"
 
-export class LocalSource extends Schema.Class<LocalSource>("Reference.LocalSource")({
-  type: Schema.Literal("local"),
-  path: AbsolutePath,
-  description: Schema.String.pipe(Schema.optional),
-  hidden: Schema.Boolean.pipe(Schema.optional),
-}) {}
+export const LocalSource = Reference.LocalSource
+export type LocalSource = Reference.LocalSource
 
-export class GitSource extends Schema.Class<GitSource>("Reference.GitSource")({
-  type: Schema.Literal("git"),
-  repository: Schema.String,
-  branch: Schema.String.pipe(Schema.optional),
-  description: Schema.String.pipe(Schema.optional),
-  hidden: Schema.Boolean.pipe(Schema.optional),
-}) {}
+export const GitSource = Reference.GitSource
+export type GitSource = Reference.GitSource
 
-export const Source = Schema.Union([LocalSource, GitSource]).pipe(Schema.toTaggedUnion("type"))
-export type Source = typeof Source.Type
+export const Source = Reference.Source
+export type Source = Reference.Source
 
-export const Event = {
-  Updated: EventV2.define({ type: "reference.updated", schema: {} }),
-}
+export const Event = Reference.Event
 
-export class Info extends Schema.Class<Info>("Reference.Info")({
-  name: Schema.String,
-  path: AbsolutePath,
-  description: Schema.String.pipe(Schema.optional),
-  hidden: Schema.Boolean.pipe(Schema.optional),
-  source: Source,
-}) {}
+export const Info = Reference.Info
+export type Info = Reference.Info
 
 type Data = {
-  sources: Map<string, Source>
+  sources: Map<string, Types.DeepMutable<Source>>
 }
 
-type Editor = {
+type Draft = {
   add(name: string, source: Source): void
   remove(name: string): void
   list(): readonly [string, Source][]
 }
 
-export interface Interface {
-  readonly transform: State.Interface<Data, Editor>["transform"]
+export interface Interface extends State.Transformable<Draft> {
   readonly list: () => Effect.Effect<Info[]>
 }
 
@@ -64,18 +47,18 @@ export const layer = Layer.effect(
     const cache = yield* RepositoryCache.Service
     const scope = yield* Scope.Scope
     const materialized = new Map<string, Info>()
-    const state = State.create<Data, Editor>({
+    const state = State.create<Data, Draft>({
       initial: () => ({ sources: new Map() }),
-      editor: (draft) => ({
-        add: (name, source) => draft.sources.set(name, castDraft(source)),
+      draft: (draft) => ({
+        add: (name, source) => draft.sources.set(name, source as Types.DeepMutable<Source>),
         remove: (name) => draft.sources.delete(name),
         list: () => Array.from(draft.sources.entries()) as [string, Source][],
       }),
-      finalize: (editor) =>
+      finalize: (draft) =>
         Effect.gen(function* () {
           materialized.clear()
           const seen = new Map<string, string | undefined>()
-          for (const [name, source] of editor.list()) {
+          for (const [name, source] of draft.list()) {
             if (source.type === "local") {
               materialized.set(
                 name,
@@ -128,6 +111,7 @@ export const layer = Layer.effect(
 
     return Service.of({
       transform: state.transform,
+      reload: state.reload,
       list: Effect.fn("Reference.list")(function* () {
         return Array.from(materialized.values())
       }),

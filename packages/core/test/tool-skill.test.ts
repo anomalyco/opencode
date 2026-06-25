@@ -1,11 +1,9 @@
 import fs from "fs/promises"
 import path from "path"
-import { pathToFileURL } from "url"
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { PermissionV2 } from "@opencode-ai/core/permission"
-import { PluginBoot } from "@opencode-ai/core/plugin/boot"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { SkillV2 } from "@opencode-ai/core/skill"
@@ -42,16 +40,6 @@ describe("SkillTool", () => {
           let current = [info]
           const assertions: PermissionV2.AssertInput[] = []
           let deny = false
-          let bootWaited = false
-          const boot = Layer.succeed(
-            PluginBoot.Service,
-            PluginBoot.Service.of({
-              wait: () =>
-                Effect.sync(() => {
-                  bootWaited = true
-                }),
-            }),
-          )
           const permission = Layer.succeed(
             PermissionV2.Service,
             PermissionV2.Service.of({
@@ -69,7 +57,8 @@ describe("SkillTool", () => {
           const skills = Layer.succeed(
             SkillV2.Service,
             SkillV2.Service.of({
-              transform: () => Effect.die("unused"),
+              transform: (_transform) => Effect.die("unused"),
+              reload: () => Effect.die("unused"),
               sources: () => Effect.die("unused"),
               list: () => Effect.succeed(current),
             }),
@@ -79,14 +68,12 @@ describe("SkillTool", () => {
             Layer.provide(registry),
             Layer.provide(permission),
             Layer.provide(FSUtil.defaultLayer),
-            Layer.provide(boot),
             Layer.provide(skills),
           )
-          const layer = Layer.mergeAll(permission, skills, registry, boot, tool)
+          const layer = Layer.mergeAll(permission, skills, registry, tool)
 
           return yield* Effect.gen(function* () {
             const registry = yield* ToolRegistry.Service
-            expect(bootWaited).toBe(true)
             expect((yield* toolDefinitions(registry))[0]).toMatchObject({
               name: "skill",
               description: SkillTool.description,
@@ -101,9 +88,7 @@ describe("SkillTool", () => {
               type: "text",
               value: SkillTool.toModelOutput(info, [reference]),
             })
-            expect(SkillTool.toModelOutput(info, [reference])).toContain(
-              `Base directory for this skill: ${pathToFileURL(directory).href}`,
-            )
+            expect(SkillTool.toModelOutput(info, [reference])).toContain(`Base directory for this skill: ${directory}`)
             expect(
               yield* settleTool(registry, {
                 sessionID,
@@ -134,7 +119,7 @@ describe("SkillTool", () => {
               }),
             ).toEqual({ type: "error", value: "Unable to load skill effect" })
             deny = false
-            const flat = new SkillV2.Info({
+            const flat = SkillV2.Info.make({
               name: "public",
               description: "Public guidance",
               location: AbsolutePath.make(path.join(tmp.path, "public.md")),

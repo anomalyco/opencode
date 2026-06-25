@@ -56,16 +56,14 @@ const draftImages = (prompt: Prompt) => prompt.filter((part): part is ImageAttac
 export async function sendFollowupDraft(input: FollowupSendInput) {
   const text = draftText(input.draft.prompt)
   const images = draftImages(input.draft.prompt)
-  const [, setStore] = input.serverSync.child(input.draft.sessionDirectory)
-
   const setBusy = () => {
     if (!input.optimisticBusy) return
-    setStore("session_status", input.draft.sessionID, { type: "busy" })
+    input.serverSync.session.set("session_status", input.draft.sessionID, { type: "busy" })
   }
 
   const setIdle = () => {
     if (!input.optimisticBusy) return
-    setStore("session_status", input.draft.sessionID, { type: "idle" })
+    input.serverSync.session.set("session_status", input.draft.sessionID, { type: "idle" })
   }
 
   const wait = async () => {
@@ -234,9 +232,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     const sessionID = params.id
     if (!sessionID) return Promise.resolve()
 
-    serverSync().todo.set(sessionID, [])
-    const [, setStore] = serverSync().child(sdk().directory)
-    setStore("todo", sessionID, [])
+    serverSync().session.set("todo", sessionID, [])
 
     input.onAbort?.()
 
@@ -282,6 +278,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
   }
 
   const seed = (dir: string, info: Session) => {
+    serverSync().session.remember(info)
     const [, setStore] = serverSync().child(dir)
     setStore("session", (list: Session[]) => {
       const result = Binary.search(list, info.id, (item) => item.id)
@@ -388,12 +385,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
         local.session.promote(sessionDirectory, session.id)
         layout.handoff.setTabs(base64Encode(sessionDirectory), session.id)
         const draftID = search.draftId
-        if (draftID)
-          tabs.promoteDraft(draftID, {
-            server: server.key,
-            dirBase64: base64Encode(sessionDirectory),
-            sessionId: session.id,
-          })
+        if (draftID) tabs.promoteDraft(draftID, { server: server.key, sessionId: session.id })
         else navigate(`/${base64Encode(sessionDirectory)}/session/${session.id}`)
       }
     }

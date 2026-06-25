@@ -105,6 +105,7 @@ export async function handler(
     const sessionId = input.request.headers.get("x-opencode-session") ?? ""
     const requestId = input.request.headers.get("x-opencode-request") ?? ""
     const ocClient = input.request.headers.get("x-opencode-client") ?? ""
+    const projectId = input.request.headers.get("x-opencode-project") ?? ""
     const userAgent = input.request.headers.get("user-agent") ?? ""
     logger.metric({
       is_stream: isStream,
@@ -193,8 +194,14 @@ export async function handler(
         headers: (() => {
           const headers = new Headers(input.request.headers)
           providerInfo.modifyHeaders(headers, providerInfo.apiKey, stickyId)
-          Object.entries(providerInfo.headerMappings ?? {}).forEach(([k, v]) => {
-            headers.set(k, headers.get(v)!)
+          Object.entries(providerInfo.headerModifier ?? {}).forEach(([k, v]) => {
+            if (v === "$ip") return headers.set(k, ip)
+            if (v === "$caller") return headers.set(k, `caller:${ip}`)
+            if (v === "$session") return headers.set(k, sessionId)
+            if (v === "$model") return headers.set(k, model)
+            if (v === "$request") return headers.set(k, requestId)
+            if (v === "$project") return headers.set(k, projectId)
+            headers.set(k, v)
           })
           headers.delete("host")
           headers.delete("content-length")
@@ -348,7 +355,7 @@ export async function handler(
               responseLength += value.length
               buffer += decoder.decode(value, { stream: true })
 
-              const parts = buffer.split(providerInfo.streamSeparator)
+              const parts = buffer.split(/\r\n\r\n|\n\n|\r\r/)
               buffer = parts.pop() ?? ""
 
               for (let part of parts) {
@@ -691,6 +698,7 @@ export async function handler(
     logger.metric({
       api_key: data.apiKey,
       workspace: data.workspaceID,
+      user_id: data.user.id,
       ...(() => {
         if (data.billing.subscription)
           return {

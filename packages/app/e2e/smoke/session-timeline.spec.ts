@@ -58,7 +58,18 @@ test.describe("smoke: session timeline", () => {
       await page.mouse.wheel(0, -120)
       await page.waitForTimeout(20)
     }
-    const keys = ["prt_user_text_smoke_0032", "prt_text_2_smoke_0032", "prt_tool_apply_patch_8_smoke_0032"]
+    const keys = await scroller.evaluate((element) => {
+      const view = element.getBoundingClientRect()
+      return [...element.querySelectorAll<HTMLElement>("[data-timeline-part-id]")]
+        .filter((row) => {
+          const rect = row.getBoundingClientRect()
+          return rect.bottom > view.top && rect.top < view.bottom
+        })
+        .map((row) => row.dataset.timelinePartId)
+        .filter((id): id is string => !!id)
+        .slice(0, 3)
+    })
+    expect(keys.length).toBeGreaterThan(0)
     const positions = () =>
       scroller.evaluate((element, keys) => {
         const top = element.getBoundingClientRect().top
@@ -327,6 +338,18 @@ test.describe("smoke: session timeline", () => {
     const expectedMessageIDs = fixture.expected.targetMessageIDs
     await expectSessionTimelineReady(page, expectedPartIDs, expectedMessageIDs, errors)
     await expectCanScrollToStart(page, expectedPartIDs, expectedMessageIDs, errors)
+
+    const shell = page.locator(`[data-timeline-part-id="${fixture.expected.expandedShellPartID}"]`)
+    const shellTrigger = shell.locator('[data-slot="collapsible-trigger"]')
+    const shellSubtitle = shell.locator('[data-slot="basic-tool-tool-subtitle"]')
+    await expect(shellSubtitle).toHaveCount(0)
+    await expect(shell.locator('[data-slot="bash-pre"]')).toContainText("$ bun typecheck")
+    await shellTrigger.click()
+    await expect(shellTrigger).toHaveAttribute("aria-expanded", "false")
+    await expect(shellSubtitle).toHaveText("bun typecheck")
+    await shellTrigger.click()
+    await expect(shellTrigger).toHaveAttribute("aria-expanded", "true")
+    await expect(shellSubtitle).toHaveCount(0)
   })
 })
 
@@ -339,7 +362,6 @@ async function configureSmokePage(page: Page, directory: string) {
           editToolPartsExpanded: true,
           shellToolPartsExpanded: true,
           showReasoningSummaries: true,
-          showSessionProgressBar: true,
         },
       }),
     )
@@ -706,7 +728,7 @@ async function navigateToSession(page: Page, directory: string, sessionId: strin
 }
 
 async function switchTitlebarSession(page: Page, sessionID: string, title: string) {
-  const href = `/${base64Encode(fixture.directory)}/session/${sessionID}`
+  const href = `/server/${base64Encode(fixture.serverKey)}/session/${sessionID}`
   const tab = page.locator(`[data-slot="titlebar-tabs"] a[href="${href}"]`).first()
   await expect(tab).toBeVisible()
   await tab.click()
