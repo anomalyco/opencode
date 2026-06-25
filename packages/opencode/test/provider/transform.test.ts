@@ -2067,6 +2067,79 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
   })
 })
 
+describe("ProviderTransform.message - openai-compatible non-empty assistant content", () => {
+  const oaiModel = {
+    id: "custom/glm-5.2",
+    providerID: "custom",
+    api: { id: "glm-5.2", url: "https://api.example.com", npm: "@ai-sdk/openai-compatible" },
+    name: "GLM 5.2",
+    capabilities: { temperature: true, reasoning: false, attachment: true, toolcall: true, input: { text: true, audio: false, image: true, video: false, pdf: true }, output: { text: true, audio: false, image: false, video: false, pdf: false }, interleaved: false },
+    cost: { input: 0.003, output: 0.015, cache: { read: 0.0003, write: 0.00375 } },
+    limit: { context: 200000, output: 8192 },
+    status: "active", options: {}, headers: {},
+  } as any
+
+  test("prepends a space text part to tool-call-only assistant messages", () => {
+    const msgs = [{
+      role: "assistant",
+      content: [
+        { type: "tool-call", toolCallId: "tc1", toolName: "bash", input: { command: "ls" } },
+        { type: "tool-call", toolCallId: "tc2", toolName: "read", input: { filePath: "foo" } },
+      ],
+    }] as any[]
+
+    const result = ProviderTransform.message(msgs, oaiModel, {}) as any[]
+
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toHaveLength(3)
+    expect(result[0].content[0]).toEqual({ type: "text", text: " " })
+    expect(result[0].content[1].type).toBe("tool-call")
+    expect(result[0].content[2].type).toBe("tool-call")
+  })
+
+  test("does not add space when assistant message already has text", () => {
+    const msgs = [{
+      role: "assistant",
+      content: [
+        { type: "text", text: "Let me check" },
+        { type: "tool-call", toolCallId: "tc1", toolName: "bash", input: { command: "ls" } },
+      ],
+    }] as any[]
+
+    const result = ProviderTransform.message(msgs, oaiModel, {}) as any[]
+
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toHaveLength(2)
+    expect(result[0].content[0].text).toBe("Let me check")
+  })
+
+  test("does not modify non-assistant messages", () => {
+    const msgs = [
+      { role: "user", content: "Hello" },
+      { role: "user", content: [{ type: "text", text: "world" }] },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, oaiModel, {}) as any[]
+
+    expect(result).toHaveLength(2)
+    expect(result[0].content).toBe("Hello")
+  })
+
+  test("does not apply to non-openai-compatible providers", () => {
+    const fpModel = { ...oaiModel, api: { id: "claude-3-5-sonnet-20241022", url: "https://api.anthropic.com", npm: "@ai-sdk/anthropic" } } as any
+    const msgs = [{
+      role: "assistant",
+      content: [{ type: "tool-call", toolCallId: "tc1", toolName: "bash", input: { command: "ls" } }],
+    }] as any[]
+
+    const result = ProviderTransform.message(msgs, fpModel, {}) as any[]
+
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toHaveLength(1)
+    expect(result[0].content[0].type).toBe("tool-call")
+  })
+})
+
 describe("ProviderTransform.message - strip openai metadata when store=false", () => {
   const openaiModel = {
     id: "openai/gpt-5",

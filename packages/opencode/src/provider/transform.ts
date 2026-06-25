@@ -473,7 +473,31 @@ export function message(msgs: ModelMessage[], model: Provider.Model, options: Re
     })
   }
 
+  if (model.api.npm === "@ai-sdk/openai-compatible") {
+    msgs = ensureNonEmptyAssistantContent(msgs)
+  }
+
   return msgs
+}
+
+// OpenAI-compatible proxies (e.g. GLM-5.2 fronted by svips-style gateways)
+// sanitise an assistant message whose `content` serialises to an empty string
+// by injecting a visible placeholder ("[System: Empty message content
+// sanitised to satisfy protocol]") into the transcript. The Vercel AI SDK
+// emits `content: ""` for assistant turns that carry only tool calls (no text
+// parts), so every tool-call turn leaks the placeholder back into history.
+// Give those turns a single-space text part so the wire content is non-empty.
+// This only shapes the messages handed to the provider; it does not touch
+// persisted session history.
+function ensureNonEmptyAssistantContent(msgs: ModelMessage[]): ModelMessage[] {
+  return msgs.map((msg) => {
+    if (msg.role !== "assistant" || typeof msg.content === "string") return msg
+    if (!Array.isArray(msg.content)) return msg
+    const hasText = msg.content.some((part) => part.type === "text" && part.text !== "")
+    const hasToolCall = msg.content.some((part) => part.type === "tool-call")
+    if (hasText || !hasToolCall) return msg
+    return { ...msg, content: [{ type: "text", text: " " }, ...msg.content] }
+  })
 }
 
 export function temperature(model: Provider.Model) {
