@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 
+from .status_speech import build_status_speech
 from .voice_phrases import next_ack_phrase
 
 _QUICK_QUERY_PATTERNS = (
@@ -95,7 +96,19 @@ def should_play_ack(text: str, progress: dict[str, object] | None = None) -> boo
     return looks_like_substantive_task(stripped)
 
 
-def ack_response(text: str, progress: dict[str, object] | None = None) -> dict[str, object]:
-    if not should_play_ack(text, progress):
+def ack_response(
+    text: str,
+    progress: dict[str, object] | None = None,
+    *,
+    periodic: bool = False,
+) -> dict[str, object]:
+    snapshot = progress or {}
+    if periodic:
+        if _has_tool_activity(snapshot):
+            return {"text": build_status_speech(snapshot)}
+        if should_play_ack(text, snapshot):
+            return {"text": next_ack_phrase()}
+        return {"skip": True}
+    if not should_play_ack(text, snapshot):
         return {"skip": True}
     return {"text": next_ack_phrase()}

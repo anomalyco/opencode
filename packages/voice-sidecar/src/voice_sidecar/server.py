@@ -29,6 +29,7 @@ from .tui_turn import ensure_opencode_reachable, run_tui_turn
 from .decider import decide_speech
 from .speech_plan import next_continuation_chunk, plan_final_speech
 from .voice_ack import ack_response
+from .voice_log import append_voice_web_log, ensure_voice_web_log, voice_web_log_path, web_voice_log_line
 from .voice_stream import _speak_text, handle_voice_stream
 
 _STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -38,6 +39,15 @@ def _stream_url(request: Request, voice_id: str) -> str:
     base = str(request.base_url).rstrip("/")
     ws_base = base.replace("https://", "wss://").replace("http://", "ws://")
     return f"{ws_base}/voice/session/{voice_id}/stream"
+
+
+def _web_voice_request(request: Request) -> bool:
+    if request.headers.get("x-opencode-voice-log") == "web":
+        return True
+    origin = request.headers.get("origin") or ""
+    referer = request.headers.get("referer") or ""
+    source = f"{origin} {referer}"
+    return "127.0.0.1:444" in source or "localhost:444" in source
 
 
 def _resolve_opencode_url(server: object | None) -> str:
@@ -79,6 +89,7 @@ async def health(_request: Request) -> JSONResponse:
             "opencode": opencode,
             "stt": stt,
             "tts": tts,
+            "voiceWebLog": str(voice_web_log_path()),
         }
     )
 
@@ -100,6 +111,7 @@ async def voice_config(_request: Request) -> JSONResponse:
                 "final_speak": "POST /voice/final-speak",
                 "continuation": "POST /voice/continuation-chunk",
                 "ack": "POST /voice/ack",
+                "log": "POST /voice/log",
                 "stream": "WSS /voice/session/{id}/stream",
             },
             "auth": "stub — optional VOICE_SIDECAR_TOKEN (not enforced yet)",
@@ -147,6 +159,8 @@ async def create_voice_session(request: Request) -> JSONResponse:
         composer=composer,
         terminal_mic=terminal_mic,
     )
+    if composer and _web_voice_request(request):
+        web_voice_log_line("STATE", f"session voice={voice.id} opencode={opencode_session_id}")
     return JSONResponse(voice.to_dict(stream_url=_stream_url(request, voice.id)), status_code=201)
 
 
@@ -226,7 +240,13 @@ async def voice_final_speak(request: Request) -> JSONResponse:
     text = str(body.get("text") or "").strip()
     if not text:
         return JSONResponse({"error": "text is required"}, status_code=400)
-    return JSONResponse(plan_final_speech(text))
+    plan = plan_final_speech(text)
+    if _web_voice_request(request):
+        web_voice_log_line(
+            "TTS",
+            f"plan parts={len(plan.get('parts', []))} offer={plan.get('hasOffer')} action={plan.get('actionOffer')}",
+        )
+    return JSONResponse(plan)
 
 
 async def voice_continuation_chunk(request: Request) -> JSONResponse:
@@ -256,7 +276,8 @@ async def voice_ack(request: Request) -> JSONResponse:
         body = {}
     text = str(body.get("text") or "").strip()
     progress = body.get("progress") if isinstance(body.get("progress"), dict) else None
-    return JSONResponse(ack_response(text, progress))
+    periodic = bool(body.get("periodic"))
+    return JSONResponse(ack_response(text, progress, periodic=periodic))
 
 
 async def voice_speak(request: Request) -> JSONResponse:
@@ -284,6 +305,9 @@ async def voice_speak(request: Request) -> JSONResponse:
     if not audio:
         return JSONResponse({"error": "synthesis returned empty audio"}, status_code=502)
 
+    if _web_voice_request(request):
+        web_voice_log_line("TTS", f"speak {len(speak)} chars raw={raw}")
+
     return JSONResponse(
         {
             "text": speak,
@@ -292,6 +316,21 @@ async def voice_speak(request: Request) -> JSONResponse:
             "data": base64.b64encode(audio).decode("ascii"),
         }
     )
+
+
+async def voice_client_log(request: Request) -> JSONResponse:
+    try:
+        body = await request.json()
+    except json.JSONDecodeError:
+        return JSONResponse({"error": "request body must be JSON"}, status_code=400)
+    if not isinstance(body, dict):
+        return JSONResponse({"error": "request body must be a JSON object"}, status_code=400)
+    lines = body.get("lines")
+    if not isinstance(lines, list):
+        return JSONResponse({"error": "lines must be an array"}, status_code=400)
+    path = append_voice_web_log([str(line) for line in lines])
+    print(f"voice-web: {len(lines)} line(s) -> {path}", flush=True)
+    return JSONResponse({"ok": True, "path": str(path)})
 
 
 async def get_voice_session(request: Request) -> JSONResponse:
@@ -316,6 +355,7 @@ async def voice_test_page(_request: Request) -> FileResponse:
 
 
 def create_app() -> Starlette:
+    ensure_voice_web_log()
     app = Starlette(
         routes=[
             Route("/health", health, methods=["GET"]),
@@ -328,6 +368,7 @@ def create_app() -> Starlette:
             Route("/voice/continuation-chunk", voice_continuation_chunk, methods=["POST"]),
             Route("/voice/ack", voice_ack, methods=["POST"]),
             Route("/voice/speak", voice_speak, methods=["POST"]),
+            Route("/voice/log", voice_client_log, methods=["POST"]),
             Route("/voice/session/{voice_id}", get_voice_session, methods=["GET"]),
             WebSocketRoute("/voice/session/{voice_id}/stream", voice_stream_ws),
         ],

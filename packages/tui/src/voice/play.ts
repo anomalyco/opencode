@@ -9,7 +9,7 @@ let player: ChildProcess | undefined
 export function stopMp3() {
   if (!player) return
   voiceLogStage("PLAY", "stop player")
-  player.kill("SIGTERM")
+  player.kill("SIGKILL")
   player = undefined
 }
 
@@ -24,9 +24,9 @@ function run(command: string, args: string[]) {
       voiceLogStage("PLAY", `spawn error ${error.message}`)
       reject(error)
     })
-    child.on("exit", (code) => {
+    child.on("exit", (code, signal) => {
       if (player === child) player = undefined
-      if (code === 0 || code === null) {
+      if (code === 0 || code === null || signal === "SIGTERM" || signal === "SIGKILL") {
         voiceLogStage("PLAY", `${command} exit ok`)
         resolve()
         return

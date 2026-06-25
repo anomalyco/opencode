@@ -5,6 +5,8 @@ import {
   type VoiceSidecarEvent,
 } from "./voice-sidecar"
 import { hostedVoiceSidecarUrl } from "@/utils/hosted-url"
+import { fetchVoiceSpeak } from "./voice-api"
+import { voiceLogStage } from "./voice-log"
 
 export type VoiceRuntimeOptions = {
   sidecarUrl?: () => string
@@ -16,6 +18,7 @@ export type VoiceRuntimeOptions = {
   onError: (message: string) => void
   onTranscript?: (text: string, input: { final: boolean; speechFinal: boolean }) => void
   onSpeechFinal?: (text: string) => void
+  onTtsActiveChange?: (active: boolean) => void
 }
 
 // Minimal silent WAV — unlocks HTML audio during the mic click gesture.
@@ -64,7 +67,9 @@ export function createVoiceRuntime(options: VoiceRuntimeOptions) {
   }
 
   const setMicSend = (enabled: boolean) => {
+    if (sendAudio === enabled) return
     sendAudio = enabled
+    voiceLogStage("RUNTIME", `mic send ${enabled ? "on" : "off"}`)
   }
 
   const stopTts = () => {
@@ -75,10 +80,18 @@ export function createVoiceRuntime(options: VoiceRuntimeOptions) {
     ttsElement.onerror = null
   }
 
+  const setTtsActive = (active: boolean) => {
+    if (ttsActive === active) return
+    ttsActive = active
+    if (active) setMicSend(false)
+    options.onTtsActiveChange?.(active)
+  }
+
   const cancelTts = () => {
+    voiceLogStage("PLAY", "cancel tts")
     ttsQueue = []
     stopTts()
-    ttsActive = false
+    setTtsActive(false)
     resolveSpeakWait()
   }
 
@@ -91,23 +104,23 @@ export function createVoiceRuntime(options: VoiceRuntimeOptions) {
     if (!running) return
     phase = "listening"
     void unlockAudio()
-    setMicSend(true)
     options.setPhase("listening")
     resolveSpeakWait()
   }
 
   const maybeBargeIn = (text: string, speechFinal: boolean) => {
     if (!ttsActive && phase !== "speaking") return
-    if (!speechFinal || text.trim().length < 3) return
+    if (!speechFinal && text.trim().length < 3) return
+    if (!/\b(stop|quiet|enough|hold on|wait)\b/.test(text.trim().toLowerCase())) return
+    voiceLogStage("RUNTIME", `barge-in ${speechFinal ? "final" : "partial"} "${text.slice(0, 40)}"`)
     cancelTts()
-    if (running) setMicSend(true)
   }
 
   const playTtsMp3 = async (base64: string) => {
     setMicSend(false)
     ttsQueue.push(base64)
     if (ttsActive) return
-    ttsActive = true
+    setTtsActive(true)
     options.setPhase("speaking")
 
     while (ttsQueue.length > 0) {
@@ -122,12 +135,16 @@ export function createVoiceRuntime(options: VoiceRuntimeOptions) {
       audio.setAttribute("playsinline", "true")
       audio.src = `data:audio/mpeg;base64,${encoded}`
       try {
+        voiceLogStage("PLAY", `play ${encoded.length} chars b64`)
         await audio.play()
         await new Promise<void>((resolve, reject) => {
           audio.onended = () => resolve()
           audio.onerror = () => reject(new Error("playback failed"))
         })
-      } catch {
+        voiceLogStage("PLAY", "play done")
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "playback failed"
+        voiceLogStage("PLAY", `play error ${message}`)
         options.onError("voice playback blocked — click the page and try again")
       } finally {
         audio.removeAttribute("src")
@@ -136,21 +153,24 @@ export function createVoiceRuntime(options: VoiceRuntimeOptions) {
       }
     }
 
-    ttsActive = false
+    setTtsActive(false)
     finishSpeaking()
   }
 
   const handleEvent = (event: VoiceSidecarEvent) => {
     if (event.type === "ready") {
+      voiceLogStage("RUNTIME", "stream ready")
       phase = "listening"
       options.setPhase("listening")
       return
     }
     if (event.type === "transcript") {
-      maybeBargeIn(event.text, event.speechFinal)
+      if (event.speechFinal) {
+        voiceLogStage("RUNTIME", `transcript-final "${event.text.slice(0, 60)}"`)
+      }
       if (event.text.trim()) options.onTranscript?.(event.text, { final: event.final, speechFinal: event.speechFinal })
+      maybeBargeIn(event.text, event.speechFinal)
       if (event.speechFinal) options.onSpeechFinal?.(event.text)
-      if (!event.speechFinal && event.text.trim()) options.setPhase("hearing")
       return
     }
     if (event.type === "status") {
@@ -158,29 +178,23 @@ export function createVoiceRuntime(options: VoiceRuntimeOptions) {
         if (ttsActive || speakDone) return
         phase = "listening"
         void unlockAudio()
-        setMicSend(running)
         options.setPhase("listening")
       }
       if (event.state === "idle") {
         if (ttsActive) return
         phase = "listening"
-        setMicSend(running)
         options.setPhase("listening")
       }
       if (event.state === "transcribing") {
         phase = "transcribing"
-        setMicSend(false)
         options.setPhase("transcribing")
       }
       if (event.state === "working") {
         phase = "transcribing"
-        setMicSend(false)
-        cancelTts()
         options.setPhase("transcribing")
       }
       if (event.state === "speaking") {
         phase = "speaking"
-        setMicSend(false)
         options.setPhase("speaking")
       }
       return
@@ -194,9 +208,10 @@ export function createVoiceRuntime(options: VoiceRuntimeOptions) {
       return
     }
     if (event.type === "error") {
+      voiceLogStage("RUNTIME", `stream error ${event.message}`)
       resolveSpeakWait()
       if (ttsActive) {
-        ttsActive = false
+        setTtsActive(false)
         finishSpeaking()
       }
       options.onError(event.message)
@@ -246,10 +261,11 @@ export function createVoiceRuntime(options: VoiceRuntimeOptions) {
     processor.connect(silent)
     silent.connect(audioContext.destination)
     running = true
-    setMicSend(false)
+    setMicSend(true)
   }
 
   const stop = () => {
+    voiceLogStage("RUNTIME", "runtime stop")
     stopMic()
     cancelTts()
     if (ws && ws.readyState === WebSocket.OPEN) ws.close()
@@ -262,14 +278,21 @@ export function createVoiceRuntime(options: VoiceRuntimeOptions) {
       const socket = new WebSocket(stream)
       ws = socket
       socket.binaryType = "arraybuffer"
-      socket.onopen = () => resolve()
-      socket.onerror = () => reject(new Error("voice stream connection failed"))
+      socket.onopen = () => {
+        voiceLogStage("RUNTIME", "websocket open")
+        resolve()
+      }
+      socket.onerror = () => {
+        voiceLogStage("RUNTIME", "websocket error")
+        reject(new Error("voice stream connection failed"))
+      }
       socket.onmessage = (message) => {
         if (typeof message.data !== "string") return
         const event = parseVoiceSidecarEvent(message.data)
         if (event) handleEvent(event)
       }
       socket.onclose = () => {
+        voiceLogStage("RUNTIME", "websocket closed")
         if (!running) return
         if (reconnecting) return
         reconnecting = true
@@ -313,6 +336,7 @@ export function createVoiceRuntime(options: VoiceRuntimeOptions) {
 
   const start = async () => {
     stop()
+    voiceLogStage("RUNTIME", "runtime start")
     const sessionID = options.sessionID()
     if (!sessionID) throw new Error("no session")
 
@@ -358,37 +382,83 @@ export function createVoiceRuntime(options: VoiceRuntimeOptions) {
   }
 
   const speak = async (text: string) => {
-    await sendSpeak(text)
+    await speakAndWait(text)
   }
 
-  const speakAndWait = async (text: string, raw = false) => {
+  const speakAndWait = async (
+    text: string,
+    raw = false,
+    prefetchedEncoding?: string,
+    shouldContinue?: () => boolean,
+  ) => {
+    if (shouldContinue && !shouldContinue()) return
     if (!text.trim()) return
-    if (!(await sendSpeak(text, raw))) return
-    await Promise.race([
-      new Promise<void>((resolve) => {
-        speakDone = resolve
-      }),
-      new Promise<void>((resolve) => setTimeout(resolve, 20000)),
-    ])
-    resolveSpeakWait()
+    setMicSend(false)
+    try {
+      if (prefetchedEncoding) {
+        await playTtsMp3(prefetchedEncoding)
+      } else {
+        const result = await fetchVoiceSpeak({
+          sidecarUrl: options.sidecarUrl,
+          text,
+          raw,
+        })
+        if (shouldContinue && !shouldContinue()) return
+        await playTtsMp3(result.data)
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "voice speak failed"
+      voiceLogStage("PLAY", `speak error ${message}`)
+      options.onError(message)
+    }
+    if (shouldContinue && !shouldContinue()) return
+  }
+
+  const speakPlanParts = async (
+    texts: string[],
+    options?: {
+      raw?: boolean
+      beforeLastPart?: () => void
+      loadTts?: (text: string, raw: boolean) => Promise<string>
+      offerAtEnd?: boolean
+      shouldContinue?: () => boolean
+    },
+  ) => {
+    for (let index = 0; index < texts.length; index++) {
+      if (options?.shouldContinue && !options.shouldContinue()) return
+      const text = texts[index]
+      if (!text?.trim()) continue
+      if (options?.beforeLastPart && index === texts.length - 1) options.beforeLastPart()
+      const isOfferPart = !!(options?.offerAtEnd && index === texts.length - 1)
+      voiceLogStage("TTS", `plan-part ${index + 1}/${texts.length} offer=${isOfferPart} ${text.slice(0, 50)}`)
+      const encoding = options?.loadTts ? await options.loadTts(text, options?.raw ?? true) : undefined
+      if (options?.shouldContinue && !options.shouldContinue()) return
+      await speakAndWait(text, options?.raw ?? true, encoding, options?.shouldContinue)
+      if (options?.shouldContinue && !options.shouldContinue()) return
+    }
   }
 
   const speakParts = async (texts: string[]) => {
-    for (const text of texts) {
-      if (!text.trim()) continue
-      await speakAndWait(text, true)
-    }
+    await speakPlanParts(texts)
   }
 
   const stopSpeaking = () => {
     cancelTts()
     if (!running) return
     phase = "listening"
-    setMicSend(true)
     options.setPhase("listening")
   }
 
   const speaking = () => ttsActive
 
-  return { start, stop, speak, speakParts, stopSpeaking, speaking }
+  return {
+    start,
+    stop,
+    speak,
+    speakParts,
+    speakPlanParts,
+    stopSpeaking,
+    speaking,
+    setMicSend: (enabled: boolean) => setMicSend(running && enabled),
+  }
 }

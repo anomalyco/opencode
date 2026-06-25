@@ -21,6 +21,8 @@ export type VoiceFinalSpeakPlan = {
   parts: string[]
   hasOffer: boolean
   fullText: string
+  closingQuestion?: string | null
+  actionOffer?: boolean
 }
 
 export type VoiceContinuationChunk = {
@@ -70,10 +72,12 @@ export async function fetchVoiceAck(input?: {
   sidecarUrl?: string
   text?: string
   progress?: VoiceProgressSnapshot
+  periodic?: boolean
 }) {
   return postJson<VoiceAckResult>(sidecarBase(input?.sidecarUrl), "/voice/ack", {
     text: input?.text ?? "",
     progress: input?.progress,
+    periodic: input?.periodic ?? false,
   })
 }
 

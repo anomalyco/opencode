@@ -37,16 +37,26 @@ function MicIcon(props: { active: boolean; class?: string }) {
 
 export function PromptVoiceComposer(props: {
   display: () => VoiceDisplayState
+  statusHeader?: () => string | undefined
+  hearingText?: () => string
   showDisclosure: () => boolean
   onToggle: () => void
   onDismissDisclosure: () => void
-  t: (key: string) => string
+  t: (key: string, values?: Record<string, string>) => string
   design?: boolean
 }) {
   const label = () => {
     const state = props.display()
     if (state === "off") return props.t("prompt.voice.action.turnOn")
     return props.t("prompt.voice.action.turnOff")
+  }
+
+  const status = () => {
+    const header = props.statusHeader?.()
+    if (header) return props.t("prompt.voice.status.awaitingQuestionNamed", { header })
+    const heard = props.hearingText?.()?.trim()
+    if (props.display() === "hearing" && heard) return heard
+    return props.t(voiceStatusKey(props.display()))
   }
 
   return (
@@ -84,14 +94,14 @@ export function PromptVoiceComposer(props: {
       <Show when={props.display() !== "off"}>
         <span
           data-slot="voice-status"
-          class="max-w-[9rem] truncate text-12-regular tabular-nums"
+          class="max-w-[min(100%,20rem)] truncate text-12-regular tabular-nums"
           classList={{
             "text-v2-text-text-base text-[11px] font-[440] leading-4 animate-pulse":
               props.design && (props.display() === "hearing" || props.display() === "speaking"),
             "animate-pulse": !props.design && (props.display() === "hearing" || props.display() === "speaking"),
           }}
         >
-          {props.t(voiceStatusKey(props.display()))}
+          {status()}
         </span>
       </Show>
 

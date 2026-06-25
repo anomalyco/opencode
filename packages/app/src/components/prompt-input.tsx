@@ -71,6 +71,7 @@ import { promptPlaceholder } from "./prompt-input/placeholder"
 import { createVoiceComposerState, voiceComposerBorderClass, voiceSidecarBaseUrl } from "./prompt-input/voice"
 import { buildVoiceProgressSnapshot, collectActiveTurnParts } from "./prompt-input/voice-progress"
 import { PromptVoiceComposer } from "./prompt-input/voice-composer"
+import type { PermissionRequest, QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
 import { showToast } from "@/utils/toast"
 import { ImagePreview } from "@opencode-ai/ui/image-preview"
 import { pathKey } from "@/utils/path-key"
@@ -178,6 +179,14 @@ export interface PromptInputProps {
   onQueue?: (draft: FollowupDraft) => void
   onAbort?: () => void
   onSubmit?: () => void
+  responsePending?: () => boolean
+  voicePanel?: {
+    pendingQuestion: () => QuestionRequest | undefined
+    pendingPermission: () => PermissionRequest | undefined
+    replyQuestion: (input: { requestID: string; answers: QuestionAnswer[] }) => void
+    rejectQuestion: (input: { requestID: string }) => void
+    respondPermission: (response: "once" | "always" | "reject") => void
+  }
 }
 
 const EXAMPLES = [
@@ -417,6 +426,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             .trim()
           if (text) return text
         }
+      },
+      pendingQuestion: () => props.voicePanel?.pendingQuestion(),
+      pendingPermission: () => props.voicePanel?.pendingPermission(),
+      replyQuestion: (input) => props.voicePanel?.replyQuestion(input),
+      rejectQuestion: (input) => props.voicePanel?.rejectQuestion(input),
+      replyPermission: ({ requestID, reply }) => {
+        const permission = props.voicePanel?.pendingPermission()
+        if (!permission || permission.id !== requestID) return
+        props.voicePanel?.respondPermission(reply)
       },
       onError: (message) => {
         showToast({
@@ -960,8 +978,23 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     ),
   )
 
+  let voicePreviewActive = false
   voiceTranscriptRef.apply = (text: string) => {
-    if (!text.trim()) return
+    if (!text.trim()) {
+      if (!voicePreviewActive) return
+      voicePreviewActive = false
+      const images = imageAttachments()
+      mirror.input = true
+      if (images.length === 0) {
+        prompt.set([], 0)
+        renderEditorWithCursor([])
+        return
+      }
+      prompt.set(images, 0)
+      renderEditorWithCursor(images)
+      return
+    }
+    voicePreviewActive = true
     const images = imageAttachments()
     const parts: Prompt = [{ type: "text", content: text, start: 0, end: text.length }, ...images]
     mirror.input = true
@@ -1307,6 +1340,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     })
 
   voiceTranscriptRef.submit = () => {
+    voicePreviewActive = false
     void handleSubmit(new Event("submit"))
   }
 
@@ -1591,6 +1625,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     onPress: () => void addProject(),
   }))
 
+  const voiceT = (key: string, values?: Record<string, string>) =>
+    language.t(key as Parameters<typeof language.t>[0], values as Parameters<typeof language.t>[1])
+
   return (
     <div class="relative size-full flex flex-col gap-0">
       {(promptReady(), null)}
@@ -1609,6 +1646,26 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         commandKeybind={command.keybind}
         t={(key) => language.t(key as Parameters<typeof language.t>[0])}
       />
+      <Show when={props.responsePending?.() && voice.active()}>
+        <div
+          classList={{
+            "flex items-center justify-end gap-2 rounded-md border px-3 py-2": true,
+            "border-border-weak-base bg-background-base": true,
+            [voiceComposerBorderClass(voice.display())]: voice.display() !== "off",
+          }}
+        >
+          <PromptVoiceComposer
+            display={voice.display}
+            statusHeader={voice.statusHeader}
+            hearingText={voice.hearingText}
+            showDisclosure={() => voice.store.showDisclosure}
+            onToggle={voice.toggle}
+            onDismissDisclosure={voice.dismissDisclosure}
+            t={voiceT}
+          />
+        </div>
+      </Show>
+      <Show when={!props.responsePending?.()}>
       <Switch>
         <Match when={props.controls.newLayoutDesigns}>
           <div class="flex flex-col gap-3">
@@ -1702,10 +1759,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     <PromptVoiceComposer
                       design
                       display={voice.display}
+                      statusHeader={voice.statusHeader}
+                      hearingText={voice.hearingText}
                       showDisclosure={() => voice.store.showDisclosure}
                       onToggle={voice.toggle}
                       onDismissDisclosure={voice.dismissDisclosure}
-                      t={(key) => language.t(key as Parameters<typeof language.t>[0])}
+                      t={voiceT}
                     />
                   </div>
                 </Show>
@@ -1919,10 +1978,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   <Show when={store.mode === "normal"}>
                     <PromptVoiceComposer
                       display={voice.display}
+                      statusHeader={voice.statusHeader}
+                      hearingText={voice.hearingText}
                       showDisclosure={() => voice.store.showDisclosure}
                       onToggle={voice.toggle}
                       onDismissDisclosure={voice.dismissDisclosure}
-                      t={(key) => language.t(key as Parameters<typeof language.t>[0])}
+                      t={voiceT}
                     />
                   </Show>
                   <Tooltip placement="top" inactive={!working() && blank()} value={tip()}>
@@ -2142,6 +2203,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           </Show>
         </Match>
       </Switch>
+      </Show>
     </div>
   )
 }

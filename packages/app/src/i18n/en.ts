@@ -295,6 +295,10 @@ export const dict = {
   "prompt.voice.status.working": "Working",
   "prompt.voice.status.speaking": "Speaking",
   "prompt.voice.status.awaitingReply": "Want more detail?",
+  "prompt.voice.status.continuing": "Continuing…",
+  "prompt.voice.status.awaitingQuestion": "Pick an option",
+  "prompt.voice.status.awaitingQuestionNamed": "Pick: {header}",
+  "prompt.voice.status.awaitingPermission": "Say allow or reject",
   "prompt.voice.error.noSession": "Open a session before using voice",
 
   "prompt.toast.pasteUnsupported.title": "Unsupported attachment",

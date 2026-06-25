@@ -131,7 +131,7 @@ export function SessionComposerRegion(props: {
   const info = createMemo(() => (route.params.id ? sync().session.get(route.params.id) : undefined))
   const parentID = createMemo(() => info()?.parentID)
   const child = createMemo(() => !!parentID())
-  const showComposer = createMemo(() => !props.state.blocked() || child())
+  const showComposer = createMemo(() => !child())
 
   const previewPrompt = () =>
     prompt
@@ -332,21 +332,35 @@ export function SessionComposerRegion(props: {
               <Show
                 when={child()}
                 fallback={
-                  <Show when={!props.state.blocked()}>
-                    <PromptInput
-                      controls={controls()}
-                      variant={props.placement === "inline" ? "new-session" : undefined}
-                      ref={props.inputRef}
-                      newSessionWorktree={props.newSessionWorktree}
-                      onNewSessionWorktreeReset={props.onNewSessionWorktreeReset}
-                      edit={props.followup?.edit}
-                      onEditLoaded={props.followup?.onEditLoaded}
-                      shouldQueue={props.followup?.queue}
-                      onQueue={props.followup?.onQueue}
-                      onAbort={props.followup?.onAbort}
-                      onSubmit={props.onSubmit}
-                    />
-                  </Show>
+                  <PromptInput
+                    controls={controls()}
+                    variant={props.placement === "inline" ? "new-session" : undefined}
+                    ref={props.inputRef}
+                    newSessionWorktree={props.newSessionWorktree}
+                    onNewSessionWorktreeReset={props.onNewSessionWorktreeReset}
+                    edit={props.followup?.edit}
+                    onEditLoaded={props.followup?.onEditLoaded}
+                    shouldQueue={props.followup?.queue}
+                    onQueue={props.followup?.onQueue}
+                    onAbort={props.followup?.onAbort}
+                    onSubmit={props.onSubmit}
+                    responsePending={() => props.state.blocked()}
+                    voicePanel={{
+                      pendingQuestion: props.state.questionRequest,
+                      pendingPermission: props.state.permissionRequest,
+                      replyQuestion: ({ requestID, answers }) => {
+                        props.onResponseSubmit()
+                        void sdk().client.question.reply({ requestID, answers })
+                      },
+                      rejectQuestion: ({ requestID }) => {
+                        void sdk().client.question.reject({ requestID })
+                      },
+                      respondPermission: (response) => {
+                        props.onResponseSubmit()
+                        props.state.decide(response)
+                      },
+                    }}
+                  />
                 }
               >
                 <div

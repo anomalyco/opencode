@@ -88,14 +88,24 @@ async def mic_frames(
     block_ms: int = 100,
 ) -> AsyncIterator[bytes]:
     """Yield ~``block_ms`` chunks of raw PCM16 mic audio until ``stop`` is set."""
+    import array
+
     import sounddevice as sd
 
+    gain = float(os.environ.get("VOICE_MIC_GAIN", "2.0"))
     loop = asyncio.get_running_loop()
     queue: asyncio.Queue[bytes] = asyncio.Queue()
     block = int(sample_rate * block_ms / 1000)
 
     def callback(indata, _frames, _time, status):  # runs on PortAudio thread
-        loop.call_soon_threadsafe(queue.put_nowait, bytes(indata))
+        if gain == 1.0:
+            loop.call_soon_threadsafe(queue.put_nowait, bytes(indata))
+            return
+        samples = array.array("h")
+        samples.frombytes(bytes(indata))
+        for index, sample in enumerate(samples):
+            samples[index] = max(-32768, min(32767, int(sample * gain)))
+        loop.call_soon_threadsafe(queue.put_nowait, samples.tobytes())
 
     with sd.InputStream(
         samplerate=sample_rate,

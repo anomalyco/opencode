@@ -133,8 +133,6 @@ async def _speak_over_ws(
     speak_lock: asyncio.Lock | None = None,
 ) -> None:
     async def run() -> None:
-        if accept_mic is not None:
-            accept_mic.clear()
         summary = text.strip() if raw else speak_text(text)
         if not summary:
             _log("tts skipped: empty speak text after summary")
@@ -305,7 +303,7 @@ async def run_voice_stream(websocket: WebSocket, voice: VoiceSession) -> None:
     accept_audio = asyncio.Event()
     accept_audio.set()
     accept_mic = asyncio.Event()
-    if not (voice.composer and voice.terminal_mic):
+    if voice.terminal_mic:
         accept_mic.set()
     speak_lock = asyncio.Lock()
 
@@ -348,8 +346,6 @@ async def run_voice_stream(websocket: WebSocket, voice: VoiceSession) -> None:
                 await _send_json(websocket, {"type": "status", "state": "idle", "reason": "no speech"})
                 continue
 
-            if voice.composer and voice.terminal_mic:
-                accept_mic.clear()
             if not voice.terminal_mic:
                 await _drain_websocket(websocket, seconds=0.15)
                 accept_audio.clear()
