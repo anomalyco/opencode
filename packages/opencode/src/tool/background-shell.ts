@@ -55,12 +55,16 @@ export function runShellJob(opts: {
             for (const line of lines) {
               const trimmed = line.trim()
               if (!trimmed) continue
-              yield* opts.onLine!(trimmed)
+              // Fire-and-forget (detached): onLine calls ops.prompt, which AWAITS
+              // the model turn. If the reader awaited that, cancelling/re-arming a
+              // monitor (Scope.close from inside the very turn the reader is
+              // awaiting) would deadlock. Detaching keeps the reader interruptible.
+              yield* opts.onLine!(trimmed).pipe(Effect.forkDetach({ startImmediately: true }))
             }
           }),
         )
         const trailing = buffer.value.trim()
-        if (trailing) yield* opts.onLine!(trailing)
+        if (trailing) yield* opts.onLine!(trailing).pipe(Effect.forkDetach({ startImmediately: true }))
       }
 
       return yield* handle.exitCode.pipe(
