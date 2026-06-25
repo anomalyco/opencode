@@ -16,7 +16,7 @@
 - Do not preserve `V2` as the permanent name for the replacement architecture. Remove `V2` from current namespaces, brands, and identifiers as the contracts are normalized.
 - Retained V1 contracts should live under a dedicated `src/v1/` subtree once the V1 isolation PR runs. New/current code must not depend on that subtree.
 - V1 coexistence is temporary. Keep compatibility entrypoints only where migration requires them, and delete the V1 subtree when the legacy runtime is retired.
-- `@opencode-ai/protocol` and future `@opencode-ai/sdk-next` are current `/api/...` surfaces. Do not include V1 events or endpoints there unless an event has been explicitly classified as current or shared transitional.
+- `@opencode-ai/protocol` and future `@opencode-ai/sdk-next` are current `/api/...` surfaces.
 
 ## Events
 
@@ -24,7 +24,7 @@
 - Being emitted by V1 is not enough to include an event in Protocol or SDK Next.
 - Keep clearly V1-only events, such as `message.updated` and `message.part.*`, out of the current Protocol/SDK Next event surface unless a current-client requirement is documented.
 - Keep compatibility events available only to the existing App/TUI/CLI compatibility surface while they are still needed.
-- When a public event belongs to a domain whose runtime is outside Schema, define only the minimal serializable wire payload in Schema and preserve a single canonical definition. Do not duplicate event definitions for generation convenience.
+- Preserve a single canonical event definition. Do not duplicate definitions for generation convenience.
 
 ## Module Shape
 
@@ -38,7 +38,6 @@
 
 - Exported schema values and namespace objects use `PascalCase`.
 - Schema-building functions and combinators use `camelCase`.
-- The package's canonical optional-property helper is `optional(...)`; it omits `undefined` during encoding.
 - The package's static-method combinator is `statics(...)`.
 - Keep descriptive schema value names such as `PositiveInt`, `NonNegativeInt`, `AbsolutePath`, `RelativePath`, and `DateTimeUtcFromMillis`.
 
