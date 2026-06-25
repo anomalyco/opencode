@@ -1979,6 +1979,9 @@ const priority = ["gpt-5", "claude-sonnet-4", "big-pickle", "gemini-3-pro", "kim
 export function sort<T extends { id: string }>(models: T[]) {
   return sortBy(
     models,
+    // The Mammouth-curated preset is always the top recommendation, so it wins
+    // over the family priority list and becomes the default model.
+    [(model) => (model.id === ModelsDev.MAMMOUTH_RECOMMENDED_MODEL_ID ? 1 : 0), "desc"],
     [(model) => priority.findIndex((filter) => model.id.includes(filter)), "desc"],
     [(model) => (model.id.includes("latest") ? 0 : 1), "asc"],
     [(model) => model.id, "desc"],

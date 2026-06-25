@@ -689,6 +689,18 @@ test("provider.sort prioritizes preferred models", () => {
   expect(sorted[sorted.length - 1].id).not.toContain("sonnet-4")
 })
 
+test("provider.sort ranks the mammouth-recommended preset first", () => {
+  const models = [
+    { id: "gpt-5-turbo", name: "GPT-5 Turbo" },
+    { id: "claude-sonnet-4-latest", name: "Claude Sonnet 4" },
+    { id: ModelsDev.MAMMOUTH_RECOMMENDED_MODEL_ID, name: "Mammouth Recommended" },
+    { id: "glm-5.2", name: "GLM 5.2" },
+  ] as any[]
+
+  const sorted = Provider.sort(models)
+  expect(sorted[0].id).toBe(ModelsDev.MAMMOUTH_RECOMMENDED_MODEL_ID)
+})
+
 it.instance(
   "multiple providers can be configured simultaneously",
   Effect.gen(function* () {

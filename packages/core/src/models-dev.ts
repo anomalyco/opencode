@@ -114,6 +114,9 @@ export type Provider = Schema.Schema.Type<typeof Provider>
 // provider so the rest of the provider system treats them like any other.
 const MAMMOUTH_API_BASE = "https://api.mammouth.ai"
 
+// The Mammouth-curated default.
+export const MAMMOUTH_RECOMMENDED_MODEL_ID = "mammouth-recommended"
+
 const ALLOWED_MODEL_FAMILIES = [
   "claude",
   "gpt",
@@ -131,6 +134,7 @@ const ALLOWED_MODEL_FAMILIES = [
 ]
 
 function isAllowedModel(name: string): boolean {
+  if (name === MAMMOUTH_RECOMMENDED_MODEL_ID) return true
   const lower = name.toLowerCase()
   return ALLOWED_MODEL_FAMILIES.some((family) => lower.startsWith(family))
 }
