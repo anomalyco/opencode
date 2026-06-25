@@ -1,20 +1,16 @@
 [data-titlebar-tab] [data-slot="tab-close"] {
   position: absolute;
-  top: 0;
-  right: 0;
+  top: 4px;
+  right: 4px;
   display: flex;
-  height: 28px;
-  width: 28px;
+  height: 20px;
+  width: 20px;
   align-items: center;
   justify-content: center;
 }
 
-[data-slot="titlebar-tabs"] {
-  container-type: inline-size;
-}
-
 [data-titlebar-tab-list] {
-  gap: calc(min(12px, 2cqw) + 1.5px);
+  gap: 13.5px;
 }
 
 [data-titlebar-tab-slot] {
@@ -25,7 +21,7 @@
   content: "";
   position: absolute;
   top: 8px;
-  left: calc(0px - min(6px, 1cqw) - 0.75px);
+  left: -6.75px;
   width: 1.5px;
   height: 12px;
   border-radius: 9999px;
@@ -54,17 +50,9 @@
   right: 100%;
 }
 
-[data-titlebar-tab] [data-slot="tab-link"] {
-  padding-right: 22px;
-}
-
 [data-titlebar-tab][data-title-overflow="true"]:not(:hover):not([data-active="true"]):not([data-editing="true"])
   [data-slot="tab-link"] {
   padding-right: 0;
-}
-
-[data-titlebar-tab][data-editing="true"] [data-slot="tab-link"] {
-  padding-right: 22px;
 }
 
 [data-titlebar-tab] [data-slot="tab-title"] {
@@ -94,5 +82,11 @@
 
   [data-titlebar-tab-title] {
     display: none;
+  }
+
+  [data-slot="tab-close"] {
+    right: auto;
+    left: 50%;
+    transform: translateX(-50%);
   }
 }

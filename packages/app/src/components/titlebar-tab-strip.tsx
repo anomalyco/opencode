@@ -100,41 +100,33 @@ function SessionTabSlot(props: {
   })
 
   return (
-    <div
-      data-titlebar-tab-slot
-      data-tab-key={props.id}
-      class="flex min-w-0 max-w-56 flex-1 basis-0"
-      classList={{
-        hidden: !session(),
-        "pointer-events-none": props.dragActive,
-      }}
+    <TabNavItem
+      tabKey={props.id}
+      dragActive={props.dragActive}
       onPointerDown={props.onPointerDown}
-    >
-      <TabNavItem
-        ref={ref}
-        href={tabHref(props.tab)}
-        server={props.tab.server}
-        session={session}
-        onTitleChange={(title) => {
-          const value = session()
-          const ctx = props.serverCtx()
-          if (value && ctx) ctx.sync.session.remember({ ...value, title })
-        }}
-        onTitleChangeFailed={(title) => {
-          const value = session()
-          const ctx = props.serverCtx()
-          if (value && ctx) ctx.sync.session.remember({ ...value, title })
-        }}
-        onNavigate={() => props.onNavigate(ref)}
-        onClose={props.onClose}
-        active={props.active()}
-        activeServer={props.tab.server === props.activeServerKey}
-        forceTruncate={props.forceTruncate}
-        suppressNavigation={props.suppressNavigation}
-        pressed={props.pressed()}
-        hidden={props.dragged()}
-      />
-    </div>
+      ref={ref}
+      href={tabHref(props.tab)}
+      server={props.tab.server}
+      session={session}
+      onTitleChange={(title) => {
+        const value = session()
+        const ctx = props.serverCtx()
+        if (value && ctx) ctx.sync.session.remember({ ...value, title })
+      }}
+      onTitleChangeFailed={(title) => {
+        const value = session()
+        const ctx = props.serverCtx()
+        if (value && ctx) ctx.sync.session.remember({ ...value, title })
+      }}
+      onNavigate={() => props.onNavigate(ref)}
+      onClose={props.onClose}
+      active={props.active()}
+      activeServer={props.tab.server === props.activeServerKey}
+      forceTruncate={props.forceTruncate}
+      suppressNavigation={props.suppressNavigation}
+      pressed={props.pressed()}
+      hidden={props.dragged() || !session()}
+    />
   )
 }
 
@@ -336,7 +328,10 @@ export function TitlebarTabStrip(props: {
     if (event.button !== 0 || drag.active) return
     if (!canStartTabDrag(event.pointerType)) return
     if (isTabCloseTarget(event.target)) return
-    const tabEl = (event.currentTarget as HTMLElement).querySelector<HTMLDivElement>("[data-titlebar-tab]")
+    const target = event.currentTarget as HTMLDivElement
+    const tabEl = target.matches("[data-titlebar-tab]")
+      ? target
+      : target.querySelector<HTMLDivElement>("[data-titlebar-tab]")
     if (!tabEl) return
     if (!tabEl.querySelector('[data-slot="tab-link"]')) return
     const tab = props.tabs.find((item) => tabKey(item) === id)
@@ -459,13 +454,13 @@ export function TitlebarTabStrip(props: {
 
   return (
     <>
-      <div data-slot="titlebar-tabs" class="relative min-w-0 flex-1">
+      <div data-slot="titlebar-tabs" class="relative min-w-0">
         <div
           data-slot="titlebar-tabs-scroll"
           class="flex min-w-0 flex-row items-center gap-1.5 overflow-x-auto no-scrollbar [app-region:no-drag]"
           ref={scrollRef}
         >
-          <div data-titlebar-tab-list class="flex w-full min-w-0 flex-row items-center" ref={listRef}>
+          <div data-titlebar-tab-list class="flex min-w-0 flex-row items-center" ref={listRef}>
             <For each={displayTabs()}>
               {(tab, index) => {
                 const id = tabKey(tab)
@@ -503,30 +498,23 @@ export function TitlebarTabStrip(props: {
                 }
 
                 return (
-                  <div
-                    data-titlebar-tab-slot
-                    data-tab-key={id}
-                    class="flex min-w-0 max-w-56 flex-1 basis-0"
-                    classList={{
-                      "pointer-events-none": drag.active,
-                    }}
+                  <DraftTabItem
+                    tabKey={id}
+                    dragActive={drag.active}
                     onPointerDown={(event) => {
                       if (dragged()) return
                       onPointerDown(id, event)
                     }}
-                  >
-                    <DraftTabItem
-                      ref={ref}
-                      href={tabHref(tab)}
-                      title={language.t("command.session.new")}
-                      onNavigate={() => props.onNavigate(tab, ref)}
-                      onClose={() => props.onClose(tab)}
-                      suppressNavigation={() => suppressNavigation()}
-                      active={props.currentTab() === tab}
-                      pressed={pressedId() === id}
-                      hidden={dragged()}
-                    />
-                  </div>
+                    ref={ref}
+                    href={tabHref(tab)}
+                    title={language.t("command.session.new")}
+                    onNavigate={() => props.onNavigate(tab, ref)}
+                    onClose={() => props.onClose(tab)}
+                    suppressNavigation={() => suppressNavigation()}
+                    active={props.currentTab() === tab}
+                    pressed={pressedId() === id}
+                    hidden={dragged()}
+                  />
                 )
               }}
             </For>
