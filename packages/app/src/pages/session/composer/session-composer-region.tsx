@@ -382,7 +382,7 @@ export function SessionComposerRegion(props: {
                   class="w-full rounded-[12px] border border-border-weak-base bg-background-base p-3 text-16-regular text-text-weak"
                 >
                   <span>{language.t("session.child.promptDisabled")} </span>
-                  <Show when={props.openParent}>
+                  <Show when={parentID() && props.openParent}>
                     <button
                       type="button"
                       class="text-text-base transition-colors hover:text-text-strong"
