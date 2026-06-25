@@ -47,7 +47,20 @@ function rewrite(request: Request, values: { directory?: string; workspace?: str
   return next
 }
 
+function normalizeBaseUrl(baseUrl: string) {
+  // A scheme-less base URL like "localhost:4096" produces requests that fetch
+  // still resolves, but URL parsing treats "localhost" as the protocol, so the
+  // pathname no longer starts with "/" and rewrite() skips the location query
+  // params. Default to http so URL handling sees the real pathname.
+  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(baseUrl)) return baseUrl
+  return `http://${baseUrl}`
+}
+
 export function createOpencodeClient(config?: Config & { directory?: string; experimental_workspaceID?: string }) {
+  if (config?.baseUrl) {
+    config = { ...config, baseUrl: normalizeBaseUrl(config.baseUrl) }
+  }
+
   if (!config?.fetch) {
     const customFetch: any = (req: any) => {
       // @ts-ignore
