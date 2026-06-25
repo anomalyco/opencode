@@ -20,6 +20,7 @@ import { SessionLocationMiddleware } from "../middleware/session-location"
 import { Agent } from "@opencode-ai/schema/agent"
 import { Model } from "@opencode-ai/schema/model"
 import { Location } from "@opencode-ai/schema/location"
+import { Revert } from "@opencode-ai/schema/revert"
 
 const SessionsQueryFields = {
   workspace: Workspace.ID.pipe(Schema.optional),
@@ -222,9 +223,9 @@ export const SessionGroup = HttpApiGroup.make("server.session")
   )
   .add(
     HttpApiEndpoint.post("session.revert.stage", "/api/session/:sessionID/revert/stage", {
-      params: { sessionID: SessionV2.ID },
+      params: { sessionID: Session.ID },
       payload: Schema.Struct({ messageID: SessionMessage.ID, files: Schema.Boolean.pipe(Schema.optional) }),
-      success: Schema.Struct({ data: SessionV2.RevertState }),
+      success: Schema.Struct({ data: Revert.State }),
       error: [MessageNotFoundError, SessionNotFoundError, UnknownError],
     })
       .middleware(SessionLocationMiddleware)
@@ -238,7 +239,7 @@ export const SessionGroup = HttpApiGroup.make("server.session")
   )
   .add(
     HttpApiEndpoint.post("session.revert.clear", "/api/session/:sessionID/revert/clear", {
-      params: { sessionID: SessionV2.ID },
+      params: { sessionID: Session.ID },
       success: HttpApiSchema.NoContent,
       error: [SessionNotFoundError, UnknownError],
     })
@@ -247,7 +248,7 @@ export const SessionGroup = HttpApiGroup.make("server.session")
   )
   .add(
     HttpApiEndpoint.post("session.revert.commit", "/api/session/:sessionID/revert/commit", {
-      params: { sessionID: SessionV2.ID },
+      params: { sessionID: Session.ID },
       success: HttpApiSchema.NoContent,
       error: SessionNotFoundError,
     })
