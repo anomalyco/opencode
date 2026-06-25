@@ -404,6 +404,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
               body={current.body}
               options={{ once: "Allow once", always: "Allow always", reject: "Reject" }}
               escapeKey="reject"
+              numbered
               fullscreen
               onSelect={(option) => {
                 if (option === "always") {
@@ -527,6 +528,7 @@ function Prompt<const T extends Record<string, string>>(props: {
   body: JSX.Element
   options: T
   escapeKey?: keyof T
+  numbered?: boolean
   fullscreen?: boolean
   onSelect: (option: keyof T) => void
 }) {
@@ -564,6 +566,14 @@ function Prompt<const T extends Record<string, string>>(props: {
       },
     ],
     bindings: [
+      ...(props.numbered
+        ? keys.slice(0, 9).map((option, index) => ({
+            key: String(index + 1),
+            desc: `Select permission option ${index + 1}`,
+            group: "Permission",
+            cmd: () => props.onSelect(option),
+          }))
+        : []),
       {
         key: "left",
         desc: "Previous permission option",
@@ -675,7 +685,7 @@ function Prompt<const T extends Record<string, string>>(props: {
       >
         <box flexDirection="row" gap={1} flexShrink={0}>
           <For each={keys}>
-            {(option) => (
+            {(option, index) => (
               <box
                 paddingLeft={1}
                 paddingRight={1}
@@ -687,7 +697,7 @@ function Prompt<const T extends Record<string, string>>(props: {
                 }}
               >
                 <text fg={option === store.selected ? selectedForeground(theme, theme.warning) : theme.textMuted}>
-                  {props.options[option]}
+                  {props.numbered ? `${index() + 1}. ${props.options[option]}` : props.options[option]}
                 </text>
               </box>
             )}
