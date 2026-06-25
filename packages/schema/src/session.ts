@@ -5,7 +5,7 @@ import { Agent } from "./agent"
 import { Location } from "./location"
 import { Model } from "./model"
 import { Project } from "./project"
-import { DateTimeUtcFromMillis, optionalOmitUndefined, RelativePath } from "./schema"
+import { DateTimeUtcFromMillis, optional, RelativePath } from "./schema"
 import { SessionEvent } from "./session-event"
 import { SessionID } from "./session-id"
 import { Revert } from "./revert"
@@ -18,7 +18,7 @@ export const Event = SessionEvent
 export interface Info extends Schema.Schema.Type<typeof Info> {}
 export const Info = Schema.Struct({
   id: ID,
-  parentID: ID.pipe(optionalOmitUndefined),
+  parentID: ID.pipe(optional),
   projectID: Project.ID,
   agent: Agent.ID.pipe(Schema.optional),
   model: Model.Ref.pipe(Schema.optional),

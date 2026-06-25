@@ -15,7 +15,6 @@ import { WorkspaceV2 } from "../workspace"
 import { SessionContextEpoch } from "./context-epoch"
 import { MessageTable, PartTable, SessionInputTable, SessionMessageTable, SessionTable } from "./sql"
 import type { DeepMutable } from "../schema"
-import { SessionMessageID } from "./message-id"
 
 type DatabaseService = Database.Interface["db"]
 
@@ -67,7 +66,7 @@ function sessionRow(info: SessionV1.SessionInfo): typeof SessionTable.$inferInse
     tokens_reasoning: (info.tokens ?? { reasoning: 0 }).reasoning,
     tokens_cache_read: (info.tokens ?? { cache: { read: 0 } }).cache.read,
     tokens_cache_write: (info.tokens ?? { cache: { write: 0 } }).cache.write,
-    revert: info.revert ? { ...info.revert, messageID: SessionMessageID.ID.make(info.revert.messageID) } : null,
+    revert: info.revert ? { ...info.revert, messageID: SessionMessage.ID.make(info.revert.messageID) } : null,
     permission: info.permission ? [...info.permission] : undefined,
     time_created: info.time.created,
     time_updated: info.time.updated,

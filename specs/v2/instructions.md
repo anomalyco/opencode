@@ -92,7 +92,7 @@ Use Effect schemas as the public contract:
 - branded schemas for ids
 - `Schema.Class` or `Schema.Struct` for domain data
 - `Schema.TaggedErrorClass` for expected errors
-- existing core helpers like `DeepMutable`, `withStatics`, and integer schemas where appropriate
+- existing core helpers like `DeepMutable`, `statics`, and integer schemas where appropriate
 
 Prefer `Info` objects as the stored domain records. Add static `empty(...)` constructors when update APIs need to create records on first mutation.
 

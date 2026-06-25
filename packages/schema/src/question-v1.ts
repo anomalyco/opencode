@@ -3,13 +3,13 @@ export * as QuestionV1 from "./question-v1"
 import { Schema } from "effect"
 import { define, inventory } from "./event"
 import { ascending } from "./identifier"
-import { withStatics } from "./schema"
+import { statics } from "./schema"
 import { SessionID } from "./session-id"
 import { SessionV1 } from "./session-v1"
 
 export const ID = Schema.String.check(Schema.isStartsWith("que")).pipe(
   Schema.brand("QuestionID"),
-  withStatics((schema) => ({ ascending: (id?: string) => schema.make(id ?? "que_" + ascending()) })),
+  statics((schema) => ({ ascending: (id?: string) => schema.make(id ?? "que_" + ascending()) })),
 )
 
 export const Option = Schema.Struct({
