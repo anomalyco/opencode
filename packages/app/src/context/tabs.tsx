@@ -112,6 +112,27 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       navigate(href)
     }
 
+    const removeTab = (index: number) => {
+      const tab = store[index]
+      if (!tab) return
+      const key = tabKey(tab)
+      const draftID = tab.type === "draft" ? tab.draftID : undefined
+      const nextTab = store[index + 1] ?? store[index - 1]
+      closing.add(key)
+      void startTransition(() => {
+        setStore(
+          produce((tabs) => {
+            tabs.splice(index, 1)
+          }),
+        )
+        if (recent.key === key) setRecentKey(nextTab && tabKey(nextTab))
+        if (nextTab) navigateTab(nextTab)
+        else navigate("/")
+      }).finally(() => closing.delete(key))
+      memory.remove(key)
+      if (draftID) removeDraftPersisted(draftID)
+    }
+
     const actions = {
       addSessionTab: (tab: Omit<SessionTab, "type">) => {
         const next = { type: "session" as const, ...tab }
@@ -175,25 +196,12 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
         memory.remove(`draft:${draftID}`)
         removeDraftPersisted(draftID)
       },
-      removeTab: (index: number) => {
-        const tab = store[index]
-        if (!tab) return
-        const key = tabKey(tab)
-        const draftID = tab.type === "draft" ? tab.draftID : undefined
-        const nextTab = store[index + 1] ?? store[index - 1]
-        closing.add(key)
-        void startTransition(() => {
-          setStore(
-            produce((tabs) => {
-              tabs.splice(index, 1)
-            }),
-          )
-          if (recent.key === key) setRecentKey(nextTab && tabKey(nextTab))
-          if (nextTab) navigateTab(nextTab)
-          else navigate("/")
-        }).finally(() => closing.delete(key))
-        memory.remove(key)
-        if (draftID) removeDraftPersisted(draftID)
+      removeTab,
+      removeSessionTab(input: Omit<SessionTab, "type">) {
+        const index = store.findIndex(
+          (tab) => tab.type === "session" && tab.server === input.server && tab.sessionId === input.sessionId,
+        )
+        if (index !== -1) removeTab(index)
       },
       removeServer(key: ServerConnection.Key) {
         const drafts = store.flatMap((tab) => (tab.type === "draft" && tab.server === key ? [tab.draftID] : []))

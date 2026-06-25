@@ -58,6 +58,7 @@ import {
   selectSessionLineage,
   sessionHref,
 } from "./utils/session-route"
+import { isSessionNotFoundError } from "./utils/server-errors"
 
 import Session from "@/pages/session"
 import { NewHome, LegacyHome } from "@/pages/home"
@@ -129,9 +130,13 @@ function ResolvedTargetSessionRoute() {
   const [resolved] = createResource(
     () => {
       if (cached()) return
-      return { id: params.id, sync: sync() }
+      return { id: params.id, server: serverKey(), sync: sync() }
     },
-    ({ id, sync }) => sync.session.lineage.resolve(id),
+    ({ id, server, sync }) =>
+      sync.session.lineage.resolve(id).catch((error) => {
+        if (isSessionNotFoundError(error, id)) tabs.removeSessionTab({ server, sessionId: id })
+        throw error
+      }),
   )
   const current = createMemo(() => selectSessionLineage(params.id, cached(), resolved()))
   const directory = createMemo(() => current()?.session.directory)
