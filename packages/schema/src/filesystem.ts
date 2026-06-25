@@ -31,3 +31,9 @@ export const Match = Schema.Struct({
   text: Schema.String,
   submatches: Schema.Array(Submatch),
 }).annotate({ identifier: "FileSystem.Match" })
+
+export class FindInput extends Schema.Class<FindInput>("FileSystem.FindInput")({
+  query: Schema.String,
+  type: Schema.Literals(["file", "directory"]).pipe(Schema.optional),
+  limit: PositiveInt.pipe(Schema.optional),
+}) {}

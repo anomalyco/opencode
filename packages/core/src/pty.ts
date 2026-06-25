@@ -2,11 +2,10 @@ export * as Pty from "./pty"
 
 import type { Disp, Proc } from "#pty"
 import { Context, Effect, Layer, Schema, Types } from "effect"
-import { PtyEvent, PtyInfo } from "@opencode-ai/schema/pty"
+import { PtyEvent, PtyInfo, Pty } from "@opencode-ai/schema/pty"
 import { Config } from "./config"
 import { EventV2 } from "./event"
 import { Location } from "./location"
-import { PositiveInt } from "./schema"
 import { PtyID } from "./pty/schema"
 import { Shell } from "./shell"
 import { lazy } from "./util/lazy"
@@ -40,25 +39,11 @@ export const Info = PtyInfo
 
 export type Info = Types.DeepMutable<typeof Info.Type>
 
-export const CreateInput = Schema.Struct({
-  command: Schema.optional(Schema.String),
-  args: Schema.optional(Schema.Array(Schema.String)),
-  cwd: Schema.optional(Schema.String),
-  title: Schema.optional(Schema.String),
-  env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
-})
+export const CreateInput = Pty.CreateInput
 
 export type CreateInput = Types.DeepMutable<typeof CreateInput.Type>
 
-export const UpdateInput = Schema.Struct({
-  title: Schema.optional(Schema.String),
-  size: Schema.optional(
-    Schema.Struct({
-      rows: PositiveInt,
-      cols: PositiveInt,
-    }),
-  ),
-})
+export const UpdateInput = Pty.UpdateInput
 
 export type UpdateInput = Types.DeepMutable<typeof UpdateInput.Type>
 

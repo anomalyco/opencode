@@ -1,14 +1,14 @@
-import { SkillV2 } from "@opencode-ai/core/skill"
-import { Location } from "@opencode-ai/core/location"
+import { Skill } from "@opencode-ai/schema/skill"
+import { Location } from "@opencode-ai/schema/location"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
-import { LocationQuery, locationQueryOpenApi, LocationMiddleware } from "./location"
+import { LocationQuery, locationQueryOpenApi } from "./location"
 
 export const SkillGroup = HttpApiGroup.make("server.skill")
   .add(
     HttpApiEndpoint.get("skill.list", "/api/skill", {
       query: LocationQuery,
-      success: Location.response(Schema.Array(SkillV2.Info)),
+      success: Location.response(Schema.Array(Skill.Info)),
     })
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
@@ -25,4 +25,3 @@ export const SkillGroup = HttpApiGroup.make("server.skill")
       description: "Experimental skill routes.",
     }),
   )
-  .middleware(LocationMiddleware)

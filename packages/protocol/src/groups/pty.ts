@@ -1,11 +1,10 @@
-import { Pty } from "@opencode-ai/core/pty"
-import { PtyID } from "@opencode-ai/core/pty/schema"
-import { PtyTicket } from "@opencode-ai/core/pty/ticket"
-import { Location } from "@opencode-ai/core/location"
+import { Pty } from "@opencode-ai/schema/pty"
+import { PtyTicket } from "@opencode-ai/schema/pty-ticket"
+import { Location } from "@opencode-ai/schema/location"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
 import { ForbiddenError, PtyNotFoundError } from "../errors"
-import { LocationQuery, locationQueryOpenApi, LocationMiddleware } from "./location"
+import { LocationQuery, locationQueryOpenApi } from "./location"
 
 export const PTY_CONNECT_TICKET_QUERY = "ticket"
 export const PTY_CONNECT_TOKEN_HEADER = "x-opencode-ticket"
@@ -51,7 +50,7 @@ export const PtyGroup = HttpApiGroup.make("server.pty")
   )
   .add(
     HttpApiEndpoint.get("pty.get", "/api/pty/:ptyID", {
-      params: { ptyID: PtyID },
+      params: { ptyID: Pty.ID },
       query: LocationQuery,
       success: Location.response(Pty.Info),
       error: PtyNotFoundError,
@@ -67,7 +66,7 @@ export const PtyGroup = HttpApiGroup.make("server.pty")
   )
   .add(
     HttpApiEndpoint.put("pty.update", "/api/pty/:ptyID", {
-      params: { ptyID: PtyID },
+      params: { ptyID: Pty.ID },
       query: LocationQuery,
       payload: Pty.UpdateInput,
       success: Location.response(Pty.Info),
@@ -84,7 +83,7 @@ export const PtyGroup = HttpApiGroup.make("server.pty")
   )
   .add(
     HttpApiEndpoint.delete("pty.remove", "/api/pty/:ptyID", {
-      params: { ptyID: PtyID },
+      params: { ptyID: Pty.ID },
       query: LocationQuery,
       success: HttpApiSchema.NoContent,
       error: PtyNotFoundError,
@@ -100,7 +99,7 @@ export const PtyGroup = HttpApiGroup.make("server.pty")
   )
   .add(
     HttpApiEndpoint.post("pty.connectToken", "/api/pty/:ptyID/connect-token", {
-      params: { ptyID: PtyID },
+      params: { ptyID: Pty.ID },
       query: LocationQuery,
       success: Location.response(PtyTicket.ConnectToken),
       error: [ForbiddenError, PtyNotFoundError],
@@ -118,7 +117,7 @@ export const PtyGroup = HttpApiGroup.make("server.pty")
     // Query fields are decoded in the raw handler after the existence check so a missing
     // session responds with an empty 404 before any upgrade work.
     HttpApiEndpoint.get("pty.connect", "/api/pty/:ptyID/connect", {
-      params: { ptyID: PtyID },
+      params: { ptyID: Pty.ID },
       success: Schema.Boolean,
       error: [ForbiddenError, PtyNotFoundError],
     }).annotateMerge(
@@ -141,4 +140,3 @@ export const PtyGroup = HttpApiGroup.make("server.pty")
     ),
   )
   .annotateMerge(OpenApi.annotations({ title: "pty", description: "Experimental location-scoped PTY routes." }))
-  .middleware(LocationMiddleware)

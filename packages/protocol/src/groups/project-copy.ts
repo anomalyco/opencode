@@ -1,8 +1,8 @@
-import { ProjectCopy } from "@opencode-ai/core/project/copy"
-import { ProjectV2 } from "@opencode-ai/core/project"
+import { ProjectCopy } from "@opencode-ai/schema/project-copy"
+import { Project } from "@opencode-ai/schema/project"
 import { Schema, Struct } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
-import { LocationMiddleware, LocationQuery, locationQueryOpenApi } from "./location"
+import { LocationQuery, locationQueryOpenApi } from "./location"
 
 const root = "/experimental/project/:projectID/copy"
 
@@ -23,7 +23,7 @@ const RemovePayload = Schema.Struct(Struct.omit(ProjectCopy.RemoveInput.fields, 
 export const ProjectCopyGroup = HttpApiGroup.make("server.projectCopy")
   .add(
     HttpApiEndpoint.post("projectCopy.create", root, {
-      params: { projectID: ProjectV2.ID },
+      params: { projectID: Project.ID },
       query: LocationQuery,
       payload: CreatePayload,
       success: ProjectCopy.Copy,
@@ -34,7 +34,7 @@ export const ProjectCopyGroup = HttpApiGroup.make("server.projectCopy")
   )
   .add(
     HttpApiEndpoint.delete("projectCopy.remove", root, {
-      params: { projectID: ProjectV2.ID },
+      params: { projectID: Project.ID },
       query: LocationQuery,
       payload: RemovePayload,
       success: HttpApiSchema.NoContent,
@@ -45,7 +45,7 @@ export const ProjectCopyGroup = HttpApiGroup.make("server.projectCopy")
   )
   .add(
     HttpApiEndpoint.post("projectCopy.refresh", `${root}/refresh`, {
-      params: { projectID: ProjectV2.ID },
+      params: { projectID: Project.ID },
       query: LocationQuery,
       success: HttpApiSchema.NoContent,
       error: ProjectCopyError,
@@ -54,4 +54,3 @@ export const ProjectCopyGroup = HttpApiGroup.make("server.projectCopy")
       .annotateMerge(OpenApi.annotations({ identifier: "v2.projectCopy.refresh" })),
   )
   .annotateMerge(OpenApi.annotations({ title: "projectCopy", description: "Project copy management routes." }))
-  .middleware(LocationMiddleware)

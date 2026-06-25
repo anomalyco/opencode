@@ -1,15 +1,15 @@
-import { ProviderV2 } from "@opencode-ai/core/provider"
-import { Location } from "@opencode-ai/core/location"
+import { Provider } from "@opencode-ai/schema/provider"
+import { Location } from "@opencode-ai/schema/location"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { ProviderNotFoundError, ServiceUnavailableError } from "../errors"
-import { LocationQuery, locationQueryOpenApi, LocationMiddleware } from "./location"
+import { LocationQuery, locationQueryOpenApi } from "./location"
 
 export const ProviderGroup = HttpApiGroup.make("server.provider")
   .add(
     HttpApiEndpoint.get("provider.list", "/api/provider", {
       query: LocationQuery,
-      success: Location.response(Schema.Array(ProviderV2.Info)),
+      success: Location.response(Schema.Array(Provider.Info)),
       error: ServiceUnavailableError,
     })
       .annotateMerge(locationQueryOpenApi)
@@ -23,9 +23,9 @@ export const ProviderGroup = HttpApiGroup.make("server.provider")
   )
   .add(
     HttpApiEndpoint.get("provider.get", "/api/provider/:providerID", {
-      params: { providerID: ProviderV2.ID },
+      params: { providerID: Provider.ID },
       query: LocationQuery,
-      success: Location.response(ProviderV2.Info),
+      success: Location.response(Provider.Info),
       error: [ProviderNotFoundError, ServiceUnavailableError],
     })
       .annotateMerge(locationQueryOpenApi)
@@ -43,4 +43,3 @@ export const ProviderGroup = HttpApiGroup.make("server.provider")
       description: "Experimental provider routes.",
     }),
   )
-  .middleware(LocationMiddleware)

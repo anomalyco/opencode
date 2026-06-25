@@ -1,7 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode-ai/server",
-  "version": "1.17.10",
+  "name": "@opencode-ai/protocol",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -12,9 +11,7 @@
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
-    "@opencode-ai/core": "workspace:*",
-    "@opencode-ai/protocol": "workspace:*",
-    "drizzle-orm": "catalog:",
+    "@opencode-ai/schema": "workspace:*",
     "effect": "catalog:"
   },
   "devDependencies": {

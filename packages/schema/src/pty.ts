@@ -3,7 +3,7 @@ export * as Pty from "./pty"
 import { Schema } from "effect"
 import { define, inventory } from "./event"
 import { ascending } from "./identifier"
-import { NonNegativeInt } from "./schema"
+import { NonNegativeInt, PositiveInt } from "./schema"
 import { withStatics } from "./schema"
 
 const IDSchema = Schema.String.check(Schema.isStartsWith("pty")).pipe(Schema.brand("PtyID"))
@@ -33,3 +33,23 @@ const Exited = define({ type: "pty.exited", schema: { id: ID, exitCode: NonNegat
 const Deleted = define({ type: "pty.deleted", schema: { id: ID } })
 export const Event = { Created, Updated, Exited, Deleted, Definitions: inventory(Created, Updated, Exited, Deleted) }
 export const PtyEvent = Event
+
+export const CreateInput = Schema.Struct({
+  command: Schema.optional(Schema.String),
+  args: Schema.optional(Schema.Array(Schema.String)),
+  cwd: Schema.optional(Schema.String),
+  title: Schema.optional(Schema.String),
+  env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+})
+export type CreateInput = typeof CreateInput.Type
+
+export const UpdateInput = Schema.Struct({
+  title: Schema.optional(Schema.String),
+  size: Schema.optional(
+    Schema.Struct({
+      rows: PositiveInt,
+      cols: PositiveInt,
+    }),
+  ),
+})
+export type UpdateInput = typeof UpdateInput.Type

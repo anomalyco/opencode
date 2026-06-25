@@ -1,15 +1,15 @@
-import { ModelV2 } from "@opencode-ai/core/model"
-import { Location } from "@opencode-ai/core/location"
+import { Model } from "@opencode-ai/schema/model"
+import { Location } from "@opencode-ai/schema/location"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { ServiceUnavailableError } from "../errors"
-import { LocationQuery, locationQueryOpenApi, LocationMiddleware } from "./location"
+import { LocationQuery, locationQueryOpenApi } from "./location"
 
 export const ModelGroup = HttpApiGroup.make("server.model")
   .add(
     HttpApiEndpoint.get("model.list", "/api/model", {
       query: LocationQuery,
-      success: Location.response(Schema.Array(ModelV2.Info)),
+      success: Location.response(Schema.Array(Model.Info)),
       error: ServiceUnavailableError,
     })
       .annotateMerge(locationQueryOpenApi)
@@ -27,4 +27,3 @@ export const ModelGroup = HttpApiGroup.make("server.model")
       description: "Experimental model routes.",
     }),
   )
-  .middleware(LocationMiddleware)

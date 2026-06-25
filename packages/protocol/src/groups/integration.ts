@@ -1,9 +1,9 @@
-import { Integration } from "@opencode-ai/core/integration"
-import { Location } from "@opencode-ai/core/location"
+import { Integration } from "@opencode-ai/schema/integration"
+import { Location } from "@opencode-ai/schema/location"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
 import { InvalidRequestError } from "../errors"
-import { LocationMiddleware, LocationQuery, locationQueryOpenApi } from "./location"
+import { LocationQuery, locationQueryOpenApi } from "./location"
 
 const Inputs = Schema.Record(Schema.String, Schema.String)
 
@@ -128,4 +128,3 @@ export const IntegrationGroup = HttpApiGroup.make("server.integration")
   .annotateMerge(
     OpenApi.annotations({ title: "integrations", description: "Integration discovery and authentication routes." }),
   )
-  .middleware(LocationMiddleware)

@@ -6,7 +6,7 @@ import { FSUtil } from "./fs-util"
 import { Location } from "./location"
 import { PositiveInt, RelativePath } from "./schema"
 import { FileSystemSearch } from "./filesystem/search"
-import { Entry, FileSystem, Match } from "@opencode-ai/schema/filesystem"
+import { Entry, FileSystem, FindInput, Match } from "@opencode-ai/schema/filesystem"
 export { Entry, Match, Submatch } from "@opencode-ai/schema/filesystem"
 
 export const ReadInput = Schema.Struct({
@@ -28,11 +28,7 @@ export const ListInput = Schema.Struct({
 })
 export type ListInput = typeof ListInput.Type
 
-export class FindInput extends Schema.Class<FindInput>("FileSystem.FindInput")({
-  query: Schema.String,
-  type: Schema.Literals(["file", "directory"]).pipe(Schema.optional),
-  limit: PositiveInt.pipe(Schema.optional),
-}) {}
+export { FindInput }
 
 export class GlobInput extends Schema.Class<GlobInput>("FileSystem.GlobInput")({
   pattern: Schema.String,

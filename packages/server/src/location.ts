@@ -1,35 +1,16 @@
 import { Location } from "@opencode-ai/core/location"
 import { LocationServiceMap } from "@opencode-ai/core/location-layer"
-import { FileSystem } from "@opencode-ai/core/filesystem"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { WorkspaceV2 } from "@opencode-ai/core/workspace"
-import { Effect, Layer, Schema } from "effect"
+import { Effect, Layer } from "effect"
 import { HttpServerRequest } from "effect/unstable/http"
-import { HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, OpenApi } from "effect/unstable/httpapi"
+import { HttpApiMiddleware } from "effect/unstable/httpapi"
 
-export const LocationQuery = Schema.Struct({
-  location: Schema.optional(
-    Schema.Struct({
-      directory: Schema.optional(Schema.String),
-      workspace: Schema.optional(Schema.String),
-    }),
-  ),
-}).annotate({ identifier: "LocationQuery" })
+export type LocationServices = Layer.Success<ReturnType<(typeof LocationServiceMap)["get"]>>
 
-export const locationQueryOpenApi = OpenApi.annotations({
-  transform: (operation) => {
-    const parameters = operation.parameters
-    if (!Array.isArray(parameters)) return operation
-    return {
-      ...operation,
-      parameters: parameters.map((parameter) =>
-        parameter?.name === "location" && parameter?.in === "query"
-          ? { ...parameter, style: "deepObject", explode: true }
-          : parameter,
-      ),
-    }
-  },
-})
+export class LocationMiddleware extends HttpApiMiddleware.Service<LocationMiddleware, { provides: LocationServices }>()(
+  "@opencode/HttpApiLocation",
+) {}
 
 export function response<A, E, R>(data: Effect.Effect<A, E, R>) {
   return Effect.gen(function* () {
@@ -44,32 +25,6 @@ export function response<A, E, R>(data: Effect.Effect<A, E, R>) {
     }
   })
 }
-
-export type LocationServices = Layer.Success<ReturnType<typeof LocationServiceMap.get>>
-
-export class LocationMiddleware extends HttpApiMiddleware.Service<
-  LocationMiddleware,
-  {
-    provides: LocationServices
-  }
->()("@opencode/HttpApiLocation") {}
-
-export const LocationGroup = HttpApiGroup.make("server.location")
-  .add(
-    HttpApiEndpoint.get("location.get", "/api/location", {
-      query: LocationQuery,
-      success: Location.Info,
-    })
-      .annotateMerge(locationQueryOpenApi)
-      .annotateMerge(
-        OpenApi.annotations({
-          identifier: "v2.location.get",
-          summary: "Get location",
-          description: "Resolve the requested location or the server default location.",
-        }),
-      ),
-  )
-  .middleware(LocationMiddleware)
 
 function ref(request: HttpServerRequest.HttpServerRequest): Location.Ref {
   const query = new URL(request.url, "http://localhost").searchParams

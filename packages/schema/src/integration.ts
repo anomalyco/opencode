@@ -2,11 +2,15 @@ export * as Integration from "./integration"
 
 import { Schema } from "effect"
 import { define, inventory } from "./event"
+import { Connection } from "./connection"
+import { ascending } from "./identifier"
+import { withStatics } from "./schema"
+import { IntegrationID, IntegrationMethodID } from "./integration-id"
 
-export const ID = Schema.String.pipe(Schema.brand("Integration.ID"))
+export const ID = IntegrationID
 export type ID = typeof ID.Type
 
-export const MethodID = Schema.String.pipe(Schema.brand("Integration.MethodID"))
+export const MethodID = IntegrationMethodID
 export type MethodID = typeof MethodID.Type
 
 export interface When extends Schema.Schema.Type<typeof When> {}
@@ -88,3 +92,37 @@ export const Ref = Schema.Struct({
   id: ID,
   name: Schema.String,
 }).annotate({ identifier: "Integration.Ref" })
+
+export class Info extends Schema.Class<Info>("Integration.Info")({
+  id: ID,
+  name: Schema.String,
+  methods: Schema.mutable(Schema.Array(Method)),
+  connections: Schema.mutable(Schema.Array(Connection.Info)),
+}) {}
+
+export const AttemptID = Schema.String.pipe(
+  Schema.brand("Integration.AttemptID"),
+  withStatics((schema) => ({ create: () => schema.make("con_" + ascending()) })),
+)
+export type AttemptID = typeof AttemptID.Type
+
+const AttemptTime = Schema.Struct({
+  created: Schema.Number,
+  expires: Schema.Number,
+})
+
+export class Attempt extends Schema.Class<Attempt>("Integration.Attempt")({
+  attemptID: AttemptID,
+  url: Schema.String,
+  instructions: Schema.String,
+  mode: Schema.Literals(["auto", "code"]),
+  time: AttemptTime,
+}) {}
+
+export const AttemptStatus = Schema.Union([
+  Schema.Struct({ status: Schema.Literal("pending"), time: AttemptTime }),
+  Schema.Struct({ status: Schema.Literal("complete"), time: AttemptTime }),
+  Schema.Struct({ status: Schema.Literal("failed"), message: Schema.String, time: AttemptTime }),
+  Schema.Struct({ status: Schema.Literal("expired"), time: AttemptTime }),
+]).pipe(Schema.toTaggedUnion("status"))
+export type AttemptStatus = typeof AttemptStatus.Type

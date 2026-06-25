@@ -1,14 +1,14 @@
-import { CommandV2 } from "@opencode-ai/core/command"
-import { Location } from "@opencode-ai/core/location"
+import { Command } from "@opencode-ai/schema/command"
+import { Location } from "@opencode-ai/schema/location"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
-import { LocationQuery, locationQueryOpenApi, LocationMiddleware } from "./location"
+import { LocationQuery, locationQueryOpenApi } from "./location"
 
 export const CommandGroup = HttpApiGroup.make("server.command")
   .add(
     HttpApiEndpoint.get("command.list", "/api/command", {
       query: LocationQuery,
-      success: Location.response(Schema.Array(CommandV2.Info)),
+      success: Location.response(Schema.Array(Command.Info)),
     })
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
@@ -25,4 +25,3 @@ export const CommandGroup = HttpApiGroup.make("server.command")
       description: "Experimental command routes.",
     }),
   )
-  .middleware(LocationMiddleware)

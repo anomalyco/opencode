@@ -1,9 +1,9 @@
-import { FileSystem } from "@opencode-ai/core/filesystem"
-import { Location } from "@opencode-ai/core/location"
-import { PositiveInt, RelativePath } from "@opencode-ai/core/schema"
+import { FileSystem } from "@opencode-ai/schema/filesystem"
+import { Location } from "@opencode-ai/schema/location"
+import { PositiveInt, RelativePath } from "@opencode-ai/schema/schema"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
-import { LocationQuery, locationQueryOpenApi, LocationMiddleware } from "./location"
+import { LocationQuery, locationQueryOpenApi } from "./location"
 
 const ListQuery = Schema.Struct({
   ...LocationQuery.fields,
@@ -66,4 +66,3 @@ export const FileSystemGroup = HttpApiGroup.make("server.fs")
       description: "Experimental location-scoped filesystem routes.",
     }),
   )
-  .middleware(LocationMiddleware)
