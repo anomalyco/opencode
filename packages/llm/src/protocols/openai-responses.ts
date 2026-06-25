@@ -258,6 +258,7 @@ const lowerTool = (tool: ToolDefinition): OpenAIResponsesTool => ({
   name: tool.name,
   description: tool.description,
   parameters: ProviderShared.openAiToolInputSchema(tool.inputSchema),
+  // TODO: Read this from OpenAI-specific tool options so direct LLM callers can opt into strict schemas.
   strict: false,
 })
 
