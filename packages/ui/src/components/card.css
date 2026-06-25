@@ -96,3 +96,20 @@
 body[data-new-layout] [data-component="card"][data-variant="error"] {
   --card-accent: var(--v2-state-fg-danger) !important;
 }
+
+body:not([data-new-layout]) [data-component="card"] {
+  color: var(--text-strong);
+  --card-accent: var(--icon-active);
+
+  :where([data-card="title"], [data-slot="card-title"]) {
+    color: var(--text-strong);
+  }
+
+  :where([data-slot="card-title-icon"][data-placeholder]) [data-component="icon"] {
+    color: var(--text-weak);
+  }
+
+  :where([data-card="description"], [data-slot="card-description"]) {
+    color: var(--text-base);
+  }
+}

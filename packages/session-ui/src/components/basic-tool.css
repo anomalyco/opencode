@@ -246,3 +246,34 @@
     }
   }
 }
+
+body:not([data-new-layout]) {
+  [data-component="tool-trigger"] {
+    [data-slot="basic-tool-tool-spinner"] {
+      color: var(--text-weak);
+    }
+
+    [data-slot="basic-tool-tool-title"],
+    [data-slot="basic-tool-tool-title"].agent-title {
+      color: var(--text-strong);
+    }
+
+    [data-slot="basic-tool-tool-subtitle"],
+    [data-slot="basic-tool-tool-subtitle"].clickable:hover,
+    [data-slot="basic-tool-tool-arg"] {
+      color: var(--text-base);
+    }
+  }
+
+  [data-component="task-tool-card"] {
+    border-width: 1px;
+
+    [data-component="task-tool-action"] {
+      color: var(--icon-weak);
+    }
+
+    [data-slot="basic-tool-tool-subtitle"] {
+      color: var(--text-strong);
+    }
+  }
+}

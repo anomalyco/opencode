@@ -1,4 +1,16 @@
 @layer theme {
+  html[data-theme="oc-2"] body[data-new-layout] {
+    --text-diff-add-base: var(--v2-state-fg-success);
+    --text-diff-delete-base: var(--v2-state-fg-danger);
+    --syntax-comment: var(--v2-text-text-muted);
+    --syntax-keyword: light-dark(var(--v2-pink-800), var(--v2-pink-400));
+    --syntax-string: light-dark(var(--v2-green-800), var(--v2-green-400));
+    --syntax-primitive: light-dark(var(--v2-pink-800), var(--v2-pink-400));
+    --syntax-property: light-dark(var(--v2-orange-800), var(--v2-orange-400));
+    --syntax-type: light-dark(var(--v2-purple-800), var(--v2-purple-400));
+    --syntax-critical: light-dark(var(--v2-red-800), var(--v2-red-400));
+  }
+
   :root {
     color-scheme: light;
 

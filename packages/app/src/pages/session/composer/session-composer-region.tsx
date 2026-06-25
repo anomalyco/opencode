@@ -4,6 +4,7 @@ import { useSpring } from "@opencode-ai/ui/motion-spring"
 import { PromptInput, type PromptInputControls, type PromptInputProps } from "@/components/prompt-input"
 import { useLanguage } from "@/context/language"
 import { usePrompt } from "@/context/prompt"
+import { useSettings } from "@/context/settings"
 import { useSync } from "@/context/sync"
 import { getSessionHandoff, setSessionHandoff } from "@/pages/session/handoff"
 import { SessionPermissionDock } from "@/pages/session/composer/session-permission-dock"
@@ -53,6 +54,7 @@ export function SessionComposerRegion(props: {
   const prompt = props.promptInput.state ?? usePrompt()
   const language = useLanguage()
   const sync = useSync()
+  const settings = useSettings()
 
   const handoffPrompt = createMemo(() => getSessionHandoff(props.sessionKey)?.prompt)
   const info = createMemo(() => (props.sessionID ? sync().session.get(props.sessionID) : undefined))
@@ -152,7 +154,8 @@ export function SessionComposerRegion(props: {
       data-component="session-prompt-dock"
       classList={{
         "w-full flex flex-col justify-center items-center pointer-events-none": true,
-        "shrink-0 pb-3 bg-v2-background-bg-base": props.placement !== "inline",
+        "shrink-0 pb-3 bg-v2-background-bg-base": props.placement !== "inline" && settings.general.newLayoutDesigns(),
+        "shrink-0 pb-3 bg-background-stronger": props.placement !== "inline" && !settings.general.newLayoutDesigns(),
       }}
     >
       <div
