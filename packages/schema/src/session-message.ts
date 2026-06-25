@@ -4,7 +4,7 @@ import { Schema } from "effect"
 import { ProviderMetadata, ToolContent } from "./llm"
 import { Model } from "./model"
 import { FileAttachment, Prompt } from "./prompt"
-import { DateTimeUtcFromMillis } from "./schema"
+import { DateTimeUtcFromMillis, RelativePath } from "./schema"
 import { SessionID } from "./session-id"
 import { SessionMessageID } from "./session-message-id"
 
@@ -49,7 +49,7 @@ export const User = Schema.Struct({
 export interface Synthetic extends Schema.Schema.Type<typeof Synthetic> {}
 export const Synthetic = Schema.Struct({
   ...Base,
-  sessionID: SessionID.ID,
+  sessionID: SessionID,
   text: Schema.String,
   type: Schema.Literal("synthetic"),
 }).annotate({ identifier: "Session.Message.Synthetic" })
@@ -163,6 +163,7 @@ export const Assistant = Schema.Struct({
   snapshot: Schema.Struct({
     start: Schema.String.pipe(Schema.optional),
     end: Schema.String.pipe(Schema.optional),
+    files: Schema.Array(RelativePath).pipe(Schema.optional),
   }).pipe(Schema.optional),
   finish: Schema.String.pipe(Schema.optional),
   cost: Schema.Finite.pipe(Schema.optional),

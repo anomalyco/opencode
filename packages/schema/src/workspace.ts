@@ -1,21 +1,9 @@
 export * as Workspace from "./workspace"
 
-import { Schema } from "effect"
-import { ascending } from "./identifier"
-import { withStatics } from "./schema"
+import { WorkspaceEvent } from "./workspace-event"
+import { WorkspaceID } from "./workspace-id"
 
-export const ID = Schema.String.check(Schema.isStartsWith("wrk")).pipe(
-  Schema.brand("WorkspaceV2.ID"),
-  withStatics((schema) => {
-    const create = () => schema.make("wrk_" + ascending())
-    return {
-      ascending: (id?: string) => {
-        if (!id) return create()
-        if (!id.startsWith("wrk")) throw new Error(`ID ${id} does not start with wrk`)
-        return schema.make(id)
-      },
-      create,
-    }
-  }),
-)
-export type ID = typeof ID.Type
+export const ID = WorkspaceID
+export type ID = WorkspaceID
+
+export const Event = WorkspaceEvent

@@ -115,6 +115,8 @@ export function fetch<T extends { name: string }>(
 
 export const sanitize = (value: string) => value.replace(/[^a-zA-Z0-9_-]/g, "_")
 
+export const toolName = (clientName: string, name: string) => sanitize(clientName) + "_" + sanitize(name)
+
 export function prompts(client: Client, timeout?: number) {
   if (!client.getServerCapabilities()?.prompts) return Promise.resolve([])
   return paginate(

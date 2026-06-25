@@ -1,46 +1,19 @@
 export * as EventV2 from "./event"
 
 import { Cause, Context, Effect, Layer, Option, PubSub, Schema, Stream } from "effect"
+import { Event } from "@opencode-ai/schema/event"
+import type { Data, Definition, Payload } from "@opencode-ai/schema/event"
 import { and, asc, eq, gt } from "drizzle-orm"
 import { Database } from "./database/database"
 import { EventSequenceTable, EventTable } from "./event/sql"
 import { Location } from "./location"
-import { withStatics } from "./schema"
-import { Identifier } from "./util/identifier"
 import { LayerNode } from "./effect/layer-node"
 import { isDeepStrictEqual } from "node:util"
+import { Durable } from "@opencode-ai/schema/durable-event-manifest"
 
-export const ID = Schema.String.check(Schema.isStartsWith("evt_")).pipe(
-  Schema.brand("Event.ID"),
-  withStatics((schema) => ({
-    create: () => schema.make("evt_" + Identifier.ascending()),
-  })),
-)
-export type ID = typeof ID.Type
-
-export type Definition<Type extends string = string, DataSchema extends Schema.Top = Schema.Top> = {
-  readonly type: Type
-  readonly durable?: {
-    readonly version: number
-    readonly aggregate: string
-  }
-  readonly data: DataSchema
-}
-
-export type Data<D extends Definition> = Schema.Schema.Type<D["data"]>
-
-export type Payload<D extends Definition = Definition> = {
-  readonly id: ID
-  readonly type: D["type"]
-  readonly data: Data<D>
-  readonly durable?: {
-    readonly aggregateID: string
-    readonly seq: number
-    readonly version: number
-  }
-  readonly location?: Location.Ref
-  readonly metadata?: Record<string, unknown>
-}
+export const ID = Event.ID
+export type ID = import("@opencode-ai/schema/event").ID
+export type { Data, Definition, Payload } from "@opencode-ai/schema/event"
 
 export type Subscriber<D extends Definition = Definition> = (event: Payload<D>) => Effect.Effect<void>
 export type Unsubscribe = Effect.Effect<void>
@@ -74,52 +47,8 @@ export class InvalidDurableEventError extends Schema.TaggedErrorClass<InvalidDur
   },
 ) {}
 
-export function versionedType(type: string, version: number) {
-  return `${type}.${version}`
-}
-
-export const registry = new Map<string, Definition>()
-const durableRegistry = new Map<string, Definition>()
-
-export function define<const Type extends string, Fields extends Schema.Struct.Fields>(input: {
-  readonly type: Type
-  readonly durable?: {
-    readonly version: number
-    readonly aggregate: string
-  }
-  readonly schema: Fields
-}): Schema.Schema<Payload<Definition<Type, Schema.Struct<Fields>>>> & Definition<Type, Schema.Struct<Fields>> {
-  const Data = Schema.Struct(input.schema)
-  const Payload = Schema.Struct({
-    id: ID,
-    metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
-    type: Schema.Literal(input.type),
-    durable: Schema.optional(Schema.Struct({ aggregateID: Schema.String, seq: Schema.Number, version: Schema.Number })),
-    location: Schema.optional(Location.Ref),
-    data: Data,
-  }).annotate({ identifier: input.type })
-
-  const definition = Object.assign(Payload, {
-    type: input.type,
-    ...(input.durable === undefined ? {} : { durable: input.durable }),
-    data: Data,
-  })
-  const existing = registry.get(input.type)
-  if (
-    input.durable === undefined ||
-    existing?.durable === undefined ||
-    input.durable.version >= existing.durable.version
-  ) {
-    registry.set(input.type, definition)
-  }
-  if (input.durable) durableRegistry.set(versionedType(input.type, input.durable.version), definition)
-  return definition as Schema.Schema<Payload<Definition<Type, Schema.Struct<Fields>>>> &
-    Definition<Type, Schema.Struct<Fields>>
-}
-
-export function definitions() {
-  return registry.values().toArray()
-}
+export const define = Event.define
+export const versionedType = Event.versionedType
 
 export interface PublishOptions {
   readonly id?: ID
@@ -169,6 +98,7 @@ export const layerWith = (options?: LayerOptions) =>
         typed: new Map<string, PubSub.PubSub<Payload>>(),
       }
       const projectors = new Map<string, Subscriber[]>()
+      // TODO: Bind durable projectors to exact type+version before supporting incompatible historical payloads.
       const listeners = new Array<Subscriber>()
       const { db } = yield* Database.Service
 
@@ -194,6 +124,7 @@ export const layerWith = (options?: LayerOptions) =>
       )
 
       function commitDurableEvent(
+        definition: Definition,
         event: Payload,
         input?: {
           readonly seq: number
@@ -204,7 +135,6 @@ export const layerWith = (options?: LayerOptions) =>
         commit?: (seq: number) => Effect.Effect<void>,
       ) {
         return Effect.gen(function* () {
-          const definition = registry.get(event.type)
           const durable = definition?.durable
           if (durable) {
             const aggregateID = (event.data as Record<string, unknown>)[durable.aggregate]
@@ -238,9 +168,10 @@ export const layerWith = (options?: LayerOptions) =>
                             .get()
                             .pipe(Effect.orDie)
                           const latest = row?.seq ?? -1
-                          const encoded = Schema.encodeUnknownSync(
-                            definition.data as Schema.Codec<unknown, unknown, never, never>,
-                          )(event.data) as Record<string, unknown>
+                          const encoded = Schema.encodeUnknownSync(definition.data)(event.data) as Record<
+                            string,
+                            unknown
+                          >
                           if (input?.strictOwner && row?.ownerID && row.ownerID !== input.ownerID) {
                             yield* Effect.die(
                               new InvalidDurableEventError({
@@ -356,9 +287,8 @@ export const layerWith = (options?: LayerOptions) =>
         })
       }
 
-      function publishEvent<D extends Definition>(event: Payload<D>, commit?: PublishOptions["commit"]) {
+      function publishEvent<D extends Definition>(definition: D, event: Payload<D>, commit?: PublishOptions["commit"]) {
         return Effect.gen(function* () {
-          const definition = registry.get(event.type)
           if (!definition?.durable && commit)
             return yield* Effect.die(
               new InvalidDurableEventError({
@@ -367,7 +297,7 @@ export const layerWith = (options?: LayerOptions) =>
               }),
             )
           if (definition?.durable) {
-            const committed = yield* commitDurableEvent(event as Payload, undefined, commit)
+            const committed = yield* commitDurableEvent(definition, event as Payload, undefined, commit)
             if (committed) {
               event = {
                 ...event,
@@ -416,6 +346,7 @@ export const layerWith = (options?: LayerOptions) =>
               ? { directory: serviceLocation.directory, workspaceID: serviceLocation.workspaceID }
               : undefined)
           return yield* publishEvent(
+            definition,
             {
               id: options?.id ?? ID.create(),
               ...(options?.metadata ? { metadata: options.metadata } : {}),
@@ -433,7 +364,7 @@ export const layerWith = (options?: LayerOptions) =>
         options?: { readonly publish?: boolean; readonly ownerID?: string; readonly strictOwner?: boolean },
       ) {
         return Effect.gen(function* () {
-          const definition = durableRegistry.get(event.type)
+          const definition = Durable.get(event.type)
           if (!definition?.durable) {
             yield* Effect.die(
               new InvalidDurableEventError({ type: event.type, message: `Unknown durable event type ${event.type}` }),
@@ -442,11 +373,9 @@ export const layerWith = (options?: LayerOptions) =>
             const payload = {
               id: event.id,
               type: definition.type,
-              data: Schema.decodeUnknownSync(definition.data as Schema.Codec<unknown, unknown, never, never>)(
-                event.data,
-              ),
+              data: Schema.decodeUnknownSync(definition.data)(event.data),
             } as Payload
-            const committed = yield* commitDurableEvent(payload, {
+            const committed = yield* commitDurableEvent(definition, payload, {
               seq: event.seq,
               aggregateID: event.aggregateID,
               ownerID: options?.ownerID,
@@ -530,8 +459,8 @@ export const layerWith = (options?: LayerOptions) =>
 
       const streamAll = (): Stream.Stream<Payload> => Stream.fromPubSub(pubsub.all)
 
-      const decodeSerializedEvent = (event: SerializedEvent): Payload => {
-        const definition = durableRegistry.get(event.type)
+      const decodeSerializedEvent = (event: SerializedEvent) => {
+        const definition = Durable.get(event.type)
         if (!definition?.durable) {
           throw new InvalidDurableEventError({ type: event.type, message: `Unknown durable event type ${event.type}` })
         }
@@ -539,7 +468,7 @@ export const layerWith = (options?: LayerOptions) =>
           id: event.id,
           type: definition.type,
           durable: { aggregateID: event.aggregateID, seq: event.seq, version: definition.durable.version },
-          data: Schema.decodeUnknownSync(definition.data as Schema.Codec<unknown, unknown, never, never>)(event.data),
+          data: Schema.decodeUnknownSync(definition.data)(event.data),
         }
       }
 
