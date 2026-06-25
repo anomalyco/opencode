@@ -8,7 +8,18 @@ import { MCP } from "../mcp"
 import { Skill } from "../skill"
 import PROMPT_INITIALIZE from "./template/initialize.txt"
 import PROMPT_REVIEW from "./template/review.txt"
+import PROMPT_GOAL from "./template/goal.txt"
+import PROMPT_YOLO from "./template/yolo.txt"
 import { LegacyEvent } from "@opencode-ai/schema/legacy-event"
+
+const PROMPT_LOOP = `<system-reminder>
+Daneel iterative mode has been requested.
+
+Behavior:
+- Continue refining the current task through inspect, edit, check, and review cycles.
+- Prefer small reversible steps with visible checkpoints.
+- Finish only when there is concrete evidence that the task is complete.
+</system-reminder>`
 
 type State = {
   commands: Record<string, Info>
@@ -45,6 +56,9 @@ export function hints(template: string) {
 export const Default = {
   INIT: "init",
   REVIEW: "review",
+  GOAL: "goal",
+  YOLO: "yolo",
+  LOOP: "loop",
 } as const
 
 export interface Interface {
@@ -84,6 +98,33 @@ export const layer = Layer.effect(
         },
         subtask: true,
         hints: hints(PROMPT_REVIEW),
+      }
+      commands[Default.GOAL] = {
+        name: Default.GOAL,
+        description: "start or update persistent goal mode",
+        source: "command",
+        get template() {
+          return PROMPT_GOAL
+        },
+        hints: hints(PROMPT_GOAL),
+      }
+      commands[Default.YOLO] = {
+        name: Default.YOLO,
+        description: "enable conservative autonomous execution mode",
+        source: "command",
+        get template() {
+          return PROMPT_YOLO
+        },
+        hints: hints(PROMPT_YOLO),
+      }
+      commands[Default.LOOP] = {
+        name: Default.LOOP,
+        description: "enable continuous iterative execution mode",
+        source: "command",
+        get template() {
+          return PROMPT_LOOP
+        },
+        hints: hints(PROMPT_LOOP),
       }
 
       for (const [name, command] of Object.entries(cfg.command ?? {})) {
