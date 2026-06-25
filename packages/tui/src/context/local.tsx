@@ -360,6 +360,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           selected() {
             const m = currentModel()
             if (!m) return undefined
+            // Prefer agent-configured variant so TAB-cycling between agents
+            // that share the same model shows the correct variant.
+            const a = agent.current()
+            if (a?.model?.variant) return a.model.variant
             const key = `${m.providerID}/${m.modelID}`
             return modelStore.variant[key]
           },
