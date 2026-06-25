@@ -100,7 +100,7 @@ describe("validateCustomProvider", () => {
         name: "Model A",
         reasoning: true,
         variants: {
-          fast: { reasoningEffort: "low", textVerbosity: "low" },
+          fast: { serviceTier: "fast" },
           none: { reasoningEffort: "none" },
           low: { reasoningEffort: "low" },
           medium: { reasoningEffort: "medium" },
@@ -172,7 +172,7 @@ describe("validateCustomProvider", () => {
       "model-a": {
         name: "Model A",
         variants: {
-          fast: { textVerbosity: "low" },
+          fast: { serviceTier: "fast" },
         },
       },
     })

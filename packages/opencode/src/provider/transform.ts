@@ -862,7 +862,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
       }
       const variants = Object.fromEntries(efforts.map((effort) => [effort, { reasoningEffort: effort }]))
       if (model.api.npm !== "@ai-sdk/openai-compatible") return variants
-      return { fast: { reasoningEffort: "low", textVerbosity: "low" }, ...variants }
+      return { fast: { serviceTier: "fast" }, ...variants }
 
     case "@ai-sdk/azure":
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/azure

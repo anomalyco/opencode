@@ -3596,7 +3596,7 @@ describe("ProviderTransform.variants", () => {
       })
       const result = ProviderTransform.variants(model)
       expect(Object.keys(result)).toEqual(["fast", "low", "medium", "high"])
-      expect(result.fast).toEqual({ reasoningEffort: "low", textVerbosity: "low" })
+      expect(result.fast).toEqual({ serviceTier: "fast" })
       expect(result.low).toEqual({ reasoningEffort: "low" })
       expect(result.high).toEqual({ reasoningEffort: "high" })
     })

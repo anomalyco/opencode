@@ -5,7 +5,6 @@ export const REASONING_EFFORTS = ["none", "low", "medium", "high", "xhigh"] as c
 export type ReasoningEffort = (typeof REASONING_EFFORTS)[number]
 
 const DEFAULT_REASONING_EFFORTS: readonly ReasoningEffort[] = ["none", "low", "medium", "high", "xhigh"]
-const FAST_REASONING_EFFORT: ReasoningEffort = "low"
 
 type Translator = (key: string, vars?: Record<string, string | number | boolean>) => string
 
@@ -174,15 +173,7 @@ function modelConfigFor(model: ModelRow) {
       )
     : []
   const fastVariant = model.fast
-    ? ([
-        "fast",
-        model.reasoning
-          ? {
-              reasoningEffort: FAST_REASONING_EFFORT,
-              textVerbosity: "low",
-            }
-          : { textVerbosity: "low" },
-      ] as const)
+    ? (["fast", { serviceTier: "fast" }] as const)
     : (["fast", { disabled: true }] as const)
 
   return {

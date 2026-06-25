@@ -184,14 +184,14 @@ describe("ConfigProviderOptionsV1", () => {
       lowerer.request({
         reasoningEffort: "high",
         textVerbosity: "low",
-        serviceTier: "priority",
+        serviceTier: "fast",
         promptCacheKey: "cache-key",
         reasoningSummary: "auto",
       }),
     ).toEqual({
       reasoning_effort: "high",
       text: { verbosity: "low" },
-      service_tier: "priority",
+      service_tier: "fast",
       prompt_cache_key: "cache-key",
       reasoning: { summary: "auto" },
     })
