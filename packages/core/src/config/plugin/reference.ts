@@ -25,6 +25,8 @@ export const Plugin = define({
           const directory = doc.path ? path.dirname(doc.path) : location.directory
           for (const [name, entry] of Object.entries(doc.info.references ?? {})) {
             if (!validAlias(name)) continue
+            const description = typeof entry === "string" ? undefined : entry.description
+            const hidden = typeof entry === "string" ? undefined : entry.hidden
             entries.set(
               name,
               local(entry)
@@ -33,15 +35,15 @@ export const Plugin = define({
                     path: AbsolutePath.make(
                       localPath(directory, global.home, typeof entry === "string" ? entry : entry.path),
                     ),
-                    description: typeof entry === "string" ? undefined : entry.description,
-                    hidden: typeof entry === "string" ? undefined : entry.hidden,
+                    ...(description === undefined ? {} : { description }),
+                    ...(hidden === undefined ? {} : { hidden }),
                   })
                 : Reference.GitSource.make({
                     type: "git",
                     repository: typeof entry === "string" ? entry : entry.repository,
-                    branch: typeof entry === "string" ? undefined : entry.branch,
-                    description: typeof entry === "string" ? undefined : entry.description,
-                    hidden: typeof entry === "string" ? undefined : entry.hidden,
+                    ...(entry.branch === undefined ? {} : { branch: entry.branch }),
+                    ...(description === undefined ? {} : { description }),
+                    ...(hidden === undefined ? {} : { hidden }),
                   }),
             )
           }

@@ -2,7 +2,7 @@ export * as Pty from "./pty"
 
 import type { Disp, Proc } from "#pty"
 import { Context, Effect, Layer, Schema, Types } from "effect"
-import { PtyEvent, PtyInfo, Pty } from "@opencode-ai/schema/pty"
+import { Pty } from "@opencode-ai/schema/pty"
 import { Config } from "./config"
 import { EventV2 } from "./event"
 import { Location } from "./location"
@@ -35,8 +35,7 @@ type Active = {
   listeners: Disp[]
 }
 
-export const Info = PtyInfo
-
+export const Info = Pty.Info
 export type Info = Types.DeepMutable<typeof Info.Type>
 
 export const CreateInput = Pty.CreateInput
@@ -46,6 +45,8 @@ export type CreateInput = Types.DeepMutable<typeof CreateInput.Type>
 export const UpdateInput = Pty.UpdateInput
 
 export type UpdateInput = Types.DeepMutable<typeof UpdateInput.Type>
+
+export const Event = Pty.Event
 
 export type AttachInput = {
   // Absolute output cursor to replay from. -1 tails from the current end; omitted replays the full retained buffer.
@@ -74,8 +75,6 @@ export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("Pty
 export class ExitedError extends Schema.TaggedErrorClass<ExitedError>()("Pty.ExitedError", {
   ptyID: PtyID,
 }) {}
-
-export const Event = PtyEvent
 
 export interface Interface {
   readonly list: () => Effect.Effect<Info[]>

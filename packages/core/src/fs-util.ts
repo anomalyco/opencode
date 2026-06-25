@@ -201,7 +201,7 @@ export namespace FSUtil {
   )
 
   export const defaultLayer = layer.pipe(Layer.provide(NodeFileSystem.layer))
-  export const node = LayerNode.make(layer, [filesystem])
+  export const node = LayerNode.make({ service: Service, layer: layer, deps: [filesystem] })
 
   // Pure helpers that don't need Effect (path manipulation, sync operations)
   export function mimeType(p: string): string {

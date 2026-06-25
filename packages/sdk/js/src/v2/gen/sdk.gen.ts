@@ -111,6 +111,7 @@ import type {
   McpRemoteConfig,
   McpStatusErrors,
   McpStatusResponses,
+  ModelRef,
   MoveSessionDestination,
   OutputFormat,
   Part as Part2,
@@ -129,10 +130,12 @@ import type {
   PermissionRuleset,
   PermissionV2Reply,
   PermissionV2Source,
+  ProjectCommands,
   ProjectCurrentErrors,
   ProjectCurrentResponses,
   ProjectDirectoriesErrors,
   ProjectDirectoriesResponses,
+  ProjectIcon,
   ProjectInitGitErrors,
   ProjectInitGitResponses,
   ProjectListErrors,
@@ -336,10 +339,16 @@ import type {
   V2SessionContextResponses,
   V2SessionCreateErrors,
   V2SessionCreateResponses,
+  V2SessionEventsErrors,
+  V2SessionEventsResponses,
   V2SessionGetErrors,
   V2SessionGetResponses,
+  V2SessionInterruptErrors,
+  V2SessionInterruptResponses,
   V2SessionListErrors,
   V2SessionListResponses,
+  V2SessionMessageErrors,
+  V2SessionMessageResponses,
   V2SessionMessagesErrors,
   V2SessionMessagesResponses,
   V2SessionPermissionCreateErrors,
@@ -2616,17 +2625,8 @@ export class Project extends HeyApiClient {
       directory?: string
       workspace?: string
       name?: string
-      icon?: {
-        url?: string
-        override?: string
-        color?: string
-      }
-      commands?: {
-        /**
-         * Startup script to run when creating a new workspace (worktree)
-         */
-        start?: string
-      }
+      icon?: ProjectIcon
+      commands?: ProjectCommands
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -5471,11 +5471,7 @@ export class Session3 extends HeyApiClient {
     parameters?: {
       id?: string
       agent?: string
-      model?: {
-        id: string
-        providerID: string
-        variant?: string
-      }
+      model?: ModelRef
       location?: LocationRef
     },
     options?: Options<never, ThrowOnError>,
@@ -5571,11 +5567,7 @@ export class Session3 extends HeyApiClient {
   public switchModel<ThrowOnError extends boolean = false>(
     parameters: {
       sessionID: string
-      model?: {
-        id: string
-        providerID: string
-        variant?: string
-      }
+      model?: ModelRef
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -5699,6 +5691,85 @@ export class Session3 extends HeyApiClient {
     const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "sessionID" }] }])
     return (options?.client ?? this.client).get<V2SessionContextResponses, V2SessionContextErrors, ThrowOnError>({
       url: "/api/session/{sessionID}/context",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Subscribe to session events
+   *
+   * Replay durable events after an aggregate sequence, then continue with new durable events.
+   */
+  public events<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      after?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "after" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).sse.get<V2SessionEventsResponses, V2SessionEventsErrors, ThrowOnError>({
+      url: "/api/session/{sessionID}/event",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Interrupt session execution
+   *
+   * Interrupt active execution owned by this OpenCode process. Idle interruption is a no-op.
+   */
+  public interrupt<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "sessionID" }] }])
+    return (options?.client ?? this.client).post<V2SessionInterruptResponses, V2SessionInterruptErrors, ThrowOnError>({
+      url: "/api/session/{sessionID}/interrupt",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get session message
+   *
+   * Retrieve one projected message owned by the Session.
+   */
+  public message<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      messageID: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "path", key: "messageID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<V2SessionMessageResponses, V2SessionMessageErrors, ThrowOnError>({
+      url: "/api/session/{sessionID}/message/{messageID}",
       ...options,
       ...params,
     })

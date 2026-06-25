@@ -169,6 +169,6 @@ export const layer = Layer.effect(
 
 export const defaultLayer = layer.pipe(Layer.provide(EffectFlock.defaultLayer), Layer.provide(FSUtil.defaultLayer))
 
-export const node = LayerNode.make(layer, [FSUtil.node, EffectFlock.node])
+export const node = LayerNode.make({ service: Service, layer: layer, deps: [FSUtil.node, EffectFlock.node] })
 
 export * as McpAuth from "./auth"

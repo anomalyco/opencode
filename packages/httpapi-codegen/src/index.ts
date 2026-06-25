@@ -69,6 +69,7 @@ type Slot = {
 
 const resolveHttpApiStatus = SchemaAST.resolveAt<number>("httpApiStatus")
 const resolveHttpApiEncoding = SchemaAST.resolveAt<HttpApiSchema.Encoding>("~httpApiEncoding")
+const resolveContentSchema = SchemaAST.resolveAt<SchemaAST.AST>("contentSchema")
 const Manifest = Schema.fromJsonString(Schema.Array(Schema.String))
 const manifestName = ".httpapi-codegen.json"
 
@@ -125,9 +126,10 @@ export function compile<Id extends string, Groups extends HttpApiGroup.Any>(
         ...responseSchemas(success.schema, `${name}.success`),
         ...errorSchemas.map((item) => [`${name}.error`, item.schema] as const),
       ]
-      const effectPortable = [params, query, headers, ...payloads, success, ...errorSchemas].every(
-        (item) => item?.effectPortable !== false,
-      )
+      const effectPortable =
+        [params, query, headers, ...payloads, success, ...errorSchemas].every(
+          (item) => item?.effectPortable !== false,
+        ) && streamEffectPortable(success.schema)
       if (effectPortable) {
         for (const [path, schema] of schemaPaths) assertPortable(schema, path, portable)
       }
@@ -454,7 +456,7 @@ function renderPromiseTypes(groups: ReadonlyArray<Group>) {
         const success = typeOf(
           isStreamSchema(successSchema) && successSchema._tag === "StreamSse"
             ? successSchema.sseMode === "data"
-              ? streamDataSchema(successSchema)
+              ? streamEncodedDataSchema(successSchema)
               : successSchema.events
             : successSchema,
         )
@@ -782,17 +784,6 @@ function responseSchemas(schema: Schema.Top, path: string): Array<readonly [stri
   if (!isStreamSchema(schema)) return [[path, schema]]
   if (schema._tag === "StreamUint8Array") return []
   const value = schema.sseMode === "data" ? streamDataSchema(schema) : schema.events
-  const rebuilt =
-    schema.sseMode === "data"
-      ? HttpApiSchema.StreamSse({ data: value, error: schema.error, contentType: schema.contentType })
-      : HttpApiSchema.StreamSse({
-          events: schema.events,
-          error: schema.error,
-          contentType: schema.contentType,
-        })
-  if (!sameEncoding(schema.events.ast, rebuilt.events.ast)) {
-    throw new GenerationError({ reason: `Unportable schema: ${path}.${schema.sseMode}` })
-  }
   return [
     [`${path}.${schema.sseMode}`, value],
     [`${path}.error`, schema.error],
@@ -964,11 +955,33 @@ function isStreamSchema(schema: Schema.Top): schema is HttpApiSchema.StreamSchem
 }
 
 function streamDataSchema(schema: Extract<HttpApiSchema.StreamSchema, { readonly _tag: "StreamSse" }>) {
-  const ast = Schema.toType(schema.events).ast
+  return Schema.make(streamDataAst(Schema.toType(schema.events).ast))
+}
+
+function streamEncodedDataSchema(schema: Extract<HttpApiSchema.StreamSchema, { readonly _tag: "StreamSse" }>) {
+  const data = streamDataAst(schema.events.ast)
+  const encodedAst = data.encoding?.at(-1)?.to
+  if (encodedAst === undefined) throw new GenerationError({ reason: "Invalid SSE data schema" })
+  const encoded = resolveContentSchema(encodedAst)
+  if (!SchemaAST.isAST(encoded)) throw new GenerationError({ reason: "Invalid SSE data schema" })
+  return Schema.make(encoded)
+}
+
+function streamDataAst(ast: SchemaAST.AST) {
   if (!SchemaAST.isObjects(ast)) throw new GenerationError({ reason: "Invalid SSE data schema" })
   const data = ast.propertySignatures.find((field) => field.name === "data")?.type
   if (data === undefined) throw new GenerationError({ reason: "Invalid SSE data schema" })
-  return Schema.make(data)
+  return data
+}
+
+function streamEffectPortable(schema: Schema.Top) {
+  if (!isStreamSchema(schema) || schema._tag === "StreamUint8Array" || schema.sseMode === "events") return true
+  const rebuilt = HttpApiSchema.StreamSse({
+    data: streamDataSchema(schema),
+    error: schema.error,
+    contentType: schema.contentType,
+  })
+  return sameEncoding(schema.events.ast, rebuilt.events.ast)
 }
 
 function renderGroup(group: Group, groupIndex: number) {
