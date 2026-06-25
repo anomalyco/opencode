@@ -160,6 +160,10 @@ describe("ACP service sessions", () => {
       title: `Session ${index + 1}`,
       time: { created: index + 1, updated: index + 1 },
     }))
+    const list = (input: { directory?: string }) =>
+      Promise.resolve({
+        data: input.directory ? sessions.filter((session) => session.directory === input.directory) : sessions,
+      })
     const sdk = {
       config: {
         providers: () => Promise.resolve({ data: { providers: [provider], default: { test: modelID } } }),
@@ -188,10 +192,7 @@ describe("ACP service sessions", () => {
       session: {
         create: () => Promise.resolve({ data: { id: "ses_new" } }),
         get: () => Promise.resolve({ data: { id: "ses_loaded" } }),
-        list: (input: { directory?: string }) =>
-          Promise.resolve({
-            data: input.directory ? sessions.filter((session) => session.directory === input.directory) : sessions,
-          }),
+        list,
         messages: () => Promise.resolve({ data: messages }),
         prompt: (input: unknown) => {
           prompts.push(input)
@@ -232,6 +233,11 @@ describe("ACP service sessions", () => {
         fork: (input: { sessionID: string }) => {
           forks.push(input.sessionID)
           return Promise.resolve({ data: { id: `fork_${input.sessionID}` } })
+        },
+      },
+      experimental: {
+        session: {
+          list,
         },
       },
       mcp: {

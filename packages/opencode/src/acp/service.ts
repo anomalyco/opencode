@@ -243,9 +243,12 @@ export function make(input: {
   const listSessions = Effect.fn("ACP.listSessions")(function* (params: ListSessionsRequest) {
     const cursor = params.cursor ? Number(params.cursor) : undefined
     const limit = 100
+    // Route through the cross-project session listing so an omitted cwd
+    // returns every known session, per the ACP session/list spec, instead of
+    // being scoped to the ACP process's own project.
     const sessions = yield* request(
       () =>
-        input.sdk.session.list(
+        input.sdk.experimental.session.list(
           {
             ...(params.cwd ? { directory: params.cwd } : {}),
             roots: true,
