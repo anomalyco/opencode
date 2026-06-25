@@ -2,7 +2,7 @@
 import { createStore } from "solid-js/store"
 import type { Todo } from "@opencode-ai/sdk/v2"
 import { createPromptState } from "@/context/prompt"
-import { SessionComposerRegion } from "@/pages/session/composer"
+import { SessionComposerRegion, createSessionComposerRegionController } from "@/pages/session/composer"
 import { createPromptInputHistory, PromptInput } from "./prompt-input"
 
 function createPromptInputStoryRuntime() {
@@ -53,12 +53,6 @@ function PromptInputExample() {
       selection: model,
       paid: true,
       loading: false,
-    },
-    projects: {
-      available: [{ name: "Story project", worktree: "/tmp/story", sandboxes: [] }],
-      directory: "/tmp/story",
-      select() {},
-      add() {},
     },
     session: {
       id: "story-session",
@@ -142,7 +136,6 @@ function PromptInputWithOpenDock() {
       paid: true,
       loading: false,
     },
-    projects: { available: [], directory: "/tmp/story", select: () => {}, add: () => {} },
     session: {
       id: "story-session",
       tabs: {
@@ -166,22 +159,37 @@ function PromptInputWithOpenDock() {
     closing: () => false,
     opening: () => false,
   }
-
   return (
     <SessionComposerRegion
-      state={state}
-      sessionKey="story-session"
-      sessionID="story-session"
-      controls={inputControls}
-      promptInput={{ ...input, ref: () => {}, newSessionWorktree: "", onNewSessionWorktreeReset: () => {} }}
-      todo={{
-        collapsed: controls.todoCollapsed,
-        onToggle: () => setControls("todoCollapsed", (collapsed) => !collapsed),
-      }}
-      ready
-      centered={false}
-      onResponseSubmit={() => {}}
-      setPromptDockRef={() => {}}
+      controller={
+        createSessionComposerRegionController({
+          state,
+          sessionKey: () => "story-session",
+          sessionID: () => "story-session",
+          prompt: input.state,
+          ready: () => true,
+          centered: () => false,
+          todo: {
+            collapsed: () => controls.todoCollapsed,
+            onToggle: () => setControls("todoCollapsed", (collapsed) => !collapsed),
+          },
+          followup: () => undefined,
+          revert: () => undefined,
+          onResponseSubmit: () => {},
+          openParent: () => {},
+          setPromptRef: () => {},
+          setDockRef: () => {},
+        })
+      }
+      promptInput={
+        <PromptInput
+          controls={inputControls}
+          {...input}
+          ref={() => {}}
+          newSessionWorktree=""
+          onNewSessionWorktreeReset={() => {}}
+        />
+      }
     />
   )
 }
