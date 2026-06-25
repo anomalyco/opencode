@@ -510,7 +510,7 @@ export const dict = {
   "home.sessions.search.sessions": "会话",
   "home.sessions.search.noResults": "未找到与 {{query}} 相关的会话",
   "home.sessions.empty": "这里还没有内容",
-  "home.sessions.empty.description": "开始会话，与智能体一起编码",
+  "home.sessions.empty.description": "创建一个会话以开始。",
   "home.sessions.group.today": "今天",
   "home.sessions.group.yesterday": "昨天",
   "home.sessions.group.older": "更早",
