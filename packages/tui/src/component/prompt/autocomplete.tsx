@@ -23,6 +23,7 @@ import { useFrecency } from "../../prompt/frecency"
 import { useBindings, useCommandSlashes, useOpencodeModeStack } from "../../keymap"
 import { displayCharAt, mentionTriggerIndex } from "../../prompt/display"
 import type { FileSystemEntry } from "@opencode-ai/sdk/v2"
+import { findExactReferenceAlias, resolveReferenceFileSearch, withReferenceFilePrefix } from "./autocomplete-reference"
 
 function removeLineRange(input: string) {
   const hashIndex = input.lastIndexOf("#")
@@ -282,9 +283,13 @@ export function Autocomplete(props: {
   const referenceMatch = createMemo(() => {
     if (!store.visible || store.visible === "/") return
     const { baseQuery } = extractLineRange(search())
-    const slash = baseQuery.indexOf("/")
-    const alias = slash === -1 ? baseQuery : baseQuery.slice(0, slash)
-    return references().find((item) => !item.hidden && item.name === alias)
+    return findExactReferenceAlias(baseQuery, references())
+  })
+
+  const referenceFileSearch = createMemo(() => {
+    if (!store.visible || store.visible === "/") return
+    const { baseQuery } = extractLineRange(search())
+    return resolveReferenceFileSearch(baseQuery, references())
   })
 
   function normalizeMentionPath(filePath: string) {
@@ -314,17 +319,18 @@ export function Autocomplete(props: {
   }
 
   const [files] = createResource(
-    () => ({ query: search(), location: location() }),
+    () => ({ query: search(), location: location(), references: references() }),
     async (input) => {
       if (!store.visible || store.visible === "/") return []
-      if (referenceMatch()) return []
       const { lineRange, baseQuery } = extractLineRange(input.query ?? "")
+      if (findExactReferenceAlias(baseQuery, input.references)) return []
+      const referenceSearch = resolveReferenceFileSearch(baseQuery, input.references)
 
       // Get files from SDK
       const result = await sdk.client.v2.fs.find({
-        query: baseQuery,
+        query: referenceSearch?.query ?? baseQuery,
         limit: "20",
-        location: {
+        location: referenceSearch?.location ?? {
           directory: input.location?.directory,
           workspace: input.location?.workspaceID ?? project.workspace.current(),
         },
@@ -338,8 +344,9 @@ export function Autocomplete(props: {
         const width = props.anchor().width - 4
         options.push(
           ...result.data.data.map((item): AutocompleteOption => {
+            const itemPath = referenceSearch ? withReferenceFilePrefix(referenceSearch.prefix, item.path) : item.path
             const { filename, part } = createFilePart(
-              item,
+              { ...item, path: itemPath },
               path.join(result.data.location.directory, item.path),
               lineRange,
             )
@@ -347,7 +354,7 @@ export function Autocomplete(props: {
               display: Locale.truncateMiddle(filename, width),
               value: filename,
               isDirectory: item.type === "directory",
-              path: item.path,
+              path: itemPath,
               onSelect: () => {
                 insertPart(filename, part)
               },
@@ -476,6 +483,7 @@ export function Autocomplete(props: {
   const options = createMemo((prev: AutocompleteOption[] | undefined) => {
     const filesValue = files()
     const referenceMatchValue = referenceMatch()
+    const referenceFileSearchValue = referenceFileSearch()
     const agentsValue = agents()
     const referenceAliasesValue = referenceAliases()
     const commandsValue = commands()
@@ -489,7 +497,9 @@ export function Autocomplete(props: {
     // it shouldn't be additionally sorted by fuzzysort as it will loose the results
     const fileOptions: AutocompleteOption[] = store.visible === "@" ? filesValue || [] : []
     const nonFileOptions: AutocompleteOption[] =
-      store.visible === "@" ? [...referenceAliasesValue, ...agentsValue, ...mcpResources()] : [...commandsValue]
+      store.visible === "@"
+        ? [...(referenceFileSearchValue ? [] : referenceAliasesValue), ...agentsValue, ...mcpResources()]
+        : [...commandsValue]
 
     if (!searchValue) {
       return [...nonFileOptions, ...fileOptions]
