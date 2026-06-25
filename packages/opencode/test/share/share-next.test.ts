@@ -35,7 +35,7 @@ const none = HttpClient.make(() => Effect.die("unexpected http call"))
 
 function requestLayer(client: HttpClient.HttpClient) {
   return LayerNode.buildLayer(LayerNode.group([ShareNext.node, AccountRepo.node]), {
-    replacements: [LayerNode.replace(httpClient, Layer.succeed(HttpClient.HttpClient, client))],
+    replacements: [LayerNode.replace(httpClient.implementation!, Layer.succeed(HttpClient.HttpClient, client))],
   })
 }
 
@@ -49,9 +49,7 @@ function integrationLayer(client: HttpClient.HttpClient) {
       AccountRepo.node,
       Database.node,
     ]),
-    {
-      replacements: [LayerNode.replace(httpClient, Layer.succeed(HttpClient.HttpClient, client))],
-    },
+    { replacements: [LayerNode.replace(httpClient.implementation!, Layer.succeed(HttpClient.HttpClient, client))] },
   )
 }
 

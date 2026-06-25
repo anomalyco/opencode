@@ -89,9 +89,9 @@ const root = LayerNode.group([
 const it = testEffect(
   LayerNode.buildLayer(root, {
     replacements: [
-      LayerNode.replace(MCP.node, mcp),
-      LayerNode.replace(LSP.node, lsp),
-      LayerNode.replace(RuntimeFlags.node, RuntimeFlags.layer({ experimentalEventSystem: true })),
+      LayerNode.replace(MCP.layer, mcp),
+      LayerNode.replace(LSP.layer, lsp),
+      LayerNode.replace(RuntimeFlags.defaultLayer, RuntimeFlags.layer({ experimentalEventSystem: true })),
     ],
   }),
 )

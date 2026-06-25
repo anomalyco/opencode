@@ -24,10 +24,13 @@ test("builds tiers with a custom builder", async () => {
     ),
     deps: [value],
   })
-  const layer = LayerNode.buildLayer(LayerNode.group([result]), tiers, (tier, layers) => {
-    if (tier !== "location") return LayerNode.combine(layers)
-    locationBuilds++
-    return LayerNode.combine(layers).pipe(Layer.fresh)
+  const layer = LayerNode.buildLayer(LayerNode.group([result]), {
+    tiers,
+    buildTier: (tier, layers) => {
+      if (tier !== "location") return LayerNode.combine(layers)
+      locationBuilds++
+      return LayerNode.combine(layers).pipe(Layer.fresh)
+    },
   })
   const program = Effect.gen(function* () {
     return (yield* Result).value
@@ -54,7 +57,7 @@ test("rejects conflicting higher-tier service implementations", () => {
     deps: [second],
   })
 
-  expect(() => LayerNode.buildLayer(LayerNode.group([left, right]), tiers)).toThrow(
+  expect(() => LayerNode.buildLayer(LayerNode.group([left, right]), { tiers })).toThrow(
     "conflicting implementations for test/TierValue",
   )
 })
@@ -73,7 +76,7 @@ test("validates tier dependencies through groups", () => {
     deps: [LayerNode.group([local])],
   })
 
-  expect(() => LayerNode.buildLayer(invalid, tiers)).toThrow("Tier global cannot depend on lower tier location")
+  expect(() => LayerNode.buildLayer(invalid, { tiers })).toThrow("Tier global cannot depend on lower tier location")
 })
 
 test("validates shared groups in each consumer tier", () => {
@@ -99,7 +102,7 @@ test("validates shared groups in each consumer tier", () => {
     deps: [shared],
   })
 
-  expect(() => LayerNode.buildLayer(LayerNode.group([valid, invalid]), tiers)).toThrow(
+  expect(() => LayerNode.buildLayer(LayerNode.group([valid, invalid]), { tiers })).toThrow(
     "Tier global cannot depend on lower tier location",
   )
 })
@@ -111,7 +114,7 @@ test("rejects a service assigned to multiple tiers", () => {
   const local = location({ service: Value, layer: Layer.succeed(Value, Value.of({ value: "local" })), deps: [] })
   const shared = global({ service: Value, layer: Layer.succeed(Value, Value.of({ value: "global" })), deps: [] })
 
-  expect(() => LayerNode.buildLayer(LayerNode.group([local, shared]), tiers)).toThrow(
+  expect(() => LayerNode.buildLayer(LayerNode.group([local, shared]), { tiers })).toThrow(
     "Service test/TierValue belongs to both tier location and tier global",
   )
 })
@@ -156,7 +159,7 @@ test("rebinds same-tier providers without reacquiring them", async () => {
     ),
     deps: [first],
   })
-  const layer = LayerNode.buildLayer(LayerNode.group([left, right, last]), tiers)
+  const layer = LayerNode.buildLayer(LayerNode.group([left, right, last]), { tiers })
   const values = Effect.gen(function* () {
     return [(yield* Left).value, (yield* Right).value, (yield* Last).value]
   }).pipe(Effect.provide(layer))

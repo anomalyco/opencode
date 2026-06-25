@@ -45,8 +45,8 @@ make({ service: B, layer: bLayer, deps: [] })
 // @ts-expect-error C requires A and B
 make({ service: C, layer: cLayer, deps: [a] })
 
-const closed = LayerNode.buildLayer(c, tiers)
-const closedWithError = LayerNode.buildLayer(dependent, tiers)
+const closed = LayerNode.buildLayer(c, { tiers })
+const closedWithError = LayerNode.buildLayer(dependent, { tiers })
 const checkClosed: Layer.Layer<C, never, never> = closed
 const checkError: Layer.Layer<B, LayerError, never> = closedWithError
 void checkClosed

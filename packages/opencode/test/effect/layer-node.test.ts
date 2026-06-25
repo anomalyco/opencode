@@ -27,7 +27,7 @@ describe("layer node", () => {
 
   test("builds a dependency graph", async () => {
     const program = Effect.map(Greeting, (item) => item.value).pipe(
-      Effect.provide(LayerNode.buildLayer(greeting, tiers)),
+      Effect.provide(LayerNode.buildLayer(greeting, { tiers })),
     )
     expect(await Effect.runPromise(program)).toBe("hello production")
   })
@@ -35,7 +35,7 @@ describe("layer node", () => {
   test("replaces a layer by identity", async () => {
     const replacement = Layer.succeed(Value, Value.of({ value: "simulation" }))
     const program = Effect.map(Greeting, (item) => item.value).pipe(
-      Effect.provide(LayerNode.buildLayer(greeting, tiers, undefined, [LayerNode.replace(valueLayer, replacement)])),
+      Effect.provide(LayerNode.buildLayer(greeting, { tiers, replacements: [LayerNode.replace(valueLayer, replacement)] })),
     )
     expect(await Effect.runPromise(program)).toBe("hello simulation")
   })
@@ -52,9 +52,10 @@ describe("layer node", () => {
     const left = make({ service: Left, layer: leftLayer, deps: [value] })
     const right = make({ service: Right, layer: rightLayer, deps: [value] })
     const replacement = Layer.succeed(Value, Value.of({ value: "replaced" }))
-    const layer = LayerNode.buildLayer(LayerNode.group([left, right]), tiers, undefined, [
-      LayerNode.replace(valueLayer, replacement),
-    ])
+    const layer = LayerNode.buildLayer(LayerNode.group([left, right]), {
+      tiers,
+      replacements: [LayerNode.replace(valueLayer, replacement)],
+    })
     const program = Effect.gen(function* () {
       return [(yield* Left).value, (yield* Right).value]
     }).pipe(Effect.provide(layer))
@@ -73,7 +74,7 @@ describe("layer node", () => {
     )
     await Effect.runPromise(
       Effect.map(Greeting, (item) => item.value).pipe(
-        Effect.provide(LayerNode.buildLayer(greeting, tiers, undefined, [LayerNode.replace(other, replacement)])),
+        Effect.provide(LayerNode.buildLayer(greeting, { tiers, replacements: [LayerNode.replace(other, replacement)] })),
       ),
     )
     expect(acquisitions).toBe(0)

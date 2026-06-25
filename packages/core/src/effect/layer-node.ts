@@ -127,16 +127,19 @@ export function buildLayer<
   const Built extends Layer.Any = Layer.Layer<never, never, never>,
 >(
   node: Node<A, E, any>,
-  tiers: Tiers<Names> = defaultTiers as unknown as Tiers<Names>,
-  buildTier?: (tier: Names[number], layers: readonly Layer.Any[]) => Built,
-  replacements?: readonly Replacement[],
+  options?: {
+    readonly tiers?: Tiers<Names>
+    readonly buildTier?: (tier: Names[number], layers: readonly Layer.Any[]) => Built
+    readonly replacements?: readonly Replacement[]
+  },
 ): Layer.Layer<A | Layer.Success<Built>, E | Layer.Error<Built>, never> {
-  const replacementMap = new Map(replacements?.map((item) => [item.source, item.replacement]))
+  const tiers = options?.tiers ?? (defaultTiers as unknown as Tiers<Names>)
+  const replacementMap = new Map(options?.replacements?.map((item) => [item.source, item.replacement]))
   const plans = plan(node, tiers, replacementMap)
   const layers: RuntimeLayer[] = tiers.names.map((name) => {
     const tier = tiers.values[name as Names[number]]
     const layers = plans.get(tier) ?? []
-    return (buildTier?.(name, layers) ?? combine(layers)) as RuntimeLayer
+    return (options?.buildTier?.(name, layers) ?? combine(layers)) as RuntimeLayer
   })
   if (layers.length === 0) return Layer.empty as never
   return layers.slice(1).reduce((result, layer) => result.pipe(Layer.provideMerge(layer)), layers[0]) as never
