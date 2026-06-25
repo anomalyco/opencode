@@ -30,10 +30,10 @@ const getWorkspaceInfo = query(async (workspaceID: string) => {
 
 const updateWorkspace = action(async (form: FormData) => {
   "use server"
-  const name = form.get("name")?.toString().trim()
+  const name = (form.get("name") as string | null)?.trim()
   if (!name) return { error: formError.workspaceNameRequired }
   if (name.length > 255) return { error: formError.nameTooLong }
-  const workspaceID = form.get("workspaceID")?.toString()
+  const workspaceID = form.get("workspaceID") as string | null
   if (!workspaceID) return { error: formError.workspaceRequired }
   return json(
     await withActor(

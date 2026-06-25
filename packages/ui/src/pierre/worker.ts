@@ -25,7 +25,7 @@ function createPool(lineDiffType: "none" | "word-alt") {
     },
   )
 
-  pool.initialize()
+  void pool.initialize()
   return pool
 }
 

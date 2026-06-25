@@ -20,7 +20,7 @@ export function Button(props: ButtonProps) {
       data-variant={split.variant || "secondary"}
       data-icon={split.icon}
       classList={{
-        ...(split.classList ?? {}),
+        ...split.classList,
         [split.class ?? ""]: !!split.class,
       }}
     >

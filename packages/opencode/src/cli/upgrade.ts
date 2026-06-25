@@ -1,9 +1,5 @@
-import { Bus } from "@/bus"
-import { Config } from "@/config/config"
-import { Flag } from "@/flag/flag"
-import { Installation } from "@/installation"
-
-// Mammouth manages its own updates — skip upstream opencode update check
+// Mammouth Code manages its own updates, so the upstream opencode auto-update
+// check is intentionally a no-op (suppresses all update-available notifications).
 export async function upgrade() {
   return
 }

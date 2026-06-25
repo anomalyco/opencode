@@ -128,4 +128,17 @@ describe("formatServerError", () => {
       ["Modelo nao encontrado: x/y", "Voce quis dizer: x/y2, x/y3", "Revise provider/model no config"].join("\n"),
     )
   })
+
+  test("unwraps SDK-wrapped errors from cause.body", () => {
+    const body = {
+      name: "ConfigInvalidError",
+      data: {
+        message: "Missing host",
+      },
+    } satisfies ConfigInvalidError
+
+    const wrapped = new Error("ConfigInvalidError", { cause: { body, status: 400 } })
+
+    expect(formatServerError(wrapped, language.t)).toBe("Arquivo de config em config invalido: Missing host")
+  })
 })

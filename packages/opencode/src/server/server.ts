@@ -1,353 +1,225 @@
-import { Log } from "../util/log"
-import { describeRoute, generateSpecs, validator, resolver, openAPIRouteHandler } from "hono-openapi"
-import { Hono } from "hono"
-import { compress } from "hono/compress"
-import { cors } from "hono/cors"
-import { basicAuth } from "hono/basic-auth"
-import type { UpgradeWebSocket } from "hono/ws"
-import z from "zod"
-import { Auth } from "../auth"
-import { Flag } from "../flag/flag"
-import { ProviderID } from "../provider/schema"
-import { createAdaptorServer, type ServerType } from "@hono/node-server"
-import { createNodeWebSocket } from "@hono/node-ws"
-import { WorkspaceRouterMiddleware } from "./router"
-import { errors } from "./error"
-import { GlobalRoutes } from "./routes/global"
+import "./init-projectors"
+
+import { NodeHttpServer } from "@effect/platform-node"
+import { ConfigProvider, Context, Effect, Exit, Layer, Scope } from "effect"
+import { HttpRouter, HttpServer } from "effect/unstable/http"
+import { OpenApi } from "effect/unstable/httpapi"
+import { createServer } from "node:http"
 import { MDNS } from "./mdns"
+import { HttpApiApp } from "./routes/instance/httpapi/server"
+import { disposeMiddleware } from "./routes/instance/httpapi/lifecycle"
+import { WebSocketTracker } from "./routes/instance/httpapi/websocket-tracker"
+import { PublicApi } from "./routes/instance/httpapi/public"
+import type { CorsOptions } from "@opencode-ai/server/cors"
 import { lazy } from "@/util/lazy"
-import { errorHandler } from "./middleware"
-import { InstanceRoutes } from "./instance"
-import { initProjectors } from "./projectors"
 
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false
 
-initProjectors()
+export type Listener = {
+  hostname: string
+  port: number
+  url: URL
+  stop: (close?: boolean) => Promise<void>
+}
 
-export namespace Server {
-  export type Listener = {
-    hostname: string
-    port: number
-    url: URL
-    stop: (close?: boolean) => Promise<void>
+type ServerApp = {
+  fetch(request: Request): Response | Promise<Response>
+  request(input: string | URL | Request, init?: RequestInit): Response | Promise<Response>
+}
+
+type ListenOptions = CorsOptions & {
+  port: number
+  hostname: string
+  mdns?: boolean
+  mdnsDomain?: string
+}
+type ListenerState = {
+  scope: Scope.Scope
+  server: Context.Service.Shape<typeof HttpServer.HttpServer>
+  http: ListenerServer
+  websockets: WebSocketTracker.Interface
+}
+type EffectListener = Omit<Listener, "stop"> & {
+  stop: (close?: boolean) => Effect.Effect<void>
+}
+
+interface ListenerServer {
+  readonly closeAll: Effect.Effect<void>
+}
+
+class ListenerServerService extends Context.Service<ListenerServerService, ListenerServer>()(
+  "@opencode/ListenerServer",
+) {}
+
+export const Default = lazy(() => {
+  const handler = HttpApiApp.webHandler().handler
+  const app: ServerApp = {
+    fetch: (request: Request) => handler(request, HttpApiApp.context),
+    request(input, init) {
+      return app.fetch(input instanceof Request ? input : new Request(new URL(input, "http://localhost"), init))
+    },
   }
+  return { app }
+})
 
-  const log = Log.create({ service: "server" })
-  const zipped = compress()
+export async function openapi() {
+  return OpenApi.fromApi(PublicApi)
+}
 
-  const skipCompress = (path: string, method: string) => {
-    if (path === "/event" || path === "/global/event" || path === "/global/sync-event") return true
-    if (method === "POST" && /\/session\/[^/]+\/(message|prompt_async)$/.test(path)) return true
-    return false
-  }
+export let url: URL | undefined
 
-  export const Default = lazy(() => create({}).app)
-
-  export function ControlPlaneRoutes(upgrade: UpgradeWebSocket, app = new Hono(), opts?: { cors?: string[] }): Hono {
-    return app
-      .onError(errorHandler(log))
-      .use((c, next) => {
-        // Allow CORS preflight requests to succeed without auth.
-        // Browser clients sending Authorization headers will preflight with OPTIONS.
-        if (c.req.method === "OPTIONS") return next()
-        const password = Flag.MAMMOUTH_SERVER_PASSWORD
-        if (!password) return next()
-        const username = Flag.MAMMOUTH_SERVER_USERNAME ?? "opencode"
-        return basicAuth({ username, password })(c, next)
-      })
-      .use(async (c, next) => {
-        const skip = c.req.path === "/log"
-        if (!skip) {
-          log.info("request", {
-            method: c.req.method,
-            path: c.req.path,
-          })
-        }
-        const timer = log.time("request", {
-          method: c.req.method,
-          path: c.req.path,
-        })
-        await next()
-        if (!skip) timer.stop()
-      })
-      .use(
-        cors({
-          maxAge: 86_400,
-          origin(input) {
-            if (!input) return
-
-            if (input.startsWith("http://localhost:")) return input
-            if (input.startsWith("http://127.0.0.1:")) return input
-            if (
-              input === "tauri://localhost" ||
-              input === "http://tauri.localhost" ||
-              input === "https://tauri.localhost"
-            )
-              return input
-
-            if (/^https:\/\/([a-z0-9-]+\.)*opencode\.ai$/.test(input)) return input
-            if (opts?.cors?.includes(input)) return input
-          },
-        }),
-      )
-      .use((c, next) => {
-        if (skipCompress(c.req.path, c.req.method)) return next()
-        return zipped(c, next)
-      })
-      .route("/global", GlobalRoutes())
-      .put(
-        "/auth/:providerID",
-        describeRoute({
-          summary: "Set auth credentials",
-          description: "Set authentication credentials",
-          operationId: "auth.set",
-          responses: {
-            200: {
-              description: "Successfully set authentication credentials",
-              content: {
-                "application/json": {
-                  schema: resolver(z.boolean()),
-                },
-              },
-            },
-            ...errors(400),
-          },
-        }),
-        validator(
-          "param",
-          z.object({
-            providerID: ProviderID.zod,
-          }),
-        ),
-        validator("json", Auth.Info.zod),
-        async (c) => {
-          const providerID = c.req.valid("param").providerID
-          const info = c.req.valid("json")
-          await Auth.set(providerID, info)
-          return c.json(true)
-        },
-      )
-      .delete(
-        "/auth/:providerID",
-        describeRoute({
-          summary: "Remove auth credentials",
-          description: "Remove authentication credentials",
-          operationId: "auth.remove",
-          responses: {
-            200: {
-              description: "Successfully removed authentication credentials",
-              content: {
-                "application/json": {
-                  schema: resolver(z.boolean()),
-                },
-              },
-            },
-            ...errors(400),
-          },
-        }),
-        validator(
-          "param",
-          z.object({
-            providerID: ProviderID.zod,
-          }),
-        ),
-        async (c) => {
-          const providerID = c.req.valid("param").providerID
-          await Auth.remove(providerID)
-          return c.json(true)
-        },
-      )
-      .get(
-        "/doc",
-        openAPIRouteHandler(app, {
-          documentation: {
-            info: {
-              title: "opencode",
-              version: "0.0.3",
-              description: "opencode api",
-            },
-            openapi: "3.1.1",
-          },
-        }),
-      )
-      .use(
-        validator(
-          "query",
-          z.object({
-            directory: z.string().optional(),
-            workspace: z.string().optional(),
-          }),
-        ),
-      )
-      .post(
-        "/log",
-        describeRoute({
-          summary: "Write log",
-          description: "Write a log entry to the server logs with specified level and metadata.",
-          operationId: "app.log",
-          responses: {
-            200: {
-              description: "Log entry written successfully",
-              content: {
-                "application/json": {
-                  schema: resolver(z.boolean()),
-                },
-              },
-            },
-            ...errors(400),
-          },
-        }),
-        validator(
-          "json",
-          z.object({
-            service: z.string().meta({ description: "Service name for the log entry" }),
-            level: z.enum(["debug", "info", "error", "warn"]).meta({ description: "Log level" }),
-            message: z.string().meta({ description: "Log message" }),
-            extra: z
-              .record(z.string(), z.any())
-              .optional()
-              .meta({ description: "Additional metadata for the log entry" }),
-          }),
-        ),
-        async (c) => {
-          const { service, level, message, extra } = c.req.valid("json")
-          const logger = Log.create({ service })
-
-          switch (level) {
-            case "debug":
-              logger.debug(message, extra)
-              break
-            case "info":
-              logger.info(message, extra)
-              break
-            case "error":
-              logger.error(message, extra)
-              break
-            case "warn":
-              logger.warn(message, extra)
-              break
-          }
-
-          return c.json(true)
-        },
-      )
-      .use(WorkspaceRouterMiddleware(upgrade))
-  }
-
-  function create(opts: { cors?: string[] }) {
-    const app = new Hono()
-    const ws = createNodeWebSocket({ app })
-    return {
-      app: ControlPlaneRoutes(ws.upgradeWebSocket, app, opts),
-      ws,
-    }
-  }
-
-  export function createApp(opts: { cors?: string[] }) {
-    return create(opts).app
-  }
-
-  export async function openapi() {
-    // Build a fresh app with all routes registered directly so
-    // hono-openapi can see describeRoute metadata (`.route()` wraps
-    // handlers when the sub-app has a custom errorHandler, which
-    // strips the metadata symbol).
-    const { app, ws } = create({})
-    InstanceRoutes(ws.upgradeWebSocket, app)
-    const result = await generateSpecs(app, {
-      documentation: {
-        info: {
-          title: "opencode",
-          version: "1.0.0",
-          description: "opencode api",
-        },
-        openapi: "3.1.1",
-      },
-    })
-    return result
-  }
-
-  export let url: URL
-
-  export async function listen(opts: {
-    port: number
-    hostname: string
-    mdns?: boolean
-    mdnsDomain?: string
-    cors?: string[]
-  }): Promise<Listener> {
-    const built = create(opts)
-    const start = (port: number) =>
-      new Promise<ServerType>((resolve, reject) => {
-        const server = createAdaptorServer({ fetch: built.app.fetch })
-        built.ws.injectWebSocket(server)
-        const fail = (err: Error) => {
-          cleanup()
-          reject(err)
-        }
-        const ready = () => {
-          cleanup()
-          resolve(server)
-        }
-        const cleanup = () => {
-          server.off("error", fail)
-          server.off("listening", ready)
-        }
-        server.once("error", fail)
-        server.once("listening", ready)
-        server.listen(port, opts.hostname)
-      })
-
-    const server = opts.port === 0 ? await start(4096).catch(() => start(0)) : await start(opts.port)
-    const addr = server.address()
-    if (!addr || typeof addr === "string") {
-      throw new Error(`Failed to resolve server address for port ${opts.port}`)
-    }
-
-    const next = new URL("http://localhost")
-    next.hostname = opts.hostname
-    next.port = String(addr.port)
-    url = next
-
-    const mdns =
-      opts.mdns &&
-      addr.port &&
-      opts.hostname !== "127.0.0.1" &&
-      opts.hostname !== "localhost" &&
-      opts.hostname !== "::1"
-    if (mdns) {
-      MDNS.publish(addr.port, opts.mdnsDomain)
-    } else if (opts.mdns) {
-      log.warn("mDNS enabled but hostname is loopback; skipping mDNS publish")
-    }
-
-    let closing: Promise<void> | undefined
-    return {
-      hostname: opts.hostname,
-      port: addr.port,
-      url: next,
-      stop(close?: boolean) {
-        closing ??= new Promise((resolve, reject) => {
-          if (mdns) MDNS.unpublish()
-          server.close((err) => {
-            if (err) {
-              reject(err)
-              return
-            }
-            resolve()
-          })
-          if (close) {
-            if ("closeAllConnections" in server && typeof server.closeAllConnections === "function") {
-              server.closeAllConnections()
-            }
-            if ("closeIdleConnections" in server && typeof server.closeIdleConnections === "function") {
-              server.closeIdleConnections()
-            }
-          }
-        })
-        return closing
-      },
-    }
+export async function listen(opts: ListenOptions): Promise<Listener> {
+  const listener = await Effect.runPromise(listenEffect(opts))
+  return {
+    hostname: listener.hostname,
+    port: listener.port,
+    url: listener.url,
+    stop: (close?: boolean) => Effect.runPromiseExit(listener.stop(close)).then(() => undefined),
   }
 }
+
+const listenEffect: (opts: ListenOptions) => Effect.Effect<EffectListener, unknown> = Effect.fn("Server.listen")(
+  function* (opts: ListenOptions) {
+    const state = yield* startWithPortFallback(opts)
+    const address = yield* tcpAddress(state)
+    const listenerUrl = makeURL(opts.hostname, address.port)
+    const unpublishMdns = yield* setupMdns(opts, address.port, state.scope)
+    url = listenerUrl
+
+    return {
+      hostname: opts.hostname,
+      port: address.port,
+      url: listenerUrl,
+      stop: yield* makeStop(state, unpublishMdns, listenerUrl),
+    }
+  },
+)
+
+function listenerLayer(opts: ListenOptions, port: number) {
+  return HttpRouter.serve(HttpApiApp.createRoutes(opts), {
+    middleware: disposeMiddleware,
+    disableLogger: true,
+    disableListenLog: true,
+  }).pipe(
+    Layer.provideMerge(WebSocketTracker.layer),
+    Layer.provideMerge(serverLayer({ port, hostname: opts.hostname })),
+    // Install a fresh `ConfigProvider` per listener so `Config.string(...)`
+    // reads reflect the current `process.env`. Effect's default
+    // `ConfigProvider` snapshots `process.env` on first read and caches the
+    // result on a module-singleton Reference; without overriding it here,
+    // every later `Server.listen()` keeps observing that initial snapshot.
+    Layer.provide(ConfigProvider.layer(ConfigProvider.fromEnv())),
+  )
+}
+
+function startWithPortFallback(opts: ListenOptions) {
+  if (opts.port !== 0) return startListener(opts, opts.port)
+  // Match the legacy listener port-resolution behavior: explicit `0` prefers
+  // 4096 first, then any free port.
+  return startListener(opts, 4096).pipe(Effect.catch(() => startListener(opts, 0)))
+}
+
+function startListener(opts: ListenOptions, port: number) {
+  const scope = Scope.makeUnsafe()
+  return Layer.buildWithMemoMap(listenerLayer(opts, port), Layer.makeMemoMapUnsafe(), scope).pipe(
+    Effect.provide(HttpApiApp.context),
+    Effect.onError(() => Scope.close(scope, Exit.void).pipe(Effect.ignore)),
+    Effect.map(
+      (ctx): ListenerState => ({
+        scope,
+        server: Context.get(ctx, HttpServer.HttpServer),
+        http: Context.get(ctx, ListenerServerService),
+        websockets: Context.get(ctx, WebSocketTracker.Service),
+      }),
+    ),
+  )
+}
+
+function tcpAddress(state: ListenerState) {
+  return Effect.gen(function* () {
+    if (state.server.address._tag === "TcpAddress") return state.server.address
+    yield* Scope.close(state.scope, Exit.void).pipe(Effect.ignore)
+    return yield* Effect.die(new Error(`Unexpected HttpServer address tag: ${state.server.address._tag}`))
+  })
+}
+
+function makeURL(hostname: string, port: number) {
+  const result = new URL("http://localhost")
+  result.hostname = hostname
+  result.port = String(port)
+  return result
+}
+
+function setupMdns(opts: ListenOptions, port: number, scope: Scope.Scope) {
+  return Effect.gen(function* () {
+    const publish =
+      opts.mdns && port && opts.hostname !== "127.0.0.1" && opts.hostname !== "localhost" && opts.hostname !== "::1"
+    if (publish) {
+      const unpublish = yield* Effect.cached(Effect.sync(() => MDNS.unpublish()))
+      yield* Effect.sync(() => MDNS.publish(port, opts.mdnsDomain))
+      yield* Scope.addFinalizer(scope, unpublish)
+      return unpublish
+    }
+    if (opts.mdns) {
+      yield* Effect.logWarning("mDNS enabled but hostname is loopback; skipping mDNS publish")
+    }
+    return Effect.void
+  })
+}
+
+function makeStop(state: ListenerState, unpublishMdns: Effect.Effect<void>, listenerUrl: URL) {
+  return Effect.gen(function* () {
+    const forceCloseOnce = yield* Effect.cached(forceClose(state).pipe(Effect.ignore))
+    const closeScopeOnce = yield* Effect.cached(
+      Scope.close(state.scope, Exit.void).pipe(
+        Effect.ignore,
+        Effect.ensuring(
+          Effect.sync(() => {
+            if (url === listenerUrl) url = undefined
+          }),
+        ),
+      ),
+    )
+
+    return (close?: boolean) =>
+      Effect.gen(function* () {
+        yield* unpublishMdns
+        if (close) yield* forceCloseOnce
+        yield* closeScopeOnce
+      })
+  })
+}
+
+function forceClose(state: ListenerState) {
+  return Effect.all([state.http.closeAll, state.websockets.closeAll], { concurrency: "unbounded", discard: true })
+}
+
+function serverLayer(opts: { port: number; hostname: string }) {
+  const server = createServer()
+  const serverRef = { closeStarted: false, forceStop: false }
+  const close = server.close.bind(server)
+  // Keep shutdown owned by NodeHttpServer, but honor listener.stop(true) by
+  // force-closing active HTTP sockets when its finalizer calls server.close().
+  // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- Node's overloads don't preserve a monkey-patched method assignment.
+  server.close = ((callback?: Parameters<typeof server.close>[0]) => {
+    serverRef.closeStarted = true
+    const result = close(callback)
+    if (serverRef.forceStop) server.closeAllConnections()
+    return result
+  }) as typeof server.close
+
+  return Layer.mergeAll(
+    NodeHttpServer.layer(() => server, { port: opts.port, host: opts.hostname, gracefulShutdownTimeout: "1 second" }),
+    Layer.succeed(ListenerServerService)(
+      ListenerServerService.of({
+        closeAll: Effect.sync(() => {
+          serverRef.forceStop = true
+          if (serverRef.closeStarted) server.closeAllConnections()
+        }),
+      }),
+    ),
+  )
+}
+
+export * as Server from "./server"
