@@ -963,12 +963,11 @@ export const layer = Layer.effect(
     })
 
     const getAuthStatus = Effect.fn("MCP.getAuthStatus")(function* (mcpName: string) {
-      const initialized = yield* InstanceState.has(state)
-      const runtimeConfig = initialized ? (yield* InstanceState.get(state)).config[mcpName] : undefined
-      const config = runtimeConfig ? undefined : yield* cfgSvc.get()
-      const configured = config?.mcp?.[mcpName]
-      const mcpConfig = runtimeConfig ?? (configured && isMcpConfigured(configured) ? configured : undefined)
-      if (mcpConfig?.type !== "remote") return "not_authenticated"
+      const runtimeConfig = (yield* InstanceState.has(state))
+        ? (yield* InstanceState.get(state)).config[mcpName]
+        : undefined
+      const mcpConfig = runtimeConfig ?? (yield* cfgSvc.get()).mcp?.[mcpName]
+      if (!mcpConfig || !isMcpConfigured(mcpConfig) || mcpConfig.type !== "remote") return "not_authenticated"
       const entry = yield* auth.getForUrl(mcpName, mcpConfig.url)
       if (!entry?.tokens) return "not_authenticated"
       if (entry.tokens.expiresAt && entry.tokens.expiresAt < Date.now() / 1000) return "expired"
