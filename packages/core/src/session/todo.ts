@@ -1,7 +1,7 @@
 export * as SessionTodo from "./todo"
 
 import { asc, eq } from "drizzle-orm"
-import { Context, Effect, Layer, Schema } from "effect"
+import { Context, Effect, Layer } from "effect"
 import { SessionTodo } from "@opencode-ai/schema/session-todo"
 import { Database } from "../database/database"
 import { EventV2 } from "../event"
@@ -11,8 +11,6 @@ import { TodoTable } from "./sql"
 export const Info = SessionTodo.Info
 export type Info = typeof Info.Type
 export const Event = SessionTodo.Event
-
-const decodeInfo = Schema.decodeUnknownSync(Info)
 
 export interface Interface {
   readonly update: (input: {
@@ -65,7 +63,7 @@ export const layer = Layer.effect(
         .orderBy(asc(TodoTable.position))
         .all()
         .pipe(Effect.orDie)
-      return rows.map((row) => decodeInfo(row))
+      return rows
     })
 
     return Service.of({ update, get })

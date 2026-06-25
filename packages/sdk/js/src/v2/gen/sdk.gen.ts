@@ -156,7 +156,6 @@ import type {
   PtyConnectTokenErrors,
   PtyConnectTokenResponses,
   PtyCreateErrors,
-  PtyCreateInput,
   PtyCreateResponses,
   PtyGetErrors,
   PtyGetResponses,
@@ -167,7 +166,6 @@ import type {
   PtyShellsErrors,
   PtyShellsResponses,
   PtyUpdateErrors,
-  PtyUpdateInput,
   PtyUpdateResponses,
   QuestionAnswer,
   QuestionListErrors,
@@ -2756,7 +2754,13 @@ export class Pty extends HeyApiClient {
     parameters?: {
       directory?: string
       workspace?: string
-      ptyCreateInput?: PtyCreateInput
+      command?: string
+      args?: Array<string>
+      cwd?: string
+      title?: string
+      env?: {
+        [key: string]: string
+      }
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -2767,7 +2771,11 @@ export class Pty extends HeyApiClient {
           args: [
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
-            { key: "ptyCreateInput", map: "body" },
+            { in: "body", key: "command" },
+            { in: "body", key: "args" },
+            { in: "body", key: "cwd" },
+            { in: "body", key: "title" },
+            { in: "body", key: "env" },
           ],
         },
       ],
@@ -2858,7 +2866,11 @@ export class Pty extends HeyApiClient {
       ptyID: string
       directory?: string
       workspace?: string
-      ptyUpdateInput?: PtyUpdateInput
+      title?: string
+      size?: {
+        rows: number
+        cols: number
+      }
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -2870,7 +2882,8 @@ export class Pty extends HeyApiClient {
             { in: "path", key: "ptyID" },
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
-            { key: "ptyUpdateInput", map: "body" },
+            { in: "body", key: "title" },
+            { in: "body", key: "size" },
           ],
         },
       ],
@@ -6443,12 +6456,18 @@ export class Pty2 extends HeyApiClient {
    * Create a pseudo-terminal session for a location.
    */
   public create<ThrowOnError extends boolean = false>(
-    parameters: {
+    parameters?: {
       location?: {
         directory?: string
         workspace?: string
       }
-      ptyCreateInput: PtyCreateInput
+      command?: string
+      args?: Array<string>
+      cwd?: string
+      title?: string
+      env?: {
+        [key: string]: string
+      }
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -6458,7 +6477,11 @@ export class Pty2 extends HeyApiClient {
         {
           args: [
             { in: "query", key: "location" },
-            { key: "ptyCreateInput", map: "body" },
+            { in: "body", key: "command" },
+            { in: "body", key: "args" },
+            { in: "body", key: "cwd" },
+            { in: "body", key: "title" },
+            { in: "body", key: "env" },
           ],
         },
       ],
@@ -6553,7 +6576,11 @@ export class Pty2 extends HeyApiClient {
         directory?: string
         workspace?: string
       }
-      ptyUpdateInput: PtyUpdateInput
+      title?: string
+      size?: {
+        rows: number
+        cols: number
+      }
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -6564,7 +6591,8 @@ export class Pty2 extends HeyApiClient {
           args: [
             { in: "path", key: "ptyID" },
             { in: "query", key: "location" },
-            { key: "ptyUpdateInput", map: "body" },
+            { in: "body", key: "title" },
+            { in: "body", key: "size" },
           ],
         },
       ],

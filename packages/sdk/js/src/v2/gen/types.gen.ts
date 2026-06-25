@@ -3730,24 +3730,6 @@ export type ProjectDirectories = Array<{
   strategy?: string
 }>
 
-export type PtyCreateInput = {
-  command?: string
-  args?: Array<string>
-  cwd?: string
-  title?: string
-  env?: {
-    [key: string]: string
-  }
-}
-
-export type PtyUpdateInput = {
-  title?: string
-  size?: {
-    rows: number
-    cols: number
-  }
-}
-
 export type PtyTicketConnectToken = {
   ticket: string
   expires_in: number
@@ -8894,7 +8876,15 @@ export type PtyListResponses = {
 export type PtyListResponse = PtyListResponses[keyof PtyListResponses]
 
 export type PtyCreateData = {
-  body?: PtyCreateInput
+  body?: {
+    command?: string
+    args?: Array<string>
+    cwd?: string
+    title?: string
+    env?: {
+      [key: string]: string
+    }
+  }
   path?: never
   query?: {
     directory?: string
@@ -8990,7 +8980,13 @@ export type PtyGetResponses = {
 export type PtyGetResponse = PtyGetResponses[keyof PtyGetResponses]
 
 export type PtyUpdateData = {
-  body?: PtyUpdateInput
+  body?: {
+    title?: string
+    size?: {
+      rows: number
+      cols: number
+    }
+  }
   path: {
     ptyID: string
   }
@@ -12776,7 +12772,15 @@ export type V2PtyListResponses = {
 export type V2PtyListResponse = V2PtyListResponses[keyof V2PtyListResponses]
 
 export type V2PtyCreateData = {
-  body: PtyCreateInput
+  body: {
+    command?: string
+    args?: Array<string>
+    cwd?: string
+    title?: string
+    env?: {
+      [key: string]: string
+    }
+  }
   path?: never
   query?: {
     location?: {
@@ -12896,7 +12900,13 @@ export type V2PtyGetResponses = {
 export type V2PtyGetResponse = V2PtyGetResponses[keyof V2PtyGetResponses]
 
 export type V2PtyUpdateData = {
-  body: PtyUpdateInput
+  body: {
+    title?: string
+    size?: {
+      rows: number
+      cols: number
+    }
+  }
   path: {
     ptyID: string
   }

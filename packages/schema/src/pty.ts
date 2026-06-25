@@ -40,7 +40,7 @@ export const CreateInput = Schema.Struct({
   cwd: optional(Schema.String),
   title: optional(Schema.String),
   env: optional(Schema.Record(Schema.String, Schema.String)),
-}).annotate({ identifier: "Pty.CreateInput" })
+})
 export interface CreateInput extends Schema.Schema.Type<typeof CreateInput> {}
 
 export const UpdateInput = Schema.Struct({
@@ -51,5 +51,5 @@ export const UpdateInput = Schema.Struct({
       cols: PositiveInt,
     }),
   ),
-}).annotate({ identifier: "Pty.UpdateInput" })
+})
 export interface UpdateInput extends Schema.Schema.Type<typeof UpdateInput> {}
