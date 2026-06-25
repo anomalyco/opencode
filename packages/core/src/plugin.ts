@@ -1,6 +1,7 @@
 export * as PluginV2 from "./plugin"
 
 import { Context, Deferred, Effect, Exit, Layer, Scope } from "effect"
+import type { Plugin as PluginRuntime } from "@opencode-ai/plugin/v2/effect"
 import { Plugin } from "@opencode-ai/schema/plugin"
 import { AgentV2 } from "./agent"
 import { AISDK } from "./aisdk"
@@ -13,8 +14,6 @@ import { PluginHost } from "./plugin/host"
 import { Reference } from "./reference"
 import { SkillV2 } from "./skill"
 import { State } from "./state"
-
-type PluginRuntime = import("@opencode-ai/plugin/v2/effect").Plugin
 
 export const ID = Plugin.ID
 export type ID = typeof ID.Type
