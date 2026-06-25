@@ -963,10 +963,12 @@ export const layer = Layer.effect(
     })
 
     const getAuthStatus = Effect.fn("MCP.getAuthStatus")(function* (mcpName: string) {
-      const entry = yield* auth.get(mcpName)
+      const mcpConfig = yield* getMcpConfig(mcpName)
+      if (mcpConfig?.type !== "remote") return "not_authenticated"
+      const entry = yield* auth.getForUrl(mcpName, mcpConfig.url)
       if (!entry?.tokens) return "not_authenticated"
-      const expired = yield* auth.isTokenExpired(mcpName)
-      return expired ? "expired" : "authenticated"
+      if (entry.tokens.expiresAt && entry.tokens.expiresAt < Date.now() / 1000) return "expired"
+      return "authenticated"
     })
 
     return Service.of({
