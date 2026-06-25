@@ -155,7 +155,7 @@ export const layer = Layer.effect(
           },
           plan: {
             name: "plan",
-            description: "Plan mode. Disallows all edit tools.",
+            description: "Plan mode. Disallows all edit tools and bash commands.",
             options: {},
             permission: Permission.merge(
               defaults,
@@ -172,6 +172,9 @@ export const layer = Layer.effect(
                   "*": "deny",
                   [path.join(".opencode", "plans", "*.md")]: "allow",
                   [path.relative(ctx.worktree, path.join(Global.Path.data, path.join("plans", "*.md")))]: "allow",
+                },
+                bash: {
+                  "*": "deny",
                 },
               }),
               user,
