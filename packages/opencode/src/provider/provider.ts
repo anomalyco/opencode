@@ -1868,6 +1868,9 @@ export const layer = Layer.effect(
         }
       }
 
+      // TODO: Remove these provider-specific assumptions once model syncing reliably reports available deployments.
+      if (providerID === ProviderV2.ID.make("azure-cognitive-services")) return undefined
+
       const defaultPriority = [
         "claude-haiku-4-5",
         "claude-haiku-4.5",
@@ -1881,7 +1884,17 @@ export const layer = Layer.effect(
         ? ["gpt-5-nano"]
         : providerID.startsWith("github-copilot")
           ? ["gpt-5-mini", "claude-haiku-4.5", ...defaultPriority]
-          : defaultPriority
+          : providerID === ProviderV2.ID.googleVertex
+            ? [
+                "gemini-3-flash",
+                "gemini-2.5-flash",
+                "claude-haiku-4-5",
+                "claude-haiku-4.5",
+                "3-5-haiku",
+                "3.5-haiku",
+                "gpt-5-nano",
+              ]
+            : defaultPriority
       for (const item of priority) {
         if (providerID === ProviderV2.ID.amazonBedrock) {
           const crossRegionPrefixes = ["global.", "us.", "eu."]
