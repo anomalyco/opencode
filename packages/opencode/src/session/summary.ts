@@ -6,6 +6,7 @@ import { Snapshot } from "@/snapshot"
 import { Session } from "./session"
 import { SessionID, MessageID } from "./schema"
 import { Config } from "@/config/config"
+import { limitSummaryDiffs } from "./summary-diffs"
 
 function unquoteGitPath(input: string) {
   if (!input.startsWith('"')) return input
@@ -121,7 +122,7 @@ export const layer = Layer.effect(
       )
       const target = messages.find((m) => m.info.id === input.messageID)
       if (!target || target.info.role !== "user") return
-      const msgDiffs = yield* computeDiff({ messages })
+      const msgDiffs = limitSummaryDiffs(yield* computeDiff({ messages }))
       target.info.summary = { ...target.info.summary, diffs: msgDiffs }
       yield* sessions.updateMessage(target.info)
     })
@@ -132,7 +133,7 @@ export const layer = Layer.effect(
         (item) => item.info.id === input.messageID,
       )
       if (!message || message.info.role !== "user") return []
-      const diffs = message.info.summary?.diffs ?? []
+      const diffs = limitSummaryDiffs(message.info.summary?.diffs ?? [])
       return diffs.map((item) => {
         if (item.file === undefined) return item
         const file = unquoteGitPath(item.file)
