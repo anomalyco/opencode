@@ -39,11 +39,6 @@
   display: none;
 }
 
-[data-titlebar-tab][data-title-overflow="false"] [data-slot="tab-close"] {
-  left: 50%;
-  transform: translateX(-50%);
-}
-
 [data-titlebar-tab][data-title-overflow="true"]:not([data-editing="true"]) [data-slot="tab-close"]::before {
   display: block;
   right: 0;
