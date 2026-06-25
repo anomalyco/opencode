@@ -1,17 +1,11 @@
 export * as CommandV2 from "./command"
 
-import { Context, Effect, Layer, Schema, Types } from "effect"
-import { ModelV2 } from "./model"
+import { Context, Effect, Layer, Types } from "effect"
+import { Command } from "@opencode-ai/schema/command"
 import { State } from "./state"
 
-export class Info extends Schema.Class<Info>("CommandV2.Info")({
-  name: Schema.String,
-  template: Schema.String,
-  description: Schema.String.pipe(Schema.optional),
-  agent: Schema.String.pipe(Schema.optional),
-  model: ModelV2.Ref.pipe(Schema.optional),
-  subtask: Schema.Boolean.pipe(Schema.optional),
-}) {}
+export const Info = Command.Info
+export type Info = Command.Info
 
 export type Data = {
   commands: Map<string, Types.DeepMutable<Info>>
@@ -40,7 +34,7 @@ export const layer = Layer.effect(
         list: () => Array.from(draft.commands.values()) as Info[],
         get: (name) => draft.commands.get(name),
         update: (name, update) => {
-          const current = draft.commands.get(name) ?? (new Info({ name, template: "" }) as Types.DeepMutable<Info>)
+          const current = draft.commands.get(name) ?? ({ name, template: "" } as Types.DeepMutable<Info>)
           if (!draft.commands.has(name)) draft.commands.set(name, current)
           update(current)
           current.name = name

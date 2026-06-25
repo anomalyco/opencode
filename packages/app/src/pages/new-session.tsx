@@ -6,7 +6,13 @@ import { useComments } from "@/context/comments"
 import { usePrompt } from "@/context/prompt"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
-import { createSessionComposerState, SessionComposerRegion } from "@/pages/session/composer"
+import { useServerSync } from "@/context/server-sync"
+import {
+  createSessionComposerControls,
+  createSessionComposerState,
+  SessionComposerRegion,
+} from "@/pages/session/composer"
+import { useSessionKey } from "@/pages/session/session-layout"
 
 /**
  * The `/new-session` draft page. Unlike `session.tsx`, this only renders the prompt
@@ -17,12 +23,19 @@ export default function NewSessionPage() {
   const prompt = usePrompt()
   const sdk = useSDK()
   const sync = useSync()
+  const serverSync = useServerSync()
   const comments = useComments()
+  const route = useSessionKey()
   const [searchParams, setSearchParams] = useSearchParams<{ prompt?: string }>()
 
   let inputRef: HTMLDivElement | undefined
 
   const composer = createSessionComposerState()
+  const composerControls = createSessionComposerControls({
+    sessionKey: route.sessionKey,
+    sessionID: () => route.params.id,
+    queryOptions: serverSync().queryOptions,
+  })
 
   const [store, setStore] = createStore({
     worktree: "main",
@@ -57,15 +70,21 @@ export default function NewSessionPage() {
             <NewSessionDesignView>
               <SessionComposerRegion
                 state={composer}
+                sessionKey={route.sessionKey()}
+                sessionID={route.params.id}
+                controls={composerControls()}
+                promptInput={{
+                  ref: (el) => {
+                    inputRef = el
+                  },
+                  newSessionWorktree: newSessionWorktree(),
+                  onNewSessionWorktreeReset: () => setStore("worktree", "main"),
+                  onSubmit: () => comments.clear(),
+                }}
+                todo={{ collapsed: false, onToggle: () => {} }}
                 ready
                 centered={false}
                 placement="inline"
-                inputRef={(el) => {
-                  inputRef = el
-                }}
-                newSessionWorktree={newSessionWorktree()}
-                onNewSessionWorktreeReset={() => setStore("worktree", "main")}
-                onSubmit={() => comments.clear()}
                 onResponseSubmit={() => {}}
                 setPromptDockRef={() => {}}
               />

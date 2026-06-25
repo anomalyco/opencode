@@ -1,7 +1,6 @@
 export * as SkillTool from "./skill"
 
 import path from "path"
-import { pathToFileURL } from "url"
 import { ToolFailure } from "@opencode-ai/llm"
 import { Effect, Layer, Schema } from "effect"
 import { FSUtil } from "../fs-util"
@@ -39,7 +38,7 @@ export const toModelOutput = (skill: SkillV2.Info, files: ReadonlyArray<string>)
     "",
     skill.content.trim(),
     "",
-    `Base directory for this skill: ${pathToFileURL(directory).href}`,
+    `Base directory for this skill: ${directory}`,
     "Relative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.",
     "Note: file list is sampled.",
     "",

@@ -84,15 +84,20 @@ export const layer = Layer.effect(
         return yield* new DestinationProjectMismatchError({ expected: current.projectID, actual: destination.id })
       }
 
-      const patch =
-        input.moveChanges && source.directory !== destination.directory
-          ? yield* git
-              .patch(current.location.directory)
-              .pipe(Effect.mapError((error) => new CaptureChangesError({ message: error.message })))
-          : ""
+      const moveChanges = input.moveChanges && source.directory !== destination.directory
+      const sourceRepository = moveChanges ? yield* git.repo.discover(current.location.directory) : undefined
+      if (moveChanges && !sourceRepository)
+        return yield* new CaptureChangesError({ message: "Source is not a Git repository" })
+      const patch = sourceRepository
+        ? yield* git.change
+            .capture({ repository: sourceRepository, path: current.location.directory })
+            .pipe(Effect.mapError((error) => new CaptureChangesError({ message: error.message })))
+        : Git.ChangeSet.make("")
       if (patch) {
-        yield* git
-          .applyPatch({ directory, patch })
+        const repository = yield* git.repo.discover(directory)
+        if (!repository) return yield* new ApplyChangesError({ message: "Destination is not a Git repository" })
+        yield* git.change
+          .apply({ repository, path: directory, changes: patch })
           .pipe(Effect.mapError((error) => new ApplyChangesError({ message: error.message })))
       }
 
@@ -104,16 +109,29 @@ export const layer = Layer.effect(
       })
 
       if (patch) {
-        yield* git.softResetChanges(current.location.directory).pipe(
-          Effect.mapError(
-            (error) =>
-              new ResetSourceChangesError({
-                directory: current.location.directory,
-                message: error.message,
-                cause: error.cause,
-              }),
-          ),
-        )
+        const repository = yield* git.repo.discover(current.location.directory)
+        if (!repository)
+          return yield* new ResetSourceChangesError({
+            directory: current.location.directory,
+            message: "Source is not a Git repository",
+          })
+        yield* git.change
+          .discard({
+            repository,
+            path: current.location.directory,
+            index: "preserve",
+            untracked: "remove",
+          })
+          .pipe(
+            Effect.mapError(
+              (error) =>
+                new ResetSourceChangesError({
+                  directory: current.location.directory,
+                  message: error.message,
+                  cause: error.cause,
+                }),
+            ),
+          )
       }
     })
 
