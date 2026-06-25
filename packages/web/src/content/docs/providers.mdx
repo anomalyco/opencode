@@ -2397,6 +2397,8 @@ You can use any OpenAI-compatible provider with opencode. Most modern AI provide
    - **npm**: AI SDK package to use, `@ai-sdk/openai-compatible` for OpenAI-compatible providers (for `/v1/chat/completions`). If your provider/model uses `/v1/responses`, use `@ai-sdk/openai`.
    - **name**: Display name in UI.
    - **models**: Available models.
+   - **blacklist**: Array of model IDs to exclude from this provider. Useful for hiding noisy or unreliable models auto-discovered by the provider.
+   - **whitelist**: Array of model IDs to exclusively allow for this provider. When set, only these models are available — all others are hidden.
    - **options.baseURL**: API endpoint URL.
    - **options.apiKey**: Optionally set the API key, if not using auth.
    - **options.headers**: Optionally set custom headers.
@@ -2445,8 +2447,29 @@ Configuration details:
 - **headers**: Custom headers sent with each request.
 - **limit.context**: Maximum input tokens the model accepts.
 - **limit.output**: Maximum tokens the model can generate.
+- **blacklist**: Models to exclude from the provider's model list.
+- **whitelist**: Models to exclusively allow for the provider.
 
 The `limit` fields allow OpenCode to understand how much context you have left. Standard providers pull these from models.dev automatically.
+
+You can also use `blacklist` and `whitelist` at the provider level to control which models are available:
+
+```json title="opencode.json" {3,4}
+{
+  "provider": {
+    "myprovider": {
+      "blacklist": ["model-foo", "model-bar"],
+      "whitelist": ["gpt-4", "claude-3"],
+      "models": {
+        "gpt-4": {},
+        "claude-3": {}
+      }
+    }
+  }
+}
+```
+
+Note that `blacklist` and `whitelist` are mutually exclusive — use one or the other. When `whitelist` is set, only models in the list are available. When `blacklist` is set, listed models are removed from the default set.
 
 ---
 
