@@ -401,15 +401,19 @@ export const defaultLayer = Layer.suspend(() =>
 
 export const hasToolCalls = LLMRequestPrep.hasToolCalls
 
-export const node = LayerNode.make(layer, [
-  Auth.node,
-  Config.node,
-  Provider.node,
-  Plugin.node,
-  Permission.node,
-  EventV2Bridge.node,
-  llmClient,
-  RuntimeFlags.node,
-])
+export const node = LayerNode.make({
+  service: Service,
+  layer: layer,
+  deps: [
+    Auth.node,
+    Config.node,
+    Provider.node,
+    Plugin.node,
+    Permission.node,
+    EventV2Bridge.node,
+    llmClient,
+    RuntimeFlags.node,
+  ],
+})
 
 export * as LLM from "./llm"

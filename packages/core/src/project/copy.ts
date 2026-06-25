@@ -279,4 +279,8 @@ export const layer = Layer.effect(
 )
 
 export const locationLayer = layer
-export const node = LayerNode.make(layer, [FSUtil.node, Git.node, ProjectDirectories.node, EventV2.node, Database.node])
+export const node = LayerNode.make({
+  service: Service,
+  layer: layer,
+  deps: [FSUtil.node, Git.node, ProjectDirectories.node, EventV2.node, Database.node],
+})
