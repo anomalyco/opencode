@@ -12581,6 +12581,95 @@ export type V2SessionPermissionListResponses = {
 
 export type V2SessionPermissionListResponse = V2SessionPermissionListResponses[keyof V2SessionPermissionListResponses]
 
+export type V2SessionPermissionCreateData = {
+  body: {
+    id?: string
+    action: string
+    resources: Array<string>
+    save?: Array<string>
+    metadata?: {
+      [key: string]: unknown
+    }
+    source?: PermissionV2Source
+    agent?: string
+  }
+  path: {
+    sessionID: string
+  }
+  query?: never
+  url: "/api/session/{sessionID}/permission"
+}
+
+export type V2SessionPermissionCreateErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * SessionNotFoundError
+   */
+  404: SessionNotFoundError
+}
+
+export type V2SessionPermissionCreateError = V2SessionPermissionCreateErrors[keyof V2SessionPermissionCreateErrors]
+
+export type V2SessionPermissionCreateResponses = {
+  /**
+   * Success
+   */
+  200: {
+    data: {
+      id: string
+      effect: PermissionV2Effect
+    }
+  }
+}
+
+export type V2SessionPermissionCreateResponse =
+  V2SessionPermissionCreateResponses[keyof V2SessionPermissionCreateResponses]
+
+export type V2SessionPermissionGetData = {
+  body?: never
+  path: {
+    sessionID: string
+    requestID: string
+  }
+  query?: never
+  url: "/api/session/{sessionID}/permission/{requestID}"
+}
+
+export type V2SessionPermissionGetErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * SessionNotFoundError | PermissionNotFoundError
+   */
+  404: PermissionNotFoundError | SessionNotFoundError
+}
+
+export type V2SessionPermissionGetError = V2SessionPermissionGetErrors[keyof V2SessionPermissionGetErrors]
+
+export type V2SessionPermissionGetResponses = {
+  /**
+   * Success
+   */
+  200: {
+    data: PermissionV2Request
+  }
+}
+
+export type V2SessionPermissionGetResponse = V2SessionPermissionGetResponses[keyof V2SessionPermissionGetResponses]
+
 export type V2SessionPermissionReplyData = {
   body: {
     reply: PermissionV2Reply
