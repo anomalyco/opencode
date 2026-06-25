@@ -48,6 +48,7 @@ import { TaskTool, type TaskPromptOps } from "@/tool/task"
 import { SessionRunState } from "./run-state"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
+import { SessionGoal } from "./goal"
 import { Database } from "@opencode-ai/core/database/database"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionMessage } from "@opencode-ai/core/session/message"
@@ -123,6 +124,7 @@ export const layer = Layer.effect(
     const llm = yield* LLM.Service
     const events = yield* EventV2Bridge.Service
     const flags = yield* RuntimeFlags.Service
+    const goal = yield* SessionGoal.Service
     const database = yield* Database.Service
     const { db } = database
     const ops = Effect.fn("SessionPrompt.ops")(function* () {
@@ -136,6 +138,7 @@ export const layer = Layer.effect(
     const cancel = Effect.fn("SessionPrompt.cancel")(function* (sessionID: SessionID) {
       yield* Effect.logInfo("cancel", { "session.id": sessionID })
       yield* state.cancel(sessionID)
+      yield* goal.clear(sessionID)
     })
 
     const resolvePromptParts = Effect.fn("SessionPrompt.resolvePromptParts")(function* (template: string) {
@@ -1377,7 +1380,57 @@ export const layer = Layer.effect(
             Effect.ensuring(instruction.clear(handle.message.id)),
             Effect.onInterrupt(() => finalizeInterruptedAssistant),
           )
-          if (outcome === "break") break
+          if (outcome === "break") {
+            const activeGoal = yield* goal.get(sessionID)
+            if (activeGoal && agent.mode !== "subagent") {
+              const verdict = yield* goal
+                .evaluate({ condition: activeGoal.condition, msgs, model })
+                .pipe(
+                  Effect.catchCause((cause) =>
+                    Effect.gen(function* () {
+                      yield* Effect.logWarning("goal judge failed; allowing stop", {
+                        error: String(Cause.squash(cause)),
+                      })
+                      return { ok: true, reason: "judge error", error: true } as SessionGoal.Verdict
+                    }),
+                  ),
+                )
+              const reactCount = yield* goal.bumpReact(sessionID)
+              if (verdict.ok || verdict.impossible || reactCount > SessionGoal.MAX_GOAL_REACT) {
+                yield* events.publish(SessionGoal.Event.Updated, {
+                  sessionID,
+                  goal: undefined,
+                  lastVerdict: { ...verdict, attempt: reactCount, messageID: handle.message.id },
+                })
+                yield* goal.clear(sessionID)
+                break
+              }
+              yield* events.publish(SessionGoal.Event.Updated, {
+                sessionID,
+                goal: { condition: activeGoal.condition },
+                lastVerdict: { ...verdict, attempt: reactCount, messageID: handle.message.id },
+              })
+              const syntheticMsg: SessionV1.User = {
+                id: MessageID.ascending(),
+                sessionID,
+                role: "user",
+                time: { created: Date.now() },
+                agent: lastUser.agent,
+                model: lastUser.model,
+              }
+              yield* sessions.updateMessage(syntheticMsg)
+              yield* sessions.updatePart({
+                id: PartID.ascending(),
+                messageID: syntheticMsg.id,
+                sessionID,
+                type: "text",
+                text: `Goal not yet satisfied: ${verdict.reason}\n\nContinue working toward: ${activeGoal.condition}`,
+                synthetic: true,
+              } satisfies SessionV1.TextPart)
+              continue
+            }
+            break
+          }
           continue
         }
 
@@ -1405,6 +1458,19 @@ export const layer = Layer.effect(
         command: input.command,
         agent: input.agent,
       })
+
+      if (input.command === Command.Default.GOAL) {
+        const trimmed = input.arguments.trim()
+        if (trimmed === "clear") {
+          yield* goal.clear(input.sessionID)
+          return yield* lastAssistant(input.sessionID)
+        }
+        if (trimmed.length > 0) {
+          yield* goal.set(input.sessionID, trimmed)
+        }
+        return yield* lastAssistant(input.sessionID)
+      }
+
       const cmd = yield* commands.get(input.command)
       if (!cmd) {
         const available = (yield* commands.list()).map((c) => c.name)
@@ -1567,6 +1633,7 @@ export const defaultLayer = Layer.suspend(() =>
         CrossSpawnSpawner.defaultLayer,
         RuntimeFlags.defaultLayer,
         EventV2Bridge.defaultLayer,
+        SessionGoal.defaultLayer,
       ),
     ),
   ),
@@ -1676,6 +1743,7 @@ const placeholderRegex = /\$(\d+)/g
 const quoteTrimRegex = /^["']|["']$/g
 
 export const node = LayerNode.make(layer, [
+  SessionGoal.node,
   SessionStatus.node,
   Session.node,
   Agent.node,

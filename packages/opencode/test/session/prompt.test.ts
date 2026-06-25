@@ -34,6 +34,7 @@ import { SessionCompaction } from "../../src/session/compaction"
 import { SessionSummary } from "../../src/session/summary"
 import { Instruction } from "../../src/session/instruction"
 import { SessionProcessor } from "../../src/session/processor"
+import { SessionGoal } from "@/session/goal"
 import { SessionPrompt } from "../../src/session/prompt"
 import { SessionRevert } from "../../src/session/revert"
 import { SessionRunState } from "../../src/session/run-state"
@@ -182,6 +183,7 @@ function makePrompt(input?: { processor?: "blocking" }) {
     status,
     Database.defaultLayer,
     EventV2Bridge.defaultLayer,
+    SessionGoal.defaultLayer,
   ).pipe(Layer.provideMerge(infra))
   const question = Question.layer.pipe(Layer.provideMerge(deps))
   const todo = Todo.layer.pipe(Layer.provideMerge(deps))
