@@ -10,6 +10,7 @@ import { PermissionV2 } from "@opencode-ai/core/permission"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { tmpdir } from "../fixture/tmpdir"
 import { testEffect } from "../lib/effect"
+import { agentHost, host } from "../plugin/host"
 
 const it = testEffect(Layer.mergeAll(AgentV2.locationLayer, FSUtil.defaultLayer))
 const decode = Schema.decodeUnknownSync(Config.Info)
@@ -19,9 +20,7 @@ describe("ConfigAgentPlugin.Plugin", () => {
     Effect.gen(function* () {
       const agents = yield* AgentV2.Service
       const build = AgentV2.ID.make("build")
-      const defaults = yield* agents.transform()
-
-      yield* defaults((editor) =>
+      yield* agents.transform((editor) =>
         editor.update(build, (agent) => {
           agent.mode = "primary"
           agent.permissions.push({ action: "bash", resource: "*", effect: "allow" })
@@ -68,9 +67,8 @@ describe("ConfigAgentPlugin.Plugin", () => {
           ]),
       })
 
-      yield* ConfigAgentPlugin.Plugin.effect.pipe(
+      yield* ConfigAgentPlugin.Plugin.effect(host({ agent: agentHost(agents) })).pipe(
         Effect.provideService(Config.Service, config),
-        Effect.provideService(AgentV2.Service, agents),
       )
 
       const buildAgent = yield* agents.get(build)
@@ -150,9 +148,8 @@ describe("ConfigAgentPlugin.Plugin", () => {
           ]),
       })
 
-      yield* ConfigAgentPlugin.Plugin.effect.pipe(
+      yield* ConfigAgentPlugin.Plugin.effect(host({ agent: agentHost(agents) })).pipe(
         Effect.provideService(Config.Service, config),
-        Effect.provideService(AgentV2.Service, agents),
       )
 
       const reviewer = yield* agents.get(AgentV2.ID.make("reviewer"))
@@ -177,8 +174,7 @@ describe("ConfigAgentPlugin.Plugin", () => {
     Effect.gen(function* () {
       const agents = yield* AgentV2.Service
       const build = AgentV2.ID.make("build")
-      const defaults = yield* agents.transform()
-      yield* defaults((editor) => editor.update(build, () => {}))
+      yield* agents.transform((editor) => editor.update(build, () => {}))
 
       const config = Config.Service.of({
         entries: () =>
@@ -190,9 +186,8 @@ describe("ConfigAgentPlugin.Plugin", () => {
           ]),
       })
 
-      yield* ConfigAgentPlugin.Plugin.effect.pipe(
+      yield* ConfigAgentPlugin.Plugin.effect(host({ agent: agentHost(agents) })).pipe(
         Effect.provideService(Config.Service, config),
-        Effect.provideService(AgentV2.Service, agents),
       )
 
       expect(yield* agents.get(build)).toBeUndefined()
@@ -251,9 +246,8 @@ Use native v2 fields.`,
               ]),
           })
 
-          yield* ConfigAgentPlugin.Plugin.effect.pipe(
+          yield* ConfigAgentPlugin.Plugin.effect(host({ agent: agentHost(agents) })).pipe(
             Effect.provideService(Config.Service, config),
-            Effect.provideService(AgentV2.Service, agents),
           )
 
           expect(yield* agents.get(AgentV2.ID.make("reviewer"))).toMatchObject({

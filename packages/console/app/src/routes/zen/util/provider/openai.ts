@@ -20,7 +20,6 @@ export const openaiHelper: ProviderHelper = ({ workspaceID }) => ({
   },
   modifyBody: (body: Record<string, any>) => body,
   createBinaryStreamDecoder: () => undefined,
-  streamSeparator: "\n\n",
   createUsageParser: () => {
     let usage: Usage
 

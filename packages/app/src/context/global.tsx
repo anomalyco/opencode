@@ -85,7 +85,7 @@ export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext(
           },
         },
       },
-      createServerCtx(conn: ServerConnection.Any) {
+      ensureServerCtx(conn: ServerConnection.Any) {
         return ensureServerCtx(conn)
       },
     }

@@ -28,9 +28,9 @@ import { AbsolutePath, type DeepMutable } from "@opencode-ai/core/schema"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { LocationServiceMap } from "@opencode-ai/core/location-layer"
-import { PluginBoot } from "@opencode-ai/core/plugin/boot"
 import { Reference } from "@opencode-ai/core/reference"
 import { Location } from "@opencode-ai/core/location"
+import { PluginV2 } from "@opencode-ai/core/plugin"
 
 export const Info = Schema.Struct({
   name: Schema.String,
@@ -99,10 +99,12 @@ export const layer = Layer.effect(
       Effect.fn("Agent.state")(function* (ctx) {
         const cfg = yield* config.get()
         const skillDirs = yield* skill.dirs()
-        const referenceDirs = yield* Effect.gen(function* () {
-          yield* (yield* PluginBoot.Service).wait()
-          return (yield* (yield* Reference.Service).list()).map((reference) => reference.path)
-        }).pipe(Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(ctx.directory) }))))
+        const referenceDirs = Object.keys(cfg.references ?? cfg.reference ?? {}).length
+          ? yield* Effect.gen(function* () {
+              yield* (yield* PluginV2.Service).wait(PluginV2.ID.make("core/config-reference"))
+              return (yield* (yield* Reference.Service).list()).map((reference) => reference.path)
+            }).pipe(Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(ctx.directory) }))))
+          : []
         const whitelistedDirs = [
           Truncate.GLOB,
           path.join(Global.Path.tmp, "*"),
