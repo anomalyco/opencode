@@ -259,7 +259,7 @@ export function TabNavItem(props: {
         <IconButtonV2
           size="small"
           variant="ghost-muted"
-          class="relative z-10 opacity-0 group-hover:opacity-100 group-data-[active=true]:opacity-100 group-data-[editing=true]:opacity-100"
+          class="relative z-10 opacity-0 group-hover:opacity-100 group-data-[active=true]:opacity-100 group-data-[editing=true]:opacity-100 [@media(hover:none)]:opacity-100"
           onPointerDown={(event) => {
             event.preventDefault()
             event.stopPropagation()
