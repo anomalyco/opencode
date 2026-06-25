@@ -1067,6 +1067,31 @@ const scenarios: Scenario[] = [
     }))
     .status(400, undefined, "none"),
   http.protected
+    .get("/api/session/{sessionID}/event", "v2.session.events.missing")
+    .at((ctx) => ({
+      path: `${route("/api/session/{sessionID}/event", { sessionID: "ses_httpapi_missing" })}?after=0`,
+      headers: ctx.headers(),
+    }))
+    .status(404, undefined, "status"),
+  http.protected
+    .post("/api/session/{sessionID}/interrupt", "v2.session.interrupt")
+    .seeded((ctx) => ctx.session({ title: "Interrupt session" }))
+    .at((ctx) => ({
+      path: route("/api/session/{sessionID}/interrupt", { sessionID: ctx.state.id }),
+      headers: ctx.headers(),
+    }))
+    .status(204, undefined, "none"),
+  http.protected
+    .get("/api/session/{sessionID}/message/{messageID}", "v2.session.message.missing")
+    .at((ctx) => ({
+      path: route("/api/session/{sessionID}/message/{messageID}", {
+        sessionID: "ses_httpapi_missing",
+        messageID: "msg_httpapi_missing",
+      }),
+      headers: ctx.headers(),
+    }))
+    .json(404, object, "status"),
+  http.protected
     .post("/api/session/{sessionID}/prompt", "v2.session.prompt.invalid")
     .seeded((ctx) => ctx.session({ title: "Invalid prompt owner" }))
     .at((ctx) => ({
