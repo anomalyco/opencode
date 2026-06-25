@@ -3,11 +3,11 @@ export * as PermissionSaved from "./permission-saved"
 import { Schema } from "effect"
 import { ascending } from "./identifier"
 import { ProjectID } from "./project-id"
-import { withStatics } from "./schema"
+import { statics } from "./schema"
 
 export const ID = Schema.String.pipe(
   Schema.brand("PermissionSaved.ID"),
-  withStatics((schema) => ({ create: () => schema.make("psv_" + ascending()) })),
+  statics((schema) => ({ create: () => schema.make("psv_" + ascending()) })),
 )
 export type ID = typeof ID.Type
 

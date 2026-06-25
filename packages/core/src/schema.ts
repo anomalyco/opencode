@@ -3,20 +3,20 @@ import {
   AbsolutePath,
   DateTimeUtcFromMillis,
   NonNegativeInt,
-  optionalOmitUndefined,
+  optional,
   PositiveInt,
   RelativePath,
-  withStatics,
+  statics,
 } from "@opencode-ai/schema/schema"
 
 export {
   AbsolutePath,
   DateTimeUtcFromMillis,
   NonNegativeInt,
-  optionalOmitUndefined,
+  optional,
   PositiveInt,
   RelativePath,
-  withStatics,
+  statics,
 }
 
 /**

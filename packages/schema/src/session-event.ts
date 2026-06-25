@@ -9,7 +9,6 @@ import { DateTimeUtcFromMillis, NonNegativeInt, RelativePath } from "./schema"
 import { FileAttachment, Prompt } from "./prompt"
 import { SessionID } from "./session-id"
 import { Location } from "./location"
-import { SessionMessageID } from "./session-message-id"
 import { SessionMessage } from "./session-message"
 import { Revert } from "./revert"
 
@@ -30,7 +29,7 @@ const Base = {
 }
 const PromptFields = {
   ...Base,
-  messageID: SessionMessageID.ID,
+  messageID: SessionMessage.ID,
   prompt: Prompt,
   delivery: Delivery,
 }
@@ -56,7 +55,7 @@ export const AgentSwitched = Event.define({
   ...options,
   schema: {
     ...Base,
-    messageID: SessionMessageID.ID,
+    messageID: SessionMessage.ID,
     agent: Schema.String,
   },
 })
@@ -67,7 +66,7 @@ export const ModelSwitched = Event.define({
   ...options,
   schema: {
     ...Base,
-    messageID: SessionMessageID.ID,
+    messageID: SessionMessage.ID,
     model: Model.Ref,
   },
 })
@@ -103,7 +102,7 @@ export const ContextUpdated = Event.define({
   ...options,
   schema: {
     ...Base,
-    messageID: SessionMessageID.ID,
+    messageID: SessionMessage.ID,
     text: Schema.String,
   },
 })
@@ -114,7 +113,7 @@ export const Synthetic = Event.define({
   ...options,
   schema: {
     ...Base,
-    messageID: SessionMessageID.ID,
+    messageID: SessionMessage.ID,
     text: Schema.String,
   },
 })
@@ -126,7 +125,7 @@ export namespace Shell {
     ...options,
     schema: {
       ...Base,
-      messageID: SessionMessageID.ID,
+      messageID: SessionMessage.ID,
       callID: Schema.String,
       command: Schema.String,
     },
@@ -151,7 +150,7 @@ export namespace Step {
     ...options,
     schema: {
       ...Base,
-      assistantMessageID: SessionMessageID.ID,
+      assistantMessageID: SessionMessage.ID,
       agent: Schema.String,
       model: Model.Ref,
       snapshot: Schema.String.pipe(Schema.optional),
@@ -164,7 +163,7 @@ export namespace Step {
     ...stepSettlementOptions,
     schema: {
       ...Base,
-      assistantMessageID: SessionMessageID.ID,
+      assistantMessageID: SessionMessage.ID,
       finish: Schema.String,
       cost: Schema.Finite,
       tokens: Schema.Struct({
@@ -187,7 +186,7 @@ export namespace Step {
     ...stepSettlementOptions,
     schema: {
       ...Base,
-      assistantMessageID: SessionMessageID.ID,
+      assistantMessageID: SessionMessage.ID,
       error: UnknownError,
     },
   })
@@ -200,7 +199,7 @@ export namespace Text {
     ...options,
     schema: {
       ...Base,
-      assistantMessageID: SessionMessageID.ID,
+      assistantMessageID: SessionMessage.ID,
       textID: Schema.String,
     },
   })
@@ -211,7 +210,7 @@ export namespace Text {
     type: "session.next.text.delta",
     schema: {
       ...Base,
-      assistantMessageID: SessionMessageID.ID,
+      assistantMessageID: SessionMessage.ID,
       textID: Schema.String,
       delta: Schema.String,
     },
@@ -223,7 +222,7 @@ export namespace Text {
     ...options,
     schema: {
       ...Base,
-      assistantMessageID: SessionMessageID.ID,
+      assistantMessageID: SessionMessage.ID,
       textID: Schema.String,
       text: Schema.String,
     },
@@ -237,7 +236,7 @@ export namespace Reasoning {
     ...options,
     schema: {
       ...Base,
-      assistantMessageID: SessionMessageID.ID,
+      assistantMessageID: SessionMessage.ID,
       reasoningID: Schema.String,
       providerMetadata: ProviderMetadata.pipe(Schema.optional),
     },
@@ -249,7 +248,7 @@ export namespace Reasoning {
     type: "session.next.reasoning.delta",
     schema: {
       ...Base,
-      assistantMessageID: SessionMessageID.ID,
+      assistantMessageID: SessionMessage.ID,
       reasoningID: Schema.String,
       delta: Schema.String,
     },
@@ -261,7 +260,7 @@ export namespace Reasoning {
     ...options,
     schema: {
       ...Base,
-      assistantMessageID: SessionMessageID.ID,
+      assistantMessageID: SessionMessage.ID,
       reasoningID: Schema.String,
       text: Schema.String,
       providerMetadata: ProviderMetadata.pipe(Schema.optional),
@@ -273,7 +272,7 @@ export namespace Reasoning {
 export namespace Tool {
   const ToolBase = {
     ...Base,
-    assistantMessageID: SessionMessageID.ID,
+    assistantMessageID: SessionMessage.ID,
     callID: Schema.String,
   }
 
@@ -401,7 +400,7 @@ export namespace Compaction {
     ...options,
     schema: {
       ...Base,
-      messageID: SessionMessageID.ID,
+      messageID: SessionMessage.ID,
       reason: Schema.Union([Schema.Literal("auto"), Schema.Literal("manual")]),
     },
   })
@@ -411,7 +410,7 @@ export namespace Compaction {
     type: "session.next.compaction.delta",
     schema: {
       ...Base,
-      messageID: SessionMessageID.ID,
+      messageID: SessionMessage.ID,
       text: Schema.String,
     },
   })
@@ -422,7 +421,7 @@ export namespace Compaction {
     ...options,
     schema: {
       ...Base,
-      messageID: SessionMessageID.ID,
+      messageID: SessionMessage.ID,
       reason: Started.data.fields.reason,
       text: Schema.String,
       recent: Schema.String,
@@ -441,7 +440,7 @@ export namespace RevertEvent {
   export const Committed = Event.define({
     type: "session.next.revert.committed",
     ...options,
-    schema: { ...Base, messageID: SessionMessageID.ID },
+    schema: { ...Base, messageID: SessionMessage.ID },
   })
 }
 

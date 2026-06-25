@@ -3,11 +3,11 @@ export * as Event from "./event"
 import { Schema } from "effect"
 import { ascending } from "./identifier"
 import { Location } from "./location"
-import { withStatics } from "./schema"
+import { statics } from "./schema"
 
 export const ID = Schema.String.check(Schema.isStartsWith("evt_")).pipe(
   Schema.brand("Event.ID"),
-  withStatics((schema) => ({ create: () => schema.make("evt_" + ascending()) })),
+  statics((schema) => ({ create: () => schema.make("evt_" + ascending()) })),
 )
 export type ID = typeof ID.Type
 

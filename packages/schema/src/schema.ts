@@ -9,7 +9,7 @@ export type RelativePath = typeof RelativePath.Type
 export const AbsolutePath = Schema.String.pipe(Schema.brand("AbsolutePath"))
 export type AbsolutePath = typeof AbsolutePath.Type
 
-export const optionalOmitUndefined = <S extends Schema.Top>(schema: S) =>
+export const optional = <S extends Schema.Top>(schema: S) =>
   Schema.optionalKey(schema).pipe(
     Schema.decodeTo(Schema.optional(schema), {
       decode: SchemaGetter.passthrough({ strict: false }),
@@ -17,7 +17,7 @@ export const optionalOmitUndefined = <S extends Schema.Top>(schema: S) =>
     }),
   )
 
-export const withStatics =
+export const statics =
   <S extends object, M extends Record<string, unknown>>(methods: (schema: S) => M) =>
   (schema: S): S & M =>
     Object.assign(schema, methods(schema))

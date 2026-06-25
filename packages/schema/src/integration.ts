@@ -4,7 +4,7 @@ import { Schema } from "effect"
 import { define, inventory } from "./event"
 import { Connection } from "./connection"
 import { ascending } from "./identifier"
-import { withStatics } from "./schema"
+import { statics } from "./schema"
 import { IntegrationID, IntegrationMethodID } from "./integration-id"
 
 export const ID = IntegrationID
@@ -102,7 +102,7 @@ export class Info extends Schema.Class<Info>("Integration.Info")({
 
 export const AttemptID = Schema.String.pipe(
   Schema.brand("Integration.AttemptID"),
-  withStatics((schema) => ({ create: () => schema.make("con_" + ascending()) })),
+  statics((schema) => ({ create: () => schema.make("con_" + ascending()) })),
 )
 export type AttemptID = typeof AttemptID.Type
 

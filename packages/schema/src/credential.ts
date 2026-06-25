@@ -3,11 +3,11 @@ export * as Credential from "./credential"
 import { Schema } from "effect"
 import { IntegrationMethodID } from "./integration-id"
 import { ascending } from "./identifier"
-import { NonNegativeInt, withStatics } from "./schema"
+import { NonNegativeInt, statics } from "./schema"
 
 export const ID = Schema.String.pipe(
   Schema.brand("Credential.ID"),
-  withStatics((schema) => ({ create: () => schema.make("cred_" + ascending()) })),
+  statics((schema) => ({ create: () => schema.make("cred_" + ascending()) })),
 )
 export type ID = typeof ID.Type
 

@@ -4,7 +4,7 @@ import { and, asc, desc, eq, isNotNull, isNull, ne, or } from "drizzle-orm"
 import { Context, Effect, Layer, Schema } from "effect"
 import { Database } from "../database/database"
 import { LayerNode } from "../effect/layer-node"
-import { AbsolutePath, optionalOmitUndefined } from "../schema"
+import { AbsolutePath, optional } from "../schema"
 import { ProjectSchema } from "./schema"
 import { ProjectDirectoryTable } from "./sql"
 import type { EffectDrizzleSqlite } from "@opencode-ai/effect-drizzle-sqlite"
@@ -39,7 +39,7 @@ export type ListInput = typeof ListInput.Type
 export const ListOutput = Schema.Array(
   Schema.Struct({
     directory: AbsolutePath,
-    strategy: optionalOmitUndefined(Schema.String),
+    strategy: optional(Schema.String),
   }),
 ).annotate({ identifier: "Project.Directories" })
 export type ListOutput = typeof ListOutput.Type

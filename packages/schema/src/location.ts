@@ -1,7 +1,7 @@
 export * as Location from "./location"
 
 import { Effect, Schema } from "effect"
-import { AbsolutePath, optionalOmitUndefined } from "./schema"
+import { AbsolutePath, optional } from "./schema"
 import { ProjectID } from "./project-id"
 import { WorkspaceID } from "./workspace-id"
 
@@ -16,7 +16,7 @@ export const Ref = Schema.Struct({
 
 export class Info extends Schema.Class<Info>("Location.Info")({
   directory: AbsolutePath,
-  workspaceID: optionalOmitUndefined(WorkspaceID),
+  workspaceID: optional(WorkspaceID),
   project: Schema.Struct({
     id: ProjectID,
     directory: AbsolutePath,

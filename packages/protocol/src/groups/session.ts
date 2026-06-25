@@ -3,7 +3,7 @@ import { SessionInput } from "@opencode-ai/schema/session-input"
 import { Prompt } from "@opencode-ai/schema/prompt"
 import { Session } from "@opencode-ai/schema/session"
 import { Project } from "@opencode-ai/schema/project"
-import { AbsolutePath, PositiveInt, RelativePath, withStatics } from "@opencode-ai/schema/schema"
+import { AbsolutePath, PositiveInt, RelativePath, statics } from "@opencode-ai/schema/schema"
 import { Workspace } from "@opencode-ai/schema/workspace"
 import { Context, Encoding, Result, Schema, Struct } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
@@ -62,7 +62,7 @@ const decodeSessionsCursor = Schema.decodeUnknownEffect(SessionsCursorJson)
 
 export const SessionsCursor = Schema.String.pipe(
   Schema.brand("SessionsCursor"),
-  withStatics((schema) => {
+  statics((schema) => {
     const make = schema.make.bind(schema)
     return {
       make: (input: typeof SessionsCursorInput.Type) => make(Encoding.encodeBase64Url(encodeSessionsCursor(input))),
