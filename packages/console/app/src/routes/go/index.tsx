@@ -12,7 +12,7 @@ import { Footer } from "~/component/footer"
 import { Header } from "~/component/header"
 import { config } from "~/config"
 import { getLastSeenWorkspaceID } from "../workspace/common"
-import { IconMiniMax, IconMiMo, IconZai, IconAlibaba } from "~/component/icon"
+import { IconMiniMax, IconMiMo, IconZai, IconAlibaba, IconDeepSeek } from "~/component/icon"
 import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
 import { LocaleLinks } from "~/component/locale-links"
@@ -23,18 +23,19 @@ const checkLoggedIn = query(async () => {
 }, "checkLoggedIn.get")
 
 const models = [
-  { name: "GLM-5.1", provider: "DeepInfra, Z.ai" },
-  { name: "GLM-5", provider: "DeepInfra, Z.ai" },
-  { name: "Kimi K2.5", provider: "Moonshot AI" },
+  { name: "GLM-5.2", provider: "DeepInfra, Fireworks AI, Z.ai" },
+  { name: "GLM-5.1", provider: "DeepInfra, Fireworks AI, Z.ai" },
+  { name: "Kimi K2.7 Code", provider: "Moonshot AI" },
   { name: "Kimi K2.6", provider: "Moonshot AI" },
-  { name: "MiMo-V2-Pro", provider: "Xiaomi MiMo" },
-  { name: "MiMo-V2-Omni", provider: "Xiaomi MiMo" },
   { name: "MiMo-V2.5-Pro", provider: "Xiaomi MiMo" },
   { name: "MiMo-V2.5", provider: "Xiaomi MiMo" },
-  { name: "Qwen3.5 Plus", provider: "Alibaba Cloud Model Studio" },
+  { name: "Qwen3.7 Max", provider: "Alibaba Cloud Model Studio" },
+  { name: "Qwen3.7 Plus", provider: "Alibaba Cloud Model Studio" },
   { name: "Qwen3.6 Plus", provider: "Alibaba Cloud Model Studio" },
+  { name: "MiniMax M3", provider: "MiniMax" },
   { name: "MiniMax M2.7", provider: "MiniMax" },
-  { name: "MiniMax M2.5", provider: "MiniMax" },
+  { name: "DeepSeek V4 Pro", provider: "DeepSeek" },
+  { name: "DeepSeek V4 Flash", provider: "DeepSeek" },
 ]
 
 function LimitsGraph(props: { href: string }) {
@@ -60,16 +61,18 @@ function LimitsGraph(props: { href: string }) {
 
   const free = 200
   const graph = [
-    { id: "glm-5.1", name: "GLM-5.1", req: 880, d: "100ms" },
-    { id: "kimi-k2.6", name: "Kimi K2.6 (3x usage)", req: 3450, baseReq: 1150, d: "150ms" },
-    { id: "mimo-v2.5-pro", name: "MiMo-V2.5-Pro", req: 1290, d: "150ms" },
-    { id: "qwen3.6-plus", name: "Qwen3.6 Plus", req: 3300, d: "280ms" },
-    { id: "minimax-m2.7", name: "MiniMax M2.7", req: 3400, d: "300ms" },
-    { id: "qwen3.5-plus", name: "Qwen3.5 Plus", req: 10200, d: "360ms" },
+    { id: "glm-5.2", name: "GLM-5.2", req: 880, d: "100ms" },
+    { id: "qwen3.7-max", name: "Qwen3.7 Max", req: 950, d: "110ms" },
+    { id: "kimi-k2.7-code", name: "Kimi K2.7 Code", req: 1150, d: "150ms" },
+    { id: "mimo-v2.5-pro", name: "MiMo-V2.5-Pro", req: 3250, d: "210ms" },
+    { id: "deepseek-v4-pro", name: "DeepSeek V4 Pro", req: 3450, d: "240ms" },
+    { id: "qwen3.7-plus", name: "Qwen3.7 Plus", req: 4300, d: "250ms" },
+    { id: "minimax-m3", name: "MiniMax M3 (3x usage)", req: 9600, baseReq: 3200, d: "280ms" },
+    { id: "mimo-v2.5", name: "MiMo-V2.5", req: 30100, d: "340ms" },
+    { id: "deepseek-v4-flash", name: "DeepSeek V4 Flash", req: 31650, d: "340ms" },
   ]
 
   const w = 720
-  const h = 270
   const left = 40
   const right = 60
   const top = 18
@@ -103,8 +106,9 @@ function LimitsGraph(props: { href: string }) {
   })()
   const shown = ticks.filter((t) => labels.has(t))
   const bh = 8
-  const gap = 16
+  const gap = 20
   const step = bh + gap
+  const h = 330 + Math.max(0, graph.length - 8) * step
   const sep = bh + 40
   const fy = top + 22
   const gy = (i: number) => fy + sep + step * i
@@ -335,6 +339,9 @@ export default function Home() {
                 </div>
                 <div>
                   <IconAlibaba width="24" height="24" />
+                </div>
+                <div>
+                  <IconDeepSeek width="24" height="24" />
                 </div>
                 <div>
                   <IconMiMo width="24" height="24" />

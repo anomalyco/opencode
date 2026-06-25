@@ -1,46 +1,14 @@
-import { BusEvent } from "@/bus/bus-event"
-import { Bus } from "@/bus"
-import { InstanceState } from "@/effect"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { InstanceState } from "@/effect/instance-state"
 import { SessionID } from "./schema"
 import { Effect, Layer, Context } from "effect"
-import z from "zod"
+import { EventV2Bridge } from "@/event-v2-bridge"
+import { SessionStatusEvent } from "@opencode-ai/schema/session-status-event"
 
-export const Info = z
-  .union([
-    z.object({
-      type: z.literal("idle"),
-    }),
-    z.object({
-      type: z.literal("retry"),
-      attempt: z.number(),
-      message: z.string(),
-      next: z.number(),
-    }),
-    z.object({
-      type: z.literal("busy"),
-    }),
-  ])
-  .meta({
-    ref: "SessionStatus",
-  })
-export type Info = z.infer<typeof Info>
+export const Info = SessionStatusEvent.Info
+export type Info = SessionStatusEvent.Info
 
-export const Event = {
-  Status: BusEvent.define(
-    "session.status",
-    z.object({
-      sessionID: SessionID.zod,
-      status: Info,
-    }),
-  ),
-  // deprecated
-  Idle: BusEvent.define(
-    "session.idle",
-    z.object({
-      sessionID: SessionID.zod,
-    }),
-  ),
-}
+export const Event = SessionStatusEvent
 
 export interface Interface {
   readonly get: (sessionID: SessionID) => Effect.Effect<Info>
@@ -53,7 +21,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Se
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const bus = yield* Bus.Service
+    const events = yield* EventV2Bridge.Service
 
     const state = yield* InstanceState.make(
       Effect.fn("SessionStatus.state")(() => Effect.succeed(new Map<SessionID, Info>())),
@@ -70,9 +38,9 @@ export const layer = Layer.effect(
 
     const set = Effect.fn("SessionStatus.set")(function* (sessionID: SessionID, status: Info) {
       const data = yield* InstanceState.get(state)
-      yield* bus.publish(Event.Status, { sessionID, status })
+      yield* events.publish(Event.Status, { sessionID, status })
       if (status.type === "idle") {
-        yield* bus.publish(Event.Idle, { sessionID })
+        yield* events.publish(Event.Idle, { sessionID })
         data.delete(sessionID)
         return
       }
@@ -83,6 +51,8 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(Bus.layer))
+export const defaultLayer = layer.pipe(Layer.provide(EventV2Bridge.defaultLayer))
+
+export const node = LayerNode.make(layer, [EventV2Bridge.node])
 
 export * as SessionStatus from "./status"

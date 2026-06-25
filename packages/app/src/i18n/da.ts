@@ -226,7 +226,7 @@ export const dict = {
   "common.default": "Standard",
   "common.attachment": "vedhæftning",
 
-  "prompt.placeholder.shell": "Indtast shell-kommando...",
+  "prompt.placeholder.shell": "Indtast shell-kommando... {{example}}",
   "prompt.placeholder.normal": 'Spørg om hvad som helst... "{{example}}"',
   "prompt.placeholder.simple": "Spørg om hvad som helst...",
   "prompt.placeholder.summarizeComments": "Opsummér kommentarer…",
@@ -298,12 +298,18 @@ export const dict = {
   "mcp.status.connected": "forbundet",
   "mcp.status.failed": "mislykkedes",
   "mcp.status.needs_auth": "kræver godkendelse",
+  "mcp.auth.clickToAuthenticate": "Klik for at godkende",
   "mcp.status.disabled": "deaktiveret",
 
   "dialog.fork.empty": "Ingen beskeder at forgrene fra",
 
   "dialog.directory.search.placeholder": "Søg mapper",
   "dialog.directory.empty": "Ingen mapper fundet",
+  "dialog.directory.action.selectFile": "Vælg fil",
+  "dialog.directory.action.selectFolder": "Vælg mappe",
+  "dialog.directory.root": "Rod",
+  "dialog.directory.parent": "Overordnet",
+  "dialog.directory.readError": "Denne mappe kan ikke læses",
 
   "dialog.server.title": "Servere",
   "dialog.server.description": "Skift hvilken OpenCode-server denne app forbinder til.",
@@ -446,6 +452,8 @@ export const dict = {
   "error.page.description": "Der opstod en fejl under indlæsning af applikationen.",
   "error.page.details.label": "Fejldetaljer",
   "error.page.action.restart": "Genstart",
+  "error.page.action.report": "Rapportér fejl",
+  "error.page.action.reported": "Fejl rapporteret",
   "error.page.action.checking": "Tjekker...",
   "error.page.action.checkUpdates": "Tjek for opdateringer",
   "error.page.action.updateTo": "Opdater til {{version}}",
@@ -456,7 +464,7 @@ export const dict = {
   "error.dev.rootNotFound":
     "Rodelement ikke fundet. Har du glemt at tilføje det til din index.html? Eller måske er id-attributten stavet forkert?",
 
-  "error.globalSync.connectFailed": "Kunne ikke forbinde til server. Kører der en server på `{{url}}`?",
+  "error.serverSync.connectFailed": "Kunne ikke forbinde til server. Kører der en server på `{{url}}`?",
   "directory.error.invalidUrl": "Ugyldig mappe i URL.",
 
   "error.chain.unknown": "Ukendt fejl",
@@ -649,9 +657,6 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Udvid edit-værktøjsdele",
   "settings.general.row.editToolPartsExpanded.description":
     "Vis edit-, write- og patch-værktøjsdele udvidet som standard i tidslinjen",
-  "settings.general.row.showSessionProgressBar.title": "Vis sessionens fremdriftslinje",
-  "settings.general.row.showSessionProgressBar.description":
-    "Vis den animerede fremdriftslinje øverst i sessionen, når agenten arbejder",
   "settings.general.row.wayland.title": "Brug native Wayland",
   "settings.general.row.wayland.description": "Deaktiver X11-fallback på Wayland. Kræver genstart.",
   "settings.general.row.wayland.tooltip":
@@ -800,8 +805,6 @@ export const dict = {
   "settings.permissions.tool.webfetch.description": "Hent indhold fra en URL",
   "settings.permissions.tool.websearch.title": "Websøgning",
   "settings.permissions.tool.websearch.description": "Søg på nettet",
-  "settings.permissions.tool.codesearch.title": "Kodesøgning",
-  "settings.permissions.tool.codesearch.description": "Søg kode på nettet",
   "settings.permissions.tool.external_directory.title": "Ekstern mappe",
   "settings.permissions.tool.external_directory.description": "Få adgang til filer uden for projektmappen",
   "settings.permissions.tool.doom_loop.title": "Doom Loop",
@@ -919,8 +922,8 @@ export const dict = {
   "common.key.insert": "Insert",
   "common.unknown": "ukendt",
   "error.page.circular": "[Cirkulær]",
-  "error.globalSDK.noServerAvailable": "Ingen server tilgængelig",
-  "error.globalSDK.serverNotAvailable": "Server ikke tilgængelig",
+  "error.serverSDK.noServerAvailable": "Ingen server tilgængelig",
+  "error.serverSDK.serverNotAvailable": "Server ikke tilgængelig",
   "error.childStore.persistedCacheCreateFailed": "Kunne ikke oprette vedvarende cache",
   "error.childStore.persistedProjectMetadataCreateFailed": "Kunne ikke oprette vedvarende projektmetadata",
   "error.childStore.persistedProjectIconCreateFailed": "Kunne ikke oprette vedvarende projektikon",

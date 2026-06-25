@@ -1,29 +1,17 @@
-import { BusEvent } from "@/bus/bus-event"
-import { Bus } from "@/bus"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { SessionID } from "./schema"
 import { Effect, Layer, Context } from "effect"
-import z from "zod"
-import { Database, eq, asc } from "../storage"
-import { TodoTable } from "./session.sql"
+import { Database } from "@opencode-ai/core/database/database"
+import { eq } from "drizzle-orm"
+import { asc } from "drizzle-orm"
+import { TodoTable } from "@opencode-ai/core/session/sql"
+import { EventV2Bridge } from "@/event-v2-bridge"
+import { SessionTodo } from "@opencode-ai/schema/session-todo"
 
-export const Info = z
-  .object({
-    content: z.string().describe("Brief description of the task"),
-    status: z.string().describe("Current status of the task: pending, in_progress, completed, cancelled"),
-    priority: z.string().describe("Priority level of the task: high, medium, low"),
-  })
-  .meta({ ref: "Todo" })
-export type Info = z.infer<typeof Info>
+export const Info = SessionTodo.Info
+export type Info = SessionTodo.Info
 
-export const Event = {
-  Updated: BusEvent.define(
-    "todo.updated",
-    z.object({
-      sessionID: SessionID.zod,
-      todos: z.array(Info),
-    }),
-  ),
-}
+export const Event = SessionTodo.Event
 
 export interface Interface {
   readonly update: (input: { sessionID: SessionID; todos: Info[] }) => Effect.Effect<void>
@@ -35,35 +23,41 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Se
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const bus = yield* Bus.Service
+    const events = yield* EventV2Bridge.Service
+    const { db } = yield* Database.Service
 
     const update = Effect.fn("Todo.update")(function* (input: { sessionID: SessionID; todos: Info[] }) {
-      yield* Effect.sync(() =>
-        Database.transaction((db) => {
-          db.delete(TodoTable).where(eq(TodoTable.session_id, input.sessionID)).run()
-          if (input.todos.length === 0) return
-          db.insert(TodoTable)
-            .values(
-              input.todos.map((todo, position) => ({
-                session_id: input.sessionID,
-                content: todo.content,
-                status: todo.status,
-                priority: todo.priority,
-                position,
-              })),
-            )
-            .run()
-        }),
-      )
-      yield* bus.publish(Event.Updated, input)
+      yield* db
+        .transaction((tx) =>
+          Effect.gen(function* () {
+            yield* tx.delete(TodoTable).where(eq(TodoTable.session_id, input.sessionID)).run()
+            if (input.todos.length === 0) return
+            yield* tx
+              .insert(TodoTable)
+              .values(
+                input.todos.map((todo, position) => ({
+                  session_id: input.sessionID,
+                  content: todo.content,
+                  status: todo.status,
+                  priority: todo.priority,
+                  position,
+                })),
+              )
+              .run()
+          }),
+        )
+        .pipe(Effect.orDie)
+      yield* events.publish(Event.Updated, input)
     })
 
     const get = Effect.fn("Todo.get")(function* (sessionID: SessionID) {
-      const rows = yield* Effect.sync(() =>
-        Database.use((db) =>
-          db.select().from(TodoTable).where(eq(TodoTable.session_id, sessionID)).orderBy(asc(TodoTable.position)).all(),
-        ),
-      )
+      const rows = yield* db
+        .select()
+        .from(TodoTable)
+        .where(eq(TodoTable.session_id, sessionID))
+        .orderBy(asc(TodoTable.position))
+        .all()
+        .pipe(Effect.orDie)
       return rows.map((row) => ({
         content: row.content,
         status: row.status,
@@ -75,6 +69,8 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(Bus.layer))
+export const defaultLayer = layer.pipe(Layer.provide(EventV2Bridge.defaultLayer), Layer.provide(Database.defaultLayer))
+
+export const node = LayerNode.make(layer, [EventV2Bridge.node, Database.node])
 
 export * as Todo from "./todo"

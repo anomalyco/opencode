@@ -5,24 +5,25 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { useMutation } from "@tanstack/solid-query"
 import { TextField } from "@opencode-ai/ui/text-field"
-import { showToast } from "@opencode-ai/ui/toast"
-import { batch, For } from "solid-js"
+import { showToast } from "@/utils/toast"
+import { type Accessor, batch, For } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { Link } from "@/components/link"
-import { useGlobalSDK } from "@/context/global-sdk"
-import { useGlobalSync } from "@/context/global-sync"
+import { useServerSDK } from "@/context/server-sdk"
+import { useServerSync } from "@/context/server-sync"
 import { useLanguage } from "@/context/language"
 import { type FormState, headerRow, modelRow, validateCustomProvider } from "./dialog-custom-provider-form"
 import { DialogSelectProvider } from "./dialog-select-provider"
 
 type Props = {
   back?: "providers" | "close"
+  directory?: Accessor<string | undefined>
 }
 
 export function DialogCustomProvider(props: Props) {
   const dialog = useDialog()
-  const globalSync = useGlobalSync()
-  const globalSDK = useGlobalSDK()
+  const serverSync = useServerSync()
+  const serverSDK = useServerSDK()
   const language = useLanguage()
 
   const [form, setForm] = createStore<FormState>({
@@ -40,7 +41,7 @@ export function DialogCustomProvider(props: Props) {
       dialog.close()
       return
     }
-    dialog.show(() => <DialogSelectProvider />)
+    dialog.show(() => <DialogSelectProvider directory={props.directory} />)
   }
 
   const addModel = () => {
@@ -105,8 +106,8 @@ export function DialogCustomProvider(props: Props) {
     const output = validateCustomProvider({
       form,
       t: language.t,
-      disabledProviders: globalSync.data.config.disabled_providers ?? [],
-      existingProviderIDs: new Set(globalSync.data.provider.all.map((p) => p.id)),
+      disabledProviders: serverSync().data.config.disabled_providers ?? [],
+      existingProviderIDs: new Set(serverSync().data.provider.all.keys()),
     })
     batch(() => {
       setForm("err", output.err)
@@ -118,11 +119,11 @@ export function DialogCustomProvider(props: Props) {
 
   const saveMutation = useMutation(() => ({
     mutationFn: async (result: NonNullable<ReturnType<typeof validate>>) => {
-      const disabledProviders = globalSync.data.config.disabled_providers ?? []
+      const disabledProviders = serverSync().data.config.disabled_providers ?? []
       const nextDisabled = disabledProviders.filter((id) => id !== result.providerID)
 
       if (result.key) {
-        await globalSDK.client.auth.set({
+        await serverSDK().client.auth.set({
           providerID: result.providerID,
           auth: {
             type: "api",
@@ -131,7 +132,7 @@ export function DialogCustomProvider(props: Props) {
         })
       }
 
-      await globalSync.updateConfig({
+      await serverSync().updateConfig({
         provider: { [result.providerID]: result.config },
         disabled_providers: nextDisabled,
       })

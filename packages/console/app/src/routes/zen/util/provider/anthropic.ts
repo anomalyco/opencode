@@ -28,7 +28,7 @@ export const anthropicHelper: ProviderHelper = ({ reqModel, providerModel }) => 
       isBedrock
         ? `${providerApi}/model/${isBedrockModelArn ? encodeURIComponent(providerModel) : providerModel}/${isStream ? "invoke-with-response-stream" : "invoke"}`
         : providerApi + "/messages",
-    modifyHeaders: (headers: Headers, body: Record<string, any>, apiKey: string) => {
+    modifyHeaders: (headers: Headers, apiKey: string, _stickyId: string) => {
       if (isBedrock || isDatabricks) {
         headers.set("Authorization", `Bearer ${apiKey}`)
       } else {
@@ -53,9 +53,7 @@ export const anthropicHelper: ProviderHelper = ({ reqModel, providerModel }) => 
               anthropic_version: "bedrock-2023-05-31",
               anthropic_beta: supports1m ? ["context-1m-2025-08-07"] : undefined,
             }
-          : {
-              service_tier: "standard_only",
-            }),
+          : {}),
     }),
     createBinaryStreamDecoder: () => {
       if (!isBedrock) return undefined
@@ -141,7 +139,6 @@ export const anthropicHelper: ProviderHelper = ({ reqModel, providerModel }) => 
         return encoder.encode(messages.join(""))
       }
     },
-    streamSeparator: "\n\n",
     createUsageParser: () => {
       let usage: Usage
 
@@ -177,6 +174,7 @@ export const anthropicHelper: ProviderHelper = ({ reqModel, providerModel }) => 
         retrieve: () => usage,
       }
     },
+    extractUsage: (response: any) => response.usage,
     normalizeUsage: (usage: Usage) => ({
       inputTokens: usage.input_tokens ?? 0,
       outputTokens: usage.output_tokens ?? 0,

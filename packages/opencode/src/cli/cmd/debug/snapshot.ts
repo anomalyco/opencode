@@ -1,6 +1,6 @@
-import { AppRuntime } from "@/effect/app-runtime"
+import { Effect } from "effect"
 import { Snapshot } from "../../../snapshot"
-import { bootstrap } from "../../bootstrap"
+import { effectCmd } from "../../effect-cmd"
 import { cmd } from "../cmd"
 
 export const SnapshotCommand = cmd({
@@ -10,17 +10,16 @@ export const SnapshotCommand = cmd({
   async handler() {},
 })
 
-const TrackCommand = cmd({
+const TrackCommand = effectCmd({
   command: "track",
   describe: "track current snapshot state",
-  async handler() {
-    await bootstrap(process.cwd(), async () => {
-      console.log(await AppRuntime.runPromise(Snapshot.Service.use((svc) => svc.track())))
-    })
-  },
+  handler: Effect.fn("Cli.debug.snapshot.track")(function* () {
+    const out = yield* Snapshot.Service.use((svc) => svc.track())
+    console.log(out)
+  }),
 })
 
-const PatchCommand = cmd({
+const PatchCommand = effectCmd({
   command: "patch <hash>",
   describe: "show patch for a snapshot hash",
   builder: (yargs) =>
@@ -29,14 +28,13 @@ const PatchCommand = cmd({
       description: "hash",
       demandOption: true,
     }),
-  async handler(args) {
-    await bootstrap(process.cwd(), async () => {
-      console.log(await AppRuntime.runPromise(Snapshot.Service.use((svc) => svc.patch(args.hash))))
-    })
-  },
+  handler: Effect.fn("Cli.debug.snapshot.patch")(function* (args) {
+    const out = yield* Snapshot.Service.use((svc) => svc.patch(args.hash))
+    console.log(out)
+  }),
 })
 
-const DiffCommand = cmd({
+const DiffCommand = effectCmd({
   command: "diff <hash>",
   describe: "show diff for a snapshot hash",
   builder: (yargs) =>
@@ -45,9 +43,8 @@ const DiffCommand = cmd({
       description: "hash",
       demandOption: true,
     }),
-  async handler(args) {
-    await bootstrap(process.cwd(), async () => {
-      console.log(await AppRuntime.runPromise(Snapshot.Service.use((svc) => svc.diff(args.hash))))
-    })
-  },
+  handler: Effect.fn("Cli.debug.snapshot.diff")(function* (args) {
+    const out = yield* Snapshot.Service.use((svc) => svc.diff(args.hash))
+    console.log(out)
+  }),
 })

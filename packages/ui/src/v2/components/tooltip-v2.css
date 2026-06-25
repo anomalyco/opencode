@@ -1,0 +1,53 @@
+[data-component="tooltip-v2"] {
+  box-sizing: border-box;
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  padding: 5px 6px;
+  gap: 6px;
+
+  background: var(--v2-background-bg-layer-01);
+  box-shadow: var(--v2-elevation-floating);
+  border-radius: 4px;
+
+  font-style: normal;
+  font-weight: 530;
+  font-size: 11px;
+  line-height: 12px;
+  letter-spacing: 0.05px;
+  color: var(--v2-text-text-base);
+  font-variant-numeric: tabular-nums;
+  font-variation-settings: "slnt" 0;
+
+  user-select: none;
+  pointer-events: none;
+
+  animation: tooltipV2In 120ms ease-out;
+  transform-origin: var(--kb-tooltip-content-transform-origin);
+
+  &[data-closed] {
+    animation: tooltipV2Out 80ms ease-in forwards;
+  }
+}
+
+@keyframes tooltipV2In {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes tooltipV2Out {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}

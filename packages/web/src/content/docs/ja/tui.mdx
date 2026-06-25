@@ -355,28 +355,57 @@ VS Code などの一部のエディターは、`--wait` フラグを使用して
 {
   "$schema": "https://opencode.ai/tui.json",
   "theme": "opencode",
+  "leader_timeout": 2000,
   "keybinds": {
-    "leader": "ctrl+x"
+    "leader": "ctrl+x",
+    "command_list": "ctrl+p"
   },
   "scroll_speed": 3,
   "scroll_acceleration": {
-    "enabled": true
+    "enabled": false
   },
-  "diff_style": "auto"
+  "diff_style": "auto",
+  "mouse": true,
+  "attention": {
+    "enabled": true,
+    "notifications": true,
+    "sound": true,
+    "volume": 0.4,
+    "sound_pack": "opencode.default",
+    "sounds": {
+      "error": "./sounds/error.mp3"
+    }
+  }
 }
 ```
 
 これは、サーバー/ランタイムの動作を構成する `opencode.json` とは別です。
 
+`keybinds` は組み込みのデフォルトとマージされるため、変更したいショートカットだけを設定すれば十分です。
+
 ### オプション
 
 - `theme` - UI テーマを設定します。[詳細はこちら](/docs/themes)。
 - `keybinds` - キーボードショートカットをカスタマイズします。[詳細はこちら](/docs/keybinds)。
+- `leader_timeout` - leader key を押したあと、OpenCode が次のキー入力を待つ時間を制御します。デフォルトは `2000` です。
 - `scroll_acceleration.enabled` - macOS スタイルのスクロールアクセラレーションを有効にして、スムーズで自然なスクロールを実現します。有効にすると、高速スクロールジェスチャではスクロール速度が向上し、ゆっくりとした動きでは正確なままになります。 **この設定は `scroll_speed` よりも優先され、有効になっている場合は上書きされます。**
 - `scroll_speed` - スクロールコマンドを使用するときに TUI がスクロールする速度を制御します (最小: `0.001`、小数をサポート)。デフォルトは `3` です。 **注: `scroll_acceleration.enabled` が `true` に設定されている場合、これは無視されます。**
 - `diff_style` - 差分レンダリングを制御します。 `"auto"` はターミナルの幅に適応し、`"stacked"` は常に 1 列のレイアウトを表示します。
+- `mouse` - TUI でのマウスキャプチャを有効または無効にします (デフォルト: `true`)。無効にすると、ターミナル本来のマウス選択/スクロール動作が維持されます。
+- `attention` - TUI のデスクトップ通知とサウンドを設定します。デフォルトでは無効です。
 
 カスタム TUI 設定パスをロードするには、`OPENCODE_TUI_CONFIG` を使用します。
+
+### Attention
+
+Attention を有効にすると、OpenCode が回答待ち、権限の承認待ち、セッションエラー、またはセッション完了を知らせたいときに、TUI がサウンドやデスクトップ通知で知らせます。`attention.enabled` で有効化します。組み込みイベントは発生時にサウンドを再生します。デスクトップ通知はターミナルウィンドウにフォーカスがない場合にのみ送信され、subagent イベントには使われません。
+
+- `enabled` - Attention のすべての通知とサウンドを有効にします。デフォルトは `false` です。
+- `notifications` - Attention が有効なとき、TUI がターミナル経由でデスクトップ通知を送信できるようにします。デフォルトは `true` です。
+- `sound` - Attention が有効なとき、通知音の再生を許可します。デフォルトは `true` です。
+- `volume` - 通知音のデフォルト音量を `0` から `1` で指定します。デフォルトは `0.4` です。
+- `sound_pack` - 使用する sound pack ID です。デフォルトは `opencode.default` です。
+- `sounds` - `default`、`question`、`permission`、`error`、`done`、または `subagent_done` に使うカスタムサウンドファイルを指定します。パスは絶対パス、`file://` URL、または `tui.json` からの相対パスにできます。
 
 ---
 

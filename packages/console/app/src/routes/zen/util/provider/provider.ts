@@ -37,19 +37,18 @@ export type ProviderHelper = (input: {
   reqModel: string
   providerModel: string
   adjustCacheUsage?: boolean
-  safetyIdentifier?: string
   workspaceID?: string
 }) => {
   format: ZenData.Format
   modifyUrl: (providerApi: string, isStream?: boolean) => string
-  modifyHeaders: (headers: Headers, body: Record<string, any>, apiKey: string) => void
+  modifyHeaders: (headers: Headers, apiKey: string, stickyId: string) => void
   modifyBody: (body: Record<string, any>) => Record<string, any>
   createBinaryStreamDecoder: () => ((chunk: Uint8Array) => Uint8Array | undefined) | undefined
-  streamSeparator: string
   createUsageParser: () => {
     parse: (chunk: string) => void
     retrieve: () => any
   }
+  extractUsage: (response: any) => any
   normalizeUsage: (usage: any) => UsageInfo
 }
 

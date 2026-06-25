@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Share } from "../../src/core/share"
 import { Storage } from "../../src/core/storage"
-import { Identifier } from "@opencode-ai/shared/util/identifier"
+import { Identifier } from "@opencode-ai/core/util/identifier"
 
 describe.concurrent("core.share", () => {
   test("should create a share", async () => {
@@ -12,6 +12,14 @@ describe.concurrent("core.share", () => {
     expect(share.secret).toBeDefined()
 
     await Share.remove({ id: share.id, secret: share.secret })
+  })
+
+  test("should remove a share as admin", async () => {
+    const share = await Share.create({ sessionID: Identifier.descending() })
+
+    await Share.removeAdmin({ id: share.id })
+
+    expect(await Share.get(share.id)).toBeUndefined()
   })
 
   test("should sync data to a share", async () => {
