@@ -29,7 +29,6 @@ import { ServerConnection, useServer } from "@/context/server"
 import { type DraftTab, useTabs } from "@/context/tabs"
 import { useDirectoryPicker } from "@/components/directory-picker"
 import { base64Encode } from "@opencode-ai/core/util/encode"
-import { legacySessionHref, requireServerKey, sessionHref } from "@/utils/session-route"
 import { useGlobal } from "@/context/global"
 
 export function SessionComposerRegion(props: {
@@ -37,6 +36,7 @@ export function SessionComposerRegion(props: {
   ready: boolean
   centered: boolean
   placement?: "dock" | "inline"
+  openParent?: () => void
   inputRef: (el: HTMLDivElement) => void
   newSessionWorktree: string
   onNewSessionWorktreeReset: () => void
@@ -225,16 +225,6 @@ export function SessionComposerRegion(props: {
   const lift = createMemo(() => (rolled() ? 18 : 36 * value()))
   const full = createMemo(() => Math.max(78, store.height))
 
-  const openParent = () => {
-    const id = parentID()
-    if (!id) return
-    navigate(
-      route.params.serverKey
-        ? sessionHref(requireServerKey(route.params.serverKey), id)
-        : legacySessionHref(sdk().directory, id),
-    )
-  }
-
   createEffect(() => {
     const el = store.body
     if (!el) return
@@ -392,11 +382,11 @@ export function SessionComposerRegion(props: {
                   class="w-full rounded-[12px] border border-border-weak-base bg-background-base p-3 text-16-regular text-text-weak"
                 >
                   <span>{language.t("session.child.promptDisabled")} </span>
-                  <Show when={parentID()}>
+                  <Show when={parentID() && props.openParent}>
                     <button
                       type="button"
                       class="text-text-base transition-colors hover:text-text-strong"
-                      onClick={openParent}
+                      onClick={props.openParent}
                     >
                       {language.t("session.child.backToParent")}
                     </button>
