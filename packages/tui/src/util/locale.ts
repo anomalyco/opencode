@@ -31,7 +31,11 @@ export function number(num: number): string {
   if (num >= 1000000) {
     return (num / 1000000).toFixed(1) + "M"
   } else if (num >= 1000) {
-    return (num / 1000).toFixed(1) + "K"
+    const k = (num / 1000).toFixed(1)
+    if (k === "1000.0") {
+      return (num / 1000000).toFixed(1) + "M"
+    }
+    return k + "K"
   }
   return num.toString()
 }
