@@ -115,6 +115,7 @@ describe("OpenAI Responses route", () => {
           type: "function",
           name: "read",
           description: "Read a path or resource.",
+          strict: false,
           parameters: {
             type: "object",
             properties: {
