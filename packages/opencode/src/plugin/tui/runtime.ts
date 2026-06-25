@@ -43,7 +43,16 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Effect } from "effect"
 import { createPluginRuntime, type PluginRuntime, type TuiPluginHost } from "@opencode-ai/tui/plugin/runtime"
 
-ensureRuntimePluginSupport({ additional: keymapRuntimeModules })
+// Bridge bare `@opentui/*` imports inside node_modules onto the host's registered runtime
+// instances. npm-spec TUI plugins are installed into an isolated tree
+// (~/.cache/opencode/packages/<spec>/node_modules/<name>/), so without this they resolve their
+// own copy of @opentui/solid (a separate RendererContext singleton) and their slots/commands
+// silently never attach to the host renderer. `file://` plugins live outside node_modules and
+// are already bridged, which is why only the npm-spec path regressed with OpenTUI 0.4.2.
+ensureRuntimePluginSupport({
+  additional: keymapRuntimeModules,
+  rewrite: { nodeModulesBareSpecifiers: true },
+})
 
 type PluginLoad = {
   options: ConfigPluginV1.Options | undefined
