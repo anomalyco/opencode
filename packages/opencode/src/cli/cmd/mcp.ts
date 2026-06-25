@@ -669,14 +669,20 @@ export const McpDebugCommand = effectCmd({
     const config = yield* Config.Service.use((cfg) => cfg.get())
     const mcp = yield* MCP.Service
     const auth = yield* McpAuth.Service
+    const serverConfig = config.mcp?.[args.name]
+    const authInfo =
+      serverConfig && isMcpRemote(serverConfig) && serverConfig.oauth !== false
+        ? yield* Effect.all({
+            authStatus: mcp.getAuthStatus(args.name),
+            entry: auth.get(args.name),
+          })
+        : undefined
     yield* Effect.promise(async () => {
       UI.empty()
       prompts.intro("MCP OAuth Debug")
 
-      const mcpServers = config.mcp ?? {}
       const serverName = args.name
 
-      const serverConfig = mcpServers[serverName]
       if (!serverConfig) {
         prompts.log.error(`MCP server not found: ${serverName}`)
         prompts.outro("Done")
@@ -698,13 +704,7 @@ export const McpDebugCommand = effectCmd({
       prompts.log.info(`Server: ${serverName}`)
       prompts.log.info(`URL: ${serverConfig.url}`)
 
-      // Check stored auth status — services already in hand, run inline.
-      const { authStatus, entry } = await Effect.runPromise(
-        Effect.all({
-          authStatus: mcp.getAuthStatus(serverName),
-          entry: auth.get(serverName),
-        }),
-      )
+      const { authStatus, entry } = authInfo!
       prompts.log.info(`Auth status: ${getAuthStatusIcon(authStatus)} ${getAuthStatusText(authStatus)}`)
 
       if (entry?.tokens) {
