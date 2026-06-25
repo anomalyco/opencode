@@ -22,6 +22,7 @@ import { LocationServiceMap } from "@opencode-ai/core/location-layer"
 import { Reference } from "@opencode-ai/core/reference"
 import { MCP } from "@/mcp"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
+import { escapeHtml } from "@/util/html"
 
 export function provider(model: Provider.Model) {
   if (model.api.id.includes("gpt-4") || model.api.id.includes("o1") || model.api.id.includes("o3"))
@@ -117,8 +118,8 @@ export const layer = Layer.effect(
         return [
           "<mcp_instructions>",
           ...instructions.flatMap((item) => [
-            `  <server name="${item.name}">`,
-            ...item.instructions.split("\n").map((line) => `    ${line}`),
+            `  <server name="${escapeHtml(item.name)}">`,
+            ...item.instructions.split("\n").map((line) => `    ${escapeHtml(line)}`),
             "  </server>",
           ]),
           "</mcp_instructions>",
