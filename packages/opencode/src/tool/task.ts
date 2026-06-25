@@ -68,14 +68,23 @@ function renderOutput(input: {
   text: string
 }) {
   const tag = input.state === "error" ? "task_error" : "task_result"
-  return [
+  const parts = [
     `<task id="${input.sessionID}" state="${input.state}">`,
     ...(input.summary ? [`<summary>${input.summary}</summary>`] : []),
     `<${tag}>`,
     input.text,
     `</${tag}>`,
     "</task>",
-  ].join("\n")
+  ]
+  if (input.state === "completed" || input.state === "error") {
+    parts.push(
+      "",
+      "<system-reminder>",
+      "The task you delegated has finished. If you were tracking this task in a todo list, you MUST call the todowrite tool now to mark the corresponding todo as completed. Do not proceed with other work before updating the todo list.",
+      "</system-reminder>",
+    )
+  }
+  return parts.join("\n")
 }
 
 export const TaskTool = Tool.define(
