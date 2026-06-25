@@ -1,6 +1,13 @@
 import { describe, expect, test } from "bun:test"
 import { captureTabDragLayout, insertIndexFromVirtualLayout } from "./titlebar-tab-drag"
-import { canOpenTabRename, createTabDragPreview, forwardTabRef, isTabCloseTarget } from "./titlebar-tab-gesture"
+import {
+  canOpenTabRename,
+  captureTabPointerDown,
+  createTabDragPreview,
+  forwardTabRef,
+  isPrimaryPointerPressed,
+  isTabCloseTarget,
+} from "./titlebar-tab-gesture"
 
 describe("titlebar tab drag", () => {
   const layout = {
@@ -80,5 +87,26 @@ describe("titlebar tab gestures", () => {
     const preview = createTabDragPreview(tab)
     expect(preview.querySelector('[data-slot="project-avatar-slot"]')).not.toBeNull()
     expect(preview.querySelector('[data-slot="tab-title"]')?.textContent).toBe("Session")
+  })
+
+  test("captures the grab offset before navigation scrolls the tab", () => {
+    const tab = document.createElement("div")
+    tab.getBoundingClientRect = () => ({ left: 80, top: 10, width: 120 }) as DOMRect
+
+    expect(captureTabPointerDown(tab, 100, 20)).toEqual({
+      startX: 100,
+      startY: 20,
+      grabOffsetX: 20,
+      grabOffsetY: 10,
+      width: 120,
+      element: tab,
+    })
+  })
+
+  test("detects when the primary pointer button was released outside the window", () => {
+    expect(isPrimaryPointerPressed(1)).toBe(true)
+    expect(isPrimaryPointerPressed(3)).toBe(true)
+    expect(isPrimaryPointerPressed(0)).toBe(false)
+    expect(isPrimaryPointerPressed(2)).toBe(false)
   })
 })

@@ -22,7 +22,12 @@ import { useCommand } from "@/context/command"
 import { useTabs } from "@/context/tabs"
 import { createTabPromptState } from "@/context/prompt"
 import { base64Encode } from "@opencode-ai/core/util/encode"
-import { createTabDragPreview, isTabCloseTarget } from "./titlebar-tab-gesture"
+import {
+  captureTabPointerDown,
+  createTabDragPreview,
+  isPrimaryPointerPressed,
+  isTabCloseTarget,
+} from "./titlebar-tab-gesture"
 import {
   ACTIVATION_DISTANCE,
   autoscrollSpeed,
@@ -336,32 +341,37 @@ export function TitlebarTabStrip(props: {
     if (!tabEl.querySelector('[data-slot="tab-link"]')) return
     const tab = props.tabs.find((item) => tabKey(item) === id)
     if (!tab) return
+    const pointer = captureTabPointerDown(tabEl, event.clientX, event.clientY)
     setSuppressNavigation(true)
     props.onNavigate(tab, tabEl)
     setPressedId(id)
-    const rect = tabEl.getBoundingClientRect()
     setGesture("pending", {
       id,
-      startX: event.clientX,
-      startY: event.clientY,
-      grabOffsetX: event.clientX - rect.left,
-      grabOffsetY: event.clientY - rect.top,
       pointerId: event.pointerId,
-      width: rect.width,
-      element: tabEl,
+      ...pointer,
     })
   }
 
   function onPointerMove(event: PointerEvent) {
     const pending = gesture.pending
+    if (pending && event.pointerId !== pending.pointerId) return
+    if (drag.active && dragPointerId !== undefined && event.pointerId !== dragPointerId) return
+    if (!isPrimaryPointerPressed(event.buttons)) {
+      if (drag.active) endDrag(true)
+      if (pending) {
+        setGesture("pending", undefined)
+        setPressedId(undefined)
+        requestAnimationFrame(() => setSuppressNavigation(false))
+      }
+      return
+    }
+
     if (pending && !drag.active) {
-      if (event.pointerId !== pending.pointerId) return
       if (pointerDistance(pending.startX, pending.startY, event.clientX, event.clientY) < ACTIVATION_DISTANCE) return
       startDrag(pending.id)
     }
 
     if (!drag.active) return
-    if (dragPointerId !== undefined && event.pointerId !== dragPointerId) return
 
     setDrag("pointerX", event.clientX)
     syncScroll()
