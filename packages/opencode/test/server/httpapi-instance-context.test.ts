@@ -161,15 +161,83 @@ describe("HttpApi instance context middleware", () => {
     }),
   )
 
-  it.live("falls back to the raw directory when URI decoding fails", () =>
+  it.live("does not decode query directory values twice", () =>
     Effect.gen(function* () {
+      const root = yield* tmpdirScoped({ git: true })
+      const dir = path.join(root, "literal%25folder")
+      yield* Effect.promise(() => mkdir(dir, { recursive: true }))
       yield* serveProbe()
 
-      const response = yield* HttpClient.get("/probe?directory=%25E0%25A4%25A")
+      const response = yield* HttpClient.get(`/probe?directory=${encodeURIComponent(dir)}`)
 
       expect(response.status).toBe(200)
       expect(yield* response.json).toMatchObject({
-        directory: path.join(process.cwd(), "%E0%A4%A"),
+        directory: dir,
+      })
+    }),
+  )
+
+  it.live("decodes encoded directory headers exactly once", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped({ git: true })
+      yield* serveProbe()
+
+      const response = yield* HttpClientRequest.get("/probe").pipe(
+        HttpClientRequest.setHeader("x-opencode-directory", encodeURIComponent(dir)),
+        HttpClient.execute,
+      )
+
+      expect(response.status).toBe(200)
+      expect(yield* response.json).toMatchObject({
+        directory: dir,
+      })
+    }),
+  )
+
+  it.live("rejects Windows drive paths on non-Windows servers", () =>
+    Effect.gen(function* () {
+      if (process.platform === "win32") return
+      yield* serveProbe()
+
+      const response = yield* HttpClient.get(`/probe?directory=${encodeURIComponent("C:\\Work\\Repo")}`)
+
+      expect(response.status).toBe(400)
+      expect(yield* response.json).toMatchObject({
+        _tag: "InvalidRequestError",
+        kind: "Query",
+        field: "directory",
+      })
+    }),
+  )
+
+  it.live("rejects forward-slash Windows drive paths on non-Windows servers", () =>
+    Effect.gen(function* () {
+      if (process.platform === "win32") return
+      yield* serveProbe()
+
+      const response = yield* HttpClient.get(`/probe?directory=${encodeURIComponent("C:/Work/Repo")}`)
+
+      expect(response.status).toBe(400)
+      expect(yield* response.json).toMatchObject({
+        _tag: "InvalidRequestError",
+        kind: "Query",
+        field: "directory",
+      })
+    }),
+  )
+
+  it.live("rejects UNC directory paths on non-Windows servers", () =>
+    Effect.gen(function* () {
+      if (process.platform === "win32") return
+      yield* serveProbe()
+
+      const response = yield* HttpClient.get(`/probe?directory=${encodeURIComponent("\\\\server\\share\\repo")}`)
+
+      expect(response.status).toBe(400)
+      expect(yield* response.json).toMatchObject({
+        _tag: "InvalidRequestError",
+        kind: "Query",
+        field: "directory",
       })
     }),
   )
