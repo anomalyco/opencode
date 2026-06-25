@@ -116,19 +116,17 @@ function ResolvedTargetSessionRoute() {
   const [resolved] = createResource(
     () => {
       if (cached()) return
-      return { id: params.id, sync: sync() }
+      return { id: params.id, server: serverKey(), sync: sync() }
     },
-    ({ id, sync }) => sync.session.lineage.resolve(id),
+    ({ id, server, sync }) =>
+      sync.session.lineage.resolve(id).catch((error) => {
+        if (isSessionNotFoundError(error, id)) tabs.removeSessionTab({ server, sessionId: id })
+        throw error
+      }),
   )
   const current = createMemo(() => cached() ?? resolved())
-  const missing = createMemo(() => isSessionNotFoundError(resolved.error, params.id))
   const directory = createMemo(() => current()?.session.directory)
   const targetDirectory = () => directory()!
-
-  createEffect(() => {
-    if (!missing()) return
-    tabs.removeSessionTab({ server: serverKey(), sessionId: params.id })
-  })
 
   createEffect(() => {
     const session = current()
@@ -141,7 +139,7 @@ function ResolvedTargetSessionRoute() {
 
   return (
     <TargetServerScopedProviders directory={directory} sessionID={() => params.id}>
-      <Show when={!resolved.error || missing()} fallback={<ErrorPage error={resolved.error} />}>
+      <Show when={!resolved.error} fallback={<ErrorPage error={resolved.error} />}>
         <Show when={directory()}>
           <Show
             when={settings.general.newLayoutDesigns()}
