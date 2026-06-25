@@ -157,15 +157,12 @@ describe("ModelsDev Service", () => {
     Effect.gen(function* () {
       yield* writeCacheText("{")
       const state = yield* Ref.make({ ...initialState, body: JSON.stringify(fixture2) })
+      const context = yield* Layer.build(buildLayer(state))
       const result = yield* Effect.acquireUseRelease(
         Effect.sync(() => {
           Flag.OPENCODE_DISABLE_MODELS_FETCH = false
         }),
-        () =>
-          provided(
-            state,
-            ModelsDev.Service.use((s) => s.get()),
-          ),
+        () => ModelsDev.Service.use((s) => s.get()).pipe(Effect.provide(context)),
         () =>
           Effect.sync(() => {
             Flag.OPENCODE_DISABLE_MODELS_FETCH = true

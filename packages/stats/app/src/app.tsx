@@ -4,6 +4,11 @@ import { FileRoutes } from "@solidjs/start/router"
 import { Suspense } from "solid-js"
 import "./app.css"
 
+function stripLocaleDataPrefix(pathname: string) {
+  const value = pathname.startsWith("/") ? pathname : `/${pathname}`
+  return value.replace(/^\/[^/]+(?=\/data(?:\/|$))/, "")
+}
+
 function AppMeta() {
   return (
     <>
@@ -21,6 +26,7 @@ export default function App() {
     <Router
       base={import.meta.env.BASE_URL.replace(/\/$/, "")}
       explicitLinks={true}
+      transformUrl={stripLocaleDataPrefix}
       root={(props) => (
         <MetaProvider>
           <AppMeta />

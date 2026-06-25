@@ -27,7 +27,7 @@ let variant: string | undefined
 
 const promptValue: Prompt = [{ type: "text", content: "ls", start: 0, end: 2 }]
 const prompt = {
-  ready: () => Object.assign(() => true, { promise: Promise.resolve(true) }),
+  ready: Object.assign(() => true, { promise: Promise.resolve(true) }),
   current: () => promptValue,
   cursor: () => 0,
   dirty: () => true,
@@ -41,6 +41,7 @@ const prompt = {
     replaceComments: () => undefined,
     items: () => [],
   },
+  capture: () => prompt,
 }
 
 const clientFor = (directory: string) => {
@@ -185,6 +186,10 @@ beforeAll(async () => {
 
   mock.module("@/context/server-sync", () => ({
     useServerSync: () => () => ({
+      session: {
+        remember: () => undefined,
+        set: () => undefined,
+      },
       child: (directory: string) => {
         syncedDirectories.push(directory)
         storedSessions[directory] ??= []

@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Tool } from "@opencode-ai/core/public"
+import { Tool } from "@opencode-ai/core/tool/tool"
 import { ApplicationTools } from "@opencode-ai/core/tool/application-tools"
 import { PermissionV2 } from "@opencode-ai/core/permission"
 import { SessionV2 } from "@opencode-ai/core/session"

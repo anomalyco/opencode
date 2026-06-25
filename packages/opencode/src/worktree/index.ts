@@ -10,7 +10,6 @@ import { ProjectTable } from "@opencode-ai/core/project/sql"
 import type { ProjectV2 } from "@opencode-ai/core/project"
 import { Slug } from "@opencode-ai/core/util/slug"
 import { errorMessage } from "../util/error"
-import { EventV2 } from "@opencode-ai/core/event"
 import { GlobalBus } from "@/bus/global"
 import { Git } from "@/git"
 import { Effect, Layer, Path, Schema, Scope, Context } from "effect"
@@ -19,22 +18,9 @@ import { NodePath } from "@effect/platform-node"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { AppProcess } from "@opencode-ai/core/process"
 import { InstanceState } from "@/effect/instance-state"
+import { WorktreeEvent } from "@opencode-ai/schema/worktree-event"
 
-export const Event = {
-  Ready: EventV2.define({
-    type: "worktree.ready",
-    schema: {
-      name: Schema.String,
-      branch: Schema.optional(Schema.String),
-    },
-  }),
-  Failed: EventV2.define({
-    type: "worktree.failed",
-    schema: {
-      message: Schema.String,
-    },
-  }),
-}
+export const Event = WorktreeEvent
 
 export const Info = Schema.Struct({
   name: Schema.String,

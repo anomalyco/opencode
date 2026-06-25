@@ -592,6 +592,7 @@ export const dict = {
   "home.server.collapse": "Collapse server projects",
   "home.server.expand": "Expand server projects",
   "home.sessions.search.placeholder": "Search sessions",
+  "home.sessions.search.placeholder.scoped": "Search sessions in {{scope}}",
   "home.sessions.search.sessions": "Sessions",
   "home.sessions.search.noResults": "No sessions found for {{query}}",
   "home.sessions.empty": "No sessions found",
@@ -854,9 +855,6 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Expand edit tool parts",
   "settings.general.row.editToolPartsExpanded.description":
     "Show edit, write, and patch tool parts expanded by default in the timeline",
-  "settings.general.row.showSessionProgressBar.title": "Show session progress bar",
-  "settings.general.row.showSessionProgressBar.description":
-    "Display the animated progress bar at the top of the session when the agent is working",
   "settings.general.row.newLayoutDesigns.title": "New layout and designs",
   "settings.general.row.newLayoutDesigns.description": "Enable the redesigned layout, home, composer, and session UI",
   "settings.general.row.pinchZoom.title": "Pinch to zoom",
