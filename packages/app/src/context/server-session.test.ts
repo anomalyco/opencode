@@ -69,12 +69,28 @@ describe("server session", () => {
     ctx.store.pin("active")
     ctx.store.optimistic.add({
       sessionID: "active",
-      message: { id: "message", sessionID: "active", role: "assistant", time: { created: 1 }, parentID: "parent", modelID: "model", providerID: "provider", mode: "build", agent: "agent", path: { cwd: "/repo", root: "/repo" }, cost: 0, tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } } },
+      message: {
+        id: "message",
+        sessionID: "active",
+        role: "assistant",
+        time: { created: 1 },
+        parentID: "parent",
+        modelID: "model",
+        providerID: "provider",
+        mode: "build",
+        agent: "agent",
+        path: { cwd: "/repo", root: "/repo" },
+        cost: 0,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      },
       parts: [],
     })
 
     for (let index = 0; index < 50; index++) {
-      ctx.store.apply({ type: "session.status", properties: { sessionID: `session-${index}`, status: { type: "busy" } } })
+      ctx.store.apply({
+        type: "session.status",
+        properties: { sessionID: `session-${index}`, status: { type: "busy" } },
+      })
     }
 
     expect(ctx.store.data.message.active?.map((message) => message.id)).toEqual(["message"])

@@ -241,13 +241,18 @@ export async function bootstrapDirectory(input: {
           input.sdk.session.status().then(async (x) => {
             if (input.session) {
               const statuses = x.data ?? {}
-              await Promise.all(Object.keys(statuses).map((sessionID) => input.session!.resolve(sessionID).catch(() => undefined)))
-              input.session.set("session_status", produce((draft) => {
-                for (const sessionID of Object.keys(draft)) {
-                  if (statuses[sessionID]) continue
-                  if (input.session?.get(sessionID)?.directory === input.directory) delete draft[sessionID]
-                }
-              }))
+              await Promise.all(
+                Object.keys(statuses).map((sessionID) => input.session!.resolve(sessionID).catch(() => undefined)),
+              )
+              input.session.set(
+                "session_status",
+                produce((draft) => {
+                  for (const sessionID of Object.keys(draft)) {
+                    if (statuses[sessionID]) continue
+                    if (input.session?.get(sessionID)?.directory === input.directory) delete draft[sessionID]
+                  }
+                }),
+              )
               for (const [sessionID, status] of Object.entries(statuses)) {
                 input.session.set("session_status", sessionID, reconcile(status))
               }

@@ -516,9 +516,7 @@ export default function Page() {
         todoTimer = undefined
         if (!id) return
         if (status === "idle" && !blocked) return
-        const cached = untrack(
-          () => sync().data.todo[id] !== undefined,
-        )
+        const cached = untrack(() => sync().data.todo[id] !== undefined)
 
         todoFrame = requestAnimationFrame(() => {
           todoFrame = undefined

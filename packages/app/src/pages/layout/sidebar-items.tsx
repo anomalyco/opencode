@@ -153,16 +153,23 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
   const hasError = createMemo(() => notification.session.unseenHasError(props.session.id))
   const [sessionStore] = serverSync().child(props.session.directory)
   const hasPermissions = createMemo(() => {
-    return !!sessionPermissionRequest(sessionStore.session, serverSync().session.data.permission, props.session.id, (item) => {
-      return !permission.autoResponds(item, props.session.directory)
-    })
+    return !!sessionPermissionRequest(
+      sessionStore.session,
+      serverSync().session.data.permission,
+      props.session.id,
+      (item) => {
+        return !permission.autoResponds(item, props.session.directory)
+      },
+    )
   })
   const isWorking = createMemo(() => {
     if (hasPermissions()) return false
     return serverSync().session.data.session_working(props.session.id)
   })
 
-  const tint = createMemo(() => messageAgentColor(serverSync().session.data.message[props.session.id], sessionStore.agent))
+  const tint = createMemo(() =>
+    messageAgentColor(serverSync().session.data.message[props.session.id], sessionStore.agent),
+  )
   const tooltip = createMemo(() => props.showTooltip ?? (props.mobile || !props.sidebarExpanded()))
   const currentChild = createMemo(() => {
     if (!props.showChild) return

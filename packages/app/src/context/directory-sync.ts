@@ -52,7 +52,10 @@ export const createDirSyncContext = (
       setStore("session", result.index, reconcile(session))
       return
     }
-    setStore("session", produce((draft) => void draft.splice(result.index, 0, session)))
+    setStore(
+      "session",
+      produce((draft) => void draft.splice(result.index, 0, session)),
+    )
   }
 
   return {
@@ -127,10 +130,13 @@ export const createDirSyncContext = (
       more: createMemo(() => current()[0].session.length >= current()[0].limit),
       archive: async (sessionID: string) => {
         await serverSDK.client.session.update({ sessionID, time: { archived: Date.now() } })
-        current()[1]("session", produce((draft) => {
-          const match = Binary.search(draft, sessionID, (session) => session.id)
-          if (match.found) draft.splice(match.index, 1)
-        }))
+        current()[1](
+          "session",
+          produce((draft) => {
+            const match = Binary.search(draft, sessionID, (session) => session.id)
+            if (match.found) draft.splice(match.index, 1)
+          }),
+        )
       },
     },
     mcp: {

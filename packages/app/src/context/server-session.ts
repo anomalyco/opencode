@@ -115,9 +115,15 @@ export function createServerSession(client: OpencodeClient) {
       const preserve = new Set([
         ...pinned.keys(),
         ...requests.keys(),
-        ...Object.entries(data.permission).filter(([, items]) => items.length > 0).map(([sessionID]) => sessionID),
-        ...Object.entries(data.question).filter(([, items]) => items.length > 0).map(([sessionID]) => sessionID),
-        ...Object.entries(data.session_status).filter(([, status]) => status.type !== "idle").map(([sessionID]) => sessionID),
+        ...Object.entries(data.permission)
+          .filter(([, items]) => items.length > 0)
+          .map(([sessionID]) => sessionID),
+        ...Object.entries(data.question)
+          .filter(([, items]) => items.length > 0)
+          .map(([sessionID]) => sessionID),
+        ...Object.entries(data.session_status)
+          .filter(([, status]) => status.type !== "idle")
+          .map(([sessionID]) => sessionID),
       ])
       for (const sessionID of preserve) {
         let current = data.info[sessionID]
@@ -132,7 +138,10 @@ export function createServerSession(client: OpencodeClient) {
         if (!preserve.has(sessionID)) stale.push(sessionID)
       }
       stale.forEach((sessionID) => infoSeen.delete(sessionID))
-      setData("info", produce((draft) => stale.forEach((sessionID) => delete draft[sessionID])))
+      setData(
+        "info",
+        produce((draft) => stale.forEach((sessionID) => delete draft[sessionID])),
+      )
     }
     return session
   }
@@ -214,27 +223,39 @@ export function createServerSession(client: OpencodeClient) {
     )
   }
 
-  const protectedSessions = () => new Set([
-    ...pinned.keys(),
-    ...requests.keys(),
-    ...inflight.keys(),
-    ...inflightDiff.keys(),
-    ...inflightTodo.keys(),
-    ...optimistic.keys(),
-    ...Object.entries(data.permission).filter(([, items]) => items.length > 0).map(([sessionID]) => sessionID),
-    ...Object.entries(data.question).filter(([, items]) => items.length > 0).map(([sessionID]) => sessionID),
-    ...Object.entries(data.session_status).filter(([, status]) => status.type !== "idle").map(([sessionID]) => sessionID),
-  ])
+  const protectedSessions = () =>
+    new Set([
+      ...pinned.keys(),
+      ...requests.keys(),
+      ...inflight.keys(),
+      ...inflightDiff.keys(),
+      ...inflightTodo.keys(),
+      ...optimistic.keys(),
+      ...Object.entries(data.permission)
+        .filter(([, items]) => items.length > 0)
+        .map(([sessionID]) => sessionID),
+      ...Object.entries(data.question)
+        .filter(([, items]) => items.length > 0)
+        .map(([sessionID]) => sessionID),
+      ...Object.entries(data.session_status)
+        .filter(([, status]) => status.type !== "idle")
+        .map(([sessionID]) => sessionID),
+    ])
 
   const touch = (sessionID: string) =>
-    evict(pickSessionCacheEvictions({ seen, keep: sessionID, limit: SESSION_CACHE_LIMIT, preserve: protectedSessions() }))
+    evict(
+      pickSessionCacheEvictions({ seen, keep: sessionID, limit: SESSION_CACHE_LIMIT, preserve: protectedSessions() }),
+    )
 
   const fetchMessages = async (sessionID: string, limit: number, before?: string) => {
     const response = await retry(() => client.session.messages({ sessionID, limit, before }))
     const items = (response.data ?? []).filter((item) => !!item?.info?.id)
     return {
       session: items.map((item) => cleanMessage(item.info)).sort((a, b) => cmp(a.id, b.id)),
-      part: items.map((item) => ({ id: item.info.id, part: item.parts.filter((part) => !!part?.id).sort((a, b) => cmp(a.id, b.id)) })),
+      part: items.map((item) => ({
+        id: item.info.id,
+        part: item.parts.filter((part) => !!part?.id).sort((a, b) => cmp(a.id, b.id)),
+      })),
       cursor: response.response.headers.get("x-next-cursor") ?? undefined,
       complete: !response.response.headers.get("x-next-cursor"),
     }
@@ -284,7 +305,11 @@ export function createServerSession(client: OpencodeClient) {
   const prefetch = async (sessionID: string, limit: number) => {
     touch(sessionID)
     await inflight.get(sessionID)
-    if (Date.now() - (meta.at[sessionID] ?? 0) <= 15_000 && (meta.complete[sessionID] || (data.message[sessionID]?.length ?? 0) >= limit)) return
+    if (
+      Date.now() - (meta.at[sessionID] ?? 0) <= 15_000 &&
+      (meta.complete[sessionID] || (data.message[sessionID]?.length ?? 0) >= limit)
+    )
+      return
     await runInflight(inflight, sessionID, () => loadMessages(sessionID, limit))
   }
 
@@ -292,8 +317,22 @@ export function createServerSession(client: OpencodeClient) {
     const properties = event.properties
     if (!properties || typeof properties !== "object") return
     if ("sessionID" in properties && typeof properties.sessionID === "string") return properties.sessionID
-    if ("info" in properties && properties.info && typeof properties.info === "object" && "sessionID" in properties.info && typeof properties.info.sessionID === "string") return properties.info.sessionID
-    if ("part" in properties && properties.part && typeof properties.part === "object" && "sessionID" in properties.part && typeof properties.part.sessionID === "string") return properties.part.sessionID
+    if (
+      "info" in properties &&
+      properties.info &&
+      typeof properties.info === "object" &&
+      "sessionID" in properties.info &&
+      typeof properties.info.sessionID === "string"
+    )
+      return properties.info.sessionID
+    if (
+      "part" in properties &&
+      properties.part &&
+      typeof properties.part === "object" &&
+      "sessionID" in properties.part &&
+      typeof properties.part.sessionID === "string"
+    )
+      return properties.part.sessionID
   }
 
   const apply = (event: { type: string; properties?: unknown }) => {
@@ -315,7 +354,10 @@ export function createServerSession(client: OpencodeClient) {
       case "session.deleted": {
         const sessionID = (event.properties as { info: Session }).info.id
         infoSeen.delete(sessionID)
-        setData("info", produce((draft) => void delete draft[sessionID]))
+        setData(
+          "info",
+          produce((draft) => void delete draft[sessionID]),
+        )
         evict([sessionID])
         return
       }
@@ -343,30 +385,36 @@ export function createServerSession(client: OpencodeClient) {
         }
         const result = Binary.search(messages, info.id, (message) => message.id)
         if (result.found) setData("message", info.sessionID, result.index, reconcile(info))
-        if (!result.found) setData("message", info.sessionID, (value = []) => {
-          const next = value.slice()
-          next.splice(result.index, 0, info)
-          return next
-        })
+        if (!result.found)
+          setData("message", info.sessionID, (value = []) => {
+            const next = value.slice()
+            next.splice(result.index, 0, info)
+            return next
+          })
         return
       }
       case "message.removed": {
         const props = event.properties as { sessionID: string; messageID: string }
-        setData(produce((draft) => {
-          const messages = draft.message[props.sessionID]
-          if (messages) {
-            const result = Binary.search(messages, props.messageID, (message) => message.id)
-            if (result.found) messages.splice(result.index, 1)
-          }
-          for (const part of draft.part[props.messageID] ?? []) delete draft.part_text_accum_delta[part.id]
-          delete draft.part[props.messageID]
-        }))
+        setData(
+          produce((draft) => {
+            const messages = draft.message[props.sessionID]
+            if (messages) {
+              const result = Binary.search(messages, props.messageID, (message) => message.id)
+              if (result.found) messages.splice(result.index, 1)
+            }
+            for (const part of draft.part[props.messageID] ?? []) delete draft.part_text_accum_delta[part.id]
+            delete draft.part[props.messageID]
+          }),
+        )
         return
       }
       case "message.part.updated": {
         const part = (event.properties as { part: Part }).part
         if (SKIP_PARTS.has(part.type)) return
-        setData("part_text_accum_delta", produce((draft) => void delete draft[part.id]))
+        setData(
+          "part_text_accum_delta",
+          produce((draft) => void delete draft[part.id]),
+        )
         const parts = data.part[part.messageID]
         if (!parts) {
           setData("part", part.messageID, [part])
@@ -374,23 +422,26 @@ export function createServerSession(client: OpencodeClient) {
         }
         const result = Binary.search(parts, part.id, (item) => item.id)
         if (result.found) setData("part", part.messageID, result.index, reconcile(part))
-        if (!result.found) setData("part", part.messageID, (value = []) => {
-          const next = value.slice()
-          next.splice(result.index, 0, part)
-          return next
-        })
+        if (!result.found)
+          setData("part", part.messageID, (value = []) => {
+            const next = value.slice()
+            next.splice(result.index, 0, part)
+            return next
+          })
         return
       }
       case "message.part.removed": {
         const props = event.properties as { messageID: string; partID: string }
-        setData(produce((draft) => {
-          delete draft.part_text_accum_delta[props.partID]
-          const parts = draft.part[props.messageID]
-          if (!parts) return
-          const result = Binary.search(parts, props.partID, (part) => part.id)
-          if (result.found) parts.splice(result.index, 1)
-          if (parts.length === 0) delete draft.part[props.messageID]
-        }))
+        setData(
+          produce((draft) => {
+            delete draft.part_text_accum_delta[props.partID]
+            const parts = draft.part[props.messageID]
+            if (!parts) return
+            const result = Binary.search(parts, props.partID, (part) => part.id)
+            if (result.found) parts.splice(result.index, 1)
+            if (parts.length === 0) delete draft.part[props.messageID]
+          }),
+        )
         return
       }
       case "message.part.delta": {
@@ -401,13 +452,21 @@ export function createServerSession(client: OpencodeClient) {
         if (!result.found) return
         const field = props.field as keyof (typeof parts)[number]
         const current = parts[result.index]?.[field]
-        setData("part_text_accum_delta", props.partID, (value) => (value ?? (typeof current === "string" ? current : "")) + props.delta)
-        setData("part", props.messageID, produce((draft) => {
-          if (!draft) return
-          const part = draft[result.index]
-          const field = props.field as keyof typeof part
-          ;(part[field] as string) = ((part[field] as string | undefined) ?? "") + props.delta
-        }))
+        setData(
+          "part_text_accum_delta",
+          props.partID,
+          (value) => (value ?? (typeof current === "string" ? current : "")) + props.delta,
+        )
+        setData(
+          "part",
+          props.messageID,
+          produce((draft) => {
+            if (!draft) return
+            const part = draft[result.index]
+            const field = props.field as keyof typeof part
+            ;(part[field] as string) = ((part[field] as string | undefined) ?? "") + props.delta
+          }),
+        )
         return
       }
       case "permission.asked": {
@@ -415,16 +474,25 @@ export function createServerSession(client: OpencodeClient) {
         const permissions = data.permission[permission.sessionID] ?? []
         const result = Binary.search(permissions, permission.id, (item) => item.id)
         if (result.found) setData("permission", permission.sessionID, result.index, reconcile(permission))
-        if (!result.found) setData("permission", permission.sessionID, produce((draft = []) => void draft.splice(result.index, 0, permission)))
+        if (!result.found)
+          setData(
+            "permission",
+            permission.sessionID,
+            produce((draft = []) => void draft.splice(result.index, 0, permission)),
+          )
         return
       }
       case "permission.replied": {
         const props = event.properties as { sessionID: string; requestID: string }
-        setData("permission", props.sessionID, produce((draft) => {
-          if (!draft) return
-          const result = Binary.search(draft, props.requestID, (item) => item.id)
-          if (result.found) draft.splice(result.index, 1)
-        }))
+        setData(
+          "permission",
+          props.sessionID,
+          produce((draft) => {
+            if (!draft) return
+            const result = Binary.search(draft, props.requestID, (item) => item.id)
+            if (result.found) draft.splice(result.index, 1)
+          }),
+        )
         return
       }
       case "question.asked": {
@@ -432,17 +500,26 @@ export function createServerSession(client: OpencodeClient) {
         const questions = data.question[question.sessionID] ?? []
         const result = Binary.search(questions, question.id, (item) => item.id)
         if (result.found) setData("question", question.sessionID, result.index, reconcile(question))
-        if (!result.found) setData("question", question.sessionID, produce((draft = []) => void draft.splice(result.index, 0, question)))
+        if (!result.found)
+          setData(
+            "question",
+            question.sessionID,
+            produce((draft = []) => void draft.splice(result.index, 0, question)),
+          )
         return
       }
       case "question.replied":
       case "question.rejected": {
         const props = event.properties as { sessionID: string; requestID: string }
-        setData("question", props.sessionID, produce((draft) => {
-          if (!draft) return
-          const result = Binary.search(draft, props.requestID, (item) => item.id)
-          if (result.found) draft.splice(result.index, 1)
-        }))
+        setData(
+          "question",
+          props.sessionID,
+          produce((draft) => {
+            if (!draft) return
+            const result = Binary.search(draft, props.requestID, (item) => item.id)
+            if (result.found) draft.splice(result.index, 1)
+          }),
+        )
       }
     }
   }
@@ -478,12 +555,19 @@ export function createServerSession(client: OpencodeClient) {
         if (items) items.set(input.message.id, input)
         if (!items) optimistic.set(input.sessionID, new Map([[input.message.id, input]]))
         setData("message", input.sessionID, (messages = []) => merge(messages, [input.message]))
-        setData("part", input.message.id, input.parts.filter((part) => !!part?.id).sort((a, b) => cmp(a.id, b.id)))
+        setData(
+          "part",
+          input.message.id,
+          input.parts.filter((part) => !!part?.id).sort((a, b) => cmp(a.id, b.id)),
+        )
       },
       remove(input: { sessionID: string; messageID: string }) {
         clearOptimistic(input.sessionID, input.messageID)
         setData("message", input.sessionID, (messages) => messages?.filter((message) => message.id !== input.messageID))
-        setData("part", produce((draft) => void delete draft[input.messageID]))
+        setData(
+          "part",
+          produce((draft) => void delete draft[input.messageID]),
+        )
       },
     },
     diff(sessionID: string, options?: { force?: boolean }) {
@@ -509,7 +593,11 @@ export function createServerSession(client: OpencodeClient) {
       })
     },
     history: {
-      more: (sessionID: string) => data.message[sessionID] !== undefined && meta.limit[sessionID] !== undefined && !meta.complete[sessionID] && !!meta.cursor[sessionID],
+      more: (sessionID: string) =>
+        data.message[sessionID] !== undefined &&
+        meta.limit[sessionID] !== undefined &&
+        !meta.complete[sessionID] &&
+        !!meta.cursor[sessionID],
       loading: (sessionID: string) => meta.loading[sessionID] ?? false,
       async loadMore(sessionID: string, count = historyMessagePageSize) {
         touch(sessionID)
