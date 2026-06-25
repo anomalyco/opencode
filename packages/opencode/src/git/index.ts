@@ -214,13 +214,17 @@ export const layer = Layer.effect(
 
     const status = Effect.fn("Git.status")(function* (cwd: string) {
       return nuls(
-        yield* text(["status", "--porcelain=v1", "--untracked-files=all", "--no-renames", "-z", "--", "."], {
-          cwd,
-        }),
+        yield* text(
+          ["status", "--porcelain=v1", "--untracked-files=normal", "--no-renames", "-z", "--", "."],
+          {
+            cwd,
+          },
+        ),
       ).flatMap((item) => {
         const file = item.slice(3)
         if (!file) return []
         const code = item.slice(0, 2)
+        if (file.endsWith("/")) return []
         return [{ file, code, status: kind(code) } satisfies Item]
       })
     })

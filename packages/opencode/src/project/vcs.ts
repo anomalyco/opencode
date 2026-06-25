@@ -11,6 +11,7 @@ import { VcsEvent } from "@opencode-ai/schema/vcs-event"
 const PATCH_CONTEXT_LINES = 2_147_483_647
 const MAX_PATCH_BYTES = 10_000_000
 const MAX_TOTAL_PATCH_BYTES = 10_000_000
+const MAX_STATUS_FILES = 2000
 type DiffOptions = {
   readonly context?: number
 }
@@ -175,8 +176,9 @@ const files = Effect.fnUntraced(function* (
   const next: FileDiff[] = []
   let total = 0
   let capped = false
+  const items = list.length > MAX_STATUS_FILES ? list.slice(0, MAX_STATUS_FILES) : list
 
-  for (const item of list.toSorted((a, b) => a.file.localeCompare(b.file))) {
+  for (const item of items.toSorted((a, b) => a.file.localeCompare(b.file))) {
     const stat = map.get(item.file) ?? (item.status === "added" ? yield* git.statUntracked(cwd, item.file) : undefined)
     const patch = yield* patchForItem(git, cwd, ref, item, batch, capped, options)
     const result: { patch: string; capped: boolean } = capped
@@ -353,9 +355,11 @@ export const layer: Layer.Layer<Service, never, Git.Service | EventV2Bridge.Serv
           [git.status(ctx.directory), ref ? git.stats(ctx.directory, ref) : Effect.succeed([])],
           { concurrency: 2 },
         )
+        const truncated = list.length > MAX_STATUS_FILES
+        const items = truncated ? list.slice(0, MAX_STATUS_FILES) : list
         const map = nums(stats)
         return yield* Effect.forEach(
-          list.toSorted((a, b) => a.file.localeCompare(b.file)),
+          items.toSorted((a, b) => a.file.localeCompare(b.file)),
           (item) =>
             Effect.gen(function* () {
               const stat =
