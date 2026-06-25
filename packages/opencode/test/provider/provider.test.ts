@@ -661,6 +661,39 @@ it.instance("getSmallModel prefers Gemini for Google Vertex", () =>
   }),
 )
 
+it.instance(
+  "getSmallModel selects the latest model in the preferred family",
+  Effect.gen(function* () {
+    const model = yield* Provider.use.getSmallModel(ProviderV2.ID.make("test-provider"))
+    expect(model?.id).toBe("new-flash")
+  }),
+  {
+    config: {
+      provider: {
+        "test-provider": {
+          name: "Test Provider",
+          npm: "@ai-sdk/openai-compatible",
+          models: {
+            "old-flash": { family: "gemini-flash", release_date: "2025-01-01" },
+            "new-flash": { family: "gemini-flash", release_date: "2026-01-01" },
+            "newer-haiku": { family: "claude-haiku", release_date: "2026-06-01" },
+          },
+          options: { apiKey: "test-key" },
+        },
+      },
+    },
+  },
+)
+
+it.instance("getSmallModel skips inferred models for Azure", () =>
+  Effect.gen(function* () {
+    yield* set("AZURE_RESOURCE_NAME", "test-resource")
+    yield* set("AZURE_API_KEY", "test-key")
+    const model = yield* Provider.use.getSmallModel(ProviderV2.ID.azure)
+    expect(model).toBeUndefined()
+  }),
+)
+
 it.instance("getSmallModel skips inferred models for Azure Cognitive Services", () =>
   Effect.gen(function* () {
     yield* set("AZURE_COGNITIVE_SERVICES_RESOURCE_NAME", "test-resource")

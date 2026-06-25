@@ -12,6 +12,8 @@ export type VariantID = typeof VariantID.Type
 export const Family = Model.Family
 export type Family = Model.Family
 
+export const smallFamilyPriority = ["flash", "nano", "mini", "lite", "small", "fast", "haiku"]
+
 export const Capabilities = Model.Capabilities
 export type Capabilities = Model.Capabilities
 

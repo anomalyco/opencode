@@ -235,6 +235,11 @@ export const layer = Layer.effect(
           if (!record) return
           const provider = record.provider
 
+          // TODO: Remove these provider-specific assumptions once model syncing reliably reports available deployments.
+          if (providerID === ProviderV2.ID.azure || providerID === ProviderV2.ID.make("azure-cognitive-services")) {
+            return
+          }
+
           if (providerID === ProviderV2.ID.opencode) {
             const gpt5Nano = record.models.get(ModelV2.ID.make("gpt-5-nano"))
             if (gpt5Nano?.enabled && gpt5Nano.status === "active") return projectModel(gpt5Nano, provider)
@@ -254,10 +259,17 @@ export const layer = Layer.effect(
               model,
               cost: model.cost[0] ? model.cost[0].input + model.cost[0].output : 999,
               age: (Date.now() - model.time.released) / (1000 * 60 * 60 * 24 * 30),
-              small: SMALL_MODEL_RE.test(`${model.id} ${model.family ?? ""} ${model.name}`.toLowerCase()),
             })),
             Array.filter((item) => item.cost > 0 && item.age <= 18),
           )
+
+          const preferred = ModelV2.smallFamilyPriority.flatMap((family) =>
+            candidates
+              .filter((item) => item.model.family?.includes(family))
+              .sort((a, b) => b.model.time.released - a.model.time.released)
+              .slice(0, 1),
+          )[0]
+          if (preferred) return projectModel(preferred.model, provider)
 
           const pick = (items: typeof candidates) => {
             const maxCost = Math.max(...items.map((item) => item.cost), 0.01)
@@ -270,13 +282,7 @@ export const layer = Layer.effect(
             )
           }
 
-          return Option.getOrUndefined(
-            pipe(
-              candidates,
-              Array.filter((item) => item.small),
-              (items) => (items.length > 0 ? pick(items) : pick(candidates)),
-            ),
-          )
+          return Option.getOrUndefined(pick(candidates))
         }),
       },
     }
@@ -284,8 +290,6 @@ export const layer = Layer.effect(
     return Service.of(result)
   }),
 )
-
-const SMALL_MODEL_RE = /\b(nano|flash|lite|mini|haiku|small|fast)\b/
 
 export const locationLayer = layer.pipe(
   Layer.provideMerge(Integration.locationLayer),

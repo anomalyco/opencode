@@ -314,7 +314,40 @@ describe("CatalogV2", () => {
     }),
   )
 
-  it.effect("small model prefers small keyword candidates before cost scoring", () =>
+  it.effect("small model selects the latest model in the preferred family", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      const providerID = ProviderV2.ID.make("test")
+      yield* catalog.transform((catalog) => {
+        catalog.provider.update(providerID, () => {})
+        catalog.model.update(providerID, ModelV2.ID.make("old-flash"), (model) => {
+          model.capabilities.input = ["text"]
+          model.capabilities.output = ["text"]
+          model.family = ModelV2.Family.make("gemini-flash")
+          model.cost = [{ input: 10, output: 10, cache: { read: 0, write: 0 } }]
+          model.time.released = Date.now() - 1000
+        })
+        catalog.model.update(providerID, ModelV2.ID.make("new-flash"), (model) => {
+          model.capabilities.input = ["text"]
+          model.capabilities.output = ["text"]
+          model.family = ModelV2.Family.make("gemini-flash")
+          model.cost = [{ input: 20, output: 20, cache: { read: 0, write: 0 } }]
+          model.time.released = Date.now()
+        })
+        catalog.model.update(providerID, ModelV2.ID.make("newer-haiku"), (model) => {
+          model.capabilities.input = ["text"]
+          model.capabilities.output = ["text"]
+          model.family = ModelV2.Family.make("claude-haiku")
+          model.cost = [{ input: 1, output: 1, cache: { read: 0, write: 0 } }]
+          model.time.released = Date.now() + 1000
+        })
+      })
+
+      expect((yield* catalog.model.small(providerID))?.id).toBe(ModelV2.ID.make("new-flash"))
+    }),
+  )
+
+  it.effect("small model falls back to cost scoring without a preferred family", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
       const providerID = ProviderV2.ID.make("test")
@@ -326,7 +359,7 @@ describe("CatalogV2", () => {
           model.cost = [{ input: 1, output: 1, cache: { read: 0, write: 0 } }]
           model.time.released = Date.now()
         })
-        catalog.model.update(providerID, ModelV2.ID.make("expensive-mini"), (model) => {
+        catalog.model.update(providerID, ModelV2.ID.make("expensive-large"), (model) => {
           model.capabilities.input = ["text"]
           model.capabilities.output = ["text"]
           model.cost = [{ input: 10, output: 10, cache: { read: 0, write: 0 } }]
@@ -334,7 +367,28 @@ describe("CatalogV2", () => {
         })
       })
 
-      expect((yield* catalog.model.small(providerID))?.id).toMatch("expensive-mini")
+      expect((yield* catalog.model.small(providerID))?.id).toBe(ModelV2.ID.make("cheap-large"))
+    }),
+  )
+
+  it.effect("small model skips inferred models for Azure providers", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      const providers = [ProviderV2.ID.azure, ProviderV2.ID.make("azure-cognitive-services")]
+      yield* catalog.transform((catalog) => {
+        for (const providerID of providers) {
+          catalog.provider.update(providerID, () => {})
+          catalog.model.update(providerID, ModelV2.ID.make("small"), (model) => {
+            model.capabilities.input = ["text"]
+            model.capabilities.output = ["text"]
+            model.family = ModelV2.Family.make("gemini-flash")
+            model.cost = [{ input: 1, output: 1, cache: { read: 0, write: 0 } }]
+            model.time.released = Date.now()
+          })
+        }
+      })
+
+      for (const providerID of providers) expect(yield* catalog.model.small(providerID)).toBeUndefined()
     }),
   )
 
