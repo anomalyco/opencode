@@ -14,7 +14,7 @@ import {
   PTY_CONNECT_TOKEN_HEADER,
   PTY_CONNECT_TOKEN_HEADER_VALUE,
 } from "@opencode-ai/protocol/groups/pty"
-import { response } from "../groups/location"
+import { response } from "../location"
 import { PtyEnvironment } from "../pty-environment"
 
 const ticketScope = Effect.gen(function* () {

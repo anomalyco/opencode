@@ -3,7 +3,7 @@ import { Effect } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import { Api } from "@opencode-ai/protocol/api"
 import { QuestionNotFoundError } from "@opencode-ai/protocol/errors"
-import { response } from "../groups/location"
+import { response } from "../location"
 
 function missingRequest(id: QuestionV2.ID) {
   return new QuestionNotFoundError({ requestID: id, message: `Question request not found: ${id}` })

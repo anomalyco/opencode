@@ -71,11 +71,8 @@ export const SessionsCursor = Schema.String.pipe(
 )
 export type SessionsCursor = typeof SessionsCursor.Type
 
-const SessionsCursorQuery = Schema.Struct({
-  cursor: SessionsCursor.annotate({
-    description: "Opaque pagination cursor returned as cursor.previous or cursor.next in the previous response.",
-  }),
-  limit: SessionsQueryFields.limit,
+const SessionsQueryCursor = SessionsCursor.annotate({
+  description: "Opaque pagination cursor returned as cursor.previous or cursor.next in the previous response.",
 })
 
 export const SessionsQuery = Schema.Struct({
@@ -83,7 +80,7 @@ export const SessionsQuery = Schema.Struct({
   directory: AbsolutePath.pipe(Schema.optional),
   project: Project.ID.pipe(Schema.optional),
   subpath: RelativePath.pipe(Schema.optional),
-  cursor: SessionsCursorQuery.fields.cursor.pipe(Schema.optional),
+  cursor: SessionsQueryCursor.pipe(Schema.optional),
 }).annotate({ identifier: "SessionsQuery" })
 
 export const SessionGroup = HttpApiGroup.make("server.session")

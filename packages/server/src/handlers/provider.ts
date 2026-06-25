@@ -3,7 +3,7 @@ import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { Api } from "@opencode-ai/protocol/api"
 import { ProviderNotFoundError } from "@opencode-ai/protocol/errors"
-import { response } from "../groups/location"
+import { response } from "../location"
 
 export const ProviderHandler = HttpApiBuilder.group(Api, "server.provider", (handlers) =>
   Effect.gen(function* () {

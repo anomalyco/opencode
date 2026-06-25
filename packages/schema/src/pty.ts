@@ -3,7 +3,7 @@ export * as Pty from "./pty"
 import { Schema } from "effect"
 import { define, inventory } from "./event"
 import { ascending } from "./identifier"
-import { NonNegativeInt } from "./schema"
+import { NonNegativeInt, PositiveInt } from "./schema"
 import { withStatics } from "./schema"
 
 const IDSchema = Schema.String.check(Schema.isStartsWith("pty")).pipe(Schema.brand("PtyID"))
@@ -47,8 +47,8 @@ export const UpdateInput = Schema.Struct({
   title: Schema.optional(Schema.String),
   size: Schema.optional(
     Schema.Struct({
-      rows: Schema.Int.check(Schema.isGreaterThan(0)),
-      cols: Schema.Int.check(Schema.isGreaterThan(0)),
+      rows: PositiveInt,
+      cols: PositiveInt,
     }),
   ),
 })

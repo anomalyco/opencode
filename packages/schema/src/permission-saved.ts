@@ -2,7 +2,7 @@ export * as PermissionSaved from "./permission-saved"
 
 import { Schema } from "effect"
 import { ascending } from "./identifier"
-import { Project } from "./project"
+import { ProjectID } from "./project-id"
 import { withStatics } from "./schema"
 
 export const ID = Schema.String.pipe(
@@ -13,7 +13,7 @@ export type ID = typeof ID.Type
 
 export const Info = Schema.Struct({
   id: ID,
-  projectID: Project.ID,
+  projectID: ProjectID,
   action: Schema.String,
   resource: Schema.String,
 }).annotate({ identifier: "PermissionSaved.Info" })

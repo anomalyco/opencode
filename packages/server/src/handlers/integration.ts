@@ -3,7 +3,7 @@ import { Effect } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import { Api } from "@opencode-ai/protocol/api"
 import { InvalidRequestError } from "@opencode-ai/protocol/errors"
-import { response } from "../groups/location"
+import { response } from "../location"
 
 const authorize = <A, R>(effect: Effect.Effect<A, Integration.AuthorizationError, R>) =>
   effect.pipe(

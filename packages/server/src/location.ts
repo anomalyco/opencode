@@ -2,16 +2,9 @@ import { Location } from "@opencode-ai/core/location"
 import { LocationServiceMap } from "@opencode-ai/core/location-layer"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { WorkspaceV2 } from "@opencode-ai/core/workspace"
+import { LocationMiddleware } from "@opencode-ai/protocol/groups/location"
 import { Effect, Layer } from "effect"
 import { HttpServerRequest } from "effect/unstable/http"
-import { LocationMiddleware } from "@opencode-ai/protocol/groups/location"
-export {
-  LocationGroup,
-  LocationMiddleware,
-  LocationQuery,
-  locationQueryOpenApi,
-} from "@opencode-ai/protocol/groups/location"
-export type { LocationServices } from "@opencode-ai/protocol/groups/location"
 
 export function response<A, E, R>(data: Effect.Effect<A, E, R>) {
   return Effect.gen(function* () {
