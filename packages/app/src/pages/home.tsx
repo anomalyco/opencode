@@ -471,9 +471,7 @@ export function NewHome() {
             >
               <Show
                 when={groups().length > 0}
-                fallback={
-                  <HomeSessionsEmpty onNewSession={newSessionProject() ? openNewSession : undefined} />
-                }
+                fallback={<HomeSessionsEmpty onNewSession={newSessionProject() ? openNewSession : undefined} />}
               >
                 <div class="pt-3 flex flex-col gap-6">
                   <For each={groups()}>
@@ -1221,13 +1219,7 @@ function HomeSessionsEmpty(props: { onNewSession?: () => void }) {
       </p>
       <Show when={props.onNewSession}>
         {(onNewSession) => (
-          <ButtonV2
-            data-action="home-new-session"
-            variant="neutral"
-            size="normal"
-            icon="edit"
-            onClick={onNewSession()}
-          >
+          <ButtonV2 data-action="home-new-session" variant="neutral" size="normal" icon="edit" onClick={onNewSession()}>
             {language.t("command.session.new")}
           </ButtonV2>
         )}
