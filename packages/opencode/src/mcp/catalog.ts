@@ -27,7 +27,7 @@ export async function paginate<T, R extends { nextCursor?: string }>(
     const page = await list(cursor)
     result.push(...items(page))
     if (page.nextCursor === undefined) return result
-    if (cursors.has(page.nextCursor)) throw new Error(`MCP list returned duplicate cursor: ${page.nextCursor}`)
+    if (cursors.has(page.nextCursor)) return result
     cursors.add(page.nextCursor)
     cursor = page.nextCursor
   }
