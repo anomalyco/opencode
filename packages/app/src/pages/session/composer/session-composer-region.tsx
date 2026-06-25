@@ -152,7 +152,7 @@ export function SessionComposerRegion(props: {
       data-component="session-prompt-dock"
       classList={{
         "w-full flex flex-col justify-center items-center pointer-events-none": true,
-        "shrink-0 pb-3 bg-background-stronger": props.placement !== "inline",
+        "shrink-0 pb-3 bg-v2-background-bg-base": props.placement !== "inline",
       }}
     >
       <div
