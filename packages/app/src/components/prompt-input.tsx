@@ -30,7 +30,7 @@ import {
   AgentPart,
   FileAttachmentPart,
 } from "@/context/prompt"
-import { useLayout } from "@/context/layout"
+import { getProjectAvatarVariant, useLayout } from "@/context/layout"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { useComments } from "@/context/comments"
@@ -38,6 +38,7 @@ import { Button } from "@opencode-ai/ui/button"
 import { DockShellForm, DockTray } from "@opencode-ai/ui/dock-surface"
 import { Icon, type IconProps } from "@opencode-ai/ui/icon"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
+import { ProjectAvatar } from "@opencode-ai/ui/v2/project-avatar-v2"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Select } from "@opencode-ai/ui/select"
@@ -71,7 +72,7 @@ import { createPromptInputTransientState } from "./prompt-input/transient-state"
 import { showToast } from "@/utils/toast"
 import { ImagePreview } from "@opencode-ai/ui/image-preview"
 import { pathKey } from "@/utils/path-key"
-import { displayName } from "@/pages/layout/helpers"
+import { displayName, getProjectAvatarSource } from "@/pages/layout/helpers"
 
 export type PromptInputState = ReturnType<typeof usePrompt>
 
@@ -100,10 +101,18 @@ export type PromptInputControls = {
     loading: boolean
   }
   projects: {
-    available: { name?: string; worktree: string; sandboxes?: string[] }[]
+    available: {
+      name?: string
+      id?: string
+      worktree: string
+      sandboxes?: string[]
+      icon?: { color?: string; url?: string; override?: string }
+      server?: { key: string; name: string }
+    }[]
     directory: string
-    select: (worktree: string) => void
-    add: (title: string) => void
+    server?: string
+    select: (worktree: string, server?: string) => void
+    add: (title: string, server?: string) => void
   }
   session: {
     id?: string
@@ -1397,7 +1406,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!directory) return
     const key = pathKey(directory)
     return projects().find(
-      (project) => pathKey(project.worktree) === key || project.sandboxes?.some((sandbox) => pathKey(sandbox) === key),
+      (project) =>
+        (!project.server || project.server.key === props.controls.projects.server) &&
+        (pathKey(project.worktree) === key || project.sandboxes?.some((sandbox) => pathKey(sandbox) === key)),
     )
   }
   const selectedProject = createMemo(() => projectForDirectory(props.controls.projects.directory))
@@ -1407,47 +1418,114 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     return projects().filter((project) => displayName(project).toLowerCase().includes(search))
   })
   const showAgentControl = createMemo(() => props.controls.agents.visible && props.controls.agents.options.length > 0)
-  const selectProject = (worktree: string) => {
+  const selectProject = (worktree: string, server?: string) => {
     setPicker({
       projectOpen: false,
       projectSearch: "",
     })
-    if (pathKey(worktree) === pathKey(selectedProject()?.worktree ?? "")) {
+    if (
+      pathKey(worktree) === pathKey(selectedProject()?.worktree ?? "") &&
+      server === selectedProject()?.server?.key
+    ) {
       restoreFocus()
       return
     }
-    props.controls.projects.select(worktree)
+    props.controls.projects.select(worktree, server)
     restoreFocus()
   }
-  const addProject = () => {
-    props.controls.projects.add(language.t("command.project.open"))
+  const addProject = (server?: string) => {
+    props.controls.projects.add(language.t("command.project.open"), server)
   }
 
-  const projectPickerState = createMemo<ComposerPickerState>(() => ({
-    open: picker.projectOpen,
+  const projectItems = createMemo<ComposerPickerItemState[]>(() =>
+    projectResults().map((project) => ({
+      leading: (
+        <ProjectAvatar
+          fallback={displayName(project)}
+          src={getProjectAvatarSource(project.id, project.icon)}
+          variant={getProjectAvatarVariant(project.icon?.color)}
+        />
+      ),
+      label: displayName(project),
+      selected:
+        selectedProject()?.worktree === project.worktree &&
+        selectedProject()?.server?.key === project.server?.key,
+      onSelect: () => selectProject(project.worktree, project.server?.key),
+    })),
+  )
+  const projectServers = createMemo(() =>
+    projects()
+      .map((project) => project.server)
+      .filter((server, index, all) => server && all.findIndex((item) => item?.key === server.key) === index),
+  )
+  const addProjectLabel = createMemo(() => language.t("session.new.project.add"))
+  const projectGroups = createMemo(() => {
+    if (projectServers().length <= 1) return
+    return projectServers()
+      .map((server) => ({
+        label: server!.name,
+        server: server!.key,
+        items: projectItems().filter((_, index) => projectResults()[index]?.server?.key === server!.key),
+        action: {
+          icon: "plus" as const,
+          label: addProjectLabel(),
+          onSelect: () => {
+            setPicker("projectOpen", false)
+            addProject(server!.key)
+          },
+        },
+      }))
+      .filter((group) => group.items.length > 0)
+  })
+  const projectPickerState: ComposerPickerState = {
+    get open() {
+      return picker.projectOpen
+    },
     trigger: {
       action: "prompt-project",
-      icon: "folder",
-      label: selectedProject() ? displayName(selectedProject()!) : language.t("session.new.project.new"),
+      get icon() {
+        return selectedProject() ? undefined : "folder"
+      },
+      get leading() {
+        const project = selectedProject()
+        if (!project) return
+        return (
+          <ProjectAvatar
+            fallback={displayName(project)}
+            src={getProjectAvatarSource(project.id, project.icon)}
+            variant={getProjectAvatarVariant(project.icon?.color)}
+          />
+        )
+      },
+      get label() {
+        const project = selectedProject()
+        return project ? displayName(project) : language.t("session.new.project.new")
+      },
       class: "max-w-[203px]",
-      style: control(),
+      get style() {
+        return control()
+      },
       onPress: () => setPicker("projectOpen", true),
     },
-    search: picker.projectSearch,
+    get search() {
+      return picker.projectSearch
+    },
     searchPlaceholder: language.t("session.new.project.search"),
     clearLabel: language.t("common.clear"),
-    items: projectResults().map((project) => ({
-      icon: "folder",
-      label: displayName(project),
-      selected: selectedProject()?.worktree === project.worktree,
-      onSelect: () => selectProject(project.worktree),
-    })),
+    get items() {
+      return projectItems()
+    },
+    get groups() {
+      return projectGroups()
+    },
     action: {
       icon: "plus",
-      label: language.t("session.new.project.add"),
+      get label() {
+        return addProjectLabel()
+      },
       onSelect: () => {
         setPicker("projectOpen", false)
-        void addProject()
+        addProject(projectServers()[0]?.key)
       },
     },
     onOpenChange: (open) => {
@@ -1457,7 +1535,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     onSearchInput: (value) => setPicker("projectSearch", value),
     onSearchClear: () => setPicker("projectSearch", ""),
     searchRef: (el) => (projectSearchRef = el),
-  }))
+  }
   const agentControlState = createMemo<ComposerAgentControlState>(() => ({
     title: language.t("command.agent.cycle"),
     keybind: command.keybind("agent.cycle"),
@@ -1666,7 +1744,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             </DockShellForm>
             <Show when={newSession() && selectedProject()}>
               <div class="flex h-7 min-w-0 items-center gap-0 px-2">
-                <ComposerPicker state={projectPickerState()} />
+                <ComposerPicker state={projectPickerState} />
               </div>
             </Show>
           </div>
@@ -2011,7 +2089,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 }
 
 type ComposerPickerItemState = {
-  icon: IconProps["name"]
+  icon?: IconProps["name"]
+  leading?: JSX.Element
   label: string
   selected?: boolean
   onSelect: () => void
@@ -2020,6 +2099,7 @@ type ComposerPickerItemState = {
 type ComposerPickerTriggerState = {
   action: string
   icon?: IconProps["name"]
+  leading?: JSX.Element
   label: string
   class?: string
   style: JSX.CSSProperties | undefined
@@ -2033,6 +2113,7 @@ type ComposerPickerState = {
   searchPlaceholder: string
   clearLabel: string
   items: ComposerPickerItemState[]
+  groups?: { label: string; server: string; items: ComposerPickerItemState[]; action: ComposerPickerItemState }[]
   action: ComposerPickerItemState
   listClass?: string
   searchRef: (el: HTMLInputElement) => void
@@ -2070,12 +2151,19 @@ function ComposerPickerTrigger(props: ComponentProps<"button"> & { state: Compos
       {...rest}
       data-action={local.state.action}
       type="button"
-      class={`flex h-7 min-w-0 items-center gap-1.5 rounded px-2 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-faint transition-colors hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none ${local.state.class ?? ""}`}
+      class={`flex h-7 min-w-0 items-center gap-1.5 rounded-sm px-2 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-faint transition-colors hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none ${local.state.class ?? ""}`}
       style={local.state.style}
       onClick={() => local.state.onPress()}
     >
-      <Show when={local.state.icon}>
-        {(icon) => <Icon name={icon()} size="small" class="shrink-0 text-v2-icon-icon-muted" />}
+      <Show
+        when={local.state.leading}
+        fallback={
+          <Show when={local.state.icon}>
+            {(icon) => <Icon name={icon()} size="small" class="shrink-0 text-v2-icon-icon-muted" />}
+          </Show>
+        }
+      >
+        {(leading) => leading()}
       </Show>
       <span class="min-w-0 truncate leading-5">{local.state.label}</span>
       <Icon name="chevron-down" size="small" class="shrink-0 text-v2-icon-icon-muted" />
@@ -2087,10 +2175,19 @@ function ComposerPickerMenuItem(props: { state: ComposerPickerItemState }) {
   return (
     <button
       type="button"
-      class="flex h-7 w-full items-center gap-2 rounded px-3 text-left text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
+      class="flex h-7 w-full items-center gap-2 rounded-sm px-3 text-left text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
       onClick={props.state.onSelect}
     >
-      <Icon name={props.state.icon} size="small" class="shrink-0 text-v2-icon-icon-base" />
+      <Show
+        when={props.state.leading}
+        fallback={
+          <Show when={props.state.icon}>
+            {(icon) => <Icon name={icon()} size="small" class="shrink-0 text-v2-icon-icon-base" />}
+          </Show>
+        }
+      >
+        {(leading) => leading()}
+      </Show>
       <span class="min-w-0 flex-1 truncate leading-5">{props.state.label}</span>
       <Show when={props.state.selected}>
         <Icon name="check-small" size="small" class="shrink-0 text-v2-icon-icon-base" />
@@ -2135,12 +2232,31 @@ function ComposerPicker(props: { state: ComposerPickerState }) {
                 </button>
               </Show>
             </div>
-            <For each={props.state.items}>{(item) => <ComposerPickerMenuItem state={item} />}</For>
+            <Show
+              when={props.state.groups}
+              fallback={<For each={props.state.items}>{(item) => <ComposerPickerMenuItem state={item} />}</For>}
+            >
+              {(groups) => (
+                <For each={groups()}>
+                  {(group) => (
+                    <div>
+                      <div class="flex h-7 select-none items-center pl-1.5 pr-3 text-[11px] font-[530] leading-none tracking-[0.05px] text-v2-text-text-faint">
+                        {group.label}
+                      </div>
+                      <For each={group.items}>{(item) => <ComposerPickerMenuItem state={item} />}</For>
+                      <ComposerPickerMenuItem state={group.action} />
+                    </div>
+                  )}
+                </For>
+              )}
+            </Show>
           </div>
-          <div class="h-px bg-v2-border-border-muted" />
-          <div class="flex flex-col p-0.5">
-            <ComposerPickerMenuItem state={props.state.action} />
-          </div>
+          <Show when={!props.state.groups}>
+            <div class="h-px bg-v2-border-border-muted" />
+            <div class="flex flex-col p-0.5">
+              <ComposerPickerMenuItem state={props.state.action} />
+            </div>
+          </Show>
         </KobaltePopover.Content>
       </KobaltePopover.Portal>
     </KobaltePopover>
