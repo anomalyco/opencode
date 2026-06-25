@@ -179,7 +179,10 @@ export interface Interface {
   readonly startAuth: (
     mcpName: string,
   ) => Effect.Effect<{ authorizationUrl: string; oauthState: string }, NotFoundError>
-  readonly authenticate: (mcpName: string) => Effect.Effect<Status, NotFoundError>
+  readonly authenticate: (
+    mcpName: string,
+    onAuthorization?: (authorizationUrl: string) => void,
+  ) => Effect.Effect<Status, NotFoundError>
   readonly finishAuth: (mcpName: string, authorizationCode: string) => Effect.Effect<Status, NotFoundError>
   readonly removeAuth: (mcpName: string) => Effect.Effect<void>
   readonly supportsOAuth: (mcpName: string) => Effect.Effect<boolean, NotFoundError>
@@ -858,7 +861,10 @@ export const layer = Layer.effect(
       )
     })
 
-    const authenticate = Effect.fn("MCP.authenticate")(function* (mcpName: string) {
+    const authenticate = Effect.fn("MCP.authenticate")(function* (
+      mcpName: string,
+      onAuthorization?: (authorizationUrl: string) => void,
+    ) {
       const result = yield* startAuth(mcpName)
       if (!result.authorizationUrl) {
         const client = "client" in result ? result.client : undefined
@@ -882,6 +888,7 @@ export const layer = Layer.effect(
       }
 
       const callbackPromise = McpOAuthCallback.waitForCallback(result.oauthState, mcpName)
+      onAuthorization?.(result.authorizationUrl)
 
       yield* Effect.tryPromise(() => open(result.authorizationUrl)).pipe(
         Effect.flatMap((subprocess) =>
