@@ -1077,3 +1077,182 @@ itFragmentFailure.live("session.processor effect tests flush partial v2 fragment
     { config: cfg },
   ),
 )
+
+// ---------------------------------------------------------------------------
+// Spurious Event Guard Tests
+// These tests verify that processor.ts guards correctly reject spurious
+// tool-input-delta and tool-input-end events after tool execution is complete.
+// See: docs/bug-fix-qwen-spurious-tool-events.md
+// ---------------------------------------------------------------------------
+
+it.live("session.processor effect tests ignore spurious tool-input-delta after tool-result", () =>
+  provideTmpdirServer(
+    ({ dir, llm }) =>
+      Effect.gen(function* () {
+        const database = yield* Database.Service
+        const { processors, session, provider } = yield* boot()
+
+        const bashTool = tool({
+          description: "run command",
+          parameters: z.object({ command: z.string() }),
+          execute: async ({ command }) => ({
+            title: "Bash",
+            output: `result: ${command}`,
+            metadata: {},
+          }),
+        })
+
+        // Normal tool call - processor will execute it
+        yield* llm.tool("bash", { command: "echo hello" })
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "run a command")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+        })
+
+        yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies SessionV1.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "run a command" }],
+          tools: { bash: bashTool },
+        })
+
+        // Verify: tool was executed successfully
+        const parts = yield* MessageV2.parts(msg.id)
+        const toolParts = parts.filter((p) => p.type === "tool")
+        expect(toolParts).toHaveLength(1)
+        expect(toolParts[0].tool).toBe("bash")
+        expect(toolParts[0].state.status).toBe("completed")
+      }),
+    { config: (url) => providerCfg(url) },
+  ),
+)
+
+it.live("session.processor effect tests ignore spurious tool-input-end after tool-result", () =>
+  provideTmpdirServer(
+    ({ dir, llm }) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+
+        const readTool = tool({
+          description: "read a file",
+          parameters: z.object({ path: z.string() }),
+          execute: async ({ path: p }) => ({
+            title: "Read",
+            output: `content of ${p}`,
+            metadata: {},
+          }),
+        })
+
+        // Normal tool call
+        yield* llm.tool("read", { path: "/tmp/test" })
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "read a file")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+        })
+
+        yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies SessionV1.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "read a file" }],
+          tools: { read: readTool },
+        })
+
+        // Verify: tool was executed successfully
+        const parts = yield* MessageV2.parts(msg.id)
+        const toolParts = parts.filter((p) => p.type === "tool")
+        expect(toolParts).toHaveLength(1)
+        expect(toolParts[0].tool).toBe("read")
+        expect(toolParts[0].state.status).toBe("completed")
+      }),
+    { config: (url) => providerCfg(url) },
+  ),
+)
+
+it.live("session.processor effect tests ignore spurious tool-input-delta without prior tool-input-start", () =>
+  provideTmpdirServer(
+    ({ dir, llm }) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+
+        // Simulate tool-input-delta arriving with no corresponding tool-input-start
+        yield* llm.push(
+          Stream.fromIterable([
+            LLMEvent.stepStart({ index: 0 }),
+            // SPURIOUS: tool-input-delta for a call ID that was never started
+            LLMEvent.toolInputDelta({ id: "call-never-started", name: "bash", text: '{"command":"echo"}' }),
+            LLMEvent.textStart({ id: "text-1" }),
+            LLMEvent.textDelta({ id: "text-1", text: "no tools needed" }),
+            LLMEvent.textEnd({ id: "text-1" }),
+            LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+            LLMEvent.finish({ reason: "stop" }),
+          ]),
+        )
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "test")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+        })
+
+        yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies SessionV1.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "test" }],
+          tools: {},
+        })
+
+        // Verify: no tool parts were created (spurious delta was ignored)
+        const parts = yield* MessageV2.parts(msg.id)
+        const toolParts = parts.filter((p) => p.type === "tool")
+        expect(toolParts).toHaveLength(0)
+      }),
+    { config: (url) => providerCfg(url) },
+  ),
+)
+

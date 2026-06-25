@@ -433,6 +433,10 @@ export const layer = Layer.effect(
 
           case "tool-input-delta":
             {
+              // Ignore spurious deltas for tool calls that have already been
+              // settled (e.g. OpenRouter can send tool-input-delta after
+              // tool-result). 
+              if (!(value.id in ctx.toolcalls)) return
               const toolCall = yield* ensureToolCall(value)
               const assistantMessageID = mirrorAssistant ? yield* requireV2AssistantMessage(toolCall.call) : undefined
               if (assistantMessageID) {
@@ -449,6 +453,9 @@ export const layer = Layer.effect(
             return
 
           case "tool-input-end": {
+            // Ignore spurious end for tool calls that were never started
+            // or have already been settled.
+            if (!(value.id in ctx.toolcalls)) return
             const toolCall = yield* ensureToolCall(value)
             // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
             if (mirrorAssistant) {
