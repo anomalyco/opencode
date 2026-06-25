@@ -697,7 +697,7 @@ function Prompt<const T extends Record<string, string>>(props: {
                 }}
               >
                 <text fg={option === store.selected ? selectedForeground(theme, theme.warning) : theme.textMuted}>
-                  {props.numbered ? `${index() + 1}. ${props.options[option]}` : props.options[option]}
+                  {props.numbered && index() < 9 ? `${index() + 1}. ${props.options[option]}` : props.options[option]}
                 </text>
               </box>
             )}

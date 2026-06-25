@@ -22,12 +22,19 @@ import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 import { TestTuiContexts } from "../../fixture/tui-environment"
 import { createFetch, eventSource } from "../../fixture/tui-sdk"
 
-async function wait(fn: () => boolean, timeout = 2000) {
+async function wait(fn: () => boolean | Promise<boolean>, timeout = 2000) {
   const start = Date.now()
-  while (!fn()) {
+  while (!(await fn())) {
     if (Date.now() - start > timeout) throw new Error("timed out waiting for condition")
     await Bun.sleep(10)
   }
+}
+
+async function waitForFrame(app: Awaited<ReturnType<typeof mount>>["app"], match: (frame: string) => boolean) {
+  await wait(async () => {
+    await app.renderOnce()
+    return match(app.captureCharFrame())
+  })
 }
 
 async function mount(input: { root: string; onReply: (reply: string) => void }) {
@@ -111,7 +118,10 @@ async function captureReply(
   const prompt = await mount({ root: tmp.path, onReply: (reply) => replies.push(reply) })
 
   try {
-    await Bun.sleep(10)
+    await waitForFrame(
+      prompt.app,
+      (frame) => frame.includes("1. Allow once") && frame.includes("2. Allow always") && frame.includes("3. Reject"),
+    )
     prompt.app.mockInput.pressKey(key)
     await confirm?.(prompt, replies)
 
@@ -126,7 +136,10 @@ test("permission prompt number keys choose matching permission responses", async
   expect(await captureReply("1")).toBe("once")
   expect(
     await captureReply("2", async (prompt, replies) => {
-      await Bun.sleep(20)
+      await waitForFrame(
+        prompt.app,
+        (frame) => frame.includes("Always allow") && frame.includes("Confirm") && frame.includes("Cancel"),
+      )
       expect(replies).toEqual([])
       prompt.app.mockInput.pressEnter()
     }),
