@@ -6,7 +6,8 @@
   "license": "MIT",
   "exports": {
     ".": "./src/index.ts",
-    "./*": "./src/*.ts"
+    "./*": "./src/*.ts",
+    "./v1/*": "./src/v1/*.ts"
   },
   "scripts": {
     "typecheck": "tsgo --noEmit"
