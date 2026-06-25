@@ -34,7 +34,6 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { InlineInput } from "@opencode-ai/ui/inline-input"
-import { Spinner } from "@opencode-ai/ui/spinner"
 import { SessionRetry } from "@opencode-ai/session-ui/session-retry"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import { StickyAccordionHeader } from "@opencode-ai/ui/sticky-accordion-header"
@@ -66,9 +65,7 @@ import { legacySessionHref, requireServerKey, sessionHref } from "@/utils/sessio
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { notifySessionTabsRemoved } from "@/components/titlebar-session-events"
-import { messageAgentColor } from "@/utils/agent"
 import { sessionTitle } from "@/utils/session-title"
-import { makeTimer } from "@solid-primitives/timer"
 import { scheduleConnectedMeasure } from "./measure"
 import { createTimelineProjection } from "./projection"
 import { MessageComment, SummaryDiff, TimelineRow, TimelineRowMap } from "./rows"
@@ -277,25 +274,7 @@ export function MessageTimeline(props: {
     if (!id) return idle
     return sync().data.session_status[id] ?? idle
   })
-  const working = createMemo(() => sessionStatus().type !== "idle")
   const sessionMessages = createMemo(() => (sessionID() ? (sync().data.message[sessionID()!] ?? []) : []))
-  const tint = createMemo(() => messageAgentColor(sessionMessages(), sync().data.agent))
-
-  const [timeoutDone, setTimeoutDone] = createSignal(true)
-
-  const workingStatus = createMemo<"hidden" | "showing" | "hiding">((prev) => {
-    if (working()) return "showing"
-    if (prev === "showing" || !timeoutDone()) return "hiding"
-    return "hidden"
-  })
-
-  createEffect(() => {
-    if (workingStatus() !== "hiding") return
-
-    setTimeoutDone(false)
-    makeTimer(() => setTimeoutDone(true), 260, setTimeout)
-  })
-
   const info = createMemo(() => {
     const id = sessionID()
     if (!id) return
@@ -1239,26 +1218,56 @@ export function MessageTimeline(props: {
   return (
     <div class="relative w-full h-full min-w-0">
       <div
-        class="absolute left-1/2 -translate-x-1/2 bottom-6 z-[60] pointer-events-none transition-all duration-200 ease-out"
+        class="absolute left-1/2 -translate-x-1/2 z-[60] pointer-events-none transition-all duration-200 ease-out"
         classList={{
+          "bottom-8": settings.general.newLayoutDesigns(),
+          "bottom-6": !settings.general.newLayoutDesigns(),
           "opacity-100 translate-y-0 scale-100": props.scroll.overflow && props.scroll.jump,
-          "opacity-0 translate-y-2 scale-95 pointer-events-none": !props.scroll.overflow || !props.scroll.jump,
+          "opacity-0 translate-y-2 pointer-events-none": !props.scroll.overflow || !props.scroll.jump,
+          "scale-[0.8]": (!props.scroll.overflow || !props.scroll.jump) && settings.general.newLayoutDesigns(),
+          "scale-95": (!props.scroll.overflow || !props.scroll.jump) && !settings.general.newLayoutDesigns(),
         }}
       >
-        <button
-          class="pointer-events-auto flex items-center justify-center w-10 h-8 bg-transparent border-none cursor-pointer p-0 group"
-          onClick={props.onResumeScroll}
+        <Show
+          when={settings.general.newLayoutDesigns()}
+          fallback={
+            <button
+              type="button"
+              aria-label={language.t("session.messages.jumpToLatest")}
+              class="pointer-events-auto flex items-center justify-center w-10 h-8 bg-transparent border-none cursor-pointer p-0 group"
+              onClick={props.onResumeScroll}
+            >
+              <div
+                class="flex items-center justify-center w-8 h-6 rounded-[6px] border border-border-weaker-base bg-[color-mix(in_srgb,var(--surface-raised-stronger-non-alpha)_80%,transparent)] backdrop-blur-[0.75px] transition-colors group-hover:border-[var(--border-weak-base)] group-hover:[--icon-base:var(--icon-hover)]"
+                style={{
+                  "box-shadow":
+                    "0 51px 60px 0 rgba(0,0,0,0.10), 0 15px 18px 0 rgba(0,0,0,0.12), 0 6.386px 7.513px 0 rgba(0,0,0,0.12), 0 2.31px 2.717px 0 rgba(0,0,0,0.20)",
+                }}
+              >
+                <Icon name="arrow-down-to-line" size="small" />
+              </div>
+            </button>
+          }
         >
-          <div
-            class="flex items-center justify-center w-8 h-6 rounded-[6px] border border-border-weaker-base bg-[color-mix(in_srgb,var(--surface-raised-stronger-non-alpha)_80%,transparent)] backdrop-blur-[0.75px] transition-colors group-hover:border-[var(--border-weak-base)] group-hover:[--icon-base:var(--icon-hover)]"
+          <button
+            type="button"
+            aria-label={language.t("session.messages.jumpToLatest")}
+            class="pointer-events-auto flex items-center justify-center w-8 h-7 px-2 py-1.5 rounded-lg border-none cursor-pointer text-v2-text-text-base backdrop-blur-[2px]"
             style={{
-              "box-shadow":
-                "0 51px 60px 0 rgba(0,0,0,0.10), 0 15px 18px 0 rgba(0,0,0,0.12), 0 6.386px 7.513px 0 rgba(0,0,0,0.12), 0 2.31px 2.717px 0 rgba(0,0,0,0.20)",
+              background: "color-mix(in srgb, var(--v2-background-bg-base) 92%, transparent)",
+              "box-shadow": "var(--v2-elevation-raised), 0px 2px 8px var(--v2-background-bg-base)",
             }}
+            onClick={props.onResumeScroll}
           >
-            <Icon name="arrow-down-to-line" size="small" />
-          </div>
-        </button>
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path
+                d="M12.3333 8.66665L8 13L3.66667 8.66665M8 12.6667V2.83332"
+                stroke="currentColor"
+                stroke-linecap="square"
+              />
+            </svg>
+          </button>
+        </Show>
       </div>
       <ScrollView
         viewportRef={bindListRoot}
@@ -1308,23 +1317,6 @@ export function MessageTimeline(props: {
                       /
                     </span>
                   </Show>
-                  <div
-                    class="shrink-0 flex items-center justify-center overflow-hidden transition-[width,margin] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
-                    style={{
-                      width: working() ? "16px" : "0px",
-                      "margin-right": working() ? "8px" : "0px",
-                    }}
-                    aria-hidden="true"
-                  >
-                    <Show when={workingStatus() !== "hidden"}>
-                      <div
-                        class="transition-opacity duration-200 ease-out"
-                        classList={{ "opacity-0": workingStatus() === "hiding" }}
-                      >
-                        <Spinner class="size-4" style={{ color: tint() ?? "var(--icon-interactive-base)" }} />
-                      </div>
-                    </Show>
-                  </div>
                   <Show when={childTitle() || title.editing}>
                     <Show
                       when={title.editing}

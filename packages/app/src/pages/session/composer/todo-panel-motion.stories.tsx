@@ -50,6 +50,25 @@ const btn = (accent?: boolean) =>
     "font-size": "13px",
   }) as const
 
+const controls = {
+  agents: { available: [], options: ["build"], current: "build", loading: false, visible: true, select: () => {} },
+  model: {
+    selection: {
+      current: () => ({ id: "claude-3-7-sonnet", name: "Claude 3.7 Sonnet", provider: { id: "anthropic" } }),
+      variant: { list: () => [], current: () => undefined, set: () => {} },
+    },
+    paid: true,
+    loading: false,
+  },
+  projects: { available: [], directory: "/tmp/story", select: () => {}, add: () => {} },
+  session: {
+    id: "story-session",
+    tabs: { active: () => undefined, all: () => [], open: () => {}, setActive: () => {} },
+    reviewPanel: { opened: () => false, open: () => {} },
+  },
+  newLayoutDesigns: true,
+}
+
 const css = `
 [data-component="todo-stage"] {
   display: grid;
@@ -132,6 +151,7 @@ export const Playground = {
     const global = useServerSync()
     const [cfg, setCfg] = createStore({
       open: true,
+      collapsed: false,
       step: 1,
       dockOpenDuration: 0.3,
       dockOpenBounce: 0,
@@ -170,7 +190,6 @@ export const Playground = {
     const countWidthDuration = () => cfg.countWidthDuration
     const state = createSessionComposerState({ closeMs: () => Math.round(dockCloseDuration() * 1000) })
     let frame
-    let composerRef
     let scrollRef
 
     const todos = createMemo<Todo[]>(() => {
@@ -196,15 +215,8 @@ export const Playground = {
       scrollRef.scrollTop = scrollRef.scrollHeight
     }
 
-    const collapsed = () =>
-      !!composerRef?.querySelector('[data-action="session-todo-toggle-button"][data-collapsed="true"]')
-
-    const setCollapsed = (value: boolean) => {
-      const button = composerRef?.querySelector('[data-action="session-todo-toggle-button"]')
-      if (!(button instanceof HTMLButtonElement)) return
-      if (collapsed() === value) return
-      button.click()
-    }
+    const collapsed = () => cfg.collapsed
+    const setCollapsed = (value: boolean) => setCfg("collapsed", value)
 
     const openDock = () => {
       clear()
@@ -267,14 +279,21 @@ export const Playground = {
                   </div>
                 </div>
 
-                <div ref={composerRef}>
+                <div>
                   <SessionComposerRegion
                     state={state}
+                    sessionKey="story-session"
+                    sessionID="story-session"
+                    controls={controls}
+                    promptInput={{
+                      submission: { abort: () => {}, handleSubmit: (event) => event.preventDefault() },
+                      ref: () => {},
+                      newSessionWorktree: "",
+                      onNewSessionWorktreeReset: () => {},
+                    }}
+                    todo={{ collapsed: collapsed(), onToggle: () => setCollapsed(!collapsed()) }}
+                    ready
                     centered={false}
-                    inputRef={() => {}}
-                    newSessionWorktree=""
-                    onNewSessionWorktreeReset={() => {}}
-                    onSubmit={() => {}}
                     onResponseSubmit={pin}
                     setPromptDockRef={() => {}}
                     dockOpenVisualDuration={dockOpenDuration()}
