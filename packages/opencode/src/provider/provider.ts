@@ -1874,9 +1874,9 @@ export const layer = Layer.effect(
       }
 
       const priority = providerID.startsWith("opencode")
-        ? ["nano"]
+        ? ["gpt-nano"]
         : providerID.startsWith("github-copilot")
-          ? ["mini", ...smallModelFamilyPriority.filter((family) => family !== "mini")]
+          ? ["gpt-mini", ...smallModelFamilyPriority]
           : smallModelFamilyPriority
       const models = sortBy(
         Object.values(provider.models),
@@ -1884,12 +1884,7 @@ export const layer = Layer.effect(
         [(model) => model.id, "desc"],
       )
       for (const family of priority) {
-        const candidates = models.filter((model) =>
-          (model.family || model.id)
-            .toLowerCase()
-            .split(/[^a-z0-9]+/)
-            .includes(family),
-        )
+        const candidates = models.filter((model) => model.family === family)
         if (providerID === ProviderV2.ID.amazonBedrock) {
           const crossRegionPrefixes = ["global.", "us.", "eu."]
 
@@ -1966,7 +1961,7 @@ export const defaultLayer = Layer.suspend(() =>
 )
 
 const priority = ["gpt-5", "claude-sonnet-4", "big-pickle", "gemini-3-pro"]
-const smallModelFamilyPriority = ["flash", "nano", "mini", "lite", "small", "fast", "haiku"]
+const smallModelFamilyPriority = ["gemini-flash", "gpt-nano", "claude-haiku"]
 export function sort<T extends { id: string }>(models: T[]) {
   return sortBy(
     models,

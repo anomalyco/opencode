@@ -686,7 +686,7 @@ it.instance(
 )
 
 it.instance(
-  "getSmallModel matches complete family segments",
+  "getSmallModel matches exact model families",
   Effect.gen(function* () {
     const model = yield* Provider.use.getSmallModel(ProviderV2.ID.make("test-provider"))
     expect(model?.id).toBe(ModelV2.ID.make("claude-haiku"))
@@ -698,7 +698,7 @@ it.instance(
           name: "Test Provider",
           npm: "@ai-sdk/openai-compatible",
           models: {
-            "minimax-fast": { family: "minimax", release_date: "2026-06-01" },
+            "glm-flash": { family: "glm-flash", release_date: "2026-06-01" },
             "claude-haiku": { family: "claude-haiku", release_date: "2026-01-01" },
           },
           options: { apiKey: "test-key" },
@@ -709,10 +709,10 @@ it.instance(
 )
 
 it.instance(
-  "getSmallModel falls back to model ID when family is missing",
+  "getSmallModel ignores model IDs without family metadata",
   Effect.gen(function* () {
     const model = yield* Provider.use.getSmallModel(ProviderV2.ID.make("test-provider"))
-    expect(model?.id).toBe(ModelV2.ID.make("gpt-5-nano"))
+    expect(model).toBeUndefined()
   }),
   {
     config: {
