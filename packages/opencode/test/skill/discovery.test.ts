@@ -136,4 +136,61 @@ describe("Discovery.pull", () => {
       expect(downloadCount).toBe(firstCount)
     }),
   )
+
+  it.live("re-downloads a skill when its version changes and caches when it does not", () =>
+    Effect.gen(function* () {
+      const fsys = yield* FSUtil.Service
+      const discovery = yield* Discovery.Service
+
+      let version = "1"
+      let skillBody = "version-1-content"
+      let count = 0
+
+      const server = Bun.serve({
+        port: 0,
+        async fetch(req) {
+          const url = new URL(req.url)
+          if (url.pathname === "/index.json") {
+            return new Response(
+              JSON.stringify({ skills: [{ name: "versioned", files: ["SKILL.md"], version }] }),
+              { headers: { "content-type": "application/json" } },
+            )
+          }
+          if (url.pathname === "/versioned/SKILL.md") {
+            count++
+            return new Response(skillBody)
+          }
+          return new Response("Not Found", { status: 404 })
+        },
+      })
+
+      const base = `http://localhost:${server.port}/`
+      const skillDir = path.join(cacheDir, "versioned")
+      const manifest = path.join(cacheDir, "versions.json")
+      yield* Effect.promise(() => rm(skillDir, { recursive: true, force: true }))
+      yield* Effect.promise(() => rm(manifest, { force: true }))
+
+      try {
+        yield* discovery.pull(base)
+        expect(count).toBe(1)
+        expect(yield* fsys.readFileString(path.join(skillDir, "SKILL.md"))).toBe("version-1-content")
+
+        yield* discovery.pull(base)
+        expect(count).toBe(1)
+
+        version = "2"
+        skillBody = "version-2-content"
+        yield* discovery.pull(base)
+        expect(count).toBe(2)
+        expect(yield* fsys.readFileString(path.join(skillDir, "SKILL.md"))).toBe("version-2-content")
+
+        yield* discovery.pull(base)
+        expect(count).toBe(2)
+      } finally {
+        void server.stop()
+        yield* Effect.promise(() => rm(skillDir, { recursive: true, force: true }))
+        yield* Effect.promise(() => rm(manifest, { force: true }))
+      }
+    }),
+  )
 })

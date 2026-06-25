@@ -1,7 +1,7 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { httpClient, path } from "@opencode-ai/core/effect/layer-node-platform"
 import { NodePath } from "@effect/platform-node"
-import { Effect, Layer, Path, Schema, Context } from "effect"
+import { Effect, Layer, Option, Path, Schema, Context } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { withTransientReadRetry } from "@/util/effect-http-client"
 import { FSUtil } from "@opencode-ai/core/fs-util"
@@ -13,6 +13,7 @@ const fileConcurrency = 8
 class IndexSkill extends Schema.Class<IndexSkill>("IndexSkill")({
   name: Schema.String,
   files: Schema.Array(Schema.String),
+  version: Schema.optional(Schema.String),
 }) {}
 
 class Index extends Schema.Class<Index>("Index")({
@@ -32,9 +33,24 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | Path.Path | Htt
     const path = yield* Path.Path
     const http = HttpClient.filterStatusOk(withTransientReadRetry(yield* HttpClient.HttpClient))
     const cache = path.join(Global.Path.cache, "skills")
+    const manifestPath = path.join(cache, "versions.json")
+    const parseManifest = Schema.decodeUnknownOption(Schema.UnknownFromJsonString)
+    const decodeManifest = Schema.decodeUnknownOption(Schema.Record(Schema.String, Schema.String))
 
-    const download = Effect.fn("Discovery.download")(function* (url: string, dest: string) {
-      if (yield* fs.exists(dest).pipe(Effect.orDie)) return true
+    const readManifest = Effect.fn("Discovery.readManifest")(function* () {
+      const text = yield* fs.readFileString(manifestPath).pipe(Effect.catch(() => Effect.succeed("")))
+      return Option.getOrElse(Option.flatMap(parseManifest(text), decodeManifest), () => ({}) as Record<string, string>)
+    })
+
+    const writeManifest = Effect.fn("Discovery.writeManifest")(function* (manifest: Record<string, string>) {
+      yield* fs.ensureDir(cache).pipe(Effect.orDie)
+      yield* fs.writeFileString(manifestPath, JSON.stringify(manifest, null, 2)).pipe(
+        Effect.catch((err) => Effect.logError("failed to persist skill version manifest", { error: err })),
+      )
+    })
+
+    const download = Effect.fn("Discovery.download")(function* (url: string, dest: string, force = false) {
+      if (!force && (yield* fs.exists(dest).pipe(Effect.orDie))) return true
 
       return yield* HttpClientRequest.get(url).pipe(
         http.execute,
@@ -71,26 +87,33 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | Path.Path | Htt
       )
       const list = data.skills.filter((skill) => skill.files.includes("SKILL.md"))
 
+      const manifest = yield* readManifest()
+      const next: Record<string, string> = {}
+
       const dirs = yield* Effect.forEach(
         list,
         (skill) =>
           Effect.gen(function* () {
             const root = path.join(cache, skill.name)
+            const force = skill.version !== undefined && manifest[skill.name] !== skill.version
 
             yield* Effect.forEach(
               skill.files,
-              (file) => download(new URL(file, `${host}/${skill.name}/`).href, path.join(root, file)),
+              (file) => download(new URL(file, `${host}/${skill.name}/`).href, path.join(root, file), force),
               {
                 concurrency: fileConcurrency,
               },
             )
 
             const md = path.join(root, "SKILL.md")
-            return (yield* fs.exists(md).pipe(Effect.orDie)) ? root : null
+            const exists = yield* fs.exists(md).pipe(Effect.orDie)
+            if (exists && skill.version !== undefined) next[skill.name] = skill.version
+            return exists ? root : null
           }),
         { concurrency: skillConcurrency },
       )
 
+      if (Object.keys(next).length > 0 || Object.keys(manifest).length > 0) yield* writeManifest(next)
       return dirs.filter((dir): dir is string => dir !== null)
     })
 
