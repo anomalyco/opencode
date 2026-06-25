@@ -1,7 +1,7 @@
 [data-component="markdown"] {
-  --markdown-inline-code-path-color: var(--v2-blue-900);
-  --markdown-inline-code-color: var(--v2-blue-800);
-  --markdown-inline-code-bg-mix: 10%;
+  --markdown-inline-code-path-color: var(--v2-text-text-code-accent);
+  --markdown-inline-code-color: var(--v2-text-text-code-accent);
+  --markdown-inline-code-bg-mix: 8%;
   --markdown-shell-code-background: var(--v2-background-bg-layer-02);
   --markdown-shell-code-border: var(--v2-border-border-muted);
   --markdown-shell-code-color: var(--v2-text-text-base);
@@ -257,7 +257,7 @@
     }
   }
 
-  :where(p, li, blockquote, a) > code {
+  :not(pre) > code {
     font-family: var(--font-family-mono);
     font-feature-settings: var(--font-family-mono--font-feature-settings);
     color: var(--v2-text-text-base);
@@ -267,13 +267,8 @@
     background: color-mix(in oklch, var(--v2-text-text-base) var(--markdown-inline-code-bg-mix), transparent);
   }
 
-  :where(p, li, blockquote, a) > code:not([data-inline-code-kind="path"]):not([data-inline-code-kind="url"]) {
-    background: color-mix(in oklch, var(--v2-text-text-base) var(--markdown-inline-code-bg-mix), transparent);
-  }
-
-  :where(p, li, blockquote, a) > code[data-inline-code-kind="path"] {
+  :not(pre) > code[data-inline-code-kind="path"] {
     color: var(--markdown-inline-code-path-color);
-    font-weight: var(--font-weight-custom);
     background: color-mix(
       in oklch,
       var(--markdown-inline-code-path-color) var(--markdown-inline-code-bg-mix),
@@ -281,7 +276,7 @@
     );
   }
 
-  :where(p, li, blockquote, a) > code[data-inline-code-kind="url"] {
+  a.external-link > code[data-inline-code-kind="url"] {
     color: var(--markdown-inline-code-color);
     background: none;
     text-decoration: underline;
@@ -322,12 +317,6 @@
     margin: 1.5rem 0;
     display: block;
   }
-}
-
-:root[data-color-scheme="dark"] [data-component="markdown"] {
-  --markdown-inline-code-path-color: var(--v2-blue-400);
-  --markdown-inline-code-color: var(--v2-blue-400);
-  /*--markdown-inline-code-bg-mix: 10%;*/
 }
 
 [data-component="markdown"] a.external-link:hover > code {

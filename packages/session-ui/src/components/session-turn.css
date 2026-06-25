@@ -102,7 +102,7 @@
     position: sticky;
     top: var(--sticky-accordion-top, 0px);
     z-index: 20;
-    background-color: var(--background-stronger);
+    background-color: var(--v2-background-bg-base);
     height: 44px;
   }
 

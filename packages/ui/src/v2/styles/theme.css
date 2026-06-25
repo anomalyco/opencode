@@ -22,6 +22,7 @@
     --v2-text-text-contrast: var(--v2-grey-50);
     --v2-text-text-accent: var(--v2-blue-600);
     --v2-text-text-accent-hover: var(--v2-blue-700);
+    --v2-text-text-code-accent: var(--v2-blue-900);
 
     /* ── Icon ── */
     --v2-icon-icon-base: var(--v2-grey-800);
@@ -141,6 +142,7 @@
       --v2-text-text-contrast: var(--v2-grey-100);
       --v2-text-text-accent: var(--v2-blue-400);
       --v2-text-text-accent-hover: var(--v2-blue-300);
+      --v2-text-text-code-accent: var(--v2-blue-400);
 
       --v2-icon-icon-base: var(--v2-grey-400);
       --v2-icon-icon-muted: var(--v2-grey-600);
@@ -243,6 +245,7 @@
     --v2-text-text-contrast: var(--v2-grey-50);
     --v2-text-text-accent: var(--v2-blue-600);
     --v2-text-text-accent-hover: var(--v2-blue-700);
+    --v2-text-text-code-accent: var(--v2-blue-900);
 
     --v2-icon-icon-base: var(--v2-grey-800);
     --v2-icon-icon-muted: var(--v2-grey-600);
@@ -352,6 +355,7 @@
     --v2-text-text-contrast: var(--v2-grey-50);
     --v2-text-text-accent: var(--v2-blue-400);
     --v2-text-text-accent-hover: var(--v2-blue-300);
+    --v2-text-text-code-accent: var(--v2-blue-400);
 
     --v2-icon-icon-base: var(--v2-grey-400);
     --v2-icon-icon-muted: var(--v2-grey-600);
