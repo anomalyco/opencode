@@ -18,6 +18,8 @@ export function TabNavItem(props: {
   href: string
   server: ServerConnection.Key
   session: () => Session | undefined
+  sessionData?: Record<string, Session | undefined>
+  sessionId?: string
   onTitleChange?: (title: string) => void
   onTitleChangeFailed?: (title: string) => void
   onClose: () => void
@@ -130,7 +132,8 @@ export function TabNavItem(props: {
   createEffect(() => {
     if (editing()) return
     if (!titleEl) return
-    const title = props.session()?.title
+    const title =
+      (props.sessionData?.[props.sessionId ?? ""] ?? props.session())?.title
     if (title === undefined) return
     titleEl.textContent = title
   })

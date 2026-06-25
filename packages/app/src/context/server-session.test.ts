@@ -95,4 +95,17 @@ describe("server session", () => {
 
     expect(ctx.store.data.message.active?.map((message) => message.id)).toEqual(["message"])
   })
+
+  test("reflects title update in store after session.updated event", () => {
+    const ctx = setup({})
+    ctx.store.apply({ type: "session.created", properties: { info: session("s1") } })
+    expect(ctx.store.data.info.s1!.title).toBe("s1")
+
+    const updated = { ...session("s1"), title: "renamed" }
+    ctx.store.apply({ type: "session.updated", properties: { info: updated } })
+
+    expect(ctx.store.data.info.s1!.title).toBe("renamed")
+    expect(ctx.store.get("s1")?.title).toBe("renamed")
+    expect(ctx.store.peek("s1")?.title).toBe("renamed")
+  })
 })

@@ -117,6 +117,8 @@ function SessionTabSlot(props: {
         href={tabHref(props.tab)}
         server={props.tab.server}
         session={session}
+        sessionData={props.serverCtx()?.sync.session.data.info}
+        sessionId={props.tab.sessionId}
         onTitleChange={(title) => {
           const value = session()
           const ctx = props.serverCtx()
