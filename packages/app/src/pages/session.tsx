@@ -73,6 +73,7 @@ import { formatServerError } from "@/utils/server-errors"
 import { legacySessionHref, requireServerKey, sessionHref } from "@/utils/session-route"
 import { useUsageExceededDialogs } from "./session/usage-exceeded-dialogs"
 import { createSessionOwnership } from "./session/session-ownership"
+import { restoreSessionScrollPosition, shouldResumeSessionAutoScroll } from "./session/session-scroll"
 
 type FollowupItem = FollowupDraft & { id: string }
 type FollowupEdit = Pick<FollowupItem, "id" | "prompt" | "context">
@@ -1076,12 +1077,19 @@ export default function Page() {
     working: () => true,
     overflowAnchor: "none",
   })
+  const shouldResumeAutoScroll = () =>
+    shouldResumeSessionAutoScroll({
+      locationHash: location.hash,
+      messageId: store.messageId,
+      pendingMessage: ui.pendingMessage,
+      savedScroll: view().scroll("session"),
+    })
   createEffect(
     on(
       () => params.id,
       (id, previous) => {
         if (!id || !previous || id === previous) return
-        if (location.hash || store.messageId || ui.pendingMessage) return
+        if (!shouldResumeAutoScroll()) return
         autoScroll.resume()
       },
     ),
@@ -1119,6 +1127,43 @@ export default function Page() {
     })
   }
 
+  let sessionScrollRestoreFrame: number | undefined
+  const persistSessionScroll = (el: HTMLDivElement) => {
+    view().setScroll("session", {
+      x: el.scrollLeft,
+      y: el.scrollTop,
+    })
+  }
+
+  const restoreSessionScroll = () => {
+    const el = scroller
+    if (!el) return
+
+    const next = restoreSessionScrollPosition({
+      savedScroll: view().scroll("session"),
+      clientWidth: el.clientWidth,
+      clientHeight: el.clientHeight,
+      scrollWidth: el.scrollWidth,
+      scrollHeight: el.scrollHeight,
+    })
+    if (!next) return
+
+    if (el.scrollLeft !== next.x) el.scrollLeft = next.x
+    if (el.scrollTop !== next.y) el.scrollTop = next.y
+    if (next.awayFromBottom) autoScroll.pause()
+
+    scheduleScrollState(el)
+  }
+
+  const queueSessionScrollRestore = () => {
+    if (sessionScrollRestoreFrame !== undefined) return
+
+    sessionScrollRestoreFrame = requestAnimationFrame(() => {
+      sessionScrollRestoreFrame = undefined
+      restoreSessionScroll()
+    })
+  }
+
   const resumeScroll = () => {
     setStore("messageId", undefined)
     autoScroll.resume()
@@ -1149,6 +1194,7 @@ export default function Page() {
     autoScroll.scrollRef(el)
     if (!el) return
     scheduleScrollState(el)
+    queueSessionScrollRestore()
     fill()
   }
 
@@ -1161,6 +1207,7 @@ export default function Page() {
     () => {
       const el = scroller
       if (el) scheduleScrollState(el)
+      queueSessionScrollRestore()
       fill()
     },
   )
@@ -1203,6 +1250,7 @@ export default function Page() {
   }
 
   onCleanup(() => {
+    if (sessionScrollRestoreFrame !== undefined) cancelAnimationFrame(sessionScrollRestoreFrame)
     if (historyContinuationFrame !== undefined) cancelAnimationFrame(historyContinuationFrame)
   })
 
@@ -1733,6 +1781,7 @@ export default function Page() {
                         scroll={ui.scroll}
                         onResumeScroll={resumeScroll}
                         setScrollRef={setScrollRef}
+                        onPersistScrollPosition={persistSessionScroll}
                         onScheduleScrollState={scheduleScrollState}
                         onAutoScrollHandleScroll={autoScroll.handleScroll}
                         onMarkScrollGesture={markScrollGesture}
@@ -1740,9 +1789,7 @@ export default function Page() {
                         onUserScroll={markUserScroll}
                         onHistoryScroll={onHistoryScroll}
                         onAutoScrollInteraction={autoScroll.handleInteraction}
-                        shouldAnchorBottom={() =>
-                          !location.hash && !store.messageId && !ui.pendingMessage && !autoScroll.userScrolled()
-                        }
+                        shouldAnchorBottom={() => shouldResumeAutoScroll() && !autoScroll.userScrolled()}
                         centered={centered()}
                         setContentRef={(el) => {
                           content = el
@@ -1750,6 +1797,7 @@ export default function Page() {
 
                           const root = scroller
                           if (root) scheduleScrollState(root)
+                          queueSessionScrollRestore()
                         }}
                         userMessages={visibleUserMessages()}
                         setHistoryAnchor={(handlers) => {
