@@ -417,8 +417,8 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
               <div
                 class="h-full flex-1 overflow-hidden flex flex-row items-center gap-1.5 px-2 md:pr-3"
                 classList={{
-                  "pt-2": !bottom(),
-                  "pb-2": bottom(),
+                  "translate-y-1": !bottom(),
+                  "-translate-y-1": bottom(),
                   "md:pl-2": mac(),
                   "md:pl-4": !mac(),
                 }}
