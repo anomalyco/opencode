@@ -2,8 +2,8 @@ import { Show, createEffect, createMemo, createResource, untrack } from "solid-j
 import { createStore } from "solid-js/store"
 import { useSearchParams } from "@solidjs/router"
 import { NewSessionDesignView } from "@/components/session"
-import { NewSessionComposer } from "@/components/new-session-composer"
-import { createPromptProjectController } from "@/components/prompt-project-selector"
+import { PromptInput } from "@/components/prompt-input"
+import { PromptProjectSelector, createPromptProjectController } from "@/components/prompt-project-selector"
 import { useComments } from "@/context/comments"
 import { usePrompt } from "@/context/prompt"
 import { useSDK } from "@/context/sdk"
@@ -91,18 +91,28 @@ export default function NewSessionPage() {
                     </div>
                   }
                 >
-                  <NewSessionComposer
-                    project={projectController}
-                    input={() => ({
-                      controls: inputController(),
-                      ref: (el) => {
+                  <div class="flex flex-col gap-3">
+                    <PromptInput
+                      controls={inputController()}
+                      variant="new-session"
+                      ref={(el) => {
                         inputRef = el
-                      },
-                      newSessionWorktree: newSessionWorktree(),
-                      onNewSessionWorktreeReset: () => setStore("worktree", "main"),
-                      onSubmit: () => comments.clear(),
-                    })}
-                  />
+                      }}
+                      newSessionWorktree={newSessionWorktree()}
+                      onNewSessionWorktreeReset={() => setStore("worktree", "main")}
+                      onSubmit={() => comments.clear()}
+                      toolbar={
+                        <Show when={!projectController.selected()}>
+                          <PromptProjectSelector controller={projectController} empty />
+                        </Show>
+                      }
+                    />
+                    <Show when={projectController.selected()}>
+                      <div class="flex h-7 min-w-0 items-center gap-0 px-2">
+                        <PromptProjectSelector controller={projectController} />
+                      </div>
+                    </Show>
+                  </div>
                 </Show>
               </div>
             </NewSessionDesignView>
