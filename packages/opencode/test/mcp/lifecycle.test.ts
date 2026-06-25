@@ -1,8 +1,12 @@
 import path from "node:path"
 import { pathToFileURL } from "node:url"
 import { expect, mock, beforeEach } from "bun:test"
-import { ListRootsRequestSchema, ToolListChangedNotificationSchema } from "@modelcontextprotocol/sdk/types.js"
-import { Cause, Effect, Exit } from "effect"
+import {
+  ElicitRequestSchema,
+  ListRootsRequestSchema,
+  ToolListChangedNotificationSchema,
+} from "@modelcontextprotocol/sdk/types.js"
+import { Cause, Effect, Exit, Fiber } from "effect"
 import type { MCP as MCPNS } from "../../src/mcp/index"
 import { testEffect } from "../lib/effect"
 import { TestInstance } from "../fixture/fixture"
@@ -46,7 +50,7 @@ interface MockClientState {
     { resourceTemplates: Array<{ name: string; uriTemplate: string; description?: string }>; nextCursor?: string }
   >
   closed: boolean
-  clientOptions?: { capabilities?: { roots?: { listChanged?: boolean } } }
+  clientOptions?: { capabilities?: { roots?: { listChanged?: boolean }; elicitation?: object } }
   requestHandlers: Map<unknown, (...args: any[]) => Promise<any>>
   notificationHandlers: Map<unknown, (...args: any[]) => any>
 }
@@ -273,6 +277,7 @@ beforeEach(() => {
 
 // Import after mocks
 const { MCP } = await import("../../src/mcp/index")
+const { McpElicitation } = await import("../../src/mcp/elicitation")
 const { McpOAuthCallback } = await import("../../src/mcp/oauth-callback")
 
 const it = testEffect(MCP.defaultLayer)
@@ -299,6 +304,106 @@ it.instance(
         expect(handler).toBeDefined()
         const result = yield* Effect.promise(() => handler?.() ?? Promise.reject(new Error("roots handler missing")))
         expect(result).toEqual({ roots: [{ uri: pathToFileURL(directory).href }] })
+      }),
+    ),
+  { config: { mcp: {} } },
+)
+
+it.instance(
+  "advertises MCP form elicitation and cancels unsupported schemas",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "elicit"
+        yield* mcp.add("elicit", { type: "local", command: ["echo", "test"] })
+
+        const state = getOrCreateClientState("elicit")
+        expect(state.clientOptions?.capabilities?.elicitation).toEqual({ form: {} })
+
+        const handler = state.requestHandlers.get(ElicitRequestSchema)
+        expect(handler).toBeDefined()
+        const schemaResult = yield* Effect.promise(
+          () =>
+            handler?.({
+              method: "elicitation/create",
+              params: {
+                message: "Need a string",
+                requestedSchema: {
+                  type: "object",
+                  properties: {
+                    value: { type: "string" },
+                  },
+                },
+              },
+            }) ?? Promise.reject(new Error("elicitation handler missing")),
+        )
+        expect(schemaResult).toEqual({ action: "cancel" })
+
+        const urlResult = yield* Effect.promise(
+          () =>
+            handler?.({
+              method: "elicitation/create",
+              params: {
+                mode: "url",
+                message: "Open this URL?",
+                url: "https://example.com",
+              },
+            }) ?? Promise.reject(new Error("elicitation handler missing")),
+        )
+        expect(urlResult).toEqual({ action: "cancel" })
+      }),
+    ),
+  { config: { mcp: {} } },
+)
+
+it.instance(
+  "routes supported MCP form elicitation through the pending request service",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "elicit-boolean"
+        yield* mcp.add("elicit-boolean", { type: "local", command: ["echo", "test"] })
+
+        const handler = getOrCreateClientState("elicit-boolean").requestHandlers.get(ElicitRequestSchema)
+        expect(handler).toBeDefined()
+        const fiber = yield* Effect.promise(
+          () =>
+            handler?.({
+              method: "elicitation/create",
+              params: {
+                message: "Approve command?",
+                requestedSchema: {
+                  type: "object",
+                  properties: {
+                    allowed: { type: "boolean", title: "Allow command" },
+                  },
+                  required: ["allowed"],
+                },
+              },
+            }) ?? Promise.reject(new Error("elicitation handler missing")),
+        ).pipe(Effect.forkScoped)
+
+        const elicitation = yield* McpElicitation.Service
+        let pending = yield* elicitation.list()
+        for (let index = 0; pending.length === 0 && index < 20; index++) {
+          yield* Effect.sleep("10 millis")
+          pending = yield* elicitation.list()
+        }
+        expect(pending).toEqual([
+          expect.objectContaining({
+            server: "elicit-boolean",
+            message: "Approve command?",
+          }),
+        ])
+
+        yield* elicitation.reply({
+          requestID: pending[0].id,
+          content: { allowed: true },
+        })
+        expect(yield* Fiber.join(fiber)).toEqual({
+          action: "accept",
+          content: { allowed: true },
+        })
       }),
     ),
   { config: { mcp: {} } },

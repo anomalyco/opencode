@@ -107,6 +107,15 @@ import type {
   McpConnectResponses,
   McpDisconnectErrors,
   McpDisconnectResponses,
+  McpElicitationCancelErrors,
+  McpElicitationCancelResponses,
+  McpElicitationDeclineErrors,
+  McpElicitationDeclineResponses,
+  McpElicitationListErrors,
+  McpElicitationListResponses,
+  McpElicitationReplyErrors,
+  McpElicitationReplyResponses,
+  McpEventElicitationContent,
   McpLocalConfig,
   McpRemoteConfig,
   McpStatusErrors,
@@ -2389,6 +2398,151 @@ export class Auth2 extends HeyApiClient {
   }
 }
 
+export class Elicitation extends HeyApiClient {
+  /**
+   * List pending MCP elicitation requests
+   *
+   * Get pending MCP elicitation requests.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<McpElicitationListResponses, McpElicitationListErrors, ThrowOnError>({
+      url: "/mcp/elicitation",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Accept MCP elicitation request
+   *
+   * Accept an MCP elicitation request with user-provided content.
+   */
+  public reply<ThrowOnError extends boolean = false>(
+    parameters: {
+      requestID: string
+      directory?: string
+      workspace?: string
+      content?: McpEventElicitationContent
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "requestID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "content" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<McpElicitationReplyResponses, McpElicitationReplyErrors, ThrowOnError>(
+      {
+        url: "/mcp/elicitation/{requestID}/reply",
+        ...options,
+        ...params,
+        headers: {
+          "Content-Type": "application/json",
+          ...options?.headers,
+          ...params.headers,
+        },
+      },
+    )
+  }
+
+  /**
+   * Decline MCP elicitation request
+   *
+   * Decline an MCP elicitation request.
+   */
+  public decline<ThrowOnError extends boolean = false>(
+    parameters: {
+      requestID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "requestID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      McpElicitationDeclineResponses,
+      McpElicitationDeclineErrors,
+      ThrowOnError
+    >({
+      url: "/mcp/elicitation/{requestID}/decline",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Cancel MCP elicitation request
+   *
+   * Cancel an MCP elicitation request.
+   */
+  public cancel<ThrowOnError extends boolean = false>(
+    parameters: {
+      requestID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "requestID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      McpElicitationCancelResponses,
+      McpElicitationCancelErrors,
+      ThrowOnError
+    >({
+      url: "/mcp/elicitation/{requestID}/cancel",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Mcp extends HeyApiClient {
   /**
    * Get MCP status
@@ -2522,6 +2676,11 @@ export class Mcp extends HeyApiClient {
   private _auth?: Auth2
   get auth(): Auth2 {
     return (this._auth ??= new Auth2({ client: this.client }))
+  }
+
+  private _elicitation?: Elicitation
+  get elicitation(): Elicitation {
+    return (this._elicitation ??= new Elicitation({ client: this.client }))
   }
 }
 

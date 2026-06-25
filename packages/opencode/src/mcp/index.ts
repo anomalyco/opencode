@@ -10,6 +10,8 @@ import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js"
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js"
 import {
+  ElicitRequestSchema,
+  type ElicitResult,
   ListRootsRequestSchema,
   type LoggingMessageNotification,
   LoggingMessageNotificationSchema,
@@ -35,6 +37,7 @@ import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { McpCatalog } from "./catalog"
 import { McpEvent } from "@opencode-ai/schema/mcp-event"
+import { McpElicitation } from "./elicitation"
 
 const DEFAULT_TIMEOUT = 30_000
 const CLIENT_OPTIONS = {
@@ -42,11 +45,18 @@ const CLIENT_OPTIONS = {
     // https://github.com/anomalyco/opencode/issues/11948
     // sampling: {},
     // https://github.com/anomalyco/opencode/issues/23066
-    // elicitation: {},
+    elicitation: { form: {} },
     // https://github.com/anomalyco/opencode/issues/2308
     roots: {},
     // https://github.com/anomalyco/opencode/issues/28567
     // tasks: {},
+  },
+} satisfies ClientOptions
+
+const CLIENT_OPTIONS_AUTH = {
+  capabilities: {
+    // https://github.com/anomalyco/opencode/issues/2308
+    roots: {},
   },
 } satisfies ClientOptions
 
@@ -73,11 +83,55 @@ export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("MCP
 
 type MCPClient = Client
 
-function createClient(directory: string) {
-  const client = new Client({ name: "opencode", version: InstallationVersion }, CLIENT_OPTIONS)
+interface ElicitationHandlerInput {
+  server: string
+  timeout: number
+  bridge: EffectBridge.Shape
+  elicitation: McpElicitation.Interface
+}
+
+function parseBooleanElicitationSchema(value: unknown) {
+  try {
+    const schema = Schema.decodeUnknownSync(McpElicitation.BooleanSchema)(value)
+    const required = new Set(schema.required ?? [])
+    for (const key of required) {
+      if (!(key in schema.properties)) return undefined
+    }
+    return schema
+  } catch {
+    return undefined
+  }
+}
+
+function createClient(directory: string, elicitationInput?: ElicitationHandlerInput) {
+  const client = new Client(
+    { name: "opencode", version: InstallationVersion },
+    elicitationInput ? CLIENT_OPTIONS : CLIENT_OPTIONS_AUTH,
+  )
   client.setRequestHandler(ListRootsRequestSchema, () =>
     Promise.resolve({ roots: [{ uri: pathToFileURL(directory).href }] }),
   )
+  client.setRequestHandler(ElicitRequestSchema, async (request): Promise<ElicitResult> => {
+    if (!elicitationInput) return { action: "cancel" }
+    if (request.params.mode === "url") return { action: "cancel" }
+    const schema = parseBooleanElicitationSchema(request.params.requestedSchema)
+    if (!schema) return { action: "cancel" }
+
+    return elicitationInput.bridge.promise(
+      elicitationInput.elicitation
+        .ask({
+          server: elicitationInput.server,
+          message: request.params.message,
+          schema,
+        })
+        .pipe(
+          Effect.timeoutOrElse({
+            duration: `${elicitationInput.timeout} millis`,
+            orElse: () => Effect.succeed({ action: "cancel" as const }),
+          }),
+        ),
+    )
+  })
   return client
 }
 
@@ -207,14 +261,21 @@ export const layer = Layer.effect(
      * Connect a client via the given transport with resource safety:
      * on failure the transport is closed; on success the caller owns it.
      */
-    const connectTransport = Effect.fn("MCP.connectTransport")(function* (transport: Transport, timeout: number) {
+    const elicitation = yield* McpElicitation.Service
+
+    const connectTransport = Effect.fn("MCP.connectTransport")(function* (
+      name: string,
+      transport: Transport,
+      timeout: number,
+    ) {
       const directory = yield* InstanceState.directory
+      const bridge = yield* EffectBridge.make()
       return yield* Effect.acquireUseRelease(
         Effect.succeed(transport),
         (t) =>
           Effect.tryPromise({
             try: () => {
-              const client = createClient(directory)
+              const client = createClient(directory, { server: name, timeout, bridge, elicitation })
               return withTimeout(client.connect(t), timeout).then(() => client)
             },
             catch: (e) => (e instanceof Error ? e : new Error(String(e))),
@@ -279,7 +340,7 @@ export const layer = Layer.effect(
       let lastStatus: Status | undefined
 
       for (const { name, transport } of transports) {
-        const result = yield* connectTransport(transport, connectTimeout).pipe(
+        const result = yield* connectTransport(key, transport, connectTimeout).pipe(
           Effect.map((client) => ({ client, transportName: name })),
           Effect.catch((error) => {
             const lastError = error instanceof Error ? error : new Error(String(error))
@@ -349,7 +410,7 @@ export const layer = Layer.effect(
       })
 
       const connectTimeout = mcp.timeout ?? DEFAULT_TIMEOUT
-      return yield* connectTransport(transport, connectTimeout).pipe(
+      return yield* connectTransport(key, transport, connectTimeout).pipe(
         Effect.map((client): { client: MCPClient | undefined; status: Status } => ({
           client,
           status: { status: "connected" },
@@ -440,6 +501,7 @@ export const layer = Layer.effect(
         s.status[name] = { status: "failed", error: "Connection closed" }
         bridge.fork(
           Effect.logWarning("MCP connection closed", { server: name }).pipe(
+            Effect.andThen(elicitation.cancelServer(name)),
             Effect.andThen(events.publish(ToolsChanged, { server: name })),
             Effect.ignore,
           ),
@@ -556,8 +618,11 @@ export const layer = Layer.effect(
       delete s.clients[name]
       delete s.defs[name]
       delete s.instructions[name]
-      if (!client) return Effect.void
-      return Effect.tryPromise(() => client.close()).pipe(Effect.ignore)
+      return Effect.gen(function* () {
+        yield* elicitation.cancelServer(name)
+        if (!client) return
+        yield* Effect.tryPromise(() => client.close()).pipe(Effect.ignore)
+      })
     }
 
     const storeClient = Effect.fnUntraced(function* (
@@ -576,7 +641,10 @@ export const layer = Layer.effect(
       if (instructions) s.instructions[name] = instructions
       else delete s.instructions[name]
       watch(s, name, client, bridge, timeout)
-      if (previous) yield* Effect.tryPromise(() => previous.close()).pipe(Effect.ignore)
+      if (previous) {
+        yield* elicitation.cancelServer(name)
+        yield* Effect.tryPromise(() => previous.close()).pipe(Effect.ignore)
+      }
       return s.status[name]
     })
 
@@ -1003,6 +1071,7 @@ export type AuthStatus = "authenticated" | "expired" | "not_authenticated"
 // --- Per-service runtime ---
 
 export const defaultLayer = layer.pipe(
+  Layer.provideMerge(McpElicitation.defaultLayer),
   Layer.provide(McpAuth.defaultLayer),
   Layer.provide(EventV2Bridge.defaultLayer),
   Layer.provide(Config.defaultLayer),
@@ -1013,7 +1082,7 @@ export const defaultLayer = layer.pipe(
 export const node = LayerNode.make({
   service: Service,
   layer: layer,
-  deps: [CrossSpawnSpawner.node, McpAuth.node, EventV2Bridge.node, Config.node],
+  deps: [CrossSpawnSpawner.node, McpAuth.node, EventV2Bridge.node, Config.node, McpElicitation.node],
 })
 
 export * as MCP from "."

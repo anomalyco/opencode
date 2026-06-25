@@ -83,6 +83,7 @@ export function createFetch(override?: FetchHandler, events?: ReturnType<typeof 
       return json([])
     if (["/config", "/experimental/resource", "/mcp", "/provider/auth", "/session/status"].includes(url.pathname))
       return json({})
+    if (url.pathname === "/mcp/elicitation") return json([])
     if (url.pathname === "/config/providers") return json({ providers: {}, default: {} })
     if (url.pathname === "/experimental/console") return json({ consoleManagedProviders: [], switchableOrgCount: 0 })
     if (url.pathname === "/experimental/capabilities") return json({ backgroundSubagents: false })

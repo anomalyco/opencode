@@ -17,6 +17,44 @@ function branchEvent(branch: string, workspace?: string): GlobalEvent {
   }
 }
 
+function elicitationAsked(id: string): GlobalEvent {
+  return {
+    directory: "/tmp/opencode/packages/tui",
+    project: "proj_test",
+    payload: {
+      id: `evt_elicitation_${id}`,
+      type: "mcp.elicitation.asked",
+      properties: {
+        id,
+        server: "unity-gateway",
+        message: "Approve resolved Unity command?",
+        schema: {
+          type: "object",
+          properties: {
+            allowed: { type: "boolean", title: "Allow command" },
+          },
+          required: ["allowed"],
+        },
+      },
+    },
+  }
+}
+
+function elicitationReplied(requestID: string): GlobalEvent {
+  return {
+    directory: "/tmp/opencode/packages/tui",
+    project: "proj_test",
+    payload: {
+      id: `evt_elicitation_replied_${requestID}`,
+      type: "mcp.elicitation.replied",
+      properties: {
+        requestID,
+        result: { action: "cancel" },
+      },
+    },
+  }
+}
+
 describe("tui sync", () => {
   test("refresh scopes sessions by default and lists project sessions when disabled", async () => {
     await using tmp = await tmpdir()
@@ -58,6 +96,31 @@ describe("tui sync", () => {
       await wait(() => sync.data.vcs?.branch === "feature")
 
       expect(sync.data.vcs?.branch).toBe("feature")
+    } finally {
+      app.renderer.destroy()
+    }
+  })
+
+  test("tracks pending MCP elicitations", async () => {
+    await using tmp = await tmpdir()
+    await Bun.write(`${tmp.path}/kv.json`, "{}")
+    const { app, emit, sync } = await mount(undefined, tmp.path)
+
+    try {
+      emit(elicitationAsked("mcpel_test"))
+      await wait(() => sync.data.mcp_elicitation.length === 1)
+
+      expect(sync.data.mcp_elicitation).toEqual([
+        expect.objectContaining({
+          id: "mcpel_test",
+          server: "unity-gateway",
+          message: "Approve resolved Unity command?",
+        }),
+      ])
+
+      emit(elicitationReplied("mcpel_test"))
+      await wait(() => sync.data.mcp_elicitation.length === 0)
+      expect(sync.data.mcp_elicitation).toEqual([])
     } finally {
       app.renderer.destroy()
     }

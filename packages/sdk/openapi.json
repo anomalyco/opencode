@@ -3599,6 +3599,309 @@
         ]
       }
     },
+    "/mcp/elicitation": {
+      "get": {
+        "tags": ["mcp"],
+        "operationId": "mcp.elicitation.list",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of pending MCP elicitation requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/McpEventElicitationRequest"
+                  },
+                  "description": "List of pending MCP elicitation requests"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Get pending MCP elicitation requests.",
+        "summary": "List pending MCP elicitation requests",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.mcp.elicitation.list({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/mcp/elicitation/{requestID}/reply": {
+      "post": {
+        "tags": ["mcp"],
+        "operationId": "mcp.elicitation.reply",
+        "parameters": [
+          {
+            "name": "requestID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^mcpel"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "MCP elicitation request accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean",
+                  "description": "MCP elicitation request accepted"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "BadRequest | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "McpElicitationNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/McpElicitationNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Accept an MCP elicitation request with user-provided content.",
+        "summary": "Accept MCP elicitation request",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "content": {
+                    "$ref": "#/components/schemas/McpEventElicitationContent"
+                  }
+                },
+                "required": ["content"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.mcp.elicitation.reply({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/mcp/elicitation/{requestID}/decline": {
+      "post": {
+        "tags": ["mcp"],
+        "operationId": "mcp.elicitation.decline",
+        "parameters": [
+          {
+            "name": "requestID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^mcpel"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "MCP elicitation request declined",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean",
+                  "description": "MCP elicitation request declined"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "McpElicitationNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/McpElicitationNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Decline an MCP elicitation request.",
+        "summary": "Decline MCP elicitation request",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.mcp.elicitation.decline({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/mcp/elicitation/{requestID}/cancel": {
+      "post": {
+        "tags": ["mcp"],
+        "operationId": "mcp.elicitation.cancel",
+        "parameters": [
+          {
+            "name": "requestID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^mcpel"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "MCP elicitation request cancelled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean",
+                  "description": "MCP elicitation request cancelled"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "McpElicitationNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/McpElicitationNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Cancel an MCP elicitation request.",
+        "summary": "Cancel MCP elicitation request",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.mcp.elicitation.cancel({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/project": {
       "get": {
         "tags": ["project"],
@@ -15473,6 +15776,12 @@
             "$ref": "#/components/schemas/EventMcpBrowserOpenFailed"
           },
           {
+            "$ref": "#/components/schemas/EventMcpElicitationAsked"
+          },
+          {
+            "$ref": "#/components/schemas/EventMcpElicitationReplied"
+          },
+          {
             "$ref": "#/components/schemas/EventCommandExecuted"
           },
           {
@@ -19954,6 +20263,70 @@
                   },
                   "type": {
                     "type": "string",
+                    "enum": ["mcp.elicitation.asked"]
+                  },
+                  "properties": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "pattern": "^mcpel"
+                      },
+                      "server": {
+                        "type": "string"
+                      },
+                      "message": {
+                        "type": "string"
+                      },
+                      "schema": {
+                        "$ref": "#/components/schemas/McpEventElicitationBooleanSchema"
+                      }
+                    },
+                    "required": ["id", "server", "message", "schema"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["id", "type", "properties"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^evt_"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["mcp.elicitation.replied"]
+                  },
+                  "properties": {
+                    "type": "object",
+                    "properties": {
+                      "requestID": {
+                        "type": "string",
+                        "pattern": "^mcpel"
+                      },
+                      "result": {
+                        "$ref": "#/components/schemas/McpEventElicitationResult"
+                      }
+                    },
+                    "required": ["requestID", "result"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["id", "type", "properties"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^evt_"
+                  },
+                  "type": {
+                    "type": "string",
                     "enum": ["command.executed"]
                   },
                   "properties": {
@@ -22686,6 +23059,23 @@
         "required": ["_tag", "name", "message"],
         "additionalProperties": false
       },
+      "McpElicitationNotFoundError": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["McpElicitationNotFoundError"]
+          },
+          "requestID": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "requestID", "message"],
+        "additionalProperties": false
+      },
       "Project": {
         "type": "object",
         "properties": {
@@ -23865,6 +24255,12 @@
             "$ref": "#/components/schemas/V2EventMcpBrowserOpenFailed"
           },
           {
+            "$ref": "#/components/schemas/V2EventMcpElicitationAsked"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventMcpElicitationReplied"
+          },
+          {
             "$ref": "#/components/schemas/V2EventCommandExecuted"
           },
           {
@@ -24475,6 +24871,107 @@
         "items": {
           "type": "string"
         }
+      },
+      "McpEventElicitationBooleanProperty": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["boolean"]
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "default": {
+            "type": "boolean"
+          }
+        },
+        "required": ["type"],
+        "additionalProperties": false
+      },
+      "McpEventElicitationBooleanSchema": {
+        "type": "object",
+        "properties": {
+          "$schema": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["object"]
+          },
+          "properties": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/McpEventElicitationBooleanProperty"
+            }
+          },
+          "required": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": ["type", "properties"],
+        "additionalProperties": false
+      },
+      "McpEventElicitationContent": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "boolean"
+        }
+      },
+      "McpEventElicitationAccept": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": ["accept"]
+          },
+          "content": {
+            "$ref": "#/components/schemas/McpEventElicitationContent"
+          }
+        },
+        "required": ["action", "content"],
+        "additionalProperties": false
+      },
+      "McpEventElicitationDecline": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": ["decline"]
+          }
+        },
+        "required": ["action"],
+        "additionalProperties": false
+      },
+      "McpEventElicitationCancel": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": ["cancel"]
+          }
+        },
+        "required": ["action"],
+        "additionalProperties": false
+      },
+      "McpEventElicitationResult": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/McpEventElicitationAccept"
+          },
+          {
+            "$ref": "#/components/schemas/McpEventElicitationDecline"
+          },
+          {
+            "$ref": "#/components/schemas/McpEventElicitationCancel"
+          }
+        ]
       },
       "ProjectVcs": {
         "type": "string",
@@ -26706,6 +27203,26 @@
           }
         },
         "required": ["action", "effect", "resource"],
+        "additionalProperties": false
+      },
+      "McpEventElicitationRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^mcpel"
+          },
+          "server": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "schema": {
+            "$ref": "#/components/schemas/McpEventElicitationBooleanSchema"
+          }
+        },
+        "required": ["id", "server", "message", "schema"],
         "additionalProperties": false
       },
       "ProjectDirectories": {
@@ -35310,6 +35827,114 @@
         "required": ["id", "type", "data"],
         "additionalProperties": false
       },
+      "V2EventMcpElicitationAsked": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["mcp.elicitation.asked"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^mcpel"
+              },
+              "server": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/McpEventElicitationBooleanSchema"
+              }
+            },
+            "required": ["id", "server", "message", "schema"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventMcpElicitationReplied": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["mcp.elicitation.replied"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "requestID": {
+                "type": "string",
+                "pattern": "^mcpel"
+              },
+              "result": {
+                "$ref": "#/components/schemas/McpEventElicitationResult"
+              }
+            },
+            "required": ["requestID", "result"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
       "V2EventCommandExecuted": {
         "type": "object",
         "properties": {
@@ -38636,6 +39261,70 @@
               }
             },
             "required": ["mcpName", "url"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventMcpElicitationAsked": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["mcp.elicitation.asked"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^mcpel"
+              },
+              "server": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/McpEventElicitationBooleanSchema"
+              }
+            },
+            "required": ["id", "server", "message", "schema"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventMcpElicitationReplied": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["mcp.elicitation.replied"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "requestID": {
+                "type": "string",
+                "pattern": "^mcpel"
+              },
+              "result": {
+                "$ref": "#/components/schemas/McpEventElicitationResult"
+              }
+            },
+            "required": ["requestID", "result"],
             "additionalProperties": false
           }
         },

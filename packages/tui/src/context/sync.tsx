@@ -12,6 +12,7 @@ import type {
   LspStatus,
   McpStatus,
   McpResource,
+  McpEventElicitationRequest,
   FormatterStatus,
   SessionStatus,
   ProviderListResponse,
@@ -101,6 +102,7 @@ export const {
       mcp_resource: {
         [key: string]: McpResource
       }
+      mcp_elicitation: McpEventElicitationRequest[]
       formatter: FormatterStatus[]
       vcs: VcsInfo | undefined
     }>({
@@ -131,6 +133,7 @@ export const {
       lsp: [],
       mcp: {},
       mcp_resource: {},
+      mcp_elicitation: [],
       formatter: [],
       vcs: undefined,
     })
@@ -240,6 +243,34 @@ export const {
             request.sessionID,
             produce((draft) => {
               draft.splice(match.index, 0, request)
+            }),
+          )
+          break
+        }
+
+        case "mcp.elicitation.asked": {
+          const request = event.properties
+          const match = search(store.mcp_elicitation, request.id, (item) => item.id)
+          if (match.found) {
+            setStore("mcp_elicitation", match.index, reconcile(request))
+            break
+          }
+          setStore(
+            "mcp_elicitation",
+            produce((draft) => {
+              draft.splice(match.index, 0, request)
+            }),
+          )
+          break
+        }
+
+        case "mcp.elicitation.replied": {
+          const match = search(store.mcp_elicitation, event.properties.requestID, (item) => item.id)
+          if (!match.found) break
+          setStore(
+            "mcp_elicitation",
+            produce((draft) => {
+              draft.splice(match.index, 1)
             }),
           )
           break
@@ -506,6 +537,9 @@ export const {
             sdk.client.command.list({ workspace }).then((x) => setStore("command", reconcile(x.data ?? []))),
             sdk.client.lsp.status({ workspace }).then((x) => setStore("lsp", reconcile(x.data ?? []))),
             sdk.client.mcp.status({ workspace }).then((x) => setStore("mcp", reconcile(x.data ?? {}))),
+            sdk.client.mcp.elicitation
+              .list({ workspace })
+              .then((x) => setStore("mcp_elicitation", reconcile(x.data ?? []))),
             sdk.client.experimental.resource
               .list({ workspace })
               .then((x) => setStore("mcp_resource", reconcile(x.data ?? {}))),

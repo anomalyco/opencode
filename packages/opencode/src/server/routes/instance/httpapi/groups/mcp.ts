@@ -1,8 +1,9 @@
 import { MCP } from "@/mcp"
+import { McpElicitation } from "@/mcp/elicitation"
 import { ConfigMCPV1 } from "@opencode-ai/core/v1/config/mcp"
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
-import { McpServerNotFoundError } from "../errors"
+import { McpElicitationNotFoundError, McpServerNotFoundError } from "../errors"
 import { Authorization } from "../middleware/authorization"
 import { InstanceContextMiddleware } from "../middleware/instance-context"
 import { WorkspaceRoutingMiddleware, WorkspaceRoutingQuery } from "../middleware/workspace-routing"
@@ -24,6 +25,9 @@ export const AuthCallbackPayload = Schema.Struct({
 export const AuthRemoveResponse = Schema.Struct({
   success: Schema.Literal(true),
 })
+export const ElicitationReplyPayload = Schema.Struct({
+  content: McpElicitation.Content,
+})
 export class UnsupportedOAuthError extends Schema.ErrorClass<UnsupportedOAuthError>("McpUnsupportedOAuthError")(
   { error: Schema.String },
   { httpApiStatus: 400 },
@@ -36,6 +40,10 @@ export const McpPaths = {
   authAuthenticate: "/mcp/:name/auth/authenticate",
   connect: "/mcp/:name/connect",
   disconnect: "/mcp/:name/disconnect",
+  elicitation: "/mcp/elicitation",
+  elicitationReply: "/mcp/elicitation/:requestID/reply",
+  elicitationDecline: "/mcp/elicitation/:requestID/decline",
+  elicitationCancel: "/mcp/elicitation/:requestID/cancel",
 } as const
 
 export const McpApi = HttpApi.make("mcp")
@@ -134,6 +142,53 @@ export const McpApi = HttpApi.make("mcp")
           OpenApi.annotations({
             identifier: "mcp.disconnect",
             description: "Disconnect an MCP server.",
+          }),
+        ),
+        HttpApiEndpoint.get("elicitationList", McpPaths.elicitation, {
+          query: WorkspaceRoutingQuery,
+          success: described(Schema.Array(McpElicitation.Request), "List of pending MCP elicitation requests"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "mcp.elicitation.list",
+            summary: "List pending MCP elicitation requests",
+            description: "Get pending MCP elicitation requests.",
+          }),
+        ),
+        HttpApiEndpoint.post("elicitationReply", McpPaths.elicitationReply, {
+          params: { requestID: McpElicitation.ID },
+          query: WorkspaceRoutingQuery,
+          payload: ElicitationReplyPayload,
+          success: described(Schema.Boolean, "MCP elicitation request accepted"),
+          error: [HttpApiError.BadRequest, McpElicitationNotFoundError],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "mcp.elicitation.reply",
+            summary: "Accept MCP elicitation request",
+            description: "Accept an MCP elicitation request with user-provided content.",
+          }),
+        ),
+        HttpApiEndpoint.post("elicitationDecline", McpPaths.elicitationDecline, {
+          params: { requestID: McpElicitation.ID },
+          query: WorkspaceRoutingQuery,
+          success: described(Schema.Boolean, "MCP elicitation request declined"),
+          error: McpElicitationNotFoundError,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "mcp.elicitation.decline",
+            summary: "Decline MCP elicitation request",
+            description: "Decline an MCP elicitation request.",
+          }),
+        ),
+        HttpApiEndpoint.post("elicitationCancel", McpPaths.elicitationCancel, {
+          params: { requestID: McpElicitation.ID },
+          query: WorkspaceRoutingQuery,
+          success: described(Schema.Boolean, "MCP elicitation request cancelled"),
+          error: McpElicitationNotFoundError,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "mcp.elicitation.cancel",
+            summary: "Cancel MCP elicitation request",
+            description: "Cancel an MCP elicitation request.",
           }),
         ),
       )

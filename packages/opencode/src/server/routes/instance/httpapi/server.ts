@@ -18,6 +18,7 @@ import { Git } from "@/git"
 import { Installation } from "@/installation"
 import { LSP } from "@/lsp/lsp"
 import { MCP } from "@/mcp"
+import { McpElicitation } from "@/mcp/elicitation"
 import { McpAuth } from "@/mcp/auth"
 import { Permission } from "@/permission"
 import { Plugin } from "@/plugin"
@@ -238,6 +239,7 @@ const app = LayerNode.group([
   LLM.node,
   LSP.node,
   MCP.node,
+  McpElicitation.node,
   McpAuth.node,
   Command.node,
   Truncate.node,

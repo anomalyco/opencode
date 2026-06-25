@@ -77,6 +77,8 @@ export type Event =
   | EventTuiSessionSelect2
   | EventMcpToolsChanged
   | EventMcpBrowserOpenFailed
+  | EventMcpElicitationAsked
+  | EventMcpElicitationReplied
   | EventCommandExecuted
   | EventProjectUpdated
   | EventSessionStatus
@@ -1468,6 +1470,24 @@ export type GlobalEvent = {
       }
     | {
         id: string
+        type: "mcp.elicitation.asked"
+        properties: {
+          id: string
+          server: string
+          message: string
+          schema: McpEventElicitationBooleanSchema
+        }
+      }
+    | {
+        id: string
+        type: "mcp.elicitation.replied"
+        properties: {
+          requestID: string
+          result: McpEventElicitationResult
+        }
+      }
+    | {
+        id: string
         type: "command.executed"
         properties: {
           name: string
@@ -2416,6 +2436,12 @@ export type McpServerNotFoundError = {
   message: string
 }
 
+export type McpElicitationNotFoundError = {
+  _tag: "McpElicitationNotFoundError"
+  requestID: string
+  message: string
+}
+
 export type Project = {
   id: string
   worktree: string
@@ -2812,6 +2838,8 @@ export type V2Event =
   | V2EventTuiSessionSelect
   | V2EventMcpToolsChanged
   | V2EventMcpBrowserOpenFailed
+  | V2EventMcpElicitationAsked
+  | V2EventMcpElicitationReplied
   | V2EventCommandExecuted
   | V2EventProjectUpdated
   | V2EventSessionStatus
@@ -3046,6 +3074,44 @@ export type QuestionV2Tool = {
 }
 
 export type QuestionV2Answer = Array<string>
+
+export type McpEventElicitationBooleanProperty = {
+  type: "boolean"
+  title?: string
+  description?: string
+  default?: boolean
+}
+
+export type McpEventElicitationBooleanSchema = {
+  $schema?: string
+  type: "object"
+  properties: {
+    [key: string]: McpEventElicitationBooleanProperty
+  }
+  required?: Array<string>
+}
+
+export type McpEventElicitationContent = {
+  [key: string]: boolean
+}
+
+export type McpEventElicitationAccept = {
+  action: "accept"
+  content: McpEventElicitationContent
+}
+
+export type McpEventElicitationDecline = {
+  action: "decline"
+}
+
+export type McpEventElicitationCancel = {
+  action: "cancel"
+}
+
+export type McpEventElicitationResult =
+  | McpEventElicitationAccept
+  | McpEventElicitationDecline
+  | McpEventElicitationCancel
 
 export type ProjectVcs = "git"
 
@@ -3727,6 +3793,13 @@ export type ConfigV2ExperimentalPolicy = {
   action: "provider.use"
   effect: PolicyEffect
   resource: string
+}
+
+export type McpEventElicitationRequest = {
+  id: string
+  server: string
+  message: string
+  schema: McpEventElicitationBooleanSchema
 }
 
 export type ProjectDirectories = Array<{
@@ -6349,6 +6422,44 @@ export type V2EventMcpBrowserOpenFailed = {
   }
 }
 
+export type V2EventMcpElicitationAsked = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  type: "mcp.elicitation.asked"
+  data: {
+    id: string
+    server: string
+    message: string
+    schema: McpEventElicitationBooleanSchema
+  }
+}
+
+export type V2EventMcpElicitationReplied = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  type: "mcp.elicitation.replied"
+  data: {
+    requestID: string
+    result: McpEventElicitationResult
+  }
+}
+
 export type V2EventCommandExecuted = {
   id: string
   metadata?: {
@@ -7437,6 +7548,26 @@ export type EventMcpBrowserOpenFailed = {
   properties: {
     mcpName: string
     url: string
+  }
+}
+
+export type EventMcpElicitationAsked = {
+  id: string
+  type: "mcp.elicitation.asked"
+  properties: {
+    id: string
+    server: string
+    message: string
+    schema: McpEventElicitationBooleanSchema
+  }
+}
+
+export type EventMcpElicitationReplied = {
+  id: string
+  type: "mcp.elicitation.replied"
+  properties: {
+    requestID: string
+    result: McpEventElicitationResult
   }
 }
 
@@ -9239,6 +9370,138 @@ export type McpDisconnectResponses = {
 }
 
 export type McpDisconnectResponse = McpDisconnectResponses[keyof McpDisconnectResponses]
+
+export type McpElicitationListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/mcp/elicitation"
+}
+
+export type McpElicitationListErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type McpElicitationListError = McpElicitationListErrors[keyof McpElicitationListErrors]
+
+export type McpElicitationListResponses = {
+  /**
+   * List of pending MCP elicitation requests
+   */
+  200: Array<McpEventElicitationRequest>
+}
+
+export type McpElicitationListResponse = McpElicitationListResponses[keyof McpElicitationListResponses]
+
+export type McpElicitationReplyData = {
+  body?: {
+    content: McpEventElicitationContent
+  }
+  path: {
+    requestID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/mcp/elicitation/{requestID}/reply"
+}
+
+export type McpElicitationReplyErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * McpElicitationNotFoundError
+   */
+  404: McpElicitationNotFoundError
+}
+
+export type McpElicitationReplyError = McpElicitationReplyErrors[keyof McpElicitationReplyErrors]
+
+export type McpElicitationReplyResponses = {
+  /**
+   * MCP elicitation request accepted
+   */
+  200: boolean
+}
+
+export type McpElicitationReplyResponse = McpElicitationReplyResponses[keyof McpElicitationReplyResponses]
+
+export type McpElicitationDeclineData = {
+  body?: never
+  path: {
+    requestID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/mcp/elicitation/{requestID}/decline"
+}
+
+export type McpElicitationDeclineErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * McpElicitationNotFoundError
+   */
+  404: McpElicitationNotFoundError
+}
+
+export type McpElicitationDeclineError = McpElicitationDeclineErrors[keyof McpElicitationDeclineErrors]
+
+export type McpElicitationDeclineResponses = {
+  /**
+   * MCP elicitation request declined
+   */
+  200: boolean
+}
+
+export type McpElicitationDeclineResponse = McpElicitationDeclineResponses[keyof McpElicitationDeclineResponses]
+
+export type McpElicitationCancelData = {
+  body?: never
+  path: {
+    requestID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/mcp/elicitation/{requestID}/cancel"
+}
+
+export type McpElicitationCancelErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * McpElicitationNotFoundError
+   */
+  404: McpElicitationNotFoundError
+}
+
+export type McpElicitationCancelError = McpElicitationCancelErrors[keyof McpElicitationCancelErrors]
+
+export type McpElicitationCancelResponses = {
+  /**
+   * MCP elicitation request cancelled
+   */
+  200: boolean
+}
+
+export type McpElicitationCancelResponse = McpElicitationCancelResponses[keyof McpElicitationCancelResponses]
 
 export type ProjectListData = {
   body?: never

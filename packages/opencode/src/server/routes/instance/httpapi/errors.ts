@@ -149,6 +149,15 @@ export class McpServerNotFoundError extends Schema.TaggedErrorClass<McpServerNot
   { httpApiStatus: 404 },
 ) {}
 
+export class McpElicitationNotFoundError extends Schema.TaggedErrorClass<McpElicitationNotFoundError>()(
+  "McpElicitationNotFoundError",
+  {
+    requestID: Schema.String,
+    message: Schema.String,
+  },
+  { httpApiStatus: 404 },
+) {}
+
 export class PtyNotFoundError extends Schema.TaggedErrorClass<PtyNotFoundError>()(
   "PtyNotFoundError",
   {
