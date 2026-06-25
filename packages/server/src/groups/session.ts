@@ -16,6 +16,9 @@ import {
   UnknownError,
 } from "../errors"
 import { SessionLocationMiddleware } from "../middleware/session-location"
+import { AgentV2 } from "@opencode-ai/core/agent"
+import { ModelV2 } from "@opencode-ai/core/model"
+import { Location } from "@opencode-ai/core/location"
 
 const SessionsQueryFields = {
   workspace: WorkspaceV2.ID.pipe(Schema.optional),
@@ -104,6 +107,70 @@ export const SessionGroup = HttpApiGroup.make("server.session")
           "Retrieve sessions in the requested order. Items keep that order across pages; use cursor.next or cursor.previous to move through the ordered list.",
       }),
     ),
+  )
+  .add(
+    HttpApiEndpoint.post("session.create", "/api/session", {
+      payload: Schema.Struct({
+        id: SessionV2.ID.pipe(Schema.optional),
+        agent: AgentV2.ID.pipe(Schema.optional),
+        model: ModelV2.Ref.pipe(Schema.optional),
+        location: Location.Ref.pipe(Schema.optional),
+      }),
+      success: Schema.Struct({ data: SessionV2.Info }),
+    }).annotateMerge(
+      OpenApi.annotations({
+        identifier: "v2.session.create",
+        summary: "Create session",
+        description: "Create a session at the requested location.",
+      }),
+    ),
+  )
+  .add(
+    HttpApiEndpoint.get("session.get", "/api/session/:sessionID", {
+      params: { sessionID: SessionV2.ID },
+      success: Schema.Struct({ data: SessionV2.Info }),
+      error: SessionNotFoundError,
+    })
+      .middleware(SessionLocationMiddleware)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.session.get",
+          summary: "Get session",
+          description: "Retrieve a session by ID.",
+        }),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.post("session.switchAgent", "/api/session/:sessionID/agent", {
+      params: { sessionID: SessionV2.ID },
+      payload: Schema.Struct({ agent: AgentV2.ID }),
+      success: HttpApiSchema.NoContent,
+      error: SessionNotFoundError,
+    })
+      .middleware(SessionLocationMiddleware)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.session.switchAgent",
+          summary: "Switch session agent",
+          description: "Switch the agent used by subsequent provider turns.",
+        }),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.post("session.switchModel", "/api/session/:sessionID/model", {
+      params: { sessionID: SessionV2.ID },
+      payload: Schema.Struct({ model: ModelV2.Ref }),
+      success: HttpApiSchema.NoContent,
+      error: SessionNotFoundError,
+    })
+      .middleware(SessionLocationMiddleware)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.session.switchModel",
+          summary: "Switch session model",
+          description: "Switch the model used by subsequent provider turns.",
+        }),
+      ),
   )
   .add(
     HttpApiEndpoint.post("session.prompt", "/api/session/:sessionID/prompt", {

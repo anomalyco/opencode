@@ -1,3 +1,5 @@
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { httpClient } from "@opencode-ai/core/effect/layer-node-platform"
 import { Context, Effect, FiberMap, Iterable, Layer, Schema, Stream } from "effect"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { FetchHttpClient, HttpBody, HttpClient, HttpClientError, HttpClientRequest } from "effect/unstable/http"
@@ -129,7 +131,7 @@ export class SyncTimeoutError extends Schema.TaggedErrorClass<SyncTimeoutError>(
 
 export class SyncAbortedError extends Schema.TaggedErrorClass<SyncAbortedError>()("WorkspaceSyncAbortedError", {
   message: Schema.String,
-  cause: Schema.optional(Schema.Defect),
+  cause: Schema.optional(Schema.Defect()),
 }) {}
 
 type CreateError = Auth.AuthError
@@ -971,5 +973,17 @@ function route(url: string | URL, path: string) {
   next.hash = ""
   return next
 }
+
+export const node = LayerNode.make(layer, [
+  Auth.node,
+  Session.node,
+  SessionPrompt.node,
+  httpClient,
+  EventV2Bridge.node,
+  Vcs.node,
+  RuntimeFlags.node,
+  FSUtil.node,
+  Database.node,
+])
 
 export * as Workspace from "./workspace"

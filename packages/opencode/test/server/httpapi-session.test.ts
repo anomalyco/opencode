@@ -9,6 +9,7 @@ import { HttpClient, HttpClientRequest, HttpClientResponse, HttpRouter, HttpServ
 import { layerWebSocketConstructorGlobal } from "effect/unstable/socket/Socket"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Flag } from "@opencode-ai/core/flag/flag"
+import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { registerAdapter } from "../../src/control-plane/adapters"
 import type { WorkspaceAdapter } from "../../src/control-plane/types"
 import { Workspace } from "../../src/control-plane/workspace"
@@ -22,7 +23,6 @@ import * as HttpSessionError from "../../src/server/routes/instance/httpapi/hand
 import { SessionPaths } from "../../src/server/routes/instance/httpapi/groups/session"
 import { Session } from "@/session/session"
 import { MessageID, PartID, SessionID, type SessionID as SessionIDType } from "../../src/session/schema"
-import { MessageV2 } from "../../src/session/message-v2"
 import { Database } from "@opencode-ai/core/database/database"
 import { SessionInputTable, SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionMessage } from "@opencode-ai/core/session/message"
@@ -66,7 +66,7 @@ const it = testEffect(
     workspaceLayer,
     Database.defaultLayer,
     httpApiLayer,
-  ),
+  ).pipe(Layer.provide(Ripgrep.defaultLayer)),
 )
 
 function pathFor(path: string, params: Record<string, string>) {
@@ -128,7 +128,7 @@ const createLocalWorkspace = (input: { projectID: Project.Info["id"]; type: stri
 
 const insertLegacyAssistantMessage = (sessionID: SessionIDType, seq = 1, time = seq) =>
   Effect.gen(function* () {
-    const message = new SessionMessage.Assistant({
+    const message = SessionMessage.Assistant.make({
       id: SessionMessage.ID.create(),
       type: "assistant",
       agent: "build",

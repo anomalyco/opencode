@@ -1,3 +1,4 @@
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import type { AuthOAuthResult, Hooks } from "@opencode-ai/plugin"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { Auth } from "@/auth"
@@ -226,5 +227,7 @@ export const layer: Layer.Layer<Service, never, Auth.Service | Plugin.Service> =
 export const defaultLayer = Layer.suspend(() =>
   layer.pipe(Layer.provide(Auth.defaultLayer), Layer.provide(Plugin.defaultLayer)),
 )
+
+export const node = LayerNode.make(layer, [Auth.node, Plugin.node])
 
 export * as ProviderAuth from "./auth"

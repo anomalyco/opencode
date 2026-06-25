@@ -224,6 +224,27 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  it.effect("preserves structured tool errors for the model", () =>
+    Effect.gen(function* () {
+      const error = { error: { type: "unknown", message: "Tool execution interrupted" } }
+      const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "bash", input: {} })]),
+            Message.tool({ id: "call_1", name: "bash", resultType: "error", result: error }),
+          ],
+        }),
+      )
+
+      expect(prepared.body.messages.at(-1)).toEqual({
+        role: "tool",
+        tool_call_id: "call_1",
+        content: ProviderShared.encodeJson(error),
+      })
+    }),
+  )
+
   it.effect("continues image tool results as vision input without base64 text", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
