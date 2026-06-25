@@ -43,6 +43,13 @@ describe("SessionTodo", () => {
       const events = yield* EventV2.Service
       const todos = yield* SessionTodo.Service
       const published = new Array<EventV2.Payload>()
+      const persistedTodos = () =>
+        db
+          .select()
+          .from(TodoTable)
+          .orderBy(asc(TodoTable.position))
+          .all()
+          .pipe(Effect.orDie)
       const unsubscribe = yield* events.listen((event) =>
         Effect.sync(() => {
           if (event.type === SessionTodo.Event.Updated.type) published.push(event)
@@ -61,21 +68,20 @@ describe("SessionTodo", () => {
         { content: "second", status: "pending", priority: "low" },
         { content: "first", status: "in_progress", priority: "high" },
       ])
-      expect(
-        (yield* db.select().from(TodoTable).orderBy(asc(TodoTable.position)).all().pipe(Effect.orDie)).map((row) => ({
-          content: row.content,
-          position: row.position,
-        })),
-      ).toEqual([
+      expect((yield* persistedTodos()).map((row) => ({ content: row.content, position: row.position }))).toEqual([
         { content: "second", position: 0 },
         { content: "first", position: 1 },
       ])
 
       yield* todos.update({ sessionID, todos: [{ content: "replacement", status: "completed", priority: "medium" }] })
       expect(yield* todos.get(sessionID)).toEqual([{ content: "replacement", status: "completed", priority: "medium" }])
+      expect((yield* persistedTodos()).map((row) => ({ content: row.content, position: row.position }))).toEqual([
+        { content: "replacement", position: 0 },
+      ])
 
       yield* todos.update({ sessionID, todos: [] })
       expect(yield* todos.get(sessionID)).toEqual([])
+      expect(yield* persistedTodos()).toEqual([])
       expect(published.map((event) => event.data)).toEqual([
         {
           sessionID,
