@@ -8,7 +8,7 @@ import { useGlobal } from "@/context/global"
 import { useLayout } from "@/context/layout"
 import { useLocal } from "@/context/local"
 import type { QueryOptionsApi } from "@/context/server-sync"
-import { ServerConnection, useServer } from "@/context/server"
+import { serverName, ServerConnection, useServer } from "@/context/server"
 import { useSDK } from "@/context/sdk"
 import { useSettings } from "@/context/settings"
 import { useSync } from "@/context/sync"
@@ -49,38 +49,61 @@ export function createSessionComposerControls(input: {
     const conn = projectServer()
     if (conn) return global.ensureServerCtx(conn)
   })
-  const projects = createMemo(() =>
-    search.draftId ? (projectServerCtx()?.projects.list() ?? []) : layout.projects.list(),
-  )
+  const projects = createMemo(() => {
+    if (server.list.length <= 1) {
+      return search.draftId ? (projectServerCtx()?.projects.list() ?? []) : layout.projects.list()
+    }
+    return server.list.flatMap((conn) => {
+      const server = { key: ServerConnection.key(conn), name: serverName(conn) }
+      return global
+        .ensureServerCtx(conn)
+        .projects.list()
+        .map((project) => ({ ...project, server }))
+    })
+  })
   const agentsQuery = createQuery(() => input.queryOptions.agents(pathKey(sdk().directory)))
   const globalProvidersQuery = createQuery(() => input.queryOptions.providers(null))
   const providersQuery = createQuery(() => input.queryOptions.providers(pathKey(sdk().directory)))
 
-  const selectProject = (worktree: string) => {
-    const conn = projectServer()
-    const target = projectServerCtx()
+  const selectProject = (worktree: string, serverKey?: string) => {
+    const conn = serverKey
+      ? server.list.find((conn) => ServerConnection.key(conn) === serverKey)
+      : projectServer()
     if (search.draftId) {
-      if (!conn || !target) return
+      if (!conn) return
+      const target = global.ensureServerCtx(conn)
       target.projects.open(worktree)
       target.projects.touch(worktree)
       tabs.updateDraft(search.draftId, { server: ServerConnection.key(conn), directory: worktree })
       return
     }
 
-    layout.projects.open(worktree)
-    server.projects.touch(worktree)
+    if (!serverKey) {
+      layout.projects.open(worktree)
+      server.projects.touch(worktree)
+      navigate(`/${base64Encode(worktree)}/session`)
+      return
+    }
+
+    if (!conn) return
+    const target = global.ensureServerCtx(conn)
+    target.projects.open(worktree)
+    target.projects.touch(worktree)
+    server.setActive(ServerConnection.key(conn))
     navigate(`/${base64Encode(worktree)}/session`)
   }
 
-  const addProject = (title: string) => {
-    const conn = projectServer()
+  const addProject = (title: string, serverKey?: string) => {
+    const conn = serverKey
+      ? server.list.find((conn) => ServerConnection.key(conn) === serverKey)
+      : projectServer()
     if (!conn) return
     pickDirectory({
       server: conn,
       title,
       onSelect: (result) => {
         const directory = Array.isArray(result) ? result[0] : result
-        if (directory) selectProject(directory)
+        if (directory) selectProject(directory, serverKey)
       },
     })
   }
@@ -102,6 +125,8 @@ export function createSessionComposerControls(input: {
     projects: {
       available: projects(),
       directory: sdk().directory,
+      server:
+        server.list.length > 1 && projectServer() ? ServerConnection.key(projectServer()!) : undefined,
       select: selectProject,
       add: addProject,
     },
