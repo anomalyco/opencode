@@ -1,5 +1,11 @@
 const PROVIDER_ID = /^[a-z0-9][a-z0-9-_]*$/
 const OPENAI_COMPATIBLE = "@ai-sdk/openai-compatible"
+export const REASONING_EFFORTS = ["none", "low", "medium", "high", "xhigh"] as const
+
+export type ReasoningEffort = (typeof REASONING_EFFORTS)[number]
+
+const DEFAULT_REASONING_EFFORTS: readonly ReasoningEffort[] = ["none", "low", "medium", "high", "xhigh"]
+const FAST_REASONING_EFFORT: ReasoningEffort = "low"
 
 type Translator = (key: string, vars?: Record<string, string | number | boolean>) => string
 
@@ -17,6 +23,10 @@ export type ModelRow = {
   row: string
   id: string
   name: string
+  configOpen: boolean
+  reasoning: boolean
+  efforts: Record<ReasoningEffort, boolean>
+  fast: boolean
   err: ModelErr
 }
 
@@ -92,7 +102,7 @@ export function validateCustomProvider(input: ValidateArgs) {
     return { id: idError, name: nameError }
   })
   const modelsValid = models.every((m) => !m.id && !m.name)
-  const modelConfig = Object.fromEntries(input.form.models.map((m) => [m.id.trim(), { name: m.name.trim() }]))
+  const modelConfig = Object.fromEntries(input.form.models.map((m) => [m.id.trim(), modelConfigFor(m)]))
 
   const seenHeaders = new Set<string>()
   const headers = input.form.headers.map((h) => {
@@ -154,5 +164,48 @@ let row = 0
 
 const nextRow = () => `row-${row++}`
 
-export const modelRow = (): ModelRow => ({ row: nextRow(), id: "", name: "", err: {} })
+function modelConfigFor(model: ModelRow) {
+  const base = { name: model.name.trim() }
+  if (!model.reasoning && !model.fast) return base
+
+  const effortVariants = model.reasoning
+    ? REASONING_EFFORTS.map(
+        (effort) => [effort, model.efforts[effort] ? { reasoningEffort: effort } : { disabled: true }] as const,
+      )
+    : []
+  const fastVariant = model.fast
+    ? ([
+        "fast",
+        model.reasoning
+          ? {
+              reasoningEffort: FAST_REASONING_EFFORT,
+              textVerbosity: "low",
+            }
+          : { textVerbosity: "low" },
+      ] as const)
+    : (["fast", { disabled: true }] as const)
+
+  return {
+    ...base,
+    ...(model.reasoning ? { reasoning: true } : {}),
+    variants: Object.fromEntries([fastVariant, ...effortVariants]),
+  }
+}
+
+function defaultReasoningEfforts() {
+  return Object.fromEntries(
+    REASONING_EFFORTS.map((effort) => [effort, DEFAULT_REASONING_EFFORTS.includes(effort)]),
+  ) as Record<ReasoningEffort, boolean>
+}
+
+export const modelRow = (): ModelRow => ({
+  row: nextRow(),
+  id: "",
+  name: "",
+  configOpen: false,
+  reasoning: false,
+  efforts: defaultReasoningEfforts(),
+  fast: false,
+  err: {},
+})
 export const headerRow = (): HeaderRow => ({ row: nextRow(), key: "", value: "", err: {} })

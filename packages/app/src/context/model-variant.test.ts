@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { cycleModelVariant, getConfiguredAgentVariant, resolveModelVariant } from "./model-variant"
+import { cycleModelVariant, enabledModelVariants, getConfiguredAgentVariant, resolveModelVariant } from "./model-variant"
 
 describe("model variant", () => {
   test("resolves configured agent variant when model matches", () => {
@@ -16,6 +16,34 @@ describe("model variant", () => {
     })
 
     expect(value).toBe("xhigh")
+  })
+
+  test("ignores disabled configured variants", () => {
+    const value = getConfiguredAgentVariant({
+      agent: {
+        model: { providerID: "custom", modelID: "model-a" },
+        variant: "high",
+      },
+      model: {
+        providerID: "custom",
+        modelID: "model-a",
+        variants: { low: {}, high: { disabled: true }, xhigh: {} },
+      },
+    })
+
+    expect(value).toBeUndefined()
+  })
+
+  test("lists only enabled model variants", () => {
+    const value = enabledModelVariants({
+      fast: { disabled: true },
+      low: {},
+      medium: { disabled: false },
+      high: { disabled: true },
+      xhigh: "legacy",
+    })
+
+    expect(value).toEqual(["low", "medium", "xhigh"])
   })
 
   test("ignores configured variant when model does not match", () => {

@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test"
-import { validateCustomProvider } from "./dialog-custom-provider-form"
+import { type ModelRow, modelRow, validateCustomProvider } from "./dialog-custom-provider-form"
 
 const t = (key: string) => key
+const model = (input: Partial<ModelRow>): ModelRow => ({ ...modelRow(), ...input })
 
 describe("validateCustomProvider", () => {
   test("builds trimmed config payload", () => {
@@ -11,7 +12,7 @@ describe("validateCustomProvider", () => {
         name: " Custom Provider ",
         baseURL: "https://api.example.com ",
         apiKey: " {env: CUSTOM_PROVIDER_KEY} ",
-        models: [{ row: "m0", id: " model-a ", name: " Model A ", err: {} }],
+        models: [model({ row: "m0", id: " model-a ", name: " Model A " })],
         headers: [
           { row: "h0", key: " X-Test ", value: " enabled ", err: {} },
           { row: "h1", key: "", value: "", err: {} },
@@ -52,8 +53,8 @@ describe("validateCustomProvider", () => {
         baseURL: "https://api.example.com",
         apiKey: "secret",
         models: [
-          { row: "m0", id: "model-a", name: "Model A", err: {} },
-          { row: "m1", id: "model-a", name: "Model A 2", err: {} },
+          model({ row: "m0", id: "model-a", name: "Model A" }),
+          model({ row: "m1", id: "model-a", name: "Model A 2" }),
         ],
         headers: [
           { row: "h0", key: "Authorization", value: "one", err: {} },
@@ -75,6 +76,105 @@ describe("validateCustomProvider", () => {
     expect(result.headers[1]).toEqual({
       key: "provider.custom.error.duplicate",
       value: undefined,
+    })
+  })
+
+  test("emits reasoning variants and fast preset", () => {
+    const result = validateCustomProvider({
+      form: {
+        providerID: "custom-provider",
+        name: "Provider",
+        baseURL: "https://api.example.com",
+        apiKey: "secret",
+        models: [model({ row: "m0", id: "model-a", name: "Model A", reasoning: true, fast: true })],
+        headers: [{ row: "h0", key: "", value: "", err: {} }],
+        err: {},
+      },
+      t,
+      disabledProviders: [],
+      existingProviderIDs: new Set(),
+    })
+
+    expect(result.result?.config.models).toEqual({
+      "model-a": {
+        name: "Model A",
+        reasoning: true,
+        variants: {
+          fast: { reasoningEffort: "low", textVerbosity: "low" },
+          none: { reasoningEffort: "none" },
+          low: { reasoningEffort: "low" },
+          medium: { reasoningEffort: "medium" },
+          high: { reasoningEffort: "high" },
+          xhigh: { reasoningEffort: "xhigh" },
+        },
+      },
+    })
+  })
+
+  test("emits disabled variants for unsupported fast and efforts", () => {
+    const result = validateCustomProvider({
+      form: {
+        providerID: "custom-provider",
+        name: "Provider",
+        baseURL: "https://api.example.com",
+        apiKey: "secret",
+        models: [
+          model({
+            row: "m0",
+            id: "model-a",
+            name: "Model A",
+            reasoning: true,
+            fast: false,
+            efforts: { none: true, low: true, medium: true, high: false, xhigh: true },
+          }),
+        ],
+        headers: [{ row: "h0", key: "", value: "", err: {} }],
+        err: {},
+      },
+      t,
+      disabledProviders: [],
+      existingProviderIDs: new Set(),
+    })
+
+    expect(result.result?.config.models).toEqual({
+      "model-a": {
+        name: "Model A",
+        reasoning: true,
+        variants: {
+          fast: { disabled: true },
+          none: { reasoningEffort: "none" },
+          low: { reasoningEffort: "low" },
+          medium: { reasoningEffort: "medium" },
+          high: { disabled: true },
+          xhigh: { reasoningEffort: "xhigh" },
+        },
+      },
+    })
+  })
+
+  test("emits fast preset independently from reasoning support", () => {
+    const result = validateCustomProvider({
+      form: {
+        providerID: "custom-provider",
+        name: "Provider",
+        baseURL: "https://api.example.com",
+        apiKey: "secret",
+        models: [model({ row: "m0", id: "model-a", name: "Model A", fast: true })],
+        headers: [{ row: "h0", key: "", value: "", err: {} }],
+        err: {},
+      },
+      t,
+      disabledProviders: [],
+      existingProviderIDs: new Set(),
+    })
+
+    expect(result.result?.config.models).toEqual({
+      "model-a": {
+        name: "Model A",
+        variants: {
+          fast: { textVerbosity: "low" },
+        },
+      },
     })
   })
 })

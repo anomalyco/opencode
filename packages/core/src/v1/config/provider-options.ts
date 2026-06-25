@@ -126,6 +126,22 @@ const openaiCompatible: Lowerer = {
       result.reasoning_effort = options.reasoningEffort
       delete result.reasoningEffort
     }
+    if (options.textVerbosity !== undefined) {
+      result.text = { ...(isRecord(result.text) ? result.text : {}), verbosity: options.textVerbosity }
+      delete result.textVerbosity
+    }
+    if (options.serviceTier !== undefined) {
+      result.service_tier = options.serviceTier
+      delete result.serviceTier
+    }
+    if (options.promptCacheKey !== undefined) {
+      result.prompt_cache_key = options.promptCacheKey
+      delete result.promptCacheKey
+    }
+    if (options.reasoningSummary !== undefined) {
+      result.reasoning = { ...(isRecord(result.reasoning) ? result.reasoning : {}), summary: options.reasoningSummary }
+      delete result.reasoningSummary
+    }
     return result
   },
 }

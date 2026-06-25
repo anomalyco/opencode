@@ -860,7 +860,9 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
       if (model.api.id.toLowerCase().includes("deepseek-v4")) {
         efforts.push("max")
       }
-      return Object.fromEntries(efforts.map((effort) => [effort, { reasoningEffort: effort }]))
+      const variants = Object.fromEntries(efforts.map((effort) => [effort, { reasoningEffort: effort }]))
+      if (model.api.npm !== "@ai-sdk/openai-compatible") return variants
+      return { fast: { reasoningEffort: "low", textVerbosity: "low" }, ...variants }
 
     case "@ai-sdk/azure":
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/azure
@@ -1222,7 +1224,9 @@ export function options(input: {
 }
 
 export function smallOptions(model: Provider.Model) {
-  const small = Object.values(model.variants ?? {})[0] ?? {}
+  const variants = Object.values(model.variants ?? {})
+  const fast = model.variants?.fast
+  const small = fast && !fast.disabled ? fast : variants.find((variant) => !variant.disabled) ?? {}
   if (
     model.providerID === "openai" ||
     model.api.npm === "@ai-sdk/openai" ||

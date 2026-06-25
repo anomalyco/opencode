@@ -18,13 +18,18 @@ type VariantInput = {
   configured: string | undefined
 }
 
+export function enabledModelVariants(variants: Record<string, unknown> | undefined) {
+  if (!variants) return []
+  return Object.keys(variants).filter((key) => variantEnabled(variants[key]))
+}
+
 export function getConfiguredAgentVariant(input: { agent: Agent | undefined; model: Model | undefined }) {
   if (!input.agent?.variant) return undefined
   if (!input.agent.model) return undefined
   if (!input.model?.variants) return undefined
   if (input.agent.model.providerID !== input.model.providerID) return undefined
   if (input.agent.model.modelID !== input.model.modelID) return undefined
-  if (!(input.agent.variant in input.model.variants)) return undefined
+  if (!enabledModelVariants(input.model.variants).includes(input.agent.variant)) return undefined
   return input.agent.variant
 }
 
@@ -49,4 +54,9 @@ export function cycleModelVariant(input: VariantInput) {
     return input.variants[index + 1]
   }
   return input.variants[0]
+}
+
+function variantEnabled(value: unknown) {
+  if (!value || typeof value !== "object") return true
+  return (value as { disabled?: unknown }).disabled !== true
 }

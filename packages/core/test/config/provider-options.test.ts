@@ -180,9 +180,20 @@ describe("ConfigProviderOptionsV1", () => {
       body: { trace: true },
       settings: { apiKey: "secret" },
     })
-    expect(lowerer.request({ reasoningEffort: "high", serviceTier: "priority" })).toEqual({
+    expect(
+      lowerer.request({
+        reasoningEffort: "high",
+        textVerbosity: "low",
+        serviceTier: "priority",
+        promptCacheKey: "cache-key",
+        reasoningSummary: "auto",
+      }),
+    ).toEqual({
       reasoning_effort: "high",
-      serviceTier: "priority",
+      text: { verbosity: "low" },
+      service_tier: "priority",
+      prompt_cache_key: "cache-key",
+      reasoning: { summary: "auto" },
     })
   })
 

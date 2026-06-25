@@ -3595,7 +3595,8 @@ describe("ProviderTransform.variants", () => {
         },
       })
       const result = ProviderTransform.variants(model)
-      expect(Object.keys(result)).toEqual(["low", "medium", "high"])
+      expect(Object.keys(result)).toEqual(["fast", "low", "medium", "high"])
+      expect(result.fast).toEqual({ reasoningEffort: "low", textVerbosity: "low" })
       expect(result.low).toEqual({ reasoningEffort: "low" })
       expect(result.high).toEqual({ reasoningEffort: "high" })
     })
@@ -4457,6 +4458,19 @@ describe("ProviderTransform.smallOptions - google thinking controls", () => {
         variants: {
           high: { thinkingConfig: { includeThoughts: true, thinkingBudget: 16000 } },
           max: { thinkingConfig: { includeThoughts: true, thinkingBudget: 32768 } },
+        },
+      }),
+    ).toEqual({ thinkingConfig: { includeThoughts: true, thinkingBudget: 16000 } })
+  })
+
+  test("skips disabled variants when selecting small options", () => {
+    expect(
+      ProviderTransform.smallOptions({
+        ...createGoogleModel("gemini-2.5-pro"),
+        variants: {
+          fast: { disabled: true },
+          low: { thinkingConfig: { includeThoughts: true, thinkingBudget: 16000 } },
+          high: { disabled: true },
         },
       }),
     ).toEqual({ thinkingConfig: { includeThoughts: true, thinkingBudget: 16000 } })

@@ -1176,6 +1176,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   )
 
   const variants = createMemo(() => ["default", ...props.controls.model.selection.variant.list()])
+  const variantLabel = (variant: string) => {
+    if (variant === "default") return language.t("common.default")
+    if (variant === "fast") return language.t("prompt.model.effort.fast")
+    return variant
+  }
   // Check provider variants directly: `variants` also includes the UI-only default option.
   const showVariantControl = createMemo(() => props.controls.model.selection.variant.list().length > 0)
   const accepting = createMemo(() => {
@@ -1627,24 +1632,18 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   </Show>
                   <ComposerModelControl state={modelControlState()} />
                   <Show when={store.mode !== "shell" && showVariantControl()}>
-                    <div
-                      data-component="prompt-variant-control"
-                      classList={{
-                        "hidden group-hover/prompt-input:block group-focus-within/prompt-input:block":
-                          !props.controls.model.selection.variant.current() && !store.variantOpen,
-                      }}
-                    >
+                    <div data-component="prompt-variant-control">
                       <TooltipKeybind
                         placement="top"
                         gutter={4}
-                        title={language.t("command.model.variant.cycle")}
+                        title={language.t("prompt.model.effort.label")}
                         keybind={command.keybind("model.variant.cycle")}
                       >
                         <Select
                           size="normal"
                           options={variants()}
                           current={props.controls.model.selection.variant.current() ?? "default"}
-                          label={(x) => (x === "default" ? language.t("common.default") : x)}
+                          label={variantLabel}
                           onOpenChange={(open) => setStore("variantOpen", open)}
                           onSelect={(value) => {
                             props.controls.model.selection.variant.set(value === "default" ? undefined : value)
@@ -1653,7 +1652,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                           class="capitalize max-w-[160px] justify-start text-v2-text-text-faint"
                           valueClass="truncate text-[13px] font-[440] leading-5 text-v2-text-text-faint"
                           triggerStyle={control()}
-                          triggerProps={{ "data-action": "prompt-model-variant" }}
+                          triggerProps={{
+                            "data-action": "prompt-model-variant",
+                            "aria-label": language.t("prompt.model.effort.label"),
+                          }}
                           variant="ghost"
                         />
                       </TooltipKeybind>
