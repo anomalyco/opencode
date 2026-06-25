@@ -110,6 +110,29 @@
         "@typescript/native-preview": "catalog:",
       },
     },
+    "packages/client": {
+      "name": "@opencode-ai/client",
+      "dependencies": {
+        "@opencode-ai/protocol": "workspace:*",
+        "@opencode-ai/schema": "workspace:*",
+      },
+      "devDependencies": {
+        "@effect/platform-node": "catalog:",
+        "@opencode-ai/core": "workspace:*",
+        "@opencode-ai/httpapi-codegen": "workspace:*",
+        "@opencode-ai/server": "workspace:*",
+        "@tsconfig/bun": "catalog:",
+        "@types/bun": "catalog:",
+        "@typescript/native-preview": "catalog:",
+        "effect": "catalog:",
+      },
+      "peerDependencies": {
+        "effect": "4.0.0-beta.83",
+      },
+      "optionalPeers": [
+        "effect",
+      ],
+    },
     "packages/console/app": {
       "name": "@opencode-ai/console-app",
       "version": "1.17.10",
@@ -479,6 +502,18 @@
         "effect": "4.0.0-beta.83",
       },
     },
+    "packages/httpapi-codegen": {
+      "name": "@opencode-ai/httpapi-codegen",
+      "dependencies": {
+        "effect": "catalog:",
+        "prettier": "3.6.2",
+      },
+      "devDependencies": {
+        "@tsconfig/bun": "catalog:",
+        "@types/bun": "catalog:",
+        "@typescript/native-preview": "catalog:",
+      },
+    },
     "packages/llm": {
       "name": "@opencode-ai/llm",
       "version": "1.17.10",
@@ -688,6 +723,20 @@
       "devDependencies": {
         "@types/bun": "catalog:",
         "@types/semver": "^7.5.8",
+      },
+    },
+    "packages/sdk-next": {
+      "name": "@opencode-ai/sdk-next",
+      "dependencies": {
+        "@opencode-ai/client": "workspace:*",
+        "@opencode-ai/core": "workspace:*",
+        "@opencode-ai/server": "workspace:*",
+        "effect": "catalog:",
+      },
+      "devDependencies": {
+        "@tsconfig/bun": "catalog:",
+        "@types/bun": "catalog:",
+        "@typescript/native-preview": "catalog:",
       },
     },
     "packages/sdk/js": {
@@ -1847,6 +1896,8 @@
 
     "@opencode-ai/cli": ["@opencode-ai/cli@workspace:packages/cli"],
 
+    "@opencode-ai/client": ["@opencode-ai/client@workspace:packages/client"],
+
     "@opencode-ai/console-app": ["@opencode-ai/console-app@workspace:packages/console/app"],
 
     "@opencode-ai/console-core": ["@opencode-ai/console-core@workspace:packages/console/core"],
@@ -1873,6 +1924,8 @@
 
     "@opencode-ai/http-recorder": ["@opencode-ai/http-recorder@workspace:packages/http-recorder"],
 
+    "@opencode-ai/httpapi-codegen": ["@opencode-ai/httpapi-codegen@workspace:packages/httpapi-codegen"],
+
     "@opencode-ai/llm": ["@opencode-ai/llm@workspace:packages/llm"],
 
     "@opencode-ai/plugin": ["@opencode-ai/plugin@workspace:packages/plugin"],
@@ -1884,6 +1937,8 @@
     "@opencode-ai/script": ["@opencode-ai/script@workspace:packages/script"],
 
     "@opencode-ai/sdk": ["@opencode-ai/sdk@workspace:packages/sdk/js"],
+
+    "@opencode-ai/sdk-next": ["@opencode-ai/sdk-next@workspace:packages/sdk-next"],
 
     "@opencode-ai/server": ["@opencode-ai/server@workspace:packages/server"],
 
