@@ -9,10 +9,13 @@ import { statics } from "./schema"
 
 export const ID = Schema.String.check(Schema.isStartsWith("que")).pipe(
   Schema.brand("QuestionV2.ID"),
-  statics((schema) => ({
-    create: () => schema.make("que_" + ascending()),
-    ascending: (id?: string) => schema.make(id ?? "que_" + ascending()),
-  })),
+  statics((schema) => {
+    const create = () => schema.make("que_" + ascending())
+    return {
+      create,
+      ascending: (id?: string) => (id === undefined ? create() : schema.make(id)),
+    }
+  }),
 )
 export type ID = typeof ID.Type
 

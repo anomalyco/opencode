@@ -9,10 +9,13 @@ import { NonNegativeInt, PositiveInt, statics } from "./schema"
 const IDSchema = Schema.String.check(Schema.isStartsWith("pty")).pipe(Schema.brand("PtyID"))
 
 export const ID = IDSchema.pipe(
-  statics((schema: typeof IDSchema) => ({
-    create: () => schema.make("pty_" + ascending()),
-    ascending: (id?: string) => schema.make(id ?? "pty_" + ascending()),
-  })),
+  statics((schema: typeof IDSchema) => {
+    const create = () => schema.make("pty_" + ascending())
+    return {
+      create,
+      ascending: (id?: string) => (id === undefined ? create() : schema.make(id)),
+    }
+  }),
 )
 export type ID = typeof ID.Type
 
