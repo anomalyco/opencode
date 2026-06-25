@@ -37,7 +37,7 @@ export function SessionComposerRegion(props: {
     sending?: string
     edit?: { id: string; prompt: FollowupDraft["prompt"]; context: FollowupDraft["context"] }
     onQueue: (draft: FollowupDraft) => void
-    onAbort: () => void
+    onAbort?: () => void
     onSend: (id: string) => void
     onEdit: (id: string) => void
     onEditLoaded: () => void
