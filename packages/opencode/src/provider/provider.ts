@@ -1884,7 +1884,12 @@ export const layer = Layer.effect(
         [(model) => model.id, "desc"],
       )
       for (const family of priority) {
-        const candidates = models.filter((model) => model.family?.includes(family))
+        const candidates = models.filter((model) =>
+          (model.family || model.id)
+            .toLowerCase()
+            .split(/[^a-z0-9]+/)
+            .includes(family),
+        )
         if (providerID === ProviderV2.ID.amazonBedrock) {
           const crossRegionPrefixes = ["global.", "us.", "eu."]
 
