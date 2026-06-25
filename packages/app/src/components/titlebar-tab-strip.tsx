@@ -45,7 +45,6 @@ import {
 function SessionTabSlot(props: {
   tab: SessionTab
   id: string
-  first: () => boolean
   active: () => boolean
   activeServerKey: ServerConnection.Key
   forceTruncate: boolean
@@ -104,10 +103,9 @@ function SessionTabSlot(props: {
     <div
       data-titlebar-tab-slot
       data-tab-key={props.id}
-      class="flex shrink-0"
+      class="flex min-w-0 max-w-56 flex-1 basis-0"
       classList={{
         hidden: !session(),
-        "ml-1.5 border-l border-[var(--v2-background-bg-layer-02)] pl-1.5": !props.first(),
         "pointer-events-none": props.dragActive,
       }}
       onPointerDown={props.onPointerDown}
@@ -461,17 +459,16 @@ export function TitlebarTabStrip(props: {
 
   return (
     <>
-      <div data-slot="titlebar-tabs" class="relative min-w-0">
+      <div data-slot="titlebar-tabs" class="relative min-w-0 flex-1">
         <div
           data-slot="titlebar-tabs-scroll"
           class="flex min-w-0 flex-row items-center gap-1.5 overflow-x-auto no-scrollbar [app-region:no-drag]"
           ref={scrollRef}
         >
-          <div class="flex min-w-0 flex-row items-center" ref={listRef}>
+          <div data-titlebar-tab-list class="flex w-full min-w-0 flex-row items-center" ref={listRef}>
             <For each={displayTabs()}>
               {(tab, index) => {
                 const id = tabKey(tab)
-                const first = () => index() === 0
                 let ref!: HTMLDivElement
                 useTabShortcut(index, () => props.onNavigate(tab, ref))
 
@@ -487,7 +484,6 @@ export function TitlebarTabStrip(props: {
                     <SessionTabSlot
                       tab={tab}
                       id={id}
-                      first={first}
                       active={() => props.currentTab() === tab}
                       activeServerKey={props.activeServerKey}
                       forceTruncate={props.forceTruncate}
@@ -510,9 +506,8 @@ export function TitlebarTabStrip(props: {
                   <div
                     data-titlebar-tab-slot
                     data-tab-key={id}
-                    class="flex shrink-0"
+                    class="flex min-w-0 max-w-56 flex-1 basis-0"
                     classList={{
-                      "ml-1.5 border-l border-[var(--v2-background-bg-layer-02)] pl-1.5": !first(),
                       "pointer-events-none": drag.active,
                     }}
                     onPointerDown={(event) => {

@@ -252,7 +252,7 @@ export function SessionComposerRegion(props: {
             </Show>
             <div
               classList={{
-                "relative z-10": true,
+                "relative z-30": true,
               }}
               style={{
                 "margin-top": `${-lift()}px`,

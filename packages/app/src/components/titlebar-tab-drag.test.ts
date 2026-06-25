@@ -56,6 +56,28 @@ describe("titlebar tab drag", () => {
     expect(captureTabDragLayout(list, ["a", "b"]).dividerWidth).toBe(13)
     list.remove()
   })
+
+  test("uses the list gap as the divider width", () => {
+    const list = document.createElement("div")
+    const first = document.createElement("div")
+    const second = document.createElement("div")
+    const firstTab = document.createElement("div")
+    const secondTab = document.createElement("div")
+    first.dataset.titlebarTabSlot = ""
+    first.dataset.tabKey = "a"
+    second.dataset.titlebarTabSlot = ""
+    second.dataset.tabKey = "b"
+    firstTab.dataset.titlebarTab = ""
+    secondTab.dataset.titlebarTab = ""
+    first.append(firstTab)
+    second.append(secondTab)
+    list.append(first, second)
+    list.style.columnGap = "13.5px"
+    document.body.append(list)
+
+    expect(captureTabDragLayout(list, ["a", "b"]).dividerWidth).toBe(13.5)
+    list.remove()
+  })
 })
 
 describe("titlebar tab gestures", () => {

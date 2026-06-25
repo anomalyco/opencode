@@ -29,6 +29,7 @@ export function captureTabDragLayout(list: HTMLElement, order: string[]) {
 
   let dividerWidth = 0
   if (order.length >= 2) {
+    const gap = Number.parseFloat(getComputedStyle(list).columnGap) || 0
     const secondId = order[1]
     for (const slot of slots) {
       if (slot.dataset.tabKey !== secondId) continue
@@ -36,10 +37,11 @@ export function captureTabDragLayout(list: HTMLElement, order: string[]) {
       if (!tab) break
       const style = getComputedStyle(slot)
       dividerWidth =
+        gap ||
         slot.getBoundingClientRect().width -
-        tab.getBoundingClientRect().width +
-        (Number.parseFloat(style.marginLeft) || 0) +
-        (Number.parseFloat(style.marginRight) || 0)
+          tab.getBoundingClientRect().width +
+          (Number.parseFloat(style.marginLeft) || 0) +
+          (Number.parseFloat(style.marginRight) || 0)
       break
     }
   }

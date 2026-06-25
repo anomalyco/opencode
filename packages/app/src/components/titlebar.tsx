@@ -481,7 +481,6 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                     />
                   </TooltipV2>
                 </Show>
-                <div class="flex-1" />
                 <TitlebarV2Right state={v2RightState()} />
                 <Show when={windows() && !electronWindows()}>
                   <div data-tauri-decorum-tb class="flex flex-row" />

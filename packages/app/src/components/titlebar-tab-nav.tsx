@@ -178,7 +178,7 @@ export function TabNavItem(props: {
       data-slot="titlebar-tab-item"
       data-title-overflow={titleOverflowing()}
       data-editing={editing()}
-      class="group relative flex h-7 min-w-24 max-w-60 select-none flex-row items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-[6px] bg-[var(--tab-bg)] px-1.5 [--tab-bg:var(--v2-background-bg-deep)] hover:[--tab-bg:var(--v2-background-bg-layer-02)] has-[>a:focus-visible]:[--tab-bg:var(--v2-background-bg-layer-02)] data-[active='true']:[--tab-bg:var(--v2-background-bg-layer-02)] data-[dragging='true']:[--tab-bg:var(--v2-background-bg-layer-02)] data-[pressed='true']:[--tab-bg:var(--v2-background-bg-layer-02)] data-[editing='true']:[--tab-bg:var(--v2-background-bg-layer-02)]"
+      class="group relative flex h-7 w-full min-w-0 max-w-56 select-none flex-row items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-[6px] bg-[var(--tab-bg)] px-1.5 [container-type:inline-size] [--tab-bg:var(--v2-background-bg-deep)] hover:[--tab-bg:var(--v2-background-bg-layer-02)] has-[>a:focus-visible]:[--tab-bg:var(--v2-background-bg-layer-02)] data-[active='true']:[--tab-bg:var(--v2-background-bg-layer-02)] data-[dragging='true']:[--tab-bg:var(--v2-background-bg-layer-02)] data-[pressed='true']:[--tab-bg:var(--v2-background-bg-layer-02)] data-[editing='true']:[--tab-bg:var(--v2-background-bg-layer-02)]"
       classList={{ invisible: props.hidden }}
       data-active={props.active}
       data-dragging={props.dragging}
@@ -193,6 +193,7 @@ export function TabNavItem(props: {
           return (
             <a
               data-slot="tab-link"
+              data-titlebar-tab-link
               href={props.href}
               draggable={false}
               onDragStart={(event) => {
@@ -221,6 +222,7 @@ export function TabNavItem(props: {
                   titleEl.textContent = session().title
                 }}
                 data-slot="tab-title"
+                data-titlebar-tab-title
                 class="min-w-0 flex-1 outline-none leading-4"
                 classList={{
                   "overflow-hidden text-clip whitespace-nowrap": !editing(),
@@ -297,7 +299,7 @@ export function DraftTabItem(props: {
       data-active={props.active}
       data-dragging={props.dragging}
       data-pressed={props.pressed}
-      class="group relative shrink-0 flex h-7 max-w-60 flex-row items-center gap-1.5 overflow-hidden rounded-[6px] bg-[var(--tab-bg)] pl-1.5 pr-8 whitespace-nowrap [--tab-bg:var(--v2-background-bg-deep)] hover:[--tab-bg:var(--v2-background-bg-layer-02)] has-[>a:focus-visible]:[--tab-bg:var(--v2-background-bg-layer-02)] data-[active='true']:has-[>a:focus-visible]:[--tab-bg:var(--v2-background-bg-layer-02)] data-[active='true']:[--tab-bg:var(--v2-overlay-simple-overlay-pressed)] data-[dragging='true']:[--tab-bg:var(--v2-background-bg-layer-02)] data-[pressed='true']:[--tab-bg:var(--v2-background-bg-layer-02)]"
+      class="group relative flex h-7 w-full min-w-0 max-w-56 flex-row items-center gap-1.5 overflow-hidden rounded-[6px] bg-[var(--tab-bg)] pl-1.5 pr-8 [container-type:inline-size] whitespace-nowrap [--tab-bg:var(--v2-background-bg-deep)] hover:[--tab-bg:var(--v2-background-bg-layer-02)] has-[>a:focus-visible]:[--tab-bg:var(--v2-background-bg-layer-02)] data-[active='true']:has-[>a:focus-visible]:[--tab-bg:var(--v2-background-bg-layer-02)] data-[active='true']:[--tab-bg:var(--v2-overlay-simple-overlay-pressed)] data-[dragging='true']:[--tab-bg:var(--v2-background-bg-layer-02)] data-[pressed='true']:[--tab-bg:var(--v2-background-bg-layer-02)] data-[active='true'][data-pressed='true']:[--tab-bg:var(--v2-overlay-simple-overlay-pressed)]"
       classList={{ invisible: props.hidden }}
       onMouseDown={(event) => {
         if (event.button !== 1) return
@@ -306,6 +308,7 @@ export function DraftTabItem(props: {
     >
       <a
         data-slot="tab-link"
+        data-titlebar-tab-link
         href={props.href}
         draggable={false}
         onDragStart={(event) => {
@@ -322,7 +325,9 @@ export function DraftTabItem(props: {
         <span class="flex size-4 shrink-0 items-center justify-center">
           <IconV2 name="edit" />
         </span>
-        <span class="truncate leading-5">{props.title}</span>
+        <span data-titlebar-tab-title class="truncate leading-5">
+          {props.title}
+        </span>
       </a>
       <div data-slot="tab-close" class="absolute right-0 inset-y-0 flex w-7 items-center justify-center">
         <IconButtonV2
