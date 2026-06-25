@@ -6,12 +6,16 @@
   outline: none;
 }
 
-[data-slot="titlebar-v2"] [data-component="icon-button-v2"][data-variant="ghost-muted"]:is(:focus-visible, [data-state="focus"]):not(:disabled) {
+[data-slot="titlebar-v2"]
+  [data-component="icon-button-v2"][data-variant="ghost-muted"]:is(:focus-visible, [data-state="focus"]):not(
+    :disabled
+  ) {
   outline: none;
   background-color: var(--v2-overlay-simple-overlay-hover);
 }
 
-[data-slot="titlebar-tab-item"] [data-component="icon-button-v2"]:is(:focus-visible, [data-state="focus"]):not(:disabled) {
+[data-slot="titlebar-tab-item"]
+  [data-component="icon-button-v2"]:is(:focus-visible, [data-state="focus"]):not(:disabled) {
   opacity: 1;
 }
 
@@ -20,7 +24,8 @@
   left: auto;
 }
 
-[data-slot="titlebar-tab-item"]:has([data-component="icon-button-v2"]:focus-visible) [data-slot="titlebar-tab-close-fade"] {
+[data-slot="titlebar-tab-item"]:has([data-component="icon-button-v2"]:focus-visible)
+  [data-slot="titlebar-tab-close-fade"] {
   background-image: var(--active-bg);
 }
 

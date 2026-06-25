@@ -703,11 +703,7 @@ function HomeServerRow(props: {
           open={state.menuOpen}
           onOpenChange={(open) => setState("menuOpen", open)}
         />
-        <TooltipV2
-          class="flex shrink-0 items-center"
-          placement="bottom"
-          value={props.language.t("home.project.add")}
-        >
+        <TooltipV2 class="flex shrink-0 items-center" placement="bottom" value={props.language.t("home.project.add")}>
           <IconButtonV2
             data-action="home-add-project"
             variant="ghost-muted"
