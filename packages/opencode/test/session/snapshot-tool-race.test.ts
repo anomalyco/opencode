@@ -84,7 +84,7 @@ const root = LayerNode.group([
   SessionSummary.node,
   Database.node,
   CrossSpawnSpawner.node,
-  LayerNode.make(TestLLMServer.layer, []),
+  LayerNode.make({ service: TestLLMServer, layer: TestLLMServer.layer, deps: [] }),
 ])
 const it = testEffect(
   LayerNode.buildLayer(root, {

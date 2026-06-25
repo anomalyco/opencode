@@ -456,4 +456,4 @@ export const layer = Layer.effectDiscard(
 )
 
 export const defaultLayer = layer.pipe(Layer.provide(EventV2.defaultLayer), Layer.provide(Database.defaultLayer))
-export const node = LayerNode.make(layer, [EventV2.node, Database.node])
+export const node = LayerNode.make({ name: "session-projector", layer, deps: [EventV2.node, Database.node] })

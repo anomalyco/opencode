@@ -180,7 +180,10 @@ const replacements = [
   LayerNode.replace(SessionSummary.node, summary),
   LayerNode.replace(RuntimeFlags.node, RuntimeFlags.layer({ experimentalEventSystem: true })),
 ]
-const env = LayerNode.buildLayer(LayerNode.group([root, LayerNode.make(TestLLMServer.layer, [])]), { replacements })
+const env = LayerNode.buildLayer(
+  LayerNode.group([root, LayerNode.make({ service: TestLLMServer, layer: TestLLMServer.layer, deps: [] })]),
+  { replacements },
+)
 
 const it = testEffect(env)
 

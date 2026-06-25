@@ -244,6 +244,6 @@ export const defaultLayer = layer.pipe(
   Layer.provide(FSUtil.defaultLayer),
   Layer.provide(EventV2.defaultLayer),
 )
-export const node = LayerNode.make(layer, [FSUtil.node, EventV2.node, httpClient])
+export const node = LayerNode.make({ service: Service, layer: layer, deps: [FSUtil.node, EventV2.node, httpClient] })
 
 export * as ModelsDev from "./models-dev"

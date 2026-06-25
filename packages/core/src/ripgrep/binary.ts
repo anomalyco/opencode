@@ -130,5 +130,9 @@ export namespace RipgrepBinary {
     Layer.provide(CrossSpawnSpawner.defaultLayer),
   )
 
-  export const node = LayerNode.make(layer, [FSUtil.node, httpClient, CrossSpawnSpawner.node])
+  export const node = LayerNode.make({
+    service: Service,
+    layer: layer,
+    deps: [FSUtil.node, httpClient, CrossSpawnSpawner.node],
+  })
 }
