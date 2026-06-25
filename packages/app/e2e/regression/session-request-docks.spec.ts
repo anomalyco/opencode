@@ -51,6 +51,38 @@ test("shows a pending question dock", async ({ page }) => {
   expect((await reply).postDataJSON()).toEqual({ answers: [["Minimal"]] })
 })
 
+test("shows progress for multiple questions", async ({ page }) => {
+  await mockServer(page, {
+    questions: [
+      {
+        id: "multi-question-request",
+        sessionID,
+        questions: [
+          {
+            header: "Implementation",
+            question: "Which implementation should be used?",
+            options: [{ label: "Minimal", description: "Use the smallest correct change" }],
+          },
+          {
+            header: "Validation",
+            question: "Which validation should be run?",
+            options: [{ label: "Targeted", description: "Run the relevant checks" }],
+          },
+        ],
+      },
+    ],
+  })
+
+  await page.goto(`/${base64Encode(directory)}/session/${sessionID}`)
+  await expectSessionTitle(page, title)
+
+  const question = page.locator('[data-component="dock-prompt"][data-kind="question"]')
+  const progress = question.locator('[data-slot="question-progress-segment"]')
+  await expect(progress).toHaveCount(2)
+  await progress.nth(1).click()
+  await expect(question.getByText("Which validation should be run?")).toBeVisible()
+})
+
 test("shows a pending permission dock", async ({ page }) => {
   await mockServer(page, {
     permissions: [

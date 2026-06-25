@@ -246,6 +246,11 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
 
   const submit = () => void reply(questions().map((_, i) => store.answers[i] ?? []))
 
+  const answered = (i: number) => {
+    if ((store.answers[i]?.length ?? 0) > 0) return true
+    return store.customOn[i] === true && (store.custom[i] ?? "").trim().length > 0
+  }
+
   const picked = (answer: string) => store.answers[store.tab]?.includes(answer) ?? false
 
   const pick = (answer: string, custom: boolean = false) => {
@@ -412,12 +417,40 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
     focus(pickFocus(tab))
   }
 
+  const jump = (tab: number) => {
+    if (sending()) return
+    setStore("tab", tab)
+    setStore("editing", false)
+    focus(pickFocus(tab))
+  }
+
   return (
     <DockPrompt
       kind="question"
       ref={(el) => (root = el)}
       onKeyDown={nav}
-      header={<div data-slot="question-header-title">{summary()}</div>}
+      header={
+        <>
+          <div data-slot="question-header-title">{summary()}</div>
+          <Show when={total() > 1}>
+            <div data-slot="question-progress">
+              <For each={questions()}>
+                {(_, i) => (
+                  <button
+                    type="button"
+                    data-slot="question-progress-segment"
+                    data-active={i() === store.tab}
+                    data-answered={answered(i())}
+                    disabled={sending()}
+                    onClick={() => jump(i())}
+                    aria-label={`${language.t("ui.tool.questions")} ${i() + 1}`}
+                  />
+                )}
+              </For>
+            </div>
+          </Show>
+        </>
+      }
       footer={
         <>
           <Button variant="ghost" size="large" disabled={sending()} onClick={reject} aria-keyshortcuts="Escape">
