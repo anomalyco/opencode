@@ -393,6 +393,8 @@ export function NewHome() {
   }
 
   function chooseProject(conn: ServerConnection.Any) {
+    if (global.servers.health[ServerConnection.key(conn)]?.healthy === false) return
+
     function resolve(result: string | string[] | null) {
       addProjects(conn, homeProjectDirectories(result))
     }
@@ -551,6 +553,7 @@ function HomeProjectColumn(props: {
               size="large"
               class="titlebar-icon [&_[data-slot=icon-svg]]:text-v2-icon-icon-muted"
               icon={<IconV2 name="folder-add-left" />}
+              disabled={global.servers.health[ServerConnection.key(global.servers.list()[0]!)]?.healthy === false}
               onClick={() => props.chooseProject(global.servers.list()[0]!)}
               aria-label={props.language.t("home.project.add")}
             />
@@ -690,7 +693,7 @@ function HomeServerRow(props: {
         </span>
       </button>
       <div
-        class="absolute right-1 top-1/2 flex -translate-y-1/2 items-center gap-1 opacity-0 transition-opacity group-hover/server:opacity-100 focus-within:opacity-100 data-[menu=true]:opacity-100"
+        class="hover-reveal absolute right-1 top-1/2 flex -translate-y-1/2 items-center gap-1 group-hover/server:opacity-100 focus-within:opacity-100 data-[menu=true]:opacity-100"
         data-menu={state.menuOpen}
       >
         <ServerRowMenu
@@ -707,6 +710,7 @@ function HomeServerRow(props: {
             size="small"
             icon={<IconV2 name="folder-add-left" />}
             aria-label={props.language.t("home.project.add")}
+            disabled={props.health?.healthy === false}
             onClick={() => props.chooseProject(props.server)}
           />
         </TooltipV2>
@@ -779,7 +783,7 @@ function HomeProjectRow(props: {
         <span class={HOME_PROJECT_NAV_LABEL}>{displayName(props.project)}</span>
       </button>
       <div
-        class="absolute right-1 top-1/2 flex -translate-y-1/2 items-center gap-1 opacity-0 transition-opacity group-hover/project:opacity-100 focus-within:opacity-100 data-[menu=true]:opacity-100"
+        class="hover-reveal absolute right-1 top-1/2 flex -translate-y-1/2 items-center gap-1 group-hover/project:opacity-100 focus-within:opacity-100 data-[menu=true]:opacity-100"
         data-menu={state.menuOpen}
       >
         <MenuV2
@@ -1187,7 +1191,7 @@ function HomeSessionRow(props: {
           </span>
         </Show>
       </button>
-      <div class="absolute right-1.5 top-1/2 flex -translate-y-1/2 items-center gap-1 opacity-0 transition-opacity group-hover/session:opacity-100 focus-within:opacity-100">
+      <div class="hover-reveal absolute right-1.5 top-1/2 flex -translate-y-1/2 items-center gap-1 group-hover/session:opacity-100 focus-within:opacity-100">
         <TooltipV2 class="flex shrink-0 items-center" placement="bottom" value={language.t("common.archive")}>
           <IconButtonV2
             data-action="home-session-archive"
@@ -1276,6 +1280,7 @@ export function LegacyHome() {
   const server = useServer()
   const language = useLanguage()
   const homedir = createMemo(() => sync().data.path.home)
+  const serverUnreachable = createMemo(() => global.servers.health[server.key]?.healthy === false)
   const recent = createMemo(() => {
     return sync()
       .data.project.slice()
@@ -1298,6 +1303,7 @@ export function LegacyHome() {
   }
 
   function chooseProject() {
+    if (serverUnreachable()) return
     const s = server.current
     if (!s) return
 
@@ -1341,7 +1347,13 @@ export function LegacyHome() {
           <div class="mt-20 w-full flex flex-col gap-4">
             <div class="flex gap-2 items-center justify-between pl-3">
               <div class="text-14-medium text-text-strong">{language.t("home.recentProjects")}</div>
-              <Button icon="folder-add-left" size="normal" class="pl-2 pr-3" onClick={chooseProject}>
+              <Button
+                icon="folder-add-left"
+                size="normal"
+                class="pl-2 pr-3"
+                disabled={serverUnreachable()}
+                onClick={chooseProject}
+              >
                 {language.t("command.project.open")}
               </Button>
             </div>
@@ -1367,7 +1379,7 @@ export function LegacyHome() {
         <Match when={!sync().ready}>
           <div class="mt-30 mx-auto flex flex-col items-center gap-3">
             <div class="text-12-regular text-text-weak">{language.t("common.loading")}</div>
-            <Button class="px-3" onClick={chooseProject}>
+            <Button class="px-3" disabled={serverUnreachable()} onClick={chooseProject}>
               {language.t("command.project.open")}
             </Button>
           </div>
@@ -1379,7 +1391,7 @@ export function LegacyHome() {
               <div class="text-14-medium text-text-strong">{language.t("home.empty.title")}</div>
               <div class="text-12-regular text-text-weak">{language.t("home.empty.description")}</div>
             </div>
-            <Button class="px-3 mt-1" onClick={chooseProject}>
+            <Button class="px-3 mt-1" disabled={serverUnreachable()} onClick={chooseProject}>
               {language.t("command.project.open")}
             </Button>
           </div>
