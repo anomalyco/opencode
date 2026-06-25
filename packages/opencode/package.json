@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "version": "1.17.11",
-  "name": "opencode",
+  "name": "daneel",
   "type": "module",
   "license": "MIT",
   "private": true,
@@ -16,7 +16,7 @@
     "dev:temporary": "bun run --conditions=browser ./src/temporary.ts"
   },
   "bin": {
-    "opencode": "./bin/opencode"
+    "daneel": "./bin/daneel"
   },
   "exports": {
     "./*": "./src/*.ts"
@@ -42,7 +42,6 @@
     "@types/mime-types": "3.0.1",
     "@types/npm-package-arg": "6.1.4",
     "@types/semver": "^7.5.8",
-    "@types/turndown": "5.0.5",
     "@types/yargs": "17.0.33",
     "@typescript/native-preview": "catalog:",
     "drizzle-orm": "catalog:",
