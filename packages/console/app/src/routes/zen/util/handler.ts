@@ -201,6 +201,7 @@ export async function handler(
             if (v === "$model") return headers.set(k, model)
             if (v === "$request") return headers.set(k, requestId)
             if (v === "$project") return headers.set(k, projectId)
+            if (v === "$workspace" && authInfo?.workspaceID) return headers.set(k, authInfo.workspaceID)
             headers.set(k, v)
           })
           headers.delete("host")
