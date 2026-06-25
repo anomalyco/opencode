@@ -13,6 +13,7 @@ import {
   SessionComposerRegion,
 } from "@/pages/session/composer"
 import { useSessionKey } from "@/pages/session/session-layout"
+import { useComposerCommands } from "@/pages/session/use-composer-commands"
 
 /**
  * The `/new-session` draft page. Unlike `session.tsx`, this only renders the prompt
@@ -27,6 +28,8 @@ export default function NewSessionPage() {
   const comments = useComments()
   const route = useSessionKey()
   const [searchParams, setSearchParams] = useSearchParams<{ draftId?: string; prompt?: string }>()
+
+  useComposerCommands()
 
   let inputRef: HTMLDivElement | undefined
 
