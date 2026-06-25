@@ -33,7 +33,12 @@ test("shows a pending question dock", async ({ page }) => {
 
   const question = page.locator('[data-component="dock-prompt"][data-kind="question"]')
   await expect(question).toBeVisible()
-  await expect(question.getByText("Which implementation should be used?")).toBeVisible()
+  const questionText = question.getByText("Which implementation should be used?")
+  await expect(questionText).toBeVisible()
+  await expect(questionText).toHaveCSS("user-select", "text")
+  await questionText.selectText()
+  expect(await page.evaluate(() => window.getSelection()?.toString())).toBe("Which implementation should be used?")
+  await expect(question.locator('[data-slot="question-progress"]')).toHaveCount(0)
   await expect(question.getByRole("radio", { name: /Minimal/ })).toBeVisible()
   await expect(question.getByRole("radio", { name: /Extended/ })).toBeVisible()
   await expect(page.locator('[data-component="session-composer"]')).toHaveCount(0)
