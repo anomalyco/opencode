@@ -160,6 +160,7 @@ export const Terminal = (props: TerminalProps) => {
   const settings = useSettings()
   const theme = useTheme()
   const language = useLanguage()
+  // Terminal captures its connection for the PTY lifetime, so callers must key it per server/session.
   const connection = useServerSDK()().server
   const directory = sdk().directory
   const client = sdk().client
