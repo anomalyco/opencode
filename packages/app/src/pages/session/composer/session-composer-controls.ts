@@ -8,11 +8,12 @@ import { useGlobal } from "@/context/global"
 import { useLayout } from "@/context/layout"
 import { useLocal } from "@/context/local"
 import type { QueryOptionsApi } from "@/context/server-sync"
+import { useServerSDK } from "@/context/server-sdk"
 import { serverName, ServerConnection, useServer } from "@/context/server"
 import { useSDK } from "@/context/sdk"
 import { useSettings } from "@/context/settings"
 import { useSync } from "@/context/sync"
-import { type DraftTab, useTabs } from "@/context/tabs"
+import { useTabs } from "@/context/tabs"
 import { useProviders } from "@/hooks/use-providers"
 import { pathKey } from "@/utils/path-key"
 
@@ -27,6 +28,7 @@ export function createSessionComposerControls(input: {
   const providers = useProviders()
   const settings = useSettings()
   const server = useServer()
+  const serverSDK = useServerSDK()
   const sync = useSync()
   const sdk = useSDK()
   const tabs = useTabs()
@@ -35,23 +37,11 @@ export function createSessionComposerControls(input: {
   const [search] = useSearchParams<{ draftId?: string }>()
   const view = layout.view(input.sessionKey)
 
-  const draft = createMemo(() => {
-    if (!search.draftId) return
-    return tabs.store.find((tab): tab is DraftTab => tab.type === "draft" && tab.draftID === search.draftId)
-  })
-  const projectServer = createMemo(() => {
-    if (!search.draftId) return server.current
-    const target = draft()?.server
-    if (!target) return
-    return server.list.find((conn) => ServerConnection.key(conn) === target)
-  })
-  const projectServerCtx = createMemo(() => {
-    const conn = projectServer()
-    if (conn) return global.ensureServerCtx(conn)
-  })
+  const projectServer = () => serverSDK().server
+  const projectServerCtx = createMemo(() => global.ensureServerCtx(projectServer()))
   const projects = createMemo(() => {
     if (server.list.length <= 1) {
-      return search.draftId ? (projectServerCtx()?.projects.list() ?? []) : layout.projects.list()
+      return search.draftId ? projectServerCtx().projects.list() : layout.projects.list()
     }
     return server.list.flatMap((conn) => {
       const server = { key: ServerConnection.key(conn), name: serverName(conn) }
@@ -121,7 +111,7 @@ export function createSessionComposerControls(input: {
     projects: {
       available: projects(),
       directory: sdk().directory,
-      server: server.list.length > 1 && projectServer() ? ServerConnection.key(projectServer()!) : undefined,
+      server: server.list.length > 1 ? ServerConnection.key(projectServer()) : undefined,
       select: selectProject,
       add: addProject,
     },

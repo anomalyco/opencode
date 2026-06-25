@@ -17,6 +17,7 @@ import type { ProjectAvatarVariant } from "@opencode-ai/ui/v2/project-avatar-v2"
 import { migrateLegacySessionStateKeys, ServerScope, SessionStateKey } from "@/utils/server-scope"
 import { createSessionKeyReader, ensureSessionKey, pruneSessionKeys } from "./layout-helpers"
 import { requireServerKey } from "@/utils/session-route"
+import { type DraftTab, useTabs } from "./tabs"
 
 export { createSessionKeyReader, ensureSessionKey, pruneSessionKeys }
 
@@ -159,12 +160,17 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     const serverSdk = useServerSDK()
     const serverSync = useServerSync()
     const server = useServer()
+    const tabs = useTabs()
     const platform = usePlatform()
     const location = useLocation()
     const route = createMemo(() => {
       const value = currentRoute(location.pathname, location.search)
       if (value.type === "home") return value
       if (value.server) return value
+      if (value.type === "draft") {
+        const draft = tabs.store.find((tab): tab is DraftTab => tab.type === "draft" && tab.draftID === value.draftID)
+        if (draft) return { ...value, server: draft.server }
+      }
       return { ...value, server: server.key }
     })
 
