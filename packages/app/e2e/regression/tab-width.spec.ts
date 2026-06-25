@@ -2,20 +2,47 @@ import { expect, test, type Page, type Route } from "@playwright/test"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 
 const server = "http://127.0.0.1:4096"
-const sessionA = { id: "ses_a", slug: "ses_a", projectID: "proj_a", directory: "/repo/a", title: "Session A", version: "dev", time: { created: 1, updated: 1 } }
-const sessionB = { id: "ses_b", slug: "ses_b", projectID: "proj_b", directory: "/repo/b", title: "Session B", version: "dev", time: { created: 2, updated: 2 } }
-const sessionC = { id: "ses_c", slug: "ses_c", projectID: "proj_c", directory: "/repo/c", title: "Session C", version: "dev", time: { created: 3, updated: 3 } }
+const sessionA = {
+  id: "ses_a",
+  slug: "ses_a",
+  projectID: "proj_a",
+  directory: "/repo/a",
+  title: "Session A",
+  version: "dev",
+  time: { created: 1, updated: 1 },
+}
+const sessionB = {
+  id: "ses_b",
+  slug: "ses_b",
+  projectID: "proj_b",
+  directory: "/repo/b",
+  title: "Session B",
+  version: "dev",
+  time: { created: 2, updated: 2 },
+}
+const sessionC = {
+  id: "ses_c",
+  slug: "ses_c",
+  projectID: "proj_c",
+  directory: "/repo/c",
+  title: "Session C",
+  version: "dev",
+  time: { created: 3, updated: 3 },
+}
 
 test("tabs shrink from their preferred width before scrolling", async ({ page }) => {
   await mockServers(page)
   await page.addInitScript(
     ({ server, sessionA, sessionB, sessionC }) => {
       localStorage.setItem("settings.v3", JSON.stringify({ general: { newLayoutDesigns: true } }))
-      localStorage.setItem("opencode.global.dat:tabs", JSON.stringify([
-        { type: "session", server, sessionId: sessionA.id },
-        { type: "session", server, sessionId: sessionB.id },
-        { type: "session", server, sessionId: sessionC.id },
-      ]))
+      localStorage.setItem(
+        "opencode.global.dat:tabs",
+        JSON.stringify([
+          { type: "session", server, sessionId: sessionA.id },
+          { type: "session", server, sessionId: sessionB.id },
+          { type: "session", server, sessionId: sessionC.id },
+        ]),
+      )
     },
     { server, sessionA, sessionB, sessionC },
   )
@@ -42,20 +69,30 @@ test("tabs shrink from their preferred width before scrolling", async ({ page })
   expect(strip!.width).toBeCloseTo(list!.width, 0)
 
   await page.setViewportSize({ width: 700, height: 720 })
-  await expect.poll(() => tabSlots.nth(0).evaluate((element) => element.getBoundingClientRect().width)).toBeLessThan(224)
+  await expect
+    .poll(() => tabSlots.nth(0).evaluate((element) => element.getBoundingClientRect().width))
+    .toBeLessThan(224)
   expect(await tabSlots.nth(0).evaluate((element) => element.getBoundingClientRect().width)).toBeGreaterThan(96)
   expect(
-    await page.locator('[data-slot="titlebar-tabs-scroll"]').evaluate((element) => element.scrollWidth <= element.clientWidth),
+    await page
+      .locator('[data-slot="titlebar-tabs-scroll"]')
+      .evaluate((element) => element.scrollWidth <= element.clientWidth),
   ).toBe(true)
 
-  await page.setViewportSize({ width: 420, height: 720 })
-  await expect.poll(() => tabSlots.nth(0).evaluate((element) => element.getBoundingClientRect().width)).toBeCloseTo(96, 0)
+  await page.setViewportSize({ width: 220, height: 720 })
+  await expect
+    .poll(() => tabSlots.nth(0).evaluate((element) => element.getBoundingClientRect().width))
+    .toBeCloseTo(28, 0)
   expect(
-    await page.locator('[data-slot="titlebar-tabs-scroll"]').evaluate((element) => element.scrollWidth > element.clientWidth),
+    await page
+      .locator('[data-slot="titlebar-tabs-scroll"]')
+      .evaluate((element) => element.scrollWidth > element.clientWidth),
   ).toBe(true)
 
   await page.setViewportSize({ width: 1280, height: 720 })
-  await expect.poll(() => tabSlots.nth(0).evaluate((element) => element.getBoundingClientRect().width)).toBeCloseTo(224, 0)
+  await expect
+    .poll(() => tabSlots.nth(0).evaluate((element) => element.getBoundingClientRect().width))
+    .toBeCloseTo(224, 0)
 
   const first = await tabSlots.nth(0).boundingBox()
   const second = await tabSlots.nth(1).boundingBox()
@@ -129,17 +166,45 @@ async function mockServers(page: Page) {
       return json(route, { all: [], connected: [], default: { providerID: "", modelID: "" } })
     if (url.pathname === "/agent") return json(route, [{ name: "build", mode: "primary" }])
     if (url.pathname === "/project" || url.pathname === "/project/current") {
-      return json(route, url.pathname === "/project" ? sessions.map((s) => ({ id: s.projectID, worktree: s.directory, vcs: "git", time: { created: 1, updated: 1 }, sandboxes: [] })) : { id: current.projectID, worktree: current.directory, vcs: "git", time: { created: 1, updated: 1 }, sandboxes: [] })
+      return json(
+        route,
+        url.pathname === "/project"
+          ? sessions.map((s) => ({
+              id: s.projectID,
+              worktree: s.directory,
+              vcs: "git",
+              time: { created: 1, updated: 1 },
+              sandboxes: [],
+            }))
+          : {
+              id: current.projectID,
+              worktree: current.directory,
+              vcs: "git",
+              time: { created: 1, updated: 1 },
+              sandboxes: [],
+            },
+      )
     }
     if (url.pathname === "/path")
-      return json(route, { state: current.directory, config: current.directory, worktree: current.directory, directory: current.directory, home: current.directory })
+      return json(route, {
+        state: current.directory,
+        config: current.directory,
+        worktree: current.directory,
+        directory: current.directory,
+        home: current.directory,
+      })
     if (url.pathname === "/vcs") return json(route, { branch: "main", default_branch: "main" })
     return json(route, {})
   })
 }
 
 function json(route: Route, body: unknown, status = 200) {
-  return route.fulfill({ status, contentType: "application/json", headers: { "access-control-allow-origin": "*" }, body: JSON.stringify(body) })
+  return route.fulfill({
+    status,
+    contentType: "application/json",
+    headers: { "access-control-allow-origin": "*" },
+    body: JSON.stringify(body),
+  })
 }
 
 function sse(route: Route) {
