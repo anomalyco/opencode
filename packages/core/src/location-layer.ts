@@ -49,27 +49,6 @@ import { SystemContextBuiltIns } from "./system-context/builtins"
 import { FetchHttpClient } from "effect/unstable/http"
 import { Snapshot } from "./snapshot"
 
-const dependencies = [
-  Project.defaultLayer,
-  EventV2.defaultLayer,
-  Credential.defaultLayer,
-  Npm.defaultLayer,
-  ModelsDev.defaultLayer,
-  FSUtil.defaultLayer,
-  Git.defaultLayer,
-  AppProcess.defaultLayer,
-  Global.defaultLayer,
-  Ripgrep.defaultLayer,
-  Database.defaultLayer,
-  ProjectDirectories.defaultLayer,
-  SessionStore.layer.pipe(Layer.provide(Database.defaultLayer)),
-  PermissionSaved.defaultLayer,
-  RepositoryCache.defaultLayer,
-  LLMClient.layer.pipe(Layer.provide(RequestExecutor.defaultLayer)),
-  FetchHttpClient.layer,
-  ToolOutputStore.defaultCleanupLayer,
-] as const
-
 export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("@opencode/example/LocationServiceMap", {
   lookup: (ref: Location.Ref) => {
     const boot = Layer.effectDiscard(
@@ -148,7 +127,25 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
     ).pipe(Layer.fresh)
   },
   idleTimeToLive: "60 minutes",
-  dependencies: [...dependencies, ApplicationTools.layer],
-}) {
-  static readonly layerWithApplicationTools = this.layerNoDeps.pipe(Layer.provide(Layer.mergeAll(...dependencies)))
-}
+  dependencies: [
+    Project.defaultLayer,
+    EventV2.defaultLayer,
+    Credential.defaultLayer,
+    Npm.defaultLayer,
+    ModelsDev.defaultLayer,
+    FSUtil.defaultLayer,
+    Git.defaultLayer,
+    AppProcess.defaultLayer,
+    Global.defaultLayer,
+    Ripgrep.defaultLayer,
+    Database.defaultLayer,
+    ProjectDirectories.defaultLayer,
+    SessionStore.layer.pipe(Layer.provide(Database.defaultLayer)),
+    PermissionSaved.defaultLayer,
+    RepositoryCache.defaultLayer,
+    LLMClient.layer.pipe(Layer.provide(RequestExecutor.defaultLayer)),
+    FetchHttpClient.layer,
+    ToolOutputStore.defaultCleanupLayer,
+    ApplicationTools.layer,
+  ],
+}) {}

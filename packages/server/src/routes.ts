@@ -16,28 +16,21 @@ export function createRoutes(password?: string) {
     password
       ? ServerAuth.Config.layer({ username: "opencode", password: Option.some(password) })
       : ServerAuth.Config.defaultLayer,
-    LocationServiceMap.layer,
   )
 }
 
 export function createEmbeddedRoutes() {
-  return makeRoutes(
-    ServerAuth.Config.layer({ username: "opencode", password: Option.none() }),
-    LocationServiceMap.layerWithApplicationTools,
-  )
+  return makeRoutes(ServerAuth.Config.layer({ username: "opencode", password: Option.none() }))
 }
 
-function makeRoutes<AuthError, AuthServices, LocationError, LocationServices>(
-  auth: Layer.Layer<ServerAuth.Config, AuthError, AuthServices>,
-  locations: Layer.Layer<LocationServiceMap, LocationError, LocationServices>,
-) {
+function makeRoutes<AuthError, AuthServices>(auth: Layer.Layer<ServerAuth.Config, AuthError, AuthServices>) {
   return HttpApiBuilder.layer(Api, { openapiPath: "/openapi.json" }).pipe(
     Layer.provide(handlers),
     Layer.provide(PtyEnvironment.defaultLayer),
     Layer.provide(authorizationLayer),
     Layer.provide(schemaErrorLayer),
     Layer.provide(auth),
-    Layer.provide(locations),
+    Layer.provide(LocationServiceMap.layer),
     Layer.provide(Database.defaultLayer),
     Layer.provide(EventV2.defaultLayer),
     Layer.provide(FetchHttpClient.layer),
