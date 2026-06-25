@@ -163,10 +163,10 @@ const trackBrowserOpenFailed = Effect.gen(function* () {
   return event
 })
 
-const authenticateScoped = (name: string) =>
+const authenticateScoped = (name: string, onAuthorization?: (authorizationUrl: string) => void) =>
   Effect.gen(function* () {
     const mcp = yield* service
-    yield* mcp.authenticate(name).pipe(
+    yield* mcp.authenticate(name, onAuthorization).pipe(
       Effect.ignore,
       Effect.catchCause(() => Effect.void),
       Effect.forkScoped,
@@ -225,12 +225,19 @@ mcpTest.instance(
 
       const opened = yield* trackBrowserOpen
       const event = yield* trackBrowserOpenFailed
-      yield* authenticateScoped("test-oauth-server-3")
+      const authorization = yield* Deferred.make<string>()
+      yield* authenticateScoped("test-oauth-server-3", (url) => Deferred.doneUnsafe(authorization, Effect.succeed(url)))
 
       const url = yield* awaitWithTimeout(Deferred.await(opened), "Timed out waiting for open()", "5 seconds")
+      const authorizationUrl = yield* awaitWithTimeout(
+        Deferred.await(authorization),
+        "Timed out waiting for authorization URL",
+        "5 seconds",
+      )
       const failure = yield* Deferred.await(event).pipe(Effect.timeoutOption("700 millis"))
 
       expect(failure).toEqual(Option.none())
+      expect(authorizationUrl).toBe(url)
       expect(typeof url).toBe("string")
       expect(url).toContain("https://")
       expect(transportCalls.at(-1)?.options.requestInit?.headers).toEqual({ "X-Custom-Header": "custom-value" })

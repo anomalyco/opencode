@@ -74,7 +74,7 @@ describe("SkillV2", () => {
             { type: "directory", path: AbsolutePath.make(second) },
           ])
           expect(yield* skill.list()).toEqual([
-            new SkillV2.Info({
+            SkillV2.Info.make({
               name: "foo",
               slash: true,
               location: AbsolutePath.make(path.join(first, "foo.md")),

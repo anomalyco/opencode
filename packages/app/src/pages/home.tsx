@@ -1,5 +1,18 @@
 import type { Session } from "@opencode-ai/sdk/v2/client"
-import { batch, createEffect, createMemo, For, Match, on, onCleanup, onMount, Show, Switch } from "solid-js"
+import {
+  batch,
+  createEffect,
+  createMemo,
+  createRoot,
+  For,
+  Match,
+  on,
+  onCleanup,
+  onMount,
+  Show,
+  startTransition,
+  Switch,
+} from "solid-js"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createStore } from "solid-js/store"
 import { useQuery } from "@tanstack/solid-query"
@@ -32,7 +45,6 @@ import {
   displayName,
   getProjectAvatarSource,
   homeProjectDirectories,
-  homeProjectNavigation,
   type HomeProjectSelection,
   projectForSession,
   sortedRootSessions,
@@ -47,6 +59,8 @@ import { ServerRowMenu } from "@/components/server/server-row-menu"
 import { ServerHealthIndicator } from "@/components/server/server-row"
 import { type ServerHealth } from "@/utils/server-health"
 import { Persist, persisted } from "@/utils/persist"
+import { useMarked } from "@opencode-ai/ui/context/marked"
+import { preloadMarkdown } from "@opencode-ai/session-ui/markdown-cache"
 
 const HOME_SESSION_LIMIT = 64
 const HOME_ROW_LAYOUT =
@@ -123,8 +137,10 @@ export function NewHome() {
   const server = useServer()
   const language = useLanguage()
   const global = useGlobal()
+  const tabs = useTabs()
   const command = useCommand()
   const notification = useNotification()
+  const marked = useMarked()
   let focusSessionSearch: (() => void) | undefined
   const [state, setState] = createStore({
     search: "",
@@ -138,7 +154,7 @@ export function NewHome() {
   const focusedServerCtx = createMemo(() => {
     const conn = focusedServer()
     if (!conn) return
-    return global.createServerCtx(conn)
+    return global.ensureServerCtx(conn)
   })
   const focusedSync = () => focusedServerCtx()?.sync ?? sync()
   const projects = createMemo(() => focusedServerCtx()?.projects.list() ?? layout.projects.list())
@@ -187,6 +203,41 @@ export function NewHome() {
   })
   const searchOpen = createMemo(() => state.searchFocused && search().length > 0)
   const groups = createMemo(() => groupSessions(records(), language))
+  const prefetched = new Set<string>()
+
+  createEffect(() => {
+    const ctx = focusedServerCtx()
+    if (!ctx) return
+    records()
+      .slice(0, 2)
+      .forEach((record) => {
+        const key = `${ServerConnection.key(focusedServer()!)}\0${record.session.id}`
+        if (prefetched.has(key)) return
+        prefetched.add(key)
+        createRoot((dispose) => {
+          try {
+            const directory = ctx.sync.ensureDirSyncContext(record.session.directory)
+            void directory.session
+              .sync(record.session.id)
+              .then(() => {
+                const store = ctx.sync.child(record.session.directory)[0]
+                return Promise.all(
+                  (store.message[record.session.id] ?? []).flatMap((message) =>
+                    (store.part[message.id] ?? []).flatMap((part) => {
+                      if (part.type !== "text" || !part.text) return []
+                      return preloadMarkdown(part.text, part.id, marked)
+                    }),
+                  ),
+                )
+              })
+              .catch(() => {})
+              .finally(dispose)
+          } catch {
+            dispose()
+          }
+        })
+      })
+  })
 
   function setSelection(next: HomeProjectSelection) {
     batch(() => {
@@ -237,7 +288,7 @@ export function NewHome() {
     const key = ServerConnection.key(conn)
     if (
       !global
-        .createServerCtx(conn)
+        .ensureServerCtx(conn)
         .projects.list()
         .some((project) => project.worktree === directory)
     )
@@ -248,7 +299,7 @@ export function NewHome() {
   function addProjects(conn: ServerConnection.Any, directories: string[]) {
     const directory = directories[0]
     if (!directory) return
-    const ctx = global.createServerCtx(conn)
+    const ctx = global.ensureServerCtx(conn)
     directories.forEach(ctx.projects.open)
     ctx.projects.touch(directory)
     setSelection({ server: ServerConnection.key(conn), directory })
@@ -261,21 +312,11 @@ export function NewHome() {
     openProjectNewSession(conn, project.worktree)
   }
 
-  function navigateOnServer(conn: ServerConnection.Any, href: string) {
-    const next = homeProjectNavigation(server.key, ServerConnection.key(conn), href)
-    if (!next.server) {
-      navigate(next.href)
-      return
-    }
-    pendingHomeNavigation = next
-    server.setActive(next.server)
-  }
-
   function openProjectNewSession(conn: ServerConnection.Any, directory: string) {
-    const ctx = global.createServerCtx(conn)
+    const ctx = global.ensureServerCtx(conn)
     ctx.projects.open(directory)
     ctx.projects.touch(directory)
-    navigateOnServer(conn, `/${base64Encode(directory)}/session`)
+    tabs.newDraft({ server: ServerConnection.key(conn), directory })
   }
 
   function editProject(conn: ServerConnection.Any, project: LocalProject) {
@@ -301,18 +342,25 @@ export function NewHome() {
     const conn = focusedServer()
     if (!conn) return
     const directory = project?.worktree ?? session.directory
-    const ctx = global.createServerCtx(conn)
+    const ctx = global.ensureServerCtx(conn)
+    global.sessionPlacement.set({
+      server: ServerConnection.key(conn),
+      leafID: session.id,
+      rootID: session.id,
+      directory: session.directory,
+    })
     ctx.projects.open(directory)
     ctx.projects.touch(directory)
-    navigateOnServer(conn, `/server/${base64Encode(ServerConnection.key(conn))}/session/${session.id}`)
+    startTransition(() => {
+      const tab = tabs.addSessionTab({ server: ServerConnection.key(conn), sessionId: session.id })
+      tabs.select(tab)
+    })
   }
 
   function chooseProject(conn: ServerConnection.Any) {
     function resolve(result: string | string[] | null) {
       addProjects(conn, homeProjectDirectories(result))
     }
-
-    const server = global.createServerCtx(conn)
 
     pickDirectory({
       server: conn,
@@ -343,7 +391,7 @@ export function NewHome() {
             const next = closeHomeProject(
               state.selection,
               ServerConnection.key(conn),
-              global.createServerCtx(conn).projects,
+              global.ensureServerCtx(conn).projects,
               directory,
             )
             if (next) setSelection(next)
@@ -480,7 +528,7 @@ function HomeProjectColumn(props: {
           {(item) => {
             const key = ServerConnection.key(item)
             const healthy = () => !!global.servers.health[key]?.healthy
-            const serverCtx = global.createServerCtx(item)
+            const serverCtx = global.ensureServerCtx(item)
             const collapsed = () => !!state.collapsed[key]
             return (
               <div class="flex max-h-[min(572px,calc(100vh_-_300px))] min-w-0 flex-col gap-1 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -1156,7 +1204,7 @@ export function LegacyHome() {
   })
 
   function openProject(server: ServerConnection.Any, directory: string) {
-    const serverCtx = global.createServerCtx(server)
+    const serverCtx = global.ensureServerCtx(server)
     serverCtx.projects.open(directory)
     serverCtx.projects.touch(directory)
     navigate(`/${base64Encode(directory)}`)

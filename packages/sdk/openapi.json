@@ -10784,6 +10784,289 @@
         ]
       }
     },
+    "/api/session/{sessionID}/revert/stage": {
+      "post": {
+        "tags": ["sessions"],
+        "operationId": "v2.session.revert.stage",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "messageID": {
+                          "type": "string",
+                          "pattern": "^msg_"
+                        },
+                        "partID": {
+                          "type": "string"
+                        },
+                        "snapshot": {
+                          "type": "string"
+                        },
+                        "diff": {
+                          "type": "string"
+                        },
+                        "files": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/FileDiff"
+                          }
+                        }
+                      },
+                      "required": ["messageID"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "MessageNotFoundError | SessionNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/MessageNotFoundError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SessionNotFoundError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SessionNotFoundError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "UnknownError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnknownError1"
+                }
+              }
+            }
+          }
+        },
+        "description": "Stage or move a reversible session boundary and optionally apply its file changes.",
+        "summary": "Stage session revert",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "messageID": {
+                    "type": "string",
+                    "pattern": "^msg_"
+                  },
+                  "files": {
+                    "type": "boolean"
+                  }
+                },
+                "required": ["messageID"],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.session.revert.stage({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/api/session/{sessionID}/revert/clear": {
+      "post": {
+        "tags": ["sessions"],
+        "operationId": "v2.session.revert.clear",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SessionNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/SessionNotFoundError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SessionNotFoundError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "UnknownError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnknownError1"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Clear staged revert",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.session.revert.clear({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/api/session/{sessionID}/revert/commit": {
+      "post": {
+        "tags": ["sessions"],
+        "operationId": "v2.session.revert.commit",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SessionNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/SessionNotFoundError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SessionNotFoundError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "summary": "Commit staged revert",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.session.revert.commit({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/api/session/{sessionID}/context": {
       "get": {
         "tags": ["sessions"],
@@ -14648,6 +14931,9 @@
             "$ref": "#/components/schemas/EventIntegrationUpdated"
           },
           {
+            "$ref": "#/components/schemas/EventIntegrationConnectionUpdated"
+          },
+          {
             "$ref": "#/components/schemas/EventCatalogUpdated"
           },
           {
@@ -14757,6 +15043,15 @@
           },
           {
             "$ref": "#/components/schemas/EventSessionNextCompactionEnded"
+          },
+          {
+            "$ref": "#/components/schemas/EventSessionNextRevertStaged"
+          },
+          {
+            "$ref": "#/components/schemas/EventSessionNextRevertCleared"
+          },
+          {
+            "$ref": "#/components/schemas/EventSessionNextRevertCommitted"
           },
           {
             "$ref": "#/components/schemas/EventMessagePartDelta"
@@ -16830,6 +17125,31 @@
                   },
                   "type": {
                     "type": "string",
+                    "enum": ["integration.connection.updated"]
+                  },
+                  "properties": {
+                    "type": "object",
+                    "properties": {
+                      "integrationID": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["integrationID"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["id", "type", "properties"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^evt_"
+                  },
+                  "type": {
+                    "type": "string",
                     "enum": ["catalog.updated"]
                   },
                   "properties": {
@@ -17515,6 +17835,12 @@
                       },
                       "snapshot": {
                         "type": "string"
+                      },
+                      "files": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
                       }
                     },
                     "required": ["timestamp", "sessionID", "assistantMessageID", "finish", "cost", "tokens"],
@@ -18311,6 +18637,123 @@
                       }
                     },
                     "required": ["timestamp", "sessionID", "messageID", "reason", "text", "recent"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["id", "type", "properties"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^evt_"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["session.next.revert.staged"]
+                  },
+                  "properties": {
+                    "type": "object",
+                    "properties": {
+                      "timestamp": {
+                        "type": "number"
+                      },
+                      "sessionID": {
+                        "type": "string",
+                        "pattern": "^ses"
+                      },
+                      "revert": {
+                        "type": "object",
+                        "properties": {
+                          "messageID": {
+                            "type": "string",
+                            "pattern": "^msg_"
+                          },
+                          "partID": {
+                            "type": "string"
+                          },
+                          "snapshot": {
+                            "type": "string"
+                          },
+                          "diff": {
+                            "type": "string"
+                          },
+                          "files": {
+                            "type": "array",
+                            "items": {
+                              "$ref": "#/components/schemas/FileDiff"
+                            }
+                          }
+                        },
+                        "required": ["messageID"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": ["timestamp", "sessionID", "revert"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["id", "type", "properties"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^evt_"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["session.next.revert.cleared"]
+                  },
+                  "properties": {
+                    "type": "object",
+                    "properties": {
+                      "timestamp": {
+                        "type": "number"
+                      },
+                      "sessionID": {
+                        "type": "string",
+                        "pattern": "^ses"
+                      }
+                    },
+                    "required": ["timestamp", "sessionID"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["id", "type", "properties"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^evt_"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["session.next.revert.committed"]
+                  },
+                  "properties": {
+                    "type": "object",
+                    "properties": {
+                      "timestamp": {
+                        "type": "number"
+                      },
+                      "sessionID": {
+                        "type": "string",
+                        "pattern": "^ses"
+                      },
+                      "messageID": {
+                        "type": "string",
+                        "pattern": "^msg_"
+                      }
+                    },
+                    "required": ["timestamp", "sessionID", "messageID"],
                     "additionalProperties": false
                   }
                 },
@@ -19849,6 +20292,15 @@
               },
               {
                 "$ref": "#/components/schemas/SyncEventSessionNextCompactionEnded"
+              },
+              {
+                "$ref": "#/components/schemas/SyncEventSessionNextRevertStaged"
+              },
+              {
+                "$ref": "#/components/schemas/SyncEventSessionNextRevertCleared"
+              },
+              {
+                "$ref": "#/components/schemas/SyncEventSessionNextRevertCommitted"
               }
             ]
           }
@@ -22922,6 +23374,26 @@
         "required": ["_tag", "message"],
         "additionalProperties": false
       },
+      "MessageNotFoundError": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["MessageNotFoundError"]
+          },
+          "sessionID": {
+            "type": "string"
+          },
+          "messageID": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "sessionID", "messageID", "message"],
+        "additionalProperties": false
+      },
       "UnknownError1": {
         "type": "object",
         "properties": {
@@ -22988,6 +23460,9 @@
           },
           {
             "$ref": "#/components/schemas/V2EventIntegrationUpdated"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventIntegrationConnectionUpdated"
           },
           {
             "$ref": "#/components/schemas/V2EventCatalogUpdated"
@@ -23099,6 +23574,15 @@
           },
           {
             "$ref": "#/components/schemas/V2EventSessionNextCompactionEnded"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventSessionNextRevertStaged"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventSessionNextRevertCleared"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventSessionNextRevertCommitted"
           },
           {
             "$ref": "#/components/schemas/V2EventMessagePartDelta"
@@ -23234,9 +23718,6 @@
           },
           {
             "$ref": "#/components/schemas/V2EventGlobalDisposed"
-          },
-          {
-            "$ref": "#/components/schemas/V2EventServerConnected"
           }
         ]
       },
@@ -23427,6 +23908,61 @@
         "required": ["id", "type", "properties"],
         "additionalProperties": false
       },
+      "CredentialValue": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/CredentialOAuth"
+          },
+          {
+            "$ref": "#/components/schemas/CredentialKey"
+          }
+        ]
+      },
+      "IntegrationInputs": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "string"
+        }
+      },
+      "IntegrationMethod": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/IntegrationOAuthMethod"
+          },
+          {
+            "$ref": "#/components/schemas/IntegrationKeyMethod"
+          },
+          {
+            "$ref": "#/components/schemas/IntegrationEnvMethod"
+          }
+        ]
+      },
+      "IntegrationRef": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": ["id", "name"],
+        "additionalProperties": false
+      },
+      "SkillV2Source": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/SkillV2DirectorySource"
+          },
+          {
+            "$ref": "#/components/schemas/SkillV2UrlSource"
+          },
+          {
+            "$ref": "#/components/schemas/SkillV2EmbeddedSource"
+          }
+        ]
+      },
       "MoveSessionDestination": {
         "type": "object",
         "properties": {
@@ -23579,6 +24115,31 @@
           }
         },
         "required": ["message", "isRetryable"],
+        "additionalProperties": false
+      },
+      "FileDiff": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["added", "modified", "deleted"]
+          },
+          "additions": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "deletions": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "patch": {
+            "type": "string"
+          }
+        },
+        "required": ["path", "status", "additions", "deletions", "patch"],
         "additionalProperties": false
       },
       "PermissionV2Source": {
@@ -24737,6 +25298,12 @@
                   },
                   "snapshot": {
                     "type": "string"
+                  },
+                  "files": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
                   }
                 },
                 "required": ["timestamp", "sessionID", "assistantMessageID", "finish", "cost", "tokens"],
@@ -25684,6 +26251,186 @@
         "required": ["type", "id", "syncEvent"],
         "additionalProperties": false
       },
+      "SyncEventSessionNextRevertStaged": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["sync"]
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "syncEvent": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["session.next.revert.staged.1"]
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^evt_"
+              },
+              "seq": {
+                "type": "number"
+              },
+              "aggregateID": {
+                "type": "string"
+              },
+              "data": {
+                "type": "object",
+                "properties": {
+                  "timestamp": {
+                    "type": "number"
+                  },
+                  "sessionID": {
+                    "type": "string",
+                    "pattern": "^ses"
+                  },
+                  "revert": {
+                    "type": "object",
+                    "properties": {
+                      "messageID": {
+                        "type": "string",
+                        "pattern": "^msg_"
+                      },
+                      "partID": {
+                        "type": "string"
+                      },
+                      "snapshot": {
+                        "type": "string"
+                      },
+                      "diff": {
+                        "type": "string"
+                      },
+                      "files": {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/components/schemas/FileDiff"
+                        }
+                      }
+                    },
+                    "required": ["messageID"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["timestamp", "sessionID", "revert"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["type", "id", "seq", "aggregateID", "data"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["type", "id", "syncEvent"],
+        "additionalProperties": false
+      },
+      "SyncEventSessionNextRevertCleared": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["sync"]
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "syncEvent": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["session.next.revert.cleared.1"]
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^evt_"
+              },
+              "seq": {
+                "type": "number"
+              },
+              "aggregateID": {
+                "type": "string"
+              },
+              "data": {
+                "type": "object",
+                "properties": {
+                  "timestamp": {
+                    "type": "number"
+                  },
+                  "sessionID": {
+                    "type": "string",
+                    "pattern": "^ses"
+                  }
+                },
+                "required": ["timestamp", "sessionID"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["type", "id", "seq", "aggregateID", "data"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["type", "id", "syncEvent"],
+        "additionalProperties": false
+      },
+      "SyncEventSessionNextRevertCommitted": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["sync"]
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "syncEvent": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["session.next.revert.committed.1"]
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^evt_"
+              },
+              "seq": {
+                "type": "number"
+              },
+              "aggregateID": {
+                "type": "string"
+              },
+              "data": {
+                "type": "object",
+                "properties": {
+                  "timestamp": {
+                    "type": "number"
+                  },
+                  "sessionID": {
+                    "type": "string",
+                    "pattern": "^ses"
+                  },
+                  "messageID": {
+                    "type": "string",
+                    "pattern": "^msg_"
+                  }
+                },
+                "required": ["timestamp", "sessionID", "messageID"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["type", "id", "seq", "aggregateID", "data"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["type", "id", "syncEvent"],
+        "additionalProperties": false
+      },
       "ConfigV2ReferenceGit": {
         "type": "object",
         "properties": {
@@ -25972,6 +26719,32 @@
           },
           "subpath": {
             "type": "string"
+          },
+          "revert": {
+            "type": "object",
+            "properties": {
+              "messageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              },
+              "partID": {
+                "type": "string"
+              },
+              "snapshot": {
+                "type": "string"
+              },
+              "diff": {
+                "type": "string"
+              },
+              "files": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/FileDiff"
+                }
+              }
+            },
+            "required": ["messageID"],
+            "additionalProperties": false
           }
         },
         "required": ["id", "projectID", "cost", "tokens", "time", "title", "location"],
@@ -26539,6 +27312,12 @@
               },
               "end": {
                 "type": "string"
+              },
+              "files": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
               }
             },
             "additionalProperties": false
@@ -26747,182 +27526,6 @@
               "body": {
                 "type": "object"
               },
-              "generation": {
-                "type": "object",
-                "properties": {
-                  "maxTokens": {
-                    "anyOf": [
-                      {
-                        "type": "number"
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["NaN"]
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["Infinity"]
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["-Infinity"]
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["Infinity", "-Infinity", "NaN"]
-                      }
-                    ]
-                  },
-                  "temperature": {
-                    "anyOf": [
-                      {
-                        "type": "number"
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["NaN"]
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["Infinity"]
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["-Infinity"]
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["Infinity", "-Infinity", "NaN"]
-                      }
-                    ]
-                  },
-                  "topP": {
-                    "anyOf": [
-                      {
-                        "type": "number"
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["NaN"]
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["Infinity"]
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["-Infinity"]
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["Infinity", "-Infinity", "NaN"]
-                      }
-                    ]
-                  },
-                  "topK": {
-                    "anyOf": [
-                      {
-                        "type": "number"
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["NaN"]
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["Infinity"]
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["-Infinity"]
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["Infinity", "-Infinity", "NaN"]
-                      }
-                    ]
-                  },
-                  "frequencyPenalty": {
-                    "anyOf": [
-                      {
-                        "type": "number"
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["NaN"]
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["Infinity"]
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["-Infinity"]
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["Infinity", "-Infinity", "NaN"]
-                      }
-                    ]
-                  },
-                  "presencePenalty": {
-                    "anyOf": [
-                      {
-                        "type": "number"
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["NaN"]
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["Infinity"]
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["-Infinity"]
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["Infinity", "-Infinity", "NaN"]
-                      }
-                    ]
-                  },
-                  "seed": {
-                    "anyOf": [
-                      {
-                        "type": "number"
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["NaN"]
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["Infinity"]
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["-Infinity"]
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["Infinity", "-Infinity", "NaN"]
-                      }
-                    ]
-                  },
-                  "stop": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
-                  }
-                },
-                "additionalProperties": false
-              },
-              "options": {
-                "type": "object"
-              },
               "variant": {
                 "type": "string"
               }
@@ -26945,182 +27548,6 @@
                   }
                 },
                 "body": {
-                  "type": "object"
-                },
-                "generation": {
-                  "type": "object",
-                  "properties": {
-                    "maxTokens": {
-                      "anyOf": [
-                        {
-                          "type": "number"
-                        },
-                        {
-                          "type": "string",
-                          "enum": ["NaN"]
-                        },
-                        {
-                          "type": "string",
-                          "enum": ["Infinity"]
-                        },
-                        {
-                          "type": "string",
-                          "enum": ["-Infinity"]
-                        },
-                        {
-                          "type": "string",
-                          "enum": ["Infinity", "-Infinity", "NaN"]
-                        }
-                      ]
-                    },
-                    "temperature": {
-                      "anyOf": [
-                        {
-                          "type": "number"
-                        },
-                        {
-                          "type": "string",
-                          "enum": ["NaN"]
-                        },
-                        {
-                          "type": "string",
-                          "enum": ["Infinity"]
-                        },
-                        {
-                          "type": "string",
-                          "enum": ["-Infinity"]
-                        },
-                        {
-                          "type": "string",
-                          "enum": ["Infinity", "-Infinity", "NaN"]
-                        }
-                      ]
-                    },
-                    "topP": {
-                      "anyOf": [
-                        {
-                          "type": "number"
-                        },
-                        {
-                          "type": "string",
-                          "enum": ["NaN"]
-                        },
-                        {
-                          "type": "string",
-                          "enum": ["Infinity"]
-                        },
-                        {
-                          "type": "string",
-                          "enum": ["-Infinity"]
-                        },
-                        {
-                          "type": "string",
-                          "enum": ["Infinity", "-Infinity", "NaN"]
-                        }
-                      ]
-                    },
-                    "topK": {
-                      "anyOf": [
-                        {
-                          "type": "number"
-                        },
-                        {
-                          "type": "string",
-                          "enum": ["NaN"]
-                        },
-                        {
-                          "type": "string",
-                          "enum": ["Infinity"]
-                        },
-                        {
-                          "type": "string",
-                          "enum": ["-Infinity"]
-                        },
-                        {
-                          "type": "string",
-                          "enum": ["Infinity", "-Infinity", "NaN"]
-                        }
-                      ]
-                    },
-                    "frequencyPenalty": {
-                      "anyOf": [
-                        {
-                          "type": "number"
-                        },
-                        {
-                          "type": "string",
-                          "enum": ["NaN"]
-                        },
-                        {
-                          "type": "string",
-                          "enum": ["Infinity"]
-                        },
-                        {
-                          "type": "string",
-                          "enum": ["-Infinity"]
-                        },
-                        {
-                          "type": "string",
-                          "enum": ["Infinity", "-Infinity", "NaN"]
-                        }
-                      ]
-                    },
-                    "presencePenalty": {
-                      "anyOf": [
-                        {
-                          "type": "number"
-                        },
-                        {
-                          "type": "string",
-                          "enum": ["NaN"]
-                        },
-                        {
-                          "type": "string",
-                          "enum": ["Infinity"]
-                        },
-                        {
-                          "type": "string",
-                          "enum": ["-Infinity"]
-                        },
-                        {
-                          "type": "string",
-                          "enum": ["Infinity", "-Infinity", "NaN"]
-                        }
-                      ]
-                    },
-                    "seed": {
-                      "anyOf": [
-                        {
-                          "type": "number"
-                        },
-                        {
-                          "type": "string",
-                          "enum": ["NaN"]
-                        },
-                        {
-                          "type": "string",
-                          "enum": ["Infinity"]
-                        },
-                        {
-                          "type": "string",
-                          "enum": ["-Infinity"]
-                        },
-                        {
-                          "type": "string",
-                          "enum": ["Infinity", "-Infinity", "NaN"]
-                        }
-                      ]
-                    },
-                    "stop": {
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                "options": {
                   "type": "object"
                 }
               },
@@ -27225,6 +27652,9 @@
         "type": "object",
         "properties": {
           "id": {
+            "type": "string"
+          },
+          "integrationID": {
             "type": "string"
           },
           "name": {
@@ -27487,17 +27917,7 @@
           "methods": {
             "type": "array",
             "items": {
-              "anyOf": [
-                {
-                  "$ref": "#/components/schemas/IntegrationOAuthMethod"
-                },
-                {
-                  "$ref": "#/components/schemas/IntegrationKeyMethod"
-                },
-                {
-                  "$ref": "#/components/schemas/IntegrationEnvMethod"
-                }
-              ]
+              "$ref": "#/components/schemas/IntegrationMethod"
             }
           },
           "connections": {
@@ -27647,12 +28067,9 @@
           "type": {
             "type": "string",
             "enum": ["file", "directory"]
-          },
-          "mime": {
-            "type": "string"
           }
         },
-        "required": ["path", "type", "mime"],
+        "required": ["path", "type"],
         "additionalProperties": false
       },
       "CommandV2Info": {
@@ -27792,6 +28209,53 @@
           "data": {
             "type": "object",
             "properties": {}
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventIntegrationConnectionUpdated": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["integration.connection.updated"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "integrationID": {
+                "type": "string"
+              }
+            },
+            "required": ["integrationID"],
+            "additionalProperties": false
           }
         },
         "required": ["id", "type", "data"],
@@ -28909,6 +29373,12 @@
               },
               "snapshot": {
                 "type": "string"
+              },
+              "files": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
               }
             },
             "required": ["timestamp", "sessionID", "assistantMessageID", "finish", "cost", "tokens"],
@@ -30093,6 +30563,189 @@
               }
             },
             "required": ["timestamp", "sessionID", "messageID", "reason", "text", "recent"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventSessionNextRevertStaged": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.next.revert.staged"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": "number"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "revert": {
+                "type": "object",
+                "properties": {
+                  "messageID": {
+                    "type": "string",
+                    "pattern": "^msg_"
+                  },
+                  "partID": {
+                    "type": "string"
+                  },
+                  "snapshot": {
+                    "type": "string"
+                  },
+                  "diff": {
+                    "type": "string"
+                  },
+                  "files": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/FileDiff"
+                    }
+                  }
+                },
+                "required": ["messageID"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["timestamp", "sessionID", "revert"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventSessionNextRevertCleared": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.next.revert.cleared"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": "number"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              }
+            },
+            "required": ["timestamp", "sessionID"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventSessionNextRevertCommitted": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.next.revert.committed"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": "number"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "messageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              }
+            },
+            "required": ["timestamp", "sessionID", "messageID"],
             "additionalProperties": false
           }
         },
@@ -32682,6 +33335,31 @@
         "required": ["id", "type", "properties"],
         "additionalProperties": false
       },
+      "EventIntegrationConnectionUpdated": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["integration.connection.updated"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "integrationID": {
+                "type": "string"
+              }
+            },
+            "required": ["integrationID"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
       "EventCatalogUpdated": {
         "type": "object",
         "properties": {
@@ -33376,6 +34054,12 @@
               },
               "snapshot": {
                 "type": "string"
+              },
+              "files": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
               }
             },
             "required": ["timestamp", "sessionID", "assistantMessageID", "finish", "cost", "tokens"],
@@ -34164,6 +34848,123 @@
               }
             },
             "required": ["timestamp", "sessionID", "messageID", "reason", "text", "recent"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventSessionNextRevertStaged": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.next.revert.staged"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": "number"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "revert": {
+                "type": "object",
+                "properties": {
+                  "messageID": {
+                    "type": "string",
+                    "pattern": "^msg_"
+                  },
+                  "partID": {
+                    "type": "string"
+                  },
+                  "snapshot": {
+                    "type": "string"
+                  },
+                  "diff": {
+                    "type": "string"
+                  },
+                  "files": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/FileDiff"
+                    }
+                  }
+                },
+                "required": ["messageID"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["timestamp", "sessionID", "revert"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventSessionNextRevertCleared": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.next.revert.cleared"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": "number"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              }
+            },
+            "required": ["timestamp", "sessionID"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventSessionNextRevertCommitted": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.next.revert.committed"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": "number"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "messageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              }
+            },
+            "required": ["timestamp", "sessionID", "messageID"],
             "additionalProperties": false
           }
         },
@@ -35464,6 +36265,92 @@
           }
         },
         "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "CredentialOAuth": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["oauth"]
+          },
+          "methodID": {
+            "type": "string"
+          },
+          "refresh": {
+            "type": "string"
+          },
+          "access": {
+            "type": "string"
+          },
+          "expires": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "metadata": {
+            "type": "object"
+          }
+        },
+        "required": ["type", "methodID", "refresh", "access", "expires"],
+        "additionalProperties": false
+      },
+      "CredentialKey": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["key"]
+          },
+          "key": {
+            "type": "string"
+          },
+          "metadata": {
+            "type": "object"
+          }
+        },
+        "required": ["type", "key"],
+        "additionalProperties": false
+      },
+      "SkillV2DirectorySource": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["directory"]
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": ["type", "path"],
+        "additionalProperties": false
+      },
+      "SkillV2UrlSource": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["url"]
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": ["type", "url"],
+        "additionalProperties": false
+      },
+      "SkillV2EmbeddedSource": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["embedded"]
+          },
+          "skill": {
+            "$ref": "#/components/schemas/SkillV2Info"
+          }
+        },
+        "required": ["type", "skill"],
         "additionalProperties": false
       },
       "BadRequestError": {

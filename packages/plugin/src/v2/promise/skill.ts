@@ -1,7 +1,7 @@
-import type { SkillDraft, SkillSource } from "../effect/skill.js"
+import type { SkillDraft } from "../effect/skill.js"
 import type { Hooks } from "./registration.js"
 
-export type { SkillDraft, SkillSource }
+export type { SkillDraft }
 
 export type SkillHooks = Hooks<{
   transform: SkillDraft
