@@ -43,8 +43,10 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | Path.Path | Htt
     })
 
     const writeManifest = Effect.fn("Discovery.writeManifest")(function* (manifest: Record<string, string>) {
-      yield* fs.ensureDir(cache).pipe(Effect.orDie)
-      yield* fs.writeFileString(manifestPath, JSON.stringify(manifest, null, 2)).pipe(
+      yield* Effect.gen(function* () {
+        yield* fs.ensureDir(cache)
+        yield* fs.writeFileString(manifestPath, JSON.stringify(manifest, null, 2))
+      }).pipe(
         Effect.catch((err) => Effect.logError("failed to persist skill version manifest", { error: err })),
       )
     })

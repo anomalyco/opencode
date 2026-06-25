@@ -193,4 +193,53 @@ describe("Discovery.pull", () => {
       }
     }),
   )
+
+  it.live("does not crash on a corrupt versions manifest and self-heals it", () =>
+    Effect.gen(function* () {
+      const fsys = yield* FSUtil.Service
+      const discovery = yield* Discovery.Service
+      let count = 0
+
+      const server = Bun.serve({
+        port: 0,
+        async fetch(req) {
+          const url = new URL(req.url)
+          if (url.pathname === "/index.json") {
+            return new Response(
+              JSON.stringify({ skills: [{ name: "selfheal", files: ["SKILL.md"], version: "1" }] }),
+              { headers: { "content-type": "application/json" } },
+            )
+          }
+          if (url.pathname === "/selfheal/SKILL.md") {
+            count++
+            return new Response("healed-content")
+          }
+          return new Response("Not Found", { status: 404 })
+        },
+      })
+
+      const base = `http://localhost:${server.port}/`
+      const skillDir = path.join(cacheDir, "selfheal")
+      const manifest = path.join(cacheDir, "versions.json")
+      yield* Effect.promise(() => rm(skillDir, { recursive: true, force: true }))
+      yield* Effect.promise(() => rm(manifest, { force: true }))
+      // seed a corrupt manifest and a stale skill file
+      yield* Effect.promise(() => Bun.write(manifest, "{not valid json"))
+      yield* Effect.promise(() => Bun.write(path.join(skillDir, "SKILL.md"), "stale"))
+
+      try {
+        // pull must not throw despite the corrupt manifest; the stale file is
+        // re-downloaded because the unreadable manifest is treated as empty
+        yield* discovery.pull(base)
+        expect(count).toBe(1)
+        expect(yield* fsys.readFileString(path.join(skillDir, "SKILL.md"))).toBe("healed-content")
+        // manifest is rewritten as valid json
+        expect(yield* fsys.readFileString(manifest)).toBe(JSON.stringify({ selfheal: "1" }, null, 2))
+      } finally {
+        void server.stop()
+        yield* Effect.promise(() => rm(skillDir, { recursive: true, force: true }))
+        yield* Effect.promise(() => rm(manifest, { force: true }))
+      }
+    }),
+  )
 })
