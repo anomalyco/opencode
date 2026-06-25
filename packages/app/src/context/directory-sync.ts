@@ -1,5 +1,5 @@
 import { Binary } from "@opencode-ai/core/util/binary"
-import type { Message, Part } from "@opencode-ai/sdk/v2/client"
+import type { Message, Part, Session } from "@opencode-ai/sdk/v2/client"
 import { createMemo } from "solid-js"
 import { produce, reconcile, type SetStoreFunction } from "solid-js/store"
 import type { createServerSdkContext } from "./server-sdk"
@@ -73,6 +73,10 @@ export const createDirSyncContext = (
       if (match.found) return serverSync.data.project[match.index]
     },
     session: {
+      remember(session: Session) {
+        serverSync.session.remember(session)
+        index(session.id)
+      },
       get(sessionID: string) {
         const session = serverSync.session.get(sessionID)
         if (session?.directory === directory) return session
