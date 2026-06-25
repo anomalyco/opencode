@@ -63,7 +63,11 @@ export const layer = Layer.effect(
         .orderBy(asc(TodoTable.position))
         .all()
         .pipe(Effect.orDie)
-      return rows
+      return rows.map((row) => ({
+        content: row.content,
+        status: row.status,
+        priority: row.priority,
+      }))
     })
 
     return Service.of({ update, get })
