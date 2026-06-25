@@ -835,11 +835,7 @@ export type GlobalEvent = {
           timestamp: number
           sessionID: string
           messageID: string
-          model: {
-            id: string
-            providerID: string
-            variant?: string
-          }
+          model: ModelRef
         }
       }
     | {
@@ -923,11 +919,7 @@ export type GlobalEvent = {
           sessionID: string
           assistantMessageID: string
           agent: string
-          model: {
-            id: string
-            providerID: string
-            variant?: string
-          }
+          model: ModelRef
           snapshot?: string
         }
       }
@@ -1003,11 +995,7 @@ export type GlobalEvent = {
           sessionID: string
           assistantMessageID: string
           reasoningID: string
-          providerMetadata?: {
-            [key: string]: {
-              [key: string]: unknown
-            }
-          }
+          providerMetadata?: LlmProviderMetadata
         }
       }
     | {
@@ -1030,11 +1018,7 @@ export type GlobalEvent = {
           assistantMessageID: string
           reasoningID: string
           text: string
-          providerMetadata?: {
-            [key: string]: {
-              [key: string]: unknown
-            }
-          }
+          providerMetadata?: LlmProviderMetadata
         }
       }
     | {
@@ -1084,11 +1068,7 @@ export type GlobalEvent = {
           }
           provider: {
             executed: boolean
-            metadata?: {
-              [key: string]: {
-                [key: string]: unknown
-              }
-            }
+            metadata?: LlmProviderMetadata
           }
         }
       }
@@ -1103,7 +1083,7 @@ export type GlobalEvent = {
           structured: {
             [key: string]: unknown
           }
-          content: Array<ToolTextContent | ToolFileContent>
+          content: Array<LlmToolContent>
         }
       }
     | {
@@ -1117,16 +1097,12 @@ export type GlobalEvent = {
           structured: {
             [key: string]: unknown
           }
-          content: Array<ToolTextContent | ToolFileContent>
+          content: Array<LlmToolContent>
           outputPaths?: Array<string>
           result?: unknown
           provider: {
             executed: boolean
-            metadata?: {
-              [key: string]: {
-                [key: string]: unknown
-              }
-            }
+            metadata?: LlmProviderMetadata
           }
         }
       }
@@ -1142,11 +1118,7 @@ export type GlobalEvent = {
           result?: unknown
           provider: {
             executed: boolean
-            metadata?: {
-              [key: string]: {
-                [key: string]: unknown
-              }
-            }
+            metadata?: LlmProviderMetadata
           }
         }
       }
@@ -1198,13 +1170,7 @@ export type GlobalEvent = {
         properties: {
           timestamp: number
           sessionID: string
-          revert: {
-            messageID: string
-            partID?: string
-            snapshot?: string
-            diff?: string
-            files?: Array<FileDiff>
-          }
+          revert: RevertState
         }
       }
     | {
@@ -1516,24 +1482,11 @@ export type GlobalEvent = {
         properties: {
           id: string
           worktree: string
-          vcs?: "git"
+          vcs?: ProjectVcs
           name?: string
-          icon?: {
-            url?: string
-            override?: string
-            color?: string
-          }
-          commands?: {
-            /**
-             * Startup script to run when creating a new workspace (worktree)
-             */
-            start?: string
-          }
-          time: {
-            created: number
-            updated: number
-            initialized?: number
-          }
+          icon?: ProjectIcon
+          commands?: ProjectCommands
+          time: ProjectTime
           sandboxes: Array<string>
         }
       }
@@ -2466,24 +2419,11 @@ export type McpServerNotFoundError = {
 export type Project = {
   id: string
   worktree: string
-  vcs?: "git"
+  vcs?: ProjectVcs
   name?: string
-  icon?: {
-    url?: string
-    override?: string
-    color?: string
-  }
-  commands?: {
-    /**
-     * Startup script to run when creating a new workspace (worktree)
-     */
-    start?: string
-  }
-  time: {
-    created: number
-    updated: number
-    initialized?: number
-  }
+  icon?: ProjectIcon
+  commands?: ProjectCommands
+  time: ProjectTime
   sandboxes: Array<string>
 }
 
@@ -2976,6 +2916,12 @@ export type MoveSessionDestination = {
   directory: string
 }
 
+export type ModelRef = {
+  id: string
+  providerID: string
+  variant?: string
+}
+
 export type LocationRef = {
   directory: string
   workspaceID?: string
@@ -3005,6 +2951,12 @@ export type SessionErrorUnknown = {
   message: string
 }
 
+export type LlmProviderMetadata = {
+  [key: string]: {
+    [key: string]: unknown
+  }
+}
+
 export type ToolTextContent = {
   type: "text"
   text: string
@@ -3016,6 +2968,8 @@ export type ToolFileContent = {
   mime: string
   name?: string
 }
+
+export type LlmToolContent = ToolTextContent | ToolFileContent
 
 export type SessionNextRetryError = {
   message: string
@@ -3036,6 +2990,14 @@ export type FileDiff = {
   additions: number
   deletions: number
   patch: string
+}
+
+export type RevertState = {
+  messageID: string
+  partID?: string
+  snapshot?: string
+  diff?: string
+  files?: Array<FileDiff>
 }
 
 export type PermissionV2Source = {
@@ -3080,6 +3042,27 @@ export type QuestionV2Tool = {
 }
 
 export type QuestionV2Answer = Array<string>
+
+export type ProjectVcs = "git"
+
+export type ProjectIcon = {
+  url?: string
+  override?: string
+  color?: string
+}
+
+export type ProjectCommands = {
+  /**
+   * Startup script to run when creating a new workspace (worktree)
+   */
+  start?: string
+}
+
+export type ProjectTime = {
+  created: number
+  updated: number
+  initialized?: number
+}
 
 export type EventServerInstanceDisposed = {
   id: string
@@ -3225,11 +3208,7 @@ export type SyncEventSessionNextModelSwitched = {
       timestamp: number
       sessionID: string
       messageID: string
-      model: {
-        id: string
-        providerID: string
-        variant?: string
-      }
+      model: ModelRef
     }
   }
 }
@@ -3369,11 +3348,7 @@ export type SyncEventSessionNextStepStarted = {
       sessionID: string
       assistantMessageID: string
       agent: string
-      model: {
-        id: string
-        providerID: string
-        variant?: string
-      }
+      model: ModelRef
       snapshot?: string
     }
   }
@@ -3473,11 +3448,7 @@ export type SyncEventSessionNextReasoningStarted = {
       sessionID: string
       assistantMessageID: string
       reasoningID: string
-      providerMetadata?: {
-        [key: string]: {
-          [key: string]: unknown
-        }
-      }
+      providerMetadata?: LlmProviderMetadata
     }
   }
 }
@@ -3496,11 +3467,7 @@ export type SyncEventSessionNextReasoningEnded = {
       assistantMessageID: string
       reasoningID: string
       text: string
-      providerMetadata?: {
-        [key: string]: {
-          [key: string]: unknown
-        }
-      }
+      providerMetadata?: LlmProviderMetadata
     }
   }
 }
@@ -3560,11 +3527,7 @@ export type SyncEventSessionNextToolCalled = {
       }
       provider: {
         executed: boolean
-        metadata?: {
-          [key: string]: {
-            [key: string]: unknown
-          }
-        }
+        metadata?: LlmProviderMetadata
       }
     }
   }
@@ -3586,7 +3549,7 @@ export type SyncEventSessionNextToolProgress = {
       structured: {
         [key: string]: unknown
       }
-      content: Array<ToolTextContent | ToolFileContent>
+      content: Array<LlmToolContent>
     }
   }
 }
@@ -3607,16 +3570,12 @@ export type SyncEventSessionNextToolSuccess = {
       structured: {
         [key: string]: unknown
       }
-      content: Array<ToolTextContent | ToolFileContent>
+      content: Array<LlmToolContent>
       outputPaths?: Array<string>
       result?: unknown
       provider: {
         executed: boolean
-        metadata?: {
-          [key: string]: {
-            [key: string]: unknown
-          }
-        }
+        metadata?: LlmProviderMetadata
       }
     }
   }
@@ -3639,11 +3598,7 @@ export type SyncEventSessionNextToolFailed = {
       result?: unknown
       provider: {
         executed: boolean
-        metadata?: {
-          [key: string]: {
-            [key: string]: unknown
-          }
-        }
+        metadata?: LlmProviderMetadata
       }
     }
   }
@@ -3713,13 +3668,7 @@ export type SyncEventSessionNextRevertStaged = {
     data: {
       timestamp: number
       sessionID: string
-      revert: {
-        messageID: string
-        partID?: string
-        snapshot?: string
-        diff?: string
-        files?: Array<FileDiff>
-      }
+      revert: RevertState
     }
   }
 }
@@ -3781,6 +3730,16 @@ export type ProjectDirectories = Array<{
   strategy?: string
 }>
 
+export type PtyTicketConnectToken = {
+  ticket: string
+  expires_in: number
+}
+
+export type WorkspaceEventConnectionStatus = {
+  workspaceID: string
+  status: "connected" | "connecting" | "disconnected" | "error"
+}
+
 export type LocationInfo = {
   directory: string
   workspaceID?: string
@@ -3789,6 +3748,17 @@ export type LocationInfo = {
     directory: string
   }
 }
+
+export type ProviderRequest = {
+  headers: {
+    [key: string]: string
+  }
+  body: {
+    [key: string]: unknown
+  }
+}
+
+export type AgentColor = string | "primary" | "secondary" | "accent" | "success" | "warning" | "error" | "info"
 
 export type PermissionV2Effect = "allow" | "deny" | "ask"
 
@@ -3802,24 +3772,13 @@ export type PermissionV2Ruleset = Array<PermissionV2Rule>
 
 export type AgentV2Info = {
   id: string
-  model?: {
-    id: string
-    providerID: string
-    variant?: string
-  }
-  request: {
-    headers: {
-      [key: string]: string
-    }
-    body: {
-      [key: string]: unknown
-    }
-  }
+  model?: ModelRef
+  request: ProviderRequest
   system?: string
   description?: string
   mode: "subagent" | "primary" | "all"
   hidden: boolean
-  color?: string | "primary" | "secondary" | "accent" | "success" | "warning" | "error" | "info"
+  color?: AgentColor
   steps?: number
   permissions: PermissionV2Ruleset
 }
@@ -3829,11 +3788,7 @@ export type SessionV2Info = {
   parentID?: string
   projectID: string
   agent?: string
-  model?: {
-    id: string
-    providerID: string
-    variant?: string
-  }
+  model?: ModelRef
   cost: number
   tokens: {
     input: number
@@ -3852,13 +3807,7 @@ export type SessionV2Info = {
   title: string
   location: LocationRef
   subpath?: string
-  revert?: {
-    messageID: string
-    partID?: string
-    snapshot?: string
-    diff?: string
-    files?: Array<FileDiff>
-  }
+  revert?: RevertState
 }
 
 export type SessionInputAdmitted = {
@@ -3892,11 +3841,7 @@ export type SessionMessageModelSwitched = {
     created: number
   }
   type: "model-switched"
-  model: {
-    id: string
-    providerID: string
-    variant?: string
-  }
+  model: ModelRef
 }
 
 export type SessionMessageUser = {
@@ -3963,11 +3908,7 @@ export type SessionMessageAssistantReasoning = {
   type: "reasoning"
   id: string
   text: string
-  providerMetadata?: {
-    [key: string]: {
-      [key: string]: unknown
-    }
-  }
+  providerMetadata?: LlmProviderMetadata
 }
 
 export type SessionMessageToolStatePending = {
@@ -3983,7 +3924,7 @@ export type SessionMessageToolStateRunning = {
   structured: {
     [key: string]: unknown
   }
-  content: Array<ToolTextContent | ToolFileContent>
+  content: Array<LlmToolContent>
 }
 
 export type SessionMessageToolStateCompleted = {
@@ -3992,7 +3933,7 @@ export type SessionMessageToolStateCompleted = {
     [key: string]: unknown
   }
   attachments?: Array<PromptFileAttachment>
-  content: Array<ToolTextContent | ToolFileContent>
+  content: Array<LlmToolContent>
   outputPaths?: Array<string>
   structured: {
     [key: string]: unknown
@@ -4005,7 +3946,7 @@ export type SessionMessageToolStateError = {
   input: {
     [key: string]: unknown
   }
-  content: Array<ToolTextContent | ToolFileContent>
+  content: Array<LlmToolContent>
   structured: {
     [key: string]: unknown
   }
@@ -4019,16 +3960,8 @@ export type SessionMessageAssistantTool = {
   name: string
   provider?: {
     executed: boolean
-    metadata?: {
-      [key: string]: {
-        [key: string]: unknown
-      }
-    }
-    resultMetadata?: {
-      [key: string]: {
-        [key: string]: unknown
-      }
-    }
+    metadata?: LlmProviderMetadata
+    resultMetadata?: LlmProviderMetadata
   }
   state:
     | SessionMessageToolStatePending
@@ -4054,11 +3987,7 @@ export type SessionMessageAssistant = {
   }
   type: "assistant"
   agent: string
-  model: {
-    id: string
-    providerID: string
-    variant?: string
-  }
+  model: ModelRef
   content: Array<SessionMessageAssistantText | SessionMessageAssistantReasoning | SessionMessageAssistantTool>
   snapshot?: {
     start?: string
@@ -4103,34 +4032,51 @@ export type SessionMessage =
   | SessionMessageAssistant
   | SessionMessageCompaction
 
+export type ModelApi =
+  | {
+      id: string
+      type: "aisdk"
+      package: string
+      url?: string
+      settings?: {
+        [key: string]: unknown
+      }
+    }
+  | {
+      id: string
+      type: "native"
+      url?: string
+      settings: {
+        [key: string]: unknown
+      }
+    }
+
+export type ModelCapabilities = {
+  tools: boolean
+  input: Array<string>
+  output: Array<string>
+}
+
+export type ModelCost = {
+  tier?: {
+    type: "context"
+    size: number
+  }
+  input: number
+  output: number
+  cache: {
+    read: number
+    write: number
+  }
+}
+
 export type ModelV2Info = {
   id: string
   providerID: string
   family?: string
   name: string
-  api:
-    | {
-        id: string
-        type: "aisdk"
-        package: string
-        url?: string
-        settings?: {
-          [key: string]: unknown
-        }
-      }
-    | {
-        id: string
-        type: "native"
-        url?: string
-        settings: {
-          [key: string]: unknown
-        }
-      }
-  capabilities: {
-    tools: boolean
-    input: Array<string>
-    output: Array<string>
-  }
+  api: ModelApi
+  capabilities: ModelCapabilities
   request: {
     headers: {
       [key: string]: string
@@ -4152,18 +4098,7 @@ export type ModelV2Info = {
   time: {
     released: number
   }
-  cost: Array<{
-    tier?: {
-      type: "context"
-      size: number
-    }
-    input: number
-    output: number
-    cache: {
-      read: number
-      write: number
-    }
-  }>
+  cost: Array<ModelCost>
   status: "alpha" | "beta" | "deprecated" | "active"
   enabled: boolean
   limit: {
@@ -4173,35 +4108,32 @@ export type ModelV2Info = {
   }
 }
 
+export type ProviderAisdk = {
+  type: "aisdk"
+  package: string
+  url?: string
+  settings?: {
+    [key: string]: unknown
+  }
+}
+
+export type ProviderNative = {
+  type: "native"
+  url?: string
+  settings: {
+    [key: string]: unknown
+  }
+}
+
+export type ProviderApi = ProviderAisdk | ProviderNative
+
 export type ProviderV2Info = {
   id: string
   integrationID?: string
   name: string
   disabled?: boolean
-  api:
-    | {
-        type: "aisdk"
-        package: string
-        url?: string
-        settings?: {
-          [key: string]: unknown
-        }
-      }
-    | {
-        type: "native"
-        url?: string
-        settings: {
-          [key: string]: unknown
-        }
-      }
-  request: {
-    headers: {
-      [key: string]: string
-    }
-    body: {
-      [key: string]: unknown
-    }
-  }
+  api: ProviderApi
+  request: ProviderRequest
 }
 
 export type IntegrationWhen = {
@@ -4278,6 +4210,37 @@ export type IntegrationAttempt = {
   }
 }
 
+export type IntegrationAttemptStatus =
+  | {
+      status: "pending"
+      time: {
+        created: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        expires: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      }
+    }
+  | {
+      status: "complete"
+      time: {
+        created: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        expires: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      }
+    }
+  | {
+      status: "failed"
+      message: string
+      time: {
+        created: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        expires: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      }
+    }
+  | {
+      status: "expired"
+      time: {
+        created: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        expires: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      }
+    }
+
 export type PermissionV2Request = {
   id: string
   sessionID: string
@@ -4307,11 +4270,7 @@ export type CommandV2Info = {
   template: string
   description?: string
   agent?: string
-  model?: {
-    id: string
-    providerID: string
-    variant?: string
-  }
+  model?: ModelRef
   subtask?: boolean
 }
 
@@ -4555,11 +4514,7 @@ export type V2EventSessionNextModelSwitched = {
     timestamp: number
     sessionID: string
     messageID: string
-    model: {
-      id: string
-      providerID: string
-      variant?: string
-    }
+    model: ModelRef
   }
 }
 
@@ -4723,11 +4678,7 @@ export type V2EventSessionNextStepStarted = {
     sessionID: string
     assistantMessageID: string
     agent: string
-    model: {
-      id: string
-      providerID: string
-      variant?: string
-    }
+    model: ModelRef
     snapshot?: string
   }
 }
@@ -4863,11 +4814,7 @@ export type V2EventSessionNextReasoningStarted = {
     sessionID: string
     assistantMessageID: string
     reasoningID: string
-    providerMetadata?: {
-      [key: string]: {
-        [key: string]: unknown
-      }
-    }
+    providerMetadata?: LlmProviderMetadata
   }
 }
 
@@ -4910,11 +4857,7 @@ export type V2EventSessionNextReasoningEnded = {
     assistantMessageID: string
     reasoningID: string
     text: string
-    providerMetadata?: {
-      [key: string]: {
-        [key: string]: unknown
-      }
-    }
+    providerMetadata?: LlmProviderMetadata
   }
 }
 
@@ -5004,11 +4947,7 @@ export type V2EventSessionNextToolCalled = {
     }
     provider: {
       executed: boolean
-      metadata?: {
-        [key: string]: {
-          [key: string]: unknown
-        }
-      }
+      metadata?: LlmProviderMetadata
     }
   }
 }
@@ -5033,7 +4972,7 @@ export type V2EventSessionNextToolProgress = {
     structured: {
       [key: string]: unknown
     }
-    content: Array<ToolTextContent | ToolFileContent>
+    content: Array<LlmToolContent>
   }
 }
 
@@ -5057,16 +4996,12 @@ export type V2EventSessionNextToolSuccess = {
     structured: {
       [key: string]: unknown
     }
-    content: Array<ToolTextContent | ToolFileContent>
+    content: Array<LlmToolContent>
     outputPaths?: Array<string>
     result?: unknown
     provider: {
       executed: boolean
-      metadata?: {
-        [key: string]: {
-          [key: string]: unknown
-        }
-      }
+      metadata?: LlmProviderMetadata
     }
   }
 }
@@ -5092,11 +5027,7 @@ export type V2EventSessionNextToolFailed = {
     result?: unknown
     provider: {
       executed: boolean
-      metadata?: {
-        [key: string]: {
-          [key: string]: unknown
-        }
-      }
+      metadata?: LlmProviderMetadata
     }
   }
 }
@@ -5198,13 +5129,7 @@ export type V2EventSessionNextRevertStaged = {
   data: {
     timestamp: number
     sessionID: string
-    revert: {
-      messageID: string
-      partID?: string
-      snapshot?: string
-      diff?: string
-      files?: Array<FileDiff>
-    }
+    revert: RevertState
   }
 }
 
@@ -5846,24 +5771,11 @@ export type V2EventProjectUpdated = {
   data: {
     id: string
     worktree: string
-    vcs?: "git"
+    vcs?: ProjectVcs
     name?: string
-    icon?: {
-      url?: string
-      override?: string
-      color?: string
-    }
-    commands?: {
-      /**
-       * Startup script to run when creating a new workspace (worktree)
-       */
-      start?: string
-    }
-    time: {
-      created: number
-      updated: number
-      initialized?: number
-    }
+    icon?: ProjectIcon
+    commands?: ProjectCommands
+    time: ProjectTime
     sandboxes: Array<string>
   }
 }
@@ -6150,12 +6062,14 @@ export type ReferenceGitSource = {
   hidden?: boolean
 }
 
+export type ReferenceSource = ReferenceLocalSource | ReferenceGitSource
+
 export type ReferenceInfo = {
   name: string
   path: string
   description?: string
   hidden?: boolean
-  source: ReferenceLocalSource | ReferenceGitSource
+  source: ReferenceSource
 }
 
 export type ProjectCopyCopy = {
@@ -6277,11 +6191,7 @@ export type EventSessionNextModelSwitched = {
     timestamp: number
     sessionID: string
     messageID: string
-    model: {
-      id: string
-      providerID: string
-      variant?: string
-    }
+    model: ModelRef
   }
 }
 
@@ -6373,11 +6283,7 @@ export type EventSessionNextStepStarted = {
     sessionID: string
     assistantMessageID: string
     agent: string
-    model: {
-      id: string
-      providerID: string
-      variant?: string
-    }
+    model: ModelRef
     snapshot?: string
   }
 }
@@ -6459,11 +6365,7 @@ export type EventSessionNextReasoningStarted = {
     sessionID: string
     assistantMessageID: string
     reasoningID: string
-    providerMetadata?: {
-      [key: string]: {
-        [key: string]: unknown
-      }
-    }
+    providerMetadata?: LlmProviderMetadata
   }
 }
 
@@ -6488,11 +6390,7 @@ export type EventSessionNextReasoningEnded = {
     assistantMessageID: string
     reasoningID: string
     text: string
-    providerMetadata?: {
-      [key: string]: {
-        [key: string]: unknown
-      }
-    }
+    providerMetadata?: LlmProviderMetadata
   }
 }
 
@@ -6546,11 +6444,7 @@ export type EventSessionNextToolCalled = {
     }
     provider: {
       executed: boolean
-      metadata?: {
-        [key: string]: {
-          [key: string]: unknown
-        }
-      }
+      metadata?: LlmProviderMetadata
     }
   }
 }
@@ -6566,7 +6460,7 @@ export type EventSessionNextToolProgress = {
     structured: {
       [key: string]: unknown
     }
-    content: Array<ToolTextContent | ToolFileContent>
+    content: Array<LlmToolContent>
   }
 }
 
@@ -6581,16 +6475,12 @@ export type EventSessionNextToolSuccess = {
     structured: {
       [key: string]: unknown
     }
-    content: Array<ToolTextContent | ToolFileContent>
+    content: Array<LlmToolContent>
     outputPaths?: Array<string>
     result?: unknown
     provider: {
       executed: boolean
-      metadata?: {
-        [key: string]: {
-          [key: string]: unknown
-        }
-      }
+      metadata?: LlmProviderMetadata
     }
   }
 }
@@ -6607,11 +6497,7 @@ export type EventSessionNextToolFailed = {
     result?: unknown
     provider: {
       executed: boolean
-      metadata?: {
-        [key: string]: {
-          [key: string]: unknown
-        }
-      }
+      metadata?: LlmProviderMetadata
     }
   }
 }
@@ -6668,13 +6554,7 @@ export type EventSessionNextRevertStaged = {
   properties: {
     timestamp: number
     sessionID: string
-    revert: {
-      messageID: string
-      partID?: string
-      snapshot?: string
-      diff?: string
-      files?: Array<FileDiff>
-    }
+    revert: RevertState
   }
 }
 
@@ -6964,24 +6844,11 @@ export type EventProjectUpdated = {
   properties: {
     id: string
     worktree: string
-    vcs?: "git"
+    vcs?: ProjectVcs
     name?: string
-    icon?: {
-      url?: string
-      override?: string
-      color?: string
-    }
-    commands?: {
-      /**
-       * Startup script to run when creating a new workspace (worktree)
-       */
-      start?: string
-    }
-    time: {
-      created: number
-      updated: number
-      initialized?: number
-    }
+    icon?: ProjectIcon
+    commands?: ProjectCommands
+    time: ProjectTime
     sandboxes: Array<string>
   }
 }
@@ -8847,17 +8714,8 @@ export type ProjectInitGitResponse = ProjectInitGitResponses[keyof ProjectInitGi
 export type ProjectUpdateData = {
   body?: {
     name?: string
-    icon?: {
-      url?: string
-      override?: string
-      color?: string
-    }
-    commands?: {
-      /**
-       * Startup script to run when creating a new workspace (worktree)
-       */
-      start?: string
-    }
+    icon?: ProjectIcon
+    commands?: ProjectCommands
   }
   path: {
     projectID: string
@@ -9194,10 +9052,7 @@ export type PtyConnectTokenResponses = {
   /**
    * WebSocket connect token
    */
-  200: {
-    ticket: string
-    expires_in: number
-  }
+  200: PtyTicketConnectToken
 }
 
 export type PtyConnectTokenResponse = PtyConnectTokenResponses[keyof PtyConnectTokenResponses]
@@ -11222,10 +11077,7 @@ export type ExperimentalWorkspaceStatusResponses = {
   /**
    * Workspace status
    */
-  200: Array<{
-    workspaceID: string
-    status: "connected" | "connecting" | "disconnected" | "error"
-  }>
+  200: Array<WorkspaceEventConnectionStatus>
 }
 
 export type ExperimentalWorkspaceStatusResponse =
@@ -11447,11 +11299,7 @@ export type V2SessionCreateData = {
   body: {
     id?: string
     agent?: string
-    model?: {
-      id: string
-      providerID: string
-      variant?: string
-    }
+    model?: ModelRef
     location?: LocationRef
   }
   path?: never
@@ -11559,11 +11407,7 @@ export type V2SessionSwitchAgentResponse = V2SessionSwitchAgentResponses[keyof V
 
 export type V2SessionSwitchModelData = {
   body: {
-    model: {
-      id: string
-      providerID: string
-      variant?: string
-    }
+    model: ModelRef
   }
   path: {
     sessionID: string
@@ -11760,13 +11604,7 @@ export type V2SessionRevertStageResponses = {
    * Success
    */
   200: {
-    data: {
-      messageID: string
-      partID?: string
-      snapshot?: string
-      diff?: string
-      files?: Array<FileDiff>
-    }
+    data: RevertState
   }
 }
 
@@ -12293,36 +12131,7 @@ export type V2IntegrationAttemptStatusResponses = {
    */
   200: {
     location: LocationInfo
-    data:
-      | {
-          status: "pending"
-          time: {
-            created: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-            expires: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-          }
-        }
-      | {
-          status: "complete"
-          time: {
-            created: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-            expires: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-          }
-        }
-      | {
-          status: "failed"
-          message: string
-          time: {
-            created: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-            expires: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-          }
-        }
-      | {
-          status: "expired"
-          time: {
-            created: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-            expires: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-          }
-        }
+    data: IntegrationAttemptStatus
   }
 }
 
@@ -13180,10 +12989,7 @@ export type V2PtyConnectTokenResponses = {
    */
   200: {
     location: LocationInfo
-    data: {
-      ticket: string
-      expires_in: number
-    }
+    data: PtyTicketConnectToken
   }
 }
 

@@ -111,6 +111,7 @@ import type {
   McpRemoteConfig,
   McpStatusErrors,
   McpStatusResponses,
+  ModelRef,
   MoveSessionDestination,
   OutputFormat,
   Part as Part2,
@@ -129,10 +130,12 @@ import type {
   PermissionRuleset,
   PermissionV2Reply,
   PermissionV2Source,
+  ProjectCommands,
   ProjectCurrentErrors,
   ProjectCurrentResponses,
   ProjectDirectoriesErrors,
   ProjectDirectoriesResponses,
+  ProjectIcon,
   ProjectInitGitErrors,
   ProjectInitGitResponses,
   ProjectListErrors,
@@ -2616,17 +2619,8 @@ export class Project extends HeyApiClient {
       directory?: string
       workspace?: string
       name?: string
-      icon?: {
-        url?: string
-        override?: string
-        color?: string
-      }
-      commands?: {
-        /**
-         * Startup script to run when creating a new workspace (worktree)
-         */
-        start?: string
-      }
+      icon?: ProjectIcon
+      commands?: ProjectCommands
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -5471,11 +5465,7 @@ export class Session3 extends HeyApiClient {
     parameters?: {
       id?: string
       agent?: string
-      model?: {
-        id: string
-        providerID: string
-        variant?: string
-      }
+      model?: ModelRef
       location?: LocationRef
     },
     options?: Options<never, ThrowOnError>,
@@ -5571,11 +5561,7 @@ export class Session3 extends HeyApiClient {
   public switchModel<ThrowOnError extends boolean = false>(
     parameters: {
       sessionID: string
-      model?: {
-        id: string
-        providerID: string
-        variant?: string
-      }
+      model?: ModelRef
     },
     options?: Options<never, ThrowOnError>,
   ) {

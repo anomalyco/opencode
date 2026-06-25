@@ -170,6 +170,7 @@ function providers(info?: Readonly<Record<string, ConfigProviderV1.Info>>) {
 function migrateProvider(info: ConfigProviderV1.Info) {
   const lowerer = ConfigProviderOptionsV1.get(info.npm)
   const options = lowerer.provider(info.options ?? {})
+  const url = info.api ?? options.url
   return {
     name: info.name,
     env: info.env,
@@ -177,7 +178,7 @@ function migrateProvider(info: ConfigProviderV1.Info) {
       ? {
           type: "aisdk" as const,
           package: info.npm,
-          url: info.api ?? options.url,
+          ...(url === undefined ? {} : { url }),
           settings: options.settings ?? {},
         }
       : undefined,
@@ -221,7 +222,7 @@ function migrateModel(info: typeof ConfigProviderV1.Model.Type, packageName?: st
           ...(info.id === undefined ? {} : { id: info.id }),
           type: "aisdk" as const,
           package: info.provider.npm,
-          url: info.provider.api,
+          ...(info.provider.api === undefined ? {} : { url: info.provider.api }),
           settings: {},
         }
       : info.id === undefined

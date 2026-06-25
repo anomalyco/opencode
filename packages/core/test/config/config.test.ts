@@ -106,7 +106,6 @@ describe("Config", () => {
       expect(migrated.providers?.bedrock?.api).toEqual({
         type: "aisdk",
         package: "@ai-sdk/amazon-bedrock",
-        url: undefined,
         settings: { region: "us-east-1", profile: "dev" },
       })
       expect(migrated.providers?.bedrock?.request).toEqual({

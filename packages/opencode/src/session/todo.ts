@@ -14,7 +14,7 @@ export type Info = SessionTodo.Info
 export const Event = SessionTodo.Event
 
 export interface Interface {
-  readonly update: (input: { sessionID: SessionID; todos: Info[] }) => Effect.Effect<void>
+  readonly update: (input: { sessionID: SessionID; todos: ReadonlyArray<Info> }) => Effect.Effect<void>
   readonly get: (sessionID: SessionID) => Effect.Effect<Info[]>
 }
 
@@ -26,7 +26,7 @@ export const layer = Layer.effect(
     const events = yield* EventV2Bridge.Service
     const { db } = yield* Database.Service
 
-    const update = Effect.fn("Todo.update")(function* (input: { sessionID: SessionID; todos: Info[] }) {
+    const update = Effect.fn("Todo.update")(function* (input: { sessionID: SessionID; todos: ReadonlyArray<Info> }) {
       yield* db
         .transaction((tx) =>
           Effect.gen(function* () {

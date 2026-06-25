@@ -1,6 +1,7 @@
 export * as Provider from "./provider"
 
 import { Schema } from "effect"
+import { optional } from "./schema"
 import { Integration } from "./integration"
 import { statics } from "./schema"
 
@@ -26,32 +27,34 @@ export interface AISDK extends Schema.Schema.Type<typeof AISDK> {}
 export const AISDK = Schema.Struct({
   type: Schema.Literal("aisdk"),
   package: Schema.String,
-  url: Schema.String.pipe(Schema.optional),
-  settings: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
-})
+  url: Schema.String.pipe(optional),
+  settings: Schema.Record(Schema.String, Schema.Unknown).pipe(optional),
+}).annotate({ identifier: "Provider.AISDK" })
 
 export interface Native extends Schema.Schema.Type<typeof Native> {}
 export const Native = Schema.Struct({
   type: Schema.Literal("native"),
-  url: Schema.String.pipe(Schema.optional),
+  url: Schema.String.pipe(optional),
   settings: Schema.Record(Schema.String, Schema.Unknown),
-})
+}).annotate({ identifier: "Provider.Native" })
 
-export const Api = Schema.Union([AISDK, Native]).pipe(Schema.toTaggedUnion("type"))
+export const Api = Schema.Union([AISDK, Native])
+  .pipe(Schema.toTaggedUnion("type"))
+  .annotate({ identifier: "Provider.Api" })
 export type Api = typeof Api.Type
 
 export interface Request extends Schema.Schema.Type<typeof Request> {}
 export const Request = Schema.Struct({
   headers: Schema.Record(Schema.String, Schema.String),
-  body: Schema.Record(Schema.String, Schema.Any),
-})
+  body: Schema.Record(Schema.String, Schema.Json),
+}).annotate({ identifier: "Provider.Request" })
 
 export interface Info extends Schema.Schema.Type<typeof Info> {}
 export const Info = Schema.Struct({
   id: ID,
-  integrationID: Integration.ID.pipe(Schema.optional),
+  integrationID: Integration.ID.pipe(optional),
   name: Schema.String,
-  disabled: Schema.Boolean.pipe(Schema.optional),
+  disabled: Schema.Boolean.pipe(optional),
   api: Api,
   request: Request,
 })

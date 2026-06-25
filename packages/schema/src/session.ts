@@ -20,8 +20,8 @@ export const Info = Schema.Struct({
   id: ID,
   parentID: ID.pipe(optional),
   projectID: Project.ID,
-  agent: Agent.ID.pipe(Schema.optional),
-  model: Model.Ref.pipe(Schema.optional),
+  agent: Agent.ID.pipe(optional),
+  model: Model.Ref.pipe(optional),
   cost: Schema.Finite,
   tokens: Schema.Struct({
     input: Schema.Finite,
@@ -35,17 +35,17 @@ export const Info = Schema.Struct({
   time: Schema.Struct({
     created: DateTimeUtcFromMillis,
     updated: DateTimeUtcFromMillis,
-    archived: DateTimeUtcFromMillis.pipe(Schema.optional),
+    archived: DateTimeUtcFromMillis.pipe(optional),
   }),
   title: Schema.String,
   location: Location.Ref,
-  subpath: RelativePath.pipe(Schema.optional),
-  revert: Revert.State.pipe(Schema.optional),
+  subpath: RelativePath.pipe(optional),
+  revert: Revert.State.pipe(optional),
 }).annotate({ identifier: "SessionV2.Info" })
 
 export const ListAnchor = Schema.Struct({
   id: ID,
   time: Schema.Finite,
   direction: Schema.Literals(["previous", "next"]),
-})
-export type ListAnchor = typeof ListAnchor.Type
+}).annotate({ identifier: "Session.ListAnchor" })
+export interface ListAnchor extends Schema.Schema.Type<typeof ListAnchor> {}
