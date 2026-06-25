@@ -567,7 +567,6 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                         >
                           <Button
                             variant="ghost"
-                            icon={creating() ? "new-session-active" : "new-session"}
                             class="titlebar-icon w-8 h-6 p-0 box-border"
                             disabled={layout.sidebar.opened()}
                             tabIndex={layout.sidebar.opened() ? -1 : undefined}
@@ -577,7 +576,9 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                             }}
                             aria-label={language.t("command.session.new")}
                             aria-current={creating() ? "page" : undefined}
-                          />
+                          >
+                            <IconV2 name="edit" size="small" />
+                          </Button>
                         </TooltipKeybind>
                       </div>
                     </div>

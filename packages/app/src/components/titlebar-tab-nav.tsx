@@ -319,7 +319,7 @@ export function DraftTabItem(props: {
         }}
         class="flex h-full min-w-0 flex-1 flex-row items-center gap-1.5 overflow-hidden text-[13px] font-medium leading-5 text-v2-text-text-faint group-data-[active='true']:text-[var(--v2-text-text-base)]"
       >
-        <span class="flex size-4 shrink-0 rotate-90 items-center justify-center">
+        <span class="flex size-4 shrink-0 items-center justify-center">
           <IconV2 name="edit" />
         </span>
         <span class="truncate leading-5">{props.title}</span>
