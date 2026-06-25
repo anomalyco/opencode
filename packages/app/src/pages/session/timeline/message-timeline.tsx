@@ -34,7 +34,6 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { InlineInput } from "@opencode-ai/ui/inline-input"
-import { Spinner } from "@opencode-ai/ui/spinner"
 import { SessionRetry } from "@opencode-ai/session-ui/session-retry"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import { StickyAccordionHeader } from "@opencode-ai/ui/sticky-accordion-header"
@@ -66,9 +65,7 @@ import { legacySessionHref, requireServerKey, sessionHref } from "@/utils/sessio
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { notifySessionTabsRemoved } from "@/components/titlebar-session-events"
-import { messageAgentColor } from "@/utils/agent"
 import { sessionTitle } from "@/utils/session-title"
-import { makeTimer } from "@solid-primitives/timer"
 import { scheduleConnectedMeasure } from "./measure"
 import { createTimelineProjection } from "./projection"
 import { MessageComment, SummaryDiff, TimelineRow, TimelineRowMap } from "./rows"
@@ -277,25 +274,7 @@ export function MessageTimeline(props: {
     if (!id) return idle
     return sync().data.session_status[id] ?? idle
   })
-  const working = createMemo(() => sessionStatus().type !== "idle")
   const sessionMessages = createMemo(() => (sessionID() ? (sync().data.message[sessionID()!] ?? []) : []))
-  const tint = createMemo(() => messageAgentColor(sessionMessages(), sync().data.agent))
-
-  const [timeoutDone, setTimeoutDone] = createSignal(true)
-
-  const workingStatus = createMemo<"hidden" | "showing" | "hiding">((prev) => {
-    if (working()) return "showing"
-    if (prev === "showing" || !timeoutDone()) return "hiding"
-    return "hidden"
-  })
-
-  createEffect(() => {
-    if (workingStatus() !== "hiding") return
-
-    setTimeoutDone(false)
-    makeTimer(() => setTimeoutDone(true), 260, setTimeout)
-  })
-
   const info = createMemo(() => {
     const id = sessionID()
     if (!id) return
@@ -1338,23 +1317,6 @@ export function MessageTimeline(props: {
                       /
                     </span>
                   </Show>
-                  <div
-                    class="shrink-0 flex items-center justify-center overflow-hidden transition-[width,margin] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
-                    style={{
-                      width: working() ? "16px" : "0px",
-                      "margin-right": working() ? "8px" : "0px",
-                    }}
-                    aria-hidden="true"
-                  >
-                    <Show when={workingStatus() !== "hidden"}>
-                      <div
-                        class="transition-opacity duration-200 ease-out"
-                        classList={{ "opacity-0": workingStatus() === "hiding" }}
-                      >
-                        <Spinner class="size-4" style={{ color: tint() ?? "var(--icon-interactive-base)" }} />
-                      </div>
-                    </Show>
-                  </div>
                   <Show when={childTitle() || title.editing}>
                     <Show
                       when={title.editing}
