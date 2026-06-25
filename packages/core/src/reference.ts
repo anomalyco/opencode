@@ -86,13 +86,13 @@ export const layer = Layer.effect(
             seen.set(target, source.branch)
             materialized.set(
               name,
-                new Info({
-                  name,
-                  path: AbsolutePath.make(target),
-                  ...(source.description === undefined ? {} : { description: source.description }),
-                  ...(source.hidden === undefined ? {} : { hidden: source.hidden }),
-                  source,
-                }),
+              new Info({
+                name,
+                path: AbsolutePath.make(target),
+                ...(source.description === undefined ? {} : { description: source.description }),
+                ...(source.hidden === undefined ? {} : { hidden: source.hidden }),
+                source,
+              }),
             )
             yield* cache.ensure({ reference: repository, branch: source.branch, refresh: true }).pipe(
               Effect.catchCause((cause) =>

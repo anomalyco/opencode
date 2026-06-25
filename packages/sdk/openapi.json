@@ -3846,29 +3846,10 @@
                     "type": "string"
                   },
                   "icon": {
-                    "type": "object",
-                    "properties": {
-                      "url": {
-                        "type": "string"
-                      },
-                      "override": {
-                        "type": "string"
-                      },
-                      "color": {
-                        "type": "string"
-                      }
-                    },
-                    "additionalProperties": false
+                    "$ref": "#/components/schemas/ProjectIcon"
                   },
                   "commands": {
-                    "type": "object",
-                    "properties": {
-                      "start": {
-                        "type": "string",
-                        "description": "Startup script to run when creating a new workspace (worktree)"
-                      }
-                    },
-                    "additionalProperties": false
+                    "$ref": "#/components/schemas/ProjectCommands"
                   }
                 },
                 "additionalProperties": false
@@ -4541,19 +4522,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "ticket": {
-                      "type": "string"
-                    },
-                    "expires_in": {
-                      "type": "integer",
-                      "exclusiveMinimum": 0
-                    }
-                  },
-                  "required": ["ticket", "expires_in"],
-                  "additionalProperties": false,
-                  "description": "WebSocket connect token"
+                  "$ref": "#/components/schemas/PtyTicketConnectToken"
                 }
               }
             }
@@ -9612,19 +9581,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "type": "object",
-                    "properties": {
-                      "workspaceID": {
-                        "type": "string",
-                        "pattern": "^wrk"
-                      },
-                      "status": {
-                        "type": "string",
-                        "enum": ["connected", "connecting", "disconnected", "error"]
-                      }
-                    },
-                    "required": ["workspaceID", "status"],
-                    "additionalProperties": false
+                    "$ref": "#/components/schemas/WorkspaceEventConnectionStatus"
                   },
                   "description": "Workspace status"
                 }
@@ -10210,20 +10167,7 @@
                     "type": "string"
                   },
                   "model": {
-                    "type": "object",
-                    "properties": {
-                      "id": {
-                        "type": "string"
-                      },
-                      "providerID": {
-                        "type": "string"
-                      },
-                      "variant": {
-                        "type": "string"
-                      }
-                    },
-                    "required": ["id", "providerID"],
-                    "additionalProperties": false
+                    "$ref": "#/components/schemas/ModelRef"
                   },
                   "location": {
                     "$ref": "#/components/schemas/LocationRef"
@@ -10477,20 +10421,7 @@
                 "type": "object",
                 "properties": {
                   "model": {
-                    "type": "object",
-                    "properties": {
-                      "id": {
-                        "type": "string"
-                      },
-                      "providerID": {
-                        "type": "string"
-                      },
-                      "variant": {
-                        "type": "string"
-                      }
-                    },
-                    "required": ["id", "providerID"],
-                    "additionalProperties": false
+                    "$ref": "#/components/schemas/ModelRef"
                   }
                 },
                 "required": ["model"],
@@ -10809,30 +10740,7 @@
                   "type": "object",
                   "properties": {
                     "data": {
-                      "type": "object",
-                      "properties": {
-                        "messageID": {
-                          "type": "string",
-                          "pattern": "^msg_"
-                        },
-                        "partID": {
-                          "type": "string"
-                        },
-                        "snapshot": {
-                          "type": "string"
-                        },
-                        "diff": {
-                          "type": "string"
-                        },
-                        "files": {
-                          "type": "array",
-                          "items": {
-                            "$ref": "#/components/schemas/FileDiff"
-                          }
-                        }
-                      },
-                      "required": ["messageID"],
-                      "additionalProperties": false
+                      "$ref": "#/components/schemas/RevertState"
                     }
                   },
                   "required": ["data"],
@@ -11996,267 +11904,7 @@
                       "$ref": "#/components/schemas/LocationInfo"
                     },
                     "data": {
-                      "anyOf": [
-                        {
-                          "type": "object",
-                          "properties": {
-                            "status": {
-                              "type": "string",
-                              "enum": ["pending"]
-                            },
-                            "time": {
-                              "type": "object",
-                              "properties": {
-                                "created": {
-                                  "anyOf": [
-                                    {
-                                      "type": "number"
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["NaN"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["Infinity"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["-Infinity"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["Infinity", "-Infinity", "NaN"]
-                                    }
-                                  ]
-                                },
-                                "expires": {
-                                  "anyOf": [
-                                    {
-                                      "type": "number"
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["NaN"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["Infinity"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["-Infinity"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["Infinity", "-Infinity", "NaN"]
-                                    }
-                                  ]
-                                }
-                              },
-                              "required": ["created", "expires"],
-                              "additionalProperties": false
-                            }
-                          },
-                          "required": ["status", "time"],
-                          "additionalProperties": false
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "status": {
-                              "type": "string",
-                              "enum": ["complete"]
-                            },
-                            "time": {
-                              "type": "object",
-                              "properties": {
-                                "created": {
-                                  "anyOf": [
-                                    {
-                                      "type": "number"
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["NaN"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["Infinity"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["-Infinity"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["Infinity", "-Infinity", "NaN"]
-                                    }
-                                  ]
-                                },
-                                "expires": {
-                                  "anyOf": [
-                                    {
-                                      "type": "number"
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["NaN"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["Infinity"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["-Infinity"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["Infinity", "-Infinity", "NaN"]
-                                    }
-                                  ]
-                                }
-                              },
-                              "required": ["created", "expires"],
-                              "additionalProperties": false
-                            }
-                          },
-                          "required": ["status", "time"],
-                          "additionalProperties": false
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "status": {
-                              "type": "string",
-                              "enum": ["failed"]
-                            },
-                            "message": {
-                              "type": "string"
-                            },
-                            "time": {
-                              "type": "object",
-                              "properties": {
-                                "created": {
-                                  "anyOf": [
-                                    {
-                                      "type": "number"
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["NaN"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["Infinity"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["-Infinity"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["Infinity", "-Infinity", "NaN"]
-                                    }
-                                  ]
-                                },
-                                "expires": {
-                                  "anyOf": [
-                                    {
-                                      "type": "number"
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["NaN"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["Infinity"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["-Infinity"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["Infinity", "-Infinity", "NaN"]
-                                    }
-                                  ]
-                                }
-                              },
-                              "required": ["created", "expires"],
-                              "additionalProperties": false
-                            }
-                          },
-                          "required": ["status", "message", "time"],
-                          "additionalProperties": false
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "status": {
-                              "type": "string",
-                              "enum": ["expired"]
-                            },
-                            "time": {
-                              "type": "object",
-                              "properties": {
-                                "created": {
-                                  "anyOf": [
-                                    {
-                                      "type": "number"
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["NaN"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["Infinity"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["-Infinity"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["Infinity", "-Infinity", "NaN"]
-                                    }
-                                  ]
-                                },
-                                "expires": {
-                                  "anyOf": [
-                                    {
-                                      "type": "number"
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["NaN"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["Infinity"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["-Infinity"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["Infinity", "-Infinity", "NaN"]
-                                    }
-                                  ]
-                                }
-                              },
-                              "required": ["created", "expires"],
-                              "additionalProperties": false
-                            }
-                          },
-                          "required": ["status", "time"],
-                          "additionalProperties": false
-                        }
-                      ]
+                      "$ref": "#/components/schemas/IntegrationAttemptStatus"
                     }
                   },
                   "required": ["location", "data"],
@@ -14231,18 +13879,7 @@
                       "$ref": "#/components/schemas/LocationInfo"
                     },
                     "data": {
-                      "type": "object",
-                      "properties": {
-                        "ticket": {
-                          "type": "string"
-                        },
-                        "expires_in": {
-                          "type": "integer",
-                          "exclusiveMinimum": 0
-                        }
-                      },
-                      "required": ["ticket", "expires_in"],
-                      "additionalProperties": false
+                      "$ref": "#/components/schemas/PtyTicketConnectToken"
                     }
                   },
                   "required": ["location", "data"],
@@ -17661,20 +17298,7 @@
                         "pattern": "^msg_"
                       },
                       "model": {
-                        "type": "object",
-                        "properties": {
-                          "id": {
-                            "type": "string"
-                          },
-                          "providerID": {
-                            "type": "string"
-                          },
-                          "variant": {
-                            "type": "string"
-                          }
-                        },
-                        "required": ["id", "providerID"],
-                        "additionalProperties": false
+                        "$ref": "#/components/schemas/ModelRef"
                       }
                     },
                     "required": ["timestamp", "sessionID", "messageID", "model"],
@@ -17974,20 +17598,7 @@
                         "type": "string"
                       },
                       "model": {
-                        "type": "object",
-                        "properties": {
-                          "id": {
-                            "type": "string"
-                          },
-                          "providerID": {
-                            "type": "string"
-                          },
-                          "variant": {
-                            "type": "string"
-                          }
-                        },
-                        "required": ["id", "providerID"],
-                        "additionalProperties": false
+                        "$ref": "#/components/schemas/ModelRef"
                       },
                       "snapshot": {
                         "type": "string"
@@ -18256,10 +17867,7 @@
                         "type": "string"
                       },
                       "providerMetadata": {
-                        "type": "object",
-                        "additionalProperties": {
-                          "type": "object"
-                        }
+                        "$ref": "#/components/schemas/LLMProviderMetadata"
                       }
                     },
                     "required": ["timestamp", "sessionID", "assistantMessageID", "reasoningID"],
@@ -18340,10 +17948,7 @@
                         "type": "string"
                       },
                       "providerMetadata": {
-                        "type": "object",
-                        "additionalProperties": {
-                          "type": "object"
-                        }
+                        "$ref": "#/components/schemas/LLMProviderMetadata"
                       }
                     },
                     "required": ["timestamp", "sessionID", "assistantMessageID", "reasoningID", "text"],
@@ -18511,10 +18116,7 @@
                             "type": "boolean"
                           },
                           "metadata": {
-                            "type": "object",
-                            "additionalProperties": {
-                              "type": "object"
-                            }
+                            "$ref": "#/components/schemas/LLMProviderMetadata"
                           }
                         },
                         "required": ["executed"],
@@ -18562,14 +18164,7 @@
                       "content": {
                         "type": "array",
                         "items": {
-                          "anyOf": [
-                            {
-                              "$ref": "#/components/schemas/ToolTextContent"
-                            },
-                            {
-                              "$ref": "#/components/schemas/ToolFileContent"
-                            }
-                          ]
+                          "$ref": "#/components/schemas/LLMToolContent"
                         }
                       }
                     },
@@ -18614,14 +18209,7 @@
                       "content": {
                         "type": "array",
                         "items": {
-                          "anyOf": [
-                            {
-                              "$ref": "#/components/schemas/ToolTextContent"
-                            },
-                            {
-                              "$ref": "#/components/schemas/ToolFileContent"
-                            }
-                          ]
+                          "$ref": "#/components/schemas/LLMToolContent"
                         }
                       },
                       "outputPaths": {
@@ -18638,10 +18226,7 @@
                             "type": "boolean"
                           },
                           "metadata": {
-                            "type": "object",
-                            "additionalProperties": {
-                              "type": "object"
-                            }
+                            "$ref": "#/components/schemas/LLMProviderMetadata"
                           }
                         },
                         "required": ["executed"],
@@ -18702,10 +18287,7 @@
                             "type": "boolean"
                           },
                           "metadata": {
-                            "type": "object",
-                            "additionalProperties": {
-                              "type": "object"
-                            }
+                            "$ref": "#/components/schemas/LLMProviderMetadata"
                           }
                         },
                         "required": ["executed"],
@@ -18892,30 +18474,7 @@
                         "pattern": "^ses"
                       },
                       "revert": {
-                        "type": "object",
-                        "properties": {
-                          "messageID": {
-                            "type": "string",
-                            "pattern": "^msg_"
-                          },
-                          "partID": {
-                            "type": "string"
-                          },
-                          "snapshot": {
-                            "type": "string"
-                          },
-                          "diff": {
-                            "type": "string"
-                          },
-                          "files": {
-                            "type": "array",
-                            "items": {
-                              "$ref": "#/components/schemas/FileDiff"
-                            }
-                          }
-                        },
-                        "required": ["messageID"],
-                        "additionalProperties": false
+                        "$ref": "#/components/schemas/RevertState"
                       }
                     },
                     "required": ["timestamp", "sessionID", "revert"],
@@ -19975,55 +19534,19 @@
                         "type": "string"
                       },
                       "vcs": {
-                        "type": "string",
-                        "enum": ["git"]
+                        "$ref": "#/components/schemas/ProjectVcs"
                       },
                       "name": {
                         "type": "string"
                       },
                       "icon": {
-                        "type": "object",
-                        "properties": {
-                          "url": {
-                            "type": "string"
-                          },
-                          "override": {
-                            "type": "string"
-                          },
-                          "color": {
-                            "type": "string"
-                          }
-                        },
-                        "additionalProperties": false
+                        "$ref": "#/components/schemas/ProjectIcon"
                       },
                       "commands": {
-                        "type": "object",
-                        "properties": {
-                          "start": {
-                            "type": "string",
-                            "description": "Startup script to run when creating a new workspace (worktree)"
-                          }
-                        },
-                        "additionalProperties": false
+                        "$ref": "#/components/schemas/ProjectCommands"
                       },
                       "time": {
-                        "type": "object",
-                        "properties": {
-                          "created": {
-                            "type": "integer",
-                            "minimum": 0
-                          },
-                          "updated": {
-                            "type": "integer",
-                            "minimum": 0
-                          },
-                          "initialized": {
-                            "type": "integer",
-                            "minimum": 0
-                          }
-                        },
-                        "required": ["created", "updated"],
-                        "additionalProperties": false
+                        "$ref": "#/components/schemas/ProjectTime"
                       },
                       "sandboxes": {
                         "type": "array",
@@ -22705,55 +22228,19 @@
             "type": "string"
           },
           "vcs": {
-            "type": "string",
-            "enum": ["git"]
+            "$ref": "#/components/schemas/ProjectVcs"
           },
           "name": {
             "type": "string"
           },
           "icon": {
-            "type": "object",
-            "properties": {
-              "url": {
-                "type": "string"
-              },
-              "override": {
-                "type": "string"
-              },
-              "color": {
-                "type": "string"
-              }
-            },
-            "additionalProperties": false
+            "$ref": "#/components/schemas/ProjectIcon"
           },
           "commands": {
-            "type": "object",
-            "properties": {
-              "start": {
-                "type": "string",
-                "description": "Startup script to run when creating a new workspace (worktree)"
-              }
-            },
-            "additionalProperties": false
+            "$ref": "#/components/schemas/ProjectCommands"
           },
           "time": {
-            "type": "object",
-            "properties": {
-              "created": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "updated": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "initialized": {
-                "type": "integer",
-                "minimum": 0
-              }
-            },
-            "required": ["created", "updated"],
-            "additionalProperties": false
+            "$ref": "#/components/schemas/ProjectTime"
           },
           "sandboxes": {
             "type": "array",
@@ -24200,6 +23687,22 @@
         "required": ["directory"],
         "additionalProperties": false
       },
+      "ModelRef": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "providerID": {
+            "type": "string"
+          },
+          "variant": {
+            "type": "string"
+          }
+        },
+        "required": ["id", "providerID"],
+        "additionalProperties": false
+      },
       "LocationRef": {
         "type": "object",
         "properties": {
@@ -24279,6 +23782,12 @@
         "required": ["type", "message"],
         "additionalProperties": false
       },
+      "LLMProviderMetadata": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "object"
+        }
+      },
       "ToolTextContent": {
         "type": "object",
         "properties": {
@@ -24312,6 +23821,16 @@
         },
         "required": ["type", "uri", "mime"],
         "additionalProperties": false
+      },
+      "LLMToolContent": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/ToolTextContent"
+          },
+          {
+            "$ref": "#/components/schemas/ToolFileContent"
+          }
+        ]
       },
       "SessionNextRetry_error": {
         "type": "object",
@@ -24367,6 +23886,32 @@
           }
         },
         "required": ["path", "status", "additions", "deletions", "patch"],
+        "additionalProperties": false
+      },
+      "RevertState": {
+        "type": "object",
+        "properties": {
+          "messageID": {
+            "type": "string",
+            "pattern": "^msg_"
+          },
+          "partID": {
+            "type": "string"
+          },
+          "snapshot": {
+            "type": "string"
+          },
+          "diff": {
+            "type": "string"
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FileDiff"
+            }
+          }
+        },
+        "required": ["messageID"],
         "additionalProperties": false
       },
       "PermissionV2Source": {
@@ -24451,6 +23996,54 @@
         "items": {
           "type": "string"
         }
+      },
+      "ProjectVcs": {
+        "type": "string",
+        "enum": ["git"]
+      },
+      "ProjectIcon": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string"
+          },
+          "override": {
+            "type": "string"
+          },
+          "color": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ProjectCommands": {
+        "type": "object",
+        "properties": {
+          "start": {
+            "type": "string",
+            "description": "Startup script to run when creating a new workspace (worktree)"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ProjectTime": {
+        "type": "object",
+        "properties": {
+          "created": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "updated": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "initialized": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": ["created", "updated"],
+        "additionalProperties": false
       },
       "EventServerInstanceDisposed": {
         "type": "object",
@@ -24935,20 +24528,7 @@
                     "pattern": "^msg_"
                   },
                   "model": {
-                    "type": "object",
-                    "properties": {
-                      "id": {
-                        "type": "string"
-                      },
-                      "providerID": {
-                        "type": "string"
-                      },
-                      "variant": {
-                        "type": "string"
-                      }
-                    },
-                    "required": ["id", "providerID"],
-                    "additionalProperties": false
+                    "$ref": "#/components/schemas/ModelRef"
                   }
                 },
                 "required": ["timestamp", "sessionID", "messageID", "model"],
@@ -25416,20 +24996,7 @@
                     "type": "string"
                   },
                   "model": {
-                    "type": "object",
-                    "properties": {
-                      "id": {
-                        "type": "string"
-                      },
-                      "providerID": {
-                        "type": "string"
-                      },
-                      "variant": {
-                        "type": "string"
-                      }
-                    },
-                    "required": ["id", "providerID"],
-                    "additionalProperties": false
+                    "$ref": "#/components/schemas/ModelRef"
                   },
                   "snapshot": {
                     "type": "string"
@@ -25764,10 +25331,7 @@
                     "type": "string"
                   },
                   "providerMetadata": {
-                    "type": "object",
-                    "additionalProperties": {
-                      "type": "object"
-                    }
+                    "$ref": "#/components/schemas/LLMProviderMetadata"
                   }
                 },
                 "required": ["timestamp", "sessionID", "assistantMessageID", "reasoningID"],
@@ -25830,10 +25394,7 @@
                     "type": "string"
                   },
                   "providerMetadata": {
-                    "type": "object",
-                    "additionalProperties": {
-                      "type": "object"
-                    }
+                    "$ref": "#/components/schemas/LLMProviderMetadata"
                   }
                 },
                 "required": ["timestamp", "sessionID", "assistantMessageID", "reasoningID", "text"],
@@ -26025,10 +25586,7 @@
                         "type": "boolean"
                       },
                       "metadata": {
-                        "type": "object",
-                        "additionalProperties": {
-                          "type": "object"
-                        }
+                        "$ref": "#/components/schemas/LLMProviderMetadata"
                       }
                     },
                     "required": ["executed"],
@@ -26097,14 +25655,7 @@
                   "content": {
                     "type": "array",
                     "items": {
-                      "anyOf": [
-                        {
-                          "$ref": "#/components/schemas/ToolTextContent"
-                        },
-                        {
-                          "$ref": "#/components/schemas/ToolFileContent"
-                        }
-                      ]
+                      "$ref": "#/components/schemas/LLMToolContent"
                     }
                   }
                 },
@@ -26170,14 +25721,7 @@
                   "content": {
                     "type": "array",
                     "items": {
-                      "anyOf": [
-                        {
-                          "$ref": "#/components/schemas/ToolTextContent"
-                        },
-                        {
-                          "$ref": "#/components/schemas/ToolFileContent"
-                        }
-                      ]
+                      "$ref": "#/components/schemas/LLMToolContent"
                     }
                   },
                   "outputPaths": {
@@ -26194,10 +25738,7 @@
                         "type": "boolean"
                       },
                       "metadata": {
-                        "type": "object",
-                        "additionalProperties": {
-                          "type": "object"
-                        }
+                        "$ref": "#/components/schemas/LLMProviderMetadata"
                       }
                     },
                     "required": ["executed"],
@@ -26279,10 +25820,7 @@
                         "type": "boolean"
                       },
                       "metadata": {
-                        "type": "object",
-                        "additionalProperties": {
-                          "type": "object"
-                        }
+                        "$ref": "#/components/schemas/LLMProviderMetadata"
                       }
                     },
                     "required": ["executed"],
@@ -26517,30 +26055,7 @@
                     "pattern": "^ses"
                   },
                   "revert": {
-                    "type": "object",
-                    "properties": {
-                      "messageID": {
-                        "type": "string",
-                        "pattern": "^msg_"
-                      },
-                      "partID": {
-                        "type": "string"
-                      },
-                      "snapshot": {
-                        "type": "string"
-                      },
-                      "diff": {
-                        "type": "string"
-                      },
-                      "files": {
-                        "type": "array",
-                        "items": {
-                          "$ref": "#/components/schemas/FileDiff"
-                        }
-                      }
-                    },
-                    "required": ["messageID"],
-                    "additionalProperties": false
+                    "$ref": "#/components/schemas/RevertState"
                   }
                 },
                 "required": ["timestamp", "sessionID", "revert"],
@@ -26730,6 +26245,35 @@
           "additionalProperties": false
         }
       },
+      "PtyTicketConnectToken": {
+        "type": "object",
+        "properties": {
+          "ticket": {
+            "type": "string"
+          },
+          "expires_in": {
+            "type": "integer",
+            "exclusiveMinimum": 0
+          }
+        },
+        "required": ["ticket", "expires_in"],
+        "additionalProperties": false
+      },
+      "WorkspaceEventConnectionStatus": {
+        "type": "object",
+        "properties": {
+          "workspaceID": {
+            "type": "string",
+            "pattern": "^wrk"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["connected", "connecting", "disconnected", "error"]
+          }
+        },
+        "required": ["workspaceID", "status"],
+        "additionalProperties": false
+      },
       "LocationInfo": {
         "type": "object",
         "properties": {
@@ -26756,6 +26300,34 @@
         },
         "required": ["directory", "project"],
         "additionalProperties": false
+      },
+      "ProviderRequest": {
+        "type": "object",
+        "properties": {
+          "headers": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "body": {
+            "type": "object"
+          }
+        },
+        "required": ["headers", "body"],
+        "additionalProperties": false
+      },
+      "AgentColor": {
+        "anyOf": [
+          {
+            "type": "string",
+            "pattern": "^#[0-9a-fA-F]{6}$"
+          },
+          {
+            "type": "string",
+            "enum": ["primary", "secondary", "accent", "success", "warning", "error", "info"]
+          }
+        ]
       },
       "PermissionV2Effect": {
         "type": "string",
@@ -26790,36 +26362,10 @@
             "type": "string"
           },
           "model": {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string"
-              },
-              "providerID": {
-                "type": "string"
-              },
-              "variant": {
-                "type": "string"
-              }
-            },
-            "required": ["id", "providerID"],
-            "additionalProperties": false
+            "$ref": "#/components/schemas/ModelRef"
           },
           "request": {
-            "type": "object",
-            "properties": {
-              "headers": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string"
-                }
-              },
-              "body": {
-                "type": "object"
-              }
-            },
-            "required": ["headers", "body"],
-            "additionalProperties": false
+            "$ref": "#/components/schemas/ProviderRequest"
           },
           "system": {
             "type": "string"
@@ -26835,16 +26381,7 @@
             "type": "boolean"
           },
           "color": {
-            "anyOf": [
-              {
-                "type": "string",
-                "pattern": "^#[0-9a-fA-F]{6}$"
-              },
-              {
-                "type": "string",
-                "enum": ["primary", "secondary", "accent", "success", "warning", "error", "info"]
-              }
-            ]
+            "$ref": "#/components/schemas/AgentColor"
           },
           "steps": {
             "type": "integer",
@@ -26875,20 +26412,7 @@
             "type": "string"
           },
           "model": {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string"
-              },
-              "providerID": {
-                "type": "string"
-              },
-              "variant": {
-                "type": "string"
-              }
-            },
-            "required": ["id", "providerID"],
-            "additionalProperties": false
+            "$ref": "#/components/schemas/ModelRef"
           },
           "cost": {
             "type": "number"
@@ -26948,30 +26472,7 @@
             "type": "string"
           },
           "revert": {
-            "type": "object",
-            "properties": {
-              "messageID": {
-                "type": "string",
-                "pattern": "^msg_"
-              },
-              "partID": {
-                "type": "string"
-              },
-              "snapshot": {
-                "type": "string"
-              },
-              "diff": {
-                "type": "string"
-              },
-              "files": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/components/schemas/FileDiff"
-                }
-              }
-            },
-            "required": ["messageID"],
-            "additionalProperties": false
+            "$ref": "#/components/schemas/RevertState"
           }
         },
         "required": ["id", "projectID", "cost", "tokens", "time", "title", "location"],
@@ -27066,20 +26567,7 @@
             "enum": ["model-switched"]
           },
           "model": {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string"
-              },
-              "providerID": {
-                "type": "string"
-              },
-              "variant": {
-                "type": "string"
-              }
-            },
-            "required": ["id", "providerID"],
-            "additionalProperties": false
+            "$ref": "#/components/schemas/ModelRef"
           }
         },
         "required": ["id", "time", "type", "model"],
@@ -27265,10 +26753,7 @@
             "type": "string"
           },
           "providerMetadata": {
-            "type": "object",
-            "additionalProperties": {
-              "type": "object"
-            }
+            "$ref": "#/components/schemas/LLMProviderMetadata"
           }
         },
         "required": ["type", "id", "text"],
@@ -27304,14 +26789,7 @@
           "content": {
             "type": "array",
             "items": {
-              "anyOf": [
-                {
-                  "$ref": "#/components/schemas/ToolTextContent"
-                },
-                {
-                  "$ref": "#/components/schemas/ToolFileContent"
-                }
-              ]
+              "$ref": "#/components/schemas/LLMToolContent"
             }
           }
         },
@@ -27337,14 +26815,7 @@
           "content": {
             "type": "array",
             "items": {
-              "anyOf": [
-                {
-                  "$ref": "#/components/schemas/ToolTextContent"
-                },
-                {
-                  "$ref": "#/components/schemas/ToolFileContent"
-                }
-              ]
+              "$ref": "#/components/schemas/LLMToolContent"
             }
           },
           "outputPaths": {
@@ -27374,14 +26845,7 @@
           "content": {
             "type": "array",
             "items": {
-              "anyOf": [
-                {
-                  "$ref": "#/components/schemas/ToolTextContent"
-                },
-                {
-                  "$ref": "#/components/schemas/ToolFileContent"
-                }
-              ]
+              "$ref": "#/components/schemas/LLMToolContent"
             }
           },
           "structured": {
@@ -27415,16 +26879,10 @@
                 "type": "boolean"
               },
               "metadata": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "object"
-                }
+                "$ref": "#/components/schemas/LLMProviderMetadata"
               },
               "resultMetadata": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "object"
-                }
+                "$ref": "#/components/schemas/LLMProviderMetadata"
               }
             },
             "required": ["executed"],
@@ -27500,20 +26958,7 @@
             "type": "string"
           },
           "model": {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string"
-              },
-              "providerID": {
-                "type": "string"
-              },
-              "variant": {
-                "type": "string"
-              }
-            },
-            "required": ["id", "providerID"],
-            "additionalProperties": false
+            "$ref": "#/components/schemas/ModelRef"
           },
           "content": {
             "type": "array",
@@ -27657,6 +27102,115 @@
           }
         ]
       },
+      "ModelApi": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": ["aisdk"]
+              },
+              "package": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string"
+              },
+              "settings": {
+                "type": "object"
+              }
+            },
+            "required": ["id", "type", "package"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": ["native"]
+              },
+              "url": {
+                "type": "string"
+              },
+              "settings": {
+                "type": "object"
+              }
+            },
+            "required": ["id", "type", "settings"],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "ModelCapabilities": {
+        "type": "object",
+        "properties": {
+          "tools": {
+            "type": "boolean"
+          },
+          "input": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "output": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": ["tools", "input", "output"],
+        "additionalProperties": false
+      },
+      "ModelCost": {
+        "type": "object",
+        "properties": {
+          "tier": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["context"]
+              },
+              "size": {
+                "type": "integer"
+              }
+            },
+            "required": ["type", "size"],
+            "additionalProperties": false
+          },
+          "input": {
+            "type": "number"
+          },
+          "output": {
+            "type": "number"
+          },
+          "cache": {
+            "type": "object",
+            "properties": {
+              "read": {
+                "type": "number"
+              },
+              "write": {
+                "type": "number"
+              }
+            },
+            "required": ["read", "write"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["input", "output", "cache"],
+        "additionalProperties": false
+      },
       "ModelV2Info": {
         "type": "object",
         "properties": {
@@ -27673,73 +27227,10 @@
             "type": "string"
           },
           "api": {
-            "anyOf": [
-              {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "string"
-                  },
-                  "type": {
-                    "type": "string",
-                    "enum": ["aisdk"]
-                  },
-                  "package": {
-                    "type": "string"
-                  },
-                  "url": {
-                    "type": "string"
-                  },
-                  "settings": {
-                    "type": "object"
-                  }
-                },
-                "required": ["id", "type", "package"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "string"
-                  },
-                  "type": {
-                    "type": "string",
-                    "enum": ["native"]
-                  },
-                  "url": {
-                    "type": "string"
-                  },
-                  "settings": {
-                    "type": "object"
-                  }
-                },
-                "required": ["id", "type", "settings"],
-                "additionalProperties": false
-              }
-            ]
+            "$ref": "#/components/schemas/ModelApi"
           },
           "capabilities": {
-            "type": "object",
-            "properties": {
-              "tools": {
-                "type": "boolean"
-              },
-              "input": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              },
-              "output": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              }
-            },
-            "required": ["tools", "input", "output"],
-            "additionalProperties": false
+            "$ref": "#/components/schemas/ModelCapabilities"
           },
           "request": {
             "type": "object",
@@ -27795,44 +27286,7 @@
           "cost": {
             "type": "array",
             "items": {
-              "type": "object",
-              "properties": {
-                "tier": {
-                  "type": "object",
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "enum": ["context"]
-                    },
-                    "size": {
-                      "type": "integer"
-                    }
-                  },
-                  "required": ["type", "size"],
-                  "additionalProperties": false
-                },
-                "input": {
-                  "type": "number"
-                },
-                "output": {
-                  "type": "number"
-                },
-                "cache": {
-                  "type": "object",
-                  "properties": {
-                    "read": {
-                      "type": "number"
-                    },
-                    "write": {
-                      "type": "number"
-                    }
-                  },
-                  "required": ["read", "write"],
-                  "additionalProperties": false
-                }
-              },
-              "required": ["input", "output", "cache"],
-              "additionalProperties": false
+              "$ref": "#/components/schemas/ModelCost"
             }
           },
           "status": {
@@ -27875,6 +27329,53 @@
         ],
         "additionalProperties": false
       },
+      "ProviderAISDK": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["aisdk"]
+          },
+          "package": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "settings": {
+            "type": "object"
+          }
+        },
+        "required": ["type", "package"],
+        "additionalProperties": false
+      },
+      "ProviderNative": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["native"]
+          },
+          "url": {
+            "type": "string"
+          },
+          "settings": {
+            "type": "object"
+          }
+        },
+        "required": ["type", "settings"],
+        "additionalProperties": false
+      },
+      "ProviderApi": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/ProviderAISDK"
+          },
+          {
+            "$ref": "#/components/schemas/ProviderNative"
+          }
+        ]
+      },
       "ProviderV2Info": {
         "type": "object",
         "properties": {
@@ -27891,61 +27392,10 @@
             "type": "boolean"
           },
           "api": {
-            "anyOf": [
-              {
-                "type": "object",
-                "properties": {
-                  "type": {
-                    "type": "string",
-                    "enum": ["aisdk"]
-                  },
-                  "package": {
-                    "type": "string"
-                  },
-                  "url": {
-                    "type": "string"
-                  },
-                  "settings": {
-                    "type": "object"
-                  }
-                },
-                "required": ["type", "package"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "type": {
-                    "type": "string",
-                    "enum": ["native"]
-                  },
-                  "url": {
-                    "type": "string"
-                  },
-                  "settings": {
-                    "type": "object"
-                  }
-                },
-                "required": ["type", "settings"],
-                "additionalProperties": false
-              }
-            ]
+            "$ref": "#/components/schemas/ProviderApi"
           },
           "request": {
-            "type": "object",
-            "properties": {
-              "headers": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string"
-                }
-              },
-              "body": {
-                "type": "object"
-              }
-            },
-            "required": ["headers", "body"],
-            "additionalProperties": false
+            "$ref": "#/components/schemas/ProviderRequest"
           }
         },
         "required": ["id", "name", "api", "request"],
@@ -28230,6 +27680,269 @@
         "required": ["attemptID", "url", "instructions", "mode", "time"],
         "additionalProperties": false
       },
+      "IntegrationAttemptStatus": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": ["pending"]
+              },
+              "time": {
+                "type": "object",
+                "properties": {
+                  "created": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["NaN"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["-Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity", "-Infinity", "NaN"]
+                      }
+                    ]
+                  },
+                  "expires": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["NaN"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["-Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity", "-Infinity", "NaN"]
+                      }
+                    ]
+                  }
+                },
+                "required": ["created", "expires"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["status", "time"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": ["complete"]
+              },
+              "time": {
+                "type": "object",
+                "properties": {
+                  "created": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["NaN"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["-Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity", "-Infinity", "NaN"]
+                      }
+                    ]
+                  },
+                  "expires": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["NaN"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["-Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity", "-Infinity", "NaN"]
+                      }
+                    ]
+                  }
+                },
+                "required": ["created", "expires"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["status", "time"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": ["failed"]
+              },
+              "message": {
+                "type": "string"
+              },
+              "time": {
+                "type": "object",
+                "properties": {
+                  "created": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["NaN"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["-Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity", "-Infinity", "NaN"]
+                      }
+                    ]
+                  },
+                  "expires": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["NaN"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["-Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity", "-Infinity", "NaN"]
+                      }
+                    ]
+                  }
+                },
+                "required": ["created", "expires"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["status", "message", "time"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": ["expired"]
+              },
+              "time": {
+                "type": "object",
+                "properties": {
+                  "created": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["NaN"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["-Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity", "-Infinity", "NaN"]
+                      }
+                    ]
+                  },
+                  "expires": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["NaN"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["-Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity", "-Infinity", "NaN"]
+                      }
+                    ]
+                  }
+                },
+                "required": ["created", "expires"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["status", "time"],
+            "additionalProperties": false
+          }
+        ]
+      },
       "PermissionV2Request": {
         "type": "object",
         "properties": {
@@ -28315,20 +28028,7 @@
             "type": "string"
           },
           "model": {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string"
-              },
-              "providerID": {
-                "type": "string"
-              },
-              "variant": {
-                "type": "string"
-              }
-            },
-            "required": ["id", "providerID"],
-            "additionalProperties": false
+            "$ref": "#/components/schemas/ModelRef"
           },
           "subtask": {
             "type": "boolean"
@@ -29001,20 +28701,7 @@
                 "pattern": "^msg_"
               },
               "model": {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "string"
-                  },
-                  "providerID": {
-                    "type": "string"
-                  },
-                  "variant": {
-                    "type": "string"
-                  }
-                },
-                "required": ["id", "providerID"],
-                "additionalProperties": false
+                "$ref": "#/components/schemas/ModelRef"
               }
             },
             "required": ["timestamp", "sessionID", "messageID", "model"],
@@ -29490,20 +29177,7 @@
                 "type": "string"
               },
               "model": {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "string"
-                  },
-                  "providerID": {
-                    "type": "string"
-                  },
-                  "variant": {
-                    "type": "string"
-                  }
-                },
-                "required": ["id", "providerID"],
-                "additionalProperties": false
+                "$ref": "#/components/schemas/ModelRef"
               },
               "snapshot": {
                 "type": "string"
@@ -29904,10 +29578,7 @@
                 "type": "string"
               },
               "providerMetadata": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "object"
-                }
+                "$ref": "#/components/schemas/LLMProviderMetadata"
               }
             },
             "required": ["timestamp", "sessionID", "assistantMessageID", "reasoningID"],
@@ -30032,10 +29703,7 @@
                 "type": "string"
               },
               "providerMetadata": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "object"
-                }
+                "$ref": "#/components/schemas/LLMProviderMetadata"
               }
             },
             "required": ["timestamp", "sessionID", "assistantMessageID", "reasoningID", "text"],
@@ -30291,10 +29959,7 @@
                     "type": "boolean"
                   },
                   "metadata": {
-                    "type": "object",
-                    "additionalProperties": {
-                      "type": "object"
-                    }
+                    "$ref": "#/components/schemas/LLMProviderMetadata"
                   }
                 },
                 "required": ["executed"],
@@ -30364,14 +30029,7 @@
               "content": {
                 "type": "array",
                 "items": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/ToolTextContent"
-                    },
-                    {
-                      "$ref": "#/components/schemas/ToolFileContent"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/LLMToolContent"
                 }
               }
             },
@@ -30438,14 +30096,7 @@
               "content": {
                 "type": "array",
                 "items": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/ToolTextContent"
-                    },
-                    {
-                      "$ref": "#/components/schemas/ToolFileContent"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/LLMToolContent"
                 }
               },
               "outputPaths": {
@@ -30462,10 +30113,7 @@
                     "type": "boolean"
                   },
                   "metadata": {
-                    "type": "object",
-                    "additionalProperties": {
-                      "type": "object"
-                    }
+                    "$ref": "#/components/schemas/LLMProviderMetadata"
                   }
                 },
                 "required": ["executed"],
@@ -30540,10 +30188,7 @@
                     "type": "boolean"
                   },
                   "metadata": {
-                    "type": "object",
-                    "additionalProperties": {
-                      "type": "object"
-                    }
+                    "$ref": "#/components/schemas/LLMProviderMetadata"
                   }
                 },
                 "required": ["executed"],
@@ -30840,30 +30485,7 @@
                 "pattern": "^ses"
               },
               "revert": {
-                "type": "object",
-                "properties": {
-                  "messageID": {
-                    "type": "string",
-                    "pattern": "^msg_"
-                  },
-                  "partID": {
-                    "type": "string"
-                  },
-                  "snapshot": {
-                    "type": "string"
-                  },
-                  "diff": {
-                    "type": "string"
-                  },
-                  "files": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/components/schemas/FileDiff"
-                    }
-                  }
-                },
-                "required": ["messageID"],
-                "additionalProperties": false
+                "$ref": "#/components/schemas/RevertState"
               }
             },
             "required": ["timestamp", "sessionID", "revert"],
@@ -32649,55 +32271,19 @@
                 "type": "string"
               },
               "vcs": {
-                "type": "string",
-                "enum": ["git"]
+                "$ref": "#/components/schemas/ProjectVcs"
               },
               "name": {
                 "type": "string"
               },
               "icon": {
-                "type": "object",
-                "properties": {
-                  "url": {
-                    "type": "string"
-                  },
-                  "override": {
-                    "type": "string"
-                  },
-                  "color": {
-                    "type": "string"
-                  }
-                },
-                "additionalProperties": false
+                "$ref": "#/components/schemas/ProjectIcon"
               },
               "commands": {
-                "type": "object",
-                "properties": {
-                  "start": {
-                    "type": "string",
-                    "description": "Startup script to run when creating a new workspace (worktree)"
-                  }
-                },
-                "additionalProperties": false
+                "$ref": "#/components/schemas/ProjectCommands"
               },
               "time": {
-                "type": "object",
-                "properties": {
-                  "created": {
-                    "type": "integer",
-                    "minimum": 0
-                  },
-                  "updated": {
-                    "type": "integer",
-                    "minimum": 0
-                  },
-                  "initialized": {
-                    "type": "integer",
-                    "minimum": 0
-                  }
-                },
-                "required": ["created", "updated"],
-                "additionalProperties": false
+                "$ref": "#/components/schemas/ProjectTime"
               },
               "sandboxes": {
                 "type": "array",
@@ -33485,6 +33071,16 @@
         "required": ["type", "repository"],
         "additionalProperties": false
       },
+      "ReferenceSource": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/ReferenceLocalSource"
+          },
+          {
+            "$ref": "#/components/schemas/ReferenceGitSource"
+          }
+        ]
+      },
       "ReferenceInfo": {
         "type": "object",
         "properties": {
@@ -33501,14 +33097,7 @@
             "type": "boolean"
           },
           "source": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ReferenceLocalSource"
-              },
-              {
-                "$ref": "#/components/schemas/ReferenceGitSource"
-              }
-            ]
+            "$ref": "#/components/schemas/ReferenceSource"
           }
         },
         "required": ["name", "path", "source"],
@@ -33880,20 +33469,7 @@
                 "pattern": "^msg_"
               },
               "model": {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "string"
-                  },
-                  "providerID": {
-                    "type": "string"
-                  },
-                  "variant": {
-                    "type": "string"
-                  }
-                },
-                "required": ["id", "providerID"],
-                "additionalProperties": false
+                "$ref": "#/components/schemas/ModelRef"
               }
             },
             "required": ["timestamp", "sessionID", "messageID", "model"],
@@ -34193,20 +33769,7 @@
                 "type": "string"
               },
               "model": {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "string"
-                  },
-                  "providerID": {
-                    "type": "string"
-                  },
-                  "variant": {
-                    "type": "string"
-                  }
-                },
-                "required": ["id", "providerID"],
-                "additionalProperties": false
+                "$ref": "#/components/schemas/ModelRef"
               },
               "snapshot": {
                 "type": "string"
@@ -34475,10 +34038,7 @@
                 "type": "string"
               },
               "providerMetadata": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "object"
-                }
+                "$ref": "#/components/schemas/LLMProviderMetadata"
               }
             },
             "required": ["timestamp", "sessionID", "assistantMessageID", "reasoningID"],
@@ -34559,10 +34119,7 @@
                 "type": "string"
               },
               "providerMetadata": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "object"
-                }
+                "$ref": "#/components/schemas/LLMProviderMetadata"
               }
             },
             "required": ["timestamp", "sessionID", "assistantMessageID", "reasoningID", "text"],
@@ -34730,10 +34287,7 @@
                     "type": "boolean"
                   },
                   "metadata": {
-                    "type": "object",
-                    "additionalProperties": {
-                      "type": "object"
-                    }
+                    "$ref": "#/components/schemas/LLMProviderMetadata"
                   }
                 },
                 "required": ["executed"],
@@ -34781,14 +34335,7 @@
               "content": {
                 "type": "array",
                 "items": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/ToolTextContent"
-                    },
-                    {
-                      "$ref": "#/components/schemas/ToolFileContent"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/LLMToolContent"
                 }
               }
             },
@@ -34833,14 +34380,7 @@
               "content": {
                 "type": "array",
                 "items": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/ToolTextContent"
-                    },
-                    {
-                      "$ref": "#/components/schemas/ToolFileContent"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/LLMToolContent"
                 }
               },
               "outputPaths": {
@@ -34857,10 +34397,7 @@
                     "type": "boolean"
                   },
                   "metadata": {
-                    "type": "object",
-                    "additionalProperties": {
-                      "type": "object"
-                    }
+                    "$ref": "#/components/schemas/LLMProviderMetadata"
                   }
                 },
                 "required": ["executed"],
@@ -34913,10 +34450,7 @@
                     "type": "boolean"
                   },
                   "metadata": {
-                    "type": "object",
-                    "additionalProperties": {
-                      "type": "object"
-                    }
+                    "$ref": "#/components/schemas/LLMProviderMetadata"
                   }
                 },
                 "required": ["executed"],
@@ -35103,30 +34637,7 @@
                 "pattern": "^ses"
               },
               "revert": {
-                "type": "object",
-                "properties": {
-                  "messageID": {
-                    "type": "string",
-                    "pattern": "^msg_"
-                  },
-                  "partID": {
-                    "type": "string"
-                  },
-                  "snapshot": {
-                    "type": "string"
-                  },
-                  "diff": {
-                    "type": "string"
-                  },
-                  "files": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/components/schemas/FileDiff"
-                    }
-                  }
-                },
-                "required": ["messageID"],
-                "additionalProperties": false
+                "$ref": "#/components/schemas/RevertState"
               }
             },
             "required": ["timestamp", "sessionID", "revert"],
@@ -36048,55 +35559,19 @@
                 "type": "string"
               },
               "vcs": {
-                "type": "string",
-                "enum": ["git"]
+                "$ref": "#/components/schemas/ProjectVcs"
               },
               "name": {
                 "type": "string"
               },
               "icon": {
-                "type": "object",
-                "properties": {
-                  "url": {
-                    "type": "string"
-                  },
-                  "override": {
-                    "type": "string"
-                  },
-                  "color": {
-                    "type": "string"
-                  }
-                },
-                "additionalProperties": false
+                "$ref": "#/components/schemas/ProjectIcon"
               },
               "commands": {
-                "type": "object",
-                "properties": {
-                  "start": {
-                    "type": "string",
-                    "description": "Startup script to run when creating a new workspace (worktree)"
-                  }
-                },
-                "additionalProperties": false
+                "$ref": "#/components/schemas/ProjectCommands"
               },
               "time": {
-                "type": "object",
-                "properties": {
-                  "created": {
-                    "type": "integer",
-                    "minimum": 0
-                  },
-                  "updated": {
-                    "type": "integer",
-                    "minimum": 0
-                  },
-                  "initialized": {
-                    "type": "integer",
-                    "minimum": 0
-                  }
-                },
-                "required": ["created", "updated"],
-                "additionalProperties": false
+                "$ref": "#/components/schemas/ProjectTime"
               },
               "sandboxes": {
                 "type": "array",
