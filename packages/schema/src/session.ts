@@ -6,10 +6,14 @@ import { Location } from "./location"
 import { Model } from "./model"
 import { Project } from "./project"
 import { DateTimeUtcFromMillis, optionalOmitUndefined, RelativePath } from "./schema"
+import { SessionEvent } from "./session-event"
 import { SessionID } from "./session-id"
+import { Revert } from "./revert"
 
-export const ID = SessionID.ID
-export type ID = SessionID.ID
+export const ID = SessionID
+export type ID = SessionID
+
+export const Event = SessionEvent
 
 export interface Info extends Schema.Schema.Type<typeof Info> {}
 export const Info = Schema.Struct({
@@ -36,6 +40,7 @@ export const Info = Schema.Struct({
   title: Schema.String,
   location: Location.Ref,
   subpath: RelativePath.pipe(Schema.optional),
+  revert: Revert.State.pipe(Schema.optional),
 }).annotate({ identifier: "SessionV2.Info" })
 
 export const ListAnchor = Schema.Struct({

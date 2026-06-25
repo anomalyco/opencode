@@ -11,6 +11,7 @@ import {
   ConflictError,
   InvalidCursorError,
   InvalidRequestError,
+  MessageNotFoundError,
   ServiceUnavailableError,
   SessionNotFoundError,
   UnknownError,
@@ -222,6 +223,40 @@ export const SessionGroup = HttpApiGroup.make("server.session")
           description: "Wait for a session agent loop to become idle.",
         }),
       ),
+  )
+  .add(
+    HttpApiEndpoint.post("session.revert.stage", "/api/session/:sessionID/revert/stage", {
+      params: { sessionID: SessionV2.ID },
+      payload: Schema.Struct({ messageID: SessionMessage.ID, files: Schema.Boolean.pipe(Schema.optional) }),
+      success: Schema.Struct({ data: SessionV2.RevertState }),
+      error: [MessageNotFoundError, SessionNotFoundError, UnknownError],
+    })
+      .middleware(SessionLocationMiddleware)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.session.revert.stage",
+          summary: "Stage session revert",
+          description: "Stage or move a reversible session boundary and optionally apply its file changes.",
+        }),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.post("session.revert.clear", "/api/session/:sessionID/revert/clear", {
+      params: { sessionID: SessionV2.ID },
+      success: HttpApiSchema.NoContent,
+      error: [SessionNotFoundError, UnknownError],
+    })
+      .middleware(SessionLocationMiddleware)
+      .annotateMerge(OpenApi.annotations({ identifier: "v2.session.revert.clear", summary: "Clear staged revert" })),
+  )
+  .add(
+    HttpApiEndpoint.post("session.revert.commit", "/api/session/:sessionID/revert/commit", {
+      params: { sessionID: SessionV2.ID },
+      success: HttpApiSchema.NoContent,
+      error: SessionNotFoundError,
+    })
+      .middleware(SessionLocationMiddleware)
+      .annotateMerge(OpenApi.annotations({ identifier: "v2.session.revert.commit", summary: "Commit staged revert" })),
   )
   .add(
     HttpApiEndpoint.get("session.context", "/api/session/:sessionID/context", {

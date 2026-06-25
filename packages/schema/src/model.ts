@@ -1,7 +1,6 @@
 export * as Model from "./model"
 
 import { Schema } from "effect"
-import { ModelRequest } from "./model-request"
 import { Provider } from "./provider"
 import { withStatics } from "./schema"
 
@@ -63,12 +62,12 @@ export const Info = Schema.Struct({
   api: Api,
   capabilities: Capabilities,
   request: Schema.Struct({
-    ...ModelRequest.Request.fields,
+    ...Provider.Request.fields,
     variant: Schema.String.pipe(Schema.optional),
   }),
   variants: Schema.Struct({
     id: VariantID,
-    ...ModelRequest.Request.fields,
+    ...Provider.Request.fields,
   }).pipe(Schema.Array, Schema.mutable),
   time: Schema.Struct({
     released: Schema.Finite,
@@ -92,7 +91,7 @@ export const Info = Schema.Struct({
           name: modelID,
           api: { id: modelID, type: "native", settings: {} },
           capabilities: { tools: false, input: [], output: [] },
-          request: { headers: {}, body: {}, generation: {}, options: {} },
+          request: { headers: {}, body: {} },
           variants: [],
           time: { released: 0 },
           cost: [],
