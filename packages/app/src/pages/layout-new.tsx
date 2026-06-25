@@ -3,12 +3,18 @@ import { useNavigate, useParams } from "@solidjs/router"
 import { DebugBar } from "@/components/debug-bar"
 import { HelpButton } from "@/components/help-button"
 import { Titlebar, type TitlebarUpdate } from "@/components/titlebar"
+import { useCommand } from "@/context/command"
+import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { useLanguage } from "@/context/language"
 import { useNotification } from "@/context/notification"
 import { usePlatform } from "@/context/platform"
 import { setNavigate } from "@/utils/notification-click"
 import { setV2Toast, ToastRegion } from "@/utils/toast"
 
 export default function NewLayout(props: ParentProps) {
+  const command = useCommand()
+  const dialog = useDialog()
+  const language = useLanguage()
   const platform = usePlatform()
   const notification = useNotification()
   const navigate = useNavigate()
@@ -21,6 +27,20 @@ export default function NewLayout(props: ParentProps) {
     if (notification.session.unseenCount(params.id) === 0) return
     notification.session.markViewed(params.id)
   })
+
+  command.register("layout", () => [
+    {
+      id: "settings.open",
+      title: language.t("command.settings.open"),
+      category: language.t("command.category.settings"),
+      keybind: "mod+comma",
+      onSelect: () => {
+        void import("@/components/settings-v2").then((x) => {
+          dialog.show(() => <x.DialogSettings />)
+        })
+      },
+    },
+  ])
 
   const update: TitlebarUpdate = {
     version: () => {
