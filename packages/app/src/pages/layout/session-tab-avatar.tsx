@@ -27,7 +27,17 @@ export function SessionTabAvatar(props: {
         />
       }
     >
-      <SessionProgressIndicatorV2 class="shrink-0" />
+      <span class="relative block size-4 shrink-0">
+        <SessionProgressIndicatorV2 class="absolute inset-0 group-hover:invisible" />
+        <span class="invisible absolute inset-0 group-hover:visible">
+          <ProjectAvatar
+            fallback={displayName(props.project ?? { worktree: props.directory })}
+            src={getProjectAvatarSource(props.project?.id, props.project?.icon)}
+            variant={getProjectAvatarVariant(props.project?.icon?.color)}
+            unread={state.unread()}
+          />
+        </span>
+      </span>
     </Show>
   )
 }
