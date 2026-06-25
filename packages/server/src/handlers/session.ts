@@ -1,5 +1,5 @@
 import { SessionV2 } from "@opencode-ai/core/session"
-import { DateTime, Effect } from "effect"
+import { DateTime, Effect, Stream } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import { Api } from "../api"
 import { SessionsCursor } from "@opencode-ai/protocol/groups/session"
@@ -316,6 +316,33 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
               }),
             ),
           }
+        }),
+      )
+      .handle(
+        "session.events",
+        Effect.fn((ctx) =>
+          Effect.succeed(
+            session.events({ sessionID: ctx.params.sessionID, after: ctx.query.after }).pipe(Stream.orDie),
+          ),
+        ),
+      )
+      .handle(
+        "session.interrupt",
+        Effect.fn(function* (ctx) {
+          yield* session.interrupt(ctx.params.sessionID)
+          return HttpApiSchema.NoContent.make()
+        }),
+      )
+      .handle(
+        "session.message",
+        Effect.fn(function* (ctx) {
+          const message = yield* session.message(ctx.params)
+          if (message) return { data: message }
+          return yield* new MessageNotFoundError({
+            sessionID: ctx.params.sessionID,
+            messageID: ctx.params.messageID,
+            message: `Message not found: ${ctx.params.messageID}`,
+          })
         }),
       )
   }),

@@ -24,8 +24,14 @@ test("session methods use the public HTTP contract", async () => {
     fetch: async (input, init) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url
       requests.push({ url, init })
+      if (url.includes("/event")) {
+        return new Response(`data: ${JSON.stringify(modelSwitchedEvent)}\n\n`, {
+          headers: { "content-type": "text/event-stream" },
+        })
+      }
       if (url.includes("/prompt")) return Response.json(admission)
       if (url.includes("/context")) return Response.json({ data: [] })
+      if (url.includes("/message/")) return Response.json({ data: modelSwitchedMessage })
       if (init?.method === "POST" && url.endsWith("/api/session")) return Response.json(session)
       if (init?.method === "POST") return new Response(null, { status: 204 })
       return Response.json({ data: [session.data], cursor: { next: "next" } })
@@ -47,11 +53,17 @@ test("session methods use the public HTTP contract", async () => {
   await client.sessions.compact({ sessionID: "ses_test" })
   await client.sessions.wait({ sessionID: "ses_test" })
   const context = await client.sessions.context({ sessionID: "ses_test" })
+  const events = []
+  for await (const event of client.sessions.events({ sessionID: "ses_test", after: "0" })) events.push(event)
+  await client.sessions.interrupt({ sessionID: "ses_test" })
+  const message = await client.sessions.message({ sessionID: "ses_test", messageID: "msg_model" })
 
   expect(page.cursor.next).toBe("next")
   expect(created.id).toBe("ses_test")
   expect(admitted.id).toBe("msg_test")
   expect(context).toEqual([])
+  expect(events).toEqual([modelSwitchedEvent])
+  expect(message).toEqual(modelSwitchedMessage)
   expect(requests.map((request) => [request.init?.method, request.url])).toEqual([
     ["GET", "http://localhost:3000/api/session?limit=10&order=desc"],
     ["POST", "http://localhost:3000/api/session"],
@@ -61,6 +73,9 @@ test("session methods use the public HTTP contract", async () => {
     ["POST", "http://localhost:3000/api/session/ses_test/compact"],
     ["POST", "http://localhost:3000/api/session/ses_test/wait"],
     ["GET", "http://localhost:3000/api/session/ses_test/context"],
+    ["GET", "http://localhost:3000/api/session/ses_test/event?after=0"],
+    ["POST", "http://localhost:3000/api/session/ses_test/interrupt"],
+    ["GET", "http://localhost:3000/api/session/ses_test/message/msg_model"],
   ])
   const body = requests[4]?.init?.body
   if (typeof body !== "string") throw new Error("Expected JSON request body")
@@ -113,5 +128,24 @@ const admission = {
     prompt: { text: "Hello" },
     delivery: "steer",
     timeCreated: 1_717_171_717_000,
+  },
+}
+
+const modelSwitchedMessage = {
+  id: "msg_model",
+  type: "model-switched",
+  time: { created: 1_717_171_717_000 },
+  model: { id: "claude", providerID: "anthropic" },
+}
+
+const modelSwitchedEvent = {
+  id: "evt_model",
+  type: "session.next.model.switched",
+  durable: { aggregateID: "ses_test", seq: 1, version: 1 },
+  data: {
+    timestamp: 1_717_171_717_000,
+    sessionID: "ses_test",
+    messageID: "msg_model",
+    model: { id: "claude", providerID: "anthropic" },
   },
 }
