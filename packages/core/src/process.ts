@@ -9,8 +9,15 @@ export class AppProcessError extends Schema.TaggedErrorClass<AppProcessError>()(
   command: Schema.String,
   exitCode: Schema.optional(Schema.Number),
   stderr: Schema.optional(Schema.String),
-  cause: Schema.optional(Schema.Defect),
-}) {}
+  cause: Schema.optional(Schema.Defect()),
+}) {
+  override get message() {
+    const detail =
+      this.stderr?.trim() || (this.cause instanceof Error ? this.cause.message : this.cause && String(this.cause))
+    const status = this.exitCode === undefined ? "" : ` (exit ${this.exitCode})`
+    return `Command failed${status}: ${this.command}${detail ? `: ${detail}` : ""}`
+  }
+}
 
 export interface RunOptions {
   readonly maxOutputBytes?: number
@@ -231,6 +238,6 @@ export const layer = Layer.effect(
 )
 
 export const defaultLayer = layer.pipe(Layer.provide(CrossSpawnSpawner.defaultLayer))
-export const node = LayerNode.make(layer, [CrossSpawnSpawner.node])
+export const node = LayerNode.make({ service: Service, layer: layer, deps: [CrossSpawnSpawner.node] })
 
 export * as AppProcess from "./process"

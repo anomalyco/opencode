@@ -49,8 +49,8 @@ Her çalışma alanından yalnızca bir üye OpenCode Go'ya abone olabilir.
 
 Mevcut model listesi şunları içerir:
 
+- **GLM-5.2**
 - **GLM-5.1**
-- **GLM-5**
 - **Kimi K2.7 Code**
 - **Kimi K2.6**
 - **MiMo-V2.5**
@@ -75,14 +75,14 @@ OpenCode Go aşağıdaki limitleri içerir:
 - **Haftalık limit** — 30$ kullanım
 - **Aylık limit** — 60$ kullanım
 
-Limitler dolar değeri üzerinden belirlenmiştir. Bu, gerçek istek sayınızın kullandığınız modele bağlı olduğu anlamına gelir. DeepSeek V4 Flash gibi daha ucuz modeller daha fazla isteğe izin verirken, GLM-5.1 gibi yüksek maliyetli modeller daha azına izin verir.
+Limitler dolar değeri üzerinden belirlenmiştir. Bu, gerçek istek sayınızın kullandığınız modele bağlı olduğu anlamına gelir. DeepSeek V4 Flash gibi daha ucuz modeller daha fazla isteğe izin verirken, GLM-5.2 gibi yüksek maliyetli modeller daha azına izin verir.
 
 Aşağıdaki tablo, tipik Go kullanım modellerine dayalı tahmini bir istek sayısı sunmaktadır:
 
 | Model             | 5 saatte bir istek | haftalık istek | aylık istek |
 | ----------------- | ------------------ | -------------- | ----------- |
+| GLM-5.2           | 880                | 2,150          | 4,300       |
 | GLM-5.1           | 880                | 2,150          | 4,300       |
-| GLM-5             | 1,150              | 2,880          | 5,750       |
 | Kimi K2.6         | 1,150              | 2,880          | 5,750       |
 | Kimi K2.7 Code    | 1,350              | 4,630          | 9,250       |
 | MiMo-V2.5         | 30,100             | 75,200         | 150,400     |
@@ -97,7 +97,7 @@ Aşağıdaki tablo, tipik Go kullanım modellerine dayalı tahmini bir istek say
 
 Tahminler, gözlemlenen ortalama istek modellerine dayanır:
 
-- GLM-5/5.1 — İstek başına 700 girdi, 52.000 önbelleğe alınmış, 150 çıktı token'ı
+- GLM-5.2/5.1 — İstek başına 700 girdi, 52.000 önbelleğe alınmış, 150 çıktı token'ı
 - Kimi K2.7/K2.6 — İstek başına 870 girdi, 55.000 önbelleğe alınmış, 200 çıktı token'ı
 - DeepSeek V4 Pro — İstek başına 750 girdi, 82.000 önbelleğe alınmış, 290 çıktı token'ı
 - DeepSeek V4 Flash — İstek başına 790 girdi, 68.000 önbelleğe alınmış, 280 çıktı token'ı
@@ -113,8 +113,8 @@ Tahminler ayrıca 1M token başına aşağıdaki fiyatlara da dayanır:
 
 | Model                        | Input | Output | Cached Read | Cached Write |
 | ---------------------------- | ----- | ------ | ----------- | ------------ |
+| GLM-5.2                      | $1.40 | $4.40  | $0.26       | -            |
 | GLM-5.1                      | $1.40 | $4.40  | $0.26       | -            |
-| GLM-5                        | $1.00 | $3.20  | $0.20       | -            |
 | Kimi K2.7 Code               | $0.95 | $4.00  | $0.19       | -            |
 | Kimi K2.6                    | $0.95 | $4.00  | $0.16       | -            |
 | MiMo V2.5                    | $0.14 | $0.28  | $0.0028     | -            |
@@ -152,8 +152,8 @@ Go modellerine aşağıdaki API uç noktaları aracılığıyla da erişebilirsi
 
 | Model             | Model ID          | Uç Nokta                                         | AI SDK Paketi               |
 | ----------------- | ----------------- | ------------------------------------------------ | --------------------------- |
+| GLM-5.2           | glm-5.2           | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | GLM-5.1           | glm-5.1           | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| GLM-5             | glm-5             | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Kimi K2.7         | kimi-k2.7         | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Kimi K2.6         | kimi-k2.6         | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Pro   | deepseek-v4-pro   | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |

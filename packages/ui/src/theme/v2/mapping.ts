@@ -90,7 +90,7 @@ const dark: Record<string, V2ColorValue> = {
   "v2-overlay-simple-overlay-pressed": ref("v2-alpha-light-10"),
   "v2-overlay-simple-overlay-contrast-hover": ref("v2-alpha-dark-24"),
   "v2-overlay-simple-overlay-contrast-pressed": ref("v2-alpha-dark-40"),
-  "v2-overlay-simple-overlay-scrim": ref("v2-alpha-light-30"),
+  "v2-overlay-simple-overlay-scrim": ref("v2-alpha-dark-60"),
   "v2-overlay-gradient-depth-overlay-depth-top": ref("v2-alpha-light-100"),
   "v2-overlay-gradient-depth-overlay-depth-bot": ref("v2-alpha-light-0"),
   "v2-overlay-simple-tab-active-scrim": "#24242400",

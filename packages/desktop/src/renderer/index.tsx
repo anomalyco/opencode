@@ -78,6 +78,7 @@ const listenForDeepLinks = () => {
 }
 
 const createPlatform = (): Platform => {
+  const attachmentPaths = new WeakMap<File, string>()
   const os = (() => {
     const ua = navigator.userAgent
     if (ua.includes("Mac")) return "macos"
@@ -153,11 +154,17 @@ const createPlatform = (): Platform => {
       if (!result) return
       try {
         for (const file of result.files) {
-          await onFile(new File([await window.api.readPickedFile(result.token, file.path)], file.name))
+          const selected = new File([await window.api.readPickedFile(result.token, file.path)], file.name)
+          attachmentPaths.set(selected, file.path)
+          await onFile(selected)
         }
       } finally {
         await window.api.releasePickedFiles(result.token)
       }
+    },
+
+    getPathForFile(file) {
+      return attachmentPaths.get(file) ?? window.api.getPathForFile(file)
     },
 
     async saveFilePickerDialog(opts) {

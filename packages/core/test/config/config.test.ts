@@ -106,7 +106,6 @@ describe("Config", () => {
       expect(migrated.providers?.bedrock?.api).toEqual({
         type: "aisdk",
         package: "@ai-sdk/amazon-bedrock",
-        url: undefined,
         settings: { region: "us-east-1", profile: "dev" },
       })
       expect(migrated.providers?.bedrock?.request).toEqual({
@@ -599,9 +598,9 @@ describe("Config", () => {
               models: {
                 model: {
                   request: {
-                    body: { temperature: 0.3, reasoningEffort: "high", serviceTier: "priority" },
+                    body: { temperature: 0.3, reasoning_effort: "high", service_tier: "priority" },
                   },
-                  variants: [{ id: "high", body: { reasoningEffort: "high", reasoningSummary: "auto" } }],
+                  variants: [{ id: "high", body: { reasoning_effort: "high", reasoning_summary: "auto" } }],
                 },
               },
             })

@@ -12,10 +12,13 @@ import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
+import { LocationServiceMap } from "@opencode-ai/core/location-layer"
+import { Snapshot } from "@opencode-ai/core/snapshot"
 import { Prompt } from "@opencode-ai/core/session/prompt"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionRunCoordinator } from "@opencode-ai/core/session/run-coordinator"
+import { SessionRunner } from "@opencode-ai/core/session/runner"
 import * as SessionRunnerLLM from "@opencode-ai/core/session/runner/llm"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
@@ -32,10 +35,6 @@ import { Effect, Layer } from "effect"
 import path from "node:path"
 import { testEffect } from "./lib/effect"
 
-const database = Database.layerFromPath(":memory:")
-const events = EventV2.layer.pipe(Layer.provide(database))
-const projector = SessionProjector.layer.pipe(Layer.provide(events), Layer.provide(database))
-const store = SessionStore.layer.pipe(Layer.provide(database))
 const cassette =
   process.env.RECORD === "true"
     ? HttpRecorderInternal.cassetteLayer("session-runner/openai-chat-streams-text", {
@@ -74,9 +73,10 @@ const skillGuidance = Layer.mock(SkillGuidance.Service, { load: () => Effect.suc
 const referenceGuidance = Layer.mock(ReferenceGuidance.Service, { load: () => Effect.succeed(SystemContext.empty) })
 const config = Layer.succeed(Config.Service, Config.Service.of({ entries: () => Effect.succeed([]) }))
 const runner = SessionRunnerLLM.defaultLayer.pipe(
-  Layer.provide(database),
-  Layer.provide(store),
-  Layer.provide(events),
+  Layer.provide(Snapshot.noopLayer),
+  Layer.provide(Database.defaultLayer),
+  Layer.provide(SessionStore.defaultLayer),
+  Layer.provide(EventV2.defaultLayer),
   Layer.provide(client),
   Layer.provide(registry),
   Layer.provide(models),
@@ -87,32 +87,34 @@ const runner = SessionRunnerLLM.defaultLayer.pipe(
   Layer.provide(referenceGuidance),
   Layer.provide(config),
 )
-const coordinator = SessionRunCoordinator.layer.pipe(Layer.provide(runner))
 const execution = Layer.effect(
   SessionExecution.Service,
-  SessionRunCoordinator.Service.pipe(
-    Effect.map((coordinator) =>
-      SessionExecution.Service.of({
-        resume: coordinator.run,
-        wake: coordinator.wake,
-        interrupt: coordinator.interrupt,
-      }),
-    ),
-  ),
-).pipe(Layer.provide(coordinator))
+  Effect.gen(function* () {
+    const sessionRunner = yield* SessionRunner.Service
+    const coordinator = yield* SessionRunCoordinator.make<SessionV2.ID, SessionRunner.RunError>({
+      drain: (sessionID, force) => sessionRunner.run({ sessionID, force }),
+    })
+    return SessionExecution.Service.of({
+      resume: coordinator.run,
+      wake: coordinator.wake,
+      interrupt: coordinator.interrupt,
+    })
+  }),
+).pipe(Layer.provide(runner))
 const sessions = SessionV2.layer.pipe(
-  Layer.provide(events),
-  Layer.provide(database),
-  Layer.provide(store),
+  Layer.provide(LocationServiceMap.layer),
+  Layer.provide(EventV2.defaultLayer),
+  Layer.provide(Database.defaultLayer),
+  Layer.provide(SessionStore.defaultLayer),
   Layer.provide(Project.defaultLayer),
   Layer.provide(execution),
 )
 const it = testEffect(
   Layer.mergeAll(
-    database,
-    events,
-    projector,
-    store,
+    Database.defaultLayer,
+    EventV2.defaultLayer,
+    SessionProjector.defaultLayer,
+    SessionStore.defaultLayer,
     executor,
     client,
     permission,
@@ -124,7 +126,6 @@ const it = testEffect(
     skillGuidance,
     config,
     runner,
-    coordinator,
     execution,
     sessions,
   ),
@@ -157,7 +158,7 @@ describe("SessionRunnerLLM recorded", () => {
       const session = yield* SessionV2.Service
       const prompt = yield* session.prompt({
         sessionID,
-        prompt: new Prompt({ text: "Say hello in one short sentence." }),
+        prompt: Prompt.make({ text: "Say hello in one short sentence." }),
         resume: false,
       })
 
@@ -179,7 +180,7 @@ describe("SessionRunnerLLM recorded", () => {
           .all()).map((event) => event.type),
       ).toEqual([
         "session.next.prompt.admitted.1",
-        "session.next.prompt.promoted.1",
+        "session.next.prompted.1",
         "session.next.step.started.1",
         "session.next.text.started.1",
         "session.next.text.ended.1",

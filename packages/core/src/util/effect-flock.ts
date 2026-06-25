@@ -24,7 +24,7 @@ export namespace EffectFlock {
 
   class ReleaseError extends Schema.TaggedErrorClass<ReleaseError>()("ReleaseError", {
     detail: Schema.String,
-    cause: Schema.optional(Schema.Defect),
+    cause: Schema.optional(Schema.Defect()),
   }) {
     override get message() {
       return this.detail
@@ -281,5 +281,5 @@ export namespace EffectFlock {
   )
 
   export const defaultLayer = layer.pipe(Layer.provide(FSUtil.defaultLayer), Layer.provide(Global.layer))
-  export const node = LayerNode.make(layer, [Global.node, FSUtil.node])
+  export const node = LayerNode.make({ service: Service, layer: layer, deps: [Global.node, FSUtil.node] })
 }

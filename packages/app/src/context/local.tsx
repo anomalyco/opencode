@@ -60,7 +60,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const sdk = useSDK()
     const sync = useSync()
     const serverSDK = useServerSDK()
-    const providers = useProviders()
+    const providers = useProviders(() => sdk().directory)
     const models = useModels()
 
     const id = createMemo(() => params.id || undefined)

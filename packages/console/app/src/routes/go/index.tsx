@@ -23,8 +23,8 @@ const checkLoggedIn = query(async () => {
 }, "checkLoggedIn.get")
 
 const models = [
+  { name: "GLM-5.2", provider: "DeepInfra, Fireworks AI, Z.ai" },
   { name: "GLM-5.1", provider: "DeepInfra, Fireworks AI, Z.ai" },
-  { name: "GLM-5", provider: "DeepInfra, Fireworks AI, Z.ai" },
   { name: "Kimi K2.7 Code", provider: "Moonshot AI" },
   { name: "Kimi K2.6", provider: "Moonshot AI" },
   { name: "MiMo-V2.5-Pro", provider: "Xiaomi MiMo" },
@@ -61,7 +61,7 @@ function LimitsGraph(props: { href: string }) {
 
   const free = 200
   const graph = [
-    { id: "glm-5.1", name: "GLM-5.1", req: 880, d: "100ms" },
+    { id: "glm-5.2", name: "GLM-5.2", req: 880, d: "100ms" },
     { id: "qwen3.7-max", name: "Qwen3.7 Max", req: 950, d: "110ms" },
     { id: "kimi-k2.7-code", name: "Kimi K2.7 Code", req: 1150, d: "150ms" },
     { id: "mimo-v2.5-pro", name: "MiMo-V2.5-Pro", req: 3250, d: "210ms" },
