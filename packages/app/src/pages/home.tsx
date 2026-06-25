@@ -63,6 +63,7 @@ import { type ServerHealth } from "@/utils/server-health"
 import { Persist, persisted } from "@/utils/persist"
 import { useMarked } from "@opencode-ai/ui/context/marked"
 import { preloadMarkdown } from "@opencode-ai/session-ui/markdown-cache"
+import { archiveHomeSession } from "./home-session-archive"
 
 const HOME_SESSION_LIMIT = 64
 const HOME_ROW_LAYOUT =
@@ -369,17 +370,17 @@ export function NewHome() {
     const ctx = focusedServerCtx()
     if (!ctx) return
     const [, setStore] = ctx.sync.child(session.directory)
-    await ctx.sdk.client.session.update({
-      directory: session.directory,
-      sessionID: session.id,
-      time: { archived: Date.now() },
+    await archiveHomeSession({
+      session,
+      update: (value) => ctx.sdk.client.session.update(value),
+      remove: () =>
+        setStore(
+          produce((draft) => {
+            const match = Binary.search(draft.session, session.id, (s) => s.id)
+            if (match.found) draft.session.splice(match.index, 1)
+          }),
+        ),
     })
-    setStore(
-      produce((draft) => {
-        const match = Binary.search(draft.session, session.id, (s) => s.id)
-        if (match.found) draft.session.splice(match.index, 1)
-      }),
-    )
   }
 
   function chooseProject(conn: ServerConnection.Any) {

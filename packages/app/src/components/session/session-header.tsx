@@ -12,7 +12,7 @@ import { createEffect, createMemo, createSignal, For, onMount, Show } from "soli
 import { createStore } from "solid-js/store"
 import { createMediaQuery } from "@solid-primitives/media"
 import { Portal } from "solid-js/web"
-import { formatKeybindKeys, useCommand } from "@/context/command"
+import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
@@ -30,6 +30,7 @@ import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
+import { reviewTooltipKeybind } from "../command-tooltip-keybind"
 
 const OPEN_APPS = [
   "vscode",
@@ -239,7 +240,7 @@ export function SessionHeader() {
     statusVisible: status(),
     statusLabel: language.t("status.popover.trigger"),
     reviewLabel: language.t("command.review.toggle"),
-    reviewKeybind: command.keybind("review.toggle"),
+    reviewKeybind: reviewTooltipKeybind(command),
     reviewVisible: isDesktop(),
     reviewOpened: view().reviewPanel.opened(),
     onReviewToggle: () => view().reviewPanel.toggle(),
@@ -522,7 +523,7 @@ type SessionHeaderV2ActionsState = {
   statusVisible: boolean
   statusLabel: string
   reviewLabel: string
-  reviewKeybind: string
+  reviewKeybind: string[]
   reviewVisible: boolean
   reviewOpened: boolean
   onReviewToggle: () => void
@@ -544,8 +545,8 @@ function SessionHeaderV2Actions(props: { state: SessionHeaderV2ActionsState }) {
           value={
             <>
               {props.state.reviewLabel}
-              <Show when={props.state.reviewKeybind}>
-                <KeybindV2 keys={formatKeybindKeys(props.state.reviewKeybind, language.t)} variant="neutral" />
+              <Show when={props.state.reviewKeybind.length > 0}>
+                <KeybindV2 keys={props.state.reviewKeybind} variant="neutral" />
               </Show>
             </>
           }

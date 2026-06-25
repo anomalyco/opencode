@@ -25,7 +25,7 @@ import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 
 import { LayoutRoute, useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
-import { formatKeybindKeys, useCommand } from "@/context/command"
+import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { useSettings } from "@/context/settings"
 import { WindowsAppMenu } from "./windows-app-menu"
@@ -43,6 +43,7 @@ import "./titlebar.css"
 import { Session } from "@opencode-ai/sdk/v2"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { createTabPromptState } from "@/context/prompt"
+import { newTabTooltipKeybind } from "./command-tooltip-keybind"
 
 type TauriDesktopWindow = {
   startDragging?: () => Promise<void>
@@ -628,7 +629,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                     value={
                       <>
                         {language.t("command.session.new")}
-                        <KeybindV2 keys={formatKeybindKeys(newTabKeybind, language.t)} variant="neutral" />
+                        <KeybindV2 keys={newTabTooltipKeybind(command)} variant="neutral" />
                       </>
                     }
                   >
