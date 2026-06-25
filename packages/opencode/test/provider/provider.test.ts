@@ -124,6 +124,25 @@ it.instance(
 )
 
 it.instance(
+  "provider-level npm applies to existing models without model overrides",
+  Effect.gen(function* () {
+    const providers = yield* list
+    const model = providers[ProviderV2.ID.anthropic].models["claude-sonnet-4-20250514"]
+    expect(model.api.npm).toBe("@ai-sdk/openai-compatible")
+  }),
+  {
+    config: {
+      provider: {
+        anthropic: {
+          npm: "@ai-sdk/openai-compatible",
+          options: { apiKey: "config-api-key" },
+        },
+      },
+    },
+  },
+)
+
+it.instance(
   "disabled_providers excludes provider",
   Effect.gen(function* () {
     yield* setProcessEnv("ANTHROPIC_API_KEY", "test-api-key")

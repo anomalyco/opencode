@@ -1394,13 +1394,20 @@ export const layer = Layer.effect(
         // extend database from config
         for (const [providerID, provider] of configProviders) {
           const existing = database[providerID]
+          const providerNpm = provider.npm
+          const existingModels = existing?.models ?? {}
           const parsed: Info = {
             id: ProviderV2.ID.make(providerID),
             name: provider.name ?? existing?.name ?? providerID,
             env: provider.env ?? existing?.env ?? [],
             options: mergeDeep(existing?.options ?? {}, provider.options ?? {}),
             source: "config",
-            models: existing?.models ?? {},
+            models: providerNpm
+              ? mapValues(existingModels, (model) => ({
+                  ...model,
+                  api: { ...model.api, npm: providerNpm },
+                }))
+              : existingModels,
           }
 
           for (const [modelID, model] of Object.entries(provider.models ?? {})) {
