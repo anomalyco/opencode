@@ -286,7 +286,7 @@ export const Playground = {
 
                 <div>
                   <SessionComposerRegion
-                    createController={() =>
+                    controller={
                       createSessionComposerRegionController({
                         state,
                         sessionKey: () => "story-session",
