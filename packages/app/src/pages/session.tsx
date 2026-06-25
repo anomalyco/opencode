@@ -43,7 +43,11 @@ import { useSettings } from "@/context/settings"
 import { useSync } from "@/context/sync"
 import { useTerminal } from "@/context/terminal"
 import { type FollowupDraft, sendFollowupDraft } from "@/components/prompt-input/submit"
-import { createSessionComposerState, SessionComposerRegion } from "@/pages/session/composer"
+import {
+  createSessionComposerControls,
+  createSessionComposerState,
+  SessionComposerRegion,
+} from "@/pages/session/composer"
 import {
   createOpenReviewFile,
   createSessionTabs,
@@ -152,6 +156,11 @@ export default function Page() {
   })
 
   const composer = createSessionComposerState()
+  const composerControls = createSessionComposerControls({
+    sessionKey,
+    sessionID: () => params.id,
+    queryOptions: serverSync().queryOptions,
+  })
 
   const workspaceTabs = createMemo(() => layout.tabs(workspaceKey))
 
@@ -1561,6 +1570,24 @@ export default function Page() {
   const composerRegion = (placement: "dock" | "inline") => (
     <SessionComposerRegion
       state={composer}
+      sessionKey={sessionKey()}
+      sessionID={params.id}
+      controls={composerControls()}
+      promptInput={{
+        ref: (el) => {
+          inputRef = el
+        },
+        newSessionWorktree: newSessionWorktree(),
+        onNewSessionWorktreeReset: () => setStore("newSessionWorktree", "main"),
+        onSubmit: () => {
+          comments.clear()
+          resumeScroll()
+        },
+      }}
+      todo={{
+        collapsed: view().todoCollapsed.get(),
+        onToggle: () => view().todoCollapsed.set(!view().todoCollapsed.get()),
+      }}
       ready={!store.deferRender && messagesReady()}
       centered={placement === "dock" && centered()}
       placement={placement}
@@ -1572,15 +1599,6 @@ export default function Page() {
             ? sessionHref(requireServerKey(params.serverKey), id)
             : legacySessionHref(sdk().directory, id),
         )
-      }}
-      inputRef={(el) => {
-        inputRef = el
-      }}
-      newSessionWorktree={newSessionWorktree()}
-      onNewSessionWorktreeReset={() => setStore("newSessionWorktree", "main")}
-      onSubmit={() => {
-        comments.clear()
-        resumeScroll()
       }}
       onResponseSubmit={resumeScroll}
       followup={

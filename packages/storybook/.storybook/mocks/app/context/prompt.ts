@@ -74,7 +74,7 @@ export function createPromptState() {
   })
 
   return {
-    ready: () => ready,
+    ready,
     current: () => store.prompt,
     cursor: () => store.cursor,
     dirty: () => !isPromptEqual(store.prompt, DEFAULT_PROMPT),
