@@ -49,7 +49,7 @@ export function define<
     readonly aggregate: string
   }
   readonly schema: Fields
-}): Schema.Schema<Payload<Definition<Type, Schema.Struct<Fields>>>> & Definition<Type, Schema.Struct<Fields>> {
+}): Schema.Codec<Payload<Definition<Type, Schema.Struct<Fields>>>, unknown> & Definition<Type, Schema.Struct<Fields>> {
   const data = Schema.Struct(input.schema)
   return Object.assign(
     Schema.Struct({
@@ -65,7 +65,7 @@ export function define<
       ...(input.durable === undefined ? {} : { durable: input.durable }),
       data,
     },
-  ) as Schema.Schema<Payload<Definition<Type, Schema.Struct<Fields>>>> & Definition<Type, Schema.Struct<Fields>>
+  ) as Schema.Codec<Payload<Definition<Type, Schema.Struct<Fields>>>, unknown> & Definition<Type, Schema.Struct<Fields>>
 }
 
 export function inventory<const Definitions extends ReadonlyArray<Definition>>(...definitions: Definitions) {
