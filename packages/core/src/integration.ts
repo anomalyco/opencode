@@ -1,92 +1,63 @@
 export * as Integration from "./integration"
 
-import { Cause, Clock, Context, Duration, Effect, Exit, Layer, Schedule, Schema, Scope, SynchronizedRef } from "effect"
-import { castDraft, enableMapSet, type Draft } from "immer"
+import {
+  Cause,
+  Clock,
+  Context,
+  Duration,
+  Effect,
+  Exit,
+  Layer,
+  Schedule,
+  Schema,
+  Scope,
+  SynchronizedRef,
+  Types,
+} from "effect"
+import { Integration } from "@opencode-ai/schema/integration"
 import { Credential } from "./credential"
-import { IntegrationSchema } from "./integration/schema"
-import { withStatics } from "./schema"
 import { State } from "./state"
-import { Identifier } from "./util/identifier"
 import { EventV2 } from "./event"
 import { IntegrationConnection } from "./integration/connection"
 
-export const ID = IntegrationSchema.ID
-export type ID = IntegrationSchema.ID
+export const ID = Integration.ID
+export type ID = Integration.ID
 
-export const MethodID = IntegrationSchema.MethodID
-export type MethodID = IntegrationSchema.MethodID
+export const MethodID = Integration.MethodID
+export type MethodID = Integration.MethodID
 
-export const AttemptID = Schema.String.pipe(
-  Schema.brand("Integration.AttemptID"),
-  withStatics((schema) => ({ create: () => schema.make("con_" + Identifier.ascending()) })),
-)
+export const AttemptID = Integration.AttemptID
 export type AttemptID = typeof AttemptID.Type
 
-export const When = Schema.Struct({
-  key: Schema.String,
-  op: Schema.Literals(["eq", "neq"]),
-  value: Schema.String,
-}).annotate({ identifier: "Integration.When" })
-export type When = typeof When.Type
+export const When = Integration.When
+export type When = Integration.When
 
-export const TextPrompt = Schema.Struct({
-  type: Schema.Literal("text"),
-  key: Schema.String,
-  message: Schema.String,
-  placeholder: Schema.optional(Schema.String),
-  when: Schema.optional(When),
-}).annotate({ identifier: "Integration.TextPrompt" })
-export type TextPrompt = typeof TextPrompt.Type
+export const TextPrompt = Integration.TextPrompt
+export type TextPrompt = Integration.TextPrompt
 
-export const SelectPrompt = Schema.Struct({
-  type: Schema.Literal("select"),
-  key: Schema.String,
-  message: Schema.String,
-  options: Schema.Array(
-    Schema.Struct({
-      label: Schema.String,
-      value: Schema.String,
-      hint: Schema.optional(Schema.String),
-    }),
-  ),
-  when: Schema.optional(When),
-}).annotate({ identifier: "Integration.SelectPrompt" })
-export type SelectPrompt = typeof SelectPrompt.Type
+export const SelectPrompt = Integration.SelectPrompt
+export type SelectPrompt = Integration.SelectPrompt
 
-export const Prompt = Schema.Union([TextPrompt, SelectPrompt]).pipe(Schema.toTaggedUnion("type"))
-export type Prompt = typeof Prompt.Type
+export const Prompt = Integration.Prompt
+export type Prompt = Integration.Prompt
 
-export const OAuthMethod = Schema.Struct({
-  id: MethodID,
-  type: Schema.Literal("oauth"),
-  label: Schema.String,
-  prompts: Schema.optional(Schema.Array(Prompt)),
-}).annotate({ identifier: "Integration.OAuthMethod" })
-export type OAuthMethod = typeof OAuthMethod.Type
+export const OAuthMethod = Integration.OAuthMethod
+export type OAuthMethod = Integration.OAuthMethod
 
-export const KeyMethod = Schema.Struct({
-  type: Schema.Literal("key"),
-  label: Schema.optional(Schema.String),
-}).annotate({ identifier: "Integration.KeyMethod" })
-export type KeyMethod = typeof KeyMethod.Type
+export const KeyMethod = Integration.KeyMethod
+export type KeyMethod = Integration.KeyMethod
 
-export const EnvMethod = Schema.Struct({
-  type: Schema.Literal("env"),
-  names: Schema.Array(Schema.String),
-}).annotate({ identifier: "Integration.EnvMethod" })
-export type EnvMethod = typeof EnvMethod.Type
+export const EnvMethod = Integration.EnvMethod
+export type EnvMethod = Integration.EnvMethod
 
-export const Method = Schema.Union([OAuthMethod, KeyMethod, EnvMethod]).pipe(Schema.toTaggedUnion("type"))
-export type Method = typeof Method.Type
+export const Method = Integration.Method
+export type Method = Integration.Method
 
-export class Info extends Schema.Class<Info>("Integration.Info")({
-  id: ID,
-  name: Schema.String,
-  methods: Schema.Array(Method),
-  connections: Schema.Array(IntegrationConnection.Info),
-}) {}
+export const Info = Integration.Info
+export type Info = Integration.Info
 
-export type Inputs = Readonly<{ [key: string]: string }>
+export const Inputs = Integration.Inputs
+export type Inputs = Integration.Inputs
 
 export type OAuthAuthorization = {
   readonly url: string
@@ -94,11 +65,11 @@ export type OAuthAuthorization = {
 } & (
   | {
       readonly mode: "auto"
-      readonly callback: Effect.Effect<Credential.Info, unknown>
+      readonly callback: Effect.Effect<Credential.OAuth, unknown>
     }
   | {
       readonly mode: "code"
-      readonly callback: (code: string) => Effect.Effect<Credential.Info, unknown>
+      readonly callback: (code: string) => Effect.Effect<Credential.OAuth, unknown>
     }
 )
 
@@ -107,6 +78,7 @@ export interface OAuthImplementation {
   readonly method: OAuthMethod
   readonly authorize: (inputs: Inputs) => Effect.Effect<OAuthAuthorization, unknown, Scope.Scope>
   readonly refresh?: (credential: Credential.OAuth) => Effect.Effect<Credential.OAuth, unknown>
+  readonly label?: (credential: Credential.OAuth) => string | undefined
 }
 
 export interface KeyImplementation {
@@ -121,32 +93,10 @@ export interface EnvImplementation {
 
 export type Implementation = OAuthImplementation | KeyImplementation | EnvImplementation
 
-function isOAuthImplementation(implementation: Implementation): implementation is OAuthImplementation {
-  return implementation.method.type === "oauth"
-}
+export const Attempt = Integration.Attempt
+export type Attempt = Integration.Attempt
 
-export class Attempt extends Schema.Class<Attempt>("Integration.Attempt")({
-  attemptID: AttemptID,
-  url: Schema.String,
-  instructions: Schema.String,
-  mode: Schema.Literals(["auto", "code"]),
-  time: Schema.Struct({
-    created: Schema.Number,
-    expires: Schema.Number,
-  }),
-}) {}
-
-const Time = Schema.Struct({
-  created: Schema.Number,
-  expires: Schema.Number,
-})
-
-export const AttemptStatus = Schema.Union([
-  Schema.Struct({ status: Schema.Literal("pending"), time: Time }),
-  Schema.Struct({ status: Schema.Literal("complete"), time: Time }),
-  Schema.Struct({ status: Schema.Literal("failed"), message: Schema.String, time: Time }),
-  Schema.Struct({ status: Schema.Literal("expired"), time: Time }),
-]).pipe(Schema.toTaggedUnion("status"))
+export const AttemptStatus = Integration.AttemptStatus
 export type AttemptStatus = typeof AttemptStatus.Type
 
 export class CodeRequiredError extends Schema.TaggedErrorClass<CodeRequiredError>()("Integration.CodeRequired", {
@@ -154,37 +104,30 @@ export class CodeRequiredError extends Schema.TaggedErrorClass<CodeRequiredError
 }) {}
 
 export class AuthorizationError extends Schema.TaggedErrorClass<AuthorizationError>()("Integration.Authorization", {
-  cause: Schema.Defect,
+  cause: Schema.Defect(),
 }) {}
 
 export type Error = CodeRequiredError | AuthorizationError
 
-export const Event = {
-  Updated: EventV2.define({
-    type: "integration.updated",
-    schema: {},
-  }),
-}
+export const Event = Integration.Event
 
-export type Ref = {
-  id: ID
-  name: string
-}
+export const Ref = Integration.Ref
+export type Ref = Integration.Ref
 
 type Entry = {
-  ref: Ref
-  methods: Method[]
-  implementations: Map<MethodID, OAuthImplementation>
+  ref: Types.DeepMutable<Ref>
+  methods: Types.DeepMutable<Method>[]
+  implementations: Map<MethodID, Types.DeepMutable<OAuthImplementation>>
 }
 
 type Data = {
   integrations: Map<ID, Entry>
 }
 
-export type Editor = {
+export type Draft = {
   list: () => readonly Ref[]
   get: (id: ID) => Ref | undefined
-  update: (id: ID, update: (integration: Draft<Ref>) => void) => void
+  update: (id: ID, update: (integration: Types.DeepMutable<Ref>) => void) => void
   remove: (id: ID) => void
   method: {
     list: (integrationID: ID) => readonly Method[]
@@ -193,20 +136,19 @@ export type Editor = {
   }
 }
 
-export interface Interface {
+export interface Interface extends State.Transformable<Draft> {
   /** Registers a scoped transform over the integration registry. */
-  readonly transform: State.Interface<Data, Editor>["transform"]
-  /** Registers and immediately applies a scoped integration registry update. */
-  readonly update: State.Interface<Data, Editor>["update"]
   /** Returns one integration with its methods and current connections. */
   readonly get: (id: ID) => Effect.Effect<Info | undefined>
   /** Returns all integrations with their methods and current connections. */
   readonly list: () => Effect.Effect<Info[]>
   readonly connection: {
-    /** Returns active connections for every registered or credential-backed integration. */
-    readonly list: () => Effect.Effect<Map<ID, IntegrationConnection.Info>>
     /** Returns the active connection for one integration. */
-    readonly forIntegration: (id: ID) => Effect.Effect<IntegrationConnection.Info | undefined>
+    readonly active: (id: ID) => Effect.Effect<IntegrationConnection.Info | undefined>
+    /** Resolves a connection into usable credential material. */
+    readonly resolve: (
+      connection: IntegrationConnection.Info,
+    ) => Effect.Effect<Credential.Value | undefined, AuthorizationError>
     /** Runs a key method and stores the resulting credential. */
     readonly key: (input: {
       /** Integration receiving the credential. */
@@ -230,7 +172,7 @@ export interface Interface {
     /** Updates a stored credential exposed as a connection. */
     readonly update: (
       credentialID: Credential.ID,
-      updates: Partial<Pick<Credential.Stored, "label">>,
+      updates: Partial<Pick<Credential.Info, "label">>,
     ) => Effect.Effect<void>
     /** Removes a stored credential connection. */
     readonly remove: (credentialID: Credential.ID) => Effect.Effect<void>
@@ -251,8 +193,6 @@ export interface Interface {
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Integration") {}
-
-enableMapSet()
 
 const attemptLifetime = Duration.toMillis(Duration.minutes(10))
 const terminalRetention = Duration.toMillis(Duration.minutes(1))
@@ -284,15 +224,17 @@ export const locationLayer = Layer.effect(
     const events = yield* EventV2.Service
     const scope = yield* Scope.Scope
     const attempts = SynchronizedRef.makeUnsafe(new Map<AttemptID, AttemptEntry>())
-    const state = State.create<Data, Editor>({
+    const state = State.create<Data, Draft>({
       initial: () => ({ integrations: new Map<ID, Entry>() }),
-      editor: (draft) => ({
+      draft: (draft) => ({
         list: () => Array.from(draft.integrations.values(), (entry) => entry.ref) as Ref[],
         get: (id) => draft.integrations.get(id)?.ref as Ref | undefined,
         update: (id, update) => {
-          const current =
-            draft.integrations.get(id) ??
-            castDraft({ ref: { id, name: id } as Ref, methods: [], implementations: new Map() })
+          const current = draft.integrations.get(id) ?? {
+            ref: { id, name: id },
+            methods: [],
+            implementations: new Map(),
+          }
           if (!draft.integrations.has(id)) draft.integrations.set(id, current)
           update(current.ref)
           current.ref.id = id
@@ -301,16 +243,14 @@ export const locationLayer = Layer.effect(
         method: {
           list: (integrationID) => (draft.integrations.get(integrationID)?.methods as Method[] | undefined) ?? [],
           update: (implementation) => {
-            const current =
-              draft.integrations.get(implementation.integrationID) ??
-              castDraft({
-                ref: {
-                  id: implementation.integrationID,
-                  name: implementation.integrationID,
-                } as Ref,
-                methods: [],
-                implementations: new Map<MethodID, OAuthImplementation>(),
-              })
+            const current = draft.integrations.get(implementation.integrationID) ?? {
+              ref: {
+                id: implementation.integrationID,
+                name: implementation.integrationID,
+              },
+              methods: [],
+              implementations: new Map<MethodID, Types.DeepMutable<OAuthImplementation>>(),
+            }
             if (!draft.integrations.has(implementation.integrationID)) {
               draft.integrations.set(implementation.integrationID, current)
             }
@@ -319,10 +259,13 @@ export const locationLayer = Layer.effect(
               if (method.type !== "oauth" || implementation.method.type !== "oauth") return true
               return method.id === implementation.method.id
             })
-            if (index === -1) current.methods.push(castDraft(implementation.method))
-            else current.methods[index] = castDraft(implementation.method)
-            if (isOAuthImplementation(implementation)) {
-              current.implementations.set(implementation.method.id, castDraft(implementation))
+            if (index === -1) current.methods.push(implementation.method as Types.DeepMutable<Method>)
+            else current.methods[index] = implementation.method as Types.DeepMutable<Method>
+            if (implementation.method.type === "oauth") {
+              current.implementations.set(
+                implementation.method.id,
+                implementation as Types.DeepMutable<OAuthImplementation>,
+              )
             }
           },
           remove: (integrationID, method) => {
@@ -341,39 +284,27 @@ export const locationLayer = Layer.effect(
       finalize: () => events.publish(Event.Updated, {}).pipe(Effect.asVoid),
     })
 
-    const connections = (entry: Entry, saved: readonly Credential.Stored[]): IntegrationConnection.Info[] => {
-      const connected = saved.map((credential) => ({
-        type: "credential" as const,
-        id: credential.id,
-        label: credential.label,
-      }))
-      const detected = entry.methods
+    const resolveConnections = (entry: Entry | undefined, saved: readonly Credential.Info[]) => {
+      const credentials = saved
+        .map((credential) => ({
+          type: "credential" as const,
+          id: credential.id,
+          label: credential.label,
+        }))
+        .toReversed()
+      const env = (entry?.methods ?? [])
         .filter((method) => method.type === "env")
         .flatMap((method) => method.names.filter((name) => process.env[name]))
         .map((name) => ({ type: "env" as const, name }))
-      return [...connected, ...detected]
+      return [...credentials, ...env]
     }
 
-    const activeConnection = (
-      entry: Entry | undefined,
-      saved: readonly Credential.Stored[],
-    ): IntegrationConnection.Info | undefined => {
-      const credential = saved.at(-1)
-      if (credential) return { type: "credential", id: credential.id, label: credential.label }
-      if (!entry) return
-      const name = entry.methods
-        .filter((method) => method.type === "env")
-        .flatMap((method) => method.names)
-        .find((name) => process.env[name])
-      if (name) return { type: "env", name }
-    }
-
-    const project = (entry: Entry, saved: readonly Credential.Stored[]) =>
+    const project = (entry: Entry, connections: IntegrationConnection.Info[]) =>
       new Info({
         id: entry.ref.id,
         name: entry.ref.name,
         methods: entry.methods,
-        connections: connections(entry, saved),
+        connections,
       })
 
     const authorize = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
@@ -387,7 +318,7 @@ export const locationLayer = Layer.effect(
       return error instanceof Error ? error.message : String(error)
     }
 
-    const settle = Effect.fnUntraced(function* (attemptID: AttemptID, exit: Exit.Exit<Credential.Info, unknown>) {
+    const settle = Effect.fnUntraced(function* (attemptID: AttemptID, exit: Exit.Exit<Credential.OAuth, unknown>) {
       const now = yield* Clock.currentTimeMillis
       const result = yield* SynchronizedRef.modify(attempts, (current) => {
         const attempt = current.get(attemptID)
@@ -399,14 +330,13 @@ export const locationLayer = Layer.effect(
       })
       if (!result) return
       if (Exit.isSuccess(exit)) {
+        const implementation = state.get().integrations.get(result.integrationID)?.implementations.get(result.methodID)
         yield* credentials.create({
           integrationID: result.integrationID,
-          label: result.label,
-          value:
-            exit.value.type === "oauth"
-              ? new Credential.OAuth({ ...exit.value, methodID: result.methodID })
-              : exit.value,
+          label: result.label ?? implementation?.label?.(exit.value),
+          value: exit.value,
         })
+        yield* events.publish(Event.ConnectionUpdated, { integrationID: result.integrationID })
         yield* events.publish(Event.Updated, {})
       }
       yield* close(result.scope)
@@ -434,32 +364,41 @@ export const locationLayer = Layer.effect(
 
     return Service.of({
       transform: state.transform,
-      update: state.update,
+      reload: state.reload,
       get: Effect.fn("Integration.get")(function* (id) {
         const entry = state.get().integrations.get(id)
         if (!entry) return undefined
-        return project(entry, yield* credentials.list(id))
+        return project(entry, resolveConnections(entry, yield* credentials.list(id)))
       }),
       list: Effect.fn("Integration.list")(function* () {
-        return (yield* Effect.forEach(state.get().integrations.values(), (entry) =>
-          Effect.gen(function* () {
-            return project(entry, yield* credentials.list(entry.ref.id))
-          }),
-        )).toSorted((a, b) => a.name.localeCompare(b.name))
+        const saved = Map.groupBy(yield* credentials.all(), (credential) => credential.integrationID)
+        return Array.from(state.get().integrations.values(), (entry) =>
+          project(entry, resolveConnections(entry, saved.get(entry.ref.id) ?? [])),
+        ).toSorted((a, b) => a.name.localeCompare(b.name))
       }),
       connection: {
-        list: Effect.fn("Integration.connection.list")(function* () {
-          const saved = Map.groupBy(yield* credentials.all(), (credential) => credential.integrationID)
-          return new Map(
-            new Set([...state.get().integrations.keys(), ...saved.keys()]).values().flatMap((id) => {
-              const connection = activeConnection(state.get().integrations.get(id), saved.get(id) ?? [])
-              return connection ? [[id, connection] as const] : []
-            }),
-          )
-        }),
-        forIntegration: Effect.fn("Integration.connection.forIntegration")(function* (id) {
+        active: Effect.fn("Integration.connection.active")(function* (id) {
           const entry = state.get().integrations.get(id)
-          return activeConnection(entry, yield* credentials.list(id))
+          return resolveConnections(entry, yield* credentials.list(id))[0]
+        }),
+        resolve: Effect.fn("Integration.connection.resolve")(function* (connection) {
+          if (connection.type === "env") {
+            const key = process.env[connection.name]
+            return key ? Credential.Key.make({ type: "key", key }) : undefined
+          }
+          const credential = yield* credentials.get(connection.id)
+          if (!credential) return undefined
+          if (credential.value.type === "key") return credential.value
+          const implementation = state
+            .get()
+            .integrations.get(credential.integrationID)
+            ?.implementations.get(credential.value.methodID)
+          if (!implementation?.refresh) return credential.value
+          const now = yield* Clock.currentTimeMillis
+          if (credential.value.expires > now + Duration.toMillis(Duration.minutes(5))) return credential.value
+          const value = yield* authorize(implementation.refresh(credential.value))
+          yield* credentials.update(credential.id, { value })
+          return value
         }),
         key: Effect.fn("Integration.connection.key")(function* (input) {
           const method = state
@@ -470,8 +409,9 @@ export const locationLayer = Layer.effect(
           yield* credentials.create({
             integrationID: input.integrationID,
             label: input.label,
-            value: new Credential.Key({ type: "key", key: input.key }),
+            value: Credential.Key.make({ type: "key", key: input.key }),
           })
+          yield* events.publish(Event.ConnectionUpdated, { integrationID: input.integrationID })
           yield* events.publish(Event.Updated, {})
         }),
         oauth: Effect.fn("Integration.connection.oauth")(function* (input) {
@@ -515,11 +455,19 @@ export const locationLayer = Layer.effect(
           })
         }),
         update: Effect.fn("Integration.connection.update")(function* (credentialID, updates) {
+          const credential = yield* credentials.get(credentialID)
           yield* credentials.update(credentialID, updates)
+          if (credential) {
+            yield* events.publish(Event.ConnectionUpdated, { integrationID: credential.integrationID })
+          }
           yield* events.publish(Event.Updated, {})
         }),
         remove: Effect.fn("Integration.connection.remove")(function* (credentialID) {
+          const credential = yield* credentials.get(credentialID)
           yield* credentials.remove(credentialID)
+          if (credential) {
+            yield* events.publish(Event.ConnectionUpdated, { integrationID: credential.integrationID })
+          }
           yield* events.publish(Event.Updated, {})
         }),
       },

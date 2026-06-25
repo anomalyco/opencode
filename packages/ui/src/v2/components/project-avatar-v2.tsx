@@ -31,20 +31,10 @@ export interface ProjectAvatarProps extends ComponentProps<"div"> {
   src?: string
   variant?: ProjectAvatarVariant
   unread?: boolean
-  loading?: boolean
 }
 
 export function ProjectAvatar(props: ProjectAvatarProps) {
-  const [split, rest] = splitProps(props, [
-    "fallback",
-    "src",
-    "variant",
-    "unread",
-    "loading",
-    "class",
-    "classList",
-    "style",
-  ])
+  const [split, rest] = splitProps(props, ["fallback", "src", "variant", "unread", "class", "classList", "style"])
   const src = split.src
   return (
     <div
@@ -61,13 +51,9 @@ export function ProjectAvatar(props: ProjectAvatarProps) {
         data-slot="project-avatar-surface"
         data-variant={split.variant ?? "gray"}
         data-has-image={src ? "" : undefined}
-        data-loading={split.loading ? "" : undefined}
       >
         <Show when={src} fallback={first(split.fallback)}>
           {(value) => <img src={value()} draggable={false} data-slot="project-avatar-image" />}
-        </Show>
-        <Show when={split.loading}>
-          <span data-slot="project-avatar-loader" aria-hidden="true" />
         </Show>
       </div>
       <Show when={split.unread}>

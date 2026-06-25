@@ -1,7 +1,6 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { EventV2Bridge } from "@/event-v2-bridge"
-import { EventV2 } from "@opencode-ai/core/event"
 import * as LSPClient from "./client"
 import path from "path"
 import { pathToFileURL, fileURLToPath } from "url"
@@ -14,10 +13,9 @@ import { InstanceState } from "@/effect/instance-state"
 import { containsPath } from "@/project/instance-context"
 import { NonNegativeInt } from "@opencode-ai/core/schema"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { LspEvent } from "@opencode-ai/schema/lsp-event"
 
-export const Event = {
-  Updated: EventV2.define({ type: "lsp.updated", schema: {} }),
-}
+export const Event = LspEvent
 
 const Position = Schema.Struct({
   line: NonNegativeInt,

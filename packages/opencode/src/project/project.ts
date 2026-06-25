@@ -16,46 +16,18 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import { AppProcess } from "@opencode-ai/core/process"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { AbsolutePath, NonNegativeInt, optionalOmitUndefined } from "@opencode-ai/core/schema"
+import { AbsolutePath } from "@opencode-ai/core/schema"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { EventV2 } from "@opencode-ai/core/event"
+import { Project } from "@opencode-ai/schema/project"
 
-const ProjectVcs = Schema.Literal("git")
-
-const ProjectIcon = Schema.Struct({
-  url: optionalOmitUndefined(Schema.String),
-  override: optionalOmitUndefined(Schema.String),
-  color: optionalOmitUndefined(Schema.String),
-})
-
-const ProjectCommands = Schema.Struct({
-  start: optionalOmitUndefined(
-    Schema.String.annotate({ description: "Startup script to run when creating a new workspace (worktree)" }),
-  ),
-})
-
-const ProjectTime = Schema.Struct({
-  created: NonNegativeInt,
-  updated: NonNegativeInt,
-  initialized: optionalOmitUndefined(NonNegativeInt),
-})
-
-export const Info = Schema.Struct({
-  id: ProjectV2.ID,
-  worktree: Schema.String,
-  vcs: optionalOmitUndefined(ProjectVcs),
-  name: optionalOmitUndefined(Schema.String),
-  icon: optionalOmitUndefined(ProjectIcon),
-  commands: optionalOmitUndefined(ProjectCommands),
-  time: ProjectTime,
-  sandboxes: Schema.Array(Schema.String),
-}).annotate({ identifier: "Project" })
+export const Info = Project.Info
 export type Info = Types.DeepMutable<Schema.Schema.Type<typeof Info>>
 
 export const Event = {
-  Updated: EventV2.define({ type: "project.updated", schema: Info.fields }),
+  Updated: Project.Event.Updated,
 }
 
 type Row = typeof ProjectTable.$inferSelect
@@ -72,7 +44,7 @@ export function fromRow(row: Row): Info {
   return {
     id: row.id,
     worktree: row.worktree,
-    vcs: row.vcs ? Schema.decodeUnknownSync(ProjectVcs)(row.vcs) : undefined,
+    vcs: row.vcs ? Schema.decodeUnknownSync(Project.Vcs)(row.vcs) : undefined,
     name: row.name ?? undefined,
     icon,
     time: {
@@ -88,15 +60,15 @@ export function fromRow(row: Row): Info {
 export const UpdateInput = Schema.Struct({
   projectID: ProjectV2.ID,
   name: Schema.optional(Schema.String),
-  icon: Schema.optional(ProjectIcon),
-  commands: Schema.optional(ProjectCommands),
+  icon: Schema.optional(Project.Icon),
+  commands: Schema.optional(Project.Commands),
 })
 export type UpdateInput = Types.DeepMutable<Schema.Schema.Type<typeof UpdateInput>>
 
 export const UpdatePayload = Schema.Struct({
   name: Schema.optional(Schema.String),
-  icon: Schema.optional(ProjectIcon),
-  commands: Schema.optional(ProjectCommands),
+  icon: Schema.optional(Project.Icon),
+  commands: Schema.optional(Project.Commands),
 }).annotate({ identifier: "ProjectUpdateInput" })
 export type UpdatePayload = Types.DeepMutable<Schema.Schema.Type<typeof UpdatePayload>>
 
@@ -135,7 +107,6 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
-    const proc = yield* AppProcess.Service
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
     const projectV2 = yield* ProjectV2.Service
     const projectDirectories = yield* ProjectDirectories.Service
@@ -168,7 +139,7 @@ export const layer = Layer.effect(
         }),
       )
 
-    const fakeVcs = Schema.decodeUnknownSync(Schema.optional(ProjectVcs))(Flag.OPENCODE_FAKE_VCS)
+    const fakeVcs = Schema.decodeUnknownSync(Schema.optional(Project.Vcs))(Flag.OPENCODE_FAKE_VCS)
 
     const scope = yield* Scope.Scope
 

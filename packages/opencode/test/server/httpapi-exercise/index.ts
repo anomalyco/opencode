@@ -734,11 +734,11 @@ const scenarios: Scenario[] = [
     .stream()
     .status(
       200,
-      (ctx, result) =>
+      (_ctx, result) =>
         Effect.sync(() => {
           check(result.contentType.includes("text/event-stream"), "v2 event should be an SSE stream")
           check(result.text.includes("server.connected"), "v2 event should emit initial connection event")
-          check(!!ctx.directory && result.text.includes(ctx.directory), "v2 event should include the resolved location")
+          check(!result.text.includes('"location"'), "v2 connection event should not be scoped to a location")
         }),
       "status",
     ),
@@ -956,9 +956,49 @@ const scenarios: Scenario[] = [
     }))
     .json(200, data(object)),
   http.protected
+    .post("/api/session/{sessionID}/agent", "v2.session.switchAgent")
+    .seeded((ctx) => ctx.session({ title: "Switch agent" }))
+    .at((ctx) => ({
+      path: route("/api/session/{sessionID}/agent", { sessionID: ctx.state.id }),
+      headers: { ...ctx.headers(), "content-type": "application/json" },
+      body: { agent: "plan" },
+    }))
+    .status(204, undefined, "none"),
+  http.protected
+    .post("/api/session/{sessionID}/model", "v2.session.switchModel")
+    .seeded((ctx) => ctx.session({ title: "Switch model" }))
+    .at((ctx) => ({
+      path: route("/api/session/{sessionID}/model", { sessionID: ctx.state.id }),
+      headers: { ...ctx.headers(), "content-type": "application/json" },
+      body: { model: { providerID: "opencode", id: "big-pickle" } },
+    }))
+    .status(204, undefined, "none"),
+  http.protected
     .get("/api/session/{sessionID}/context", "v2.session.context")
     .at((ctx) => ({
       path: route("/api/session/{sessionID}/context", { sessionID: "ses_httpapi_missing" }),
+      headers: ctx.headers(),
+    }))
+    .json(404, object, "status"),
+  http.protected
+    .post("/api/session/{sessionID}/revert/stage", "v2.session.revert.stage")
+    .at((ctx) => ({
+      path: route("/api/session/{sessionID}/revert/stage", { sessionID: "ses_httpapi_missing" }),
+      headers: { ...ctx.headers(), "content-type": "application/json" },
+      body: { messageID: "msg_httpapi_missing" },
+    }))
+    .json(404, object, "status"),
+  http.protected
+    .post("/api/session/{sessionID}/revert/clear", "v2.session.revert.clear")
+    .at((ctx) => ({
+      path: route("/api/session/{sessionID}/revert/clear", { sessionID: "ses_httpapi_missing" }),
+      headers: ctx.headers(),
+    }))
+    .json(404, object, "status"),
+  http.protected
+    .post("/api/session/{sessionID}/revert/commit", "v2.session.revert.commit")
+    .at((ctx) => ({
+      path: route("/api/session/{sessionID}/revert/commit", { sessionID: "ses_httpapi_missing" }),
       headers: ctx.headers(),
     }))
     .json(404, object, "status"),

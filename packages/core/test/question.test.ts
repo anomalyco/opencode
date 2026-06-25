@@ -6,10 +6,8 @@ import { QuestionV2 } from "@opencode-ai/core/question"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { testEffect } from "./lib/effect"
 
-const database = Database.layerFromPath(":memory:")
-const events = EventV2.layer.pipe(Layer.provide(database))
-const questions = QuestionV2.layer.pipe(Layer.provide(events))
-const it = testEffect(Layer.mergeAll(database, events, questions))
+const questions = QuestionV2.layer.pipe(Layer.provide(EventV2.defaultLayer))
+const it = testEffect(Layer.mergeAll(Database.defaultLayer, EventV2.defaultLayer, questions))
 
 const sessionID = SessionV2.ID.make("ses_question_test")
 const question: QuestionV2.Info = {

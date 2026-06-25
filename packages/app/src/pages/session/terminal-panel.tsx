@@ -16,6 +16,7 @@ import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { useSettings } from "@/context/settings"
 import { useTerminal } from "@/context/terminal"
+import { useSDK } from "@/context/sdk"
 import { terminalTabLabel } from "@/pages/session/terminal-label"
 import { createSizing, focusTerminalById } from "@/pages/session/helpers"
 import { getTerminalHandoff, setTerminalHandoff } from "@/pages/session/handoff"
@@ -25,10 +26,11 @@ export function TerminalPanel() {
   const delays = [120, 240]
   const layout = useLayout()
   const terminal = useTerminal()
+  const sdk = useSDK()
   const language = useLanguage()
   const command = useCommand()
   const settings = useSettings()
-  const { params, workspaceKey, view } = useSessionLayout()
+  const { workspaceKey, view } = useSessionLayout()
 
   const opened = createMemo(() => view().terminal.opened())
   const size = createSizing()
@@ -122,7 +124,7 @@ export function TerminalPanel() {
   })
 
   createEffect(() => {
-    const dir = params.dir
+    const dir = sdk().directory
     if (!dir) return
     if (!terminal.ready()) return
     language.locale()
@@ -140,7 +142,7 @@ export function TerminalPanel() {
   })
 
   const handoff = createMemo(() => {
-    const dir = params.dir
+    const dir = sdk().directory
     if (!dir) return []
     return getTerminalHandoff(workspaceKey()) ?? []
   })
