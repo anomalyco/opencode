@@ -229,9 +229,8 @@ export function PromptProjectSelector(props: { controller: PromptProjectControll
   return (
     <DropdownMenu
       open={props.controller.open()}
-      placement="bottom-start"
+      placement="bottom"
       gutter={4}
-      shift={-6}
       modal={false}
       onOpenChange={(open) => props.controller.setOpen(open)}
     >
@@ -376,7 +375,7 @@ function ProjectTrigger(props: ComponentProps<"button"> & { controller: PromptPr
       {...rest}
       data-action="prompt-project"
       type="button"
-      class="flex h-7 min-w-0 max-w-[203px] items-center gap-1.5 rounded-sm px-2 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-faint transition-colors focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
+      class="flex h-7 min-w-0 max-w-[203px] items-center gap-1.5 rounded-sm px-1.5 transition-colors focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
       classList={{
         ...local.classList,
         "hover:bg-v2-overlay-simple-overlay-hover": !local.controller.open(),

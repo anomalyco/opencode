@@ -755,7 +755,7 @@ export const dict = {
   "session.delete.confirm": 'Supprimer la session "{{name}}" ?',
   "session.delete.button": "Supprimer la session",
   "workspace.new": "Nouvel espace de travail",
-  "workspace.type.local": "local",
+  "workspace.type.local": "Local",
   "workspace.type.sandbox": "bac à sable",
   "workspace.create.failed.title": "Échec de la création de l'espace de travail",
   "workspace.delete.failed.title": "Échec de la suppression de l'espace de travail",
