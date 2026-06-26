@@ -192,6 +192,15 @@ const reapOnceImpl = Effect.fn("S2SPoller.reapOnce")(function* (now: number, win
   // makes a redundant redelivery harmless, so the simpler time-based
   // version is the chosen shape.
   yield* store.reapStale(now - windowMs)
+
+  // Garbage-collect rows that reference sessions that no longer exist.
+  // Best-effort: a GC failure is logged but must not break the reaper
+  // tick (the same pattern as the pollOnce error handler).
+  yield* store.deleteOrphaned().pipe(
+    Effect.catchCause((cause) =>
+      Effect.logWarning("S2SPoller: deleteOrphaned failed", { cause: Cause.pretty(cause) }),
+    ),
+  )
 })
 
 const parseMs = (raw: string | undefined, fallback: number, min: number): number => {

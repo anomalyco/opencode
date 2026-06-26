@@ -29,7 +29,10 @@
 //     own row (or non-existent).
 
 import { sql } from "drizzle-orm"
-import { Context, Effect, Layer, Option, Schema } from "effect"
+import { EffectDrizzleQueryError } from "drizzle-orm/effect-core/errors"
+import { Context, Duration, Effect, Layer, Option, Schedule, Schema } from "effect"
+import { Cause } from "effect"
+import { isSqlError, type SqlError } from "effect/unstable/sql/SqlError"
 import { Database } from "@opencode-ai/core/database/database"
 import { SessionID } from "@/session/schema"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
@@ -39,6 +42,44 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 // the TTL guard). The caller-facing error message references this
 // constant for display.
 export const TOKEN_TTL_MS = 600_000
+
+// ──────────────────────────────────────────────────────────────────
+// Retry helpers — exported for unit-testing so concurrency behavior
+// can be verified without real database locking.
+// ──────────────────────────────────────────────────────────────────
+
+/**
+ * Walks the Error → EffectDrizzleQueryError → Cause → SqlError chain
+ * to extract `sqlError.reason.isRetryable`. Returns `false` on any
+ * value it cannot classify.
+ */
+export function isRetryableSqlError(err: unknown): boolean {
+  if (!(err instanceof EffectDrizzleQueryError)) return false
+  const inner = Cause.findErrorOption(err.cause as Cause.Cause<unknown>)
+  if (Option.isNone(inner)) return false
+  if (!isSqlError(inner.value)) return false
+  return inner.value.reason.isRetryable === true
+}
+
+const RETRY_MAX = 4
+const RETRY_BASE_MS = 20
+
+/**
+ * Applies a bounded exponential-backoff retry that stops on errors that
+ * are not cross-process SQLite lock-timeout / deadlock / serialization
+ * failures.
+ *
+ * The retry runs the RAW database effect — BEFORE the `query` helper
+ * remaps it to `S2SStoreError` — so the predicate sees the original
+ * drizzle + SqlError chain.
+ */
+export function retryOnBusy<A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A, E> {
+  return Effect.retry(effect, {
+    while: (err) => isRetryableSqlError(err),
+    times: RETRY_MAX,
+    schedule: Schedule.jittered(Schedule.exponential(Duration.millis(RETRY_BASE_MS))),
+  }) as unknown as Effect.Effect<A, E>
+}
 
 export class S2SStoreError extends Schema.TaggedErrorClass<S2SStoreError>()("S2SStore.Error", {
   message: Schema.String,
@@ -88,6 +129,7 @@ export interface Interface {
   readonly insertAllow: (from: SessionID, to: SessionID) => Effect.Effect<void, S2SStoreError>
   readonly isAllowed: (from: SessionID, to: SessionID) => Effect.Effect<boolean, S2SStoreError>
   readonly deleteAllow: (from: SessionID, to: SessionID) => Effect.Effect<void, S2SStoreError>
+  readonly deleteOrphaned: () => Effect.Effect<void, S2SStoreError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/S2SStore") {}
@@ -250,6 +292,34 @@ export const layer = Layer.effect(
       )
     })
 
+    // Removes s2s rows whose target / owner / inviter no longer exists in
+    // the session table. A session row is always created BEFORE any s2s row
+    // can reference it (synchronous at session creation), so NOT IN cannot
+    // race-delete rows that belong to a live, newly created session.
+    const deleteOrphaned: Interface["deleteOrphaned"] = Effect.fn("S2SStore.deleteOrphaned")(
+      function* () {
+        yield* query(
+          db.run(sql`
+            DELETE FROM s2s_inbox
+            WHERE target_session_id NOT IN (SELECT id FROM session)
+          `),
+        )
+        yield* query(
+          db.run(sql`
+            DELETE FROM s2s_allow
+            WHERE session_id NOT IN (SELECT id FROM session)
+               OR allowed_session_id NOT IN (SELECT id FROM session)
+          `),
+        )
+        yield* query(
+          db.run(sql`
+            DELETE FROM s2s_token
+            WHERE inviter_session_id NOT IN (SELECT id FROM session)
+          `),
+        )
+      },
+    )
+
     return {
       insertInbox,
       claimForSessions,
@@ -261,6 +331,7 @@ export const layer = Layer.effect(
       insertAllow,
       isAllowed,
       deleteAllow,
+      deleteOrphaned,
     } satisfies Interface
   }),
 )

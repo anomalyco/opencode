@@ -42,6 +42,8 @@ import { Config } from "@/config/config"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Database } from "@opencode-ai/core/database/database"
+import { SessionTable } from "@opencode-ai/core/session/sql"
+import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { Env } from "../../src/env"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { FSUtil } from "@opencode-ai/core/fs-util"
@@ -413,7 +415,7 @@ describe("S2SPoller: reaper cutoff advances per tick (FIX 1 regression guard)", 
           experimentalS2S: true,
         }),
       ),
-    ).pipe(Layer.provide(reaperDatabase))
+    ).pipe(Layer.provideMerge(reaperDatabase))
   }
 
   const reaperLoopIt = testEffect(makeReaperLoopLayer())
@@ -426,6 +428,24 @@ describe("S2SPoller: reaper cutoff advances per tick (FIX 1 regression guard)", 
         // Use a session ID that is NOT in the local set (localSet returns [],
         // so any ID is "non-local"). The reap loop doesn't care about local-set.
         const targetID = SessionID.make("ses_reaper_target_xxxxxxxxx")
+        const { db } = yield* Database.Service
+        yield* db.insert(ProjectTable).values({ id: "prj_test", worktree: "/tmp", sandboxes: [], time_created: 1, time_updated: 1 } as any).run().pipe(Effect.orDie)
+        yield* db.insert(SessionTable).values({
+          id: targetID,
+          project_id: "prj_test",
+          slug: "test-slug",
+          directory: "/tmp",
+          title: "test",
+          version: "1",
+          cost: 0,
+          tokens_input: 0,
+          tokens_output: 0,
+          tokens_reasoning: 0,
+          tokens_cache_read: 0,
+          tokens_cache_write: 0,
+          time_created: 1,
+          time_updated: 1,
+        } as any).run().pipe(Effect.orDie)
 
         yield* store.insertInbox({
           id: "inb_reaper_cutoff_1",
