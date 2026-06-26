@@ -22,6 +22,7 @@ import { UI } from "../ui"
 import { effectCmd } from "../effect-cmd"
 import { EOL } from "os"
 import { Filesystem } from "@/util/filesystem"
+import { isMedia } from "@/util/media"
 import { createOpencodeClient, type OpencodeClient, type ToolPart } from "@opencode-ai/sdk/v2"
 import { FormatError, FormatUnknownError } from "../error"
 import { INTERACTIVE_INPUT_ERROR, resolveInteractiveStdin } from "./run/runtime.stdin"
@@ -356,7 +357,7 @@ export const RunCommand = effectCmd({
           }
 
           const content = await (async () => {
-            if (!args.attach) return
+            if (!args.attach && !isMedia(FSUtil.mimeType(resolvedPath))) return
             const handle = await open(resolvedPath, "r")
             try {
               const opened = await handle.stat()
@@ -382,7 +383,9 @@ export const RunCommand = effectCmd({
           const mime = !args.attach
             ? isDirectory
               ? "application/x-directory"
-              : "text/plain"
+              : isMedia(detected)
+                ? detected
+                : "text/plain"
             : content && text !== undefined && Buffer.from(text, "utf8").equals(content)
               ? "text/plain"
               : detected
