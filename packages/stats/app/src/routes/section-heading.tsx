@@ -9,7 +9,10 @@ export function SectionHeading(props: {
     <>
       <strong>
         <a data-slot="heading-link" href={props.href}>
-          <span data-slot="heading-anchor" aria-hidden="true">#</span>{props.title}.
+          <span data-slot="heading-anchor" aria-hidden="true">
+            #
+          </span>
+          {props.title}.
         </a>
       </strong>{" "}
       <span>{props.description}</span>
