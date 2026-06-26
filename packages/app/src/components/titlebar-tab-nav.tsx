@@ -15,7 +15,6 @@ import "./titlebar-tab-nav.css"
 
 export function TabNavItem(props: {
   ref?: Ref<HTMLDivElement>
-  tabKey: string
   href: string
   server: ServerConnection.Key
   session: () => Session | undefined
@@ -176,13 +175,11 @@ export function TabNavItem(props: {
         forwardTabRef(props.ref, el)
       }}
       data-titlebar-tab
-      data-titlebar-tab-slot
-      data-tab-key={props.tabKey}
       data-slot="titlebar-tab-item"
       data-title-overflow={titleOverflowing()}
       data-editing={editing()}
-      class="group relative flex h-7 w-56 min-w-7 max-w-56 flex-shrink select-none flex-row items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-[6px] bg-[var(--tab-bg)] px-1.5 [container-type:inline-size] [--tab-bg:var(--v2-background-bg-deep)] hover:[--tab-bg:var(--v2-background-bg-layer-02)] has-[>a:focus-visible]:[--tab-bg:var(--v2-background-bg-layer-02)] data-[active='true']:[--tab-bg:var(--v2-background-bg-layer-02)] data-[dragging='true']:[--tab-bg:var(--v2-background-bg-layer-02)] data-[pressed='true']:[--tab-bg:var(--v2-background-bg-layer-02)] data-[editing='true']:[--tab-bg:var(--v2-background-bg-layer-02)]"
-      classList={{ invisible: props.hidden, hidden: !props.session() }}
+      class="group relative flex h-7 w-full min-w-0 select-none flex-row items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-[6px] bg-[var(--tab-bg)] px-1.5 [container-type:inline-size] [--tab-bg:var(--v2-background-bg-deep)] hover:[--tab-bg:var(--v2-background-bg-layer-02)] has-[>a:focus-visible]:[--tab-bg:var(--v2-background-bg-layer-02)] data-[active='true']:[--tab-bg:var(--v2-background-bg-layer-02)] data-[dragging='true']:[--tab-bg:var(--v2-background-bg-layer-02)] data-[pressed='true']:[--tab-bg:var(--v2-background-bg-layer-02)] data-[editing='true']:[--tab-bg:var(--v2-background-bg-layer-02)]"
+      classList={{ invisible: props.hidden }}
       data-active={props.active}
       data-dragging={props.dragging}
       data-pressed={props.pressed}
@@ -279,7 +276,6 @@ export function TabNavItem(props: {
 
 export function DraftTabItem(props: {
   ref?: Ref<HTMLDivElement>
-  tabKey: string
   href: string
   title: string
   active?: boolean
@@ -299,13 +295,11 @@ export function DraftTabItem(props: {
     <div
       ref={(el) => forwardTabRef(props.ref, el)}
       data-titlebar-tab
-      data-titlebar-tab-slot
-      data-tab-key={props.tabKey}
       data-slot="titlebar-tab-item"
       data-active={props.active}
       data-dragging={props.dragging}
       data-pressed={props.pressed}
-      class="group relative flex h-7 w-56 min-w-7 max-w-56 flex-shrink flex-row items-center gap-1.5 overflow-hidden rounded-[6px] bg-[var(--tab-bg)] px-1.5 [container-type:inline-size] whitespace-nowrap transition-transform [--tab-bg:var(--v2-background-bg-deep)] hover:[--tab-bg:var(--v2-background-bg-layer-02)] has-[>a:focus-visible]:[--tab-bg:var(--v2-background-bg-layer-02)] data-[active='true']:[--tab-bg:var(--v2-background-bg-layer-02)] data-[dragging='true']:[--tab-bg:var(--v2-background-bg-layer-02)] data-[pressed='true']:[--tab-bg:var(--v2-background-bg-layer-02)] data-[editing='true']:[--tab-bg:var(--v2-background-bg-layer-02)]"
+      class="group relative flex h-7 w-full min-w-0 flex-row items-center gap-1.5 overflow-hidden rounded-[6px] bg-[var(--tab-bg)] px-1.5 [container-type:inline-size] whitespace-nowrap [--tab-bg:var(--v2-background-bg-deep)] hover:[--tab-bg:var(--v2-background-bg-layer-02)] has-[>a:focus-visible]:[--tab-bg:var(--v2-background-bg-layer-02)] data-[active='true']:[--tab-bg:var(--v2-background-bg-layer-02)] data-[dragging='true']:[--tab-bg:var(--v2-background-bg-layer-02)] data-[pressed='true']:[--tab-bg:var(--v2-background-bg-layer-02)] data-[editing='true']:[--tab-bg:var(--v2-background-bg-layer-02)]"
       classList={{ invisible: props.hidden }}
       onMouseDown={(event) => {
         if (event.button !== 1) return
