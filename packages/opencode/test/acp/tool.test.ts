@@ -2,9 +2,11 @@ import { resolve } from "path"
 import { describe, expect, test } from "bun:test"
 import {
   completedToolContent,
+  completedToolUpdate,
   completedToolRawOutput,
   extractImageAttachments,
   imageContents,
+  pendingToolCall,
   shellOutputSnapshot,
   toLocations,
   toToolKind,
@@ -109,6 +111,85 @@ describe("acp tool conversion", () => {
         content: { type: "text", text: "wrote /tmp/file.ts" },
       },
     ])
+  })
+
+  test("sends completed tool calls as partial updates", () => {
+    expect(
+      pendingToolCall({
+        toolCallId: "tool-1",
+        toolName: "edit",
+        state: {
+          input: {
+            filePath: "/tmp/file.ts",
+            oldString: "before",
+            newString: "after",
+          },
+        },
+      }),
+    ).toMatchObject({
+      kind: "edit",
+      locations: [{ path: "/tmp/file.ts" }],
+      rawInput: {
+        filePath: "/tmp/file.ts",
+        oldString: "before",
+        newString: "after",
+      },
+    })
+
+    expect(
+      completedToolUpdate({
+        toolCallId: "tool-1",
+        toolName: "edit",
+        state: {
+          status: "completed",
+          input: {
+            filePath: "/tmp/file.ts",
+            oldString: "before",
+            newString: "after",
+          },
+          output: "Edit applied successfully.",
+        },
+      }),
+    ).toEqual({
+      toolCallId: "tool-1",
+      status: "completed",
+      content: [
+        {
+          type: "content",
+          content: { type: "text", text: "Edit applied successfully." },
+        },
+        {
+          type: "diff",
+          path: "/tmp/file.ts",
+          oldText: "before",
+          newText: "after",
+        },
+      ],
+      rawOutput: {
+        output: "Edit applied successfully.",
+      },
+    })
+
+    expect(
+      completedToolUpdate({
+        toolCallId: "tool-1",
+        toolName: "edit",
+        state: {
+          status: "completed",
+          input: {
+            filePath: "/tmp/file.ts",
+            oldString: "before",
+            newString: "after",
+          },
+          title: "file.ts",
+          output: "Edit applied successfully.",
+        },
+      }),
+    ).toMatchObject({
+      toolCallId: "tool-1",
+      status: "completed",
+      title: "file.ts",
+    })
   })
 
   test("uses clean read display text for completed content", () => {
