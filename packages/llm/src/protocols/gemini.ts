@@ -407,21 +407,35 @@ const step = (state: ParserState, event: GeminiEvent) => {
     if ("thoughtSignature" in part && part.thoughtSignature && "thought" in part && part.thought)
       reasoningSignature = part.thoughtSignature
     if ("text" in part && part.text.length > 0) {
-      lifecycle = part.thought
-        ? Lifecycle.reasoningDelta(
-            lifecycle,
-            events,
-            "reasoning-0",
-            part.text,
-            part.thoughtSignature ? googleMetadata({ thoughtSignature: part.thoughtSignature }) : undefined,
-          )
-        : Lifecycle.textDelta(lifecycle, events, "text-0", part.text)
+      if (part.thought) {
+        lifecycle = Lifecycle.reasoningDelta(
+          lifecycle,
+          events,
+          "reasoning-0",
+          part.text,
+          part.thoughtSignature ? googleMetadata({ thoughtSignature: part.thoughtSignature }) : undefined,
+        )
+        continue
+      }
+      lifecycle = Lifecycle.reasoningEnd(
+        lifecycle,
+        events,
+        "reasoning-0",
+        reasoningSignature ? googleMetadata({ thoughtSignature: reasoningSignature }) : undefined,
+      )
+      lifecycle = Lifecycle.textDelta(lifecycle, events, "text-0", part.text)
       continue
     }
 
     if ("functionCall" in part) {
       const input = part.functionCall.args
       const id = `tool_${nextToolCallId++}`
+      lifecycle = Lifecycle.reasoningEnd(
+        lifecycle,
+        events,
+        "reasoning-0",
+        reasoningSignature ? googleMetadata({ thoughtSignature: reasoningSignature }) : undefined,
+      )
       lifecycle = Lifecycle.stepStart(lifecycle, events)
       events.push(
         LLMEvent.toolCall({

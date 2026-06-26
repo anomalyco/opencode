@@ -10594,7 +10594,7 @@
                     "pattern": "^msg_"
                   },
                   "prompt": {
-                    "$ref": "#/components/schemas/Prompt"
+                    "$ref": "#/components/schemas/PromptInput"
                   },
                   "delivery": {
                     "type": "string",
@@ -23533,6 +23533,28 @@
         "required": ["_tag", "sessionID", "message"],
         "additionalProperties": false
       },
+      "PromptInput": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PromptInputFileAttachment"
+            }
+          },
+          "agents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PromptAgentAttachment"
+            }
+          }
+        },
+        "required": ["text"],
+        "additionalProperties": false
+      },
       "ConflictError": {
         "type": "object",
         "properties": {
@@ -26955,6 +26977,25 @@
           }
         },
         "required": ["id", "projectID", "cost", "tokens", "time", "title", "location"],
+        "additionalProperties": false
+      },
+      "PromptInputFileAttachment": {
+        "type": "object",
+        "properties": {
+          "uri": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/PromptSource"
+          }
+        },
+        "required": ["uri"],
         "additionalProperties": false
       },
       "SessionInputAdmitted": {
