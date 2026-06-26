@@ -38,6 +38,27 @@ test("shows a pending question dock", async ({ page }) => {
   await expect(question.getByRole("radio", { name: /Extended/ })).toBeVisible()
   await expect(page.locator('[data-component="session-composer"]')).toHaveCount(0)
 
+  const rejectRequests: string[] = []
+  page.on("request", (request) => {
+    if (request.method() !== "POST") return
+    if (new URL(request.url()).pathname === "/question/question-request/reject") rejectRequests.push(request.url())
+  })
+
+  await question.getByRole("button", { name: "Minimize question" }).click()
+  await expect(question).toHaveCount(0)
+  await expect(page.getByText("Which implementation should be used?")).toHaveCount(0)
+
+  const minimized = page.locator('[data-component="question-minimized-dock"]')
+  await expect(minimized).toBeVisible()
+  await expect(minimized.getByText("1 pending question")).toBeVisible()
+  expect(rejectRequests).toEqual([])
+
+  await minimized.getByRole("button", { name: "Restore question" }).click()
+  await expect(question).toBeVisible()
+  await expect(question.getByText("Which implementation should be used?")).toBeVisible()
+  await expect(question.getByRole("radio", { name: /Minimal/ })).toBeVisible()
+  expect(rejectRequests).toEqual([])
+
   await question.getByRole("radio", { name: /Minimal/ }).click()
   const reply = page.waitForRequest(
     (request) => request.method() === "POST" && new URL(request.url()).pathname === "/question/question-request/reply",

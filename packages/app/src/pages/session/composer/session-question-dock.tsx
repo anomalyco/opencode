@@ -3,7 +3,9 @@ import { createStore } from "solid-js/store"
 import { useMutation } from "@tanstack/solid-query"
 import { Button } from "@opencode-ai/ui/button"
 import { DockPrompt } from "@opencode-ai/session-ui/dock-prompt"
+import { DockTray } from "@opencode-ai/ui/dock-surface"
 import { Icon } from "@opencode-ai/ui/icon"
+import { IconButton } from "@opencode-ai/ui/icon-button"
 import { showToast } from "@/utils/toast"
 import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
 import { useLanguage } from "@/context/language"
@@ -77,6 +79,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
     customOn: cached?.customOn ?? ([] as boolean[]),
     editing: false,
     focus: 0,
+    minimized: false,
   })
 
   let root: HTMLDivElement | undefined
@@ -96,6 +99,9 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
     const n = Math.min(store.tab + 1, total())
     return language.t("session.question.progress", { current: n, total: total() })
   })
+  const minimizedSummary = createMemo(() =>
+    language.t(total() === 1 ? "session.question.pending.one" : "session.question.pending.other", { count: total() }),
+  )
 
   const customLabel = () => language.t("ui.messagePart.option.typeOwnAnswer")
   const customPlaceholder = () => language.t("ui.question.custom.placeholder")
@@ -424,153 +430,192 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
     focus(pickFocus(tab))
   }
 
-  return (
-    <DockPrompt
-      kind="question"
-      ref={(el) => (root = el)}
-      onKeyDown={nav}
-      header={
-        <>
-          <div data-slot="question-header-title">{summary()}</div>
-          <Show when={total() > 1}>
-            <div data-slot="question-progress">
-              <For each={questions()}>
-                {(_, i) => (
-                  <button
-                    type="button"
-                    data-slot="question-progress-segment"
-                    data-active={i() === store.tab}
-                    data-answered={answered(i())}
-                    disabled={sending()}
-                    onClick={() => jump(i())}
-                    aria-label={`${language.t("ui.tool.questions")} ${i() + 1}`}
-                  />
-                )}
-              </For>
-            </div>
-          </Show>
-        </>
-      }
-      footer={
-        <>
-          <Button variant="ghost" size="large" disabled={sending()} onClick={reject} aria-keyshortcuts="Escape">
-            {language.t("ui.common.dismiss")}
-          </Button>
-          <div data-slot="question-footer-actions">
-            <Show when={store.tab > 0}>
-              <Button variant="secondary" size="large" disabled={sending()} onClick={back}>
-                {language.t("ui.common.back")}
-              </Button>
-            </Show>
-            <Button
-              variant={last() ? "primary" : "secondary"}
-              size="large"
-              disabled={sending()}
-              onClick={next}
-              aria-keyshortcuts="Meta+Enter Control+Enter"
-            >
-              {last() ? language.t("ui.common.submit") : language.t("ui.common.next")}
-            </Button>
-          </div>
-        </>
-      }
-    >
-      <div data-slot="question-text" class="overflow-auto">
-        {question()?.question}
-      </div>
-      <Show when={multi()} fallback={<div data-slot="question-hint">{language.t("ui.question.singleHint")}</div>}>
-        <div data-slot="question-hint">{language.t("ui.question.multiHint")}</div>
-      </Show>
-      <div data-slot="question-options">
-        <For each={options()}>
-          {(opt, i) => (
-            <Option
-              multi={multi()}
-              picked={picked(opt.label)}
-              label={opt.label}
-              description={opt.description}
-              disabled={sending()}
-              ref={(el) => (optsRef[i()] = el)}
-              onFocus={() => setStore("focus", i())}
-              onClick={() => selectOption(i())}
-            />
-          )}
-        </For>
+  const minimize = () => {
+    if (sending()) return
+    setStore("minimized", true)
+  }
 
-        <Show
-          when={store.editing}
-          fallback={
-            <button
-              type="button"
-              ref={customRef}
-              data-slot="question-option"
-              data-custom="true"
-              data-picked={on()}
-              role={multi() ? "checkbox" : "radio"}
-              aria-checked={on()}
-              disabled={sending()}
-              onFocus={() => setStore("focus", options().length)}
-              onClick={customOpen}
-            >
-              <Mark multi={multi()} picked={on()} onClick={toggleCustomMark} />
-              <span data-slot="question-option-main">
-                <span data-slot="option-label">{customLabel()}</span>
-                <span data-slot="option-description">{input() || customPlaceholder()}</span>
-              </span>
-            </button>
+  const restore = () => {
+    if (sending()) return
+    setStore("minimized", false)
+    focus(pickFocus())
+  }
+
+  return (
+    <Show
+      when={store.minimized}
+      fallback={
+        <DockPrompt
+          kind="question"
+          ref={(el) => (root = el)}
+          onKeyDown={nav}
+          header={
+            <>
+              <div data-slot="question-header-title">{summary()}</div>
+              <div data-slot="question-header-actions">
+                <Show when={total() > 1}>
+                  <div data-slot="question-progress">
+                    <For each={questions()}>
+                      {(_, i) => (
+                        <button
+                          type="button"
+                          data-slot="question-progress-segment"
+                          data-active={i() === store.tab}
+                          data-answered={answered(i())}
+                          disabled={sending()}
+                          onClick={() => jump(i())}
+                          aria-label={`${language.t("ui.tool.questions")} ${i() + 1}`}
+                        />
+                      )}
+                    </For>
+                  </div>
+                </Show>
+                <IconButton
+                  icon="chevron-down"
+                  size="normal"
+                  variant="ghost"
+                  disabled={sending()}
+                  onClick={minimize}
+                  aria-label={language.t("session.question.minimize")}
+                />
+              </div>
+            </>
+          }
+          footer={
+            <>
+              <Button variant="ghost" size="large" disabled={sending()} onClick={reject} aria-keyshortcuts="Escape">
+                {language.t("ui.common.dismiss")}
+              </Button>
+              <div data-slot="question-footer-actions">
+                <Show when={store.tab > 0}>
+                  <Button variant="secondary" size="large" disabled={sending()} onClick={back}>
+                    {language.t("ui.common.back")}
+                  </Button>
+                </Show>
+                <Button
+                  variant={last() ? "primary" : "secondary"}
+                  size="large"
+                  disabled={sending()}
+                  onClick={next}
+                  aria-keyshortcuts="Meta+Enter Control+Enter"
+                >
+                  {last() ? language.t("ui.common.submit") : language.t("ui.common.next")}
+                </Button>
+              </div>
+            </>
           }
         >
-          <form
-            data-slot="question-option"
-            data-custom="true"
-            data-picked={on()}
-            role={multi() ? "checkbox" : "radio"}
-            aria-checked={on()}
-            onMouseDown={(e) => {
-              if (sending()) {
-                e.preventDefault()
-                return
+          <div data-slot="question-text">
+            {question()?.question}
+          </div>
+          <Show when={multi()} fallback={<div data-slot="question-hint">{language.t("ui.question.singleHint")}</div>}>
+            <div data-slot="question-hint">{language.t("ui.question.multiHint")}</div>
+          </Show>
+          <div data-slot="question-options">
+            <For each={options()}>
+              {(opt, i) => (
+                <Option
+                  multi={multi()}
+                  picked={picked(opt.label)}
+                  label={opt.label}
+                  description={opt.description}
+                  disabled={sending()}
+                  ref={(el) => (optsRef[i()] = el)}
+                  onFocus={() => setStore("focus", i())}
+                  onClick={() => selectOption(i())}
+                />
+              )}
+            </For>
+
+            <Show
+              when={store.editing}
+              fallback={
+                <button
+                  type="button"
+                  ref={customRef}
+                  data-slot="question-option"
+                  data-custom="true"
+                  data-picked={on()}
+                  role={multi() ? "checkbox" : "radio"}
+                  aria-checked={on()}
+                  disabled={sending()}
+                  onFocus={() => setStore("focus", options().length)}
+                  onClick={customOpen}
+                >
+                  <Mark multi={multi()} picked={on()} onClick={toggleCustomMark} />
+                  <span data-slot="question-option-main">
+                    <span data-slot="option-label">{customLabel()}</span>
+                    <span data-slot="option-description">{input() || customPlaceholder()}</span>
+                  </span>
+                </button>
               }
-              if (e.target instanceof HTMLTextAreaElement) return
-              const input = e.currentTarget.querySelector('[data-slot="question-custom-input"]')
-              if (input instanceof HTMLTextAreaElement) input.focus()
-            }}
-            onSubmit={(e) => {
-              e.preventDefault()
-              commitCustom()
-            }}
-          >
-            <Mark multi={multi()} picked={on()} onClick={toggleCustomMark} />
-            <span data-slot="question-option-main">
-              <span data-slot="option-label">{customLabel()}</span>
-              <textarea
-                ref={focusCustom}
-                data-slot="question-custom-input"
-                placeholder={customPlaceholder()}
-                value={input()}
-                rows={1}
-                disabled={sending()}
-                onKeyDown={(e) => {
-                  if (e.key === "Escape") {
+            >
+              <form
+                data-slot="question-option"
+                data-custom="true"
+                data-picked={on()}
+                role={multi() ? "checkbox" : "radio"}
+                aria-checked={on()}
+                onMouseDown={(e) => {
+                  if (sending()) {
                     e.preventDefault()
-                    setStore("editing", false)
-                    focus(options().length)
                     return
                   }
-                  if ((e.metaKey || e.ctrlKey) && !e.altKey) return
-                  if (e.key !== "Enter" || e.shiftKey) return
+                  if (e.target instanceof HTMLTextAreaElement) return
+                  const input = e.currentTarget.querySelector('[data-slot="question-custom-input"]')
+                  if (input instanceof HTMLTextAreaElement) input.focus()
+                }}
+                onSubmit={(e) => {
                   e.preventDefault()
                   commitCustom()
                 }}
-                onInput={(e) => {
-                  customUpdate(e.currentTarget.value)
-                  resizeInput(e.currentTarget)
-                }}
-              />
-            </span>
-          </form>
-        </Show>
-      </div>
-    </DockPrompt>
+              >
+                <Mark multi={multi()} picked={on()} onClick={toggleCustomMark} />
+                <span data-slot="question-option-main">
+                  <span data-slot="option-label">{customLabel()}</span>
+                  <textarea
+                    ref={focusCustom}
+                    data-slot="question-custom-input"
+                    placeholder={customPlaceholder()}
+                    value={input()}
+                    rows={1}
+                    disabled={sending()}
+                    onKeyDown={(e) => {
+                      if (e.key === "Escape") {
+                        e.preventDefault()
+                        setStore("editing", false)
+                        focus(options().length)
+                        return
+                      }
+                      if ((e.metaKey || e.ctrlKey) && !e.altKey) return
+                      if (e.key !== "Enter" || e.shiftKey) return
+                      e.preventDefault()
+                      commitCustom()
+                    }}
+                    onInput={(e) => {
+                      customUpdate(e.currentTarget.value)
+                      resizeInput(e.currentTarget)
+                    }}
+                  />
+                </span>
+              </form>
+            </Show>
+          </div>
+        </DockPrompt>
+      }
+    >
+      <DockTray data-component="question-minimized-dock">
+        <button
+          type="button"
+          data-slot="question-minimized-trigger"
+          disabled={sending()}
+          onClick={restore}
+          aria-label={language.t("session.question.restore")}
+        >
+          <span data-slot="question-minimized-summary">{minimizedSummary()}</span>
+          <Icon name="chevron-down" size="small" />
+        </button>
+      </DockTray>
+    </Show>
   )
 }
