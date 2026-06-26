@@ -22,7 +22,7 @@ import { NamedError } from "@opencode-ai/core/util/error"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { withTimeout } from "@/util/timeout"
 import { FSUtil } from "@opencode-ai/core/fs-util"
-import { McpOAuthProvider, OAUTH_CALLBACK_PATH } from "./oauth-provider"
+import { McpOAuthPendingProvider, McpOAuthProvider, OAUTH_CALLBACK_PATH } from "./oauth-provider"
 import { McpOAuthCallback } from "./oauth-callback"
 import { McpAuth } from "./auth"
 import { EventV2Bridge } from "@/event-v2-bridge"
@@ -109,7 +109,7 @@ export type Status = Schema.Schema.Type<typeof Status>
 
 // Store transports for OAuth servers to allow finishing auth
 type TransportWithAuth = StreamableHTTPClientTransport | SSEClientTransport
-const pendingOAuthTransports = new Map<string, TransportWithAuth>()
+const pendingOAuthTransports = new Map<string, { transport: TransportWithAuth; provider?: McpOAuthPendingProvider }>()
 
 // Prompt cache types
 type PromptInfo = Awaited<ReturnType<MCPClient["listPrompts"]>>["prompts"][number]
@@ -301,7 +301,7 @@ export const layer = Layer.effect(
                   })
                   .pipe(Effect.ignore, Effect.as(undefined))
               } else {
-                pendingOAuthTransports.set(key, transport)
+                pendingOAuthTransports.set(key, { transport })
                 lastStatus = { status: "needs_auth" as const }
                 return events
                   .publish(TuiEvent.ToastShow, {
@@ -819,7 +819,7 @@ export const layer = Layer.effect(
         .join("")
       yield* auth.updateOAuthState(mcpName, oauthState)
       let capturedUrl: URL | undefined
-      const authProvider = new McpOAuthProvider(
+      const authProvider = new McpOAuthPendingProvider(
         mcpName,
         mcpConfig.url,
         {
@@ -845,15 +845,16 @@ export const layer = Layer.effect(
       return yield* Effect.tryPromise({
         try: () => {
           const client = createClient(directory)
-          return client
-            .connect(transport)
-            .then(() => ({ authorizationUrl: "", oauthState, client }) satisfies AuthResult)
+          return client.connect(transport).then(async () => {
+            await authProvider.commit()
+            return { authorizationUrl: "", oauthState, client } satisfies AuthResult
+          })
         },
         catch: (error) => error,
       }).pipe(
         Effect.catch((error) => {
           if (error instanceof UnauthorizedError && capturedUrl) {
-            pendingOAuthTransports.set(mcpName, transport)
+            pendingOAuthTransports.set(mcpName, { transport, provider: authProvider })
             return Effect.succeed({ authorizationUrl: capturedUrl.toString(), oauthState } satisfies AuthResult)
           }
           return Effect.die(error)
@@ -924,11 +925,11 @@ export const layer = Layer.effect(
 
     const finishAuth = Effect.fn("MCP.finishAuth")(function* (mcpName: string, authorizationCode: string) {
       yield* requireMcpConfig(mcpName)
-      const transport = pendingOAuthTransports.get(mcpName)
-      if (!transport) throw new Error(`No pending OAuth flow for MCP server: ${mcpName}`)
+      const pending = pendingOAuthTransports.get(mcpName)
+      if (!pending) throw new Error(`No pending OAuth flow for MCP server: ${mcpName}`)
 
       const result = yield* Effect.tryPromise({
-        try: () => transport.finishAuth(authorizationCode).then(() => true as const),
+        try: () => pending.transport.finishAuth(authorizationCode).then(() => true as const),
         catch: (error) => {
           return error
         },
@@ -938,6 +939,7 @@ export const layer = Layer.effect(
         return { status: "failed", error: "OAuth completion failed" } satisfies Status
       }
 
+      yield* Effect.promise(() => pending.provider?.commit() ?? Promise.resolve())
       yield* auth.clearCodeVerifier(mcpName)
       pendingOAuthTransports.delete(mcpName)
 
@@ -963,10 +965,15 @@ export const layer = Layer.effect(
     })
 
     const getAuthStatus = Effect.fn("MCP.getAuthStatus")(function* (mcpName: string) {
-      const entry = yield* auth.get(mcpName)
+      const runtimeConfig = (yield* InstanceState.has(state))
+        ? (yield* InstanceState.get(state)).config[mcpName]
+        : undefined
+      const mcpConfig = runtimeConfig ?? (yield* cfgSvc.get()).mcp?.[mcpName]
+      if (!mcpConfig || !isMcpConfigured(mcpConfig) || mcpConfig.type !== "remote") return "not_authenticated"
+      const entry = yield* auth.getForUrl(mcpName, mcpConfig.url)
       if (!entry?.tokens) return "not_authenticated"
-      const expired = yield* auth.isTokenExpired(mcpName)
-      return expired ? "expired" : "authenticated"
+      if (entry.tokens.expiresAt && entry.tokens.expiresAt < Date.now() / 1000) return "expired"
+      return "authenticated"
     })
 
     return Service.of({
@@ -1005,6 +1012,10 @@ export const defaultLayer = layer.pipe(
   Layer.provide(FSUtil.defaultLayer),
 )
 
-export const node = LayerNode.make(layer, [CrossSpawnSpawner.node, McpAuth.node, EventV2Bridge.node, Config.node])
+export const node = LayerNode.make({
+  service: Service,
+  layer: layer,
+  deps: [CrossSpawnSpawner.node, McpAuth.node, EventV2Bridge.node, Config.node],
+})
 
 export * as MCP from "."

@@ -134,4 +134,8 @@ export const defaultLayer = layer.pipe(
   Layer.provide(Git.defaultLayer),
   Layer.provideMerge(ProjectDirectories.defaultLayer),
 )
-export const node = LayerNode.make(layer, [FSUtil.node, Git.node, ProjectDirectories.node])
+export const node = LayerNode.make({
+  service: Service,
+  layer: layer,
+  deps: [FSUtil.node, Git.node, ProjectDirectories.node],
+})

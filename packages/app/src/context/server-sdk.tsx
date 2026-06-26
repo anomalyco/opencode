@@ -269,6 +269,7 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
   })
 
   return {
+    server,
     scope,
     url: server.http.url,
     client: sdk,

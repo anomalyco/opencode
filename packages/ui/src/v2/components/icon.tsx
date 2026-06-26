@@ -49,6 +49,10 @@ const icons = {
     viewBox: "0 0 16 16",
     body: `<path d="M5 6.5L8 9.5L11 6.5" stroke="currentColor"/>`,
   },
+  check: {
+    viewBox: "0 0 16 16",
+    body: `<path d="M3.53613 8.17857L6.39328 11.75L12.4647 4.25" stroke="currentColor"/>`,
+  },
   close: {
     viewBox: "0 0 20 20",
     body: `<path d="M14.4446 5.55566L5.55566 14.4446M5.55566 5.55566L14.4446 14.4446" stroke="currentColor" stroke-linejoin="round"/>`,

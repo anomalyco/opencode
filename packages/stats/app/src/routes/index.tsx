@@ -27,6 +27,10 @@ import { getRequestEvent } from "solid-js/web"
 import type { FeatureCollection, GeometryObject, GeoJsonProperties } from "geojson"
 import type { GeometryCollection, Topology } from "topojson-specification"
 import { runStatsEffect } from "../stats-runtime"
+import { LocaleLinks } from "../component/locale-links"
+import { useI18n } from "../context/i18n"
+import { useLanguage } from "../context/language"
+import { localizedUrl } from "../lib/language"
 import { findModelCatalogEntry, getModelCatalog, type ModelCatalog } from "./model-catalog"
 import {
   applyThemePreference,
@@ -42,19 +46,7 @@ import {
 const products = ["All Users", "Zen", "Go"] as const
 const tokenProducts = ["Zen", "Go"] as const
 const ranges = ["1D", "1W", "2W", "1M", "2M"] as const
-const rangeLabels: Record<UsageRange, string> = {
-  "1D": "1 Day",
-  "1W": "1 Week",
-  "2W": "2 Weeks",
-  "1M": "1 Month",
-  "2M": "2 Months",
-}
-const statsHomeTitle = "AI Model Usage Rankings | OpenCode Data"
-const statsHomeDescription =
-  "Explore OpenCode Go usage across AI models, including token volume, rankings, market share, token pricing, session cost, cache ratio, and geo breakdowns."
-const statsHomeFallbackUrl = "https://opencode.ai/data/"
 const statsUnfurlPath = "banner.jpg"
-const statsUnfurlAlt = "OpenCode Data wordmark on a dark patterned background"
 const usageColors = [
   "#ed6aff",
   "#a684ff",
@@ -71,7 +63,6 @@ const usageColors = [
 const marketColors = ["#ed6aff", "#a684ff", "#7c86ff", "#51a2ff", "#00d3f2", "#00d5be", "#00bc7d", "#9ae600", "#ffb900"]
 const geoMapWidth = 960
 const geoMapHeight = 430
-const countryDisplayNames = new Intl.DisplayNames(["en"], { type: "region" })
 
 type UsageProduct = (typeof products)[number]
 type TokenProduct = (typeof tokenProducts)[number]
@@ -79,6 +70,20 @@ type UsageRange = (typeof ranges)[number]
 type IsoCountryCode = readonly [string, string, string]
 type WorldCountryProperties = GeoJsonProperties & { name?: string }
 type WorldTopology = Topology<{ countries: GeometryCollection<WorldCountryProperties> }>
+
+function productLabel(product: UsageProduct | TokenProduct, i18n: ReturnType<typeof useI18n>) {
+  if (product === "All Users") return i18n.t("product.allUsers")
+  if (product === "Zen") return i18n.t("product.zen")
+  return i18n.t("product.go")
+}
+
+function rangeLabel(range: UsageRange, i18n: ReturnType<typeof useI18n>) {
+  if (range === "1D") return i18n.t("range.1D")
+  if (range === "1W") return i18n.t("range.1W")
+  if (range === "2W") return i18n.t("range.2W")
+  if (range === "1M") return i18n.t("range.1M")
+  return i18n.t("range.2M")
+}
 
 const countryNumericIds = new Map(
   (JSON.parse(countryCodesSource) as IsoCountryCode[]).map((country) => [country[0], country[2]] as const),
@@ -113,13 +118,12 @@ const getData = query(async () => {
 }, "getStatsHomeData")
 
 export default function StatsHome() {
+  const i18n = useI18n()
+  const language = useLanguage()
   const event = getRequestEvent()
   event?.response.headers.set("Cache-Control", "public, max-age=60, s-maxage=300, stale-while-revalidate=86400")
-  const statsHomeUrl = getStatsHomeUrl(
-    import.meta.env.BASE_URL,
-    event?.request.url ?? (typeof window === "undefined" ? statsHomeFallbackUrl : window.location.href),
-  )
-  const statsUnfurlUrl = new URL(statsUnfurlPath, statsHomeUrl).toString()
+  const statsHomeUrl = localizedUrl(language.locale(), "/data/")
+  const statsUnfurlUrl = new URL(statsUnfurlPath, localizedUrl("en", "/data/")).toString()
   const data = createAsync(() => getData())
   const catalog = createAsync(() => getModelCatalog())
   const githubStars = createAsync(() => getGitHubStars())
@@ -141,24 +145,24 @@ export default function StatsHome() {
 
   return (
     <main data-page="stats" data-theme={themePreference()}>
-      <Title>{statsHomeTitle}</Title>
-      <Meta name="description" content={statsHomeDescription} />
-      <Link rel="canonical" href={statsHomeUrl} />
+      <Title>{i18n.t("app.title")}</Title>
+      <Meta name="description" content={i18n.t("app.description")} />
+      <LocaleLinks path="/data/" />
       <Meta property="og:type" content="website" />
       <Meta property="og:site_name" content="OpenCode" />
-      <Meta property="og:title" content={statsHomeTitle} />
-      <Meta property="og:description" content={statsHomeDescription} />
+      <Meta property="og:title" content={i18n.t("app.title")} />
+      <Meta property="og:description" content={i18n.t("app.description")} />
       <Meta property="og:url" content={statsHomeUrl} />
       <Meta property="og:image" content={statsUnfurlUrl} />
       <Meta property="og:image:type" content="image/jpeg" />
       <Meta property="og:image:width" content="1200" />
       <Meta property="og:image:height" content="630" />
-      <Meta property="og:image:alt" content={statsUnfurlAlt} />
+      <Meta property="og:image:alt" content={i18n.t("app.unfurlAlt")} />
       <Meta name="twitter:card" content="summary_large_image" />
-      <Meta name="twitter:title" content={statsHomeTitle} />
-      <Meta name="twitter:description" content={statsHomeDescription} />
+      <Meta name="twitter:title" content={i18n.t("app.title")} />
+      <Meta name="twitter:description" content={i18n.t("app.description")} />
       <Meta name="twitter:image" content={statsUnfurlUrl} />
-      <Meta name="twitter:image:alt" content={statsUnfurlAlt} />
+      <Meta name="twitter:image:alt" content={i18n.t("app.unfurlAlt")} />
       <Link rel="preload" href={ibmPlexMonoRegularLatin1} as="font" type="font/woff2" crossorigin="anonymous" />
       <Link rel="preload" href={ibmPlexMonoMediumLatin1} as="font" type="font/woff2" crossorigin="anonymous" />
       <Link rel="preload" href={ibmPlexMonoSemiBoldLatin1} as="font" type="font/woff2" crossorigin="anonymous" />
@@ -187,23 +191,20 @@ export default function StatsHome() {
   )
 }
 
-function getStatsHomeUrl(base: string, requestUrl: string) {
-  const url = new URL(base, requestUrl)
-  if (url.hostname === "stats.opencode.ai") return "https://opencode.ai/data/"
-  if (url.hostname === "stats.dev.opencode.ai") return "https://dev.opencode.ai/data/"
-  return url.toString()
-}
-
 function Hero(props: { updatedAt: string | null }) {
+  const i18n = useI18n()
+  const language = useLanguage()
   const [timeZone, setTimeZone] = createSignal("UTC")
   const [previousTimeZone, setPreviousTimeZone] = createSignal("UTC")
   const [isTicking, setIsTicking] = createSignal(false)
   const updatedAtParts = (timeZone: string) =>
-    props.updatedAt ? formatUpdatedAtParts(props.updatedAt, timeZone) : { date: "No rows yet", time: "" }
+    props.updatedAt
+      ? formatUpdatedAtParts(props.updatedAt, timeZone, language.tag(language.locale()), i18n.t("home.justNow"))
+      : { date: i18n.t("home.noRows"), time: "" }
   const previousUpdatedAt = createMemo(() => updatedAtParts(previousTimeZone()))
   const currentUpdatedAt = createMemo(() => updatedAtParts(timeZone()))
   const currentUpdatedLabel = createMemo(() =>
-    props.updatedAt ? `Updated ${formatUpdatedAtLabel(currentUpdatedAt())}` : "No rows yet",
+    props.updatedAt ? `${i18n.t("home.updated")} ${formatUpdatedAtLabel(currentUpdatedAt())}` : i18n.t("home.noRows"),
   )
   const isDateTicking = createMemo(() => isTicking() && previousUpdatedAt().date !== currentUpdatedAt().date)
   const isTimeTicking = createMemo(() => isTicking() && previousUpdatedAt().time !== currentUpdatedAt().time)
@@ -213,8 +214,9 @@ function Hero(props: { updatedAt: string | null }) {
     const nextTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"
     if (nextTimeZone === "UTC") return
     if (
-      formatUpdatedAtLabel(formatUpdatedAtParts(props.updatedAt, nextTimeZone)) ===
-      formatUpdatedAtLabel(updatedAtParts("UTC"))
+      formatUpdatedAtLabel(
+        formatUpdatedAtParts(props.updatedAt, nextTimeZone, language.tag(language.locale()), i18n.t("home.justNow")),
+      ) === formatUpdatedAtLabel(updatedAtParts("UTC"))
     )
       return
     const timeouts: number[] = []
@@ -248,7 +250,7 @@ function Hero(props: { updatedAt: string | null }) {
         {props.updatedAt ? (
           <>
             <span data-slot="hero-meta-label" aria-hidden="true">
-              Updated
+              {i18n.t("home.updated")}
             </span>
             <span data-slot="hero-meta-time" aria-hidden="true">
               <HeroMetaTickerPart
@@ -265,16 +267,13 @@ function Hero(props: { updatedAt: string | null }) {
             </span>
           </>
         ) : (
-          <span data-slot="hero-meta-empty">No rows yet</span>
+          <span data-slot="hero-meta-empty">{i18n.t("home.noRows")}</span>
         )}
       </p>
       <div data-slot="hero-canvas">
         <div data-slot="hero-pattern" aria-hidden="true" />
-        <h1>Model Data</h1>
-        <p data-slot="hero-copy">
-          See which models are winning real usage, how the mix <br data-slot="hero-copy-break" />
-          shifts over time, and where momentum is moving each week.
-        </p>
+        <h1>{i18n.t("footer.modelData")}</h1>
+        <p data-slot="hero-copy">{i18n.t("home.heroCopy")}</p>
       </div>
     </section>
   )
@@ -292,11 +291,12 @@ function HeroMetaTickerPart(props: { previous: string; current: string; ticking:
 }
 
 function StatsLoading() {
+  const i18n = useI18n()
   return (
     <>
       <Hero updatedAt={null} />
-      <ChartSection title="Usage">
-        <EmptyState title="Loading data" description="Reading model aggregates from model_stat." />
+      <ChartSection title={i18n.t("home.usageTitle")}>
+        <EmptyState title={i18n.t("home.loadingTitle")} description={i18n.t("home.loadingDescription")} />
       </ChartSection>
     </>
   )
@@ -332,9 +332,10 @@ function SectionTitle(props: { title: string; description: string }) {
 }
 
 function SectionBridge(props: { label: string; href: string }) {
+  const i18n = useI18n()
   return (
     <a data-component="section-bridge" href={props.href}>
-      <span>LEAN MORE</span>
+      <span>{i18n.t("bridge.learnMore")}</span>
       <i />
       <strong>{props.label}</strong>
       <b>▸</b>
@@ -351,16 +352,16 @@ function EmptyState(props: { title: string; description: string }) {
   )
 }
 
-function formatUpdatedAtParts(value: string, timeZone: string) {
+function formatUpdatedAtParts(value: string, timeZone: string, locale: string, fallback: string) {
   const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return { date: "just now", time: "" }
+  if (Number.isNaN(date.getTime())) return { date: fallback, time: "" }
   return {
-    date: new Intl.DateTimeFormat("en", {
+    date: new Intl.DateTimeFormat(locale, {
       month: "short",
       day: "numeric",
       timeZone,
     }).format(date),
-    time: new Intl.DateTimeFormat("en", {
+    time: new Intl.DateTimeFormat(locale, {
       hour: "2-digit",
       minute: "2-digit",
       timeZone,
@@ -375,6 +376,7 @@ function formatUpdatedAtLabel(value: { date: string; time: string }) {
 }
 
 function TopModelsSection(props: { data: StatsHomeData["usage"]; leaderboard: StatsHomeData["leaderboard"] }) {
+  const i18n = useI18n()
   const [product, setProduct] = createSignal<UsageProduct>("Go")
   const [range, setRange] = createSignal<UsageRange>("2M")
   const [sheet, setSheet] = createSignal<"product" | "range">()
@@ -403,11 +405,11 @@ function TopModelsSection(props: { data: StatsHomeData["usage"]; leaderboard: St
   return (
     <section id="top-models" data-section="top-models">
       <h2 data-slot="top-models-title">
-        <strong>Top models.</strong> <span>Usage of models across OpenCode Go.</span>
+        <strong>{i18n.t("nav.topModels")}.</strong> <span>{i18n.t("home.topModelsDescription")}</span>
       </h2>
       <Show
         when={data().some((item) => usageTotal(item) > 0)}
-        fallback={<EmptyState title="No usage data" description="No model_stat rows matched this product and range." />}
+        fallback={<EmptyState title={i18n.t("home.noUsageTitle")} description={i18n.t("home.noUsageDescription")} />}
       >
         <TopModelsChart
           data={data()}
@@ -419,7 +421,7 @@ function TopModelsSection(props: { data: StatsHomeData["usage"]; leaderboard: St
       <Show
         when={leaderboard().length > 0}
         fallback={
-          <EmptyState title="No leaderboard data" description="No model_stat rows matched this product and range." />
+          <EmptyState title={i18n.t("home.noLeaderboardTitle")} description={i18n.t("home.noLeaderboardDescription")} />
         }
       >
         <Leaderboard data={leaderboard()} activeModel={activeModel()} onActiveModelChange={setActiveModel} />
@@ -428,14 +430,14 @@ function TopModelsSection(props: { data: StatsHomeData["usage"]; leaderboard: St
         <StatsFilters product={product()} range={range()} onProductSelect={setProduct} onRangeSelect={setRange} />
         <div data-slot="top-models-mobile-controls">
           <MobileFilterButton
-            label="Product filter"
-            value={product()}
+            label={i18n.t("home.productFilter")}
+            value={productLabel(product(), i18n)}
             expanded={sheet() === "product"}
             onClick={() => setSheet(sheet() === "product" ? undefined : "product")}
           />
           <MobileFilterButton
-            label="Date range"
-            value={range()}
+            label={i18n.t("home.dateRange")}
+            value={rangeLabel(range(), i18n)}
             expanded={sheet() === "range"}
             onClick={() => setSheet(sheet() === "range" ? undefined : "range")}
           />
@@ -486,12 +488,13 @@ function MobileFilterSheet(props: {
   onRangeSelect: (range: UsageRange) => void
   onClose: () => void
 }) {
+  const i18n = useI18n()
   return (
     <div data-component="mobile-filter-sheet" role="presentation" onClick={props.onClose}>
       <div
         data-slot="filter-sheet-panel"
         role="radiogroup"
-        aria-label={props.kind === "product" ? "Product filter" : "Date range"}
+        aria-label={props.kind === "product" ? i18n.t("home.productFilter") : i18n.t("home.dateRange")}
       >
         <Show
           when={props.kind === "product"}
@@ -508,7 +511,7 @@ function MobileFilterSheet(props: {
                     props.onRangeSelect(item)
                   }}
                 >
-                  {rangeLabels[item]}
+                  {rangeLabel(item, i18n)}
                 </button>
               )}
             </For>
@@ -526,7 +529,7 @@ function MobileFilterSheet(props: {
                   props.onProductSelect(item)
                 }}
               >
-                {item}
+                {productLabel(item, i18n)}
               </button>
             )}
           </For>
@@ -550,20 +553,23 @@ function StatsFilters(props: {
   onProductSelect: (product: UsageProduct) => void
   onRangeSelect: (range: UsageRange) => void
 }) {
+  const i18n = useI18n()
   return (
     <>
       <FilterPills
         items={products}
         selected={props.product}
-        label="Product filter"
+        label={i18n.t("home.productFilter")}
         variant="product"
+        formatLabel={(item) => productLabel(item, i18n)}
         onSelect={props.onProductSelect}
       />
       <FilterPills
         items={ranges}
         selected={props.range}
-        label="Date range"
+        label={i18n.t("home.dateRange")}
         variant="range"
+        formatLabel={(item) => rangeLabel(item, i18n)}
         onSelect={props.onRangeSelect}
       />
     </>
@@ -575,6 +581,7 @@ function FilterPills<T extends string>(props: {
   selected: T
   label: string
   variant: "product" | "range"
+  formatLabel?: (item: T) => string
   onSelect: (item: T) => void
 }) {
   return (
@@ -588,7 +595,7 @@ function FilterPills<T extends string>(props: {
             data-active={props.selected === item ? "true" : undefined}
             onClick={() => props.onSelect(item)}
           >
-            {item}
+            {props.formatLabel ? props.formatLabel(item) : item}
           </button>
         )}
       </For>
@@ -604,6 +611,7 @@ function TopModelsChart(props: {
   activeModel: string | undefined
   onActiveModelChange: (model: string | undefined) => void
 }) {
+  const i18n = useI18n()
   let chartRef: HTMLDivElement | undefined
   const [activeIndex, setActiveIndex] = createSignal<number>()
   const maxTotal = createMemo(() => getTopModelsMaxTotal(props.data))
@@ -621,7 +629,7 @@ function TopModelsChart(props: {
       data-metric={metric()}
       data-dense-labels={isDenseColumnRange(props.range) ? "true" : undefined}
       role="img"
-      aria-label={props.ariaLabel ?? "Stacked top model usage chart"}
+      aria-label={props.ariaLabel ?? i18n.t("home.stackedUsageChart")}
       style={{ "--top-models-count": props.data.length } as JSX.CSSProperties}
       onPointerLeave={(event) => {
         if (event.pointerType === "touch") return
@@ -662,7 +670,7 @@ function TopModelsChart(props: {
               data-slot="top-models-bar"
               role="button"
               tabIndex={0}
-              aria-label={`${day.date} ${formatUsageChartValue(usageTotal(day), metric())} ${usageChartTotalLabel(metric())}`}
+              aria-label={`${day.date} ${formatUsageChartValue(usageTotal(day), metric())} ${usageChartTotalLabel(metric(), i18n)}`}
               data-active={activeIndex() === dayIndex() ? "true" : undefined}
               data-muted={activeIndex() !== undefined && activeIndex() !== dayIndex() ? "true" : undefined}
               style={{ "--top-models-bar-height": `${getTopModelsBarHeight(usageTotal(day), maxTotal())}%` }}
@@ -746,7 +754,7 @@ function TopModelsChart(props: {
                     <strong>{point().date}</strong>
                     <Show when={metric() === "tokens"}>
                       <span>
-                        {formatUsageChartValue(usageTotal(point()), metric())} {usageChartTotalLabel(metric())}
+                        {formatUsageChartValue(usageTotal(point()), metric())} {usageChartTotalLabel(metric(), i18n)}
                       </span>
                     </Show>
                     <Show when={metric() === "tokens"}>
@@ -786,24 +794,25 @@ function TopModelsChart(props: {
 }
 
 function UniqueUsersSection(props: { data: StatsHomeData["users"] }) {
+  const i18n = useI18n()
   const [activeModel, setActiveModel] = createSignal<string>()
   const data = createMemo(() => props.data.Go["2M"])
 
   return (
     <section id="unique-users" data-section="unique-users">
-      <SectionBridge label="TOP MODELS" href="#top-models" />
-      <SectionTitle title="Unique Users" description="Daily unique OpenCode Go users by model." />
+      <SectionBridge label={i18n.t("nav.topModels").toUpperCase()} href="#top-models" />
+      <SectionTitle title={i18n.t("home.uniqueUsersTitle")} description={i18n.t("home.uniqueUsersDescription")} />
       <Show
         when={data().some((item) => usageTotal(item) > 0)}
         fallback={
-          <EmptyState title="No user data" description="No user-bearing model_stat rows matched this window." />
+          <EmptyState title={i18n.t("home.noUserDataTitle")} description={i18n.t("home.noUserDataDescription")} />
         }
       >
         <TopModelsChart
           data={data()}
           range="2M"
           metric="users"
-          ariaLabel="Stacked unique user chart by model"
+          ariaLabel={i18n.t("home.uniqueUsersChart")}
           activeModel={activeModel()}
           onActiveModelChange={setActiveModel}
         />
@@ -907,9 +916,9 @@ function formatUsageChartValue(value: number, metric: "tokens" | "users") {
   return formatTokens(value)
 }
 
-function usageChartTotalLabel(metric: "tokens" | "users") {
-  if (metric === "users") return "model users"
-  return "total"
+function usageChartTotalLabel(metric: "tokens" | "users", i18n: ReturnType<typeof useI18n>) {
+  if (metric === "users") return i18n.t("home.modelUsers")
+  return i18n.t("home.total")
 }
 
 function formatUsers(value: number) {
@@ -923,11 +932,12 @@ function Leaderboard(props: {
   activeModel: string | undefined
   onActiveModelChange: (model: string | undefined) => void
 }) {
+  const i18n = useI18n()
   const featured = createMemo(() => props.data.slice(0, 3))
   const compact = createMemo(() => props.data.slice(3))
 
   return (
-    <div id="leaderboard" data-component="leaderboard" role="list" aria-label="Model token leaderboard">
+    <div id="leaderboard" data-component="leaderboard" role="list" aria-label={i18n.t("chart.leaderboardAria")}>
       <div data-slot="leaderboard-featured">
         <For each={featured()}>
           {(entry) => (
@@ -953,7 +963,7 @@ function Leaderboard(props: {
           )}
         </For>
       </div>
-      <div data-slot="leaderboard-mobile" aria-label="Scrollable model token leaderboard">
+      <div data-slot="leaderboard-mobile" aria-label={i18n.t("chart.scrollableLeaderboardAria")}>
         <For each={props.data}>
           {(entry) => (
             <LeaderboardCard
@@ -975,15 +985,19 @@ function LeaderboardCard(props: {
   active: boolean
   onActiveModelChange: (model: string | undefined) => void
 }) {
+  const i18n = useI18n()
+  const language = useLanguage()
   return (
     <a
       data-component="leader-card"
       data-size={props.size}
       data-active={props.active ? "true" : undefined}
-      href={`${import.meta.env.BASE_URL}${modelSlug(props.entry.provider)}/${modelSlug(props.entry.model)}`}
+      href={language.route(
+        `${import.meta.env.BASE_URL}${modelSlug(props.entry.provider)}/${modelSlug(props.entry.model)}`,
+      )}
       role="listitem"
       tabIndex={0}
-      aria-label={`${String(props.entry.rank).padStart(2, "0")} ${props.entry.model} by ${props.entry.author}`}
+      aria-label={`${String(props.entry.rank).padStart(2, "0")} ${props.entry.model} ${i18n.t("chart.byAuthor", { author: props.entry.author })}`}
       onPointerEnter={() => props.onActiveModelChange(props.entry.model)}
       onPointerLeave={(event) => {
         if (event.pointerType === "touch") return
@@ -1009,7 +1023,7 @@ function LeaderboardCard(props: {
               data-new={props.entry.change === null ? "true" : undefined}
               data-negative={props.entry.change !== null && props.entry.change < 0 ? "true" : undefined}
             >
-              {formatChange(props.entry.change)}
+              {formatChange(props.entry.change, i18n)}
             </span>
           </div>
         </div>
@@ -1030,13 +1044,14 @@ function formatBillions(value: number) {
   return `${value}B`
 }
 
-function formatChange(value: number | null) {
-  if (value === null) return "New"
+function formatChange(value: number | null, i18n: ReturnType<typeof useI18n>) {
+  if (value === null) return i18n.t("home.new")
   if (value > 0) return `+${value}%`
   return `${value}%`
 }
 
 function MarketShareSection(props: { data: StatsHomeData["market"] }) {
+  const i18n = useI18n()
   const [range, setRange] = createSignal<UsageRange>("2M")
   const [activeIndex, setActiveIndex] = createSignal(2)
   const [activeAuthor, setActiveAuthor] = createSignal<string>()
@@ -1056,11 +1071,11 @@ function MarketShareSection(props: { data: StatsHomeData["market"] }) {
         setInspecting(false)
       }}
     >
-      <SectionBridge label="CACHE RATIO" href="#cache-ratio" />
-      <SectionTitle title="Market Share" description="Compare token share by model author." />
+      <SectionBridge label={i18n.t("nav.cacheRatio").toUpperCase()} href="#cache-ratio" />
+      <SectionTitle title={i18n.t("home.marketShareTitle")} description={i18n.t("home.marketShareDescription")} />
       <Show
         when={activeDay()}
-        fallback={<EmptyState title="No market data" description="No model_stat rows matched this range." />}
+        fallback={<EmptyState title={i18n.t("home.noMarketTitle")} description={i18n.t("home.noMarketDescription")} />}
       >
         {(day) => (
           <>
@@ -1095,13 +1110,17 @@ function MarketShareSection(props: { data: StatsHomeData["market"] }) {
       <div data-slot="market-footer">
         <p>
           <span>[*]</span>
-          <strong>{inspecting() ? formatMarketDate(activeDay()) : formatMarketRange(data())}</strong>
+          <strong>
+            {inspecting()
+              ? formatMarketDate(activeDay(), i18n.t("home.noData"))
+              : formatMarketRange(data(), i18n.t("home.noData"))}
+          </strong>
         </p>
         <div hidden>
           <FilterPills
             items={ranges}
             selected={range()}
-            label="Date range"
+            label={i18n.t("home.dateRange")}
             variant="range"
             onSelect={(item) => {
               setRange(item)
@@ -1125,6 +1144,7 @@ function MarketShare(props: {
   onActiveIndexChange: (index: number) => void
   onActiveAuthorChange: (author: string) => void
 }) {
+  const i18n = useI18n()
   let chartRef: HTMLDivElement | undefined
 
   createEffect(() => scrollDenseChartToEnd(chartRef, props.range, props.data.length))
@@ -1136,7 +1156,7 @@ function MarketShare(props: {
       data-range={props.range}
       data-dense-labels={isDenseColumnRange(props.range) ? "true" : undefined}
       role="img"
-      aria-label="Market share by model author"
+      aria-label={i18n.t("home.marketChart")}
       style={{ "--market-count": props.data.length } as JSX.CSSProperties}
     >
       <div data-slot="market-labels">
@@ -1219,6 +1239,7 @@ function MarketShareList(props: {
   activeAuthor: string | undefined
   onActiveAuthorChange: (author: string) => void
 }) {
+  const i18n = useI18n()
   return (
     <ol data-component="market-share-list">
       <For each={props.data}>
@@ -1226,7 +1247,7 @@ function MarketShareList(props: {
           <li
             role="button"
             tabIndex={0}
-            aria-label={`${item.author} ${formatTrillions(item.tokens)} ${item.share.toFixed(1)} percent`}
+            aria-label={`${item.author} ${formatTrillions(item.tokens)} ${item.share.toFixed(1)} ${i18n.t("chart.percent")}`}
             data-active={props.activeAuthor === item.author ? "true" : undefined}
             onPointerEnter={() => props.onActiveAuthorChange(item.author)}
             onFocus={() => props.onActiveAuthorChange(item.author)}
@@ -1249,6 +1270,8 @@ function MarketShareList(props: {
 }
 
 function GeoBreakdownSection(props: { data: StatsHomeData["country"] }) {
+  const i18n = useI18n()
+  const language = useLanguage()
   const [activeCountry, setActiveCountry] = createSignal<string>()
   const data = createMemo(() => props.data["2M"])
   const countryById = createMemo(
@@ -1273,11 +1296,11 @@ function GeoBreakdownSection(props: { data: StatsHomeData["country"] }) {
         setActiveCountry(undefined)
       }}
     >
-      <SectionBridge label="MARKET SHARE" href="#market-share" />
-      <SectionTitle title="Geo Breakdown" description="Tokens used by country." />
+      <SectionBridge label={i18n.t("nav.marketShare").toUpperCase()} href="#market-share" />
+      <SectionTitle title={i18n.t("home.geoTitle")} description={i18n.t("home.geoDescription")} />
       <Show
         when={data().length > 0}
-        fallback={<EmptyState title="No geo data" description="No geo_stat rows matched this range." />}
+        fallback={<EmptyState title={i18n.t("home.noGeoTitle")} description={i18n.t("home.noGeoDescription")} />}
       >
         <div data-component="geo-breakdown">
           <div data-slot="geo-map-panel">
@@ -1291,7 +1314,9 @@ function GeoBreakdownSection(props: { data: StatsHomeData["country"] }) {
               {(country) => (
                 <div data-slot="geo-active-country">
                   <span>#{String(country().rank).padStart(2, "0")}</span>
-                  <strong>{formatCountryName(country().country)}</strong>
+                  <strong>
+                    {formatCountryName(country().country, language.tag(language.locale()), i18n.t("home.unknown"))}
+                  </strong>
                   <p>
                     <b>{formatGeoTokens(country().tokens)}</b>
                     <em>{formatGeoShare(country().share)}</em>
@@ -1318,6 +1343,7 @@ function GeoWorldMap(props: {
   maxTokens: number
   onActiveCountryChange: (country: string | undefined) => void
 }) {
+  const i18n = useI18n()
   const opacityScale = createMemo(() => scaleSqrt().domain([0, props.maxTokens]).range([0.26, 0.96]).clamp(true))
   const countryOpacity = (country: CountryEntry | undefined) => {
     if (!country) return 0
@@ -1331,9 +1357,9 @@ function GeoWorldMap(props: {
       data-component="geo-world-map"
       viewBox={`0 0 ${geoMapWidth} ${geoMapHeight}`}
       role="img"
-      aria-label="World map of token usage by country"
+      aria-label={i18n.t("home.worldMap")}
     >
-      <title>Geo Breakdown map</title>
+      <title>{i18n.t("home.geoMapTitle")}</title>
       <g data-slot="geo-countries">
         <For each={worldCountryPaths}>
           {(country) => {
@@ -1403,6 +1429,8 @@ function GeoCountryList(props: {
   maxTokens: number
   onActiveCountryChange: (country: string | undefined) => void
 }) {
+  const i18n = useI18n()
+  const language = useLanguage()
   const opacityScale = createMemo(() => scaleSqrt().domain([0, props.maxTokens]).range([0.26, 0.96]).clamp(true))
 
   return (
@@ -1414,16 +1442,16 @@ function GeoCountryList(props: {
               type="button"
               data-active={props.activeCountry === country.country ? "true" : undefined}
               style={{ "--geo-row-opacity": String(opacityScale()(country.tokens)) } as JSX.CSSProperties}
-              aria-label={`${formatCountryName(country.country)} ${formatGeoTokens(country.tokens)} ${formatGeoShare(
-                country.share,
-              )}`}
+              aria-label={`${formatCountryName(country.country, language.tag(language.locale()), i18n.t("home.unknown"))} ${formatGeoTokens(country.tokens)} ${formatGeoShare(country.share)}`}
               onClick={() => props.onActiveCountryChange(country.country)}
               onPointerEnter={() => props.onActiveCountryChange(country.country)}
               onFocus={() => props.onActiveCountryChange(country.country)}
             >
               <span>{String(country.rank).padStart(2, "0")}</span>
               <i />
-              <strong>{formatCountryName(country.country)}</strong>
+              <strong>
+                {formatCountryName(country.country, language.tag(language.locale()), i18n.t("home.unknown"))}
+              </strong>
               <em>{formatGeoTokens(country.tokens)}</em>
               <b>{formatGeoShare(country.share)}</b>
             </button>
@@ -1446,11 +1474,11 @@ function geoCountryMarker(country: (typeof worldCountries.features)[number]) {
   return { x, y }
 }
 
-function formatCountryName(country: string) {
+function formatCountryName(country: string, locale: string, unknown: string) {
   const code = country.toUpperCase()
-  if (code === "ZZ") return "Unknown"
+  if (code === "ZZ") return unknown
   if (!countryNumericId(code)) return code
-  return countryDisplayNames.of(code) ?? code
+  return new Intl.DisplayNames([locale], { type: "region" }).of(code) ?? code
 }
 
 function formatGeoTokens(value: number) {
@@ -1516,15 +1544,15 @@ function formatTrillions(value: number) {
   return `${value.toFixed(value >= 10 ? 0 : 1)}T`
 }
 
-function formatMarketDate(day: MarketDay | undefined) {
-  if (!day) return "No data"
+function formatMarketDate(day: MarketDay | undefined, fallback: string) {
+  if (!day) return fallback
   return formatMarketDateLabel(day.date)
 }
 
-function formatMarketRange(data: MarketDay[]) {
+function formatMarketRange(data: MarketDay[], fallback: string) {
   const first = data[0]?.date
   const last = data[data.length - 1]?.date
-  if (!first || !last) return "No data"
+  if (!first || !last) return fallback
   const start = marketDateParts(first).start
   const end = marketDateParts(last).end
   if (start === end) return formatMarketDateLabel(start)
@@ -1544,6 +1572,7 @@ function marketDateParts(label: string) {
 }
 
 function TokenCostSection(props: { data: StatsHomeData["tokenCost"]; catalog: ModelCatalog | null }) {
+  const i18n = useI18n()
   const [product, setProduct] = createSignal<TokenProduct>("Go")
   const [activeIndex, setActiveIndex] = createSignal(2)
   const data = createMemo(() => priceTokenCostFromCatalog(props.data[product()], props.catalog))
@@ -1552,12 +1581,12 @@ function TokenCostSection(props: { data: StatsHomeData["tokenCost"]; catalog: Mo
 
   return (
     <section id="token-cost" data-section="token-cost">
-      <SectionBridge label="SESSION COST" href="#session-cost" />
-      <SectionTitle title="Token Cost" description="Price per 1M tokens." />
+      <SectionBridge label={i18n.t("nav.sessionCost").toUpperCase()} href="#session-cost" />
+      <SectionTitle title={i18n.t("home.tokenCostTitle")} description={i18n.t("home.tokenCostDescription")} />
       <Show
         when={visible().length > 0}
         fallback={
-          <EmptyState title="No token cost data" description="No cost-bearing model_stat rows matched this product." />
+          <EmptyState title={i18n.t("home.noTokenCostTitle")} description={i18n.t("home.noTokenCostDescription")} />
         }
       >
         <TokenCostChart data={visible()} activeIndex={selectedIndex()} onActiveIndexChange={setActiveIndex} />
@@ -1566,8 +1595,9 @@ function TokenCostSection(props: { data: StatsHomeData["tokenCost"]; catalog: Mo
         <FilterPills
           items={tokenProducts}
           selected={product()}
-          label="Product filter"
+          label={i18n.t("home.productFilter")}
           variant="product"
+          formatLabel={(item) => productLabel(item, i18n)}
           onSelect={setProduct}
         />
         <LiveIndicator />
@@ -1581,6 +1611,7 @@ function TokenCostChart(props: {
   activeIndex: number
   onActiveIndexChange: (index: number) => void
 }) {
+  const i18n = useI18n()
   const max = createMemo(() => Math.max(0, ...props.data.map((item) => item.total)) || 1)
   const active = createMemo(() => props.data[props.activeIndex] ?? props.data[0])
 
@@ -1605,15 +1636,15 @@ function TokenCostChart(props: {
         {(item) => (
           <div data-component="token-tooltip" style={{ top: `${props.activeIndex * 36 + 2}px` }}>
             <p>
-              <span>Input</span>
+              <span>{i18n.t("chart.input")}</span>
               <strong>{formatDollars(item().input)}</strong>
             </p>
             <p>
-              <span>Output</span>
+              <span>{i18n.t("chart.output")}</span>
               <strong>{formatDollars(item().output)}</strong>
             </p>
             <p>
-              <span>Cached</span>
+              <span>{i18n.t("chart.cached")}</span>
               <strong>{formatDollars(item().cached)}</strong>
             </p>
           </div>
@@ -1624,6 +1655,7 @@ function TokenCostChart(props: {
 }
 
 function CacheRatioSection(props: { data: StatsHomeData["cacheRatio"] }) {
+  const i18n = useI18n()
   const [product, setProduct] = createSignal<TokenProduct>("Go")
   const [activeIndex, setActiveIndex] = createSignal(2)
   const data = createMemo(() => props.data[product()])
@@ -1632,13 +1664,11 @@ function CacheRatioSection(props: { data: StatsHomeData["cacheRatio"] }) {
 
   return (
     <section id="cache-ratio" data-section="cache-ratio">
-      <SectionBridge label="TOKEN COST" href="#token-cost" />
-      <SectionTitle title="Cache Ratio" description="Share of input tokens served from cache." />
+      <SectionBridge label={i18n.t("nav.tokenCost").toUpperCase()} href="#token-cost" />
+      <SectionTitle title={i18n.t("home.cacheRatioTitle")} description={i18n.t("home.cacheRatioDescription")} />
       <Show
         when={visible().length > 0}
-        fallback={
-          <EmptyState title="No cache ratio data" description="No input-token model_stat rows matched this product." />
-        }
+        fallback={<EmptyState title={i18n.t("home.noCacheTitle")} description={i18n.t("home.noCacheDescription")} />}
       >
         <CacheRatioChart data={visible()} activeIndex={selectedIndex()} onActiveIndexChange={setActiveIndex} />
       </Show>
@@ -1646,8 +1676,9 @@ function CacheRatioSection(props: { data: StatsHomeData["cacheRatio"] }) {
         <FilterPills
           items={tokenProducts}
           selected={product()}
-          label="Product filter"
+          label={i18n.t("home.productFilter")}
           variant="product"
+          formatLabel={(item) => productLabel(item, i18n)}
           onSelect={setProduct}
         />
         <LiveIndicator />
@@ -1661,13 +1692,14 @@ function CacheRatioChart(props: {
   activeIndex: number
   onActiveIndexChange: (index: number) => void
 }) {
+  const i18n = useI18n()
   const active = createMemo(() => props.data[props.activeIndex] ?? props.data[0])
 
   return (
     <div data-component="cache-ratio" data-variant="marker">
       <div data-slot="cache-ratio-heading" aria-hidden="true">
-        <strong>Ratio</strong>
-        <span>Model</span>
+        <strong>{i18n.t("chart.ratio")}</strong>
+        <span>{i18n.t("chart.model")}</span>
         <b>0-100%</b>
       </div>
       <div data-slot="cache-ratio-rows">
@@ -1695,15 +1727,15 @@ function CacheRatioChart(props: {
             style={{ top: `${props.activeIndex * 36 + 28}px` }}
           >
             <p>
-              <span>Cache Ratio</span>
+              <span>{i18n.t("chart.cacheRatio")}</span>
               <strong>{formatRatio(item().ratio)}</strong>
             </p>
             <p>
-              <span>Cached</span>
+              <span>{i18n.t("chart.cached")}</span>
               <strong>{formatBillions(item().cached)}</strong>
             </p>
             <p>
-              <span>Uncached</span>
+              <span>{i18n.t("chart.uncached")}</span>
               <strong>{formatBillions(item().uncached)}</strong>
             </p>
           </div>
@@ -1749,6 +1781,7 @@ function MetricBar(props: { value: number; max: number; active: boolean }) {
 }
 
 function SessionCostSection(props: { data: StatsHomeData["sessionCost"] }) {
+  const i18n = useI18n()
   const [product, setProduct] = createSignal<TokenProduct>("Go")
   const [activeIndex, setActiveIndex] = createSignal(2)
   const data = createMemo(() => props.data[product()])
@@ -1757,15 +1790,12 @@ function SessionCostSection(props: { data: StatsHomeData["sessionCost"] }) {
 
   return (
     <section id="session-cost" data-section="session-cost">
-      <SectionBridge label="TOP MODELS" href="#top-models" />
-      <SectionTitle title="Session Cost" description="Average cost per session." />
+      <SectionBridge label={i18n.t("nav.topModels").toUpperCase()} href="#top-models" />
+      <SectionTitle title={i18n.t("home.sessionCostTitle")} description={i18n.t("home.sessionCostDescription")} />
       <Show
         when={visible().length > 0}
         fallback={
-          <EmptyState
-            title="No session cost data"
-            description="No session-bearing model_stat rows matched this product."
-          />
+          <EmptyState title={i18n.t("home.noSessionCostTitle")} description={i18n.t("home.noSessionCostDescription")} />
         }
       >
         <SessionCostChart data={visible()} activeIndex={selectedIndex()} onActiveIndexChange={setActiveIndex} />
@@ -1774,8 +1804,9 @@ function SessionCostSection(props: { data: StatsHomeData["sessionCost"] }) {
         <FilterPills
           items={tokenProducts}
           selected={product()}
-          label="Product filter"
+          label={i18n.t("home.productFilter")}
           variant="product"
+          formatLabel={(item) => productLabel(item, i18n)}
           onSelect={setProduct}
         />
         <LiveIndicator />
@@ -1789,6 +1820,7 @@ function SessionCostChart(props: {
   activeIndex: number
   onActiveIndexChange: (index: number) => void
 }) {
+  const i18n = useI18n()
   const maxCost = createMemo(() => Math.max(0, ...props.data.map((item) => item.cost)) || 1)
   const maxTokens = createMemo(() => Math.max(0, ...props.data.map((item) => item.tokens)) || 1)
   const active = createMemo(() => props.data[props.activeIndex] ?? props.data[0])
@@ -1798,8 +1830,8 @@ function SessionCostChart(props: {
       <div data-slot="session-heading">
         <strong aria-hidden="true" />
         <span aria-hidden="true" />
-        <p>COST / SESSION</p>
-        <p>TOKENS / SESSION</p>
+        <p>{i18n.t("chart.costPerSession")}</p>
+        <p>{i18n.t("chart.tokensPerSession")}</p>
       </div>
       <For each={props.data}>
         {(item, index) => (
@@ -1826,11 +1858,11 @@ function SessionCostChart(props: {
             style={{ top: `${props.activeIndex * 36 + 28}px` }}
           >
             <p>
-              <span>Cost/Session</span>
+              <span>{i18n.t("chart.costSession")}</span>
               <strong>{formatSessionCost(item().cost)}</strong>
             </p>
             <p>
-              <span>Tokens/Session</span>
+              <span>{i18n.t("chart.tokensSession")}</span>
               <strong>{formatTokenCount(item().tokens)}</strong>
             </p>
           </div>
@@ -1841,7 +1873,8 @@ function SessionCostChart(props: {
 }
 
 function LiveIndicator() {
-  return <span data-component="live-filter">Live</span>
+  const i18n = useI18n()
+  return <span data-component="live-filter">{i18n.t("chart.live")}</span>
 }
 
 function formatTokenCount(value: number) {

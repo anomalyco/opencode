@@ -476,15 +476,19 @@ export const defaultLayer = layer.pipe(
 
 export const use = serviceUse(Service)
 
-export const node = LayerNode.make(layer, [
-  FSUtil.node,
-  AppProcess.node,
-  CrossSpawnSpawner.node,
-  ProjectV2.node,
-  ProjectDirectories.node,
-  EventV2Bridge.node,
-  RuntimeFlags.node,
-  Database.node,
-])
+export const node = LayerNode.make({
+  service: Service,
+  layer: layer,
+  deps: [
+    FSUtil.node,
+    AppProcess.node,
+    CrossSpawnSpawner.node,
+    ProjectV2.node,
+    ProjectDirectories.node,
+    EventV2Bridge.node,
+    RuntimeFlags.node,
+    Database.node,
+  ],
+})
 
 export * as Project from "./project"

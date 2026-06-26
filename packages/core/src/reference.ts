@@ -65,8 +65,8 @@ export const layer = Layer.effect(
                 new Info({
                   name,
                   path: source.path,
-                  description: source.description,
-                  hidden: source.hidden,
+                  ...(source.description === undefined ? {} : { description: source.description }),
+                  ...(source.hidden === undefined ? {} : { hidden: source.hidden }),
                   source,
                 }),
               )
@@ -89,8 +89,8 @@ export const layer = Layer.effect(
               new Info({
                 name,
                 path: AbsolutePath.make(target),
-                description: source.description,
-                hidden: source.hidden,
+                ...(source.description === undefined ? {} : { description: source.description }),
+                ...(source.hidden === undefined ? {} : { hidden: source.hidden }),
                 source,
               }),
             )

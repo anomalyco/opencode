@@ -1,6 +1,7 @@
 export * as ProjectCopy from "./project-copy"
 
 import { Schema } from "effect"
+import { optional } from "./schema"
 import { ProjectID } from "./project-id"
 import { AbsolutePath } from "./schema"
 
@@ -12,18 +13,18 @@ export const CreateInput = Schema.Struct({
   strategy: StrategyID,
   sourceDirectory: AbsolutePath,
   directory: AbsolutePath,
-  name: Schema.optional(Schema.String),
+  name: optional(Schema.String),
 }).annotate({ identifier: "ProjectCopy.CreateInput" })
-export type CreateInput = typeof CreateInput.Type
+export interface CreateInput extends Schema.Schema.Type<typeof CreateInput> {}
 
 export const RemoveInput = Schema.Struct({
   projectID: ProjectID,
   directory: AbsolutePath,
   force: Schema.Boolean,
 }).annotate({ identifier: "ProjectCopy.RemoveInput" })
-export type RemoveInput = typeof RemoveInput.Type
+export interface RemoveInput extends Schema.Schema.Type<typeof RemoveInput> {}
 
 export const Copy = Schema.Struct({
   directory: AbsolutePath,
 }).annotate({ identifier: "ProjectCopy.Copy" })
-export type Copy = typeof Copy.Type
+export interface Copy extends Schema.Schema.Type<typeof Copy> {}
