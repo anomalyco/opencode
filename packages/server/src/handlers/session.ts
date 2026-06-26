@@ -12,14 +12,12 @@ import {
   UnknownError,
 } from "@opencode-ai/protocol/errors"
 import { AbsolutePath } from "@opencode-ai/core/schema"
-import { SessionExecution } from "@opencode-ai/core/session/execution"
 
 const DefaultSessionsLimit = 50
 
 export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handlers) =>
   Effect.gen(function* () {
     const session = yield* SessionV2.Service
-    const execution = yield* SessionExecution.Service
 
     return handlers
       .handle(
@@ -83,7 +81,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
         Effect.fn(function* () {
           return {
             data: Object.fromEntries(
-              Array.from(yield* execution.active, (sessionID) => [sessionID, { type: "running" as const }]),
+              Array.from(yield* session.active, (sessionID) => [sessionID, { type: "running" as const }]),
             ),
           }
         }),
