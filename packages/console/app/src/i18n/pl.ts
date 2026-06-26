@@ -107,7 +107,7 @@ export const dict = {
   "home.banner.downloadBetaNow": "Pobierz betę wersji desktopowej",
 
   "home.hero.title": "Open source'owy agent AI do kodowania",
-  "home.hero.subtitle.a": "Korzystaj z darmowych modeli w pakiecie lub podłącz dowolny model dowolnego dostawcy,",
+  "home.hero.subtitle.a": "Darmowe modele w pakiecie lub model dowolnego dostawcy,",
   "home.hero.subtitle.b": "w tym Claude, GPT, Gemini i inne.",
 
   "home.install.ariaLabel": "Opcje instalacji",
