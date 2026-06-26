@@ -1,5 +1,7 @@
 export * as PluginInternal from "./internal"
 
+import { makeLocationNode } from "../effect/node"
+import { httpClient } from "../effect/layer-node-platform"
 import type { PluginContext } from "@opencode-ai/plugin/v2/effect"
 import { Effect, Layer, Scope } from "effect"
 import { AgentV2 } from "../agent"
@@ -57,7 +59,7 @@ export function define<R>(plugin: Plugin<R>) {
   return plugin
 }
 
-export const locationLayer = Layer.effectDiscard(
+const layer = Layer.effectDiscard(
   Effect.gen(function* () {
     const catalog = yield* Catalog.Service
     const commands = yield* CommandV2.Service
@@ -117,9 +119,34 @@ export const locationLayer = Layer.effectDiscard(
       yield* add(VariantPlugin.Plugin)
     }).pipe(Effect.withSpan("PluginInternal.boot"), Effect.forkScoped({ startImmediately: true }))
   }),
-).pipe(
+)
+
+export const locationLayer = layer.pipe(
   Layer.provideMerge(PluginV2.locationLayer),
   Layer.provideMerge(Config.locationLayer),
   Layer.provideMerge(FileSystem.locationLayer),
   Layer.provideMerge(FetchHttpClient.layer),
 )
+
+export const node = makeLocationNode({
+  name: "plugin-internal",
+  layer,
+  deps: [
+    Catalog.node,
+    CommandV2.node,
+    PluginV2.node,
+    Integration.node,
+    AgentV2.node,
+    Config.node,
+    Location.node,
+    ModelsDev.node,
+    Npm.node,
+    EventV2.node,
+    FSUtil.node,
+    FileSystem.node,
+    Global.node,
+    httpClient,
+    SkillV2.node,
+    Reference.node,
+  ],
+})

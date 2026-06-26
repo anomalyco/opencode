@@ -1,6 +1,7 @@
 import { test } from "bun:test"
 import { Context, Effect, Layer } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { LayerNodeTree } from "@opencode-ai/core/effect/layer-node"
 
 class A extends Context.Service<A, {}>()("test/LayerNodeA") {}
 class B extends Context.Service<B, {}>()("test/LayerNodeB") {}
@@ -12,8 +13,10 @@ class OtherError {
   readonly _tag = "OtherError"
 }
 
-const tiers = LayerNode.tiers(["app"])
-const make = tiers.make("app")
+const tags = LayerNode.tags({ app: [] })
+const make = tags.make("app")
+const build = <A, E>(root: LayerNode.Node<A, E, any>) =>
+  LayerNodeTree.compile(LayerNodeTree.separate(root, tags).app) as Layer.Layer<A, E>
 const aLayer = Layer.succeed(A, A.of({}))
 const bLayer = Layer.effect(B, Effect.as(A, B.of({})))
 const cLayer = Layer.effect(
@@ -30,6 +33,8 @@ const b = make({ service: B, layer: bLayer, deps: [a] })
 const c = make({ service: C, layer: cLayer, deps: [a, b] })
 const failing = make({ service: A, layer: failingA, deps: [] })
 const dependent = make({ service: B, layer: bLayer, deps: [failing] })
+const inputA = LayerNode.unbound(A, tags.values.app)
+const inputDependent = make({ service: B, layer: bLayer, deps: [inputA] })
 
 make({ name: "manual-a", layer: aLayer, deps: [] })
 
@@ -45,8 +50,8 @@ make({ service: B, layer: bLayer, deps: [] })
 // @ts-expect-error C requires A and B
 make({ service: C, layer: cLayer, deps: [a] })
 
-const closed = LayerNode.buildLayer(c, { tiers })
-const closedWithError = LayerNode.buildLayer(dependent, { tiers })
+const closed = build(LayerNode.group([c]))
+const closedWithError = build(LayerNode.group([dependent]))
 const checkClosed: Layer.Layer<C, never, never> = closed
 const checkError: Layer.Layer<B, LayerError, never> = closedWithError
 void checkClosed

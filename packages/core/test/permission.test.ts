@@ -11,7 +11,7 @@ import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
-import { LocationServiceMap } from "@opencode-ai/core/location-layer"
+import { locationServiceMapLayer } from "@opencode-ai/core/location-layer"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionStore } from "@opencode-ai/core/session/store"
@@ -24,7 +24,7 @@ const current = Layer.succeed(
   Location.Service.of(location({ directory: AbsolutePath.make("/project") })),
 )
 const sessions = SessionV2.layer.pipe(
-  Layer.provide(LocationServiceMap.layer),
+  Layer.provide(locationServiceMapLayer),
   Layer.provide(EventV2.defaultLayer),
   Layer.provide(Database.defaultLayer),
   Layer.provide(SessionStore.defaultLayer),

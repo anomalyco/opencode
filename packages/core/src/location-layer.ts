@@ -1,151 +1,120 @@
 import { Effect, Layer, LayerMap } from "effect"
-import { Location } from "./location"
-import { Policy } from "./policy"
-import { Config } from "./config"
-import { PluginV2 } from "./plugin"
-import { Catalog } from "./catalog"
-import { Integration } from "./integration"
-import { CommandV2 } from "./command"
 import { AgentV2 } from "./agent"
-import { PluginInternal } from "./plugin/internal"
-import { Project } from "./project"
-import { ProjectCopy } from "./project/copy"
-import { ProjectDirectories } from "./project/directories"
-import { EventV2 } from "./event"
-import { Credential } from "./credential"
-import { Npm } from "./npm"
-import { ModelsDev } from "./models-dev"
-import { FSUtil } from "./fs-util"
-import { Git } from "./git"
-import { Global } from "./global"
-import { Database } from "./database/database"
-import { PermissionV2 } from "./permission"
-import { PermissionSaved } from "./permission/saved"
-import { FileSystem } from "./filesystem"
-import { Ripgrep } from "./ripgrep"
-import { Watcher } from "./filesystem/watcher"
-import { LocationMutation } from "./location-mutation"
+import { AISDK } from "./aisdk"
+import { Catalog } from "./catalog"
+import { CommandV2 } from "./command"
+import { Config } from "./config"
+import { LayerNode, LayerNodeTree } from "./effect/layer-node"
+import { Node } from "./effect/node"
 import { FileMutation } from "./file-mutation"
+import { FileSystem } from "./filesystem"
+import { FileSystemSearch } from "./filesystem/search"
+import { Watcher } from "./filesystem/watcher"
+import { Image } from "./image"
+import { Integration } from "./integration"
+import { Location } from "./location"
+import { LocationMutation } from "./location-mutation"
+import { LocationServiceMap } from "./location-service-map"
+import { PermissionV2 } from "./permission"
+import { PluginV2 } from "./plugin"
+import { PluginInternal } from "./plugin/internal"
+import { Policy } from "./policy"
+import { ProjectCopy } from "./project/copy"
+import { Pty } from "./pty"
+import { QuestionV2 } from "./question"
 import { Reference } from "./reference"
 import { ReferenceGuidance } from "./reference/guidance"
-import { RepositoryCache } from "./repository-cache"
-import { Pty } from "./pty"
-import { SkillV2 } from "./skill"
-import { SkillGuidance } from "./skill/guidance"
-import { BuiltInTools } from "./tool/builtins"
-import { Image } from "./image"
-import { ToolRegistry } from "./tool/registry"
-import { ApplicationTools } from "./tool/application-tools"
-import { ToolOutputStore } from "./tool-output-store"
-import { AppProcess } from "./process"
-import { SessionStore } from "./session/store"
-import { SessionTodo } from "./session/todo"
-import { QuestionV2 } from "./question"
-import { LLMClient } from "@opencode-ai/llm"
-import { RequestExecutor } from "@opencode-ai/llm/route"
 import * as SessionRunnerLLM from "./session/runner/llm"
 import { SessionRunnerModel } from "./session/runner/model"
-import { SystemContextBuiltIns } from "./system-context/builtins"
-import { FetchHttpClient } from "effect/unstable/http"
+import { SessionTodo } from "./session/todo"
+import { SkillV2 } from "./skill"
+import { SkillGuidance } from "./skill/guidance"
 import { Snapshot } from "./snapshot"
+import { SystemContextBuiltIns } from "./system-context/builtins"
+import { SystemContextRegistry } from "./system-context/registry"
+import { BuiltInTools } from "./tool/builtins"
+import { ReadToolFileSystem } from "./tool/read-filesystem"
+import { ToolRegistry } from "./tool/registry"
+import { ToolOutputStore } from "./tool-output-store"
 
-export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("@opencode/example/LocationServiceMap", {
-  lookup: (ref: Location.Ref) => {
-    const boot = Layer.effectDiscard(
-      Effect.logInfo("booting location services", { directory: ref.directory, workspaceID: ref.workspaceID }),
-    )
-    const location = Location.layer(ref)
-    const systemContext = SystemContextBuiltIns.locationLayer
-    const base = Layer.mergeAll(
-      location,
-      Policy.locationLayer,
-      Config.locationLayer,
-      Reference.locationLayer,
-      PluginV2.locationLayer,
-      Catalog.locationLayer,
-      Integration.locationLayer,
-      CommandV2.locationLayer,
-      AgentV2.locationLayer,
-      PluginInternal.locationLayer,
-      ProjectCopy.locationLayer,
-      FileSystem.locationLayer,
-      Watcher.locationLayer,
-      Pty.locationLayer,
-      SkillV2.locationLayer,
-      systemContext,
-      LocationMutation.locationLayer.pipe(Layer.orDie),
-    ).pipe(Layer.provideMerge(location))
-    const resources = ToolOutputStore.layer.pipe(Layer.provide(base))
-    const permissionsAndTools = ToolRegistry.layer.pipe(
-      Layer.provideMerge(PermissionV2.locationLayer),
-      Layer.provide(resources),
-      Layer.provide(base),
-    )
-    const services = Layer.mergeAll(base, resources, permissionsAndTools)
-    const image = Image.layer.pipe(Layer.provide(services))
-    const mutation = FileMutation.locationLayer.pipe(Layer.provide(services))
-    const skillGuidance = SkillGuidance.locationLayer.pipe(Layer.provide(services))
-    const referenceGuidance = ReferenceGuidance.locationLayer.pipe(Layer.provide(services))
-    const todos = SessionTodo.layer.pipe(Layer.provide(services))
-    const questions = QuestionV2.locationLayer.pipe(Layer.provide(services))
-    const builtInTools = BuiltInTools.locationLayer.pipe(
-      Layer.provide(services),
-      Layer.provide(mutation),
-      Layer.provide(resources),
-      Layer.provide(todos),
-      Layer.provide(questions),
-      Layer.provide(image),
-    )
-    const model = SessionRunnerModel.locationLayer.pipe(Layer.provide(services))
-    const snapshot = Snapshot.locationLayer.pipe(Layer.provide(services))
-    const runner = SessionRunnerLLM.defaultLayer.pipe(
-      Layer.provide(services),
-      Layer.provide(model),
-      Layer.provide(skillGuidance),
-      Layer.provide(referenceGuidance),
-      Layer.provide(snapshot),
-    )
+export { LocationServiceMap, node } from "./location-service-map"
 
-    // Kick off a background project copy refresh to update locations now that we
-    // have a location
-    const projectCopyRefresh = Layer.effectDiscard(ProjectCopy.refreshAfterBoot).pipe(Layer.provide(services))
+export const locationServices = LayerNode.group([
+  Location.node,
+  Policy.node,
+  Config.node,
+  AgentV2.node,
+  CommandV2.node,
+  Reference.node,
+  Integration.node,
+  Catalog.node,
+  AISDK.node,
+  PluginV2.node,
+  PluginInternal.node,
+  ProjectCopy.node,
+  ProjectCopy.refreshNode,
+  FileSystemSearch.node,
+  FileSystem.node,
+  Watcher.node,
+  Pty.node,
+  SkillV2.node,
+  SystemContextRegistry.node,
+  SystemContextBuiltIns.node,
+  LocationMutation.node,
+  FileMutation.node,
+  PermissionV2.node,
+  ToolOutputStore.node,
+  ToolRegistry.node,
+  ToolRegistry.toolsNode,
+  Image.node,
+  SkillGuidance.node,
+  ReferenceGuidance.node,
+  SessionTodo.node,
+  QuestionV2.node,
+  ReadToolFileSystem.node,
+  BuiltInTools.node,
+  SessionRunnerModel.node,
+  Snapshot.node,
+  SessionRunnerLLM.node,
+])
 
-    return Layer.mergeAll(
-      boot,
-      services,
-      image,
-      mutation,
-      resources,
-      todos,
-      questions,
-      model,
-      snapshot,
-      runner,
-      builtInTools,
-      referenceGuidance,
-      projectCopyRefresh,
-    ).pipe(Layer.fresh)
-  },
-  idleTimeToLive: "60 minutes",
-  dependencies: [
-    Project.defaultLayer,
-    EventV2.defaultLayer,
-    Credential.defaultLayer,
-    Npm.defaultLayer,
-    ModelsDev.defaultLayer,
-    FSUtil.defaultLayer,
-    Git.defaultLayer,
-    AppProcess.defaultLayer,
-    Global.defaultLayer,
-    Ripgrep.defaultLayer,
-    Database.defaultLayer,
-    ProjectDirectories.defaultLayer,
-    SessionStore.layer.pipe(Layer.provide(Database.defaultLayer)),
-    PermissionSaved.defaultLayer,
-    RepositoryCache.defaultLayer,
-    LLMClient.layer.pipe(Layer.provide(RequestExecutor.defaultLayer)),
-    FetchHttpClient.layer,
-    ToolOutputStore.defaultCleanupLayer,
-    ApplicationTools.layer,
-  ],
-}) {}
+export type LocationServices = LayerNode.Output<typeof locationServices>
+export type LocationError = LayerNode.Error<typeof locationServices>
+
+export function buildLocationServiceMap(
+  location: LayerNode.Node<LocationServices, LocationError, any>,
+  replacements?: ReadonlyMap<Layer.Any, Layer.Any>,
+): Layer.Layer<LocationServiceMap, LocationError> {
+  return Layer.effect(
+    LocationServiceMap,
+    LayerMap.make(
+      (ref: Location.Ref) => {
+        const layer = LayerNodeTree.compile(
+          LayerNodeTree.bind(location, Location.node, Location.boundNode(ref)),
+          replacements,
+        ) as Layer.Layer<LocationServices, LocationError>
+        return layer.pipe(
+          Layer.fresh,
+          Layer.tap(() =>
+            Effect.logInfo("booting location services", {
+              directory: ref.directory,
+              workspaceID: ref.workspaceID,
+            }),
+          ),
+        )
+      },
+      { idleTimeToLive: "60 minutes" },
+    ),
+  )
+}
+
+// This is temporary for backwards compatibility
+const separatedLocationServices = LayerNodeTree.separate(locationServices, Node.tags)
+const hoistedLocationServices = LayerNodeTree.hoist(
+  separatedLocationServices.location,
+  Node.tags.values.global,
+)
+
+export const locationServiceMapLayer = buildLocationServiceMap(
+  hoistedLocationServices.node as LayerNode.Node<LocationServices, LocationError, any>,
+).pipe(Layer.provide(LayerNodeTree.compile(hoistedLocationServices.hoisted))) as Layer.Layer<LocationServiceMap>

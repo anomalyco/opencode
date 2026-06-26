@@ -1,6 +1,6 @@
 import { test } from "bun:test"
 import { Context, Effect, Layer } from "effect"
-import { makeGlobalNode, makeLocationNode } from "@opencode-ai/core/effect/scoped-node"
+import { makeGlobalNode, makeLocationNode } from "@opencode-ai/core/effect/node"
 
 class A extends Context.Service<A, {}>()("test/ScopedA") {}
 class B extends Context.Service<B, {}>()("test/ScopedB") {}

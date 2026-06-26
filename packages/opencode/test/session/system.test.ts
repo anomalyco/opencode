@@ -6,7 +6,7 @@ import { Skill } from "../../src/skill"
 import { Permission } from "../../src/permission"
 import { SystemPrompt } from "../../src/session/system"
 import { MCP } from "../../src/mcp"
-import { LocationServiceMap } from "@opencode-ai/core/location-layer"
+import { LocationServiceMap, locationServiceMapLayer } from "@opencode-ai/core/location-layer"
 import { testEffect } from "../lib/effect"
 
 const skills: Skill.Info[] = [
@@ -44,7 +44,7 @@ const build: Agent.Info = {
 
 const it = testEffect(
   SystemPrompt.layer.pipe(
-    Layer.provide(LocationServiceMap.layer),
+    Layer.provide(locationServiceMapLayer),
     Layer.provide(
       Layer.mock(MCP.Service, {
         instructions: () =>

@@ -6,7 +6,7 @@ import { Tool } from "@opencode-ai/core/tool/tool"
 import { define } from "@opencode-ai/plugin/v2/effect"
 import { AgentV2 } from "@opencode-ai/core/agent"
 import { Catalog } from "@opencode-ai/core/catalog"
-import { LocationServiceMap } from "@opencode-ai/core/location-layer"
+import { LocationServiceMap, locationServiceMapLayer } from "@opencode-ai/core/location-layer"
 import { Location } from "@opencode-ai/core/location"
 import { PluginV2 } from "@opencode-ai/core/plugin"
 import { ModelV2 } from "@opencode-ai/core/model"
@@ -34,7 +34,7 @@ const applicationTools = ApplicationTools.layer
 const it = testEffect(
   Layer.merge(
     Layer.mergeAll(applicationTools, Database.defaultLayer, EventV2.defaultLayer),
-    LocationServiceMap.layer.pipe(
+    locationServiceMapLayer.pipe(
       Layer.provide(applicationTools),
       Layer.provide(
         Layer.mergeAll(

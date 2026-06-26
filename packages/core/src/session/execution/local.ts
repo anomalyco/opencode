@@ -1,5 +1,6 @@
 import { Cause, Effect, Layer } from "effect"
-import { LocationServiceMap } from "../../location-layer"
+import { LocationServiceMap, node as locationServiceMapNode } from "../../location-service-map"
+import { makeGlobalNode } from "../../effect/node"
 import { SessionRunCoordinator } from "../run-coordinator"
 import { SessionRunner } from "../runner"
 import { SessionSchema } from "../schema"
@@ -37,3 +38,11 @@ export const layer = Layer.effect(
 )
 
 export const defaultLayer = layer.pipe(Layer.provide(SessionStore.defaultLayer))
+
+export const node = makeGlobalNode({
+  service: SessionExecution.Service,
+  layer,
+  deps: [SessionStore.node, locationServiceMapNode],
+})
+
+export * as SessionExecutionLocal from "./local"

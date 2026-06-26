@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { FSUtil } from "@opencode-ai/core/fs-util"
-import { LocationServiceMap } from "@opencode-ai/core/location-layer"
+import { LocationServiceMap, locationServiceMapLayer } from "@opencode-ai/core/location-layer"
 import { Effect, Layer } from "effect"
 import { FetchHttpClient } from "effect/unstable/http"
 import path from "path"
@@ -44,7 +44,7 @@ const agentLayer = Agent.layer.pipe(
   Layer.provide(SkillTest.empty),
   Layer.provide(provider.layer),
   Layer.provide(pluginLayer),
-  Layer.provide(LocationServiceMap.layer),
+  Layer.provide(locationServiceMapLayer),
   Layer.provide(RuntimeFlags.layer({ disableDefaultPlugins: true })),
 )
 

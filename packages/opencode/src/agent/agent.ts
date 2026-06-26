@@ -27,7 +27,7 @@ import * as OtelTracer from "@effect/opentelemetry/Tracer"
 import { AbsolutePath, type DeepMutable } from "@opencode-ai/core/schema"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
-import { LocationServiceMap } from "@opencode-ai/core/location-layer"
+import { LocationServiceMap, locationServiceMapLayer } from "@opencode-ai/core/location-layer"
 import { Reference } from "@opencode-ai/core/reference"
 import { Location } from "@opencode-ai/core/location"
 import { PluginV2 } from "@opencode-ai/core/plugin"
@@ -444,10 +444,10 @@ export const defaultLayer = layer.pipe(
   Layer.provide(Auth.defaultLayer),
   Layer.provide(Config.defaultLayer),
   Layer.provide(Skill.defaultLayer),
-  Layer.provide(LocationServiceMap.layer),
+  Layer.provide(locationServiceMapLayer),
 )
 
-const locationServiceMapNode = LayerNode.make({ service: Service, layer: LocationServiceMap.layer, deps: [] })
+const locationServiceMapNode = LayerNode.make({ service: LocationServiceMap, layer: locationServiceMapLayer, deps: [] })
 
 export const node = LayerNode.make({
   service: Service,
