@@ -114,7 +114,8 @@ const BUNDLED_PROVIDERS: Record<string, () => Promise<(opts: any) => BundledSDK>
   "@ai-sdk/google-vertex/anthropic": () =>
     import("@ai-sdk/google-vertex/anthropic").then((m) => m.createVertexAnthropic),
   "@ai-sdk/openai": () => import("@ai-sdk/openai").then((m) => m.createOpenAI),
-  "@ai-sdk/openai-compatible": () => import("@ai-sdk/openai-compatible").then((m) => m.createOpenAICompatible),
+  "@ai-sdk/openai-compatible": () =>
+    import("@opencode-ai/core/github-copilot/copilot-provider").then((m) => m.createOpenaiCompatible),
   "@openrouter/ai-sdk-provider": () => import("@openrouter/ai-sdk-provider").then((m) => m.createOpenRouter),
   "@ai-sdk/xai": () => import("@ai-sdk/xai").then((m) => m.createXai),
   "@ai-sdk/mistral": () => import("@ai-sdk/mistral").then((m) => m.createMistral),

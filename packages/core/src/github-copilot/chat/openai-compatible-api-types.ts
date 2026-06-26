@@ -27,7 +27,12 @@ export interface OpenAICompatibleUserMessage extends JsonRecord<OpenAICompatible
   content: string | Array<OpenAICompatibleContentPart>
 }
 
-export type OpenAICompatibleContentPart = OpenAICompatibleContentPartText | OpenAICompatibleContentPartImage
+export type OpenAICompatibleContentPart =
+  | OpenAICompatibleContentPartText
+  | OpenAICompatibleContentPartImage
+  | OpenAICompatibleContentPartVideo
+  | OpenAICompatibleContentPartAudio
+  | OpenAICompatibleContentPartFile
 
 export interface OpenAICompatibleContentPartImage extends JsonRecord {
   type: "image_url"
@@ -39,6 +44,21 @@ export interface OpenAICompatibleContentPartText extends JsonRecord {
   text: string
 }
 
+export interface OpenAICompatibleContentPartVideo extends JsonRecord {
+  type: "video_url"
+  video_url: { url: string }
+}
+
+export interface OpenAICompatibleContentPartAudio extends JsonRecord {
+  type: "input_audio"
+  input_audio: { data: string; format: string }
+}
+
+export interface OpenAICompatibleContentPartFile extends JsonRecord {
+  type: "file"
+  file: { filename?: string; file_data: string }
+}
+
 export interface OpenAICompatibleAssistantMessage extends JsonRecord<OpenAICompatibleMessageToolCall> {
   role: "assistant"
   content?: string | null
@@ -46,6 +66,8 @@ export interface OpenAICompatibleAssistantMessage extends JsonRecord<OpenAICompa
   // Copilot-specific reasoning fields
   reasoning_text?: string
   reasoning_opaque?: string
+  // OpenAI-compatible reasoning field for non-Copilot providers
+  reasoning_content?: string
 }
 
 export interface OpenAICompatibleMessageToolCall extends JsonRecord {

@@ -7,7 +7,21 @@ import type { OpenAICompatibleChatPrompt } from "./openai-compatible-api-types"
 import { convertToBase64 } from "@ai-sdk/provider-utils"
 
 function getOpenAIMetadata(message: { providerOptions?: SharedV3ProviderOptions }) {
-  return message?.providerOptions?.copilot ?? {}
+  const options = message?.providerOptions
+  if (!options) return {}
+  return options.copilot ?? options.openaiCompatible ?? options.openai ?? {}
+}
+
+function audioFormatFromMime(mime: string): "wav" | "mp3" | null {
+  switch (mime) {
+    case "audio/wav":
+      return "wav"
+    case "audio/mp3":
+    case "audio/mpeg":
+      return "mp3"
+    default:
+      return null
+  }
 }
 
 export function convertToOpenAICompatibleChatMessages(prompt: LanguageModelV3Prompt): OpenAICompatibleChatPrompt {
@@ -56,6 +70,51 @@ export function convertToOpenAICompatibleChatMessages(prompt: LanguageModelV3Pro
                     },
                     ...partMetadata,
                   }
+                } else if (part.mediaType.startsWith("video/")) {
+                  return {
+                    type: "video_url",
+                    video_url: {
+                      url:
+                        part.data instanceof URL
+                          ? part.data.toString()
+                          : `data:${part.mediaType};base64,${convertToBase64(part.data)}`,
+                    },
+                    ...partMetadata,
+                  }
+                } else if (part.mediaType.startsWith("audio/")) {
+                  if (part.data instanceof URL) {
+                    throw new UnsupportedFunctionalityError({
+                      functionality: "audio file parts with URLs",
+                    })
+                  }
+                  const format = audioFormatFromMime(part.mediaType)
+                  if (!format) {
+                    throw new UnsupportedFunctionalityError({
+                      functionality: `audio media type ${part.mediaType}`,
+                    })
+                  }
+                  return {
+                    type: "input_audio",
+                    input_audio: {
+                      data: convertToBase64(part.data),
+                      format,
+                    },
+                    ...partMetadata,
+                  }
+                } else if (part.mediaType === "application/pdf") {
+                  if (part.data instanceof URL) {
+                    throw new UnsupportedFunctionalityError({
+                      functionality: "PDF file parts with URLs",
+                    })
+                  }
+                  return {
+                    type: "file",
+                    file: {
+                      filename: part.filename ?? "document.pdf",
+                      file_data: `data:application/pdf;base64,${convertToBase64(part.data)}`,
+                    },
+                    ...partMetadata,
+                  }
                 } else {
                   throw new UnsupportedFunctionalityError({
                     functionality: `file part media type ${part.mediaType}`,
@@ -74,6 +133,7 @@ export function convertToOpenAICompatibleChatMessages(prompt: LanguageModelV3Pro
         let text = ""
         let reasoningText: string | undefined
         let reasoningOpaque: string | undefined
+        let reasoningCombined = ""
         const toolCalls: Array<{
           id: string
           type: "function"
@@ -95,7 +155,10 @@ export function convertToOpenAICompatibleChatMessages(prompt: LanguageModelV3Pro
               break
             }
             case "reasoning": {
-              if (part.text) reasoningText = part.text
+              if (part.text) {
+                reasoningText = part.text
+                reasoningCombined += part.text
+              }
               break
             }
             case "tool-call": {
@@ -119,6 +182,9 @@ export function convertToOpenAICompatibleChatMessages(prompt: LanguageModelV3Pro
           tool_calls: toolCalls.length > 0 ? toolCalls : undefined,
           reasoning_text: reasoningOpaque ? reasoningText : undefined,
           reasoning_opaque: reasoningOpaque,
+          ...(reasoningCombined.length > 0 && !reasoningOpaque
+            ? { reasoning_content: reasoningCombined }
+            : {}),
           ...metadata,
         })
 

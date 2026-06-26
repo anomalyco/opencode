@@ -137,6 +137,100 @@ describe("user messages", () => {
       },
     ])
   })
+
+  test("should convert video file parts to video_url", () => {
+    const videoData = Buffer.from([0, 1, 2, 3]).toString("base64")
+    const result = convertToCopilotMessages([
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "Describe this video" },
+          {
+            type: "file",
+            data: videoData,
+            mediaType: "video/mp4",
+          },
+        ],
+      },
+    ])
+
+    expect(result).toEqual([
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "Describe this video" },
+          {
+            type: "video_url",
+            video_url: { url: `data:video/mp4;base64,${videoData}` },
+          },
+        ],
+      },
+    ])
+  })
+
+  test("should convert audio file parts to input_audio", () => {
+    const audioData = Buffer.from([0, 1, 2, 3]).toString("base64")
+    const result = convertToCopilotMessages([
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "Transcribe this" },
+          {
+            type: "file",
+            data: audioData,
+            mediaType: "audio/wav",
+          },
+        ],
+      },
+    ])
+
+    expect(result).toEqual([
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "Transcribe this" },
+          {
+            type: "input_audio",
+            input_audio: { data: audioData, format: "wav" },
+          },
+        ],
+      },
+    ])
+  })
+
+  test("should convert PDF file parts to file", () => {
+    const pdfData = Buffer.from([0, 1, 2, 3]).toString("base64")
+    const result = convertToCopilotMessages([
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "Summarize this" },
+          {
+            type: "file",
+            data: pdfData,
+            mediaType: "application/pdf",
+            filename: "report.pdf",
+          },
+        ],
+      },
+    ])
+
+    expect(result).toEqual([
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "Summarize this" },
+          {
+            type: "file",
+            file: {
+              filename: "report.pdf",
+              file_data: `data:application/pdf;base64,${pdfData}`,
+            },
+          },
+        ],
+      },
+    ])
+  })
 })
 
 describe("assistant messages", () => {
@@ -383,6 +477,9 @@ describe("reasoning (copilot-specific)", () => {
       },
     ])
 
+    // When there is no Copilot-specific reasoning_opaque, the converter must
+    // not surface reasoning_text. Reasoning is still preserved for generic
+    // OpenAI-compatible providers via reasoning_content.
     expect(result).toEqual([
       {
         role: "assistant",
@@ -390,6 +487,7 @@ describe("reasoning (copilot-specific)", () => {
         tool_calls: undefined,
         reasoning_text: undefined,
         reasoning_opaque: undefined,
+        reasoning_content: "Let me think about this...",
       },
     ])
   })
