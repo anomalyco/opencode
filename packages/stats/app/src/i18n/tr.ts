@@ -1,7 +1,6 @@
 export const dict = {
   "app.title": "Yapay Zeka Model Kullanım Sıralamaları | OpenCode Data",
-  "app.description":
-    "OpenCode Go kullanımını yapay zeka modelleri genelinde keşfedin: token hacmi, sıralamalar, pazar payı, token fiyatlandırması, oturum maliyeti, önbellek oranı ve coğrafi dağılımlar.",
+  "app.description": "OpenCode Go kullanımını yapay zeka modelleri genelinde keşfedin: token hacmi, sıralamalar, pazar payı, token fiyatlandırması, oturum maliyeti, önbellek oranı ve coğrafi dağılımlar.",
   "app.unfurlAlt": "Koyu desenli arka plan üzerinde OpenCode Data logosu",
   "nav.dataHome": "Veri Ana Sayfası",
   "nav.topModels": "En İyi Modeller",
@@ -81,8 +80,7 @@ export const dict = {
   "home.updated": "Güncellendi",
   "home.noRows": "Henüz satır yok",
   "home.justNow": "az önce",
-  "home.heroCopy":
-    "Gerçek kullanımda hangi modellerin öne geçtiğini, karışımın nasıl değiştiğini ve bunun maliyet için ne anlama geldiğini görün.",
+  "home.heroCopy": "Gerçek kullanımda hangi modellerin öne geçtiğini, karışımın nasıl değiştiğini ve bunun maliyet için ne anlama geldiğini görün.",
   "home.loadingTitle": "Veriler yükleniyor",
   "home.loadingDescription": "Model toplamları okunuyor.",
   "home.usageTitle": "Kullanım",
@@ -129,15 +127,13 @@ export const dict = {
   "home.noSessionCostDescription": "Bu ürünle eşleşen oturum içeren model satırı yok.",
   "home.costSession": "Maliyet/Oturum",
   "lab.title": "{{lab}} Yapay Zeka Model Kullanımı ve Sıralamaları | OpenCode Data",
-  "lab.description":
-    "OpenCode Go'da kullanılan {{lab}} modellerini karşılaştırın: token kullanımı, model sıralamaları, bağlam pencereleri, yayın tarihleri, maliyetler ve modele özel veriler.",
+  "lab.description": "OpenCode Go'da kullanılan {{lab}} modellerini karşılaştırın: token kullanımı, model sıralamaları, bağlam pencereleri, yayın tarihleri, maliyetler ve modele özel veriler.",
   "lab.loadingTitle": "Model Laboratuvarı",
   "lab.loadingDescription": "Model kullanılabilirliği ve son OpenCode kullanımı okunuyor.",
   "lab.notFound": "Bu laboratuvarla eşleşen model yok.",
   "lab.heroPrefix": "OpenCode'da kullanılan {{count}} {{lab}} modelini keşfedin",
   "lab.heroIncluding": "{{models}} dahil",
-  "lab.heroSuffix":
-    "Son token kullanımını, bağlam pencerelerini, yayın tarihlerini ve modele özel verileri karşılaştırın.",
+  "lab.heroSuffix": "Son token kullanımını, bağlam pencerelerini, yayın tarihlerini ve modele özel verileri karşılaştırın.",
   "lab.tokensProcessed": "İşlenen Tokenlar",
   "lab.pending": "Beklemede",
   "lab.usageAfterActivity": "Kullanım, model etkinliği ulaştıktan sonra görünür",
@@ -156,8 +152,7 @@ export const dict = {
   "lab.usage": "Kullanım",
   "lab.share": "Pay",
   "model.title": "{{model}} Kullanımı, Maliyeti ve Sırası | OpenCode Data",
-  "model.description":
-    "{{model}} için OpenCode Go kullanım verilerini görüntüleyin: token hacmi, haftalık sıra, token karışımı, maliyetler, önbellek oranı, oturumlar, coğrafi dağılımlar ve benzer modeller.",
+  "model.description": "{{model}} için OpenCode Go kullanım verilerini görüntüleyin: token hacmi, haftalık sıra, token karışımı, maliyetler, önbellek oranı, oturumlar, coğrafi dağılımlar ve benzer modeller.",
   "model.loadingTitle": "Model Verileri",
   "model.loadingDescription": "Model toplamları okunuyor.",
   "model.loadingProfile": "Model profili okunuyor.",
@@ -165,8 +160,7 @@ export const dict = {
   "model.noDataDescription": "Sıralamadan bir model açmayı deneyin.",
   "model.noMatched": "{{id}} ile eşleşen model bilgisi veya kullanım satırı yok.",
   "model.fallback": "Model",
-  "model.catalogFallback":
-    "Paylaşılan model dizininden model bilgileri. Bu modelde etkinlik olduğunda OpenCode Go kullanımı görünür.",
+  "model.catalogFallback": "Paylaşılan model dizininden model bilgileri. Bu modelde etkinlik olduğunda OpenCode Go kullanımı görünür.",
   "model.unranked": "Geçen haftaki OpenCode Go kullanımında sıralanmamış",
   "model.ranked": "Geçen haftaki OpenCode Go kullanımında #{{rank}} sırada",
   "model.observedVolume": "gözlemlenen 2M hacmin {{share}} payıyla.",
