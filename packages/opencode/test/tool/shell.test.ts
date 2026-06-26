@@ -189,6 +189,20 @@ describe("tool.shell", () => {
     ),
   )
 
+  each("sets OPENCODE for child commands", () =>
+    runIn(
+      projectRoot,
+      Effect.gen(function* () {
+        const command = `${bin} -e ${evalarg("process.stdout.write(process.env.OPENCODE??String())")}`
+        const result = yield* run({
+          command: PS.has(sh()) ? `& ${command}` : command,
+        })
+        expect(result.metadata.exit).toBe(0)
+        expect(result.output).toContain("1")
+      }),
+    ),
+  )
+
   it.live("falls back from terminal-only configured shell", () =>
     Effect.gen(function* () {
       const tmp = yield* tmpdirScoped({ config: { shell: "fish" } })
