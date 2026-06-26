@@ -918,6 +918,8 @@
     line-height: var(--line-height-large);
     color: var(--text-strong);
     padding: 0 10px;
+    -webkit-user-select: text;
+    user-select: text;
   }
 
   [data-slot="question-hint"] {

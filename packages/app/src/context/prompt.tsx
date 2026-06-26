@@ -9,7 +9,7 @@ import { useServerSDK } from "./server-sdk"
 import type { ServerScope } from "@/utils/server-scope"
 import { useSDK } from "./sdk"
 import { useTabs, type Tab } from "./tabs"
-import { ServerConnection, useServer } from "./server"
+import { ServerConnection } from "./server"
 import { requireServerKey } from "@/utils/session-route"
 import { useSettings } from "./settings"
 
@@ -287,7 +287,6 @@ export const { use: usePrompt, provider: PromptProvider } = createSimpleContext(
     const sdk = useSDK()
     const [search] = useSearchParams<{ draftId?: string }>()
     const serverSDK = useServerSDK()
-    const server = useServer()
     const tabs = useTabs()
     const settings = useSettings()
     const cache = new Map<string, PromptCacheEntry>()
@@ -312,7 +311,8 @@ export const { use: usePrompt, provider: PromptProvider } = createSimpleContext(
     }
 
     const owner = getOwner()
-    const serverKey = () => (params.serverKey ? requireServerKey(params.serverKey) : server.key)
+    const serverKey = () =>
+      params.serverKey ? requireServerKey(params.serverKey) : ServerConnection.key(serverSDK().server)
     const scope = () =>
       search.draftId ? { draftID: search.draftId } : { dir: base64Encode(sdk().directory), id: params.id }
     const load = (scope: Scope) => {

@@ -319,6 +319,12 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                 return
               }
 
+              const activeTab = currentTab()
+              if (activeTab?.type === "draft") {
+                tabs.newDraft({ server: activeTab.server, directory: activeTab.directory }, "")
+                return
+              }
+
               const current = layout.projects.list()[0]
               if (current) {
                 tabs.newDraft({ server: server.key, directory: current.worktree }, "")

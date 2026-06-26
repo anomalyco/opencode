@@ -32,10 +32,7 @@ export const node = makeLocationNode({
 Tiers are declared bottom-up, from the most specific lifecycle to the most foundational:
 
 ```ts
-const tiers = LayerNode.tiers([
-  "location",
-  "global",
-])
+const tiers = LayerNode.tiers(["location", "global"])
 ```
 
 An earlier tier may depend on its own tier or any later tier. A later tier cannot depend on an earlier tier.
@@ -157,27 +154,18 @@ Without a custom build function, a tier's sorted layers are combined with the de
 The optional third argument customizes how each tier's sorted layers are constructed:
 
 ```ts
-const appLayer = LayerNode.buildLayer(
-  root,
-  tiers,
-  (tier, layers) => {
-    const combined = LayerNode.combine(layers)
+const appLayer = LayerNode.buildLayer(root, tiers, (tier, layers) => {
+  const combined = LayerNode.combine(layers)
 
-    if (tier !== "location") return combined
+  if (tier !== "location") return combined
 
-    return Layer.effect(
-      LocationServiceMap,
-      LayerMap.make(
-        (ref: Location.Ref) =>
-          combined.pipe(
-            Layer.provide(Location.layer(ref)),
-            Layer.fresh,
-          ),
-        { idleTimeToLive: "60 minutes" },
-      ),
-    )
-  },
-)
+  return Layer.effect(
+    LocationServiceMap,
+    LayerMap.make((ref: Location.Ref) => combined.pipe(Layer.provide(Location.layer(ref)), Layer.fresh), {
+      idleTimeToLive: "60 minutes",
+    }),
+  )
+})
 ```
 
 The callback receives:
@@ -192,12 +180,7 @@ It returns the final layer representing that tier. This permits a tier to introd
 Tests and alternate runtimes may replace a specific layer implementation by exact object identity:
 
 ```ts
-const layer = LayerNode.buildLayer(
-  root,
-  tiers,
-  buildTier,
-  [LayerNode.replace(Config.layer, testConfigLayer)],
-)
+const layer = LayerNode.buildLayer(root, tiers, buildTier, [LayerNode.replace(Config.layer, testConfigLayer)])
 ```
 
 The replacement applies to every placement of that exact source layer in the generated plans. Unused replacements are not acquired. A replacement must provide the same service output, must not introduce new errors, and must not have unresolved dependencies.
@@ -207,9 +190,7 @@ The replacement applies to every placement of that exact source layer in the gen
 Global implementations must remain outside the location freshness boundary. Conceptually:
 
 ```ts
-locationTier
-  .pipe(Layer.fresh)
-  .pipe(Layer.provideMerge(globalTier))
+locationTier.pipe(Layer.fresh).pipe(Layer.provideMerge(globalTier))
 ```
 
 The location tier contains only location implementations. Global dependencies are connected after the location build function creates its fresh or `LayerMap` boundary, so global services remain shared.
