@@ -1019,7 +1019,13 @@ export function MessageTimeline(props: {
                 <div class="flex w-max min-w-full justify-end gap-2">
                   <Index each={comments()}>
                     {(comment) => (
-                      <div class="shrink-0 max-w-[260px] rounded-[6px] border border-border-weak-base bg-background-stronger px-2.5 py-2">
+                      <div
+                        classList={{
+                          "shrink-0 max-w-[260px] rounded-[6px] border-border-weak-base bg-background-stronger px-2.5 py-2": true,
+                          "border-[0.5px]": settings.general.newLayoutDesigns(),
+                          border: !settings.general.newLayoutDesigns(),
+                        }}
+                      >
                         <div class="flex items-center gap-1.5 min-w-0 text-11-medium text-text-strong">
                           <FileIcon node={{ path: comment().path, type: "file" }} class="size-3.5 shrink-0" />
                           <span class="truncate">{getFilename(comment().path)}</span>
@@ -1288,7 +1294,11 @@ export function MessageTimeline(props: {
           <div
             data-session-title
             classList={{
-              "sticky top-0 z-30 bg-[linear-gradient(to_bottom,var(--background-stronger)_48px,transparent)]": true,
+              "sticky top-0 z-30": true,
+              "bg-[linear-gradient(to_bottom,var(--v2-background-bg-base)_48px,transparent)]":
+                settings.general.newLayoutDesigns(),
+              "bg-[linear-gradient(to_bottom,var(--background-stronger)_48px,transparent)]":
+                !settings.general.newLayoutDesigns(),
               "w-full": true,
               "pb-4": true,
               "pr-3": true,
@@ -1509,7 +1519,11 @@ export function MessageTimeline(props: {
                                       <Button
                                         size="large"
                                         variant="secondary"
-                                        class="w-full shadow-none border border-border-weak-base"
+                                        class={
+                                          settings.general.newLayoutDesigns()
+                                            ? "w-full shadow-none border-[0.5px] border-border-weak-base"
+                                            : "w-full shadow-none border border-border-weak-base"
+                                        }
                                         onClick={unshareSession}
                                         disabled={unshareMutation.isPending}
                                       >

@@ -24,7 +24,6 @@ import { raw, reply, TestLLMServer } from "../lib/llm-server"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
-import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { LLMEvent } from "@opencode-ai/llm"
 
@@ -981,10 +980,9 @@ itProviderError.live("session.processor effect tests fail provider-executed erro
         const parent = yield* user(chat.id, "provider tool error")
         const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
         const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
-        const settlements: Array<typeof SessionEvent.Tool.Failed.Type> = []
+        const seen: string[] = []
         const off = yield* events.listen((event) => {
-          if (event.type === SessionEvent.Tool.Failed.type)
-            settlements.push(event as typeof SessionEvent.Tool.Failed.Type)
+          seen.push(event.type)
           return Effect.void
         })
         const handle = yield* processors.create({ assistantMessage: msg, sessionID: chat.id, model: mdl })
@@ -1011,19 +1009,15 @@ itProviderError.live("session.processor effect tests fail provider-executed erro
         const call = parts.find((part): part is SessionV1.ToolPart => part.type === "tool")
         expect(call?.state.status).toBe("error")
         if (call?.state.status === "error") expect(call.state.error).toBe("provider boom")
-        expect(settlements).toHaveLength(1)
-        expect(settlements[0]?.data).toMatchObject({
-          callID: "call-1",
-          error: { type: "unknown", message: "provider boom" },
-          result: { type: "error", value: "provider boom" },
-          provider: { executed: true },
-        })
+        expect(seen).toContain(MessageV2.Event.PartUpdated.type)
+        expect(seen).toContain(MessageV2.Event.Updated.type)
+        expect(seen.filter((type) => type.startsWith("session.next."))).toEqual([])
       }),
     { config: cfg },
   ),
 )
 
-itFragmentFailure.live("session.processor effect tests flush partial v2 fragments before step failure", () =>
+itFragmentFailure.live("session.processor effect tests retain partial legacy parts without v2 events", () =>
   provideTmpdirInstance(
     (dir) =>
       Effect.gen(function* () {
@@ -1035,14 +1029,8 @@ itFragmentFailure.live("session.processor effect tests flush partial v2 fragment
         const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
         const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
         const seen: string[] = []
-        let text: string | undefined
-        let reasoning: string | undefined
         const off = yield* events.listen((event) => {
           seen.push(event.type)
-          if (event.type === SessionEvent.Text.Ended.type)
-            text = (event.data as typeof SessionEvent.Text.Ended.data.Type).text
-          if (event.type === SessionEvent.Reasoning.Ended.type)
-            reasoning = (event.data as typeof SessionEvent.Reasoning.Ended.data.Type).text
           return Effect.void
         })
         const handle = yield* processors.create({ assistantMessage: msg, sessionID: chat.id, model: mdl })
@@ -1067,12 +1055,16 @@ itFragmentFailure.live("session.processor effect tests flush partial v2 fragment
         ).toBe("stop")
         yield* off
 
-        const failed = seen.indexOf(SessionEvent.Step.Failed.type)
-        expect(failed).toBeGreaterThan(-1)
-        expect(seen.indexOf(SessionEvent.Text.Ended.type)).toBeLessThan(failed)
-        expect(seen.indexOf(SessionEvent.Reasoning.Ended.type)).toBeLessThan(failed)
-        expect(text).toBe("partial")
-        expect(reasoning).toBe("thinking")
+        const parts = yield* MessageV2.parts(msg.id)
+        expect(parts).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ type: "text", text: "partial" }),
+            expect.objectContaining({ type: "reasoning", text: "thinking" }),
+          ]),
+        )
+        expect(seen).toContain(MessageV2.Event.PartUpdated.type)
+        expect(seen).toContain(Session.Event.Error.type)
+        expect(seen.filter((type) => type.startsWith("session.next."))).toEqual([])
       }),
     { config: cfg },
   ),

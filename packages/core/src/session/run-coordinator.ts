@@ -4,6 +4,8 @@ import { Deferred, Effect, Exit, Fiber, FiberSet, Scope } from "effect"
 
 /** Serializes execution for each key while allowing different keys to run concurrently. */
 export interface Coordinator<Key, E> {
+  /** Snapshots keys with an execution owned by this coordinator. */
+  readonly active: Effect.Effect<ReadonlySet<Key>>
   /** Starts execution while idle or joins the active execution. */
   readonly run: (key: Key) => Effect.Effect<void, E>
   /** Registers one coalesced follow-up after newly recorded work. */
@@ -98,5 +100,5 @@ export const make = <Key, E>(options: {
         return Fiber.interrupt(entry.owner)
       })
 
-    return { run, wake, interrupt }
+    return { active: Effect.sync(() => new Set(active.keys())), run, wake, interrupt }
   })

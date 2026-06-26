@@ -3,6 +3,7 @@ import type {
   SessionsListOutput,
   SessionsCreateInput,
   SessionsCreateOutput,
+  SessionsActiveOutput,
   SessionsGetInput,
   SessionsGetOutput,
   SessionsSwitchAgentInput,
@@ -192,6 +193,17 @@ export function make(options: ClientOptions) {
             method: "POST",
             path: `/api/session`,
             body: { id: input?.id, agent: input?.agent, model: input?.model, location: input?.location },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      active: (requestOptions?: RequestOptions) =>
+        request<{ readonly data: SessionsActiveOutput }>(
+          {
+            method: "GET",
+            path: `/api/session/active`,
             successStatus: 200,
             declaredStatuses: [401, 400],
             empty: false,

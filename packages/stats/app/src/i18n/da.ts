@@ -222,6 +222,7 @@ export const dict = {
   "model.noPeersDescription": "Ranglister over lignende modeller vises, når brug lander.",
   "model.noUsageLastWeek": "Ingen brug sidste uge",
   "model.newThisWeek": "Ny denne uge",
+  "model.sameAsPreviousWeek": "Samme som forrige uge",
   "model.vsPreviousWeek": "{{change}} vs forrige uge",
   "model.pdf": "PDF",
   "format.users": "brugere",

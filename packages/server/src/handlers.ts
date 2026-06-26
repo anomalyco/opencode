@@ -25,19 +25,10 @@ import { IntegrationHandler } from "./handlers/integration"
 import { CredentialHandler } from "./handlers/credential"
 import { Credential } from "@opencode-ai/core/credential"
 import { ProjectCopyHandler } from "./handlers/project-copy"
-import { Database } from "@opencode-ai/core/database/database"
-import { EventV2 } from "@opencode-ai/core/event"
-import { ProjectV2 } from "@opencode-ai/core/project"
-import { SessionProjector } from "@opencode-ai/core/session/projector"
-import { SessionStore } from "@opencode-ai/core/session/store"
 
-const sessionLayer = SessionV2.layer.pipe(
-  Layer.provide(SessionStore.defaultLayer),
-  Layer.provide(SessionProjector.defaultLayer),
-  Layer.provide(EventV2.defaultLayer),
-  Layer.provide(Database.defaultLayer),
-  Layer.provide(ProjectV2.defaultLayer),
-  Layer.orDie,
+const sessionLayer = SessionV2.defaultLayer.pipe(
+  Layer.provide(SessionExecutionLocal.defaultLayer),
+  Layer.provide(LocationServiceMap.layer),
 )
 
 export const handlers = Layer.mergeAll(
@@ -63,7 +54,6 @@ export const handlers = Layer.mergeAll(
   Layer.provide(sessionLocationLayer),
   Layer.provide(locationLayer),
   Layer.provide(sessionLayer),
-  Layer.provide(SessionExecutionLocal.defaultLayer),
   Layer.provide(PermissionSaved.defaultLayer),
   Layer.provide(PtyTicket.defaultLayer),
   Layer.provide(LocationServiceMap.layer),

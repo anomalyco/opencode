@@ -115,10 +115,9 @@ const storedSession = {
 const openAIResponses = {
   user: (text: string) => ({ role: "user", content: [{ type: "input_text", text }] }),
   assistant: (text: string) => ({ role: "assistant", content: [{ type: "output_text", text }] }),
-  openaiReasoning: (text: string, options: { readonly itemId: string; readonly encryptedContent: string }) => ({
+  openaiReasoning: (text: string, encryptedContent: string) => ({
     type: "reasoning",
-    id: options.itemId,
-    encrypted_content: options.encryptedContent,
+    encrypted_content: encryptedContent,
     summary: [{ type: "summary_text", text }],
   }),
 }
@@ -657,10 +656,7 @@ describe("session.llm-native.request", () => {
       expectedBody: {
         input: [
           openAIResponses.user("What changed?"),
-          openAIResponses.openaiReasoning("Checked the previous diff.", {
-            itemId: "rs_1",
-            encryptedContent: "encrypted-state",
-          }),
+          openAIResponses.openaiReasoning("Checked the previous diff.", "encrypted-state"),
           openAIResponses.assistant("The parser changed."),
           openAIResponses.user("Summarize it."),
         ],
@@ -683,7 +679,7 @@ describe("session.llm-native.request", () => {
       ],
       providerOptions: { openai: { store: false, include: ["reasoning.encrypted_content"] } },
       expectedBody: {
-        input: [{ type: "reasoning", id: "rs_1", summary: [], encrypted_content: "encrypted-state" }],
+        input: [{ type: "reasoning", summary: [], encrypted_content: "encrypted-state" }],
         include: ["reasoning.encrypted_content"],
         store: false,
       },

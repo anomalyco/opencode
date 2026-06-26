@@ -2,6 +2,7 @@ import type { Session } from "@opencode-ai/sdk/v2/client"
 import {
   createEffect,
   createMemo,
+  createResource,
   createRoot,
   For,
   Match,
@@ -33,6 +34,7 @@ import { usePlatform } from "@/context/platform"
 import { DateTime } from "luxon"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useDirectoryPicker } from "@/components/directory-picker"
+import { useSettingsCommand } from "@/components/settings-dialog"
 import { DialogSelectServer, useServerManagementController } from "@/components/dialog-select-server"
 import { DialogServerV2 } from "@/components/settings-v2/dialog-server-v2"
 import { ServerConnection, serverName, useServer } from "@/context/server"
@@ -144,6 +146,7 @@ export function NewHome() {
   const command = useCommand()
   const notification = useNotification()
   const marked = useMarked()
+  const openSettings = useSettingsCommand()
   let focusSessionSearch: (() => void) | undefined
   const [state, setState] = createStore({
     search: "",
@@ -402,12 +405,6 @@ export function NewHome() {
     })
   }
 
-  function openSettings() {
-    void import("@/components/settings-v2").then((x) => {
-      dialog.show(() => <x.DialogSettings />)
-    })
-  }
-
   return (
     <div class="rounded-[10px] shadow-[var(--v2-elevation-raised)] m-2 min-h-0 lg:overflow-hidden bg-v2-background-bg-base self-stretch flex-1">
       <div class="mx-auto grid h-full w-full max-w-[1080px] grid-rows-[auto_minmax(0,1fr)_auto] gap-4 px-3 pb-3 lg:grid-cols-[280px_minmax(0,720px)] lg:grid-rows-1 lg:gap-8 lg:px-6 lg:pb-16">
@@ -529,10 +526,16 @@ function HomeProjectColumn(props: {
   const global = useGlobal()
   const dialog = useDialog()
   const controller = useServerManagementController({ navigateOnAdd: false })
-  const [state, setState] = persisted(
+  const [_state, setState, _, ready] = persisted(
     Persist.global("home.servers", ["home.servers.v1"]),
     createStore({ collapsed: {} as Record<string, boolean> }),
   )
+  const [state] = createResource(
+    () => ready.promise ?? Promise.resolve(),
+    (p) => p.then(() => _state),
+    { initialValue: _state },
+  )
+
   return (
     <aside
       class="mt-6 flex min-w-0 flex-col gap-4 lg:mt-14 lg:pt-[52px]"
@@ -564,7 +567,7 @@ function HomeProjectColumn(props: {
             const key = ServerConnection.key(item)
             const healthy = () => !!global.servers.health[key]?.healthy
             const serverCtx = global.ensureServerCtx(item)
-            const collapsed = () => !!state.collapsed[key]
+            const collapsed = () => !!state().collapsed[key]
             return (
               <div class="flex max-h-[min(572px,calc(100vh_-_300px))] min-w-0 flex-col gap-1 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 <HomeServerRow
@@ -577,7 +580,7 @@ function HomeProjectColumn(props: {
                   focusServer={props.focusServer}
                   chooseProject={props.chooseProject}
                   openEdit={(server) => dialog.show(() => <DialogServerV2 mode="edit" server={server} />)}
-                  toggleCollapsed={() => setState("collapsed", key, !state.collapsed[key])}
+                  toggleCollapsed={() => setState("collapsed", key, !state().collapsed[key])}
                   language={props.language}
                 />
                 <Show when={healthy() && !collapsed()}>

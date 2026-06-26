@@ -223,6 +223,7 @@ export const dict = {
   "model.noPeersDescription": "Os rankings de pares aparecem depois que o uso chega.",
   "model.noUsageLastWeek": "Sem uso na semana passada",
   "model.newThisWeek": "Novo esta semana",
+  "model.sameAsPreviousWeek": "Igual à semana anterior",
   "model.vsPreviousWeek": "{{change}} vs semana anterior",
   "model.pdf": "PDF",
   "format.users": "usuários",

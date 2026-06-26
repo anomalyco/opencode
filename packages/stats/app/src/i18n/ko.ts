@@ -224,6 +224,7 @@ export const dict = {
   "model.noPeersDescription": "사용량이 들어오면 비슷한 모델 순위가 표시됩니다.",
   "model.noUsageLastWeek": "지난주 사용량 없음",
   "model.newThisWeek": "이번 주 신규",
+  "model.sameAsPreviousWeek": "지난주와 동일",
   "model.vsPreviousWeek": "지난주 대비 {{change}}",
   "model.pdf": "PDF",
   "format.users": "사용자",
