@@ -44,6 +44,10 @@
     "vite-plugin-solid": "catalog:"
   },
   "dependencies": {
+    "@dnd-kit/abstract": "0.5.0",
+    "@dnd-kit/dom": "0.5.0",
+    "@dnd-kit/helpers": "0.5.0",
+    "@dnd-kit/solid": "0.5.0",
     "@kobalte/core": "catalog:",
     "@opencode-ai/core": "workspace:*",
     "@opencode-ai/sdk": "workspace:*",
