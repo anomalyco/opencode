@@ -298,14 +298,14 @@ describe("Config", () => {
                 },
                 tool_output: { max_lines: 1000, max_bytes: 32768 },
                 mcp: {
-                  timeout: 5000,
+                  timeout: { startup: 5000, request: 60000 },
                   servers: {
                     local: {
                       type: "local",
                       command: ["node", "./mcp/server.js"],
                       environment: { API_KEY: "secret" },
                       disabled: false,
-                      timeout: 10000,
+                      timeout: { request: 10000 },
                     },
                     remote: {
                       type: "remote",
@@ -313,6 +313,7 @@ describe("Config", () => {
                       headers: { Authorization: "Bearer token" },
                       oauth: { client_id: "client", scope: "read write", callback_port: 19876 },
                       disabled: true,
+                      timeout: { startup: 15000 },
                     },
                   },
                 },
@@ -383,14 +384,14 @@ describe("Config", () => {
             })
             expect(documents[0]?.info.tool_output).toEqual({ max_lines: 1000, max_bytes: 32768 })
             expect(documents[0]?.info.mcp).toEqual({
-              timeout: 5000,
+              timeout: { startup: 5000, request: 60000 },
               servers: {
                 local: {
                   type: "local",
                   command: ["node", "./mcp/server.js"],
                   environment: { API_KEY: "secret" },
                   disabled: false,
-                  timeout: 10000,
+                  timeout: { request: 10000 },
                 },
                 remote: {
                   type: "remote",
@@ -398,6 +399,7 @@ describe("Config", () => {
                   headers: { Authorization: "Bearer token" },
                   oauth: { client_id: "client", scope: "read write", callback_port: 19876 },
                   disabled: true,
+                  timeout: { startup: 15000 },
                 },
               },
             })
@@ -541,11 +543,12 @@ describe("Config", () => {
                 compaction: { auto: true, tail_turns: 3, preserve_recent_tokens: 2000, reserved: 10000 },
                 experimental: { mcp_timeout: 5000 },
                 mcp: {
-                  local: { type: "local", command: ["node", "server.js"], enabled: false },
+                  local: { type: "local", command: ["node", "server.js"], enabled: false, timeout: 10000 },
                   remote: {
                     type: "remote",
                     url: "https://mcp.example.com",
                     oauth: { clientId: "client", callbackPort: 19876 },
+                    timeout: 20000,
                   },
                 },
               }),
@@ -623,13 +626,19 @@ describe("Config", () => {
               buffer: 10000,
             })
             expect(documents[0]?.info.mcp).toMatchObject({
-              timeout: 5000,
+              timeout: { request: 5000 },
               servers: {
-                local: { type: "local", command: ["node", "server.js"], disabled: true },
+                local: {
+                  type: "local",
+                  command: ["node", "server.js"],
+                  disabled: true,
+                  timeout: { request: 10000 },
+                },
                 remote: {
                   type: "remote",
                   url: "https://mcp.example.com",
                   oauth: { client_id: "client", callback_port: 19876 },
+                  timeout: { request: 20000 },
                 },
               },
             })
