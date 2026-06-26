@@ -162,9 +162,11 @@ while true; do
   # bumped package.json and the lockfile really does need regenerating.
 
   # safety: OUTSIDE an escalation, markers must never survive (guards against a
-  # stale rerere replay leaving a half-resolved file).
+  # stale rerere replay leaving a half-resolved file). Exclude .sync/rr-cache:
+  # rerere *preimage* files legitimately contain conflict markers (that's what a
+  # recorded conflict IS), so scanning them would always false-positive.
   if [ "$needs_review_batch" -eq 0 ] && \
-     git grep -lE "^(<<<<<<<|=======|>>>>>>>)" -- . ':!bun.lock' >/dev/null 2>&1; then
+     git grep -lE "^(<<<<<<<|=======|>>>>>>>)" -- . ':!bun.lock' ':!.sync/rr-cache' >/dev/null 2>&1; then
     echo "Conflict markers present but no escalation recorded — aborting for safety." >&2
     git merge --abort 2>/dev/null || true
     exit 4
