@@ -39,11 +39,11 @@ const ROUTE = "diff"
 const MIN_SPLIT_WIDTH = 100
 const FILE_TREE_WIDTH = 32
 const PLAIN_TEXT_FILETYPE = "opencode-plain-text"
-const WORKING_TREE_DIFF_CONTEXT_LINES = 12
+const VCS_DIFF_CONTEXT_LINES = 12
 const KV_SHOW_FILE_TREE = "diff_viewer_show_file_tree"
 const KV_SINGLE_PATCH = "diff_viewer_single_patch"
 const KV_VIEW = "diff_viewer_view"
-type DiffMode = "git" | "last-turn"
+type DiffMode = "git" | "branch" | "last-turn"
 type DiffViewerFocus = "patches" | "files"
 type DiffView = "split" | "unified"
 type SelectedHunk = { readonly fileIndex: number; readonly hunkIndex: number; readonly scrollTop: number }
@@ -82,6 +82,12 @@ function storedView(value: unknown): DiffView | undefined {
   if (value === "split" || value === "unified") return value
 }
 
+function diffSourceLabel(mode: DiffMode) {
+  if (mode === "last-turn") return "last turn"
+  if (mode === "branch") return "main branch"
+  return "working tree"
+}
+
 function DiffViewer(props: { api: TuiPluginApi }) {
   const dimensions = useTerminalDimensions()
   const themeState = useTheme()
@@ -117,7 +123,7 @@ function DiffViewer(props: { api: TuiPluginApi }) {
     }
 
     const result = await props.api.client.vcs.diff(
-      { directory: input.directory, mode: "git", context: WORKING_TREE_DIFF_CONTEXT_LINES },
+      { directory: input.directory, mode: input.mode, context: VCS_DIFF_CONTEXT_LINES },
       { throwOnError: true },
     )
     return normalizeDiffs(result.data ?? [])
@@ -675,18 +681,30 @@ function DiffViewer(props: { api: TuiPluginApi }) {
     },
   ]
 
-  const switchDiffOptions = createMemo(() => [
-    {
-      title: "Working tree",
-      value: "git" as const,
-      description: "Show current git changes",
-    },
-    {
-      title: "Last turn",
-      value: "last-turn" as const,
-      description: "Show changes from the last assistant turn",
-    },
-  ])
+  const switchDiffOptions = createMemo(() => {
+    const vcs = props.api.state.vcs
+    return [
+      {
+        title: "Working tree",
+        value: "git" as const,
+        description: "Show current git changes",
+      },
+      ...(vcs?.branch && vcs.default_branch && vcs.branch !== vcs.default_branch
+        ? [
+            {
+              title: "Main branch",
+              value: "branch" as const,
+              description: "Show changes compared to main branch",
+            },
+          ]
+        : []),
+      {
+        title: "Last turn",
+        value: "last-turn" as const,
+        description: "Show changes from the last assistant turn",
+      },
+    ]
+  })
 
   const openSwitchDiffDialog = () => {
     props.api.ui.dialog.replace(() => (
@@ -736,7 +754,7 @@ function DiffViewer(props: { api: TuiPluginApi }) {
       <PanelGroup axis="y" width="100%" height="100%">
         <Panel border="none" flexShrink={0} padding={0} paddingLeft={1}>
           <text fg={theme().text}>Diff </text>
-          <text fg={theme().textMuted}>{mode() === "last-turn" ? "last turn" : "working tree"}</text>
+          <text fg={theme().textMuted}>{diffSourceLabel(mode())}</text>
           <box flexGrow={1} />
           <text fg={theme().textMuted}>
             {files().length} {files().length === 1 ? "file" : "files"}
@@ -971,7 +989,7 @@ function DiffViewerHelpDialog() {
     {
       shortcut: useCommandShortcut("diff.switch_source"),
       action: "Switch source",
-      description: "Choose working tree or last-turn changes",
+      description: "Choose working tree, main branch, or last-turn changes",
     },
     {
       shortcut: useCommandShortcut("diff.toggle_view"),
