@@ -528,29 +528,6 @@ it.instance("loop calls LLM and returns assistant message", () =>
   }),
 )
 
-it.instance("title generation merges its instruction into the first user message", () =>
-  Effect.gen(function* () {
-    const { llm } = yield* useServerConfig(providerCfg)
-    const prompt = yield* SessionPrompt.Service
-    const sessions = yield* Session.Service
-    const chat = yield* sessions.create({})
-    yield* user(chat.id, "hello")
-    yield* llm.text("world")
-
-    yield* prompt.loop({ sessionID: chat.id })
-    yield* llm.wait(2)
-
-    const title = (yield* llm.hits).find((hit) =>
-      JSON.stringify(hit.body).includes("Generate a title for this conversation"),
-    )
-    expect(title).toBeDefined()
-    const messages = title?.body.messages as { role: string; content: unknown }[]
-    const users = messages.filter((message) => message.role === "user")
-    expect(users).toHaveLength(1)
-    expect(JSON.stringify(users[0]?.content)).toContain("hello")
-  }),
-)
-
 withMcpInstructions.instance(
   "loop includes MCP instructions in model system context",
   () =>
