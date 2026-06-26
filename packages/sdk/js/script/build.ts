@@ -13,6 +13,37 @@ const opencode = path.resolve(dir, "../../opencode")
 
 await $`bun dev generate > ${dir}/openapi.json`.cwd(opencode)
 
+const document = (await Bun.file("./openapi.json").json()) as {
+  components?: { schemas?: Record<string, unknown> }
+  [key: string]: unknown
+}
+const schemas = document.components?.schemas
+if (schemas) {
+  const reachable = new Set<string>()
+  const visit = (value: unknown) => {
+    if (Array.isArray(value)) {
+      value.forEach(visit)
+      return
+    }
+    if (typeof value !== "object" || value === null) return
+    for (const [key, child] of Object.entries(value)) {
+      if (key === "$ref" && typeof child === "string" && child.startsWith("#/components/schemas/")) {
+        const name = child.slice("#/components/schemas/".length)
+        if (reachable.has(name)) continue
+        reachable.add(name)
+        visit(schemas[name])
+      } else {
+        visit(child)
+      }
+    }
+  }
+  visit({ ...document, components: { ...document.components, schemas: undefined } })
+  for (const name of Object.keys(schemas)) {
+    if (/^SessionNext\w+1$/.test(name) && !reachable.has(name)) delete schemas[name]
+  }
+  await Bun.write("./openapi.json", JSON.stringify(document))
+}
+
 await createClient({
   input: "./openapi.json",
   output: {
@@ -39,6 +70,11 @@ await createClient({
     },
   ],
 })
+
+const generatedTypes = await Bun.file("./src/v2/gen/types.gen.ts").text()
+if (/export type SessionNext\w+1 =/.test(generatedTypes)) {
+  throw new Error("Session history generated duplicate Session event variants")
+}
 
 // Patch a @hey-api/openapi-ts codegen bug: SseFn incorrectly passes the
 // endpoint's TError into the second generic of ServerSentEventsResult, which

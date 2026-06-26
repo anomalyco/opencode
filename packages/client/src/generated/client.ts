@@ -331,7 +331,7 @@ export function make(options: ClientOptions) {
           {
             method: "GET",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/history`,
-            query: { after: input.after, through: input.through, limit: input.limit },
+            query: { limit: input.limit, after: input.after, cursor: input.cursor },
             successStatus: 200,
             declaredStatuses: [404, 400, 401],
             empty: false,

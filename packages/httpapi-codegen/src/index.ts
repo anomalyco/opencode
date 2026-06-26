@@ -322,28 +322,39 @@ function renderImportedEffectFiles(
     const rawGroup = group.endpoints[0]?.topLevel ? "RawClient" : `RawClient[${JSON.stringify(group.sourceIdentifier)}]`
     const methods = group.endpoints.map((item, endpointIndex) => {
       const prefix = `Endpoint${groupIndex}_${endpointIndex}`
+      const schemaBySource = {
+        params: item.params,
+        query: item.query,
+        headers: item.headers,
+        payload: item.payloads[0],
+      }
       const request = (["params", "query", "headers", "payload"] as const)
         .flatMap((source) => {
           const fields = item.input.filter((field) => field.source === source)
           if (fields.length === 0) return []
+          if (isStructUnion(schemaBySource[source])) return [`${source}: input`]
           return [
             `${source}: { ${fields.map((field) => `${JSON.stringify(field.name)}: input${item.operation.inputMode === "optional" ? "?." : "."}${field.name}`).join(", ")} }`,
           ]
         })
         .join(", ")
-      const input = item.input
-        .map(
-          (field) =>
-            `readonly ${JSON.stringify(field.name)}${field.optional ? "?" : ""}: ${prefix}Request[${JSON.stringify(field.source)}][${JSON.stringify(field.name)}]`,
-        )
-        .join("; ")
+      const input = (["params", "query", "headers", "payload"] as const)
+        .flatMap((source) => {
+          const fields = item.input.filter((field) => field.source === source)
+          if (fields.length === 0) return []
+          if (isStructUnion(schemaBySource[source])) return [`${prefix}Request[${JSON.stringify(source)}]`]
+          return [
+            `{ ${fields.map((field) => `readonly ${JSON.stringify(field.name)}${field.optional ? "?" : ""}: ${prefix}Request[${JSON.stringify(source)}][${JSON.stringify(field.name)}]`).join("; ")} }`,
+          ]
+        })
+        .join(" & ")
       const argument =
         item.operation.inputMode === "none"
           ? ""
           : `input${item.operation.inputMode === "optional" ? "?" : ""}: ${prefix}Input`
       const rawCall = `raw[${JSON.stringify(item.endpoint.name)}]({ ${request} })`
       const mapped = `${rawCall}.pipe(Effect.mapError(mapClientError)${item.unwrapData ? ", Effect.map((value) => value.data)" : ""})`
-      return `${item.operation.inputMode === "none" ? "" : `type ${prefix}Request = Parameters<${rawGroup}[${JSON.stringify(item.endpoint.name)}]>[0]\ntype ${prefix}Input = { ${input} }\n`}const ${prefix} = (raw: ${rawGroup}) => (${argument}) => ${item.operation.success === "stream" ? `Stream.unwrap(${rawCall}.pipe(Effect.mapError(mapClientError), Effect.map((stream) => stream.pipe(Stream.mapError(mapClientError)))))` : mapped}`
+      return `${item.operation.inputMode === "none" ? "" : `type ${prefix}Request = Parameters<${rawGroup}[${JSON.stringify(item.endpoint.name)}]>[0]\ntype ${prefix}Input = ${input}\n`}const ${prefix} = (raw: ${rawGroup}) => (${argument}) => ${item.operation.success === "stream" ? `Stream.unwrap(${rawCall}.pipe(Effect.mapError(mapClientError), Effect.map((stream) => stream.pipe(Stream.mapError(mapClientError)))))` : mapped}`
     })
     return `${methods.join("\n\n")}\n\nconst adaptGroup${groupIndex} = (raw: ${rawGroup}) => ({ ${group.endpoints.map((item, endpointIndex) => `${JSON.stringify(item.operation.name)}: Endpoint${groupIndex}_${endpointIndex}(raw)`).join(", ")} })`
   })
@@ -444,14 +455,18 @@ function renderPromiseTypes(groups: ReadonlyArray<Group>) {
           headers: endpoint.headers,
           payload: endpoint.payloads[0],
         }
-        const input = endpoint.input
-          .map((field) => {
-            const schema = schemas[field.source]
-            if (schema === undefined)
-              throw new GenerationError({ reason: `Missing input schema: ${prefix}.${field.name}` })
-            return `readonly ${JSON.stringify(field.name)}${field.optional ? "?" : ""}: (${typeOf(schema)})[${JSON.stringify(field.name)}]`
+        const input = (["params", "query", "headers", "payload"] as const)
+          .flatMap((source) => {
+            const schema = schemas[source]
+            const fields = endpoint.input.filter((field) => field.source === source)
+            if (fields.length === 0) return []
+            if (schema === undefined) throw new GenerationError({ reason: `Missing input schema: ${prefix}.${source}` })
+            if (isStructUnion(schema)) return [`(${typeOf(schema)})`]
+            return [
+              `{ ${fields.map((field) => `readonly ${JSON.stringify(field.name)}${field.optional ? "?" : ""}: (${typeOf(schema)})[${JSON.stringify(field.name)}]`).join("; ")} }`,
+            ]
           })
-          .join("; ")
+          .join(" & ")
         const successSchema = endpoint.successes[0]
         const success = typeOf(
           isStreamSchema(successSchema) && successSchema._tag === "StreamSse"
@@ -461,7 +476,7 @@ function renderPromiseTypes(groups: ReadonlyArray<Group>) {
             : successSchema,
         )
         return [
-          ...(endpoint.operation.inputMode === "none" ? [] : [`export type ${prefix}Input = { ${input} }`]),
+          ...(endpoint.operation.inputMode === "none" ? [] : [`export type ${prefix}Input = ${input}`]),
           `export type ${prefix}Output = ${endpoint.unwrapData ? `(${success})["data"]` : success}`,
         ]
       }),
@@ -764,19 +779,35 @@ export function generate<Id extends string, Groups extends HttpApiGroup.Any>(
 function inputFields(schema: Schema.Top | undefined, source: InputField["source"], operation: string) {
   if (schema === undefined) return []
   const ast = Schema.toType(schema).ast
-  if (!SchemaAST.isObjects(ast) || ast.indexSignatures.length > 0) {
+  const objects = SchemaAST.isUnion(ast) ? ast.types : [ast]
+  if (objects.some((item) => !SchemaAST.isObjects(item) || item.indexSignatures.length > 0)) {
     throw new GenerationError({ reason: `Input schema must be a struct: ${operation}.${source}` })
   }
-  return ast.propertySignatures.map((field) => {
-    if (typeof field.name !== "string") {
-      throw new GenerationError({ reason: `Input field must have a string name: ${operation}.${source}` })
+  const names = new Set<string>()
+  for (const object of objects) {
+    if (!SchemaAST.isObjects(object)) continue
+    for (const field of object.propertySignatures) {
+      if (typeof field.name !== "string") {
+        throw new GenerationError({ reason: `Input field must have a string name: ${operation}.${source}` })
+      }
+      names.add(field.name)
     }
-    return {
-      name: field.name,
-      source,
-      optional: SchemaAST.isOptional(field.type),
-    }
-  })
+  }
+  return Array.from(names, (name) => ({
+    name,
+    source,
+    optional: objects.some((object) => {
+      if (!SchemaAST.isObjects(object)) return false
+      const field = object.propertySignatures.find((field) => field.name === name)
+      return field === undefined || SchemaAST.isOptional(field.type)
+    }),
+  }))
+}
+
+function isStructUnion(schema: Schema.Top | undefined) {
+  if (schema === undefined) return false
+  const ast = Schema.toType(schema).ast
+  return SchemaAST.isUnion(ast) && ast.types.every((item) => SchemaAST.isObjects(item))
 }
 
 function responseSchemas(schema: Schema.Top, path: string): Array<readonly [string, Schema.Top]> {
@@ -1017,15 +1048,20 @@ function renderGroup(group: Group, groupIndex: number) {
         : `error: ${errorSlots.length === 1 ? errorSlots[0].name : `[${errorSlots.map((slot) => slot.name).join(", ")}]`}`,
     ].filter((option): option is string => option !== undefined)
     const schemaBySource = { params, query, headers, payload: payloads[0] }
-    const inputType = operation.input
-      .map((field) => {
-        const slot = schemaBySource[field.source]
+    const inputType = (["params", "query", "headers", "payload"] as const)
+      .flatMap((source) => {
+        const slot = schemaBySource[source]
+        const fields = operation.input.filter((field) => field.source === source)
+        if (fields.length === 0) return []
         if (slot === undefined) {
           throw new GenerationError({ reason: `Missing input schema: ${group.identifier}.${endpoint.name}` })
         }
-        return `readonly ${JSON.stringify(field.name)}${field.optional ? "?" : ""}: (typeof ${slot.name}.Type)[${JSON.stringify(field.name)}]`
+        if (isStructUnion(slot.schema)) return [`typeof ${slot.name}.Type`]
+        return [
+          `{ ${fields.map((field) => `readonly ${JSON.stringify(field.name)}${field.optional ? "?" : ""}: (typeof ${slot.name}.Type)[${JSON.stringify(field.name)}]`).join("; ")} }`,
+        ]
       })
-      .join("; ")
+      .join(" & ")
     const argument =
       operation.operation.inputMode === "none"
         ? ""
@@ -1034,6 +1070,7 @@ function renderGroup(group: Group, groupIndex: number) {
       .flatMap((source) => {
         const slot = schemaBySource[source]
         if (slot === undefined) return []
+        if (isStructUnion(slot.schema)) return [`${source}: input`]
         const fields = operation.input
           .filter((field) => field.source === source)
           .map(
@@ -1048,7 +1085,7 @@ function renderGroup(group: Group, groupIndex: number) {
       declared.length === 0 ? "Schema.Never" : `Schema.Union([${declared.map((slot) => slot.name).join(", ")}])`
     const rawCall = `raw[${JSON.stringify(endpoint.name)}]({ ${request} })`
     const mapped = `${rawCall}.pipe(Effect.mapError(map${prefix}Error)${operation.unwrapData ? ", Effect.map((value) => value.data)" : ""})`
-    const inputDeclaration = operation.operation.inputMode === "none" ? "" : `type ${prefix}Input = { ${inputType} }\n`
+    const inputDeclaration = operation.operation.inputMode === "none" ? "" : `type ${prefix}Input = ${inputType}\n`
     adapters.push(
       `${inputDeclaration}const ${prefix}DeclaredError = ${declaredSchema}\nconst map${prefix}Error = (error: unknown) => HttpClientError.isHttpClientError(error) || Schema.isSchemaError(error) || Sse.Retry.is(error) ? new ClientError({ cause: error }) : Schema.is(${prefix}DeclaredError)(error) ? error : new ClientError({ cause: error })\nconst ${prefix} = (raw: RawGroup) => (${argument}) => ${operation.operation.success === "stream" ? `Stream.unwrap(${rawCall}.pipe(Effect.mapError(map${prefix}Error), Effect.map((stream) => stream.pipe(Stream.mapError(map${prefix}Error)))))` : mapped}`,
     )

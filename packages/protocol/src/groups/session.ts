@@ -5,7 +5,7 @@ import { Session } from "@opencode-ai/schema/session"
 import { Project } from "@opencode-ai/schema/project"
 import { AbsolutePath, NonNegativeInt, optional, PositiveInt, RelativePath, statics } from "@opencode-ai/schema/schema"
 import { Workspace } from "@opencode-ai/schema/workspace"
-import { Context, Encoding, Result, Schema, Struct } from "effect"
+import { Context, Effect, Encoding, Result, Schema, Struct } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
 import {
   ConflictError,
@@ -60,6 +60,7 @@ const SessionsCursorInput = Schema.Union([
 const SessionsCursorJson = Schema.fromJsonString(SessionsCursorInput)
 const encodeSessionsCursor = Schema.encodeSync(SessionsCursorJson)
 const decodeSessionsCursor = Schema.decodeUnknownEffect(SessionsCursorJson)
+const invalidCursor = "Invalid cursor" as const
 
 export const SessionsCursor = Schema.String.pipe(
   Schema.brand("SessionsCursor"),
@@ -67,17 +68,73 @@ export const SessionsCursor = Schema.String.pipe(
     const make = schema.make.bind(schema)
     return {
       make: (input: typeof SessionsCursorInput.Type) => make(Encoding.encodeBase64Url(encodeSessionsCursor(input))),
-      parse: (input: string) => decodeSessionsCursor(Result.getOrThrow(Encoding.decodeBase64UrlString(input))),
+      parse: (input: string) =>
+        Effect.suspend(() => {
+          const result = Encoding.decodeBase64UrlString(input)
+          return Result.isFailure(result)
+            ? Effect.fail(invalidCursor)
+            : decodeSessionsCursor(result.success).pipe(Effect.mapError(() => invalidCursor))
+        }),
     }
   }),
 )
 export type SessionsCursor = typeof SessionsCursor.Type
+
+const SessionHistoryCursorInput = Schema.Struct({
+  after: Schema.Int.check(Schema.isGreaterThanOrEqualTo(-1)),
+  through: Schema.Int.check(Schema.isGreaterThanOrEqualTo(-1)),
+})
+const SessionHistoryCursorJson = Schema.fromJsonString(SessionHistoryCursorInput)
+const encodeSessionHistoryCursor = Schema.encodeSync(SessionHistoryCursorJson)
+const decodeSessionHistoryCursor = Schema.decodeUnknownEffect(SessionHistoryCursorJson)
+
+export const SessionHistoryCursor = Schema.String.pipe(
+  Schema.brand("Session.HistoryCursor"),
+  statics((schema) => {
+    const make = schema.make.bind(schema)
+    return {
+      make: (input: typeof SessionHistoryCursorInput.Type) =>
+        make(Encoding.encodeBase64Url(encodeSessionHistoryCursor(input))),
+      parse: (input: string) =>
+        Effect.suspend(() => {
+          const result = Encoding.decodeBase64UrlString(input)
+          return Result.isFailure(result)
+            ? Effect.fail(invalidCursor)
+            : decodeSessionHistoryCursor(result.success).pipe(Effect.mapError(() => invalidCursor))
+        }),
+    }
+  }),
+)
+export type SessionHistoryCursor = typeof SessionHistoryCursor.Type
 
 const SessionActive = Schema.Struct({
   type: Schema.Literal("running"),
 }).annotate({ identifier: "SessionActive" })
 
 const SessionHistoryLimit = PositiveInt.check(Schema.isLessThanOrEqualTo(100))
+
+const SessionHistoryQueryFields = {
+  limit: SessionHistoryLimit.pipe(Schema.optional),
+}
+
+const SessionHistoryQueryType = Schema.Union([
+  Schema.Struct({
+    ...SessionHistoryQueryFields,
+    after: NonNegativeInt.pipe(Schema.optional),
+    cursor: Schema.Never.pipe(Schema.optional),
+  }),
+  Schema.Struct({
+    ...SessionHistoryQueryFields,
+    after: Schema.Never.pipe(Schema.optional),
+    cursor: SessionHistoryCursor,
+  }),
+])
+
+export const SessionHistoryQuery = Schema.Struct({
+  limit: Schema.NumberFromString.pipe(Schema.decodeTo(SessionHistoryLimit), Schema.optional),
+  after: Schema.NumberFromString.pipe(Schema.decodeTo(NonNegativeInt), Schema.optional),
+  cursor: SessionHistoryCursor.pipe(Schema.optional),
+}).pipe(Schema.decodeTo(SessionHistoryQueryType))
 
 const SessionsQueryCursor = SessionsCursor.annotate({
   description: "Opaque pagination cursor returned as cursor.previous or cursor.next in the previous response.",
@@ -294,15 +351,10 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
     .add(
       HttpApiEndpoint.get("session.history", "/api/session/:sessionID/history", {
         params: { sessionID: Session.ID },
-        query: {
-          after: Schema.NumberFromString.pipe(Schema.decodeTo(NonNegativeInt), Schema.optional),
-          through: Schema.NumberFromString.pipe(Schema.decodeTo(NonNegativeInt), Schema.optional),
-          limit: Schema.NumberFromString.pipe(Schema.decodeTo(SessionHistoryLimit), Schema.optional),
-        },
+        query: SessionHistoryQuery,
         success: Schema.Struct({
           events: Schema.Array(SessionEvent.Durable),
-          through: NonNegativeInt,
-          nextAfter: optional(NonNegativeInt),
+          cursor: optional(SessionHistoryCursor),
         }).annotate({ identifier: "SessionHistory" }),
         error: [SessionNotFoundError, InvalidCursorError],
       })
@@ -312,7 +364,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
             identifier: "v2.session.history",
             summary: "Get session history",
             description:
-              "Read one finite page of public durable Session events. Reuse through and pass nextAfter unchanged as the exclusive after cursor; an omitted nextAfter means the fixed snapshot is exhausted.",
+              "Read one finite page of public durable Session events. Pass the returned opaque cursor unchanged to continue the fixed snapshot; an omitted cursor means the snapshot is exhausted.",
           }),
         ),
     )

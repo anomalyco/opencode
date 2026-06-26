@@ -64,21 +64,30 @@ const decodeSerializedEvent = (event: SerializedEvent): Payload => {
   }
 }
 
-export const readAggregate = Effect.fn("EventV2.readAggregate")(function* (
+export const readAggregate = Effect.fn("EventV2.readAggregate")(function* <A>(
   db: Database.Interface["db"],
   input: {
     readonly aggregateID: string
     readonly after?: number
     readonly through?: number
     readonly limit: number
-    readonly types: ReadonlyArray<string>
+    readonly manifest: {
+      readonly definitions: ReadonlyMap<string, Definition>
+      readonly schema: Schema.Decoder<A, never>
+    }
   },
 ) {
   const after = input.after ?? -1
-  return yield* db
-    .transaction(() =>
+  const result = yield* db
+    .transaction((tx) =>
       Effect.gen(function* () {
-        const head = yield* latestSequence(db, input.aggregateID)
+        const sequence = yield* tx
+          .select({ seq: EventSequenceTable.seq })
+          .from(EventSequenceTable)
+          .where(eq(EventSequenceTable.aggregate_id, input.aggregateID))
+          .get()
+          .pipe(Effect.orDie)
+        const head = sequence?.seq ?? -1
         if (input.through !== undefined && input.through > head) {
           return yield* new InvalidCursorError({ message: "History cutoff is above the current aggregate head" })
         }
@@ -86,7 +95,7 @@ export const readAggregate = Effect.fn("EventV2.readAggregate")(function* (
         if (through < after) {
           return yield* new InvalidCursorError({ message: "History cutoff must not be less than the cursor" })
         }
-        const rows = yield* db
+        const rows = yield* tx
           .select()
           .from(EventTable)
           .where(
@@ -94,31 +103,36 @@ export const readAggregate = Effect.fn("EventV2.readAggregate")(function* (
               eq(EventTable.aggregate_id, input.aggregateID),
               gt(EventTable.seq, after),
               lte(EventTable.seq, through),
-              inArray(EventTable.type, input.types),
+              inArray(EventTable.type, Array.from(input.manifest.definitions.keys())),
             ),
           )
           .orderBy(asc(EventTable.seq))
           .limit(input.limit + 1)
           .all()
           .pipe(Effect.orDie)
-        const page = rows.slice(0, input.limit)
-        const events = page.map((event) =>
-          decodeSerializedEvent({
-            id: event.id,
-            aggregateID: event.aggregate_id,
-            seq: event.seq,
-            type: event.type,
-            data: event.data,
-          }),
-        )
-        return {
-          events,
-          through,
-          nextAfter: rows.length > input.limit ? events.at(-1)?.durable?.seq : undefined,
-        }
+        return { rows, through }
       }),
     )
     .pipe(Effect.catchTag("SqlError", Effect.die))
+  const page = result.rows.slice(0, input.limit)
+  const decode = Schema.decodeUnknownSync(input.manifest.schema)
+  const events = page.map((event) =>
+    decode({
+      id: event.id,
+      type: input.manifest.definitions.get(event.type)?.type ?? event.type,
+      durable: {
+        aggregateID: event.aggregate_id,
+        seq: event.seq,
+        version: input.manifest.definitions.get(event.type)?.durable?.version,
+      },
+      data: event.data,
+    }),
+  )
+  return {
+    events,
+    through: result.through,
+    nextAfter: result.rows.length > input.limit ? page.at(-1)?.seq : undefined,
+  }
 })
 
 export const define = Event.define

@@ -34,6 +34,7 @@ import { Snapshot } from "./snapshot"
 import { SessionRevert } from "./session/revert"
 import { Revert } from "@opencode-ai/schema/revert"
 import { FSUtil } from "./fs-util"
+import { SessionDurable } from "@opencode-ai/schema/durable-event-manifest"
 
 export const RevertState = Revert.State
 export type RevertState = Revert.State
@@ -105,13 +106,15 @@ export class PromptConflictError extends Schema.TaggedErrorClass<PromptConflictE
 export class InvalidCursorError extends Schema.TaggedErrorClass<InvalidCursorError>()("Session.InvalidCursorError", {
   message: Schema.String,
 }) {}
-const DurableEventTypes = SessionEvent.DurableDefinitions.flatMap((definition) =>
-  definition.durable ? [EventV2.versionedType(definition.type, definition.durable.version)] : [],
-)
 export const MessageNotFoundError = SessionRevert.MessageNotFoundError
 export type MessageNotFoundError = SessionRevert.MessageNotFoundError
 
-export type Error = NotFoundError | MessageDecodeError | OperationUnavailableError | PromptConflictError
+export type Error =
+  | NotFoundError
+  | MessageDecodeError
+  | OperationUnavailableError
+  | PromptConflictError
+  | InvalidCursorError
 
 export interface Interface {
   readonly list: (input?: ListInput) => Effect.Effect<SessionSchema.Info[]>
@@ -368,21 +371,11 @@ export const layer = Layer.unwrap(
               ).pipe(Stream.filter((event): event is SessionEvent.DurableEvent => isDurableSessionEvent(event))),
             history: Effect.fn("V2Session.history")(function* (input) {
               yield* result.get(input.sessionID)
-              const page = yield* EventV2
-                .readAggregate(db, {
-                  ...input,
-                  aggregateID: input.sessionID,
-                  types: DurableEventTypes,
-                })
-                .pipe(
-                  Effect.mapError((error) => new InvalidCursorError({ message: error.message })),
-                )
-              return {
-                ...page,
-                events: page.events.filter(
-                  (event): event is SessionEvent.DurableEvent => isDurableSessionEvent(event),
-                ),
-              }
+              return yield* EventV2.readAggregate(db, {
+                ...input,
+                aggregateID: input.sessionID,
+                manifest: SessionDurable,
+              }).pipe(Effect.mapError((error) => new InvalidCursorError({ message: error.message })))
             }),
             prompt: Effect.fn("V2Session.prompt")((input) =>
               Effect.uninterruptible(

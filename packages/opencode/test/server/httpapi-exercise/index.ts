@@ -1082,7 +1082,10 @@ const scenarios: Scenario[] = [
       (body) => {
         object(body)
         array(body.events)
-        if (typeof body.through !== "number") throw new Error("Expected numeric history cutoff")
+        check(
+          body.cursor === undefined || typeof body.cursor === "string",
+          "Expected an optional opaque history cursor",
+        )
       },
       "none",
     ),
@@ -1095,9 +1098,9 @@ const scenarios: Scenario[] = [
     .json(404, object, "status"),
   http.protected
     .get("/api/session/{sessionID}/history", "v2.session.history.invalid")
-    .seeded((ctx) => ctx.session({ title: "Invalid history cutoff" }))
+    .seeded((ctx) => ctx.session({ title: "Invalid history cursor" }))
     .at((ctx) => ({
-      path: `${route("/api/session/{sessionID}/history", { sessionID: ctx.state.id })}?through=999999`,
+      path: `${route("/api/session/{sessionID}/history", { sessionID: ctx.state.id })}?cursor=malformed`,
       headers: ctx.headers(),
     }))
     .json(400, object, "status"),

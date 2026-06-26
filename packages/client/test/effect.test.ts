@@ -2,6 +2,7 @@ import { expect, test } from "bun:test"
 import { DateTime, Effect, Stream } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/unstable/http"
 import { AbsolutePath, Agent, Location, Model, OpenCode, Prompt, Session, SessionMessage } from "../src/effect"
+import { SessionHistoryCursor } from "@opencode-ai/protocol/groups/session"
 
 test("sessions.get returns the decoded Effect projection", async () => {
   const httpClient = HttpClient.make((request) =>
@@ -16,6 +17,8 @@ test("sessions.get returns the decoded Effect projection", async () => {
 })
 
 test("session methods retain decoded Effect inputs and outputs", async () => {
+  const historyQueries: Array<Record<string, string>> = []
+  let historyPage = 0
   const httpClient = HttpClient.make((request) => {
     const url = request.url
     if (url.includes("/event")) {
@@ -29,10 +32,14 @@ test("session methods retain decoded Effect inputs and outputs", async () => {
       )
     }
     if (url.includes("/history")) {
+      historyPage++
+      historyQueries.push(Object.fromEntries(request.urlParams.params))
       return Effect.succeed(
         HttpClientResponse.fromWeb(
           request,
-          Response.json({ events: [modelSwitchedEvent], through: 2, nextAfter: 1 }),
+          Response.json(
+            historyPage === 1 ? { events: [modelSwitchedEvent], cursor: "opaque_history_cursor" } : { events: [] },
+          ),
         ),
       )
     }
@@ -83,9 +90,15 @@ test("session methods retain decoded Effect inputs and outputs", async () => {
     const history = yield* client.sessions.history({
       sessionID: Session.ID.make("ses_test"),
       after: 0,
-      through: 2,
       limit: 1,
     })
+    const historyNext = history.cursor
+      ? yield* client.sessions.history({
+          sessionID: Session.ID.make("ses_test"),
+          cursor: history.cursor,
+          limit: 2,
+        })
+      : undefined
     const events = yield* client.sessions
       .events({ sessionID: Session.ID.make("ses_test"), after: 0 })
       .pipe(Stream.runCollect)
@@ -94,7 +107,7 @@ test("session methods retain decoded Effect inputs and outputs", async () => {
       sessionID: Session.ID.make("ses_test"),
       messageID: SessionMessage.ID.make("msg_model"),
     })
-    return { page, active, created, admitted, context, history, events, message }
+    return { page, active, created, admitted, context, history, historyNext, events, message }
   }).pipe(Effect.provideService(HttpClient.HttpClient, httpClient), Effect.runPromise)
 
   expect(DateTime.toEpochMillis(result.page.data[0].time.created)).toBe(1_717_171_717_000)
@@ -107,7 +120,9 @@ test("session methods retain decoded Effect inputs and outputs", async () => {
   expect(DateTime.toEpochMillis(result.admitted.timeCreated)).toBe(1_717_171_717_000)
   expect(result.context).toEqual([])
   expect(DateTime.toEpochMillis(result.history.events[0].data.timestamp)).toBe(1_717_171_717_000)
-  expect(result.history).toEqual(expect.objectContaining({ through: 2, nextAfter: 1 }))
+  expect(result.history).toEqual(expect.objectContaining({ cursor: "opaque_history_cursor" }))
+  expect(result.historyNext).toEqual({ events: [] })
+  expect(historyQueries[1]).toEqual({ limit: "2", cursor: "opaque_history_cursor" })
   expect(DateTime.toEpochMillis(result.events[0].data.timestamp)).toBe(1_717_171_717_000)
   expect(result.message).toEqual(expect.objectContaining({ id: "msg_model", type: "model-switched" }))
 })
@@ -124,7 +139,10 @@ test("sessions.history retains the typed InvalidCursorError", async () => {
   const error = await Effect.gen(function* () {
     const client = yield* OpenCode.make({ baseUrl: "http://localhost:3000" })
     return yield* client.sessions
-      .history({ sessionID: Session.ID.make("ses_test"), through: 2 })
+      .history({
+        sessionID: Session.ID.make("ses_test"),
+        cursor: SessionHistoryCursor.make({ after: 0, through: 0 }),
+      })
       .pipe(Effect.flip)
   }).pipe(Effect.provideService(HttpClient.HttpClient, httpClient), Effect.runPromise)
 

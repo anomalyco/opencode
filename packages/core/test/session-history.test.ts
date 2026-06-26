@@ -5,11 +5,13 @@ import { EventV2 } from "@opencode-ai/core/event"
 import { Location } from "@opencode-ai/core/location"
 import { LocationServiceMap } from "@opencode-ai/core/location-layer"
 import { ProjectV2 } from "@opencode-ai/core/project"
+import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionStore } from "@opencode-ai/core/session/store"
+import { SessionTable } from "@opencode-ai/core/session/sql"
 import { testEffect } from "./lib/effect"
 
 const projects = Layer.succeed(
@@ -48,16 +50,31 @@ const GapEvent = EventV2.define({
 })
 
 describe("SessionV2.history", () => {
-  it.effect("returns a stable cutoff for a Session with no public history", () =>
+  it.effect("returns an exhausted page for a migrated Session with no event sequence", () =>
     Effect.gen(function* () {
+      const db = (yield* Database.Service).db
       const session = yield* SessionV2.Service
-      const created = yield* session.create({ location })
+      const sessionID = SessionV2.ID.make("ses_empty_history")
+      yield* db
+        .insert(ProjectTable)
+        .values({ id: ProjectV2.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
+        .onConflictDoNothing()
+        .run()
+      yield* db
+        .insert(SessionTable)
+        .values({
+          id: sessionID,
+          project_id: ProjectV2.ID.global,
+          slug: "empty-history",
+          directory: "/project",
+          title: "Empty history",
+          version: "test",
+        })
+        .run()
 
-      const first = yield* session.history({ sessionID: created.id, limit: 10 })
-      const second = yield* session.history({ sessionID: created.id, through: first.through, limit: 10 })
+      const first = yield* session.history({ sessionID, limit: 10 })
 
-      expect(first).toEqual({ events: [], through: 0, nextAfter: undefined })
-      expect(second).toEqual(first)
+      expect(first).toEqual({ events: [], through: -1, nextAfter: undefined })
     }),
   )
 
@@ -130,9 +147,7 @@ describe("SessionV2.history", () => {
   it.effect("fails with NotFoundError for a missing Session", () =>
     Effect.gen(function* () {
       const session = yield* SessionV2.Service
-      const error = yield* session
-        .history({ sessionID: SessionV2.ID.make("ses_missing"), limit: 10 })
-        .pipe(Effect.flip)
+      const error = yield* session.history({ sessionID: SessionV2.ID.make("ses_missing"), limit: 10 }).pipe(Effect.flip)
 
       expect(error._tag).toBe("Session.NotFoundError")
     }),

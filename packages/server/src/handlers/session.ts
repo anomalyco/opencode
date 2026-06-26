@@ -2,7 +2,7 @@ import { SessionV2 } from "@opencode-ai/core/session"
 import { DateTime, Effect, Stream } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import { Api } from "../api"
-import { SessionsCursor } from "@opencode-ai/protocol/groups/session"
+import { SessionHistoryCursor, SessionsCursor } from "@opencode-ai/protocol/groups/session"
 import {
   ConflictError,
   InvalidCursorError,
@@ -332,14 +332,27 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.history",
         Effect.fn(function* (ctx) {
+          const continuation =
+            ctx.query.cursor !== undefined
+              ? yield* SessionHistoryCursor.parse(ctx.query.cursor).pipe(
+                  Effect.mapError(() => new InvalidCursorError({ message: "Invalid cursor" })),
+                )
+              : undefined
           return yield* session
             .history({
               sessionID: ctx.params.sessionID,
-              after: ctx.query.after,
-              through: ctx.query.through,
+              after: continuation?.after ?? ctx.query.after,
+              through: continuation?.through,
               limit: ctx.query.limit ?? DefaultSessionHistoryLimit,
             })
             .pipe(
+              Effect.map((page) => ({
+                events: page.events,
+                cursor:
+                  page.nextAfter === undefined
+                    ? undefined
+                    : SessionHistoryCursor.make({ after: page.nextAfter, through: page.through }),
+              })),
               Effect.catchTag(
                 "Session.NotFoundError",
                 (error) =>
