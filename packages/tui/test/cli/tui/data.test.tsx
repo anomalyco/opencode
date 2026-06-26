@@ -68,7 +68,7 @@ test("refreshes resources into reactive getters", async () => {
   function Probe() {
     data = useData()
     onMount(ready)
-    return <box />
+    return <text>{data.session.message.get("ses_test", "msg_second")?.id ?? "missing"}</text>
   }
 
   const app = await testRender(() => (
@@ -96,6 +96,8 @@ test("refreshes resources into reactive getters", async () => {
     expect(data.session.get("ses_test")?.title).toBe("Test session")
     expect(data.session.message.ids("ses_test")).toEqual(["msg_first", "msg_second"])
     expect(data.session.message.get("ses_test", "msg_second")?.id).toBe("msg_second")
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toContain("msg_second")
     expect(data.location.default()).toEqual({ directory, workspaceID: undefined })
     expect(data.location.agent.list(location)?.map((agent) => agent.id)).toEqual(["build"])
   } finally {

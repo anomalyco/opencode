@@ -502,8 +502,9 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             return store.session.message[sessionID] ?? []
           },
           get(sessionID: string, messageID: string) {
+            const messages = store.session.message[sessionID]
             const position = messageIndex.get(sessionID)?.get(messageID)
-            return position === undefined ? undefined : store.session.message[sessionID]?.[position]
+            return position === undefined ? undefined : messages?.[position]
           },
           async refresh(sessionID: string) {
             setStore("session", "message", sessionID, [])
@@ -518,8 +519,8 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             const messages = [...loaded.map((message) => liveByID.get(message.id) ?? message), ...live]
               .filter((message, index, messages) => messages.findIndex((item) => item.id === message.id) === index)
               .toSorted((a, b) => a.time.created - b.time.created)
-            setStore("session", "message", sessionID, messages)
             messageIndex.set(sessionID, new Map(messages.map((message, index) => [message.id, index])))
+            setStore("session", "message", sessionID, messages)
           },
         },
         permission: {
