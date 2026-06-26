@@ -32,12 +32,15 @@ const permission = Layer.succeed(
     list: () => Effect.die("unused"),
   }),
 )
-const database = Database.layerFromPath(":memory:")
-const events = EventV2.layer.pipe(Layer.provide(database))
-const todos = SessionTodo.layer.pipe(Layer.provide(database), Layer.provide(events))
 const registry = ToolRegistry.defaultLayer.pipe(Layer.provide(permission))
-const tool = TodoWriteTool.layer.pipe(Layer.provide(registry), Layer.provide(permission), Layer.provide(todos))
-const it = testEffect(Layer.mergeAll(database, events, todos, permission, registry, tool))
+const tool = TodoWriteTool.layer.pipe(
+  Layer.provide(registry),
+  Layer.provide(permission),
+  Layer.provide(SessionTodo.defaultLayer),
+)
+const it = testEffect(
+  Layer.mergeAll(Database.defaultLayer, EventV2.defaultLayer, SessionTodo.defaultLayer, permission, registry, tool),
+)
 
 const setup = Effect.gen(function* () {
   assertions.length = 0
@@ -74,7 +77,9 @@ describe("TodoWriteTool", () => {
       yield* setup
       const registry = yield* ToolRegistry.Service
       const service = yield* SessionTodo.Service
-      const todoList = [{ content: "Implement slice", status: "in_progress", priority: "high" }]
+      const todoList: ReadonlyArray<SessionTodo.Info> = [
+        { content: "Implement slice", status: "in_progress", priority: "high" },
+      ]
 
       expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual([TodoWriteTool.name])
       expect(yield* settleTool(registry, call(todoList))).toEqual({

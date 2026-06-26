@@ -11,6 +11,7 @@ import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
+import { LocationServiceMap } from "@opencode-ai/core/location-layer"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionStore } from "@opencode-ai/core/session/store"
@@ -18,29 +19,26 @@ import { eq } from "drizzle-orm"
 import { location } from "./fixture/location"
 import { testEffect } from "./lib/effect"
 
-const database = Database.layerFromPath(":memory:")
 const current = Layer.succeed(
   Location.Service,
   Location.Service.of(location({ directory: AbsolutePath.make("/project") })),
 )
-const events = EventV2.layer.pipe(Layer.provide(database))
-const store = SessionStore.layer.pipe(Layer.provide(database))
 const sessions = SessionV2.layer.pipe(
-  Layer.provide(events),
-  Layer.provide(database),
-  Layer.provide(store),
+  Layer.provide(LocationServiceMap.layer),
+  Layer.provide(EventV2.defaultLayer),
+  Layer.provide(Database.defaultLayer),
+  Layer.provide(SessionStore.defaultLayer),
   Layer.provide(Project.defaultLayer),
   Layer.provide(SessionExecution.noopLayer),
 )
-const saved = PermissionSaved.layer.pipe(Layer.provide(database))
 const layer = PermissionV2.locationLayer.pipe(
-  Layer.provideMerge(database),
-  Layer.provideMerge(store),
-  Layer.provideMerge(events),
+  Layer.provideMerge(Database.defaultLayer),
+  Layer.provideMerge(SessionStore.defaultLayer),
+  Layer.provideMerge(EventV2.defaultLayer),
   Layer.provideMerge(current),
   Layer.provideMerge(sessions),
   Layer.provideMerge(SessionExecution.noopLayer),
-  Layer.provideMerge(saved),
+  Layer.provideMerge(PermissionSaved.defaultLayer),
 )
 const it = testEffect(layer)
 
@@ -74,8 +72,7 @@ function setup(rules: PermissionV2.Ruleset = []) {
 function setRules(rules: PermissionV2.Ruleset) {
   return Effect.gen(function* () {
     const agents = yield* AgentV2.Service
-    const update = yield* agents.transform()
-    yield* update((editor) =>
+    yield* agents.transform((editor) =>
       editor.update(AgentV2.ID.make("test"), (agent) => {
         agent.permissions = [...rules]
       }),
@@ -130,7 +127,7 @@ describe("PermissionV2", () => {
     Effect.gen(function* () {
       yield* setup([{ action: "read", resource: "*", effect: "allow" }])
       const agents = yield* AgentV2.Service
-      yield* agents.update((editor) =>
+      yield* agents.transform((editor) =>
         editor.update(AgentV2.ID.make("reviewer"), (agent) => {
           agent.permissions.push({ action: "read", resource: "*", effect: "deny" })
         }),
@@ -139,7 +136,7 @@ describe("PermissionV2", () => {
 
       expect(yield* service.ask(assertion())).toMatchObject({ effect: "allow" })
       expect(yield* service.ask(assertion({ agent: AgentV2.ID.make("reviewer") }))).toMatchObject({ effect: "deny" })
-      yield* agents.update((editor) =>
+      yield* agents.transform((editor) =>
         editor.update(AgentV2.ID.make("reviewer"), (agent) => {
           agent.permissions = []
         }),
@@ -187,8 +184,7 @@ describe("PermissionV2", () => {
         .run()
         .pipe(Effect.orDie)
       const agents = yield* AgentV2.Service
-      const update = yield* agents.transform()
-      yield* update((editor) =>
+      yield* agents.transform((editor) =>
         editor.update(AgentV2.ID.make("build"), (agent) => {
           agent.permissions = [{ action: "todowrite", resource: "*", effect: "allow" }]
         }),
@@ -214,7 +210,7 @@ describe("PermissionV2", () => {
         .run()
         .pipe(Effect.orDie)
       const agents = yield* AgentV2.Service
-      yield* agents.update((editor) => {
+      yield* agents.transform((editor) => {
         editor.remove(AgentV2.ID.make("test"))
         editor.remove(AgentV2.ID.make("build"))
       })
