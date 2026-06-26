@@ -394,15 +394,29 @@ describe("ACP service sessions", () => {
     expect(second.sessions.map((session) => session.sessionId)).toEqual(["ses_2", "ses_1"])
   })
 
-  it("resumes a session and stores restored state", async () => {
-    const { service } = makeService([
+  it("resumes a session and stores restored state without replaying transcript chunks", async () => {
+    const { service, updates } = makeService([
       {
         info: {
+          id: "msg_user",
+          sessionID: "ses_resume",
           role: "user",
           model: { providerID: "test", modelID: "test-model", variant: "high" },
           agent: "plan",
         },
-        parts: [],
+        parts: [{ id: "part_user", sessionID: "ses_resume", messageID: "msg_user", type: "text", text: "hello" }],
+      },
+      {
+        info: { id: "msg_assistant", sessionID: "ses_resume", role: "assistant" },
+        parts: [
+          {
+            id: "part_assistant",
+            sessionID: "ses_resume",
+            messageID: "msg_assistant",
+            type: "text",
+            text: "hi there",
+          },
+        ],
       },
     ])
     const resumed = await Effect.runPromise(
@@ -414,6 +428,11 @@ describe("ACP service sessions", () => {
 
     expect(select(resumed, "effort")?.currentValue).toBe("high")
     expect(select(updated, "effort")?.currentValue).toBe("default")
+    expect(
+      updates
+        .map((item) => item.update)
+        .filter((item) => item.sessionUpdate === "user_message_chunk" || item.sessionUpdate === "agent_message_chunk"),
+    ).toEqual([])
   })
 
   it("closes local ACP state and aborts the backing session best-effort", async () => {
