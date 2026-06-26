@@ -5,6 +5,8 @@ import { SessionRunner } from "./runner/index"
 import { SessionSchema } from "./schema"
 
 export interface Interface {
+  /** Snapshots active execution owned by this process. */
+  readonly active: Effect.Effect<ReadonlySet<SessionSchema.ID>>
   /** Starts execution while idle or joins the active execution. */
   readonly resume: (sessionID: SessionSchema.ID) => Effect.Effect<void, SessionRunner.RunError>
   /** Registers newly recorded work. Repeated wakeups may coalesce. */
@@ -19,5 +21,10 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/v2
 /** Low-level compatibility layer for callers that only need durable Session recording. */
 export const noopLayer = Layer.succeed(
   Service,
-  Service.of({ resume: () => Effect.void, wake: () => Effect.void, interrupt: () => Effect.void }),
+  Service.of({
+    active: Effect.succeed(new Set()),
+    resume: () => Effect.void,
+    wake: () => Effect.void,
+    interrupt: () => Effect.void,
+  }),
 )

@@ -42,7 +42,7 @@ const layer = MoveSession.layer.pipe(
   Layer.provide(Git.defaultLayer),
   Layer.provide(EventV2.defaultLayer),
   Layer.provide(project),
-  Layer.provide(sessions),
+  Layer.provide(SessionStore.defaultLayer),
 )
 const it = testEffect(
   Layer.mergeAll(
@@ -53,7 +53,6 @@ const it = testEffect(
     project,
     SessionProjector.defaultLayer,
     SessionStore.defaultLayer,
-    SessionExecution.noopLayer,
     sessions,
   ),
 )

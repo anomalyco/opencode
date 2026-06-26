@@ -37,6 +37,11 @@ test("session methods retain decoded Effect inputs and outputs", async () => {
     if (url.includes("/message/")) {
       return Effect.succeed(HttpClientResponse.fromWeb(request, Response.json({ data: modelSwitchedMessage })))
     }
+    if (url.endsWith("/api/session/active")) {
+      return Effect.succeed(
+        HttpClientResponse.fromWeb(request, Response.json({ data: { ses_test: { type: "running" } } })),
+      )
+    }
     if (request.method === "POST" && url.endsWith("/api/session")) {
       return Effect.succeed(HttpClientResponse.fromWeb(request, Response.json(session)))
     }
@@ -50,6 +55,7 @@ test("session methods retain decoded Effect inputs and outputs", async () => {
   const result = await Effect.gen(function* () {
     const client = yield* OpenCode.make({ baseUrl: "http://localhost:3000" })
     const page = yield* client.sessions.list({ limit: 10 })
+    const active = yield* client.sessions.active()
     const created = yield* client.sessions.create({
       location: Location.Ref.make({ directory: AbsolutePath.make("/tmp/project") }),
     })
@@ -74,10 +80,11 @@ test("session methods retain decoded Effect inputs and outputs", async () => {
       sessionID: Session.ID.make("ses_test"),
       messageID: SessionMessage.ID.make("msg_model"),
     })
-    return { page, created, admitted, context, events, message }
+    return { page, active, created, admitted, context, events, message }
   }).pipe(Effect.provideService(HttpClient.HttpClient, httpClient), Effect.runPromise)
 
   expect(DateTime.toEpochMillis(result.page.data[0].time.created)).toBe(1_717_171_717_000)
+  expect(result.active).toEqual({ ses_test: { type: "running" } })
   expect(Object.getPrototypeOf(result.page.data[0])).toBe(Object.prototype)
   expect(Object.getPrototypeOf(result.created)).toBe(Object.prototype)
   expect(result.created.id).toBe("ses_test")
