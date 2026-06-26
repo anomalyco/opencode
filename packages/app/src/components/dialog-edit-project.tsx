@@ -20,7 +20,7 @@ export function DialogEditProject(props: { project: LocalProject; server: Server
   const dialog = useDialog()
   const global = useGlobal()
   const language = useLanguage()
-  const serverCtx = createMemo(() => global.createServerCtx(props.server))
+  const serverCtx = createMemo(() => global.ensureServerCtx(props.server))
   const serverSDK = () => serverCtx().sdk
   const serverSync = () => serverCtx().sync
 

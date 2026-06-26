@@ -253,7 +253,11 @@ export const defaultLayer = layer.pipe(
   Layer.provide(Global.layer),
   Layer.provide(NodeFileSystem.layer),
 )
-export const node = LayerNode.make(layer, [FSUtil.node, Global.node, filesystem, EffectFlock.node])
+export const node = LayerNode.make({
+  service: Service,
+  layer: layer,
+  deps: [FSUtil.node, Global.node, filesystem, EffectFlock.node],
+})
 
 const { runPromise } = makeRuntime(Service, defaultLayer)
 

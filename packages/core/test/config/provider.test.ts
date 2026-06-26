@@ -15,11 +15,8 @@ const it = testEffect(PluginTestLayer)
 
 const addPlugin = Effect.fn(function* (config: Config.Interface) {
   const plugin = yield* PluginV2.Service
-  const host = yield* PluginHost.make()
-  yield* plugin.add({
-    ...ConfigProviderPlugin.Plugin,
-    effect: ConfigProviderPlugin.Plugin.effect(host).pipe(Effect.provideService(Config.Service, config)),
-  })
+  const host = yield* PluginHost.make(plugin)
+  yield* ConfigProviderPlugin.Plugin.effect(host).pipe(Effect.provideService(Config.Service, config))
 })
 
 function required<T>(value: T | undefined): T {
@@ -58,7 +55,7 @@ function request(headers: Record<string, string>, variant?: string) {
 const decode = Schema.decodeUnknownSync(Config.Info)
 
 describe("ConfigProviderPlugin.Plugin", () => {
-  it.effect("partitions existing model variant bodies without changing config shape", () =>
+  it.effect("keeps configured model variant bodies unchanged", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
       const providerID = ProviderV2.ID.opencode
@@ -99,8 +96,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
       expect(model.variants).toMatchObject([
         {
           id: "high",
-          body: {},
-          options: {
+          body: {
             reasoningEffort: "high",
             reasoningSummary: "auto",
             include: ["reasoning.encrypted_content"],
@@ -110,7 +106,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
     }),
   )
 
-  it.effect("uses the effective provider package across layered config", () =>
+  it.effect("keeps layered model variant bodies unchanged", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
       const providerID = ProviderV2.ID.opencode
@@ -150,8 +146,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
       const model = required(yield* catalog.model.get(providerID, modelID))
       expect(model.variants[0]).toMatchObject({
         id: "high",
-        body: {},
-        options: { reasoningEffort: "high" },
+        body: { reasoningEffort: "high" },
       })
     }),
   )

@@ -28,9 +28,6 @@ export const Input = Schema.Struct({
     .annotate({
       description: `Timeout in milliseconds. Defaults to ${DEFAULT_TIMEOUT_MS} and may not exceed ${MAX_TIMEOUT_MS}.`,
     }),
-  description: Schema.String.pipe(Schema.optional).annotate({
-    description: "Concise description of the command's purpose",
-  }),
 })
 
 const Output = Schema.Struct({

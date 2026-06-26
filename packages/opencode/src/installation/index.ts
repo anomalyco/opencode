@@ -8,30 +8,17 @@ import { errorMessage } from "@/util/error"
 import { ChildProcess } from "effect/unstable/process"
 import { AppProcess } from "@opencode-ai/core/process"
 import path from "path"
-import { EventV2 } from "@opencode-ai/core/event"
 import { makeRuntime } from "@opencode-ai/core/effect/runtime"
 import semver from "semver"
 import { InstallationChannel, InstallationVersion } from "@opencode-ai/core/installation/version"
 import { NpmConfig } from "@opencode-ai/core/npm-config"
+import { InstallationEvent } from "@opencode-ai/schema/installation-event"
 
 export type Method = "curl" | "npm" | "yarn" | "pnpm" | "bun" | "brew" | "scoop" | "choco" | "unknown"
 
 export type ReleaseType = "patch" | "minor" | "major"
 
-export const Event = {
-  Updated: EventV2.define({
-    type: "installation.updated",
-    schema: {
-      version: Schema.String,
-    },
-  }),
-  UpdateAvailable: EventV2.define({
-    type: "installation.update-available",
-    schema: {
-      version: Schema.String,
-    },
-  }),
-}
+export const Event = InstallationEvent
 
 export function getReleaseType(current: string, latest: string): ReleaseType {
   const currMajor = semver.major(current)
@@ -345,6 +332,6 @@ export const latest = (...args: Parameters<Interface["latest"]>) => runPromise((
 export const method = () => runPromise((s) => s.method())
 export const upgrade = (...args: Parameters<Interface["upgrade"]>) => runPromise((s) => s.upgrade(...args))
 
-export const node = LayerNode.make(layer, [httpClient, AppProcess.node])
+export const node = LayerNode.make({ service: Service, layer: layer, deps: [httpClient, AppProcess.node] })
 
 export * as Installation from "."

@@ -375,18 +375,6 @@ export const SettingsGeneral: Component = () => {
         </SettingsRow>
 
         <SettingsRow
-          title={language.t("settings.general.row.showSessionProgressBar.title")}
-          description={language.t("settings.general.row.showSessionProgressBar.description")}
-        >
-          <div data-action="settings-show-session-progress-bar">
-            <Switch
-              checked={settings.general.showSessionProgressBar()}
-              onChange={(checked) => settings.general.setShowSessionProgressBar(checked)}
-            />
-          </div>
-        </SettingsRow>
-
-        <SettingsRow
           title={language.t("settings.general.row.newLayoutDesigns.title")}
           description={language.t("settings.general.row.newLayoutDesigns.description")}
         >

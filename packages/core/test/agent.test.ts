@@ -50,7 +50,7 @@ describe("AgentV2", () => {
       )
       description = "New description"
       hidden = false
-      yield* agent.rebuild()
+      yield* agent.reload()
 
       expect(yield* agent.get(id)).toMatchObject({ description: "New description", hidden: false })
     }),
@@ -104,8 +104,12 @@ describe("AgentV2", () => {
       yield* AgentPlugin.Plugin.effect(
         host({
           agent: agentHost(agent),
-          location: location({ directory: AbsolutePath.make("/project") }),
         }),
+      ).pipe(
+        Effect.provideService(
+          Location.Service,
+          Location.Service.of(location({ directory: AbsolutePath.make("/project") })),
+        ),
       )
 
       const agents = yield* agent.all()

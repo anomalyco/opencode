@@ -119,7 +119,6 @@ export async function setupTimelineBenchmark(page: Page, options: { historyTurns
           editToolPartsExpanded: true,
           shellToolPartsExpanded: true,
           showReasoningSummaries: true,
-          showSessionProgressBar: true,
         },
       }),
     )
