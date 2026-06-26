@@ -223,9 +223,7 @@ describe("ReadTool", () => {
         },
         { sessionID, action: "read", resources: [external.replaceAll("\\", "/")], save: ["*"] },
       ])
-      expect(readCalls).toEqual([
-        { input: AbsolutePath.make(external), page: { offset: undefined, limit: undefined } },
-      ])
+      expect(readCalls).toEqual([{ input: AbsolutePath.make(external), page: { offset: undefined, limit: undefined } }])
     }),
   )
 

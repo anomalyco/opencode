@@ -75,7 +75,8 @@ export const layer = Layer.effectDiscard(
                 agent: context.agent,
                 source,
               })
-              if (type === "directory") return yield* reader.list(absolute, { offset: input.offset, limit: input.limit })
+              if (type === "directory")
+                return yield* reader.list(absolute, { offset: input.offset, limit: input.limit })
               const content = yield* reader.read(absolute, resource, {
                 offset: input.offset,
                 limit: input.limit,
