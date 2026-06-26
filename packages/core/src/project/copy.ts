@@ -13,7 +13,7 @@ import { Slug } from "../util/slug"
 import { EventV2 } from "../event"
 import { Database } from "../database/database"
 import { Location } from "../location"
-import { ProjectDirectoriesEvent } from "@opencode-ai/schema/project-directories"
+import { Event } from "@opencode-ai/schema/project-directories"
 import { ProjectCopy } from "@opencode-ai/schema/project-copy"
 
 export const StrategyID = ProjectCopy.StrategyID
@@ -96,7 +96,7 @@ export interface Strategy {
   readonly list: (directory: AbsolutePath) => Effect.Effect<ListEntry[], Git.WorktreeError | DirectoryUnavailableError>
 }
 
-export const Event = ProjectDirectoriesEvent
+export { Event }
 
 export interface Interface {
   readonly register: (strategy: Strategy) => Effect.Effect<void, DuplicateStrategyError>
@@ -279,4 +279,8 @@ export const layer = Layer.effect(
 )
 
 export const locationLayer = layer
-export const node = LayerNode.make(layer, [FSUtil.node, Git.node, ProjectDirectories.node, EventV2.node, Database.node])
+export const node = LayerNode.make({
+  service: Service,
+  layer: layer,
+  deps: [FSUtil.node, Git.node, ProjectDirectories.node, EventV2.node, Database.node],
+})

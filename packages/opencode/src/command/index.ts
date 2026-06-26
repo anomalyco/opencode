@@ -170,6 +170,6 @@ export const defaultLayer = layer.pipe(
   Layer.provide(Skill.defaultLayer),
 )
 
-export const node = LayerNode.make(layer, [Config.node, MCP.node, Skill.node])
+export const node = LayerNode.make({ service: Service, layer: layer, deps: [Config.node, MCP.node, Skill.node] })
 
 export * as Command from "."

@@ -9,6 +9,8 @@ import { Model } from "@opencode-ai/schema/model"
 import { AgentAttachment, FileAttachment, Prompt, Source } from "@opencode-ai/schema/prompt"
 import { Provider } from "@opencode-ai/schema/provider"
 import { Project } from "@opencode-ai/schema/project"
+import { ProjectDirectories } from "@opencode-ai/schema/project-directories"
+import { PermissionV1 } from "@opencode-ai/schema/permission-v1"
 import { Session } from "@opencode-ai/schema/session"
 import { SessionInput } from "@opencode-ai/schema/session-input"
 import { SessionMessage } from "@opencode-ai/schema/session-message"
@@ -20,10 +22,14 @@ import { FileSystem } from "@opencode-ai/schema/filesystem"
 import { Integration } from "@opencode-ai/schema/integration"
 import { LLM } from "@opencode-ai/schema/llm"
 import { Permission } from "@opencode-ai/schema/permission"
+import { Plugin } from "@opencode-ai/schema/plugin"
+import { Pty } from "@opencode-ai/schema/pty"
 import { Reference } from "@opencode-ai/schema/reference"
+import { SessionTodo } from "@opencode-ai/schema/session-todo"
 import { Skill } from "@opencode-ai/schema/skill"
-import { AbsolutePath, DateTimeUtcFromMillis } from "@opencode-ai/schema/schema"
+import { AbsolutePath, DateTimeUtcFromMillis, optional, statics } from "@opencode-ai/schema/schema"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { PluginV2 } from "@opencode-ai/core/plugin"
 
 test("Core reuses the canonical shared schemas", async () => {
   const [
@@ -35,13 +41,18 @@ test("Core reuses the canonical shared schemas", async () => {
     coreLocation,
     coreLLM,
     corePermission,
+    corePermissionV1,
+    coreProjectCopy,
+    corePty,
     coreProject,
     coreReference,
     coreSessionInput,
     coreSessionMessage,
+    coreSessionTodo,
     corePrompt,
     coreSkill,
     coreV2Schema,
+    coreSchema,
     coreWorkspace,
   ] = await Promise.all([
     import("@opencode-ai/core/command"),
@@ -52,13 +63,18 @@ test("Core reuses the canonical shared schemas", async () => {
     import("@opencode-ai/core/location"),
     import("@opencode-ai/llm"),
     import("@opencode-ai/core/permission"),
+    import("@opencode-ai/core/v1/permission"),
+    import("@opencode-ai/core/project/copy"),
+    import("@opencode-ai/core/pty"),
     import("@opencode-ai/core/project/schema"),
     import("@opencode-ai/core/reference"),
     import("@opencode-ai/core/session/input"),
     import("@opencode-ai/core/session/message"),
+    import("@opencode-ai/core/session/todo"),
     import("@opencode-ai/core/session/prompt"),
     import("@opencode-ai/core/skill"),
     import("@opencode-ai/core/v2-schema"),
+    import("@opencode-ai/core/schema"),
     import("@opencode-ai/core/workspace"),
   ])
 
@@ -111,6 +127,12 @@ test("Core reuses the canonical shared schemas", async () => {
     [corePermission.Effect, Permission.Effect],
     [corePermission.Rule, Permission.Rule],
     [corePermission.Ruleset, Permission.Ruleset],
+    [corePermissionV1.Event, PermissionV1.Event],
+    [coreProjectCopy.Event, ProjectDirectories.Event],
+    [PluginV2.ID, Plugin.ID],
+    [PluginV2.Event, Plugin.Event],
+    [corePty.Info, Pty.Info],
+    [corePty.Event, Pty.Event],
     [coreProject.ID, Project.ID],
     [coreReference.LocalSource, Reference.LocalSource],
     [coreReference.GitSource, Reference.GitSource],
@@ -140,6 +162,8 @@ test("Core reuses the canonical shared schemas", async () => {
     [coreSessionMessage.Assistant, SessionMessage.Assistant],
     [coreSessionMessage.Compaction, SessionMessage.Compaction],
     [coreSessionMessage.Message, SessionMessage.Message],
+    [coreSessionTodo.Info, SessionTodo.Info],
+    [coreSessionTodo.Event, SessionTodo.Event],
     [corePrompt.Source, Source],
     [corePrompt.FileAttachment, FileAttachment],
     [corePrompt.AgentAttachment, AgentAttachment],
@@ -150,6 +174,8 @@ test("Core reuses the canonical shared schemas", async () => {
     [coreSkill.Source, Skill.Source],
     [coreSkill.Info, Skill.Info],
     [coreV2Schema.DateTimeUtcFromMillis, DateTimeUtcFromMillis],
+    [coreSchema.optional, optional],
+    [coreSchema.statics, statics],
     [coreWorkspace.ID, Workspace.ID],
   ]
   for (const [core, shared] of schemas) expect(core).toBe(shared)
