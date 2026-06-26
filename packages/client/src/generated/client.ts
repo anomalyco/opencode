@@ -24,12 +24,15 @@ import type {
   SessionsCommitOutput,
   SessionsContextInput,
   SessionsContextOutput,
+  SessionsHistoryInput,
+  SessionsHistoryOutput,
   SessionsEventsInput,
   SessionsEventsOutput,
   SessionsInterruptInput,
   SessionsInterruptOutput,
   SessionsMessageInput,
   SessionsMessageOutput,
+  EventsSubscribeOutput,
 } from "./types"
 import { ClientError } from "./client-error"
 
@@ -324,6 +327,18 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ).then((value) => value.data),
+      history: (input: SessionsHistoryInput, requestOptions?: RequestOptions) =>
+        request<SessionsHistoryOutput>(
+          {
+            method: "GET",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/history`,
+            query: { limit: input.limit, after: input.after },
+            successStatus: 200,
+            declaredStatuses: [404, 400, 401],
+            empty: false,
+          },
+          requestOptions,
+        ),
       events: (input: SessionsEventsInput, requestOptions?: RequestOptions): AsyncIterable<SessionsEventsOutput> =>
         sse<SessionsEventsOutput>(
           {
@@ -358,6 +373,13 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ).then((value) => value.data),
+    },
+    events: {
+      subscribe: (requestOptions?: RequestOptions): AsyncIterable<EventsSubscribeOutput> =>
+        sse<EventsSubscribeOutput>(
+          { method: "GET", path: `/api/event`, successStatus: 200, declaredStatuses: [401, 400], empty: false },
+          requestOptions,
+        ),
     },
   }
 }

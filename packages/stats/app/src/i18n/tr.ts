@@ -223,6 +223,7 @@ export const dict = {
   "model.noPeersDescription": "Benzer model sıralamaları kullanım geldikten sonra görünür.",
   "model.noUsageLastWeek": "Geçen hafta kullanım yok",
   "model.newThisWeek": "Bu hafta yeni",
+  "model.sameAsPreviousWeek": "Önceki haftayla aynı",
   "model.vsPreviousWeek": "önceki haftaya göre {{change}}",
   "model.pdf": "PDF",
   "format.users": "kullanıcı",

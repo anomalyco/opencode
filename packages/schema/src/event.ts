@@ -55,7 +55,7 @@ export function define<
     id: ID,
     metadata: optional(Schema.Record(Schema.String, Schema.Unknown)),
     type: Schema.Literal(input.type),
-    durable: optional(Schema.Struct({ aggregateID: Schema.String, seq: Schema.Number, version: Schema.Number })),
+    durable: optional(Schema.Struct({ aggregateID: Schema.String, seq: Schema.Int, version: Schema.Int })),
     location: optional(Location.Ref),
     data,
   })
@@ -95,7 +95,7 @@ export function versionedType(type: string, version: number) {
   return `${type}.${version}`
 }
 
-export function durable(definitions: ReadonlyArray<Definition>) {
+export function durable<const Definitions extends ReadonlyArray<Definition>>(definitions: Definitions) {
   return readonlyMap(
     definitions.reduce((result, definition) => {
       if (!definition.durable) return result
@@ -103,7 +103,7 @@ export function durable(definitions: ReadonlyArray<Definition>) {
       if (result.has(key)) throw new Error(`Duplicate durable event definition for ${key}`)
       result.set(key, definition)
       return result
-    }, new Map<string, Definition>()),
+    }, new Map<string, Definitions[number]>()),
   )
 }
 

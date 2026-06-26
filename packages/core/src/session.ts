@@ -10,6 +10,7 @@ import { ModelV2 } from "./model"
 import { Location } from "./location"
 import { SessionMessage } from "./session/message"
 import { Prompt } from "./session/prompt"
+import { PromptInput } from "@opencode-ai/schema/prompt-input"
 import { EventV2 } from "./event"
 import { Database } from "./database/database"
 import { SessionProjector } from "./session/projector"
@@ -32,6 +33,8 @@ import { SessionInput } from "./session/input"
 import { Snapshot } from "./snapshot"
 import { SessionRevert } from "./session/revert"
 import { Revert } from "@opencode-ai/schema/revert"
+import { FSUtil } from "./fs-util"
+import { SessionDurable } from "@opencode-ai/schema/durable-event-manifest"
 
 export const RevertState = Revert.State
 export type RevertState = Revert.State
@@ -129,6 +132,11 @@ export interface Interface {
     sessionID: SessionSchema.ID
     after?: number
   }) => Stream.Stream<SessionEvent.DurableEvent, NotFoundError>
+  readonly history: (input: {
+    sessionID: SessionSchema.ID
+    after?: number
+    limit: number
+  }) => Effect.Effect<{ events: ReadonlyArray<SessionEvent.DurableEvent>; hasMore: boolean }, NotFoundError>
   readonly switchAgent: (input: { sessionID: SessionSchema.ID; agent: string }) => Effect.Effect<void, NotFoundError>
   readonly switchModel: (input: {
     sessionID: SessionSchema.ID
@@ -137,7 +145,7 @@ export interface Interface {
   readonly prompt: (input: {
     id?: SessionMessage.ID
     sessionID: SessionSchema.ID
-    prompt: Prompt
+    prompt: PromptInput.Prompt
     delivery?: SessionInput.Delivery
     resume?: boolean
   }) => Effect.Effect<SessionInput.Admitted, NotFoundError | PromptConflictError>
@@ -345,17 +353,26 @@ export const layer = Layer.unwrap(
                   .get(input.sessionID)
                   .pipe(Effect.as(events.durable({ aggregateID: input.sessionID, after: input.after }))),
               ).pipe(Stream.filter((event): event is SessionEvent.DurableEvent => isDurableSessionEvent(event))),
+            history: Effect.fn("V2Session.history")(function* (input) {
+              yield* result.get(input.sessionID)
+              return yield* EventV2.readAggregate(db, {
+                ...input,
+                aggregateID: input.sessionID,
+                manifest: SessionDurable,
+              })
+            }),
             prompt: Effect.fn("V2Session.prompt")((input) =>
               Effect.uninterruptible(
                 Effect.gen(function* () {
                   yield* result.get(input.sessionID)
+                  const prompt = resolvePrompt(input.prompt)
                   const messageID = input.id ?? SessionMessage.ID.create()
                   const delivery = input.delivery ?? "steer"
-                  const expected = { sessionID: input.sessionID, messageID, prompt: input.prompt, delivery }
+                  const expected = { sessionID: input.sessionID, messageID, prompt, delivery }
                   const admitted = yield* SessionInput.admit(db, events, {
                     id: messageID,
                     sessionID: input.sessionID,
-                    prompt: input.prompt,
+                    prompt,
                     delivery,
                   }).pipe(
                     Effect.catchDefect((defect) =>
@@ -452,3 +469,17 @@ export const defaultLayer = layer.pipe(
   Layer.provide(ProjectV2.defaultLayer),
   Layer.orDie,
 )
+
+const resolvePrompt = (input: PromptInput.Prompt) =>
+  Prompt.make({
+    text: input.text,
+    agents: input.agents,
+    files: input.files?.map((file) => {
+      const dataMime = file.uri.match(/^data:([^;,]+)[;,]/i)?.[1]
+      const target = URL.canParse(file.uri) ? new URL(file.uri).pathname : (file.name ?? file.uri)
+      return {
+        ...file,
+        mime: dataMime ?? (target.endsWith("/") ? "application/x-directory" : FSUtil.mimeType(target)),
+      }
+    }),
+  })

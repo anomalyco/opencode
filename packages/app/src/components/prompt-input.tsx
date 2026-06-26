@@ -1343,9 +1343,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   const agentsLoading = () => props.controls.agents.loading
-  const agentsShouldFadeIn = createMemo((prev) => prev ?? agentsLoading())
+  const agentsShouldFadeIn = createMemo<boolean>((prev) => prev ?? agentsLoading())
   const providersLoading = () => props.controls.model.loading
-  const providersShouldFadeIn = createMemo((prev) => prev ?? providersLoading())
+  const providersShouldFadeIn = createMemo<boolean>((prev) => prev ?? providersLoading())
 
   const [promptReady] = createResource(
     () => prompt.ready.promise,
@@ -1359,6 +1359,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const modelControlState = createMemo<ComposerModelControlState>(() => ({
     loading: providersLoading(),
+    shouldAnimate: providersShouldFadeIn(),
     paid: props.controls.model.paid,
     title: language.t("command.model.choose"),
     keybind: command.keybind("model.choose"),
@@ -1519,10 +1520,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   </Show>
                   {props.toolbar}
                   <ComposerModelControl state={modelControlState()} />
-                  <Show when={store.mode !== "shell" && showVariantControl()}>
+                  <Show when={!providersLoading() && store.mode !== "shell" && showVariantControl()}>
                     <div
                       data-component="prompt-variant-control"
                       classList={{
+                        "animate-in fade-in": providersShouldFadeIn(),
                         "hidden group-hover/prompt-input:block group-focus-within/prompt-input:block":
                           !props.controls.model.selection.variant.current() && !store.variantOpen,
                       }}
@@ -1765,7 +1767,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     <Show when={!agentsLoading()}>
                       <div
                         data-component="prompt-agent-control"
-                        style={agentsShouldFadeIn() ? { animation: "fade-in 0.3s" } : undefined}
+                        classList={{ "animate-in fade-in duration-300": agentsShouldFadeIn() }}
                       >
                         <TooltipKeybind
                           placement="top"
@@ -1794,7 +1796,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       <Show when={store.mode !== "shell"}>
                         <div
                           data-component="prompt-model-control"
-                          style={providersShouldFadeIn() ? { animation: "fade-in 0.3s" } : undefined}
+                          classList={{ "animate-in fade-in duration-300": providersShouldFadeIn() }}
                         >
                           <Show
                             when={props.controls.model.paid}
@@ -1873,7 +1875,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                         <Show when={showVariantControl()}>
                           <div
                             data-component="prompt-variant-control"
-                            style={providersShouldFadeIn() ? { animation: "fade-in 0.3s" } : undefined}
+                            classList={{ "animate-in fade-in duration-300": providersShouldFadeIn() }}
                           >
                             <TooltipKeybind
                               placement="top"
@@ -1923,6 +1925,7 @@ type ComposerAgentControlState = {
 
 type ComposerModelControlState = {
   loading: boolean
+  shouldAnimate: boolean
   paid: boolean
   title: string
   keybind: string
@@ -1970,6 +1973,7 @@ function ComposerModelControl(props: { state: ComposerModelControlState }) {
               variant="ghost"
               size="normal"
               class="min-w-0 max-w-[220px] justify-start text-[13px] font-[440] leading-5 text-v2-text-text-faint group"
+              classList={{ "animate-in fade-in": props.state.shouldAnimate }}
               style={props.state.style}
               onClick={props.state.onUnpaidClick}
             >
@@ -2000,6 +2004,7 @@ function ComposerModelControl(props: { state: ComposerModelControlState }) {
               style: props.state.style,
               class:
                 "min-w-0 max-w-[220px] justify-start text-[13px] font-[440] leading-5 text-v2-text-text-faint group",
+              classList: { "animate-in fade-in": props.state.shouldAnimate },
               "data-action": "prompt-model",
             }}
             onClose={props.state.onClose}

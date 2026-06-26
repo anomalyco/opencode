@@ -230,7 +230,12 @@ export function emitEffectImported(
   }
 }
 
-export function emitPromise(contract: Contract): Output {
+export function emitPromise(
+  contract: Contract,
+  options?: {
+    readonly outputTypes?: Readonly<Record<string, { readonly name: string; readonly import: string }>>
+  },
+): Output {
   const groups = contract.groups
   for (const group of groups) {
     for (const endpoint of group.endpoints) assertPromiseEndpoint(endpoint)
@@ -238,7 +243,7 @@ export function emitPromise(contract: Contract): Output {
   return {
     operations: operations(groups),
     files: [
-      { path: "types.ts", content: renderPromiseTypes(groups) },
+      { path: "types.ts", content: renderPromiseTypes(groups, options?.outputTypes) },
       {
         path: "client-error.ts",
         content: `export type ClientErrorReason = "Transport" | "UnexpectedStatus" | "UnsupportedContentType" | "MalformedResponse"\n\nexport class ClientError extends Error {\n  override readonly name = "ClientError"\n  constructor(readonly reason: ClientErrorReason, options?: ErrorOptions) {\n    super(reason, options)\n  }\n}\n`,
@@ -408,14 +413,17 @@ function renderImportedProjection(groups: ReadonlyArray<Group>, endpoints: Reado
   return { imports: [...new Set(imports)], source }
 }
 
-function renderPromiseTypes(groups: ReadonlyArray<Group>) {
+function renderPromiseTypes(
+  groups: ReadonlyArray<Group>,
+  outputTypes?: Readonly<Record<string, { readonly name: string; readonly import: string }>>,
+) {
   const types = new Map<SchemaAST.AST, string>()
-  const typeOf = (schema: Schema.Top) => {
-    const encoded = Schema.toEncoded(schema)
-    const cached = types.get(encoded.ast)
+  const typeOf = (schema: Schema.Top, decoded = false) => {
+    const projected = decoded ? Schema.toType(schema) : Schema.toEncoded(schema)
+    const cached = types.get(projected.ast)
     if (cached !== undefined) return cached
-    const type = structuralType(encoded)
-    types.set(encoded.ast, type)
+    const type = structuralType(projected)
+    types.set(projected.ast, type)
     return type
   }
   const errors = new Map(
@@ -449,17 +457,19 @@ function renderPromiseTypes(groups: ReadonlyArray<Group>) {
             const schema = schemas[field.source]
             if (schema === undefined)
               throw new GenerationError({ reason: `Missing input schema: ${prefix}.${field.name}` })
-            return `readonly ${JSON.stringify(field.name)}${field.optional ? "?" : ""}: (${typeOf(schema)})[${JSON.stringify(field.name)}]`
+            return `readonly ${JSON.stringify(field.name)}${field.optional ? "?" : ""}: (${typeOf(schema, field.source === "query")})[${JSON.stringify(field.name)}]`
           })
           .join("; ")
         const successSchema = endpoint.successes[0]
-        const success = typeOf(
-          isStreamSchema(successSchema) && successSchema._tag === "StreamSse"
-            ? successSchema.sseMode === "data"
-              ? streamEncodedDataSchema(successSchema)
-              : successSchema.events
-            : successSchema,
-        )
+        const success =
+          outputTypes?.[`${group.identifier}.${endpoint.operation.name}`]?.name ??
+          typeOf(
+            isStreamSchema(successSchema) && successSchema._tag === "StreamSse"
+              ? successSchema.sseMode === "data"
+                ? streamEncodedDataSchema(successSchema)
+                : successSchema.events
+              : successSchema,
+          )
         return [
           ...(endpoint.operation.inputMode === "none" ? [] : [`export type ${prefix}Input = { ${input} }`]),
           `export type ${prefix}Output = ${endpoint.unwrapData ? `(${success})["data"]` : success}`,
@@ -470,7 +480,8 @@ function renderPromiseTypes(groups: ReadonlyArray<Group>) {
   const json = operations.includes("JsonValue")
     ? "export type JsonValue = null | boolean | number | string | ReadonlyArray<JsonValue> | { readonly [key: string]: JsonValue }"
     : ""
-  return [json, ...errorTypes, operations].filter(Boolean).join("\n\n")
+  const imports = [...new Set(Object.values(outputTypes ?? {}).map((override) => override.import))]
+  return [...imports, json, ...errorTypes, operations].filter(Boolean).join("\n\n")
 }
 
 function renderPromiseClient(groups: ReadonlyArray<Group>) {
