@@ -97,10 +97,11 @@ type OpenAIResponsesInputItem = Schema.Schema.Type<typeof OpenAIResponsesInputIt
 // multiple streamed summary parts into the same item before flushing.
 type OpenAIResponsesReasoningInput = {
   type: "reasoning"
-  id?: string
+  id: string
   summary: Array<{ type: "summary_text"; text: string }>
   encrypted_content?: string | null
 }
+type OpenAIResponsesReasoningReplay = Omit<OpenAIResponsesReasoningInput, "id">
 
 const OpenAIResponsesTool = Schema.Struct({
   type: Schema.tag("function"),
@@ -277,9 +278,7 @@ const lowerToolCall = (part: ToolCallPart): OpenAIResponsesInputItem => ({
   arguments: ProviderShared.encodeJson(part.input),
 })
 
-const lowerReasoning = (
-  part: ReasoningPart,
-): { readonly itemID: string; readonly item: OpenAIResponsesReasoningInput } | undefined => {
+const lowerReasoning = (part: ReasoningPart): OpenAIResponsesReasoningInput | undefined => {
   const openai = part.providerMetadata?.openai
   if (!ProviderShared.isRecord(openai) || typeof openai.itemId !== "string" || openai.itemId.length === 0)
     return undefined
@@ -290,12 +289,10 @@ const lowerReasoning = (
         ? null
         : undefined
   return {
-    itemID: openai.itemId,
-    item: {
-      type: "reasoning",
-      summary: part.text.length > 0 ? [{ type: "summary_text", text: part.text }] : [],
-      encrypted_content: encryptedContent,
-    },
+    type: "reasoning",
+    id: openai.itemId,
+    summary: part.text.length > 0 ? [{ type: "summary_text", text: part.text }] : [],
+    encrypted_content: encryptedContent,
   }
 }
 
@@ -370,7 +367,7 @@ const lowerMessages = Effect.fn("OpenAIResponses.lowerMessages")(function* (requ
 
     if (message.role === "assistant") {
       const content: TextPart[] = []
-      const reasoningItems: Record<string, OpenAIResponsesReasoningInput> = {}
+      const reasoningItems: Record<string, OpenAIResponsesReasoningReplay> = {}
       const reasoningReferences = new Set<string>()
       const hostedToolReferences = new Set<string>()
       const flushText = () => {
@@ -388,19 +385,24 @@ const lowerMessages = Effect.fn("OpenAIResponses.lowerMessages")(function* (requ
           const reasoning = lowerReasoning(part)
           if (!reasoning) continue
           if (store !== false) {
-            if (!reasoningReferences.has(reasoning.itemID)) input.push({ type: "item_reference", id: reasoning.itemID })
-            reasoningReferences.add(reasoning.itemID)
+            if (!reasoningReferences.has(reasoning.id)) input.push({ type: "item_reference", id: reasoning.id })
+            reasoningReferences.add(reasoning.id)
             continue
           }
-          const existing = reasoningItems[reasoning.itemID]
+          const existing = reasoningItems[reasoning.id]
           if (existing) {
-            existing.summary.push(...reasoning.item.summary)
-            if (typeof reasoning.item.encrypted_content === "string")
-              existing.encrypted_content = reasoning.item.encrypted_content
+            existing.summary.push(...reasoning.summary)
+            if (typeof reasoning.encrypted_content === "string")
+              existing.encrypted_content = reasoning.encrypted_content
             continue
           }
-          reasoningItems[reasoning.itemID] = reasoning.item
-          input.push(reasoning.item)
+          const replay = {
+            type: reasoning.type,
+            summary: reasoning.summary,
+            encrypted_content: reasoning.encrypted_content,
+          }
+          reasoningItems[reasoning.id] = replay
+          input.push(replay)
           continue
         }
         if (part.type === "tool-call") {
