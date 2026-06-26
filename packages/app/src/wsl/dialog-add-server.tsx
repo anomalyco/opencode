@@ -1,17 +1,19 @@
-import { Button } from "@opencode-ai/ui/button"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { showToast } from "@opencode-ai/ui/toast"
-import { createEffect, createMemo, For, Match, onCleanup, Show, Switch } from "solid-js"
+import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
+import { Dialog, DialogFooter } from "@opencode-ai/ui/v2/dialog-v2"
+import { RadioGroupV2, RadioItemV2 } from "@opencode-ai/ui/v2/radio-v2"
+import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
+import fuzzysort from "fuzzysort"
+import { createEffect, createMemo, For, onCleanup, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { useWslServers } from "./context"
-import { enterWslOpencodeStep } from "./settings-model"
+import "./dialog-add-wsl-server.css"
 
-type WslServerStep = "wsl" | "distro" | "opencode"
-
-const STEPS: WslServerStep[] = ["wsl", "distro", "opencode"]
+type DistroStatusTone = "success" | "warning" | "muted"
 
 function isHiddenDistro(name: string) {
   return /^docker-desktop(?:-data)?$/i.test(name)
@@ -28,10 +30,12 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
   const wslServers = useWslServers()
   const api = platform.wslServers!
   const [store, setStore] = createStore({
-    step: undefined as WslServerStep | undefined,
+    view: "main" as "main" | "catalog",
     selectedDistro: null as string | null,
-    installTarget: undefined as string | undefined,
+    catalogSearch: "",
+    catalogTarget: null as string | null,
     adding: false,
+    probingDistros: false,
   })
   const current = () => wslServers.data
   let disposed = false
@@ -45,26 +49,21 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
   const visibleOnlineDistros = createMemo(() => (current()?.online ?? []).filter((item) => !isHiddenDistro(item.name)))
   const defaultInstalledDistro = createMemo(() => visibleInstalledDistros().find((item) => item.isDefault) ?? null)
   const existingServerDistros = createMemo(() => new Set((current()?.servers ?? []).map((item) => item.config.distro)))
-  const addableInstalledDistros = createMemo(() => {
-    return visibleInstalledDistros().filter((item) => !existingServerDistros().has(item.name))
-  })
+  const addableInstalledDistros = createMemo(() =>
+    visibleInstalledDistros().filter((item) => !existingServerDistros().has(item.name)),
+  )
   const selectedDistro = createMemo(() => {
-    if (store.selectedDistro && addableInstalledDistros().some((item) => item.name === store.selectedDistro)) {
+    if (
+      store.selectedDistro &&
+      addableInstalledDistros().some((item) => item.name === store.selectedDistro && item.version !== 1)
+    ) {
       return store.selectedDistro
     }
+    const ready = addableInstalledDistros().find((item) => distroReady(item.name))
+    if (ready) return ready.name
     const distro = defaultInstalledDistro()
-    if (distro && !existingServerDistros().has(distro.name)) return distro.name
-    return null
-  })
-  const selectedProbe = createMemo(() => {
-    const distro = selectedDistro()
-    if (!distro) return null
-    return current()?.distroProbes[distro] ?? null
-  })
-  const selectedInstalled = createMemo(() => {
-    const distro = selectedDistro()
-    if (!distro) return null
-    return (current()?.installed ?? []).find((item) => item.name === distro) ?? null
+    if (distro && distro.version !== 1 && !existingServerDistros().has(distro.name)) return distro.name
+    return addableInstalledDistros().find((item) => item.version !== 1)?.name ?? null
   })
   const opencodeCheck = createMemo(() => {
     const distro = selectedDistro()
@@ -72,35 +71,121 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
     return current()?.opencodeChecks[distro] ?? null
   })
   const wslReady = createMemo(() => !!current()?.runtime?.available && !current()?.pendingRestart)
-  const distroReady = createMemo(() => {
-    const probe = selectedProbe()
-    if (!probe || !selectedDistro()) return false
-    if (selectedInstalled()?.version === 1) return false
+  const runtimeState = createMemo(() => {
+    const state = current()
+    if (!state) return "loading"
+    if (state.pendingRestart) return "pendingRestart"
+    if (!state.runtime) return state.job?.kind === "runtime" ? "checking" : "checking"
+    if (!state.runtime.available) return "unavailable"
+    return "ready"
+  })
+  function distroReady(name: string) {
+    const installed = visibleInstalledDistros().find((item) => item.name === name)
+    const probe = current()?.distroProbes[name]
+    if (!probe || !installed) return false
+    if (installed.version === 1) return false
     return probe.canExecute && probe.hasBash && probe.hasCurl
-  })
-  const opencodeReady = createMemo(() => {
+  }
+
+  function opencodeReady() {
     const check = opencodeCheck()
-    return !!check?.resolvedPath && !check.error
-  })
-  const distroWarningProbe = createMemo(() => {
-    const probe = selectedProbe()
-    if (!probe) return null
-    if (distroReady()) return null
-    return probe
-  })
-  const distroUnavailableMessage = createMemo(() => {
-    const probe = distroWarningProbe()
+    return !!check?.resolvedPath && check.matchesDesktop !== false && !check.error
+  }
+
+  function checkingStatus(): { text: string; tone: DistroStatusTone } {
+    return { text: language.t("wsl.onboarding.distroStatus.checking"), tone: "muted" }
+  }
+
+  function distroStatus(name: string): { text: string; tone: DistroStatusTone } | null {
+    const installed = visibleInstalledDistros().find((item) => item.name === name)
+    if (installed?.version === 1) {
+      return { text: language.t("wsl.onboarding.distroStatus.unsupported"), tone: "muted" }
+    }
+    const job = current()?.job
+    const probingDistroJob = job?.kind === "probe-distro" && job.distro === name
+    const probingOpencodeJob = job?.kind === "probe-opencode" && job.distro === name
+    const probe = current()?.distroProbes[name]
+    if (!probe) {
+      if (store.probingDistros || probingDistroJob) return checkingStatus()
+      return null
+    }
+    if (!probe.canExecute) {
+      if (!installed) return { text: language.t("wsl.onboarding.distroNotInstalled", { distro: name }), tone: "warning" }
+      return { text: language.t("wsl.onboarding.openDistroOnce", { distro: name }), tone: "warning" }
+    }
+    if (!probe.hasBash || !probe.hasCurl) {
+      return { text: language.t("wsl.onboarding.distroStatus.missingTools"), tone: "warning" }
+    }
+    const check = current()?.opencodeChecks[name]
+    if (!check) {
+      if (store.probingDistros || probingOpencodeJob) return checkingStatus()
+      return null
+    }
+    if (check.matchesDesktop === false) {
+      return { text: language.t("wsl.onboarding.updateOpencode"), tone: "warning" }
+    }
+    if (!check.resolvedPath) {
+      return { text: language.t("wsl.onboarding.distroStatus.opencodeMissing"), tone: "warning" }
+    }
+    return { text: language.t("wsl.onboarding.distroStatus.ready"), tone: "success" }
+  }
+
+  function selectedDistroSettled() {
     const distro = selectedDistro()
-    if (!probe || probe.canExecute || !distro) return null
-    if (!selectedInstalled()) return language.t("wsl.onboarding.distroNotInstalled", { distro })
-    return language.t("wsl.onboarding.openDistroOnce", { distro })
+    if (!distro) return false
+    const installed = visibleInstalledDistros().find((item) => item.name === distro)
+    if (installed?.version === 1) return false
+    if (!current()?.distroProbes[distro]) return false
+    if (!distroReady(distro)) return true
+    return !!current()?.opencodeChecks[distro]
+  }
+
+  const primaryButton = createMemo(() => {
+    const distro = selectedDistro()
+    const job = current()?.job
+    const check = opencodeCheck()
+    const ready = !!distro && distroReady(distro)
+    const probingSelected = store.probingDistros && !selectedDistroSettled()
+    const probingOpencode =
+      probingSelected || (ready && (!check || job?.kind === "probe-opencode" || job?.kind === "probe-distro"))
+    const installingOpencode = job?.kind === "install-opencode" && job.distro === distro
+
+    if (!ready || probingOpencode) {
+      return {
+        variant: "contrast" as const,
+        label: probingSelected
+          ? language.t("wsl.onboarding.distroStatus.checking")
+          : language.t("wsl.server.add"),
+        disabled: true,
+        action: null,
+        loading: probingSelected,
+      }
+    }
+
+    if (!opencodeReady()) {
+      const update = !!check?.resolvedPath && check.matchesDesktop === false
+      return {
+        variant: "neutral" as const,
+        label: installingOpencode
+          ? language.t("wsl.onboarding.updatingOpencode")
+          : update
+            ? language.t("wsl.onboarding.updateOpencode")
+            : language.t("wsl.onboarding.installOpencode"),
+        disabled: busy(),
+        action: "install-opencode" as const,
+        loading: installingOpencode,
+      }
+    }
+
+    return {
+      variant: "contrast" as const,
+      label: store.adding ? language.t("wsl.onboarding.adding") : language.t("wsl.server.add"),
+      disabled: store.adding || (!!job && job.kind !== "probe-opencode" && job.kind !== "probe-distro"),
+      action: "add" as const,
+      loading: store.adding,
+    }
   })
-  const distroMissingTools = createMemo(() => {
-    const probe = distroWarningProbe()
-    if (!probe?.canExecute) return null
-    if (probe.hasBash && probe.hasCurl) return null
-    return probe
-  })
+
   const installableDistros = createMemo(() => {
     const online = visibleOnlineDistros()
     const installed = new Set(visibleInstalledDistros().map((item) => item.name))
@@ -109,29 +194,29 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
       .filter((item) => !installed.has(item.name))
       .filter((item) => !(item.name === "Ubuntu" && hasVersionedUbuntu))
   })
-  const installTarget = createMemo(
-    () => installableDistros().find((item) => item.name === store.installTarget) ?? installableDistros()[0] ?? null,
-  )
-  const installingDistro = createMemo(() => current()?.job?.kind === "install-distro")
-  const installingOpencode = createMemo(() => {
-    const job = current()?.job
-    return job?.kind === "install-opencode" && job.distro === selectedDistro()
+  const filteredInstallableDistros = createMemo(() => {
+    const distros = installableDistros()
+    const query = store.catalogSearch.trim()
+    if (!query) return distros
+    return fuzzysort.go(query, distros, { keys: ["label", "name"] }).map((item) => item.obj)
   })
-  const allReady = createMemo(() => wslReady() && distroReady() && opencodeReady())
-  const addDisabled = createMemo(() => {
-    const job = current()?.job
-    if (!job) return store.adding
-    return store.adding || job.kind !== "probe-opencode"
+  const catalogTarget = createMemo(() => {
+    const distros = filteredInstallableDistros()
+    if (store.catalogTarget && distros.some((item) => item.name === store.catalogTarget)) {
+      return store.catalogTarget
+    }
+    return distros[0]?.name ?? null
   })
-  const recommendedStep = createMemo<WslServerStep>(() => {
-    if (!wslReady()) return "wsl"
-    if (!distroReady()) return "distro"
-    return "opencode"
-  })
-  // activeStep falls back to recommendedStep when the user hasn't picked one.
-  // Once the user clicks a step tab we respect their choice rather than snapping
-  // them back when a probe result updates recommendedStep.
-  const activeStep = createMemo(() => store.step ?? recommendedStep())
+  const installingCatalogDistro = createMemo(() => current()?.job?.kind === "install-distro")
+
+  const openCatalog = () => {
+    const first = installableDistros()[0]
+    setStore({
+      view: "catalog",
+      catalogSearch: "",
+      catalogTarget: first?.name ?? null,
+    })
+  }
 
   const autoProbe = createMemo(() => {
     const state = current()
@@ -142,15 +227,54 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
     if (!state.installed.length && !state.online.length) {
       return { key: "distros", run: () => api.refreshDistros() }
     }
-    const distro = selectedDistro()
-    if (distro && !state.distroProbes[distro]) {
-      return { key: `probe-distro:${distro}`, run: () => api.probeDistro(distro) }
-    }
-    if (!distro || !distroReady()) return null
-    if (!state.opencodeChecks[distro]) {
-      return { key: `probe-opencode:${distro}`, run: () => api.probeOpencode(distro) }
-    }
     return null
+  })
+
+  const needsAddableProbe = createMemo(() => {
+    if (!wslReady() || store.view !== "main" || store.probingDistros || store.adding) return false
+    const job = current()?.job
+    if (job && job.kind !== "probe-distro" && job.kind !== "probe-opencode") return false
+    return addableInstalledDistros().some((item) => {
+      if (item.version === 1) return false
+      if (!current()?.distroProbes[item.name]) return true
+      if (distroReady(item.name) && !current()?.opencodeChecks[item.name]) return true
+      return false
+    })
+  })
+
+  const drainAddableProbes = async () => {
+    const selected = selectedDistro()
+    const items = addableInstalledDistros().filter((item) => item.version !== 1)
+    const ordered = selected
+      ? [...items.filter((item) => item.name === selected), ...items.filter((item) => item.name !== selected)]
+      : items
+
+    for (const item of ordered) {
+      if (disposed) return
+      if (!current()?.distroProbes[item.name]) await api.probeDistro(item.name)
+    }
+    for (const item of ordered) {
+      if (disposed) return
+      if (!distroReady(item.name)) continue
+      if (!current()?.opencodeChecks[item.name]) await api.probeOpencode(item.name)
+    }
+  }
+
+  const probeAllAddable = async () => {
+    if (store.probingDistros || store.adding || disposed) return
+    setStore("probingDistros", true)
+    try {
+      await drainAddableProbes()
+    } catch (err) {
+      if (!disposed) requestError(language, err)
+    } finally {
+      if (!disposed) setStore("probingDistros", false)
+    }
+  }
+
+  createEffect(() => {
+    if (!needsAddableProbe()) return
+    void probeAllAddable()
   })
 
   let lastAutoProbe: string | null = null
@@ -164,67 +288,10 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
         await probe.run()
       } catch (err) {
         if (disposed) return
-        // Allow the same probe to run again when reactive inputs next change
-        // (e.g. user reselects a distro). Without this the user would be stuck
-        // on a transient wsl.exe failure until they pick a different distro.
         if (lastAutoProbe === key) lastAutoProbe = null
         requestError(language, err)
       }
     })()
-  })
-
-  const wslMessage = createMemo(() => {
-    const state = current()
-    if (!state || state.job?.kind === "runtime") return language.t("wsl.onboarding.checkingRuntime")
-    if (state.pendingRestart) return language.t("wsl.onboarding.restartRequired")
-    if (state.runtime?.available) return state.runtime.version ?? language.t("wsl.onboarding.ready")
-    return state.runtime?.error ?? language.t("wsl.onboarding.required")
-  })
-
-  const distroMessage = createMemo(() => {
-    const state = current()
-    if (!state) return language.t("wsl.onboarding.checkingDistros")
-    const distro = selectedDistro()
-    if (state.job?.kind === "install-distro")
-      return language.t("wsl.onboarding.installingDistro", { distro: state.job.distro })
-    if (state.job?.kind === "probe-distro")
-      return language.t("wsl.onboarding.checkingDistro", { distro: state.job.distro })
-    if (state.job?.kind === "distros") return language.t("wsl.onboarding.listingDistros")
-    if (distroUnavailableMessage()) return distroUnavailableMessage()!
-    if (selectedProbe() && distroReady())
-      return language.t("wsl.onboarding.distroReady", { distro: selectedProbe()!.name })
-    if (distro) return language.t("wsl.onboarding.finishingDistro", { distro })
-    return language.t("wsl.onboarding.pickDistro")
-  })
-
-  const opencodeMessage = createMemo(() => {
-    const state = current()
-    if (!state) return language.t("wsl.onboarding.checkingOpencode")
-    const distro = selectedDistro()
-    if (state.job?.kind === "install-opencode") {
-      return distro
-        ? language.t("wsl.onboarding.updatingOpencodeIn", { distro })
-        : language.t("wsl.onboarding.updatingOpencode")
-    }
-    if (state.job?.kind === "probe-opencode") {
-      return distro
-        ? language.t("wsl.onboarding.checkingOpencodeIn", { distro })
-        : language.t("wsl.onboarding.checkingOpencode")
-    }
-    if (opencodeCheck()?.error) return opencodeCheck()!.error
-    if (opencodeCheck()?.matchesDesktop === false) {
-      return distro
-        ? language.t("wsl.onboarding.updateOpencodeIn", { distro })
-        : language.t("wsl.onboarding.updateOpencode")
-    }
-    if (opencodeReady()) {
-      return distro
-        ? language.t("wsl.onboarding.opencodeReadyIn", { distro })
-        : language.t("wsl.onboarding.opencodeReady")
-    }
-    return distro
-      ? language.t("wsl.onboarding.installOpencodeIn", { distro })
-      : language.t("wsl.onboarding.chooseDistroFirst")
   })
 
   const run = async (action: () => Promise<unknown>) => {
@@ -235,26 +302,40 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
     }
   }
 
-  const runSelectedDistro = (action: (distro: string) => Promise<unknown>) => {
-    const distro = selectedDistro()
-    if (!distro) return
-    void run(() => action(distro))
+  const refreshDistros = () => {
+    void run(async () => {
+      await api.refreshDistros()
+      await probeAllAddable()
+    })
   }
 
-  const selectDistro = (name: string) => {
-    setStore("selectedDistro", name)
-    setStore("step", undefined)
+  const installDistro = (name: string) => {
+    void run(async () => {
+      await api.installDistro(name)
+      setStore("view", "main")
+      await probeAllAddable()
+    })
   }
 
-  const openOpencodeStep = () => {
-    const distro = selectedDistro()
-    if (!distro) return
-    void run(() => enterWslOpencodeStep(distro, api.probeOpencode, (step) => setStore("step", step)))
+  const installCatalogDistro = () => {
+    const name = catalogTarget()
+    if (!name) return
+    installDistro(name)
   }
 
-  const finish = async () => {
+  const closeCatalog = () => {
+    setStore({ view: "main", catalogSearch: "", catalogTarget: null })
+    void probeAllAddable()
+  }
+
+  const runPrimary = async () => {
     const distro = selectedDistro()
-    if (!distro) return
+    const action = primaryButton().action
+    if (!distro || !action) return
+    if (action === "install-opencode") {
+      await run(() => api.installOpencode(distro))
+      return
+    }
     setStore("adding", true)
     try {
       await api.addServer(distro)
@@ -270,44 +351,6 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
     }
   }
 
-  const steps = createMemo(() => {
-    const active = activeStep()
-    const activeIndex = STEPS.indexOf(active)
-    const recommendedIndex = STEPS.indexOf(recommendedStep())
-    return STEPS.map((step) => {
-      const index = STEPS.indexOf(step)
-      return {
-        step,
-        title:
-          step === "wsl"
-            ? language.t("wsl.server.label")
-            : step === "distro"
-              ? language.t("wsl.onboarding.step.distro")
-              : language.t("wsl.onboarding.step.opencode"),
-        state:
-          active === step
-            ? "current"
-            : step === "wsl"
-              ? wslReady()
-                ? "done"
-                : "warning"
-              : step === "distro"
-                ? distroReady()
-                  ? "done"
-                  : index > activeIndex
-                    ? "locked"
-                    : "warning"
-                : opencodeCheck()?.matchesDesktop === false
-                  ? "warning"
-                  : opencodeReady()
-                    ? "done"
-                    : index > activeIndex
-                      ? "locked"
-                      : "warning",
-        locked: index > recommendedIndex,
-      }
-    })
-  })
   const loadError = createMemo(() => {
     const error = wslServers.error
     if (!error) return language.t("wsl.onboarding.loadFailed")
@@ -315,301 +358,267 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
   })
 
   return (
-    <div class="px-5 pb-5 flex flex-col gap-4">
+    <Show
+      when={!wslServers.isPending && !wslServers.isError}
+      fallback={
+        <Dialog fit class="settings-v2-wsl-dialog">
+          <Show
+            when={!wslServers.isError}
+            fallback={<div class="settings-v2-wsl-loading">{loadError()}</div>}
+          >
+            <div class="settings-v2-wsl-loading">{language.t("wsl.onboarding.loading")}</div>
+          </Show>
+        </Dialog>
+      }
+    >
       <Show
-        when={!wslServers.isPending}
-        fallback={<div class="px-1 py-6 text-14-regular text-text-weak">{language.t("wsl.onboarding.loading")}</div>}
+        when={runtimeState() === "ready"}
+        fallback={
+          <Show
+            when={runtimeState() === "checking" || runtimeState() === "loading"}
+            fallback={
+              <DialogWslSetup
+                state={runtimeState()}
+                busy={busy()}
+                onInstall={() => void run(() => api.installWsl())}
+              />
+            }
+          >
+            <Dialog fit class="settings-v2-wsl-dialog">
+              <div class="settings-v2-wsl-loading">{language.t("wsl.onboarding.checkingRuntime")}</div>
+            </Dialog>
+          </Show>
+        }
       >
-        <Show
-          when={!wslServers.isError}
-          fallback={<div class="px-1 py-6 text-14-regular text-text-weak">{loadError()}</div>}
+        <Dialog
+          title={
+            store.view === "main"
+              ? language.t("wsl.server.add")
+              : language.t("wsl.onboarding.installDistro")
+          }
+          fit
+          class="settings-v2-wsl-dialog"
         >
-          <div class="flex gap-2 pb-1">
-            <For each={steps()}>
-              {(item) => (
-                <button
-                  type="button"
-                  class="basis-0 flex-1 min-w-0 rounded-md border px-3 py-2 text-left transition-colors"
-                  classList={{
-                    "border-border-strong-base bg-surface-base-hover": item.state === "current",
-                    "border-icon-success-base/40 bg-surface-base": item.state === "done",
-                    "border-border-weak-base bg-background-base opacity-60": item.state === "locked",
-                    "border-icon-warning-base/40 bg-surface-base": item.state === "warning",
-                  }}
-                  disabled={item.locked}
-                  onClick={() => setStore("step", item.step)}
-                >
-                  <div class="text-13-medium text-text-strong">{item.title}</div>
-                </button>
-              )}
-            </For>
-          </div>
-
-          <Switch>
-            <Match when={activeStep() === "wsl"}>
-              <div class="rounded-md bg-surface-base p-4 flex flex-col gap-3">
-                <div class="flex items-center justify-between gap-3">
-                  <div class="text-14-medium text-text-strong">{language.t("wsl.server.label")}</div>
-                  <Show when={current()?.runtime && !wslReady() && !current()?.pendingRestart}>
-                    <Button
-                      variant="secondary"
-                      size="large"
+          <Show
+            when={store.view === "main"}
+            fallback={
+              <>
+                <div class="settings-v2-wsl-dialog-body settings-v2-wsl-catalog-picker">
+                  <TextInputV2
+                    class="settings-v2-wsl-catalog-search"
+                    appearance="large"
+                    placeholder={language.t("wsl.onboarding.searchDistros")}
+                    value={store.catalogSearch}
+                    disabled={busy()}
+                    onInput={(event) => setStore("catalogSearch", event.currentTarget.value)}
+                  />
+                  <div class="settings-v2-wsl-catalog-list">
+                    <RadioGroupV2
+                      hideLabel
+                      class="settings-v2-wsl-distro-group"
+                      label={language.t("wsl.onboarding.installDistro")}
+                      value={catalogTarget() ?? undefined}
+                      onChange={(value) => setStore("catalogTarget", value)}
                       disabled={busy()}
-                      onClick={() => void run(() => api.installWsl())}
                     >
-                      {language.t("wsl.onboarding.installWsl")}
-                    </Button>
-                  </Show>
+                      <For each={filteredInstallableDistros()}>
+                        {(item) => (
+                          <RadioItemV2
+                            class="settings-v2-wsl-distro-row settings-v2-wsl-catalog-row"
+                            value={item.name}
+                            disabled={busy()}
+                            label={<span class="settings-v2-wsl-distro-label">{item.label}</span>}
+                          />
+                        )}
+                      </For>
+                    </RadioGroupV2>
+                  </div>
                 </div>
-                <div class="text-12-regular text-text-weak whitespace-pre-wrap break-words">{wslMessage()}</div>
-                <Show when={current()?.pendingRestart}>
-                  <div class="rounded-md border border-border-weak-base px-3 py-3">
-                    <div class="text-12-regular text-text-warning-base">
-                      {language.t("wsl.onboarding.windowsRestartRequired")}
+                <DialogFooter>
+                  <ButtonV2 variant="neutral" disabled={busy()} onClick={closeCatalog}>
+                    {language.t("common.cancel")}
+                  </ButtonV2>
+                  <ButtonV2
+                    variant="contrast"
+                    disabled={busy() || !catalogTarget()}
+                    onClick={installCatalogDistro}
+                  >
+                    <Show when={installingCatalogDistro()}>
+                      <Spinner class="size-4 shrink-0" />
+                    </Show>
+                    {installingCatalogDistro()
+                      ? language.t("wsl.onboarding.installing")
+                      : language.t("wsl.onboarding.installDistro")}
+                  </ButtonV2>
+                </DialogFooter>
+              </>
+            }
+          >
+            <div class="settings-v2-wsl-dialog-body">
+              <div class="settings-v2-wsl-section-header">
+                <span class="settings-v2-wsl-section-title">{language.t("wsl.onboarding.installedDistros")}</span>
+                <ButtonV2 variant="ghost-muted" size="small" disabled={busy()} onClick={refreshDistros}>
+                  {language.t("wsl.onboarding.checkAgain")}
+                </ButtonV2>
+              </div>
+
+              <Show
+                when={addableInstalledDistros().length > 0}
+                fallback={
+                  <div class="settings-v2-wsl-distro-list">
+                    <div class="settings-v2-wsl-distro-empty">
+                      {visibleInstalledDistros().length
+                        ? language.t("wsl.onboarding.allDistrosAdded")
+                        : language.t("wsl.onboarding.noDistros")}
                     </div>
                   </div>
-                </Show>
-                <div class="flex items-center justify-end">
-                  <Button
-                    variant="secondary"
-                    size="large"
-                    disabled={busy() || !wslReady()}
-                    onClick={() => setStore("step", "distro")}
-                  >
-                    {language.t("wsl.onboarding.next")}
-                  </Button>
-                </div>
-              </div>
-            </Match>
-
-            <Match when={activeStep() === "distro"}>
-              <div class="rounded-md bg-surface-base p-4 flex flex-col gap-3">
-                <div class="flex items-center justify-between gap-3">
-                  <div class="text-14-medium text-text-strong">{language.t("wsl.onboarding.step.distro")}</div>
-                  <Show when={selectedDistro()}>
-                    <Button
-                      variant="ghost"
-                      size="small"
-                      disabled={busy()}
-                      onClick={() => runSelectedDistro((distro) => api.probeDistro(distro))}
-                    >
-                      {language.t("wsl.onboarding.refresh")}
-                    </Button>
-                  </Show>
-                </div>
-                <div class="text-12-regular text-text-weak whitespace-pre-wrap break-words">{distroMessage()}</div>
-
-                <div class="flex flex-col gap-2">
-                  <Show
-                    when={addableInstalledDistros().length > 0}
-                    fallback={
-                      <div class="text-12-regular text-text-weak">
-                        {visibleInstalledDistros().length
-                          ? language.t("wsl.onboarding.allDistrosAdded")
-                          : current()?.runtime?.available
-                            ? language.t("wsl.onboarding.noDistros")
-                            : language.t("wsl.onboarding.checkingDistros")}
-                      </div>
-                    }
+                }
+              >
+                <div class="settings-v2-wsl-distro-list">
+                  <RadioGroupV2
+                    hideLabel
+                    class="settings-v2-wsl-distro-group"
+                    label={language.t("wsl.onboarding.installedDistros")}
+                    value={selectedDistro() ?? undefined}
+                    onChange={(value) => setStore("selectedDistro", value)}
+                    disabled={busy()}
                   >
                     <For each={addableInstalledDistros()}>
-                      {(item) => (
-                        <button
-                          type="button"
-                          class="rounded-md border border-border-weak-base px-3 py-2 text-left transition-colors"
-                          classList={{ "bg-surface-raised-base": selectedDistro() === item.name }}
-                          onClick={() => selectDistro(item.name)}
-                        >
-                          <div class="text-13-medium text-text-strong">{item.name}</div>
-                          <Show when={item.isDefault}>
-                            <div class="text-12-regular text-text-weak">{language.t("common.default")}</div>
-                          </Show>
-                        </button>
-                      )}
+                      {(item) => {
+                        const status = () => distroStatus(item.name)
+                        return (
+                          <RadioItemV2
+                            class={`settings-v2-wsl-distro-row${item.version === 1 ? " settings-v2-wsl-distro-row--unsupported" : ""}`}
+                            value={item.name}
+                            disabled={item.version === 1 || busy()}
+                            label={<span class="settings-v2-wsl-distro-label">{item.name}</span>}
+                            description={
+                              <Show when={status()}>
+                                {(value) => (
+                                  <span class="settings-v2-wsl-distro-status" data-tone={value().tone}>
+                                    {value().text}
+                                  </span>
+                                )}
+                              </Show>
+                            }
+                          />
+                        )
+                      }}
                     </For>
-                  </Show>
+                  </RadioGroupV2>
                 </div>
+              </Show>
 
-                <Show when={installableDistros().length > 0}>
-                  <div class="rounded-md border border-border-weak-base p-2 flex flex-col gap-2">
-                    <div class="px-1 flex items-center justify-between gap-3">
-                      <div class="text-12-medium text-text-weak">{language.t("wsl.onboarding.install")}</div>
-                      <div class="flex items-center gap-2 shrink-0">
-                        <Show when={installingDistro()}>
-                          <Spinner class="h-4 w-4 text-icon-info-base shrink-0" />
-                        </Show>
-                        <Button
-                          variant="secondary"
-                          size="small"
-                          disabled={busy() || !installTarget()}
-                          onClick={() => void run(() => api.installDistro(installTarget()!.name))}
-                        >
-                          {installingDistro()
-                            ? language.t("wsl.onboarding.installing")
-                            : language.t("wsl.onboarding.install")}
-                        </Button>
-                      </div>
-                    </div>
-                    <div
-                      role="radiogroup"
-                      aria-label={language.t("wsl.onboarding.installDistro")}
-                      class="max-h-52 overflow-y-auto rounded-md bg-background-base"
-                    >
-                      <For each={installableDistros()}>
-                        {(item) => {
-                          const selected = () => installTarget()?.name === item.name
-                          return (
-                            <button
-                              type="button"
-                              role="radio"
-                              aria-checked={selected()}
-                              disabled={busy()}
-                              class="w-full px-3 py-2 flex items-center gap-3 text-left border-b border-border-weak-base last:border-b-0 transition-colors"
-                              classList={{
-                                "bg-surface-raised-base": selected(),
-                                "hover:bg-surface-base": !selected(),
-                              }}
-                              onClick={() => setStore("installTarget", item.name)}
-                            >
-                              <div
-                                class="mt-0.5 h-4 w-4 rounded-full border border-border-strong-base flex items-center justify-center shrink-0"
-                                classList={{ "border-text-strong": selected() }}
-                              >
-                                <div class="h-2 w-2 rounded-full bg-text-strong" classList={{ hidden: !selected() }} />
-                              </div>
-                              <div class="min-w-0 flex-1 text-13-medium text-text-strong truncate">{item.label}</div>
-                            </button>
-                          )
-                        }}
-                      </For>
-                    </div>
-                  </div>
-                </Show>
-
-                <Show when={selectedInstalled()?.version === 1 || distroUnavailableMessage() || distroMissingTools()}>
-                  <div class="rounded-md border border-border-weak-base px-3 py-3 flex flex-col gap-1">
-                    <Show when={selectedInstalled()?.version === 1}>
-                      <div class="text-12-regular text-text-warning-base">
-                        {language.t("wsl.onboarding.wsl2Required")}
-                      </div>
-                    </Show>
-                    <Show when={distroUnavailableMessage()}>
-                      {(message) => <div class="text-12-regular text-text-warning-base">{message()}</div>}
-                    </Show>
-                    <Show when={distroMissingTools()}>
-                      <div class="text-12-regular text-text-warning-base">
-                        {language.t("wsl.onboarding.toolsRequired")}
-                      </div>
-                    </Show>
-                  </div>
-                </Show>
-
-                <div class="flex items-center gap-2">
-                  <Button
-                    variant="secondary"
-                    size="large"
-                    disabled={busy() || !selectedInstalled()}
-                    onClick={() => runSelectedDistro((distro) => api.openTerminal(distro))}
-                  >
-                    {language.t("wsl.onboarding.openTerminal")}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="large"
-                    disabled={busy() || !selectedDistro()}
-                    onClick={() => runSelectedDistro((distro) => api.probeDistro(distro))}
-                  >
-                    {language.t("wsl.onboarding.refresh")}
-                  </Button>
-                </div>
-
-                <div class="flex items-center justify-end">
-                  <Button
-                    variant="secondary"
-                    size="large"
-                    disabled={busy() || !selectedDistro() || !distroReady()}
-                    onClick={openOpencodeStep}
-                  >
-                    {language.t("wsl.onboarding.next")}
-                  </Button>
-                </div>
-              </div>
-            </Match>
-
-            <Match when={activeStep() === "opencode"}>
-              <div class="rounded-md bg-surface-base p-4 flex flex-col gap-3">
-                <div class="flex items-center justify-between gap-3">
-                  <div class="text-14-medium text-text-strong">{language.t("wsl.onboarding.step.opencode")}</div>
-                  <div class="flex items-center gap-2">
-                    <Show when={selectedDistro()}>
-                      <Button
-                        variant="ghost"
-                        size="large"
-                        disabled={busy()}
-                        onClick={() => runSelectedDistro((distro) => api.probeOpencode(distro))}
-                      >
-                        {language.t("wsl.onboarding.refresh")}
-                      </Button>
-                    </Show>
-                    <Show when={!opencodeReady() || opencodeCheck()?.matchesDesktop === false}>
-                      <Button
-                        variant="secondary"
-                        size="large"
-                        disabled={busy()}
-                        onClick={() => runSelectedDistro((distro) => api.installOpencode(distro))}
-                      >
-                        <Show when={installingOpencode()}>
-                          <Spinner class="size-4 shrink-0" />
-                        </Show>
-                        {opencodeCheck()?.resolvedPath
-                          ? language.t("wsl.onboarding.updateOpencode")
-                          : language.t("wsl.onboarding.installOpencode")}
-                      </Button>
-                    </Show>
-                  </div>
-                </div>
-                <div class="text-12-regular text-text-weak whitespace-pre-wrap break-words">{opencodeMessage()}</div>
-                <Show when={opencodeCheck()?.matchesDesktop === false ? opencodeCheck() : null}>
-                  {(check) => (
-                    <div class="rounded-md border border-border-weak-base px-3 py-3 flex flex-col gap-1">
-                      <div class="text-12-regular text-text-weak">
-                        {language.t("wsl.onboarding.path", {
-                          path: check().resolvedPath ?? language.t("wsl.onboarding.notFound"),
-                        })}
-                      </div>
-                      <div class="text-12-regular text-text-weak">
-                        {language.t("wsl.onboarding.version", {
-                          version: check().version ?? language.t("wsl.onboarding.unknown"),
-                        })}
-                        <Show when={check().expectedVersion}>
-                          {(expected) => (
-                            <span>{` · ${language.t("wsl.onboarding.desktopVersion", { version: expected() })}`}</span>
-                          )}
-                        </Show>
-                      </div>
-                      <div class="text-12-regular text-text-warning-base">
-                        {language.t("wsl.onboarding.versionMismatch")}
-                      </div>
-                    </div>
-                  )}
-                </Show>
-              </div>
-            </Match>
-          </Switch>
-
-          <Show when={activeStep() === "opencode" && allReady() && selectedDistro()}>
-            <div class="flex items-center justify-end gap-2">
-              <Button variant="ghost" size="large" disabled={store.adding} onClick={() => dialog.close()}>
-                {language.t("common.cancel")}
-              </Button>
-              <Button variant="primary" size="large" disabled={addDisabled()} onClick={() => void finish()}>
-                {store.adding ? language.t("wsl.onboarding.adding") : language.t("wsl.server.add")}
-              </Button>
+              <Show when={installableDistros().length > 0}>
+                <button
+                  type="button"
+                  class="settings-v2-wsl-catalog-card"
+                  disabled={busy()}
+                  onClick={openCatalog}
+                >
+                  <span class="settings-v2-wsl-catalog-icon" aria-hidden="true">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path
+                        d="M13.5564 10.4443V13.5554H4.22309C3.24087 13.5554 2.44531 13.5554 2.44531 13.5554V10.4443M11.112 5.99989L8.00087 9.111L4.88976 5.99989M8.00087 9.111L8.00087 2.44434"
+                        stroke="currentColor"
+                      />
+                    </svg>
+                  </span>
+                  <span class="settings-v2-wsl-catalog-copy">
+                    <span class="settings-v2-wsl-catalog-title">{language.t("wsl.onboarding.needAnotherDistro")}</span>
+                    <span class="settings-v2-wsl-catalog-description">
+                      {language.t("wsl.onboarding.needAnotherDistroHint")}
+                    </span>
+                  </span>
+                  <span class="settings-v2-wsl-catalog-chevron" aria-hidden="true">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M6 12L10 8L6 4" stroke="currentColor" />
+                    </svg>
+                  </span>
+                </button>
+              </Show>
             </div>
+
+            <DialogFooter>
+              <ButtonV2 variant="neutral" disabled={store.adding} onClick={() => dialog.close()}>
+                {language.t("common.cancel")}
+              </ButtonV2>
+              <ButtonV2
+                variant={primaryButton().variant}
+                disabled={primaryButton().disabled}
+                onClick={() => void runPrimary()}
+              >
+                <Show when={primaryButton().loading}>
+                  <Spinner class="size-4 shrink-0" />
+                </Show>
+                {primaryButton().label}
+              </ButtonV2>
+            </DialogFooter>
           </Show>
-        </Show>
+        </Dialog>
       </Show>
-    </div>
+    </Show>
+  )
+}
+
+function DialogWslSetup(props: { state: string; busy: boolean; onInstall: () => void }) {
+  const language = useLanguage()
+  const dialog = useDialog()
+  const title = () =>
+    props.state === "pendingRestart"
+      ? language.t("wsl.onboarding.restartRequired")
+      : language.t("wsl.onboarding.wslNotInstalled.title")
+  const description = () =>
+    props.state === "pendingRestart"
+      ? language.t("wsl.onboarding.windowsRestartRequired")
+      : language.t("wsl.onboarding.wslNotInstalled.description")
+
+  return (
+    <Dialog fit class="settings-v2-wsl-not-installed-dialog">
+      <div class="settings-v2-wsl-not-installed-content">
+        <div class="settings-v2-wsl-not-installed-message">
+          <svg
+            class="settings-v2-wsl-not-installed-icon"
+            width="24"
+            height="24"
+            viewBox="0 0 24 24"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+            aria-hidden="true"
+          >
+            <g clip-path="url(#settings-v2-wsl-warning-clip)">
+              <path
+                fill-rule="evenodd"
+                clip-rule="evenodd"
+                d="M12 -0.00244141L23.6926 20.2498H0.308594L12 -0.00244141ZM12.7954 6.32932C12.5844 6.11834 12.2982 5.99982 11.9999 5.99982C11.7015 5.99982 11.4154 6.11834 11.2044 6.32932C10.9934 6.5403 10.8749 6.82645 10.8749 7.12482V11.6248C10.8749 11.9232 10.9934 12.2093 11.2044 12.4203C11.4154 12.6313 11.7015 12.7498 11.9999 12.7498C12.2982 12.7498 12.5844 12.6313 12.7954 12.4203C13.0064 12.2093 13.1249 11.9232 13.1249 11.6248V7.12482C13.1249 6.82645 13.0064 6.5403 12.7954 6.32932ZM13.0605 17.5605C12.7792 17.8418 12.3977 17.9998 11.9999 17.9998C11.6021 17.9998 11.2205 17.8418 10.9392 17.5605C10.6579 17.2792 10.4999 16.8976 10.4999 16.4998C10.4999 16.102 10.6579 15.7205 10.9392 15.4392C11.2205 15.1579 11.6021 14.9998 11.9999 14.9998C12.3977 14.9998 12.7792 15.1579 13.0605 15.4392C13.3418 15.7205 13.4999 16.102 13.4999 16.4998C13.4999 16.8976 13.3418 17.2792 13.0605 17.5605Z"
+                fill="#DBDBDB"
+              />
+            </g>
+            <defs>
+              <clipPath id="settings-v2-wsl-warning-clip">
+                <rect width="24" height="24" fill="white" />
+              </clipPath>
+            </defs>
+          </svg>
+          <h2 class="settings-v2-wsl-not-installed-title">{title()}</h2>
+          <p class="settings-v2-wsl-not-installed-description">{description()}</p>
+        </div>
+        <Show when={props.state === "unavailable"}>
+          <ButtonV2
+            variant="neutral"
+            disabled={props.busy}
+            onClick={props.onInstall}
+          >
+            {language.t("wsl.onboarding.installWsl")}
+          </ButtonV2>
+        </Show>
+        <Show when={props.state !== "unavailable"}>
+          <ButtonV2 variant="neutral" onClick={() => dialog.close()}>
+            {language.t("common.close")}
+          </ButtonV2>
+        </Show>
+      </div>
+    </Dialog>
   )
 }
 
