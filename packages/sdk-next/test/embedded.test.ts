@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { Flag } from "@opencode-ai/core/flag/flag"
-import { Effect, Option, Schema, Stream } from "effect"
+import { Effect, Option, Schedule, Schema, Stream } from "effect"
 
 test("embedded client uses the real router and handlers", async () => {
   const directory = await mkdtemp(join(tmpdir(), "opencode-embedded-"))
@@ -80,6 +80,45 @@ test("embedded client uses the real router and handlers", async () => {
         "SessionNotFoundError",
       ])
       expect(missingMessage._tag).toBe("MessageNotFoundError")
+    })
+    await Effect.runPromise(Effect.scoped(program))
+  } finally {
+    Flag.OPENCODE_DB = database
+    await rm(directory, { recursive: true, force: true })
+  }
+})
+
+test("embedded client wakes session execution after prompt admission", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "opencode-embedded-wake-"))
+  const database = Flag.OPENCODE_DB
+  Flag.OPENCODE_DB = join(directory, "opencode.sqlite")
+  const { AbsolutePath, Location, Model, OpenCode, Prompt, Provider, Session } = await import("../src")
+  const sessionID = Session.ID.make(`ses_embedded_${crypto.randomUUID()}`)
+
+  try {
+    const program = Effect.gen(function* () {
+      const opencode = yield* OpenCode.create()
+      const admitted = yield* opencode.sessions
+        .create({
+          id: sessionID,
+          location: Location.Ref.make({ directory: AbsolutePath.make(directory) }),
+          model: Model.Ref.make({ id: Model.ID.make("embedded"), providerID: Provider.ID.make("test") }),
+        })
+        .pipe(
+          Effect.andThen(
+            opencode.sessions.prompt({
+              sessionID,
+              prompt: Prompt.make({ text: "Promote this input" }),
+            }),
+          ),
+        )
+      const context = yield* opencode.sessions.context({ sessionID }).pipe(
+        Effect.filterOrFail((messages) => messages.some((message) => message.id === admitted.id)),
+        Effect.retry(Schedule.spaced("10 millis")),
+        Effect.timeout("2 seconds"),
+      )
+
+      expect(context).toContainEqual(expect.objectContaining({ id: admitted.id, type: "user" }))
     })
     await Effect.runPromise(Effect.scoped(program))
   } finally {

@@ -613,8 +613,7 @@ describe("session.compaction.create", () => {
         })
 
         const v2 = yield* SessionV2.Service.use((svc) => svc.messages({ sessionID: info.id })).pipe(
-          Effect.provide(SessionExecution.noopLayer),
-          Effect.provide(SessionV2.defaultLayer),
+          Effect.provide(SessionV2.defaultLayer.pipe(Layer.provide(SessionExecution.noopLayer))),
         )
         expect(v2.at(-1)).toMatchObject({
           type: "compaction",

@@ -94,7 +94,7 @@ import { questionHandlers } from "./handlers/question"
 import { sessionHandlers } from "./handlers/session"
 import { syncHandlers } from "./handlers/sync"
 import { tuiHandlers } from "./handlers/tui"
-import { handlers } from "@opencode-ai/server/handlers"
+import { handlers, sessionRuntime } from "@opencode-ai/server/handlers"
 import { schemaErrorLayer as v2SchemaErrorLayer } from "@opencode-ai/server/middleware/schema-error"
 import { workspaceHandlers } from "./handlers/workspace"
 import { instanceContextLayer } from "./middleware/instance-context"
@@ -276,7 +276,7 @@ export function createRoutes(
       corsVaryFix,
       fenceLayer,
       cors(corsOptions),
-      MoveSession.defaultLayer,
+      MoveSession.defaultLayer.pipe(Layer.provide(sessionRuntime)),
       HttpServer.layerServices,
     ]),
     Layer.provide(LayerNode.buildLayer(app)),
