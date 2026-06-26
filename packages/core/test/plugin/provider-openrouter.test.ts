@@ -53,7 +53,7 @@ describe("OpenRouterPlugin", () => {
       yield* addPlugin()
 
       const ignored = yield* aisdk.runSDK({
-        model: new ModelV2.Info({
+        model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.openrouter, ModelV2.ID.make("openai/gpt-5")),
           api: { id: ModelV2.ID.make("openai/gpt-5"), type: "aisdk", package: "test-provider" },
         }),
@@ -63,7 +63,7 @@ describe("OpenRouterPlugin", () => {
       expect(ignored.sdk).toBeUndefined()
 
       const result = yield* aisdk.runSDK({
-        model: new ModelV2.Info({
+        model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.make("custom"), ModelV2.ID.make("openai/gpt-5")),
           api: { id: ModelV2.ID.make("openai/gpt-5"), type: "aisdk", package: "test-provider" },
         }),

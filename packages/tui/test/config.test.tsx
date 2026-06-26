@@ -80,6 +80,12 @@ test("resolves overrides without mutating input", () => {
   expect(input.keybinds).toEqual({ session_list: "ctrl+l" })
 })
 
+test("resolves a session move keybind", () => {
+  const config = resolve({ keybinds: { session_move: "ctrl+o" } }, { terminalSuspend: true })
+
+  expect(config.keybinds.get("session.move")).toMatchObject([{ key: "ctrl+o" }])
+})
+
 test("disables suspend and assigns ctrl+z to undo when unsupported", () => {
   const config = resolve({}, { terminalSuspend: false })
 

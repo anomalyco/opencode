@@ -10,6 +10,7 @@ import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
+import { LocationServiceMap } from "@opencode-ai/core/location-layer"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { Prompt } from "@opencode-ai/core/session/prompt"
@@ -20,6 +21,7 @@ import { SessionInput } from "@opencode-ai/core/session/input"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { SessionInputTable, SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { testEffect } from "./lib/effect"
+import { Snapshot } from "@opencode-ai/core/snapshot"
 
 const it = testEffect(Layer.mergeAll(Database.defaultLayer, EventV2.defaultLayer, SessionProjector.defaultLayer))
 const sessionID = SessionV2.ID.make("ses_projector_test")
@@ -36,11 +38,63 @@ const assistantRow = (
     id: _,
     type,
     ...data
-  } = encodeMessage(new SessionMessage.Assistant({ id, type: "assistant", agent: "build", model, content: [], time }))
+  } = encodeMessage(SessionMessage.Assistant.make({ id, type: "assistant", agent: "build", model, content: [], time }))
   return { id, session_id: sessionID, type, seq, time_created: DateTime.toEpochMillis(time.created), data }
 }
 
 describe("SessionProjector", () => {
+  it.effect("projects staged, cleared, and committed reverts", () =>
+    Effect.gen(function* () {
+      const db = (yield* Database.Service).db
+      yield* db
+        .insert(ProjectTable)
+        .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
+        .run()
+      yield* db
+        .insert(SessionTable)
+        .values({
+          id: sessionID,
+          project_id: Project.ID.global,
+          slug: "test",
+          directory: "/project",
+          title: "test",
+          version: "test",
+        })
+        .run()
+      const boundary = SessionMessage.ID.make("msg_boundary")
+      yield* db
+        .insert(SessionMessageTable)
+        .values([assistantRow(boundary, 1), assistantRow(SessionMessage.ID.make("msg_later"), 2)])
+        .run()
+      const events = yield* EventV2.Service
+      yield* events.publish(SessionEvent.RevertEvent.Staged, {
+        sessionID,
+        timestamp: DateTime.makeUnsafe(1),
+        revert: { messageID: boundary, snapshot: Snapshot.ID.make("tree"), diff: "patch", files: [] },
+      })
+      expect((yield* db.select({ revert: SessionTable.revert }).from(SessionTable).get())?.revert).toMatchObject({
+        messageID: boundary,
+        snapshot: "tree",
+        files: [],
+      })
+      yield* events.publish(SessionEvent.RevertEvent.Cleared, { sessionID, timestamp: DateTime.makeUnsafe(2) })
+      expect((yield* db.select({ revert: SessionTable.revert }).from(SessionTable).get())?.revert).toBeNull()
+      yield* events.publish(SessionEvent.RevertEvent.Staged, {
+        sessionID,
+        timestamp: DateTime.makeUnsafe(3),
+        revert: { messageID: boundary, files: [] },
+      })
+      yield* events.publish(SessionEvent.RevertEvent.Committed, {
+        sessionID,
+        messageID: boundary,
+        timestamp: DateTime.makeUnsafe(4),
+      })
+      expect(
+        (yield* db.select({ id: SessionMessageTable.id }).from(SessionMessageTable).all()).map((row) => row.id),
+      ).toEqual([boundary])
+    }),
+  )
+
   it.effect("orders projected messages and context by durable aggregate sequence", () =>
     Effect.gen(function* () {
       const { db } = yield* Database.Service
@@ -69,7 +123,7 @@ describe("SessionProjector", () => {
           sessionID,
           messageID: SessionMessage.ID.make("msg_first"),
           timestamp: created,
-          prompt: new Prompt({ text: "first" }),
+          prompt: Prompt.make({ text: "first" }),
           delivery: "steer",
         },
         { id: EventV2.ID.make("evt_z") },
@@ -80,7 +134,7 @@ describe("SessionProjector", () => {
           sessionID,
           messageID: SessionMessage.ID.make("msg_second"),
           timestamp: created,
-          prompt: new Prompt({ text: "second" }),
+          prompt: Prompt.make({ text: "second" }),
           delivery: "steer",
         },
         { id: EventV2.ID.make("evt_a") },
@@ -110,6 +164,7 @@ describe("SessionProjector", () => {
     }).pipe(
       Effect.provide(
         SessionV2.layer.pipe(
+          Layer.provide(LocationServiceMap.layer),
           Layer.provide(EventV2.defaultLayer),
           Layer.provide(Database.defaultLayer),
           Layer.provide(Project.defaultLayer),
@@ -145,7 +200,7 @@ describe("SessionProjector", () => {
       const admitted = yield* SessionInput.admit(db, events, {
         id,
         sessionID,
-        prompt: new Prompt({ text: "promote me" }),
+        prompt: Prompt.make({ text: "promote me" }),
         delivery: "steer",
       })
       if (!admitted) return yield* Effect.die("Prompt admission failed")
@@ -154,7 +209,7 @@ describe("SessionProjector", () => {
         sessionID,
         timestamp: admitted.timeCreated,
         messageID: id,
-        prompt: new Prompt({ text: "promote me" }),
+        prompt: Prompt.make({ text: "promote me" }),
         delivery: "steer",
       })
 
@@ -334,7 +389,7 @@ describe("SessionProjector", () => {
 
   it.effect("does not revive a stale incomplete in-memory assistant projection", () =>
     Effect.gen(function* () {
-      const stale = new SessionMessage.Assistant({
+      const stale = SessionMessage.Assistant.make({
         id: SessionMessage.ID.make("msg_assistant_stale"),
         type: "assistant",
         agent: "build",
@@ -342,7 +397,7 @@ describe("SessionProjector", () => {
         content: [],
         time: { created },
       })
-      const completed = new SessionMessage.Assistant({
+      const completed = SessionMessage.Assistant.make({
         id: SessionMessage.ID.make("msg_assistant_completed"),
         type: "assistant",
         agent: "build",
@@ -466,15 +521,15 @@ describe("SessionProjector", () => {
         Schema.decodeUnknownSync(SessionMessage.Message)({ ...row.data, id: row.id, type: row.type }),
       )
       expect(messages).toEqual([
-        new SessionMessage.Assistant({
+        SessionMessage.Assistant.make({
           id: SessionMessage.ID.make("msg_assistant_completed"),
           type: "assistant",
           agent: "build",
           model,
-          content: [new SessionMessage.AssistantText({ type: "text", id: "text-stale", text: "" })],
+          content: [SessionMessage.AssistantText.make({ type: "text", id: "text-stale", text: "" })],
           time: { created: DateTime.makeUnsafe(1), completed: DateTime.makeUnsafe(2) },
         }),
-        new SessionMessage.Assistant({
+        SessionMessage.Assistant.make({
           id: SessionMessage.ID.make("msg_assistant_stale"),
           type: "assistant",
           agent: "build",

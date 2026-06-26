@@ -83,26 +83,6 @@ Compatibility:
 - The `session.next.*` lifecycle event family predates this branch; this branch refines its experimental V2 durability and replay contracts.
 - Durable replay cursors are per-aggregate event sequences; ephemeral deltas are intentionally absent after reconnect.
 
-### Deterministic IDs From External Keys
-
-Affected schema:
-
-- Session and Event ID construction helpers.
-
-Change:
-
-- Add deterministic `SessionSchema.ID.fromExternal(...)` and `EventV2.ID.fromExternal(...)` constructors for trusted external keys.
-
-Reason:
-
-- Embedded adapters need stable local identities when the same external conversation or stimulus is delivered more than once.
-- Deterministic IDs let durable admission and event publication retain their idempotency boundaries across retries.
-
-Compatibility:
-
-- Existing generated Session and Event IDs retain their current prefixes and generation behavior.
-- Deterministic constructors are additive internal helpers; public ID schemas remain strings with their existing prefixes.
-
 ### Durable Step Settlement Ownership
 
 Affected schema:
@@ -713,6 +693,22 @@ Compatibility:
 
 - Foreground V2 bash execution is unchanged.
 - Reintroduce background bash only with durable status observation, completion delivery, and explicit cancellation semantics.
+
+## 2026-06-18: Remove Bash Description Input
+
+Affected schema:
+
+- V1 and Core V2 model-facing `bash` tool parameters.
+
+Change:
+
+- Remove the V1 required and V2 optional `description` parameter.
+- Derive shell presentation from the command or a generic shell label instead of model-authored description metadata.
+
+Compatibility:
+
+- Existing persisted tool calls may still contain `description`, but new tool definitions no longer expose or require it.
+- Shell command execution behavior is unchanged.
 
 ## 2026-06-04: Add Durable Session Context Snapshots
 
