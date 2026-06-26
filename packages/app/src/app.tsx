@@ -16,6 +16,7 @@ import {
   type Component,
   createEffect,
   createMemo,
+  createRenderEffect,
   createResource,
   createSignal,
   ErrorBoundary,
@@ -278,10 +279,11 @@ function QueryProvider(props: ParentProps) {
 function BodyDesignClass() {
   const settings = useSettings()
 
-  createEffect(() => {
+  createRenderEffect(() => {
     if (typeof document === "undefined") return
 
     const enabled = settings.general.newLayoutDesigns()
+    document.body.toggleAttribute("data-new-layout", enabled)
     document.body.classList.toggle("text-12-regular", !enabled)
     document.body.classList.toggle("font-(family-name:--font-family-text)", enabled)
     document.body.classList.toggle("text-[13px]", enabled)
