@@ -17,6 +17,35 @@ test("sessions.get returns the wire projection", async () => {
   expect(result.time.created).toBe(1_717_171_717_000)
 })
 
+test("events.subscribe exposes the Promise event stream wire projection", async () => {
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async () =>
+      new Response(
+        `: heartbeat\n\ndata: ${JSON.stringify({ id: "evt_connected", type: "server.connected", data: {} })}\n\n` +
+          `data: ${JSON.stringify(modelSwitchedEvent)}\n\n`,
+        { headers: { "content-type": "text/event-stream" } },
+      ),
+  })
+  const events = []
+  for await (const event of client.events.subscribe()) events.push(event)
+
+  expect(events).toEqual([{ id: "evt_connected", type: "server.connected", data: {} }, modelSwitchedEvent])
+  expect(events[1]?.type === "session.next.model.switched" && events[1].data.timestamp).toBe(1_717_171_717_000)
+})
+
+test("events.subscribe terminates on malformed Promise SSE data", async () => {
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async () => new Response("data: {not-json}\n\n", { headers: { "content-type": "text/event-stream" } }),
+  })
+
+  await expect(client.events.subscribe()[Symbol.asyncIterator]().next()).rejects.toMatchObject({
+    name: "ClientError",
+    reason: "MalformedResponse",
+  })
+})
+
 test("session methods use the public HTTP contract", async () => {
   const requests: Array<{ url: string; init?: RequestInit }> = []
   let historyPage = 0

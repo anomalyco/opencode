@@ -1,3 +1,5 @@
+import type { OpenCodeEventEncoded } from "@opencode-ai/protocol/groups/event"
+
 export type JsonValue =
   | null
   | boolean
@@ -1666,3 +1668,5 @@ export type SessionsMessageOutput = {
         readonly time: { readonly created: number }
       }
 }["data"]
+
+export type EventsSubscribeOutput = OpenCodeEventEncoded

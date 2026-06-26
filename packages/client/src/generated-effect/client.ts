@@ -2,13 +2,11 @@
 import { Effect, Stream, Schema } from "effect"
 import { Sse } from "effect/unstable/encoding"
 import { HttpClientError } from "effect/unstable/http"
-import { HttpApi, HttpApiClient } from "effect/unstable/httpapi"
-import { SessionGroup } from "../contract"
+import { HttpApiClient } from "effect/unstable/httpapi"
+import { ClientApi } from "../contract"
 import { ClientError } from "./client-error"
 
-const Api = HttpApi.make("generated").add(SessionGroup)
-
-type RawClient = HttpApiClient.ForApi<typeof Api>
+type RawClient = HttpApiClient.ForApi<typeof ClientApi>
 
 const mapClientError = <E>(error: E) =>
   HttpClientError.isHttpClientError(error) || Schema.isSchemaError(error) || Sse.Retry.is(error)
@@ -210,7 +208,20 @@ const adaptGroup0 = (raw: RawClient["server.session"]) => ({
   message: Endpoint0_16(raw),
 })
 
-const adaptClient = (raw: RawClient) => ({ sessions: adaptGroup0(raw["server.session"]) })
+const Endpoint1_0 = (raw: RawClient["server.event"]) => () =>
+  Stream.unwrap(
+    raw["event.subscribe"]({}).pipe(
+      Effect.mapError(mapClientError),
+      Effect.map((stream) => stream.pipe(Stream.mapError(mapClientError))),
+    ),
+  )
+
+const adaptGroup1 = (raw: RawClient["server.event"]) => ({ subscribe: Endpoint1_0(raw) })
+
+const adaptClient = (raw: RawClient) => ({
+  sessions: adaptGroup0(raw["server.session"]),
+  events: adaptGroup1(raw["server.event"]),
+})
 
 export const make = (options?: { readonly baseUrl?: URL | string }) =>
-  HttpApiClient.make(Api, options).pipe(Effect.map(adaptClient))
+  HttpApiClient.make(ClientApi, options).pipe(Effect.map(adaptClient))

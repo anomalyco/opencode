@@ -3,7 +3,8 @@ import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { Flag } from "@opencode-ai/core/flag/flag"
-import { Effect, Option, Schema, Stream } from "effect"
+import { Effect, Latch, Option, Schema, Stream } from "effect"
+import type { OpenCodeEvent } from "../src"
 
 test("embedded client uses the real router and handlers", async () => {
   const directory = await mkdtemp(join(tmpdir(), "opencode-embedded-"))
@@ -16,6 +17,23 @@ test("embedded client uses the real router and handlers", async () => {
   try {
     const program = Effect.gen(function* () {
       const opencode = yield* OpenCode.create()
+      const connected = yield* Latch.make(false)
+      const runnerEvent = yield* Latch.make(false)
+      const globalEvents = new Array<{ readonly type: string; readonly durable?: { readonly seq: number } }>()
+      yield* opencode.events.subscribe().pipe(
+        Stream.runForEach((event) =>
+          Effect.sync(() => globalEvents.push(event)).pipe(
+            Effect.andThen(event.type === "server.connected" ? connected.open : Effect.void),
+            Effect.andThen(
+              event.type === "session.next.prompted" && event.data.sessionID === sessionID
+                ? runnerEvent.open
+                : Effect.void,
+            ),
+          ),
+        ),
+        Effect.forkScoped,
+      )
+      yield* connected.await
       yield* opencode.tools.register({
         embedded_tool: Tool.make({
           description: "Embedded test tool",
@@ -44,6 +62,7 @@ test("embedded client uses the real router and handlers", async () => {
         sessionID,
         prompt: Prompt.make({ text: "Promote this input" }),
       })
+      yield* runnerEvent.await
       const prompted = yield* opencode.sessions.events({ sessionID }).pipe(
         Stream.filter((event) => event.type === "session.next.prompted" && event.data.messageID === wake.id),
         Stream.runHead,
@@ -79,6 +98,13 @@ test("embedded client uses the real router and handlers", async () => {
       )
 
       expect(created.id).toBe(sessionID)
+      expect(globalEvents[0]?.type).toBe("server.connected")
+      expect(globalEvents).toContainEqual(
+        expect.objectContaining({
+          type: "session.next.prompted",
+          durable: expect.objectContaining({ seq: expect.any(Number) }),
+        }),
+      )
       expect(selected.model?.id).toBe(model.id)
       expect(selected.model?.providerID).toBe(model.providerID)
       expect(page.data.some((session) => session.id === sessionID)).toBe(true)
@@ -95,6 +121,49 @@ test("embedded client uses the real router and handlers", async () => {
         "SessionNotFoundError",
       ])
       expect(missingMessage._tag).toBe("MessageNotFoundError")
+    })
+    await Effect.runPromise(Effect.scoped(program))
+  } finally {
+    Flag.OPENCODE_DB = database
+    await rm(directory, { recursive: true, force: true })
+  }
+})
+
+test("independent embedded hosts do not share live notifications", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "opencode-embedded-hosts-"))
+  const database = Flag.OPENCODE_DB
+  Flag.OPENCODE_DB = join(directory, "opencode.sqlite")
+  const { AbsolutePath, Agent, Location, OpenCode, Session } = await import("../src")
+  const sessionID = Session.ID.make(`ses_embedded_${crypto.randomUUID()}`)
+
+  try {
+    const program = Effect.gen(function* () {
+      const first = yield* OpenCode.create()
+      const second = yield* OpenCode.create()
+      const firstReady = yield* Latch.make(false)
+      const secondReady = yield* Latch.make(false)
+      const firstEvent = yield* Latch.make(false)
+      const secondEvent = yield* Latch.make(false)
+      const observe = (ready: Latch.Latch, event: Latch.Latch) =>
+        Stream.runForEach((notification: OpenCodeEvent) =>
+          notification.type === "server.connected"
+            ? ready.open
+            : notification.type === "session.next.agent.switched" && notification.data.sessionID === sessionID
+              ? event.open
+              : Effect.void,
+        )
+
+      yield* first.events.subscribe().pipe(observe(firstReady, firstEvent), Effect.forkScoped)
+      yield* second.events.subscribe().pipe(observe(secondReady, secondEvent), Effect.forkScoped)
+      yield* Effect.all([firstReady.await, secondReady.await], { discard: true })
+      yield* first.sessions.create({
+        id: sessionID,
+        location: Location.Ref.make({ directory: AbsolutePath.make(directory) }),
+      })
+      yield* first.sessions.switchAgent({ sessionID, agent: Agent.ID.make("plan") })
+
+      yield* firstEvent.await.pipe(Effect.timeout("2 seconds"))
+      expect(Option.isNone(yield* secondEvent.await.pipe(Effect.timeoutOption("100 millis")))).toBe(true)
     })
     await Effect.runPromise(Effect.scoped(program))
   } finally {
