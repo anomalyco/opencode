@@ -62,6 +62,7 @@ const requests: LLMRequest[] = []
 let response: LLMEvent[] = []
 let responses: LLMEvent[][] | undefined
 let responseStream: Stream.Stream<LLMEvent, LLMError> | undefined
+let responseStreams: Stream.Stream<LLMEvent, LLMError>[] | undefined
 let streamGate: Deferred.Deferred<void> | undefined
 let streamStarted: Deferred.Deferred<void> | undefined
 let streamFailure: LLMError | undefined
@@ -76,6 +77,7 @@ const client = Layer.succeed(
     prepare: () => Effect.die("unused"),
     stream: ((request: LLMRequest) => {
       requests.push(request)
+      if (responseStreams) return responseStreams.shift() ?? Stream.empty
       if (responseStream) {
         const stream = responseStream
         responseStream = undefined
@@ -326,6 +328,7 @@ const setup = Effect.gen(function* () {
   responses = undefined
   streamFailure = undefined
   responseStream = undefined
+  responseStreams = undefined
   streamGate = undefined
   streamStarted = undefined
   toolExecutionGate = undefined
@@ -1196,6 +1199,28 @@ describe("SessionRunnerLLM", () => {
       expect(requests).toHaveLength(3)
       expect(yield* session.context(sessionID)).toMatchObject([
         { type: "compaction" },
+        { type: "assistant", finish: "error", error: { message: "prompt too long" } },
+      ])
+    }),
+  )
+
+  it.effect("publishes the original overflow when recovery summarization aborts", () =>
+    Effect.gen(function* () {
+      const session = yield* setupOverflowRecovery
+      const overflow = () => [
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.providerError({ message: "prompt too long", classification: "context-overflow" }),
+      ]
+      responseStreams = [
+        Stream.fromIterable(overflow()),
+        Stream.die(new Error("MessageAbortedError")) as Stream.Stream<LLMEvent, LLMError>,
+      ]
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Continue" }), resume: false })
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(2)
+      expect((yield* session.context(sessionID)).slice(-2)).toMatchObject([
+        { type: "user", text: "Continue" },
         { type: "assistant", finish: "error", error: { message: "prompt too long" } },
       ])
     }),
