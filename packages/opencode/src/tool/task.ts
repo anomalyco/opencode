@@ -9,9 +9,12 @@ import { Agent } from "../agent/agent"
 import { deriveSubagentSessionPermission } from "../agent/subagent-permissions"
 import type { SessionPrompt } from "../session/prompt"
 import { Config } from "@/config/config"
+import { ModelID, ProviderID } from "../provider/schema"
 import { Cause, Effect, Exit, Schema, Scope } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+
+const id = "task"
 
 export interface TaskPromptOps {
   cancel(sessionID: SessionID): Effect.Effect<void>
@@ -19,7 +22,81 @@ export interface TaskPromptOps {
   prompt(input: SessionPrompt.PromptInput): Effect.Effect<MessageV2.WithParts>
 }
 
-const id = "task"
+export interface SpawnWorkerInput {
+  subagentType: string
+  prompt: string
+  parentSessionID: SessionID
+  parentAgent: Agent.Info | undefined
+  model?: { modelID: ModelID; providerID: ProviderID }
+  ops: TaskPromptOps
+  ctx: Pick<Tool.Context, "abort" | "ask" | "metadata" | "extra">
+  bypassAgentCheck?: boolean
+  sessionID?: SessionID
+}
+
+export interface SpawnWorkerResult {
+  text: string
+  sessionID: SessionID
+}
+
+export const spawnWorker = Effect.fn("TaskTool.spawnWorker")(function* (input: SpawnWorkerInput) {
+  const agent = yield* Agent.Service
+  const sessions = yield* Session.Service
+  const config = yield* Config.Service
+
+  if (!input.bypassAgentCheck) {
+    yield* input.ctx.ask({
+      permission: id,
+      patterns: [input.subagentType],
+      always: ["*"],
+      metadata: {
+        description: `workflow worker: ${input.subagentType}`,
+        subagent_type: input.subagentType,
+      },
+    })
+  }
+
+  const next = yield* agent.get(input.subagentType)
+  if (!next) {
+    return yield* Effect.fail(new Error(`Unknown agent type: ${input.subagentType} is not a valid agent type`))
+  }
+
+  const parent = yield* sessions.get(input.parentSessionID)
+  const cfg = yield* config.get()
+  const existing = input.sessionID
+    ? yield* sessions.get(input.sessionID).pipe(Effect.catchCause(() => Effect.succeed(undefined)))
+    : undefined
+  const session =
+    existing ??
+    (yield* sessions.create({
+      parentID: input.parentSessionID,
+      title: `workflow worker (@${next.name})`,
+      permission: workerPermission({ parent, parentAgent: input.parentAgent, subagent: next, cfg }),
+    }))
+
+  const parts = yield* input.ops.resolvePromptParts(input.prompt)
+  const result = yield* input.ops.prompt({
+    messageID: MessageID.ascending(),
+    sessionID: session.id,
+    model: input.model ?? {
+      modelID: parent.model?.id ?? ModelID.make("unknown"),
+      providerID: parent.model?.providerID ?? ProviderID.make("unknown"),
+    },
+    agent: next.name,
+    tools: {
+      ...(next.permission.some((rule) => rule.permission === "todowrite") ? {} : { todowrite: false }),
+      ...(next.permission.some((rule) => rule.permission === id) ? {} : { task: false }),
+      ...Object.fromEntries((cfg.experimental?.primary_tools ?? []).map((item) => [item, false])),
+    },
+    parts,
+  })
+
+  return {
+    text: result.parts.findLast((item) => item.type === "text")?.text ?? "",
+    sessionID: session.id,
+  }
+})
+
 const BACKGROUND_DESCRIPTION = [
   "",
   "",
@@ -93,6 +170,26 @@ function errorText(error: unknown) {
   return String(error)
 }
 
+function workerPermission(input: {
+  parent: Session.Info
+  parentAgent: Agent.Info | undefined
+  subagent: Agent.Info
+  cfg: Config.Info
+}) {
+  return [
+    ...deriveSubagentSessionPermission({
+      parentSessionPermission: input.parent.permission ?? [],
+      parentAgent: input.parentAgent,
+      subagent: input.subagent,
+    }),
+    ...(input.cfg.experimental?.primary_tools?.map((item) => ({
+      pattern: "*" as const,
+      action: "allow" as const,
+      permission: item,
+    })) ?? []),
+  ]
+}
+
 export const TaskTool = Tool.define(
   id,
   Effect.gen(function* () {
@@ -144,18 +241,7 @@ export const TaskTool = Tool.define(
         (yield* sessions.create({
           parentID: ctx.sessionID,
           title: params.description + ` (@${next.name} subagent)`,
-          permission: [
-            ...deriveSubagentSessionPermission({
-              parentSessionPermission: parent.permission ?? [],
-              parentAgent,
-              subagent: next,
-            }),
-            ...(cfg.experimental?.primary_tools?.map((item) => ({
-              pattern: "*",
-              action: "allow" as const,
-              permission: item,
-            })) ?? []),
-          ],
+          permission: workerPermission({ parent, parentAgent, subagent: next, cfg }),
         }))
 
       const msg = yield* MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID }).pipe(Effect.orDie)
@@ -180,25 +266,22 @@ export const TaskTool = Tool.define(
       const ops = ctx.extra?.promptOps as TaskPromptOps
       if (!ops) return yield* Effect.fail(new Error("TaskTool requires promptOps in ctx.extra"))
 
-      const runTask = Effect.fn("TaskTool.runTask")(function* () {
-        const parts = yield* ops.resolvePromptParts(params.prompt)
-        const result = yield* ops.prompt({
-          messageID: MessageID.ascending(),
-          sessionID: nextSession.id,
-          model: {
-            modelID: model.modelID,
-            providerID: model.providerID,
-          },
-          agent: next.name,
-          tools: {
-            ...(next.permission.some((rule) => rule.permission === "todowrite") ? {} : { todowrite: false }),
-            ...(next.permission.some((rule) => rule.permission === id) ? {} : { task: false }),
-            ...Object.fromEntries((cfg.experimental?.primary_tools ?? []).map((item) => [item, false])),
-          },
-          parts,
-        })
-        return result.parts.findLast((item) => item.type === "text")?.text ?? ""
-      })
+      const runTask = spawnWorker({
+        subagentType: params.subagent_type,
+        prompt: params.prompt,
+        parentSessionID: ctx.sessionID,
+        parentAgent,
+        model,
+        ops,
+        ctx,
+        bypassAgentCheck: true,
+        sessionID: nextSession.id,
+      }).pipe(
+        Effect.provideService(Agent.Service, agent),
+        Effect.provideService(Session.Service, sessions),
+        Effect.provideService(Config.Service, config),
+        Effect.map((result) => result.text),
+      )
 
       const inject = Effect.fn("TaskTool.injectBackgroundResult")(function* (
         state: "completed" | "error",
@@ -236,7 +319,7 @@ export const TaskTool = Tool.define(
           type: id,
           title: params.description,
           metadata,
-          run: runTask().pipe(
+          run: runTask.pipe(
             Effect.tap((text) => inject("completed", text).pipe(Effect.ignore)),
             Effect.catchCause((cause) =>
               (Cause.hasInterruptsOnly(cause)
@@ -270,7 +353,7 @@ export const TaskTool = Tool.define(
         }),
         () =>
           Effect.gen(function* () {
-            const text = yield* runTask()
+            const text = yield* runTask
             return {
               title: params.description,
               metadata,
