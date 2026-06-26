@@ -101,8 +101,14 @@ export const tuiHandlers = HttpApiBuilder.group(InstanceHttpApi, "tui", (handler
       payload: typeof TuiEvent.SessionSelect.data.Type
     }) {
       if (!ctx.payload.sessionID.startsWith("ses")) return yield* new HttpApiError.BadRequest({})
-      yield* SessionError.mapStorageNotFound(session.get(ctx.payload.sessionID))
-      yield* events.publish(TuiEvent.SessionSelect, ctx.payload)
+      const info = yield* SessionError.mapStorageNotFound(session.get(ctx.payload.sessionID))
+      // Look up parentID server-side so external callers don't have to supply
+      // it. Plugins can use it to distinguish subagent sessions from
+      // top-level ones without an extra round-trip.
+      yield* events.publish(TuiEvent.SessionSelect, {
+        sessionID: ctx.payload.sessionID,
+        ...(info.parentID ? { parentID: info.parentID } : {}),
+      })
       return true
     })
 

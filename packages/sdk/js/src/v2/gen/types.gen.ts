@@ -1484,6 +1484,10 @@ export type GlobalEvent = {
            * Session ID to navigate to
            */
           sessionID: string
+          /**
+           * ID of the parent session if this is a subagent; absent for top-level sessions
+           */
+          parentID?: string
         }
       }
     | {
@@ -2712,6 +2716,10 @@ export type EventTuiSessionSelect = {
      * Session ID to navigate to
      */
     sessionID: string
+    /**
+     * ID of the parent session if this is a subagent; absent for top-level sessions
+     */
+    parentID?: string
   }
 }
 
@@ -2970,6 +2978,10 @@ export type EventTuiSessionSelect2 = {
      * Session ID to navigate to
      */
     sessionID: string
+    /**
+     * ID of the parent session if this is a subagent; absent for top-level sessions
+     */
+    parentID?: string
   }
 }
 
@@ -5797,6 +5809,10 @@ export type V2EventTuiSessionSelect = {
      * Session ID to navigate to
      */
     sessionID: string
+    /**
+     * ID of the parent session if this is a subagent; absent for top-level sessions
+     */
+    parentID?: string
   }
 }
 
@@ -11026,6 +11042,10 @@ export type TuiSelectSessionData = {
      * Session ID to navigate to
      */
     sessionID: string
+    /**
+     * ID of the parent session if this is a subagent; absent for top-level sessions
+     */
+    parentID?: string
   }
   path?: never
   query?: {

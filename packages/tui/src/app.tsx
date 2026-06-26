@@ -1013,10 +1013,14 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
             inboundSessionID = null
             return
           }
+          // Best-effort parentID lookup from the sync store so plugins can
+          // distinguish subagent sessions. May be undefined if the session
+          // isn't hydrated yet — plugins can fall back to client.session.get.
+          const parentID = sync.session.get(sessionID)?.parentID
           sdk.client.tui.publish({
             body: {
               type: "tui.session.select",
-              properties: { sessionID },
+              properties: parentID ? { sessionID, parentID } : { sessionID },
             },
           })
           return

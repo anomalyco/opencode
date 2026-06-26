@@ -2,7 +2,7 @@ export * as TuiEvent from "./tui-event"
 
 import { Effect, Schema } from "effect"
 import { Event } from "./event"
-import { PositiveInt } from "./schema"
+import { optionalOmitUndefined, PositiveInt } from "./schema"
 import { SessionID } from "./session-id"
 
 const DEFAULT_TOAST_DURATION = 5000
@@ -52,6 +52,9 @@ export const SessionSelect = Event.define({
   type: "tui.session.select",
   schema: {
     sessionID: SessionID.annotate({ description: "Session ID to navigate to" }),
+    parentID: SessionID.annotate({
+      description: "ID of the parent session if this is a subagent; absent for top-level sessions",
+    }).pipe(optionalOmitUndefined),
   },
 })
 

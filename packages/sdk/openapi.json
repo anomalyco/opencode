@@ -9168,6 +9168,11 @@
                     "type": "string",
                     "pattern": "^ses",
                     "description": "Session ID to navigate to"
+                  },
+                  "parentID": {
+                    "type": "string",
+                    "pattern": "^ses",
+                    "description": "ID of the parent session if this is a subagent; absent for top-level sessions"
                   }
                 },
                 "required": ["sessionID"],
@@ -19635,6 +19640,11 @@
                         "type": "string",
                         "pattern": "^ses",
                         "description": "Session ID to navigate to"
+                      },
+                      "parentID": {
+                        "type": "string",
+                        "pattern": "^ses",
+                        "description": "ID of the parent session if this is a subagent; absent for top-level sessions"
                       }
                     },
                     "required": ["sessionID"],
@@ -23173,6 +23183,11 @@
                 "type": "string",
                 "pattern": "^ses",
                 "description": "Session ID to navigate to"
+              },
+              "parentID": {
+                "type": "string",
+                "pattern": "^ses",
+                "description": "ID of the parent session if this is a subagent; absent for top-level sessions"
               }
             },
             "required": ["sessionID"],
@@ -23942,6 +23957,11 @@
                 "type": "string",
                 "pattern": "^ses",
                 "description": "Session ID to navigate to"
+              },
+              "parentID": {
+                "type": "string",
+                "pattern": "^ses",
+                "description": "ID of the parent session if this is a subagent; absent for top-level sessions"
               }
             },
             "required": ["sessionID"],
@@ -32277,6 +32297,11 @@
                 "type": "string",
                 "pattern": "^ses",
                 "description": "Session ID to navigate to"
+              },
+              "parentID": {
+                "type": "string",
+                "pattern": "^ses",
+                "description": "ID of the parent session if this is a subagent; absent for top-level sessions"
               }
             },
             "required": ["sessionID"],

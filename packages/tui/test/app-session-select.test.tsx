@@ -6,7 +6,7 @@ import { Global } from "@opencode-ai/core/global"
 import { createTuiResolvedConfig } from "./fixture/tui-runtime"
 import { createEventSource, createFetch, directory, json } from "./fixture/tui-sdk"
 
-type PublishBody = { type: string; properties?: { sessionID?: string } }
+type PublishBody = { type: string; properties?: { sessionID?: string; parentID?: string } }
 
 function parsePublishes(bodies: (string | undefined)[]) {
   const out: PublishBody[] = []
@@ -43,7 +43,10 @@ test("publishes tui.session.select when the TUI navigates to a session route", a
       time: { created: 0, updated: 0 },
     },
     other: {
+      // Subagent session with a parentID — publish should carry it through so
+      // plugins can distinguish subagents from top-level sessions.
       id: "other",
+      parentID: "dummy",
       title: "Other session",
       slug: "other",
       projectID: "project",
@@ -115,10 +118,19 @@ test("publishes tui.session.select when the TUI navigates to a session route", a
     expect(sinceInbound).toEqual([])
 
     const publishes = parsePublishes(calls.tuiPublish.map((r) => r.body))
-    const sessionIds = publishes.filter((p) => p.type === "tui.session.select").map((p) => p.properties?.sessionID)
-
+    const selects = publishes.filter((p) => p.type === "tui.session.select")
+    const sessionIds = selects.map((p) => p.properties?.sessionID)
     expect(sessionIds).toContain("dummy")
     expect(sessionIds).toContain("other")
+
+    // The "other" session has parentID "dummy" — verify it's carried through.
+    const otherSelect = selects.find((p) => p.properties?.sessionID === "other")
+    expect(otherSelect?.properties?.parentID).toBe("dummy")
+
+    // The top-level "dummy" session has no parentID — verify the field is
+    // absent from the publish payload.
+    const dummySelect = selects.find((p) => p.properties?.sessionID === "dummy")
+    expect(dummySelect?.properties?.parentID).toBeUndefined()
 
     api?.keymap.dispatchCommand("app.exit")
     await task
