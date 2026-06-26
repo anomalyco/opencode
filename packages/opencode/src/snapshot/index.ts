@@ -804,6 +804,10 @@ export const defaultLayer = layer.pipe(
   Layer.provide(Config.defaultLayer),
 )
 
-export const node = LayerNode.make(layer, [FSUtil.node, AppProcess.node, Config.node])
+export const node = LayerNode.make({
+  service: Service,
+  layer: layer,
+  deps: [FSUtil.node, AppProcess.node, Config.node],
+})
 
 export * as Snapshot from "."

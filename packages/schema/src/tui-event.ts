@@ -1,6 +1,7 @@
 export * as TuiEvent from "./tui-event"
 
 import { Effect, Schema } from "effect"
+import { optional } from "./schema"
 import { Event } from "./event"
 import { PositiveInt } from "./schema"
 import { SessionID } from "./session-id"
@@ -39,7 +40,7 @@ export const CommandExecute = Event.define({
 export const ToastShow = Event.define({
   type: "tui.toast.show",
   schema: {
-    title: Schema.optional(Schema.String),
+    title: optional(Schema.String),
     message: Schema.String,
     variant: Schema.Literals(["info", "success", "warning", "error"]),
     duration: PositiveInt.pipe(Schema.withDecodingDefault(Effect.succeed(DEFAULT_TOAST_DURATION))).annotate({

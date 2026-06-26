@@ -223,6 +223,7 @@ export const dict = {
   "model.noPeersDescription": "Vergleichsrankings erscheinen, nachdem Nutzung eingegangen ist.",
   "model.noUsageLastWeek": "Keine Nutzung letzte Woche",
   "model.newThisWeek": "Neu diese Woche",
+  "model.sameAsPreviousWeek": "Unverändert zur vorherigen Woche",
   "model.vsPreviousWeek": "{{change}} ggü. vorheriger Woche",
   "model.pdf": "PDF",
   "format.users": "Nutzer",

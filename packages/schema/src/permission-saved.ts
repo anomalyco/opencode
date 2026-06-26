@@ -17,4 +17,4 @@ export const Info = Schema.Struct({
   action: Schema.String,
   resource: Schema.String,
 }).annotate({ identifier: "PermissionSaved.Info" })
-export type Info = typeof Info.Type
+export interface Info extends Schema.Schema.Type<typeof Info> {}

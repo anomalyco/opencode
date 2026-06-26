@@ -324,6 +324,6 @@ export const layer = Layer.effect(
 
 export const defaultLayer = layer.pipe(Layer.provide(FSUtil.defaultLayer), Layer.provide(Git.defaultLayer))
 
-export const node = LayerNode.make(layer, [FSUtil.node, Git.node])
+export const node = LayerNode.make({ service: Service, layer: layer, deps: [FSUtil.node, Git.node] })
 
 export * as Storage from "./storage"

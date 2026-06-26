@@ -958,16 +958,20 @@ function route(url: string | URL, path: string) {
   return next
 }
 
-export const node = LayerNode.make(layer, [
-  Auth.node,
-  Session.node,
-  SessionPrompt.node,
-  httpClient,
-  EventV2Bridge.node,
-  Vcs.node,
-  RuntimeFlags.node,
-  FSUtil.node,
-  Database.node,
-])
+export const node = LayerNode.make({
+  service: Service,
+  layer: layer,
+  deps: [
+    Auth.node,
+    Session.node,
+    SessionPrompt.node,
+    httpClient,
+    EventV2Bridge.node,
+    Vcs.node,
+    RuntimeFlags.node,
+    FSUtil.node,
+    Database.node,
+  ],
+})
 
 export * as Workspace from "./workspace"

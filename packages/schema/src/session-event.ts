@@ -1,6 +1,7 @@
 export * as SessionEvent from "./session-event"
 
 import { Schema } from "effect"
+import { optional } from "./schema"
 import { Event } from "./event"
 import { ProviderMetadata, ToolContent } from "./llm"
 import { Delivery } from "./session-delivery"
@@ -21,7 +22,7 @@ export const Source = Schema.Struct({
 }).annotate({
   identifier: "session.next.event.source",
 })
-export type Source = typeof Source.Type
+export interface Source extends Schema.Schema.Type<typeof Source> {}
 
 const Base = {
   timestamp: DateTimeUtcFromMillis,
@@ -78,7 +79,7 @@ export const Moved = Event.define({
   schema: {
     ...Base,
     location: Location.Ref,
-    subdirectory: RelativePath.pipe(Schema.optional),
+    subdirectory: RelativePath.pipe(optional),
   },
 })
 export type Moved = typeof Moved.Type
@@ -153,7 +154,7 @@ export namespace Step {
       assistantMessageID: SessionMessage.ID,
       agent: Schema.String,
       model: Model.Ref,
-      snapshot: Schema.String.pipe(Schema.optional),
+      snapshot: Schema.String.pipe(optional),
     },
   })
   export type Started = typeof Started.Type
@@ -175,8 +176,8 @@ export namespace Step {
           write: Schema.Finite,
         }),
       }),
-      snapshot: Schema.String.pipe(Schema.optional),
-      files: Schema.Array(RelativePath).pipe(Schema.optional),
+      snapshot: Schema.String.pipe(optional),
+      files: Schema.Array(RelativePath).pipe(optional),
     },
   })
   export type Ended = typeof Ended.Type
@@ -238,7 +239,7 @@ export namespace Reasoning {
       ...Base,
       assistantMessageID: SessionMessage.ID,
       reasoningID: Schema.String,
-      providerMetadata: ProviderMetadata.pipe(Schema.optional),
+      providerMetadata: ProviderMetadata.pipe(optional),
     },
   })
   export type Started = typeof Started.Type
@@ -263,7 +264,7 @@ export namespace Reasoning {
       assistantMessageID: SessionMessage.ID,
       reasoningID: Schema.String,
       text: Schema.String,
-      providerMetadata: ProviderMetadata.pipe(Schema.optional),
+      providerMetadata: ProviderMetadata.pipe(optional),
     },
   })
   export type Ended = typeof Ended.Type
@@ -317,7 +318,7 @@ export namespace Tool {
       input: Schema.Record(Schema.String, Schema.Unknown),
       provider: Schema.Struct({
         executed: Schema.Boolean,
-        metadata: ProviderMetadata.pipe(Schema.optional),
+        metadata: ProviderMetadata.pipe(optional),
       }),
     },
   })
@@ -332,7 +333,7 @@ export namespace Tool {
     ...options,
     schema: {
       ...ToolBase,
-      structured: Schema.Record(Schema.String, Schema.Any),
+      structured: Schema.Record(Schema.String, Schema.Unknown),
       content: Schema.Array(ToolContent),
     },
   })
@@ -343,13 +344,13 @@ export namespace Tool {
     ...options,
     schema: {
       ...ToolBase,
-      structured: Schema.Record(Schema.String, Schema.Any),
+      structured: Schema.Record(Schema.String, Schema.Unknown),
       content: Schema.Array(ToolContent),
-      outputPaths: Schema.Array(Schema.String).pipe(Schema.optional),
-      result: Schema.Unknown.pipe(Schema.optional),
+      outputPaths: Schema.Array(Schema.String).pipe(optional),
+      result: Schema.Unknown.pipe(optional),
       provider: Schema.Struct({
         executed: Schema.Boolean,
-        metadata: ProviderMetadata.pipe(Schema.optional),
+        metadata: ProviderMetadata.pipe(optional),
       }),
     },
   })
@@ -361,10 +362,10 @@ export namespace Tool {
     schema: {
       ...ToolBase,
       error: UnknownError,
-      result: Schema.Unknown.pipe(Schema.optional),
+      result: Schema.Unknown.pipe(optional),
       provider: Schema.Struct({
         executed: Schema.Boolean,
-        metadata: ProviderMetadata.pipe(Schema.optional),
+        metadata: ProviderMetadata.pipe(optional),
       }),
     },
   })
@@ -373,15 +374,15 @@ export namespace Tool {
 
 export const RetryError = Schema.Struct({
   message: Schema.String,
-  statusCode: Schema.Finite.pipe(Schema.optional),
+  statusCode: Schema.Finite.pipe(optional),
   isRetryable: Schema.Boolean,
-  responseHeaders: Schema.Record(Schema.String, Schema.String).pipe(Schema.optional),
-  responseBody: Schema.String.pipe(Schema.optional),
-  metadata: Schema.Record(Schema.String, Schema.String).pipe(Schema.optional),
+  responseHeaders: Schema.Record(Schema.String, Schema.String).pipe(optional),
+  responseBody: Schema.String.pipe(optional),
+  metadata: Schema.Record(Schema.String, Schema.String).pipe(optional),
 }).annotate({
   identifier: "session.next.retry_error",
 })
-export type RetryError = typeof RetryError.Type
+export interface RetryError extends Schema.Schema.Type<typeof RetryError> {}
 
 export const Retried = Event.define({
   type: "session.next.retried",

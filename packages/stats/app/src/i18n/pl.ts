@@ -221,6 +221,7 @@ export const dict = {
   "model.noPeersDescription": "Rankingi podobnych modeli pojawią się po nadejściu użycia.",
   "model.noUsageLastWeek": "Brak użycia w zeszłym tygodniu",
   "model.newThisWeek": "Nowy w tym tygodniu",
+  "model.sameAsPreviousWeek": "Tak samo jak w poprzednim tygodniu",
   "model.vsPreviousWeek": "{{change}} vs poprzedni tydzień",
   "model.pdf": "PDF",
   "format.users": "użytkownicy",

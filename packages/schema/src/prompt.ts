@@ -1,4 +1,5 @@
 import { Schema } from "effect"
+import { optional } from "./schema"
 import { statics } from "./schema"
 
 export interface Source extends Schema.Schema.Type<typeof Source> {}
@@ -12,9 +13,9 @@ export interface FileAttachment extends Schema.Schema.Type<typeof FileAttachment
 export const FileAttachment = Schema.Struct({
   uri: Schema.String,
   mime: Schema.String,
-  name: Schema.String.pipe(Schema.optional),
-  description: Schema.String.pipe(Schema.optional),
-  source: Source.pipe(Schema.optional),
+  name: Schema.String.pipe(optional),
+  description: Schema.String.pipe(optional),
+  source: Source.pipe(optional),
 })
   .annotate({ identifier: "Prompt.FileAttachment" })
   .pipe(
@@ -33,14 +34,14 @@ export const FileAttachment = Schema.Struct({
 export interface AgentAttachment extends Schema.Schema.Type<typeof AgentAttachment> {}
 export const AgentAttachment = Schema.Struct({
   name: Schema.String,
-  source: Source.pipe(Schema.optional),
+  source: Source.pipe(optional),
 }).annotate({ identifier: "Prompt.AgentAttachment" })
 
 export interface Prompt extends Schema.Schema.Type<typeof Prompt> {}
 export const Prompt = Schema.Struct({
   text: Schema.String,
-  files: Schema.Array(FileAttachment).pipe(Schema.optional),
-  agents: Schema.Array(AgentAttachment).pipe(Schema.optional),
+  files: Schema.Array(FileAttachment).pipe(optional),
+  agents: Schema.Array(AgentAttachment).pipe(optional),
 })
   .annotate({ identifier: "Prompt" })
   .pipe(

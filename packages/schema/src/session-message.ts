@@ -1,6 +1,7 @@
 export * as SessionMessage from "./session-message"
 
 import { Schema } from "effect"
+import { optional } from "./schema"
 import { ProviderMetadata, ToolContent } from "./llm"
 import { Model } from "./model"
 import { FileAttachment, Prompt } from "./prompt"
@@ -22,7 +23,7 @@ export const UnknownError = Schema.Struct({
 
 const Base = {
   id: ID,
-  metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
+  metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(optional),
   time: Schema.Struct({ created: DateTimeUtcFromMillis }),
 }
 
@@ -73,7 +74,7 @@ export const Shell = Schema.Struct({
   output: Schema.String,
   time: Schema.Struct({
     created: DateTimeUtcFromMillis,
-    completed: DateTimeUtcFromMillis.pipe(Schema.optional),
+    completed: DateTimeUtcFromMillis.pipe(optional),
   }),
 }).annotate({ identifier: "Session.Message.Shell" })
 
@@ -87,7 +88,7 @@ export interface ToolStateRunning extends Schema.Schema.Type<typeof ToolStateRun
 export const ToolStateRunning = Schema.Struct({
   status: Schema.Literal("running"),
   input: Schema.Record(Schema.String, Schema.Unknown),
-  structured: Schema.Record(Schema.String, Schema.Any),
+  structured: Schema.Record(Schema.String, Schema.Unknown),
   content: ToolContent.pipe(Schema.Array),
 }).annotate({ identifier: "Session.Message.ToolState.Running" })
 
@@ -95,11 +96,11 @@ export interface ToolStateCompleted extends Schema.Schema.Type<typeof ToolStateC
 export const ToolStateCompleted = Schema.Struct({
   status: Schema.Literal("completed"),
   input: Schema.Record(Schema.String, Schema.Unknown),
-  attachments: FileAttachment.pipe(Schema.Array, Schema.optional),
+  attachments: FileAttachment.pipe(Schema.Array, optional),
   content: ToolContent.pipe(Schema.Array),
-  outputPaths: Schema.Array(Schema.String).pipe(Schema.optional),
-  structured: Schema.Record(Schema.String, Schema.Any),
-  result: Schema.Unknown.pipe(Schema.optional),
+  outputPaths: Schema.Array(Schema.String).pipe(optional),
+  structured: Schema.Record(Schema.String, Schema.Unknown),
+  result: Schema.Unknown.pipe(optional),
 }).annotate({ identifier: "Session.Message.ToolState.Completed" })
 
 export interface ToolStateError extends Schema.Schema.Type<typeof ToolStateError> {}
@@ -107,9 +108,9 @@ export const ToolStateError = Schema.Struct({
   status: Schema.Literal("error"),
   input: Schema.Record(Schema.String, Schema.Unknown),
   content: ToolContent.pipe(Schema.Array),
-  structured: Schema.Record(Schema.String, Schema.Any),
+  structured: Schema.Record(Schema.String, Schema.Unknown),
   error: UnknownError,
-  result: Schema.Unknown.pipe(Schema.optional),
+  result: Schema.Unknown.pipe(optional),
 }).annotate({ identifier: "Session.Message.ToolState.Error" })
 
 export const ToolState = Schema.Union([ToolStatePending, ToolStateRunning, ToolStateCompleted, ToolStateError]).pipe(
@@ -124,15 +125,15 @@ export const AssistantTool = Schema.Struct({
   name: Schema.String,
   provider: Schema.Struct({
     executed: Schema.Boolean,
-    metadata: ProviderMetadata.pipe(Schema.optional),
-    resultMetadata: ProviderMetadata.pipe(Schema.optional),
-  }).pipe(Schema.optional),
+    metadata: ProviderMetadata.pipe(optional),
+    resultMetadata: ProviderMetadata.pipe(optional),
+  }).pipe(optional),
   state: ToolState,
   time: Schema.Struct({
     created: DateTimeUtcFromMillis,
-    ran: DateTimeUtcFromMillis.pipe(Schema.optional),
-    completed: DateTimeUtcFromMillis.pipe(Schema.optional),
-    pruned: DateTimeUtcFromMillis.pipe(Schema.optional),
+    ran: DateTimeUtcFromMillis.pipe(optional),
+    completed: DateTimeUtcFromMillis.pipe(optional),
+    pruned: DateTimeUtcFromMillis.pipe(optional),
   }),
 }).annotate({ identifier: "Session.Message.Assistant.Tool" })
 
@@ -148,7 +149,7 @@ export const AssistantReasoning = Schema.Struct({
   type: Schema.Literal("reasoning"),
   id: Schema.String,
   text: Schema.String,
-  providerMetadata: ProviderMetadata.pipe(Schema.optional),
+  providerMetadata: ProviderMetadata.pipe(optional),
 }).annotate({ identifier: "Session.Message.Assistant.Reasoning" })
 
 export const AssistantContent = Schema.Union([AssistantText, AssistantReasoning, AssistantTool]).pipe(
@@ -164,22 +165,22 @@ export const Assistant = Schema.Struct({
   model: Model.Ref,
   content: AssistantContent.pipe(Schema.Array),
   snapshot: Schema.Struct({
-    start: Schema.String.pipe(Schema.optional),
-    end: Schema.String.pipe(Schema.optional),
-    files: Schema.Array(RelativePath).pipe(Schema.optional),
-  }).pipe(Schema.optional),
-  finish: Schema.String.pipe(Schema.optional),
-  cost: Schema.Finite.pipe(Schema.optional),
+    start: Schema.String.pipe(optional),
+    end: Schema.String.pipe(optional),
+    files: Schema.Array(RelativePath).pipe(optional),
+  }).pipe(optional),
+  finish: Schema.String.pipe(optional),
+  cost: Schema.Finite.pipe(optional),
   tokens: Schema.Struct({
     input: Schema.Finite,
     output: Schema.Finite,
     reasoning: Schema.Finite,
     cache: Schema.Struct({ read: Schema.Finite, write: Schema.Finite }),
-  }).pipe(Schema.optional),
-  error: UnknownError.pipe(Schema.optional),
+  }).pipe(optional),
+  error: UnknownError.pipe(optional),
   time: Schema.Struct({
     created: DateTimeUtcFromMillis,
-    completed: DateTimeUtcFromMillis.pipe(Schema.optional),
+    completed: DateTimeUtcFromMillis.pipe(optional),
   }),
 }).annotate({ identifier: "Session.Message.Assistant" })
 
