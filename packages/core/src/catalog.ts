@@ -71,6 +71,7 @@ const layer = Layer.effect(
     const available = (provider: ProviderV2.Info, integration: Integration.Info | undefined) => {
       if (provider.disabled) return false
       if (typeof provider.request.body.apiKey === "string") return true
+      if (typeof provider.api.settings?.apiKey === "string") return true
       if (integration?.connections.length) return true
       return provider.integrationID === undefined && !integration
     }
@@ -209,18 +210,29 @@ const layer = Layer.effect(
         }),
 
         available: Effect.fn("CatalogV2.model.available")(function* () {
+          const records = new Map((yield* result.provider.all()).map((provider) => [provider.id, provider]))
           const providers = new Set((yield* result.provider.available()).map((provider) => provider.id))
-          return (yield* result.model.all()).filter((model) => providers.has(model.providerID) && model.enabled)
+          return (yield* result.model.all()).filter(
+            (model) =>
+              model.enabled &&
+              records.get(model.providerID)?.disabled !== true &&
+              (providers.has(model.providerID) ||
+                typeof model.request.body.apiKey === "string" ||
+                typeof model.api.settings?.apiKey === "string"),
+          )
         }),
 
         default: Effect.fn("CatalogV2.model.default")(function* () {
           const defaultModel = state.get().defaultModel
           if (defaultModel) {
-            const provider = yield* result.provider.get(defaultModel.providerID)
-            if (provider && (yield* result.provider.available()).some((item) => item.id === provider.id)) {
-              const model = yield* result.model.get(defaultModel.providerID, defaultModel.modelID)
-              if (model?.enabled) return model
-            }
+            const model = yield* result.model.get(defaultModel.providerID, defaultModel.modelID)
+            if (
+              model &&
+              (yield* result.model.available()).some(
+                (item) => item.providerID === model.providerID && item.id === model.id,
+              )
+            )
+              return model
           }
 
           return Option.getOrUndefined(

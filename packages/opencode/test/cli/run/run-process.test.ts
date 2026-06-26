@@ -227,16 +227,9 @@ describe("opencode run (non-interactive subprocess)", () => {
 
         const events = opencode.parseJsonEvents(result.stdout)
         expect(result.exitCode).toBe(0)
-        expect(events.map((event) => event.type)).toEqual([
-          "step_start",
-          "text",
-          "tool_use",
-          "step_finish",
-          "step_start",
-          "step_finish",
-        ])
+        expect(events.map((event) => event.type)).toEqual(["step_start", "text", "tool_use", "step_finish"])
         expect(events[1]?.part).toEqual(expect.objectContaining({ type: "text", text: "partial json" }))
-        expect(events.at(-1)?.part).toEqual(expect.objectContaining({ type: "step-finish", reason: "unknown" }))
+        expect(events.at(-1)?.part).toEqual(expect.objectContaining({ type: "step-finish" }))
       }),
     60_000,
   )
@@ -273,6 +266,44 @@ describe("opencode run (non-interactive subprocess)", () => {
         opencode.expectExit(explicitlyDenied, 0)
         expect(explicitlyDenied.stdout).toContain("continued after explicit denial")
         expect(yield* Effect.promise(() => Bun.file(`${home}/explicitly-denied`).exists())).toBe(false)
+      }),
+    60_000,
+  )
+
+  cliIt.concurrent(
+    "rejects unattended questions without hanging",
+    ({ llm, opencode }) =>
+      Effect.gen(function* () {
+        yield* llm.tool("question", {
+          questions: [
+            {
+              question: "Continue?",
+              header: "Continue",
+              options: [{ label: "Yes", description: "Continue execution" }],
+            },
+          ],
+        })
+        const result = yield* opencode.run("ask a question")
+
+        opencode.expectExit(result, 0)
+        expect(result.stdout).toBe("")
+      }),
+    60_000,
+  )
+
+  cliIt.concurrent(
+    "continues a current session with projected history",
+    ({ llm, opencode }) =>
+      Effect.gen(function* () {
+        yield* llm.text("first response")
+        const first = yield* opencode.run("first prompt")
+        opencode.expectExit(first, 0)
+
+        yield* llm.text("second response")
+        const second = yield* opencode.run("second prompt", { extraArgs: ["--continue"] })
+        opencode.expectExit(second, 0)
+        expect(second.stdout).toBe("second response\n")
+        expect(JSON.stringify(yield* llm.inputs)).toContain("first prompt")
       }),
     60_000,
   )
@@ -325,6 +356,21 @@ describe("opencode run (non-interactive subprocess)", () => {
 
         expect(result.exitCode).not.toBe(0)
         expect(result.durationMs).toBeLessThan(30_000)
+      }),
+    30_000,
+  )
+
+  cliIt.live(
+    "SIGINT before admission prevents provider execution",
+    ({ llm, opencode }) =>
+      Effect.gen(function* () {
+        yield* llm.hang
+        const run = yield* opencode.startRun("do not start")
+        run.interrupt()
+        const result = yield* run.result
+
+        expect(result.exitCode).not.toBe(0)
+        expect(yield* llm.inputs).toHaveLength(0)
       }),
     30_000,
   )

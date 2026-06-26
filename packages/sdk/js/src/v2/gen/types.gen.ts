@@ -24,6 +24,7 @@ export type Event =
   | EventSessionNextForked
   | EventSessionNextPrompted
   | EventSessionNextPromptAdmitted
+  | EventSessionNextExecutionSettled
   | EventSessionNextContextUpdated
   | EventSessionNextSynthetic
   | EventSessionNextSkillActivated
@@ -921,6 +922,16 @@ export type GlobalEvent = {
           messageID: string
           prompt: Prompt
           delivery: "steer" | "queue"
+        }
+      }
+    | {
+        id: string
+        type: "session.next.execution.settled"
+        properties: {
+          timestamp: number
+          sessionID: string
+          outcome: "success" | "failure" | "interrupted"
+          error?: SessionErrorUnknown
         }
       }
     | {
@@ -2885,7 +2896,7 @@ export type SessionHistory = {
   hasMore: boolean
 }
 
-export type SessionDurableEventStream = string
+export type SessionDurableEvent1 = string
 
 export type SessionMessagesResponse = {
   data: Array<SessionMessage>
@@ -2990,7 +3001,7 @@ export type QuestionRejected2 = {
   }
 }
 
-export type V2Event =
+export type V2Event1 =
   | ModelsDevRefreshed
   | IntegrationUpdated
   | IntegrationConnectionUpdated
@@ -3010,6 +3021,7 @@ export type V2Event =
   | SessionNextForked
   | SessionNextPrompted
   | SessionNextPromptAdmitted
+  | SessionNextExecutionSettled
   | SessionNextContextUpdated
   | SessionNextSynthetic
   | SessionNextSkillActivated
@@ -3089,7 +3101,7 @@ export type V2Event =
   | ServerConnected
   | GlobalDisposed
 
-export type V2EventStream = string
+export type V2Event = string
 
 export type ForbiddenError = {
   _tag: "ForbiddenError"
@@ -5597,6 +5609,26 @@ export type MessagePartRemoved = {
   }
 }
 
+export type SessionNextExecutionSettled = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.execution.settled"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    outcome: "success" | "failure" | "interrupted"
+    error?: SessionErrorUnknown
+  }
+}
+
 export type SessionNextTextDelta = {
   id: string
   metadata?: {
@@ -6799,6 +6831,17 @@ export type EventSessionNextPromptAdmitted = {
     messageID: string
     prompt: Prompt
     delivery: "steer" | "queue"
+  }
+}
+
+export type EventSessionNextExecutionSettled = {
+  id: string
+  type: "session.next.execution.settled"
+  properties: {
+    timestamp: number
+    sessionID: string
+    outcome: "success" | "failure" | "interrupted"
+    error?: SessionErrorUnknown
   }
 }
 
@@ -11965,6 +12008,7 @@ export type V2SessionListResponse = V2SessionListResponses[keyof V2SessionListRe
 export type V2SessionCreateData = {
   body: {
     id?: string
+    title?: string
     agent?: string
     model?: ModelRef
     location?: LocationRef
@@ -12674,7 +12718,7 @@ export type V2SessionEventsResponses = {
   200: {
     id: string
     event: string
-    data: SessionDurableEventStream
+    data: SessionDurableEvent1
   }
 }
 

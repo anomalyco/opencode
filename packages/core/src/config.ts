@@ -2,6 +2,7 @@ export * as Config from "./config"
 
 import { makeLocationNode } from "./effect/app-node"
 import path from "path"
+import os from "os"
 import { type ParseError, parse } from "jsonc-parser"
 import { Context, Effect, Layer, Option, Schema } from "effect"
 import { Permission } from "@opencode-ai/schema/permission"
@@ -25,6 +26,7 @@ import { ConfigToolOutput } from "./config/tool-output"
 import { ConfigWatcher } from "./config/watcher"
 import { ConfigV1 } from "./v1/config/config"
 import { ConfigMigrateV1 } from "./v1/config/migrate"
+import { Flag } from "./flag/flag"
 
 export class Info extends Schema.Class<Info>("Config.Info")({
   $schema: Schema.optional(Schema.String).annotate({
@@ -144,19 +146,50 @@ const layer = Layer.effect(
     const decodeInfo = Schema.decodeUnknownOption(Info, decodeOptions)
     const decodeV1Info = Schema.decodeUnknownOption(ConfigV1.Info, decodeOptions)
 
+    const decode = (input: unknown) =>
+      Option.getOrUndefined(
+        ConfigMigrateV1.isV1(input)
+          ? decodeV1Info(input).pipe(Option.map(ConfigMigrateV1.migrate), Option.flatMap(decodeInfo))
+          : decodeInfo(input),
+      )
+
+    const substitute = Effect.fnUntraced(function* (text: string, directory: string) {
+      const expanded = text.replace(/\{env:([^}]+)\}/g, (_, name: string) => process.env[name] ?? "")
+      const replacements = yield* Effect.forEach(
+        Array.from(expanded.matchAll(/\{file:[^}]+\}/g)),
+        Effect.fnUntraced(function* (match) {
+          const index = match.index
+          const line = expanded.slice(expanded.lastIndexOf("\n", index - 1) + 1, index).trimStart()
+          if (line.startsWith("//")) return { index, token: match[0], value: match[0] }
+          const target = match[0].slice(6, -1)
+          const filepath = target.startsWith("~/")
+            ? path.join(os.homedir(), target.slice(2))
+            : path.resolve(directory, target)
+          const content = yield* fs.readFileStringSafe(filepath).pipe(Effect.catch(() => Effect.succeed(undefined)))
+          return { index, token: match[0], value: JSON.stringify(content?.trim() ?? "").slice(1, -1) }
+        }),
+      )
+      const result = replacements.reduce(
+        (result, replacement) => ({
+          text: result.text + expanded.slice(result.cursor, replacement.index) + replacement.value,
+          cursor: replacement.index + replacement.token.length,
+        }),
+        { text: "", cursor: 0 },
+      )
+      return result.text + expanded.slice(result.cursor)
+    })
+
     const loadFile = Effect.fnUntraced(function* (filepath: string) {
       const text = yield* fs.readFileStringSafe(filepath)
       if (!text) return
 
       const errors: ParseError[] = []
-      const input: unknown = parse(text, errors, { allowTrailingComma: true })
+      const input: unknown = parse(yield* substitute(text, path.dirname(filepath)), errors, {
+        allowTrailingComma: true,
+      })
       if (errors.length) return
 
-      const info = Option.getOrUndefined(
-        ConfigMigrateV1.isV1(input)
-          ? decodeV1Info(input).pipe(Option.map(ConfigMigrateV1.migrate), Option.flatMap(decodeInfo))
-          : decodeInfo(input),
-      )
+      const info = decode(input)
       if (!info) return
       return new Document({ type: "document", path: filepath, info })
     })
@@ -200,7 +233,22 @@ const layer = Layer.effect(
     const supplementary = yield* Effect.forEach(directories, loadDirectory).pipe(Effect.orDie)
     // Apply general settings first and more specific settings last:
     // global config, project files, then `.opencode` files.
-    const configs = [...(supplementary[0] ?? []), ...direct, ...supplementary.slice(1).flat()]
+    const content = yield* Effect.gen(function* () {
+      if (!Flag.OPENCODE_CONFIG_CONTENT) return undefined
+      const errors: ParseError[] = []
+      const input: unknown = parse(yield* substitute(Flag.OPENCODE_CONFIG_CONTENT, location.directory), errors, {
+        allowTrailingComma: true,
+      })
+      if (errors.length) return undefined
+      const info = decode(input)
+      return info ? new Document({ type: "document", info }) : undefined
+    })
+    const configs = [
+      ...(supplementary[0] ?? []),
+      ...direct,
+      ...supplementary.slice(1).flat(),
+      ...(content ? [content] : []),
+    ]
     // Rules use the opposite order so a user-global rule can override a
     // repository rule. Statement order inside each file stays unchanged.
     yield* policy.load(

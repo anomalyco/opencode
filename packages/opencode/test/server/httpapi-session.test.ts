@@ -251,6 +251,35 @@ describe("session HttpApi", () => {
   )
 
   it.instance(
+    "exposes current-created sessions through the legacy API",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const headers = { "x-opencode-directory": test.directory, "content-type": "application/json" }
+        const created = yield* requestJson<{
+          data: { id: SessionIDType; title: string; location: { directory: string } }
+        }>("/api/session", {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ title: "current title", location: { directory: test.directory } }),
+        })
+        expect(created.data.location.directory).toBe(test.directory)
+        expect(created.data.title).toBe("current title")
+
+        const legacy = yield* requestJson<SessionV1.SessionInfo>(
+          pathFor(SessionPaths.get, { sessionID: created.data.id }),
+          { headers },
+        )
+        expect(legacy).toMatchObject({
+          id: created.data.id,
+          title: "current title",
+          directory: test.directory,
+        })
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
+
+  it.instance(
     "returns declared not found errors for read routes",
     () =>
       Effect.gen(function* () {

@@ -68,6 +68,7 @@ type SessionInfo = {
   id: string
   title?: string
   directory?: string
+  current?: boolean
 }
 
 function inline(info: Inline) {
@@ -446,6 +447,8 @@ export const RunCommand = effectCmd({
               pattern: "*",
             },
           ]
+      const currentPrompt =
+        !interactive && !args.command && !args.fork && files.every((file) => file.mime !== "application/x-directory")
 
       function title() {
         if (args.title === undefined) return
@@ -455,6 +458,21 @@ export const RunCommand = effectCmd({
 
       async function session(sdk: OpencodeClient): Promise<SessionInfo | undefined> {
         if (args.session) {
+          if (currentPrompt) {
+            const response = await sdk.v2.session.get({ sessionID: args.session }).catch(() => undefined)
+            const current = response?.data?.data
+            if (!current) {
+              UI.error("Session not found")
+              process.exit(1)
+            }
+            return {
+              id: current.id,
+              title: current.title,
+              directory: current.location.directory,
+              current: await currentTranscript(sdk, current.id),
+            }
+          }
+
           const current = await sdk.session
             .get({
               sessionID: args.session,
@@ -465,6 +483,7 @@ export const RunCommand = effectCmd({
             UI.error("Session not found")
             process.exit(1)
           }
+          if (!interactive) await requireLegacyTranscript(sdk, current.data.id)
 
           if (args.fork) {
             const forked = await sdk.session.fork({
@@ -479,6 +498,7 @@ export const RunCommand = effectCmd({
               id,
               title: forked.data?.title ?? current.data.title,
               directory: forked.data?.directory ?? current.data.directory,
+              current: false,
             }
           }
 
@@ -486,10 +506,16 @@ export const RunCommand = effectCmd({
             id: current.data.id,
             title: current.data.title,
             directory: current.data.directory,
+            current: false,
           }
         }
 
-        const base = args.continue ? (await sdk.session.list()).data?.find((item) => !item.parentID) : undefined
+        const base = args.continue
+          ? currentPrompt
+            ? await currentRootSession(sdk)
+            : (await sdk.session.list()).data?.find((item) => !item.parentID)
+          : undefined
+        if (base && !interactive && !currentPrompt) await requireLegacyTranscript(sdk, base.id)
 
         if (base && args.fork) {
           const forked = await sdk.session.fork({
@@ -504,6 +530,7 @@ export const RunCommand = effectCmd({
             id,
             title: forked.data?.title ?? base.title,
             directory: forked.data?.directory ?? base.directory,
+            current: false,
           }
         }
 
@@ -512,6 +539,22 @@ export const RunCommand = effectCmd({
             id: base.id,
             title: base.title,
             directory: base.directory,
+            current: "current" in base ? base.current : false,
+          }
+        }
+
+        if (interactive || currentPrompt) {
+          const result = await sdk.v2.session.create({
+            title: title(),
+            location: { directory: await current(sdk) },
+          })
+          const created = result.data?.data
+          if (!created) return
+          return {
+            id: created.id,
+            title: created.title,
+            directory: created.location.directory,
+            current: true,
           }
         }
 
@@ -529,7 +572,43 @@ export const RunCommand = effectCmd({
           id,
           title: result.data?.title ?? name,
           directory: result.data?.directory,
+          current: false,
         }
+      }
+
+      async function currentRootSession(sdk: OpencodeClient): Promise<SessionInfo | undefined> {
+        // The current list is creation-ordered; continue preserves the product's last-updated selection semantics.
+        const root = (await sdk.session.list()).data?.find((item) => !item.parentID)
+        if (!root) return
+        const response = await sdk.v2.session.get({ sessionID: root.id })
+        const current = response.data?.data
+        if (!current) return
+        return {
+          id: current.id,
+          title: current.title,
+          directory: current.location.directory,
+          current: await currentTranscript(sdk, current.id),
+        }
+      }
+
+      async function transcriptKind(sdk: OpencodeClient, sessionID: string) {
+        const [legacy, current] = await Promise.all([
+          sdk.session.messages({ sessionID, limit: 1 }).then((result) => (result.data?.length ?? 0) > 0),
+          sdk.v2.session.messages({ sessionID, limit: 1 }).then((result) => (result.data?.data.length ?? 0) > 0),
+        ])
+        if (legacy && current) throw new Error("Session contains mixed legacy and current transcripts")
+        if (legacy) return "legacy" as const
+        if (current) return "current" as const
+        return "empty" as const
+      }
+
+      async function currentTranscript(sdk: OpencodeClient, sessionID: string) {
+        return (await transcriptKind(sdk, sessionID)) !== "legacy"
+      }
+
+      async function requireLegacyTranscript(sdk: OpencodeClient, sessionID: string) {
+        if ((await transcriptKind(sdk, sessionID)) !== "current") return
+        throw new Error("This operation is not available for a current Session transcript")
       }
 
       async function share(sdk: OpencodeClient, sessionID: string) {
@@ -551,7 +630,7 @@ export const RunCommand = effectCmd({
         sdk: OpencodeClient,
         input: { agent: string | undefined; model: ModelInput | undefined; variant: string | undefined },
       ): Promise<SessionInfo> {
-        const result = await sdk.session.create({
+        const result = await sdk.v2.session.create({
           title: args.title !== undefined && args.title !== "" ? args.title : undefined,
           agent: input.agent,
           model: input.model
@@ -561,9 +640,10 @@ export const RunCommand = effectCmd({
                 variant: input.variant,
               }
             : undefined,
-          permission: [...rules],
+          location: { directory: await current(sdk) },
         })
-        const id = result.data?.id
+        const created = result.data?.data
+        const id = created?.id
         if (!id) {
           throw new Error("Failed to create session")
         }
@@ -571,7 +651,7 @@ export const RunCommand = effectCmd({
         void share(sdk, id).catch(() => {})
         return {
           id,
-          title: result.data?.title,
+          title: created.title,
         }
       }
 
@@ -826,6 +906,32 @@ export const RunCommand = effectCmd({
         await share(client, sessionID)
 
         if (!interactive) {
+          if (currentPrompt && sess.current !== false) {
+            const model = pick(args.model)
+            const { runNonInteractivePrompt } = await import("./run/noninteractive")
+            try {
+              await runNonInteractivePrompt({
+                client,
+                sessionID,
+                message,
+                files,
+                agent,
+                model,
+                variant: args.variant,
+                thinking,
+                format: args.format === "json" ? "json" : "default",
+                dangerouslySkipPermissions: args["dangerously-skip-permissions"],
+                renderTool: tool,
+                renderToolError: toolError,
+              })
+            } catch (error) {
+              const output = error instanceof Error ? { type: "unknown", message: error.message } : error
+              if (!emit("error", { error: output })) UI.error(formatRunError(error))
+              process.exitCode = 1
+            }
+            return
+          }
+
           const events = await client.event.subscribe()
           const completed = loop(client, events).catch((e) => {
             console.error(e)

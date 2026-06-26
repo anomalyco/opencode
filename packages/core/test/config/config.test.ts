@@ -194,6 +194,39 @@ describe("Config", () => {
     ),
   )
 
+  it.live("expands environment and file variables before decoding", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const previous = process.env.OPENCODE_TEST_MODEL
+          process.env.OPENCODE_TEST_MODEL = "test/model"
+          yield* Effect.addFinalizer(() =>
+            Effect.sync(() => {
+              if (previous === undefined) delete process.env.OPENCODE_TEST_MODEL
+              else process.env.OPENCODE_TEST_MODEL = previous
+            }),
+          )
+          yield* Effect.promise(() => fs.writeFile(path.join(tmp.path, "username.txt"), "tester\n"))
+          yield* Effect.promise(() =>
+            fs.writeFile(
+              path.join(tmp.path, "opencode.json"),
+              JSON.stringify({ model: "{env:OPENCODE_TEST_MODEL}", username: "{file:username.txt}" }),
+            ),
+          )
+          return yield* Effect.gen(function* () {
+            const config = yield* Config.Service
+            const entries = yield* config.entries()
+            expect(Config.latest(entries, "model")).toBe("test/model")
+            expect(Config.latest(entries, "username")).toBe("tester")
+          }).pipe(Effect.provide(testLayer(tmp.path)))
+        }),
+      ),
+    ),
+  )
+
   it.live("loads opencode JSON and JSONC files from lowest to highest priority", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
