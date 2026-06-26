@@ -4,8 +4,6 @@ import {
   createEffect,
   on,
   Component,
-  splitProps,
-  For,
   Show,
   onCleanup,
   createMemo,
@@ -13,10 +11,8 @@ import {
   createResource,
   Switch,
   Match,
-  type ComponentProps,
   type JSX,
 } from "solid-js"
-import { Popover as KobaltePopover } from "@kobalte/core/popover"
 import { createStore, type SetStoreFunction, type Store } from "solid-js/store"
 import type { useLocal } from "@/context/local"
 import { selectionFromLines, type SelectedLineRange, useFile } from "@/context/file"
@@ -36,7 +32,7 @@ import { useSync } from "@/context/sync"
 import { useComments } from "@/context/comments"
 import { Button } from "@opencode-ai/ui/button"
 import { DockShellForm, DockTray } from "@opencode-ai/ui/dock-surface"
-import { Icon, type IconProps } from "@opencode-ai/ui/icon"
+import { Icon } from "@opencode-ai/ui/icon"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -70,8 +66,6 @@ import { promptPlaceholder } from "./prompt-input/placeholder"
 import { createPromptInputTransientState } from "./prompt-input/transient-state"
 import { showToast } from "@/utils/toast"
 import { ImagePreview } from "@opencode-ai/ui/image-preview"
-import { pathKey } from "@/utils/path-key"
-import { displayName } from "@/pages/layout/helpers"
 
 export type PromptInputState = ReturnType<typeof usePrompt>
 
@@ -98,12 +92,6 @@ export type PromptInputControls = {
     selection: ReturnType<typeof useLocal>["model"]
     paid: boolean
     loading: boolean
-  }
-  projects: {
-    available: { name?: string; worktree: string; sandboxes?: string[] }[]
-    directory: string
-    select: (worktree: string) => void
-    add: (title: string) => void
   }
   session: {
     id?: string
@@ -175,6 +163,7 @@ export interface PromptInputProps {
   onQueue?: (draft: FollowupDraft) => void
   onAbort?: () => void
   onSubmit?: () => void
+  toolbar?: JSX.Element
 }
 
 const EXAMPLES = [
@@ -223,7 +212,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   let fileInputRef: HTMLInputElement | undefined
   let scrollRef!: HTMLDivElement
   let slashPopoverRef!: HTMLDivElement
-  let projectSearchRef: HTMLInputElement | undefined
 
   const mirror = { input: false }
   const inset = 56
@@ -351,11 +339,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     () => prompt.capture(),
     Math.floor(Math.random() * EXAMPLES.length),
   )
-  const [picker, setPicker] = createStore({
-    projectOpen: false,
-    projectSearch: "",
-  })
-
   const buttonsSpring = useSpring(() => (store.mode === "normal" ? 1 : 0), { visualDuration: 0.2, bounce: 0 })
   const motion = (value: number) => ({
     opacity: value,
@@ -1392,72 +1375,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }))
 
   const newSession = () => props.variant === "new-session"
-  const projects = createMemo(() => props.controls.projects.available)
-  const projectForDirectory = (directory: string | undefined) => {
-    if (!directory) return
-    const key = pathKey(directory)
-    return projects().find(
-      (project) => pathKey(project.worktree) === key || project.sandboxes?.some((sandbox) => pathKey(sandbox) === key),
-    )
-  }
-  const selectedProject = createMemo(() => projectForDirectory(props.controls.projects.directory))
-  const projectResults = createMemo(() => {
-    const search = picker.projectSearch.trim().toLowerCase()
-    if (!search) return projects()
-    return projects().filter((project) => displayName(project).toLowerCase().includes(search))
-  })
   const showAgentControl = createMemo(() => props.controls.agents.visible && props.controls.agents.options.length > 0)
-  const selectProject = (worktree: string) => {
-    setPicker({
-      projectOpen: false,
-      projectSearch: "",
-    })
-    if (pathKey(worktree) === pathKey(selectedProject()?.worktree ?? "")) {
-      restoreFocus()
-      return
-    }
-    props.controls.projects.select(worktree)
-    restoreFocus()
-  }
-  const addProject = () => {
-    props.controls.projects.add(language.t("command.project.open"))
-  }
-
-  const projectPickerState = createMemo<ComposerPickerState>(() => ({
-    open: picker.projectOpen,
-    trigger: {
-      action: "prompt-project",
-      icon: "folder",
-      label: selectedProject() ? displayName(selectedProject()!) : language.t("session.new.project.new"),
-      class: "max-w-[203px]",
-      style: control(),
-      onPress: () => setPicker("projectOpen", true),
-    },
-    search: picker.projectSearch,
-    searchPlaceholder: language.t("session.new.project.search"),
-    clearLabel: language.t("common.clear"),
-    items: projectResults().map((project) => ({
-      icon: "folder",
-      label: displayName(project),
-      selected: selectedProject()?.worktree === project.worktree,
-      onSelect: () => selectProject(project.worktree),
-    })),
-    action: {
-      icon: "plus",
-      label: language.t("session.new.project.add"),
-      onSelect: () => {
-        setPicker("projectOpen", false)
-        void addProject()
-      },
-    },
-    onOpenChange: (open) => {
-      setPicker("projectOpen", open)
-      if (open) requestAnimationFrame(() => projectSearchRef?.focus())
-    },
-    onSearchInput: (value) => setPicker("projectSearch", value),
-    onSearchClear: () => setPicker("projectSearch", ""),
-    searchRef: (el) => (projectSearchRef = el),
-  }))
   const agentControlState = createMemo<ComposerAgentControlState>(() => ({
     title: language.t("command.agent.cycle"),
     keybind: command.keybind("agent.cycle"),
@@ -1469,15 +1387,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       restoreFocus()
     },
   }))
-  const newProjectTriggerState = createMemo<ComposerPickerTriggerState>(() => ({
-    action: "prompt-project",
-    icon: "folder-add-left",
-    label: language.t("session.new.project.new"),
-    class: "max-w-[160px]",
-    style: control(),
-    onPress: () => void addProject(),
-  }))
-
   return (
     <div class="relative size-full flex flex-col gap-0">
       {(promptReady(), null)}
@@ -1608,9 +1517,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   <Show when={showAgentControl()}>
                     <ComposerAgentControl state={agentControlState()} />
                   </Show>
-                  <Show when={newSession() && !selectedProject()}>
-                    <ComposerPickerTrigger state={newProjectTriggerState()} />
-                  </Show>
+                  {props.toolbar}
                   <ComposerModelControl state={modelControlState()} />
                   <Show when={store.mode !== "shell" && showVariantControl()}>
                     <div
@@ -1664,11 +1571,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 </Tooltip>
               </div>
             </DockShellForm>
-            <Show when={newSession() && selectedProject()}>
-              <div class="flex h-7 min-w-0 items-center gap-0 px-2">
-                <ComposerPicker state={projectPickerState()} />
-              </div>
-            </Show>
           </div>
         </Match>
         <Match when>
@@ -2010,37 +1912,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   )
 }
 
-type ComposerPickerItemState = {
-  icon: IconProps["name"]
-  label: string
-  selected?: boolean
-  onSelect: () => void
-}
-
-type ComposerPickerTriggerState = {
-  action: string
-  icon?: IconProps["name"]
-  label: string
-  class?: string
-  style: JSX.CSSProperties | undefined
-  onPress: () => void
-}
-
-type ComposerPickerState = {
-  open: boolean
-  trigger: ComposerPickerTriggerState
-  search: string
-  searchPlaceholder: string
-  clearLabel: string
-  items: ComposerPickerItemState[]
-  action: ComposerPickerItemState
-  listClass?: string
-  searchRef: (el: HTMLInputElement) => void
-  onOpenChange: (open: boolean) => void
-  onSearchInput: (value: string) => void
-  onSearchClear: () => void
-}
-
 type ComposerAgentControlState = {
   title: string
   keybind: string
@@ -2061,90 +1932,6 @@ type ComposerModelControlState = {
   style: JSX.CSSProperties | undefined
   onClose: () => void
   onUnpaidClick: () => void
-}
-
-function ComposerPickerTrigger(props: ComponentProps<"button"> & { state: ComposerPickerTriggerState }) {
-  const [local, rest] = splitProps(props, ["state", "class", "style", "onClick"])
-  return (
-    <button
-      {...rest}
-      data-action={local.state.action}
-      type="button"
-      class={`flex h-7 min-w-0 items-center gap-1.5 rounded px-2 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-faint transition-colors hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none ${local.state.class ?? ""}`}
-      style={local.state.style}
-      onClick={() => local.state.onPress()}
-    >
-      <Show when={local.state.icon}>
-        {(icon) => <Icon name={icon()} size="small" class="shrink-0 text-v2-icon-icon-muted" />}
-      </Show>
-      <span class="min-w-0 truncate leading-5">{local.state.label}</span>
-      <Icon name="chevron-down" size="small" class="shrink-0 text-v2-icon-icon-muted" />
-    </button>
-  )
-}
-
-function ComposerPickerMenuItem(props: { state: ComposerPickerItemState }) {
-  return (
-    <button
-      type="button"
-      class="flex h-7 w-full items-center gap-2 rounded px-3 text-left text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
-      onClick={props.state.onSelect}
-    >
-      <Icon name={props.state.icon} size="small" class="shrink-0 text-v2-icon-icon-base" />
-      <span class="min-w-0 flex-1 truncate leading-5">{props.state.label}</span>
-      <Show when={props.state.selected}>
-        <Icon name="check-small" size="small" class="shrink-0 text-v2-icon-icon-base" />
-      </Show>
-    </button>
-  )
-}
-
-function ComposerPicker(props: { state: ComposerPickerState }) {
-  return (
-    <KobaltePopover
-      open={props.state.open}
-      placement="bottom-start"
-      gutter={4}
-      modal={false}
-      onOpenChange={props.state.onOpenChange}
-    >
-      <KobaltePopover.Trigger as={ComposerPickerTrigger} state={props.state.trigger} />
-      <KobaltePopover.Portal>
-        <KobaltePopover.Content
-          class="w-[243px] overflow-hidden rounded-md bg-v2-background-bg-layer-01 shadow-[var(--v2-elevation-floating)] focus:outline-none"
-          onOpenAutoFocus={(event) => event.preventDefault()}
-        >
-          <div class={`flex flex-col p-0.5 ${props.state.listClass ?? ""}`}>
-            <div class="flex h-7 items-center gap-2 rounded px-3 text-v2-icon-icon-muted">
-              <Icon name="magnifying-glass" size="small" class="shrink-0" />
-              <input
-                ref={props.state.searchRef}
-                value={props.state.search}
-                placeholder={props.state.searchPlaceholder}
-                class="h-7 min-w-0 flex-1 border-0 bg-transparent text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base outline-none placeholder:text-v2-text-text-faint"
-                onInput={(event) => props.state.onSearchInput(event.currentTarget.value)}
-              />
-              <Show when={props.state.search.trim()}>
-                <button
-                  type="button"
-                  class="flex size-5 items-center justify-center rounded text-v2-icon-icon-muted hover:bg-v2-overlay-simple-overlay-hover"
-                  onClick={props.state.onSearchClear}
-                  aria-label={props.state.clearLabel}
-                >
-                  <Icon name="close-small" size="small" />
-                </button>
-              </Show>
-            </div>
-            <For each={props.state.items}>{(item) => <ComposerPickerMenuItem state={item} />}</For>
-          </div>
-          <div class="h-px bg-v2-border-border-muted" />
-          <div class="flex flex-col p-0.5">
-            <ComposerPickerMenuItem state={props.state.action} />
-          </div>
-        </KobaltePopover.Content>
-      </KobaltePopover.Portal>
-    </KobaltePopover>
-  )
 }
 
 function ComposerAgentControl(props: { state: ComposerAgentControlState }) {

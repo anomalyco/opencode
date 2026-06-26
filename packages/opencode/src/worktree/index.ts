@@ -627,14 +627,10 @@ export const appLayer = layer.pipe(
 
 export const defaultLayer = appLayer.pipe(Layer.provide(InstanceLayer.layer))
 
-export const node = LayerNode.make(layer, [
-  FSUtil.node,
-  path,
-  AppProcess.node,
-  Git.node,
-  Project.node,
-  InstanceStore.node,
-  Database.node,
-])
+export const node = LayerNode.make({
+  service: Service,
+  layer: layer,
+  deps: [FSUtil.node, path, AppProcess.node, Git.node, Project.node, InstanceStore.node, Database.node],
+})
 
 export * as Worktree from "."

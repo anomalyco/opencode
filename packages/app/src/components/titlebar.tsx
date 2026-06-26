@@ -319,6 +319,12 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                 return
               }
 
+              const activeTab = currentTab()
+              if (activeTab?.type === "draft") {
+                tabs.newDraft({ server: activeTab.server, directory: activeTab.directory }, "")
+                return
+              }
+
               const current = layout.projects.list()[0]
               if (current) {
                 tabs.newDraft({ server: server.key, directory: current.worktree }, "")
@@ -481,6 +487,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                     />
                   </TooltipV2>
                 </Show>
+                <div class="flex-1" />
                 <TitlebarV2Right state={v2RightState()} />
                 <Show when={windows() && !electronWindows()}>
                   <div data-tauri-decorum-tb class="flex flex-row" />

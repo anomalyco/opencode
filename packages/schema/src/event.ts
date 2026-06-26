@@ -1,13 +1,14 @@
 export * as Event from "./event"
 
 import { Schema } from "effect"
+import { optional } from "./schema"
 import { ascending } from "./identifier"
 import { Location } from "./location"
-import { withStatics } from "./schema"
+import { statics } from "./schema"
 
 export const ID = Schema.String.check(Schema.isStartsWith("evt_")).pipe(
   Schema.brand("Event.ID"),
-  withStatics((schema) => ({ create: () => schema.make("evt_" + ascending()) })),
+  statics((schema) => ({ create: () => schema.make("evt_" + ascending()) })),
 )
 export type ID = typeof ID.Type
 
@@ -40,7 +41,7 @@ export type Payload<D extends Definition = Definition> = {
 
 export function define<
   const Type extends string,
-  Fields extends Readonly<Record<PropertyKey, Schema.Codec<unknown, unknown>>>,
+  const Fields extends Readonly<Record<PropertyKey, Schema.Codec<unknown, unknown>>>,
 >(input: {
   readonly type: Type
   readonly durable?: {
@@ -48,25 +49,24 @@ export function define<
     readonly aggregate: string
   }
   readonly schema: Fields
-}): Schema.Schema<Payload<Definition<Type, Schema.Struct<Fields>>>> & Definition<Type, Schema.Struct<Fields>> {
+}) {
   const data = Schema.Struct(input.schema)
-  return Object.assign(
-    Schema.Struct({
-      id: ID,
-      metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
-      type: Schema.Literal(input.type),
-      durable: Schema.optional(
-        Schema.Struct({ aggregateID: Schema.String, seq: Schema.Number, version: Schema.Number }),
-      ),
-      location: Schema.optional(Location.Ref),
-      data,
-    }).annotate({ identifier: input.type }),
-    {
-      type: input.type,
-      ...(input.durable === undefined ? {} : { durable: input.durable }),
-      data,
-    },
-  ) as Schema.Schema<Payload<Definition<Type, Schema.Struct<Fields>>>> & Definition<Type, Schema.Struct<Fields>>
+  return Schema.Struct({
+    id: ID,
+    metadata: optional(Schema.Record(Schema.String, Schema.Unknown)),
+    type: Schema.Literal(input.type),
+    durable: optional(Schema.Struct({ aggregateID: Schema.String, seq: Schema.Number, version: Schema.Number })),
+    location: optional(Location.Ref),
+    data,
+  })
+    .annotate({ identifier: input.type })
+    .pipe(
+      statics(() => ({
+        type: input.type,
+        ...(input.durable === undefined ? {} : { durable: input.durable }),
+        data,
+      })),
+    ) satisfies Definition<Type, typeof data>
 }
 
 export function inventory<const Definitions extends ReadonlyArray<Definition>>(...definitions: Definitions) {

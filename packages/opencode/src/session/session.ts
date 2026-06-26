@@ -12,7 +12,8 @@ import { Database } from "@opencode-ai/core/database/database"
 import { makeRuntime } from "@opencode-ai/core/effect/runtime"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { SessionV2 } from "@opencode-ai/core/session"
-import { SessionExecution } from "@opencode-ai/core/session/execution"
+import * as SessionExecutionLocal from "@opencode-ai/core/session/execution/local"
+import { LocationServiceMap } from "@opencode-ai/core/location-layer"
 
 import { NotFoundError } from "@/storage/storage"
 import { eq } from "drizzle-orm"
@@ -39,11 +40,11 @@ import { SessionID, MessageID, PartID } from "./schema"
 import type { Provider } from "@/provider/provider"
 import { Global } from "@opencode-ai/core/global"
 import { Effect, Layer, Option, Context, Schema, Types } from "effect"
-import { NonNegativeInt, optionalOmitUndefined } from "@opencode-ai/core/schema"
+import { NonNegativeInt, optional } from "@opencode-ai/core/schema"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
-import { SessionMessageID } from "@opencode-ai/schema/session-message-id"
+import { SessionMessage } from "@opencode-ai/schema/session-message"
 
 const runtime = makeRuntime(Database.Service, Database.defaultLayer)
 
@@ -146,7 +147,7 @@ export function toRow(info: Info) {
     tokens_cache_write: (info.tokens ?? EmptyTokens).cache.write,
     revert: info.revert
       ? {
-          messageID: SessionMessageID.ID.make(info.revert.messageID),
+          messageID: SessionMessage.ID.make(info.revert.messageID),
           partID: info.revert.partID,
           snapshot: info.revert.snapshot,
           diff: info.revert.diff,
@@ -178,7 +179,7 @@ const Summary = Schema.Struct({
   additions: Schema.Finite,
   deletions: Schema.Finite,
   files: Schema.Finite,
-  diffs: optionalOmitUndefined(Schema.Array(Snapshot.FileDiff)),
+  diffs: optional(Schema.Array(Snapshot.FileDiff)),
 })
 
 const Tokens = Schema.Struct({
@@ -204,21 +205,21 @@ export const ArchivedTimestamp = Schema.Finite
 const Time = Schema.Struct({
   created: NonNegativeInt,
   updated: NonNegativeInt,
-  compacting: optionalOmitUndefined(NonNegativeInt),
-  archived: optionalOmitUndefined(ArchivedTimestamp),
+  compacting: optional(NonNegativeInt),
+  archived: optional(ArchivedTimestamp),
 })
 
 const Revert = Schema.Struct({
   messageID: MessageID,
-  partID: optionalOmitUndefined(PartID),
-  snapshot: optionalOmitUndefined(Schema.String),
-  diff: optionalOmitUndefined(Schema.String),
+  partID: optional(PartID),
+  snapshot: optional(Schema.String),
+  diff: optional(Schema.String),
 })
 
 const Model = Schema.Struct({
   id: ModelV2.ID,
   providerID: ProviderV2.ID,
-  variant: optionalOmitUndefined(Schema.String),
+  variant: optional(Schema.String),
 })
 
 export const Metadata = Schema.Record(Schema.String, Schema.Any)
@@ -227,28 +228,28 @@ export const Info = Schema.Struct({
   id: SessionID,
   slug: Schema.String,
   projectID: ProjectV2.ID,
-  workspaceID: optionalOmitUndefined(WorkspaceV2.ID),
+  workspaceID: optional(WorkspaceV2.ID),
   directory: Schema.String,
-  path: optionalOmitUndefined(Schema.String),
-  parentID: optionalOmitUndefined(SessionID),
-  summary: optionalOmitUndefined(Summary),
-  cost: optionalOmitUndefined(Schema.Finite),
-  tokens: optionalOmitUndefined(Tokens),
-  share: optionalOmitUndefined(Share),
+  path: optional(Schema.String),
+  parentID: optional(SessionID),
+  summary: optional(Summary),
+  cost: optional(Schema.Finite),
+  tokens: optional(Tokens),
+  share: optional(Share),
   title: Schema.String,
-  agent: optionalOmitUndefined(Schema.String),
-  model: optionalOmitUndefined(Model),
+  agent: optional(Schema.String),
+  model: optional(Model),
   version: Schema.String,
-  metadata: optionalOmitUndefined(Metadata),
+  metadata: optional(Metadata),
   time: Time,
-  permission: optionalOmitUndefined(PermissionV1.Ruleset),
-  revert: optionalOmitUndefined(Revert),
+  permission: optional(PermissionV1.Ruleset),
+  revert: optional(Revert),
 }).annotate({ identifier: "Session" })
 export type Info = Types.DeepMutable<Schema.Schema.Type<typeof Info>>
 
 export const ProjectInfo = Schema.Struct({
   id: ProjectV2.ID,
-  name: optionalOmitUndefined(Schema.String),
+  name: optional(Schema.String),
   worktree: Schema.String,
 }).annotate({ identifier: "ProjectSummary" })
 export type ProjectInfo = Types.DeepMutable<Schema.Schema.Type<typeof ProjectInfo>>
@@ -432,6 +433,12 @@ export interface Interface {
   readonly setTitle: (input: { sessionID: SessionID; title: string }) => Effect.Effect<void>
   readonly setArchived: (input: { sessionID: SessionID; time?: number }) => Effect.Effect<void>
   readonly setMetadata: (input: typeof SetMetadataInput.Type) => Effect.Effect<void>
+  readonly setAgentModel: (input: {
+    sessionID: SessionID
+    agent: string
+    model: NonNullable<Info["model"]>
+    time: number
+  }) => Effect.Effect<void>
   readonly setPermission: (input: { sessionID: SessionID; permission: PermissionV1.Ruleset }) => Effect.Effect<void>
   readonly setRevert: (input: {
     sessionID: SessionID
@@ -760,6 +767,19 @@ export const layer: Layer.Layer<
       yield* patch(input.sessionID, { metadata: input.metadata, time: { updated: Date.now() } }).pipe(Effect.orDie)
     })
 
+    const setAgentModel = Effect.fn("Session.setAgentModel")(function* (input: {
+      sessionID: SessionID
+      agent: string
+      model: NonNullable<Info["model"]>
+      time: number
+    }) {
+      yield* patch(input.sessionID, {
+        agent: input.agent,
+        model: input.model,
+        time: { updated: input.time },
+      }).pipe(Effect.orDie)
+    })
+
     const setPermission = Effect.fn("Session.setPermission")(function* (input: {
       sessionID: SessionID
       permission: PermissionV1.Ruleset
@@ -898,6 +918,7 @@ export const layer: Layer.Layer<
       setTitle,
       setArchived,
       setMetadata,
+      setAgentModel,
       setPermission,
       setRevert,
       clearRevert,
@@ -923,8 +944,12 @@ export const defaultLayer = layer.pipe(
   Layer.provide(BackgroundJob.defaultLayer),
   Layer.provide(Database.defaultLayer),
   Layer.provide(EventV2Bridge.defaultLayer),
-  Layer.provide(SessionExecution.noopLayer),
-  Layer.provide(SessionV2.defaultLayer),
+  Layer.provide(
+    SessionV2.defaultLayer.pipe(
+      Layer.provide(SessionExecutionLocal.defaultLayer),
+      Layer.provide(LocationServiceMap.layer),
+    ),
+  ),
   Layer.provide(RuntimeFlags.defaultLayer),
 )
 
@@ -1070,6 +1095,10 @@ export function* listGlobal(input?: {
   }
 }
 
-export const node = LayerNode.make(layer, [BackgroundJob.node, RuntimeFlags.node, Database.node, EventV2Bridge.node])
+export const node = LayerNode.make({
+  service: Service,
+  layer: layer,
+  deps: [BackgroundJob.node, RuntimeFlags.node, Database.node, EventV2Bridge.node],
+})
 
 export * as Session from "./session"
