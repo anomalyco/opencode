@@ -49,18 +49,17 @@ OpenCode Go 的運作方式與 OpenCode 中的任何其他供應商相同。
 
 目前的模型清單包括：
 
-- **GLM-5**
+- **GLM-5.2**
 - **GLM-5.1**
-- **Kimi K2.5**
+- **Kimi K2.7 Code**
 - **Kimi K2.6**
 - **MiMo-V2.5**
 - **MiMo-V2.5-Pro**
-- **MiniMax M2.5**
-- **MiniMax M2.7**
 - **MiniMax M3**
-- **Qwen3.6 Plus**
-- **Qwen3.7 Plus**
+- **MiniMax M2.7**
 - **Qwen3.7 Max**
+- **Qwen3.7 Plus**
+- **Qwen3.6 Plus**
 - **DeepSeek V4 Pro**
 - **DeepSeek V4 Flash**
 
@@ -76,21 +75,20 @@ OpenCode Go 包含以下限制：
 - **每週限制** — $30 美元的使用量
 - **每月限制** — $60 美元的使用量
 
-限制是以美元價值來定義。這意味著您的實際請求次數取決於您使用的模型。像 DeepSeek V4 Flash 這樣較便宜的模型允許更多的請求次數，而像 GLM-5.1 這樣成本較高的模型則允許較少次數。
+限制是以美元價值來定義。這意味著您的實際請求次數取決於您使用的模型。像 DeepSeek V4 Flash 這樣較便宜的模型允許更多的請求次數，而像 GLM-5.2 這樣成本較高的模型則允許較少次數。
 
 下表提供了基於典型 Go 使用模式的預估請求次數：
 
 | Model             | 每 5 小時請求數 | 每週請求數 | 每月請求數 |
 | ----------------- | --------------- | ---------- | ---------- |
+| GLM-5.2           | 880             | 2,150      | 4,300      |
 | GLM-5.1           | 880             | 2,150      | 4,300      |
-| GLM-5             | 1,150           | 2,880      | 5,750      |
-| Kimi K2.5         | 1,850           | 4,630      | 9,250      |
 | Kimi K2.6         | 1,150           | 2,880      | 5,750      |
+| Kimi K2.7 Code    | 1,350           | 4,630      | 9,250      |
 | MiMo-V2.5         | 30,100          | 75,200     | 150,400    |
 | MiMo-V2.5-Pro     | 3,250           | 8,150      | 16,300     |
-| MiniMax M3        | 1,400           | 3,500      | 7,000      |
+| MiniMax M3        | 3,200           | 8,000      | 16,000     |
 | MiniMax M2.7      | 3,400           | 8,500      | 17,000     |
-| MiniMax M2.5      | 6,300           | 15,900     | 31,800     |
 | Qwen3.7 Max       | 950             | 2,390      | 4,770      |
 | Qwen3.7 Plus      | 4,300           | 10,800     | 21,600     |
 | Qwen3.6 Plus      | 3,300           | 8,200      | 16,300     |
@@ -99,12 +97,12 @@ OpenCode Go 包含以下限制：
 
 這些預估值是基於觀察到的平均請求模式：
 
-- GLM-5/5.1 — 每次請求 700 個輸入 token、52,000 個快取 token、150 個輸出 token
-- Kimi K2.5/K2.6 — 每次請求 870 個輸入 token、55,000 個快取 token、200 個輸出 token
+- GLM-5.2/5.1 — 每次請求 700 個輸入 token、52,000 個快取 token、150 個輸出 token
+- Kimi K2.7/K2.6 — 每次請求 870 個輸入 token、55,000 個快取 token、200 個輸出 token
 - DeepSeek V4 Pro — 每次請求 750 個輸入 token、82,000 個快取 token、290 個輸出 token
 - DeepSeek V4 Flash — 每次請求 790 個輸入 token、68,000 個快取 token、280 個輸出 token
-- MiniMax M3 — 每次請求 810 個輸入 token、62,000 個快取 token、225 個輸出 token
-- MiniMax M2.7/M2.5 — 每次請求 300 個輸入 token、55,000 個快取 token、125 個輸出 token
+- MiniMax M3 — 每次請求 510 個輸入 token、56,000 個快取 token、190 個輸出 token
+- MiniMax M2.7 — 每次請求 300 個輸入 token、55,000 個快取 token、125 個輸出 token
 - Qwen3.7 Max — 每次請求 420 個輸入 token、66,000 個快取 token、200 個輸出 token
 - Qwen3.7 Plus — 每次請求 500 個輸入 token、57,000 個快取 token、190 個輸出 token
 - Qwen3.6 Plus — 每次請求 500 個輸入 token、57,000 個快取 token、190 個輸出 token
@@ -113,22 +111,24 @@ OpenCode Go 包含以下限制：
 
 這些預估值也基於以下每 1M tokens 的價格：
 
-| 模型              | 輸入  | 輸出  | 快取讀取 | 快取寫入 |
-| ----------------- | ----- | ----- | -------- | -------- |
-| GLM-5.1           | $1.40 | $4.40 | $0.26    | -        |
-| GLM-5             | $1.00 | $3.20 | $0.20    | -        |
-| Kimi K2.6         | $0.95 | $4.00 | $0.16    | -        |
-| Kimi K2.5         | $0.60 | $3.00 | $0.10    | -        |
-| MiMo V2.5         | $0.14 | $0.28 | $0.0028  | -        |
-| MiMo V2.5 Pro     | $1.74 | $3.48 | $0.0145  | -        |
-| MiniMax M3        | $0.60 | $2.40 | $0.12    | $0.75    |
-| MiniMax M2.7      | $0.30 | $1.20 | $0.06    | $0.375   |
-| MiniMax M2.5      | $0.30 | $1.20 | $0.06    | $0.375   |
-| Qwen3.7 Max       | $2.50 | $7.50 | $0.50    | $3.125   |
-| Qwen3.7 Plus      | $0.40 | $1.60 | $0.04    | $0.50    |
-| Qwen3.6 Plus      | $0.50 | $3.00 | $0.05    | $0.625   |
-| DeepSeek V4 Pro   | $1.74 | $3.48 | $0.0145  | -        |
-| DeepSeek V4 Flash | $0.14 | $0.28 | $0.0028  | -        |
+| 模型                         | 輸入  | 輸出  | 快取讀取 | 快取寫入 |
+| ---------------------------- | ----- | ----- | -------- | -------- |
+| GLM-5.2                      | $1.40 | $4.40 | $0.26    | -        |
+| GLM-5.1                      | $1.40 | $4.40 | $0.26    | -        |
+| Kimi K2.7 Code               | $0.95 | $4.00 | $0.19    | -        |
+| Kimi K2.6                    | $0.95 | $4.00 | $0.16    | -        |
+| MiMo V2.5                    | $0.14 | $0.28 | $0.0028  | -        |
+| MiMo V2.5 Pro                | $1.74 | $3.48 | $0.0145  | -        |
+| MiniMax M3                   | $0.30 | $1.20 | $0.06    | -        |
+| MiniMax M2.7                 | $0.30 | $1.20 | $0.06    | $0.375   |
+| MiniMax M2.5                 | $0.30 | $1.20 | $0.06    | $0.375   |
+| Qwen3.7 Max                  | $2.50 | $7.50 | $0.50    | $3.125   |
+| Qwen3.7 Plus (≤ 256K tokens) | $0.40 | $1.60 | $0.04    | $0.50    |
+| Qwen3.7 Plus (> 256K tokens) | $1.20 | $4.80 | $0.12    | $1.50    |
+| Qwen3.6 Plus (≤ 256K tokens) | $0.50 | $3.00 | $0.05    | $0.625   |
+| Qwen3.6 Plus (> 256K tokens) | $2.00 | $6.00 | $0.20    | $2.50    |
+| DeepSeek V4 Pro              | $1.74 | $3.48 | $0.0145  | -        |
+| DeepSeek V4 Flash            | $0.14 | $0.28 | $0.0028  | -        |
 
 您可以在 **<a href={console}>console</a>** 中追蹤您目前的使用量。
 
@@ -152,9 +152,9 @@ OpenCode Go 包含以下限制：
 
 | 模型              | 模型 ID           | 端點                                             | AI SDK 套件                 |
 | ----------------- | ----------------- | ------------------------------------------------ | --------------------------- |
+| GLM-5.2           | glm-5.2           | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | GLM-5.1           | glm-5.1           | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| GLM-5             | glm-5             | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| Kimi K2.5         | kimi-k2.5         | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| Kimi K2.7         | kimi-k2.7         | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Kimi K2.6         | kimi-k2.6         | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Pro   | deepseek-v4-pro   | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Flash | deepseek-v4-flash | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
@@ -167,7 +167,7 @@ OpenCode Go 包含以下限制：
 | Qwen3.7 Plus      | qwen3.7-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus      | qwen3.6-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 
-您的 OpenCode 設定中的 [model id](/docs/config/#models) 使用 `opencode-go/<model-id>` 格式。例如，Kimi K2.6 在設定中應使用 `opencode-go/kimi-k2.6`。
+您的 OpenCode 設定中的 [model id](/docs/config/#models) 使用 `opencode-go/<model-id>` 格式。例如，Kimi K2.7 Code 在設定中應使用 `opencode-go/kimi-k2.7-code`。
 
 ---
 

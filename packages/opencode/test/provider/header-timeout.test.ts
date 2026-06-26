@@ -4,6 +4,7 @@ import { streamText } from "ai"
 import { Effect, Layer } from "effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
 import { disposeAllInstances, provideTmpdirInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { testProviderConfig } from "../lib/test-provider"
@@ -31,7 +32,7 @@ it.live("headerTimeout does not abort delayed SSE body after headers arrive", ()
       () =>
         Effect.gen(function* () {
           const provider = yield* Provider.Service
-          const model = yield* provider.getModel(ProviderV2.ID.make("test"), ProviderV2.ModelID.make("test-model"))
+          const model = yield* provider.getModel(ProviderV2.ID.make("test"), ModelV2.ID.make("test-model"))
           const result = streamText({
             model: yield* provider.getLanguage(model),
             messages: [{ role: "user", content: "hello" }],
@@ -55,7 +56,7 @@ it.live("chunkTimeout raises a response stream error when SSE body stalls", () =
       () =>
         Effect.gen(function* () {
           const provider = yield* Provider.Service
-          const model = yield* provider.getModel(ProviderV2.ID.make("test"), ProviderV2.ModelID.make("test-model"))
+          const model = yield* provider.getModel(ProviderV2.ID.make("test"), ModelV2.ID.make("test-model"))
           const result = streamText({
             model: yield* provider.getLanguage(model),
             onError() {},
@@ -89,7 +90,7 @@ it.live("headerTimeout aborts when response headers do not arrive", () =>
       () =>
         Effect.gen(function* () {
           const provider = yield* Provider.Service
-          const model = yield* provider.getModel(ProviderV2.ID.make("test"), ProviderV2.ModelID.make("test-model"))
+          const model = yield* provider.getModel(ProviderV2.ID.make("test"), ModelV2.ID.make("test-model"))
           const result = streamText({
             model: yield* provider.getLanguage(model),
             onError() {},
@@ -121,7 +122,7 @@ it.live("headerTimeout is opt-in for non-OpenAI providers", () =>
       () =>
         Effect.gen(function* () {
           const provider = yield* Provider.Service
-          const model = yield* provider.getModel(ProviderV2.ID.make("test"), ProviderV2.ModelID.make("test-model"))
+          const model = yield* provider.getModel(ProviderV2.ID.make("test"), ModelV2.ID.make("test-model"))
           const result = streamText({
             model: yield* provider.getLanguage(model),
             messages: [{ role: "user", content: "hello" }],

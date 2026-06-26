@@ -1070,6 +1070,35 @@ subscription](https://github.com/features/copilot/plans) to use.
 
 ---
 
+### GMI Cloud
+
+To use GMI Cloud with OpenCode:
+
+1. Head over to the [GMI Cloud console](https://console.gmicloud.ai/) to create an API key. You can also review the [API reference](https://docs.gmicloud.ai/inference-engine/api-reference/llm-api-reference) for the endpoint details.
+
+2. Run the `/connect` command and search for **GMI Cloud**.
+
+   ```txt
+   /connect
+   ```
+
+3. Enter your GMI Cloud API key.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Run the `/models` command to select the model you want.
+
+   ```txt
+   /models
+   ```
+
+---
+
 ### Google Vertex AI
 
 To use Google Vertex AI with OpenCode:
@@ -1937,6 +1966,109 @@ To use [Scaleway Generative APIs](https://www.scaleway.com/en/docs/generative-ap
    ```txt
    /models
    ```
+
+---
+
+### Snowflake Cortex
+
+[Snowflake Cortex](https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-rest-api) gives you access to frontier models (Claude, OpenAI GPT-5, and more) via an OpenAI-compatible API. All inference runs within the Snowflake perimeter and is billed in Snowflake credits. For per-model rates, see the [Snowflake Service Consumption Table](https://www.snowflake.com/legal-files/CreditConsumptionTable.pdf).
+
+Don't have a Snowflake account? [Sign up for a free trial](https://signup.snowflake.com/?utm_source=opencode&utm_medium=docs&utm_campaign=cortex-provider).
+
+opencode's core workflow for coding, editing files, and running commands relies on tool calling. Only the Claude and OpenAI families within Snowflake Cortex support this. The provider is limited to those families to support the core workflow.
+
+OpenCode supports two authentication methods:
+
+- **Browser OAuth (Recommended)** — sign in with your IdP/SSO; no secrets to manage, tokens refresh automatically.
+- **Manual bearer token** — paste a PAT or JWT from the Snowflake console.
+
+#### Browser OAuth (Recommended)
+
+1. Run the `/connect` command and search for **Snowflake Cortex**.
+
+   ```txt
+   /connect
+   ```
+
+2. Select **Login with Snowflake (External Browser)**.
+
+   ```txt
+   ┌ Select auth method
+   │
+   │ Login with Snowflake (External Browser)
+   │ Paste PAT or bearer token manually
+   └
+   ```
+
+3. Enter your [account identifier](https://docs.snowflake.com/en/user-guide/admin-account-identifier) when prompted, for example `myorg-myaccount` or `xy12345.us-east-1`.
+
+   ```txt
+   ┌ Snowflake Account Identifier
+   │
+   │
+   └ enter
+   ```
+
+4. Optionally enter a Snowflake role to scope the session (e.g. `SYSADMIN`). Leave blank to use your default role.
+
+5. Complete sign-in in the browser that opens. OpenCode captures the OAuth callback automatically and stores the token — no copy/paste needed.
+
+6. Run the `/models` command to select a model.
+
+   ```txt
+   /models
+   ```
+
+:::note
+Browser OAuth uses Snowflake's built-in `SNOWFLAKE$LOCAL_APPLICATION` security integration ([docs](https://docs.snowflake.com/en/user-guide/oauth-local-applications)), which is rolling out to all accounts. To check availability in your account:
+
+```sql
+SHOW SECURITY INTEGRATIONS LIKE 'SNOWFLAKE$LOCAL_APPLICATION';
+```
+
+If the result is empty, use the **Manual bearer token** method below while the integration rolls out to your account.
+:::
+
+#### Manual bearer token
+
+If you prefer to paste a token directly, or if `SNOWFLAKE$LOCAL_APPLICATION` is not yet available in your account:
+
+1. Generate a [Programmatic Access Token (PAT)](https://docs.snowflake.com/en/user-guide/programmatic-access-tokens) in your Snowflake account.
+
+2. Run the `/connect` command, search for **Snowflake Cortex**, and select **Paste PAT or bearer token manually**.
+
+3. Enter your [account identifier](https://docs.snowflake.com/en/user-guide/admin-account-identifier) when prompted.
+
+4. Paste your PAT.
+
+5. Run the `/models` command to select a model.
+
+   ```txt
+   /models
+   ```
+
+#### Environment variable
+
+For CI or headless environments, set a PAT or JWT before starting opencode:
+
+```bash
+export SNOWFLAKE_ACCOUNT=myorg-myaccount
+export SNOWFLAKE_CORTEX_TOKEN=your-pat-or-jwt
+```
+
+:::note
+`SNOWFLAKE_CORTEX_TOKEN` accepts a PAT or JWT only — the browser OAuth flow is available via `/connect` only and cannot be configured through an environment variable. `SNOWFLAKE_CORTEX_PAT` is still supported for backward compatibility.
+:::
+
+The model catalog is provided automatically. A minimal `opencode.json` is all that's needed:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "snowflake-cortex/claude-sonnet-4-6",
+  "small_model": "snowflake-cortex/claude-haiku-4-5"
+}
+```
 
 ---
 

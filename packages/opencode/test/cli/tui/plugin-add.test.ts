@@ -5,9 +5,9 @@ import { pathToFileURL } from "url"
 import { tmpdir } from "../../fixture/fixture"
 import { createTuiPluginApi } from "../../fixture/tui-plugin"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
-import { TuiConfig } from "../../../src/cli/cmd/tui/config/tui"
+import { TuiConfig } from "../../../src/config/tui"
 
-const { TuiPluginRuntime } = await import("../../../src/cli/cmd/tui/plugin/runtime")
+const { TuiPluginRuntime } = await import("../../../src/plugin/tui/runtime")
 
 test("adds tui plugin at runtime from spec", async () => {
   await using tmp = await tmpdir({

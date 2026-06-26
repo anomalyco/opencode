@@ -1,12 +1,13 @@
 import type { PermissionV1 } from "@opencode-ai/core/v1/permission"
-// CLI entry point for `opencode run`.
+import { FSUtil } from "@opencode-ai/core/fs-util"
+// CLI entry point for `opencode run` and `opencode --mini`.
 //
 // Handles three modes:
 //   1. Non-interactive (default): sends a single prompt, streams events to
 //      stdout, and exits when the session goes idle.
-//   2. Interactive local (`--interactive`): boots the split-footer direct mode
+//   2. Interactive local (`opencode --mini`): boots the split-footer direct mode
 //      with an in-process server (no external HTTP).
-//   3. Interactive attach (`--interactive --attach`): connects to a running
+//   3. Interactive attach (`opencode --mini --attach`): connects to a running
 //      opencode server and runs interactive mode against it.
 //
 // Also supports `--command` for slash-command execution, `--format json` for
@@ -15,6 +16,7 @@ import type { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import type { Argv } from "yargs"
 import path from "path"
 import { pathToFileURL } from "url"
+import { open } from "node:fs/promises"
 import { Effect } from "effect"
 import { UI } from "../ui"
 import { effectCmd } from "../effect-cmd"
@@ -53,6 +55,8 @@ type FilePart = {
   filename: string
   mime: string
 }
+
+const ATTACH_FILE_MAX_BYTES = 10 * 1024 * 1024
 
 type Inline = {
   icon: string
@@ -213,20 +217,21 @@ export const RunCommand = effectCmd({
         type: "boolean",
         describe: "show thinking blocks",
       })
+      .option("mini", {
+        type: "boolean",
+        hidden: true,
+        default: false,
+      })
       .option("replay", {
         type: "boolean",
         default: true,
+        hidden: true,
         describe: "replay interactive session history on resume and after resize (use --no-replay to disable)",
       })
       .option("replay-limit", {
         type: "number",
+        hidden: true,
         describe: "cap visible interactive replay to the newest N messages",
-      })
-      .option("interactive", {
-        alias: ["i"],
-        type: "boolean",
-        describe: "run in direct interactive split-footer mode",
-        default: false,
       })
       .option("dangerously-skip-permissions", {
         type: "boolean",
@@ -236,6 +241,7 @@ export const RunCommand = effectCmd({
       .option("demo", {
         type: "boolean",
         default: false,
+        hidden: true,
         describe: "enable direct interactive demo slash commands; pass one as the message to run it immediately",
       }),
   handler: Effect.fn("Cli.run")(function* (args) {
@@ -248,7 +254,8 @@ export const RunCommand = effectCmd({
     const localInstance = yield* InstanceRef
     yield* Effect.promise(async () => {
       const rawMessage = [...args.message, ...(args["--"] || [])].join(" ")
-      const thinking = args.interactive ? (args.thinking ?? true) : (args.thinking ?? false)
+      const interactive = args.mini
+      const thinking = interactive ? (args.thinking ?? true) : (args.thinking ?? false)
       const die = (message: string): never => {
         UI.error(message)
         process.exit(1)
@@ -265,20 +272,24 @@ export const RunCommand = effectCmd({
         .map((arg) => (arg.includes(" ") ? `"${arg.replace(/"/g, '\\"')}"` : arg))
         .join(" ")
 
-      if (args.interactive && args.command) {
-        die("--interactive cannot be used with --command")
+      if (interactive && args.command) {
+        die("--mini cannot be used with --command")
       }
 
-      if (args.demo && !args.interactive) {
-        die("--demo requires --interactive")
+      if (interactive && args._?.[0] !== "mini") {
+        die("--mini must be used without the run subcommand")
       }
 
-      if (args.interactive && args.format === "json") {
-        die("--interactive cannot be used with --format json")
+      if (args.demo && !interactive) {
+        die("--demo requires --mini")
       }
 
-      if (args["replay-limit"] !== undefined && !args.interactive) {
-        die("--replay-limit requires --interactive")
+      if (interactive && args.format === "json") {
+        die("--mini cannot be used with --format json")
+      }
+
+      if (args["replay-limit"] !== undefined && !interactive) {
+        die("--replay-limit requires --mini")
       }
 
       if (
@@ -288,11 +299,11 @@ export const RunCommand = effectCmd({
         die("--replay-limit must be a positive integer")
       }
 
-      if (args.interactive && !process.stdout.isTTY) {
-        die("--interactive requires a TTY stdout")
+      if (interactive && !process.stdout.isTTY) {
+        die("--mini requires a TTY stdout")
       }
 
-      if (args.interactive) {
+      if (interactive) {
         try {
           resolveInteractiveStdin().cleanup?.()
         } catch (error) {
@@ -300,7 +311,7 @@ export const RunCommand = effectCmd({
         }
       }
 
-      const replay = args.replay || args["replay-limit"] !== undefined
+      const replay = args.replay === false ? false : args.replay || args["replay-limit"] !== undefined
 
       const root = Filesystem.resolve(process.env.PWD ?? process.cwd())
       const directory = (() => {
@@ -337,11 +348,48 @@ export const RunCommand = effectCmd({
             process.exit(1)
           }
 
-          const mime = (await Filesystem.isDir(resolvedPath)) ? "application/x-directory" : "text/plain"
+          const stat = Filesystem.stat(resolvedPath)
+          const isDirectory = stat?.isDirectory() ?? false
+          if (args.attach && isDirectory) {
+            UI.error(`Cannot attach local directory without a shared filesystem: ${filePath}`)
+            process.exit(1)
+          }
+
+          const content = await (async () => {
+            if (!args.attach) return
+            const handle = await open(resolvedPath, "r")
+            try {
+              const opened = await handle.stat()
+              if (!opened.isFile() || Number(opened.size) > ATTACH_FILE_MAX_BYTES) {
+                UI.error(`Cannot attach local file larger than 10 MiB or a special file: ${filePath}`)
+                process.exit(1)
+              }
+              if (opened.size === 0) return Buffer.alloc(0)
+              const buffer = Buffer.alloc(Number(opened.size))
+              let offset = 0
+              while (offset < buffer.length) {
+                const read = await handle.read(buffer, offset, buffer.length - offset, offset)
+                if (read.bytesRead === 0) break
+                offset += read.bytesRead
+              }
+              return buffer.subarray(0, offset)
+            } finally {
+              await handle.close()
+            }
+          })()
+          const detected = FSUtil.mimeType(resolvedPath)
+          const text = content?.toString("utf8")
+          const mime = !args.attach
+            ? isDirectory
+              ? "application/x-directory"
+              : "text/plain"
+            : content && text !== undefined && Buffer.from(text, "utf8").equals(content)
+              ? "text/plain"
+              : detected
 
           files.push({
             type: "file",
-            url: pathToFileURL(resolvedPath).href,
+            url: content ? `data:${mime};base64,${content.toString("base64")}` : pathToFileURL(resolvedPath).href,
             filename: path.basename(resolvedPath),
             mime,
           })
@@ -352,7 +400,7 @@ export const RunCommand = effectCmd({
       message = resolveRunInput(message, piped) ?? ""
       const initialInput = resolveRunInput(rawMessage, piped)
 
-      if (message.trim().length === 0 && !args.command && !args.interactive) {
+      if (message.trim().length === 0 && !args.command && !interactive) {
         UI.error("You must provide a message or a command")
         process.exit(1)
       }
@@ -362,7 +410,7 @@ export const RunCommand = effectCmd({
         process.exit(1)
       }
 
-      const rules: PermissionV1.Ruleset = args.interactive
+      const rules: PermissionV1.Ruleset = interactive
         ? []
         : [
             {
@@ -760,12 +808,17 @@ export const RunCommand = effectCmd({
 
         await share(client, sessionID)
 
-        if (!args.interactive) {
+        if (!interactive) {
           const events = await client.event.subscribe()
-          loop(client, events).catch((e) => {
+          const completed = loop(client, events).catch((e) => {
             console.error(e)
-            process.exit(1)
+            process.exitCode = 1
           })
+          async function finish() {
+            if (args.attach) return
+            const error = await completed
+            if (error) process.exitCode = 1
+          }
 
           if (args.command) {
             const result = await client.session.command({
@@ -779,7 +832,9 @@ export const RunCommand = effectCmd({
             if (result.error) {
               if (!emit("error", { error: result.error })) UI.error(formatRunError(result.error))
               process.exitCode = 1
+              return
             }
+            await finish()
             return
           }
 
@@ -794,7 +849,9 @@ export const RunCommand = effectCmd({
           if (result.error) {
             if (!emit("error", { error: result.error })) UI.error(formatRunError(result.error))
             process.exitCode = 1
+            return
           }
+          await finish()
           return
         }
 
@@ -816,6 +873,7 @@ export const RunCommand = effectCmd({
             initialInput,
             createSession: createFreshSession,
             thinking,
+            backgroundSubagents: flags.experimentalBackgroundSubagents,
             demo: args.demo,
           })
         } catch (error) {
@@ -824,13 +882,16 @@ export const RunCommand = effectCmd({
         return
       }
 
-      if (args.interactive && !args.attach && !args.session && !args.continue) {
+      if (interactive && !args.attach && !args.session && !args.continue) {
         const model = pick(args.model)
         const { runInteractiveLocalMode } = await import("./run/runtime")
         const fetchFn = (async (input: RequestInfo | URL, init?: RequestInit) => {
           const { Server } = await import("@/server/server")
           const request = new Request(input, init)
-          return Server.Default().app.fetch(request)
+          const headers = new Headers(request.headers)
+          const auth = ServerAuth.header()
+          if (auth) headers.set("Authorization", auth)
+          return Server.Default().app.fetch(new Request(request, { headers }))
         }) as typeof globalThis.fetch
 
         try {
@@ -849,6 +910,7 @@ export const RunCommand = effectCmd({
             files,
             initialInput,
             thinking,
+            backgroundSubagents: flags.experimentalBackgroundSubagents,
             demo: args.demo,
           })
         } catch (error) {
@@ -864,7 +926,10 @@ export const RunCommand = effectCmd({
       const fetchFn = (async (input: RequestInfo | URL, init?: RequestInit) => {
         const { Server } = await import("@/server/server")
         const request = new Request(input, init)
-        return Server.Default().app.fetch(request)
+        const headers = new Headers(request.headers)
+        const auth = ServerAuth.header()
+        if (auth) headers.set("Authorization", auth)
+        return Server.Default().app.fetch(new Request(request, { headers }))
       }) as typeof globalThis.fetch
       const sdk = createOpencodeClient({
         baseUrl: "http://opencode.internal",
@@ -875,3 +940,52 @@ export const RunCommand = effectCmd({
     })
   }),
 })
+
+type MiniCommandInput = {
+  directory?: string
+  attach?: string
+  password?: string
+  username?: string
+  continue?: boolean
+  session?: string
+  fork?: boolean
+  model?: string
+  agent?: string
+  prompt?: string
+  replay?: boolean
+  replayLimit?: number
+  demo?: boolean
+}
+
+export async function runMini(input: MiniCommandInput) {
+  if (!RunCommand.handler) throw new Error("Mini command handler is unavailable")
+  await RunCommand.handler({
+    $0: "opencode",
+    _: ["mini"],
+    message: input.prompt ? [input.prompt] : [],
+    command: undefined,
+    continue: input.continue,
+    session: input.session,
+    fork: input.fork,
+    share: undefined,
+    model: input.model,
+    agent: input.agent,
+    format: "default",
+    file: undefined,
+    title: undefined,
+    attach: input.attach,
+    password: input.password,
+    username: input.username,
+    dir: input.directory,
+    port: undefined,
+    variant: undefined,
+    thinking: undefined,
+    mini: true,
+    replay: input.replay ?? true,
+    "replay-limit": input.replayLimit,
+    replayLimit: input.replayLimit,
+    "dangerously-skip-permissions": false,
+    dangerouslySkipPermissions: false,
+    demo: input.demo ?? false,
+  })
+}

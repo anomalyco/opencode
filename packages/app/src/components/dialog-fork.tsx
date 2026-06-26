@@ -35,13 +35,13 @@ export const DialogFork: Component = () => {
     const sessionID = params.id
     if (!sessionID) return []
 
-    const msgs = sync.data.message[sessionID] ?? []
+    const msgs = sync().data.message[sessionID] ?? []
     const result: ForkableMessage[] = []
 
     for (const message of msgs) {
       if (message.role !== "user") continue
 
-      const parts = sync.data.part[message.id] ?? []
+      const parts = sync().data.part[message.id] ?? []
       const textPart = parts.find((x): x is SDKTextPart => x.type === "text" && !x.synthetic && !x.ignored)
       if (!textPart) continue
 
@@ -61,15 +61,15 @@ export const DialogFork: Component = () => {
     const sessionID = params.id
     if (!sessionID) return
 
-    const parts = sync.data.part[item.id] ?? []
+    const parts = sync().data.part[item.id] ?? []
     const restored = extractPromptFromParts(parts, {
-      directory: sdk.directory,
+      directory: sdk().directory,
       attachmentName: language.t("common.attachment"),
     })
-    const dir = base64Encode(sdk.directory)
+    const dir = base64Encode(sdk().directory)
 
-    sdk.client.session
-      .fork({ sessionID, messageID: item.id })
+    sdk()
+      .client.session.fork({ sessionID, messageID: item.id })
       .then((forked) => {
         if (!forked.data) {
           showToast({ title: language.t("common.requestFailed") })

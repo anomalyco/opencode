@@ -90,6 +90,7 @@ jobs:
         id: build
         run: |
           ./packages/opencode/script/build.ts ${{ (github.ref_name == 'beta' && '--sourcemaps') || '' }}
+          ./packages/cli/script/build.ts ${{ (github.ref_name == 'beta' && '--sourcemaps') || '' }}
         env:
           OPENCODE_VERSION: ${{ needs.version.outputs.version }}
           OPENCODE_RELEASE: ${{ needs.version.outputs.release }}
@@ -107,6 +108,12 @@ jobs:
         with:
           name: opencode-cli-windows
           path: packages/opencode/dist/opencode-windows*
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: opencode-preview-cli
+          path: packages/cli/dist/cli-*
+
     outputs:
       version: ${{ needs.version.outputs.version }}
 
@@ -318,6 +325,7 @@ jobs:
         run: bun run build
         working-directory: packages/desktop
         env:
+          NODE_OPTIONS: --max-old-space-size=4096
           OPENCODE_CHANNEL: ${{ (github.ref_name == 'beta' && 'beta') || 'prod' }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           SENTRY_ORG: ${{ vars.SENTRY_ORG }}
@@ -327,9 +335,9 @@ jobs:
           VITE_SENTRY_ENVIRONMENT: ${{ (github.ref_name == 'beta' && 'beta') || 'production' }}
           VITE_SENTRY_RELEASE: desktop@${{ needs.version.outputs.version }}
 
-      - name: Package and publish
+      - name: Package
         if: needs.version.outputs.release
-        run: npx electron-builder ${{ matrix.settings.platform_flag }} --publish always --config electron-builder.config.ts
+        run: npx electron-builder ${{ matrix.settings.platform_flag }} --publish never --config electron-builder.config.ts
         working-directory: packages/desktop
         timeout-minutes: 60
         env:
@@ -349,11 +357,9 @@ jobs:
         env:
           OPENCODE_CHANNEL: ${{ (github.ref_name == 'beta' && 'beta') || 'prod' }}
 
-      - name: Create and upload macOS .app.tar.gz
+      - name: Create macOS .app.tar.gz
         if: runner.os == 'macOS' && needs.version.outputs.release
         working-directory: packages/desktop/dist
-        env:
-          GH_TOKEN: ${{ steps.committer.outputs.token }}
         run: |
           if [[ "${{ matrix.settings.target }}" == "x86_64-apple-darwin" ]]; then
             APP_DIR="mac"
@@ -371,7 +377,6 @@ jobs:
             exit 1
           fi
           tar -czf "$OUT_NAME" -C "$(dirname "$APP_PATH")" "$(basename "$APP_PATH")"
-          gh release upload "v${{ needs.version.outputs.version }}" "$OUT_NAME" --clobber --repo "${{ needs.version.outputs.repo }}"
 
       - name: Verify signed Windows Electron artifacts
         if: runner.os == 'Windows'
@@ -447,10 +452,22 @@ jobs:
           path: packages/opencode/dist
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: opencode-preview-cli
+          path: packages/cli/dist
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         if: needs.version.outputs.release
         with:
           pattern: latest-yml-*
           path: /tmp/latest-yml
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        if: needs.version.outputs.release
+        with:
+          pattern: opencode-desktop-*
+          path: /tmp/desktop
+          merge-multiple: true
 
       - name: Setup git committer
         id: committer
@@ -477,6 +494,19 @@ jobs:
           git config --global user.email "opencode@sst.dev"
           git config --global user.name "opencode"
           ssh-keyscan -H aur.archlinux.org >> ~/.ssh/known_hosts || true
+
+      - name: Upload desktop release assets
+        if: needs.version.outputs.release
+        env:
+          GH_TOKEN: ${{ steps.committer.outputs.token }}
+        run: |
+          shopt -s nullglob
+          files=(/tmp/desktop/*.{exe,blockmap,dmg,zip,AppImage,deb,rpm} /tmp/desktop/*.app.tar.gz)
+          if (( ${#files[@]} == 0 )); then
+            echo "No desktop release assets found"
+            exit 1
+          fi
+          gh release upload "v${{ needs.version.outputs.version }}" "${files[@]}" --clobber --repo "${{ needs.version.outputs.repo }}"
 
       - run: ./script/publish.ts
         env:

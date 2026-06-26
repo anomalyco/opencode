@@ -1,22 +1,12 @@
-import { Context, Effect, Layer, Schema } from "effect"
+import { Context, Effect, Layer } from "effect"
+import { Info, Ref, response } from "@opencode-ai/schema/location"
 import { Project } from "./project"
-import { AbsolutePath } from "./schema"
 
 export * as Location from "./location"
 
-export const Ref = Schema.Struct({
-  directory: AbsolutePath,
-  workspaceID: Schema.optional(Schema.String),
-}).annotate({ identifier: "Location.Ref" })
-export type Ref = typeof Ref.Type
+export { Info, Ref, response }
 
-export interface Interface {
-  readonly directory: AbsolutePath
-  readonly workspaceID?: string
-  readonly project: {
-    readonly id: Project.ID
-    readonly directory: AbsolutePath
-  }
+export interface Interface extends Info {
   readonly vcs?: Project.Vcs
 }
 
