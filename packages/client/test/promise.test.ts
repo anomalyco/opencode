@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { isUnauthorizedError, OpenCode } from "../src"
+import { isInvalidCursorError, isUnauthorizedError, OpenCode } from "../src"
 
 test("sessions.get returns the wire projection", async () => {
   const client = OpenCode.make({
@@ -29,6 +29,9 @@ test("session methods use the public HTTP contract", async () => {
           headers: { "content-type": "text/event-stream" },
         })
       }
+      if (url.includes("/history")) {
+        return Response.json({ events: [modelSwitchedEvent], through: 2, nextAfter: 1 })
+      }
       if (url.includes("/prompt")) return Response.json(admission)
       if (url.includes("/context")) return Response.json({ data: [] })
       if (url.includes("/message/")) return Response.json({ data: modelSwitchedMessage })
@@ -55,6 +58,7 @@ test("session methods use the public HTTP contract", async () => {
   await client.sessions.compact({ sessionID: "ses_test" })
   await client.sessions.wait({ sessionID: "ses_test" })
   const context = await client.sessions.context({ sessionID: "ses_test" })
+  const history = await client.sessions.history({ sessionID: "ses_test", after: "0", through: "2", limit: "1" })
   const events = []
   for await (const event of client.sessions.events({ sessionID: "ses_test", after: "0" })) events.push(event)
   await client.sessions.interrupt({ sessionID: "ses_test" })
@@ -65,6 +69,7 @@ test("session methods use the public HTTP contract", async () => {
   expect(created.id).toBe("ses_test")
   expect(admitted.id).toBe("msg_test")
   expect(context).toEqual([])
+  expect(history).toEqual({ events: [modelSwitchedEvent], through: 2, nextAfter: 1 })
   expect(events).toEqual([modelSwitchedEvent])
   expect(message).toEqual(modelSwitchedMessage)
   expect(requests.map((request) => [request.init?.method, request.url])).toEqual([
@@ -77,6 +82,7 @@ test("session methods use the public HTTP contract", async () => {
     ["POST", "http://localhost:3000/api/session/ses_test/compact"],
     ["POST", "http://localhost:3000/api/session/ses_test/wait"],
     ["GET", "http://localhost:3000/api/session/ses_test/context"],
+    ["GET", "http://localhost:3000/api/session/ses_test/history?after=0&through=2&limit=1"],
     ["GET", "http://localhost:3000/api/session/ses_test/event?after=0"],
     ["POST", "http://localhost:3000/api/session/ses_test/interrupt"],
     ["GET", "http://localhost:3000/api/session/ses_test/message/msg_model"],
@@ -101,6 +107,20 @@ test("middleware errors remain declared client errors", async () => {
     throw new Error("Expected request to fail")
   } catch (error) {
     expect(isUnauthorizedError(error)).toBe(true)
+  }
+})
+
+test("sessions.history decodes InvalidCursorError", async () => {
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async () => Response.json({ _tag: "InvalidCursorError", message: "Invalid cutoff" }, { status: 400 }),
+  })
+
+  try {
+    await client.sessions.history({ sessionID: "ses_test", through: "2" })
+    throw new Error("Expected request to fail")
+  } catch (error) {
+    expect(isInvalidCursorError(error)).toBe(true)
   }
 })
 

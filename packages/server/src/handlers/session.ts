@@ -14,6 +14,7 @@ import {
 import { AbsolutePath } from "@opencode-ai/core/schema"
 
 const DefaultSessionsLimit = 50
+const DefaultSessionHistoryLimit = 50
 
 export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handlers) =>
   Effect.gen(function* () {
@@ -326,6 +327,32 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
               }),
             ),
           }
+        }),
+      )
+      .handle(
+        "session.history",
+        Effect.fn(function* (ctx) {
+          return yield* session
+            .history({
+              sessionID: ctx.params.sessionID,
+              after: ctx.query.after,
+              through: ctx.query.through,
+              limit: ctx.query.limit ?? DefaultSessionHistoryLimit,
+            })
+            .pipe(
+              Effect.catchTag(
+                "Session.NotFoundError",
+                (error) =>
+                  new SessionNotFoundError({
+                    sessionID: error.sessionID,
+                    message: `Session not found: ${error.sessionID}`,
+                  }),
+              ),
+              Effect.catchTag(
+                "Session.InvalidCursorError",
+                (error) => new InvalidCursorError({ message: error.message }),
+              ),
+            )
         }),
       )
       .handle(

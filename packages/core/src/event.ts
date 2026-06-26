@@ -3,7 +3,7 @@ export * as EventV2 from "./event"
 import { Cause, Context, Effect, Layer, Option, PubSub, Schema, Stream } from "effect"
 import { Event } from "@opencode-ai/schema/event"
 import type { Data, Definition, Payload } from "@opencode-ai/schema/event"
-import { and, asc, eq, gt } from "drizzle-orm"
+import { and, asc, eq, gt, inArray, lte, type SQL } from "drizzle-orm"
 import { Database } from "./database/database"
 import { EventSequenceTable, EventTable } from "./event/sql"
 import { Location } from "./location"
@@ -46,6 +46,79 @@ export class InvalidDurableEventError extends Schema.TaggedErrorClass<InvalidDur
     message: Schema.String,
   },
 ) {}
+
+export class InvalidCursorError extends Schema.TaggedErrorClass<InvalidCursorError>()("EventV2.InvalidCursorError", {
+  message: Schema.String,
+}) {}
+
+const decodeSerializedEvent = (event: SerializedEvent): Payload => {
+  const definition = Durable.get(event.type)
+  if (!definition?.durable) {
+    throw new InvalidDurableEventError({ type: event.type, message: `Unknown durable event type ${event.type}` })
+  }
+  return {
+    id: event.id,
+    type: definition.type,
+    durable: { aggregateID: event.aggregateID, seq: event.seq, version: definition.durable.version },
+    data: Schema.decodeUnknownSync(definition.data)(event.data),
+  }
+}
+
+export const readAggregate = Effect.fn("EventV2.readAggregate")(function* (
+  db: Database.Interface["db"],
+  input: {
+    readonly aggregateID: string
+    readonly after?: number
+    readonly through?: number
+    readonly limit: number
+    readonly types: ReadonlyArray<string>
+  },
+) {
+  const after = input.after ?? -1
+  if (input.through !== undefined && input.through < after) {
+    return yield* new InvalidCursorError({ message: "History cutoff must not be less than the cursor" })
+  }
+  return yield* db
+    .transaction(() =>
+      Effect.gen(function* () {
+        const head = yield* latestSequence(db, input.aggregateID)
+        if (input.through !== undefined && input.through > head) {
+          return yield* new InvalidCursorError({ message: "History cutoff is above the current aggregate head" })
+        }
+        const through = input.through ?? head
+        const conditions: SQL[] = [
+          eq(EventTable.aggregate_id, input.aggregateID),
+          gt(EventTable.seq, after),
+          lte(EventTable.seq, through),
+          inArray(EventTable.type, input.types),
+        ]
+        const rows = yield* db
+          .select()
+          .from(EventTable)
+          .where(and(...conditions))
+          .orderBy(asc(EventTable.seq))
+          .limit(input.limit + 1)
+          .all()
+          .pipe(Effect.orDie)
+        const page = rows.slice(0, input.limit)
+        const events = page.map((event) =>
+          decodeSerializedEvent({
+            id: event.id,
+            aggregateID: event.aggregate_id,
+            seq: event.seq,
+            type: event.type,
+            data: event.data,
+          }),
+        )
+        return {
+          events,
+          through,
+          nextAfter: rows.length > input.limit ? events.at(-1)?.durable?.seq : undefined,
+        }
+      }),
+    )
+    .pipe(Effect.catchTag("SqlError", Effect.die))
+})
 
 export const define = Event.define
 export const versionedType = Event.versionedType
@@ -458,19 +531,6 @@ export const layerWith = (options?: LayerOptions) =>
         )
 
       const streamAll = (): Stream.Stream<Payload> => Stream.fromPubSub(pubsub.all)
-
-      const decodeSerializedEvent = (event: SerializedEvent) => {
-        const definition = Durable.get(event.type)
-        if (!definition?.durable) {
-          throw new InvalidDurableEventError({ type: event.type, message: `Unknown durable event type ${event.type}` })
-        }
-        return {
-          id: event.id,
-          type: definition.type,
-          durable: { aggregateID: event.aggregateID, seq: event.seq, version: definition.durable.version },
-          data: Schema.decodeUnknownSync(definition.data)(event.data),
-        }
-      }
 
       const readAfter = (aggregateID: string, after: number) =>
         (options?.beforeAggregateRead?.(aggregateID) ?? Effect.void).pipe(

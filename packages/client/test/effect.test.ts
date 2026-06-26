@@ -28,6 +28,14 @@ test("session methods retain decoded Effect inputs and outputs", async () => {
         ),
       )
     }
+    if (url.includes("/history")) {
+      return Effect.succeed(
+        HttpClientResponse.fromWeb(
+          request,
+          Response.json({ events: [modelSwitchedEvent], through: 2, nextAfter: 1 }),
+        ),
+      )
+    }
     if (url.includes("/prompt")) {
       return Effect.succeed(HttpClientResponse.fromWeb(request, Response.json(admission)))
     }
@@ -72,6 +80,12 @@ test("session methods retain decoded Effect inputs and outputs", async () => {
     yield* client.sessions.compact({ sessionID: Session.ID.make("ses_test") })
     yield* client.sessions.wait({ sessionID: Session.ID.make("ses_test") })
     const context = yield* client.sessions.context({ sessionID: Session.ID.make("ses_test") })
+    const history = yield* client.sessions.history({
+      sessionID: Session.ID.make("ses_test"),
+      after: 0,
+      through: 2,
+      limit: 1,
+    })
     const events = yield* client.sessions
       .events({ sessionID: Session.ID.make("ses_test"), after: 0 })
       .pipe(Stream.runCollect)
@@ -80,7 +94,7 @@ test("session methods retain decoded Effect inputs and outputs", async () => {
       sessionID: Session.ID.make("ses_test"),
       messageID: SessionMessage.ID.make("msg_model"),
     })
-    return { page, active, created, admitted, context, events, message }
+    return { page, active, created, admitted, context, history, events, message }
   }).pipe(Effect.provideService(HttpClient.HttpClient, httpClient), Effect.runPromise)
 
   expect(DateTime.toEpochMillis(result.page.data[0].time.created)).toBe(1_717_171_717_000)
@@ -92,8 +106,29 @@ test("session methods retain decoded Effect inputs and outputs", async () => {
   expect(Object.getPrototypeOf(result.admitted.prompt)).toBe(Object.prototype)
   expect(DateTime.toEpochMillis(result.admitted.timeCreated)).toBe(1_717_171_717_000)
   expect(result.context).toEqual([])
+  expect(DateTime.toEpochMillis(result.history.events[0].data.timestamp)).toBe(1_717_171_717_000)
+  expect(result.history).toEqual(expect.objectContaining({ through: 2, nextAfter: 1 }))
   expect(DateTime.toEpochMillis(result.events[0].data.timestamp)).toBe(1_717_171_717_000)
   expect(result.message).toEqual(expect.objectContaining({ id: "msg_model", type: "model-switched" }))
+})
+
+test("sessions.history retains the typed InvalidCursorError", async () => {
+  const httpClient = HttpClient.make((request) =>
+    Effect.succeed(
+      HttpClientResponse.fromWeb(
+        request,
+        Response.json({ _tag: "InvalidCursorError", message: "Invalid cutoff" }, { status: 400 }),
+      ),
+    ),
+  )
+  const error = await Effect.gen(function* () {
+    const client = yield* OpenCode.make({ baseUrl: "http://localhost:3000" })
+    return yield* client.sessions
+      .history({ sessionID: Session.ID.make("ses_test"), through: 2 })
+      .pipe(Effect.flip)
+  }).pipe(Effect.provideService(HttpClient.HttpClient, httpClient), Effect.runPromise)
+
+  expect(error._tag).toBe("InvalidCursorError")
 })
 
 const session = {

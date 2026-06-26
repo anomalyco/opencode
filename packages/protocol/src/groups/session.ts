@@ -3,7 +3,7 @@ import { SessionInput } from "@opencode-ai/schema/session-input"
 import { PromptInput } from "@opencode-ai/schema/prompt-input"
 import { Session } from "@opencode-ai/schema/session"
 import { Project } from "@opencode-ai/schema/project"
-import { AbsolutePath, NonNegativeInt, PositiveInt, RelativePath, statics } from "@opencode-ai/schema/schema"
+import { AbsolutePath, NonNegativeInt, optional, PositiveInt, RelativePath, statics } from "@opencode-ai/schema/schema"
 import { Workspace } from "@opencode-ai/schema/workspace"
 import { Context, Encoding, Result, Schema, Struct } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
@@ -76,6 +76,8 @@ export type SessionsCursor = typeof SessionsCursor.Type
 const SessionActive = Schema.Struct({
   type: Schema.Literal("running"),
 }).annotate({ identifier: "SessionActive" })
+
+const SessionHistoryLimit = PositiveInt.check(Schema.isLessThanOrEqualTo(100))
 
 const SessionsQueryCursor = SessionsCursor.annotate({
   description: "Opaque pagination cursor returned as cursor.previous or cursor.next in the previous response.",
@@ -286,6 +288,31 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
             identifier: "v2.session.context",
             summary: "Get session context",
             description: "Retrieve the active context messages for a session (all messages after the last compaction).",
+          }),
+        ),
+    )
+    .add(
+      HttpApiEndpoint.get("session.history", "/api/session/:sessionID/history", {
+        params: { sessionID: Session.ID },
+        query: {
+          after: Schema.NumberFromString.pipe(Schema.decodeTo(NonNegativeInt), Schema.optional),
+          through: Schema.NumberFromString.pipe(Schema.decodeTo(NonNegativeInt), Schema.optional),
+          limit: Schema.NumberFromString.pipe(Schema.decodeTo(SessionHistoryLimit), Schema.optional),
+        },
+        success: Schema.Struct({
+          events: Schema.Array(SessionEvent.Durable),
+          through: NonNegativeInt,
+          nextAfter: optional(NonNegativeInt),
+        }).annotate({ identifier: "SessionHistory" }),
+        error: [SessionNotFoundError, InvalidCursorError],
+      })
+        .middleware(sessionLocationMiddleware)
+        .annotateMerge(
+          OpenApi.annotations({
+            identifier: "v2.session.history",
+            summary: "Get session history",
+            description:
+              "Read one finite page of public durable Session events. Reuse through and pass nextAfter unchanged as the exclusive after cursor; an omitted nextAfter means the fixed snapshot is exhausted.",
           }),
         ),
     )

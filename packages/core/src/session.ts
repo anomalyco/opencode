@@ -102,6 +102,9 @@ export class PromptConflictError extends Schema.TaggedErrorClass<PromptConflictE
   sessionID: SessionSchema.ID,
   messageID: SessionMessage.ID,
 }) {}
+export class InvalidCursorError extends Schema.TaggedErrorClass<InvalidCursorError>()("Session.InvalidCursorError", {
+  message: Schema.String,
+}) {}
 export const MessageNotFoundError = SessionRevert.MessageNotFoundError
 export type MessageNotFoundError = SessionRevert.MessageNotFoundError
 
@@ -131,6 +134,19 @@ export interface Interface {
     sessionID: SessionSchema.ID
     after?: number
   }) => Stream.Stream<SessionEvent.DurableEvent, NotFoundError>
+  readonly history: (input: {
+    sessionID: SessionSchema.ID
+    after?: number
+    through?: number
+    limit: number
+  }) => Effect.Effect<
+    {
+      events: ReadonlyArray<SessionEvent.DurableEvent>
+      through: number
+      nextAfter?: number
+    },
+    NotFoundError | InvalidCursorError
+  >
   readonly switchAgent: (input: { sessionID: SessionSchema.ID; agent: string }) => Effect.Effect<void, NotFoundError>
   readonly switchModel: (input: {
     sessionID: SessionSchema.ID
@@ -347,6 +363,28 @@ export const layer = Layer.unwrap(
                   .get(input.sessionID)
                   .pipe(Effect.as(events.durable({ aggregateID: input.sessionID, after: input.after }))),
               ).pipe(Stream.filter((event): event is SessionEvent.DurableEvent => isDurableSessionEvent(event))),
+            history: Effect.fn("V2Session.history")(function* (input) {
+              yield* result.get(input.sessionID)
+              const page = yield* EventV2
+                .readAggregate(db, {
+                  ...input,
+                  aggregateID: input.sessionID,
+                  types: SessionEvent.DurableDefinitions.flatMap((definition) =>
+                    definition.durable
+                      ? [EventV2.versionedType(definition.type, definition.durable.version)]
+                      : [],
+                  ),
+                })
+                .pipe(
+                  Effect.mapError((error) => new InvalidCursorError({ message: error.message })),
+                )
+              return {
+                ...page,
+                events: page.events.filter(
+                  (event): event is SessionEvent.DurableEvent => isDurableSessionEvent(event),
+                ),
+              }
+            }),
             prompt: Effect.fn("V2Session.prompt")((input) =>
               Effect.uninterruptible(
                 Effect.gen(function* () {

@@ -2731,6 +2731,41 @@ export type UnknownError1 = {
   ref?: string
 }
 
+export type SessionHistory = {
+  events: Array<
+    | SessionNextAgentSwitched
+    | SessionNextModelSwitched
+    | SessionNextMoved
+    | SessionNextPrompted
+    | SessionNextPromptAdmitted
+    | SessionNextContextUpdated
+    | SessionNextSynthetic
+    | SessionNextShellStarted
+    | SessionNextShellEnded
+    | SessionNextStepStarted
+    | SessionNextStepEnded
+    | SessionNextStepFailed
+    | SessionNextTextStarted
+    | SessionNextTextEnded
+    | SessionNextToolInputStarted
+    | SessionNextToolInputEnded
+    | SessionNextToolCalled
+    | SessionNextToolProgress
+    | SessionNextToolSuccess
+    | SessionNextToolFailed
+    | SessionNextReasoningStarted
+    | SessionNextReasoningEnded
+    | SessionNextRetried
+    | SessionNextCompactionStarted
+    | SessionNextCompactionEnded
+    | SessionNextRevertStaged
+    | SessionNextRevertCleared
+    | SessionNextRevertCommitted
+  >
+  through: number
+  nextAfter?: number
+}
+
 export type SessionMessagesResponse = {
   data: Array<SessionMessage>
   cursor: {
@@ -4057,6 +4092,615 @@ export type SessionNextAgentSwitched = {
   type: "session.next.agent.switched"
   durable?: {
     aggregateID: string
+    seq: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    version: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    messageID: string
+    agent: string
+  }
+}
+
+export type SessionNextModelSwitched = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.model.switched"
+  durable?: {
+    aggregateID: string
+    seq: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    version: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    messageID: string
+    model: ModelRef
+  }
+}
+
+export type SessionNextMoved = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.moved"
+  durable?: {
+    aggregateID: string
+    seq: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    version: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    location: LocationRef
+    subdirectory?: string
+  }
+}
+
+export type SessionNextPrompted = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.prompted"
+  durable?: {
+    aggregateID: string
+    seq: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    version: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    messageID: string
+    prompt: Prompt
+    delivery: "steer" | "queue"
+  }
+}
+
+export type SessionNextPromptAdmitted = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.prompt.admitted"
+  durable?: {
+    aggregateID: string
+    seq: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    version: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    messageID: string
+    prompt: Prompt
+    delivery: "steer" | "queue"
+  }
+}
+
+export type SessionNextContextUpdated = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.context.updated"
+  durable?: {
+    aggregateID: string
+    seq: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    version: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    messageID: string
+    text: string
+  }
+}
+
+export type SessionNextSynthetic = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.synthetic"
+  durable?: {
+    aggregateID: string
+    seq: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    version: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    messageID: string
+    text: string
+  }
+}
+
+export type SessionNextShellStarted = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.shell.started"
+  durable?: {
+    aggregateID: string
+    seq: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    version: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    messageID: string
+    callID: string
+    command: string
+  }
+}
+
+export type SessionNextShellEnded = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.shell.ended"
+  durable?: {
+    aggregateID: string
+    seq: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    version: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    callID: string
+    output: string
+  }
+}
+
+export type SessionNextStepStarted = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.step.started"
+  durable?: {
+    aggregateID: string
+    seq: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    version: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    assistantMessageID: string
+    agent: string
+    model: ModelRef
+    snapshot?: string
+  }
+}
+
+export type SessionNextStepEnded = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.step.ended"
+  durable?: {
+    aggregateID: string
+    seq: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    version: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    assistantMessageID: string
+    finish: string
+    cost: number
+    tokens: {
+      input: number
+      output: number
+      reasoning: number
+      cache: {
+        read: number
+        write: number
+      }
+    }
+    snapshot?: string
+    files?: Array<string>
+  }
+}
+
+export type SessionNextStepFailed = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.step.failed"
+  durable?: {
+    aggregateID: string
+    seq: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    version: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    assistantMessageID: string
+    error: SessionErrorUnknown
+  }
+}
+
+export type SessionNextTextStarted = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.text.started"
+  durable?: {
+    aggregateID: string
+    seq: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    version: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    assistantMessageID: string
+    textID: string
+  }
+}
+
+export type SessionNextTextEnded = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.text.ended"
+  durable?: {
+    aggregateID: string
+    seq: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    version: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    assistantMessageID: string
+    textID: string
+    text: string
+  }
+}
+
+export type SessionNextToolInputStarted = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.tool.input.started"
+  durable?: {
+    aggregateID: string
+    seq: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    version: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    assistantMessageID: string
+    callID: string
+    name: string
+  }
+}
+
+export type SessionNextToolInputEnded = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.tool.input.ended"
+  durable?: {
+    aggregateID: string
+    seq: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    version: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    assistantMessageID: string
+    callID: string
+    text: string
+  }
+}
+
+export type SessionNextToolCalled = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.tool.called"
+  durable?: {
+    aggregateID: string
+    seq: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    version: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    assistantMessageID: string
+    callID: string
+    tool: string
+    input: {
+      [key: string]: unknown
+    }
+    provider: {
+      executed: boolean
+      metadata?: LlmProviderMetadata
+    }
+  }
+}
+
+export type SessionNextToolProgress = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.tool.progress"
+  durable?: {
+    aggregateID: string
+    seq: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    version: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    assistantMessageID: string
+    callID: string
+    structured: {
+      [key: string]: unknown
+    }
+    content: Array<LlmToolContent>
+  }
+}
+
+export type SessionNextToolSuccess = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.tool.success"
+  durable?: {
+    aggregateID: string
+    seq: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    version: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    assistantMessageID: string
+    callID: string
+    structured: {
+      [key: string]: unknown
+    }
+    content: Array<LlmToolContent>
+    outputPaths?: Array<string>
+    result?: unknown
+    provider: {
+      executed: boolean
+      metadata?: LlmProviderMetadata
+    }
+  }
+}
+
+export type SessionNextToolFailed = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.tool.failed"
+  durable?: {
+    aggregateID: string
+    seq: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    version: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    assistantMessageID: string
+    callID: string
+    error: SessionErrorUnknown
+    result?: unknown
+    provider: {
+      executed: boolean
+      metadata?: LlmProviderMetadata
+    }
+  }
+}
+
+export type SessionNextReasoningStarted = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.reasoning.started"
+  durable?: {
+    aggregateID: string
+    seq: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    version: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    assistantMessageID: string
+    reasoningID: string
+    providerMetadata?: LlmProviderMetadata
+  }
+}
+
+export type SessionNextReasoningEnded = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.reasoning.ended"
+  durable?: {
+    aggregateID: string
+    seq: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    version: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    assistantMessageID: string
+    reasoningID: string
+    text: string
+    providerMetadata?: LlmProviderMetadata
+  }
+}
+
+export type SessionNextRetried = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.retried"
+  durable?: {
+    aggregateID: string
+    seq: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    version: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    attempt: number
+    error: SessionNextRetryError
+  }
+}
+
+export type SessionNextCompactionStarted = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.compaction.started"
+  durable?: {
+    aggregateID: string
+    seq: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    version: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    messageID: string
+    reason: "auto" | "manual"
+  }
+}
+
+export type SessionNextCompactionEnded = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.compaction.ended"
+  durable?: {
+    aggregateID: string
+    seq: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    version: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    messageID: string
+    reason: "auto" | "manual"
+    text: string
+    recent: string
+  }
+}
+
+export type SessionNextRevertStaged = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.revert.staged"
+  durable?: {
+    aggregateID: string
+    seq: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    version: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    revert: RevertState
+  }
+}
+
+export type SessionNextRevertCleared = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.revert.cleared"
+  durable?: {
+    aggregateID: string
+    seq: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    version: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+  }
+}
+
+export type SessionNextRevertCommitted = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.revert.committed"
+  durable?: {
+    aggregateID: string
+    seq: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    version: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    messageID: string
+  }
+}
+
+export type SessionNextAgentSwitched1 = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.agent.switched"
+  durable?: {
+    aggregateID: string
     seq: number | "NaN" | "Infinity" | "-Infinity"
     version: number | "NaN" | "Infinity" | "-Infinity"
   }
@@ -4069,7 +4713,7 @@ export type SessionNextAgentSwitched = {
   }
 }
 
-export type SessionNextModelSwitched = {
+export type SessionNextModelSwitched1 = {
   id: string
   metadata?: {
     [key: string]: unknown
@@ -4089,7 +4733,7 @@ export type SessionNextModelSwitched = {
   }
 }
 
-export type SessionNextMoved = {
+export type SessionNextMoved1 = {
   id: string
   metadata?: {
     [key: string]: unknown
@@ -4109,7 +4753,7 @@ export type SessionNextMoved = {
   }
 }
 
-export type SessionNextPrompted = {
+export type SessionNextPrompted1 = {
   id: string
   metadata?: {
     [key: string]: unknown
@@ -4130,7 +4774,7 @@ export type SessionNextPrompted = {
   }
 }
 
-export type SessionNextPromptAdmitted = {
+export type SessionNextPromptAdmitted1 = {
   id: string
   metadata?: {
     [key: string]: unknown
@@ -4151,7 +4795,7 @@ export type SessionNextPromptAdmitted = {
   }
 }
 
-export type SessionNextContextUpdated = {
+export type SessionNextContextUpdated1 = {
   id: string
   metadata?: {
     [key: string]: unknown
@@ -4171,7 +4815,7 @@ export type SessionNextContextUpdated = {
   }
 }
 
-export type SessionNextSynthetic = {
+export type SessionNextSynthetic1 = {
   id: string
   metadata?: {
     [key: string]: unknown
@@ -4191,7 +4835,7 @@ export type SessionNextSynthetic = {
   }
 }
 
-export type SessionNextShellStarted = {
+export type SessionNextShellStarted1 = {
   id: string
   metadata?: {
     [key: string]: unknown
@@ -4212,7 +4856,7 @@ export type SessionNextShellStarted = {
   }
 }
 
-export type SessionNextShellEnded = {
+export type SessionNextShellEnded1 = {
   id: string
   metadata?: {
     [key: string]: unknown
@@ -4232,7 +4876,7 @@ export type SessionNextShellEnded = {
   }
 }
 
-export type SessionNextStepStarted = {
+export type SessionNextStepStarted1 = {
   id: string
   metadata?: {
     [key: string]: unknown
@@ -4254,7 +4898,7 @@ export type SessionNextStepStarted = {
   }
 }
 
-export type SessionNextStepEnded = {
+export type SessionNextStepEnded1 = {
   id: string
   metadata?: {
     [key: string]: unknown
@@ -4286,7 +4930,7 @@ export type SessionNextStepEnded = {
   }
 }
 
-export type SessionNextStepFailed = {
+export type SessionNextStepFailed1 = {
   id: string
   metadata?: {
     [key: string]: unknown
@@ -4306,7 +4950,7 @@ export type SessionNextStepFailed = {
   }
 }
 
-export type SessionNextTextStarted = {
+export type SessionNextTextStarted1 = {
   id: string
   metadata?: {
     [key: string]: unknown
@@ -4326,7 +4970,7 @@ export type SessionNextTextStarted = {
   }
 }
 
-export type SessionNextTextEnded = {
+export type SessionNextTextEnded1 = {
   id: string
   metadata?: {
     [key: string]: unknown
@@ -4347,7 +4991,7 @@ export type SessionNextTextEnded = {
   }
 }
 
-export type SessionNextToolInputStarted = {
+export type SessionNextToolInputStarted1 = {
   id: string
   metadata?: {
     [key: string]: unknown
@@ -4368,7 +5012,7 @@ export type SessionNextToolInputStarted = {
   }
 }
 
-export type SessionNextToolInputEnded = {
+export type SessionNextToolInputEnded1 = {
   id: string
   metadata?: {
     [key: string]: unknown
@@ -4389,7 +5033,7 @@ export type SessionNextToolInputEnded = {
   }
 }
 
-export type SessionNextToolCalled = {
+export type SessionNextToolCalled1 = {
   id: string
   metadata?: {
     [key: string]: unknown
@@ -4417,7 +5061,7 @@ export type SessionNextToolCalled = {
   }
 }
 
-export type SessionNextToolProgress = {
+export type SessionNextToolProgress1 = {
   id: string
   metadata?: {
     [key: string]: unknown
@@ -4441,7 +5085,7 @@ export type SessionNextToolProgress = {
   }
 }
 
-export type SessionNextToolSuccess = {
+export type SessionNextToolSuccess1 = {
   id: string
   metadata?: {
     [key: string]: unknown
@@ -4471,7 +5115,7 @@ export type SessionNextToolSuccess = {
   }
 }
 
-export type SessionNextToolFailed = {
+export type SessionNextToolFailed1 = {
   id: string
   metadata?: {
     [key: string]: unknown
@@ -4497,7 +5141,7 @@ export type SessionNextToolFailed = {
   }
 }
 
-export type SessionNextReasoningStarted = {
+export type SessionNextReasoningStarted1 = {
   id: string
   metadata?: {
     [key: string]: unknown
@@ -4518,7 +5162,7 @@ export type SessionNextReasoningStarted = {
   }
 }
 
-export type SessionNextReasoningEnded = {
+export type SessionNextReasoningEnded1 = {
   id: string
   metadata?: {
     [key: string]: unknown
@@ -4540,7 +5184,7 @@ export type SessionNextReasoningEnded = {
   }
 }
 
-export type SessionNextRetried = {
+export type SessionNextRetried1 = {
   id: string
   metadata?: {
     [key: string]: unknown
@@ -4560,7 +5204,7 @@ export type SessionNextRetried = {
   }
 }
 
-export type SessionNextCompactionStarted = {
+export type SessionNextCompactionStarted1 = {
   id: string
   metadata?: {
     [key: string]: unknown
@@ -4580,7 +5224,7 @@ export type SessionNextCompactionStarted = {
   }
 }
 
-export type SessionNextCompactionEnded = {
+export type SessionNextCompactionEnded1 = {
   id: string
   metadata?: {
     [key: string]: unknown
@@ -4602,7 +5246,7 @@ export type SessionNextCompactionEnded = {
   }
 }
 
-export type SessionNextRevertStaged = {
+export type SessionNextRevertStaged1 = {
   id: string
   metadata?: {
     [key: string]: unknown
@@ -4621,7 +5265,7 @@ export type SessionNextRevertStaged = {
   }
 }
 
-export type SessionNextRevertCleared = {
+export type SessionNextRevertCleared1 = {
   id: string
   metadata?: {
     [key: string]: unknown
@@ -4639,7 +5283,7 @@ export type SessionNextRevertCleared = {
   }
 }
 
-export type SessionNextRevertCommitted = {
+export type SessionNextRevertCommitted1 = {
   id: string
   metadata?: {
     [key: string]: unknown
@@ -12383,6 +13027,45 @@ export type V2SessionContextResponses = {
 }
 
 export type V2SessionContextResponse = V2SessionContextResponses[keyof V2SessionContextResponses]
+
+export type V2SessionHistoryData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    after?: string
+    through?: string
+    limit?: string
+  }
+  url: "/api/session/{sessionID}/history"
+}
+
+export type V2SessionHistoryErrors = {
+  /**
+   * InvalidCursorError | InvalidRequestError
+   */
+  400: InvalidCursorError | InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * SessionNotFoundError
+   */
+  404: SessionNotFoundError
+}
+
+export type V2SessionHistoryError = V2SessionHistoryErrors[keyof V2SessionHistoryErrors]
+
+export type V2SessionHistoryResponses = {
+  /**
+   * SessionHistory
+   */
+  200: SessionHistory
+}
+
+export type V2SessionHistoryResponse = V2SessionHistoryResponses[keyof V2SessionHistoryResponses]
 
 export type V2SessionEventsData = {
   body?: never
