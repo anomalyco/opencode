@@ -11,6 +11,22 @@ const money = new Intl.NumberFormat("en-US", {
   currency: "USD",
 })
 
+export function computeContextState(
+  last: AssistantMessage,
+  contextLimit?: number,
+) {
+  const tokens =
+    last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
+  const totalInput = last.tokens.input + last.tokens.cache.read
+  return {
+    tokens,
+    input: last.tokens.input,
+    cache: last.tokens.cache.read,
+    cachePercent: totalInput > 0 ? Math.round(last.tokens.cache.read / totalInput * 100) : 0,
+    percent: contextLimit ? Math.round((tokens / contextLimit) * 100) : null,
+  }
+}
+
 function View(props: { api: TuiPluginApi; session_id: string }) {
   const theme = () => props.api.theme.current
   const msg = createMemo(() => props.api.state.session.messages(props.session_id))
@@ -29,17 +45,8 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
       }
     }
 
-    const tokens =
-      last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
     const model = props.api.state.provider.find((item) => item.id === last.providerID)?.models[last.modelID]
-    const totalInput = last.tokens.input + last.tokens.cache.read + last.tokens.cache.write
-    return {
-      tokens,
-      input: last.tokens.input,
-      cache: last.tokens.cache.read + last.tokens.cache.write,
-      cachePercent: totalInput > 0 ? Math.round((last.tokens.cache.read + last.tokens.cache.write) / totalInput * 100) : 0,
-      percent: model?.limit.context ? Math.round((tokens / model.limit.context) * 100) : null,
-    }
+    return computeContextState(last, model?.limit.context)
   })
 
   return (
