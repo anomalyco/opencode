@@ -3,12 +3,19 @@ import type { AsyncStorage, SyncStorage } from "@solid-primitives/storage"
 import type { Accessor } from "solid-js"
 import type { DesktopMenuAction } from "../desktop-menu"
 import { ServerConnection } from "./server"
+import type { WslServersPlatform } from "../wsl/types"
+import type { UpdaterPlatform } from "../updater"
 
 type PickerPaths = string | string[] | null
 type OpenDirectoryPickerOptions = { title?: string; multiple?: boolean }
-type OpenFilePickerOptions = { title?: string; multiple?: boolean; accept?: string[]; extensions?: string[] }
+type OpenAttachmentPickerOptions = {
+  title?: string
+  multiple?: boolean
+  accept?: string[]
+  extensions?: string[]
+  defaultPath?: string
+}
 type SaveFilePickerOptions = { title?: string; defaultPath?: string }
-type UpdateInfo = { updateAvailable: boolean; version?: string }
 type PlatformName = "web" | "desktop"
 type DesktopOS = "macos" | "windows" | "linux"
 
@@ -20,13 +27,7 @@ export type FatalRendererErrorLog = {
   os?: DesktopOS
 }
 
-export type Platform = {
-  /** Platform discriminator */
-  platform: PlatformName
-
-  /** Desktop OS (Tauri only) */
-  os?: DesktopOS
-
+type PlatformBase = {
   /** App version */
   version?: string
 
@@ -48,23 +49,23 @@ export type Platform = {
   /** Send a system notification (optional deep link) */
   notify(title: string, description?: string, href?: string): Promise<void>
 
-  /** Open directory picker dialog (native on Tauri, server-backed on web) */
-  openDirectoryPickerDialog?(opts?: OpenDirectoryPickerOptions): Promise<PickerPaths>
+  /** Open a native attachment picker and read selected files sequentially (desktop only) */
+  openAttachmentPickerDialog?(
+    opts: OpenAttachmentPickerOptions,
+    onFile: (file: File) => Promise<unknown>,
+  ): Promise<void>
 
-  /** Open native file picker dialog (Tauri only) */
-  openFilePickerDialog?(opts?: OpenFilePickerOptions): Promise<PickerPaths>
+  /** Resolve the native source path for a desktop File. */
+  getPathForFile?(file: File): string
 
-  /** Save file picker dialog (Tauri only) */
+  /** Open a native save file picker dialog (desktop only) */
   saveFilePickerDialog?(opts?: SaveFilePickerOptions): Promise<string | null>
 
   /** Storage mechanism, defaults to localStorage */
   storage?: (name?: string) => SyncStorage | AsyncStorage
 
-  /** Check for a downloadable desktop update */
-  checkUpdate?(): Promise<UpdateInfo>
-
-  /** Install the downloaded update using the platform restart flow */
-  updateAndRestart?(): Promise<void>
+  /** Application-global desktop updater */
+  updater?: UpdaterPlatform
 
   /** Fetch override */
   fetch?: typeof fetch
@@ -75,11 +76,8 @@ export type Platform = {
   /** Set the default server URL to use on app startup (platform-specific) */
   setDefaultServer?(url: ServerConnection.Key | null): Promise<void> | void
 
-  /** Get the configured WSL integration (desktop only) */
-  getWslEnabled?(): Promise<boolean>
-
-  /** Set the configured WSL integration (desktop only) */
-  setWslEnabled?(config: boolean): Promise<void> | void
+  /** Manage WSL sidecar servers (Electron on Windows only) */
+  wslServers?: WslServersPlatform
 
   /** Get the preferred display backend (desktop only) */
   getDisplayBackend?(): Promise<DisplayBackend | null> | DisplayBackend | null
@@ -114,6 +112,16 @@ export type Platform = {
   /** Record a fatal renderer error in platform logs (desktop only) */
   recordFatalRendererError?(error: FatalRendererErrorLog): Promise<void>
 }
+
+export type Platform = PlatformBase &
+  (
+    | { platform: "web"; os?: never }
+    | {
+        platform: "desktop"
+        os?: DesktopOS
+        openDirectoryPickerDialog(opts?: OpenDirectoryPickerOptions): Promise<PickerPaths>
+      }
+  )
 
 export type DisplayBackend = "auto" | "wayland"
 

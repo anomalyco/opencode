@@ -1,7 +1,9 @@
 import { Option } from "effect"
-import { decodeJson } from "./matching"
-import { redactHeaders, redactUrl } from "./redaction"
-import type { RequestSnapshot, ResponseSnapshot } from "./schema"
+import { decodeJson } from "./matching.js"
+import { REDACTED, redactHeaders, redactUrl } from "./redaction.js"
+import type { RedactOptions, RequestSnapshot, ResponseSnapshot } from "./types.js"
+
+export type { RedactOptions } from "./types.js"
 
 export const DEFAULT_REQUEST_HEADERS: ReadonlyArray<string> = ["content-type", "accept", "openai-beta"]
 export const DEFAULT_RESPONSE_HEADERS: ReadonlyArray<string> = ["content-type"]
@@ -65,6 +67,63 @@ export interface DefaultRedactorOverrides {
   readonly responseHeaders?: HeaderOptions
   readonly url?: UrlOptions
   readonly body?: (parsed: unknown) => unknown
+}
+
+const DEFAULT_REDACT_JSON_FIELDS = [
+  "access_token",
+  "api_key",
+  "apikey",
+  "client_secret",
+  "password",
+  "refresh_token",
+  "secret",
+  "token",
+]
+
+const normalizeField = (field: string) => field.replace(/[^a-z0-9]/gi, "").toLowerCase()
+
+const redactJsonFields = (value: unknown, fields: ReadonlySet<string>): unknown => {
+  if (Array.isArray(value)) return value.map((item) => redactJsonFields(item, fields))
+  if (!value || typeof value !== "object") return value
+  return Object.fromEntries(
+    Object.entries(value).map(([key, child]) => [
+      key,
+      fields.has(normalizeField(key)) ? REDACTED : redactJsonFields(child, fields),
+    ]),
+  )
+}
+
+const redactBody = (value: string, fields: ReadonlySet<string>, transform: ((body: string) => string) | undefined) => {
+  const redacted = Option.match(decodeJson(value), {
+    onNone: () => value,
+    onSome: (parsed) => JSON.stringify(redactJsonFields(parsed, fields)),
+  })
+  return transform?.(redacted) ?? redacted
+}
+
+export const make = (options: RedactOptions = {}): Redactor => {
+  const fields = new Set([...DEFAULT_REDACT_JSON_FIELDS, ...(options.jsonFields ?? [])].map(normalizeField))
+  return compose(
+    requestHeaders({
+      allow: [...DEFAULT_REQUEST_HEADERS, ...(options.allowRequestHeaders ?? []), ...(options.headers ?? [])],
+      redact: options.headers,
+    }),
+    responseHeaders({
+      allow: [...DEFAULT_RESPONSE_HEADERS, ...(options.allowResponseHeaders ?? []), ...(options.headers ?? [])],
+      redact: options.headers,
+    }),
+    url({ query: options.queryParameters, transform: options.url }),
+    {
+      request: (snapshot) => ({
+        ...snapshot,
+        body: redactBody(snapshot.body, fields, options.body),
+      }),
+      response: (snapshot) => ({
+        ...snapshot,
+        body: redactBody(snapshot.body, fields, options.body),
+      }),
+    },
+  )
 }
 
 export const defaults = (overrides: DefaultRedactorOverrides = {}): Redactor =>

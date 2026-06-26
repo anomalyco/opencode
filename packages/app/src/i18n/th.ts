@@ -306,6 +306,11 @@ export const dict = {
 
   "dialog.directory.search.placeholder": "ค้นหาโฟลเดอร์",
   "dialog.directory.empty": "ไม่พบโฟลเดอร์",
+  "dialog.directory.action.selectFile": "เลือกไฟล์",
+  "dialog.directory.action.selectFolder": "เลือกโฟลเดอร์",
+  "dialog.directory.root": "ราก",
+  "dialog.directory.parent": "โฟลเดอร์หลัก",
+  "dialog.directory.readError": "ไม่สามารถอ่านโฟลเดอร์นี้ได้",
 
   "dialog.server.title": "เซิร์ฟเวอร์",
   "dialog.server.description": "สลับเซิร์ฟเวอร์ OpenCode ที่แอปนี้เชื่อมต่อด้วย",
@@ -650,9 +655,6 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "ขยายส่วนเครื่องมือ edit",
   "settings.general.row.editToolPartsExpanded.description":
     "แสดงส่วนเครื่องมือ edit, write และ patch แบบขยายตามค่าเริ่มต้นในไทม์ไลน์",
-  "settings.general.row.showSessionProgressBar.title": "แสดงแถบความคืบหน้าของเซสชัน",
-  "settings.general.row.showSessionProgressBar.description":
-    "แสดงแถบความคืบหน้าแบบเคลื่อนไหวที่ด้านบนของเซสชันเมื่อเอเจนต์กำลังทำงาน",
   "settings.general.row.wayland.title": "ใช้ Wayland แบบเนทีฟ",
   "settings.general.row.wayland.description": "ปิดใช้งาน X11 fallback บน Wayland ต้องรีสตาร์ท",
   "settings.general.row.wayland.tooltip": "บน Linux ที่มีจอภาพรีเฟรชเรตแบบผสม Wayland แบบเนทีฟอาจเสถียรกว่า",

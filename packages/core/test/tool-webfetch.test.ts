@@ -4,19 +4,16 @@ import * as TestClock from "effect/testing/TestClock"
 import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { PermissionV2 } from "@opencode-ai/core/permission"
 import { SessionV2 } from "@opencode-ai/core/session"
-import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
-import { ToolRegistry } from "@opencode-ai/core/tool-registry"
+import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { WebFetchTool } from "@opencode-ai/core/tool/webfetch"
 import { testEffect } from "./lib/effect"
+import { toolIdentity, executeTool, settleTool, toolDefinitions } from "./lib/tool"
 
 const sessionID = SessionV2.ID.make("ses_webfetch_test")
 const requests: Array<{ readonly url: string; readonly headers: Record<string, string> }> = []
 const assertions: PermissionV2.AssertInput[] = []
-const truncations: ToolOutputStore.TruncateInput[] = []
 let respond = (_request: HttpClientRequest.HttpClientRequest) =>
   Effect.succeed(new Response("hello", { headers: { "content-type": "text/plain" } }))
-let truncate = (input: ToolOutputStore.TruncateInput): Effect.Effect<ToolOutputStore.TruncateResult> =>
-  Effect.succeed({ content: input.content, truncated: false })
 
 const http = Layer.succeed(
   HttpClient.HttpClient,
@@ -38,42 +35,31 @@ const permission = Layer.succeed(
     list: () => Effect.die("unused"),
   }),
 )
-const resources = Layer.succeed(
-  ToolOutputStore.Service,
-  ToolOutputStore.Service.of({
-    limits: () => Effect.die("unused"),
-    write: () => Effect.die("unused"),
-    truncate: (input) => Effect.sync(() => truncations.push(input)).pipe(Effect.andThen(truncate(input))),
-    read: () => Effect.die("unused"),
-    cleanup: () => Effect.die("unused"),
-  }),
-)
-const registry = ToolRegistry.layer.pipe(Layer.provide(permission))
-const webfetch = WebFetchTool.layer.pipe(Layer.provide(registry), Layer.provide(http), Layer.provide(resources))
-const it = testEffect(Layer.mergeAll(registry, permission, http, resources, webfetch))
+const registry = ToolRegistry.defaultLayer.pipe(Layer.provide(permission))
+const webfetch = WebFetchTool.layer.pipe(Layer.provide(registry), Layer.provide(permission), Layer.provide(http))
+const it = testEffect(Layer.mergeAll(registry, permission, http, webfetch))
 const fetchWebfetch = WebFetchTool.layer.pipe(
   Layer.provide(registry),
+  Layer.provide(permission),
   Layer.provide(FetchHttpClient.layer),
-  Layer.provide(resources),
 )
-const live = testEffect(Layer.mergeAll(registry, permission, FetchHttpClient.layer, resources, fetchWebfetch))
+const live = testEffect(Layer.mergeAll(registry, permission, FetchHttpClient.layer, fetchWebfetch))
 
 const reset = () => {
   requests.length = 0
   assertions.length = 0
-  truncations.length = 0
   respond = () => Effect.succeed(new Response("hello", { headers: { "content-type": "text/plain" } }))
-  truncate = (input) => Effect.succeed({ content: input.content, truncated: false })
 }
 
-const call = (input: typeof WebFetchTool.Parameters.Type, id = "call-webfetch") => ({
+const call = (input: typeof WebFetchTool.Input.Type, id = "call-webfetch") => ({
   sessionID,
+  ...toolIdentity,
   call: { type: "tool-call" as const, id, name: "webfetch", input },
 })
 
 describe("WebFetchTool helpers", () => {
   test("defaults format and rejects invalid timeout controls", () => {
-    const decode = Schema.decodeUnknownSync(WebFetchTool.Parameters)
+    const decode = Schema.decodeUnknownSync(WebFetchTool.Input)
     expect(decode({ url: "https://example.com" })).toEqual({ url: "https://example.com", format: "markdown" })
     expect(() => decode({ url: "https://example.com", timeout: 0 })).toThrow()
     expect(() => decode({ url: "https://example.com", timeout: WebFetchTool.MAX_TIMEOUT_SECONDS + 1 })).toThrow()
@@ -86,22 +72,22 @@ describe("WebFetchTool helpers", () => {
   })
 })
 
-describe("WebFetchTool contribution", () => {
+describe("WebFetchTool registration", () => {
   it.effect("registers and fetches an ordinary hostname HTTP URL without rewriting it", () =>
     Effect.gen(function* () {
       reset()
       const registry = yield* ToolRegistry.Service
       const url = "http://example.com/public"
 
-      expect((yield* registry.definitions()).map((tool) => tool.name)).toEqual(["webfetch"])
-      expect(yield* registry.settle(call({ url, format: "text", timeout: 4 }))).toEqual({
+      expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["webfetch"])
+      expect(yield* settleTool(registry, call({ url, format: "text", timeout: 4 }))).toEqual({
         result: { type: "text", value: "hello" },
         output: {
-          structured: { url, contentType: "text/plain", format: "text", output: "hello", truncated: false },
+          structured: { url, contentType: "text/plain", format: "text", output: "hello" },
           content: [{ type: "text", text: "hello" }],
         },
       })
-      expect(assertions).toEqual([
+      expect(assertions).toMatchObject([
         { sessionID, action: "webfetch", resources: [url], save: ["*"], metadata: { url, format: "text", timeout: 4 } },
       ])
       expect(requests).toMatchObject([{ url, headers: { accept: expect.stringContaining("text/plain;q=1.0") } }])
@@ -114,11 +100,11 @@ describe("WebFetchTool contribution", () => {
       const registry = yield* ToolRegistry.Service
       const url = "http://localhost/private"
 
-      expect(yield* registry.execute(call({ url, format: "text" }))).toEqual({
+      expect(yield* executeTool(registry, call({ url, format: "text" }))).toEqual({
         type: "text",
         value: "hello",
       })
-      expect(assertions).toEqual([
+      expect(assertions).toMatchObject([
         { sessionID, action: "webfetch", resources: [url], save: ["*"], metadata: { url, format: "text" } },
       ])
       expect(requests.map((request) => request.url)).toEqual([url])
@@ -142,8 +128,11 @@ describe("WebFetchTool contribution", () => {
           const registry = yield* ToolRegistry.Service
           const url = new URL("/redirect", server.url).toString()
 
-          expect(yield* registry.execute(call({ url, format: "text" }))).toEqual({ type: "text", value: "redirected" })
-          expect(assertions).toEqual([
+          expect(yield* executeTool(registry, call({ url, format: "text" }))).toEqual({
+            type: "text",
+            value: "redirected",
+          })
+          expect(assertions).toMatchObject([
             { sessionID, action: "webfetch", resources: [url], save: ["*"], metadata: { url, format: "text" } },
           ])
         }),
@@ -156,7 +145,7 @@ describe("WebFetchTool contribution", () => {
       reset()
       const registry = yield* ToolRegistry.Service
 
-      expect(yield* registry.execute(call({ url: "file:///etc/passwd", format: "text" }))).toEqual({
+      expect(yield* executeTool(registry, call({ url: "file:///etc/passwd", format: "text" }))).toEqual({
         type: "error",
         value: "Unable to fetch file:///etc/passwd",
       })
@@ -176,39 +165,33 @@ describe("WebFetchTool contribution", () => {
         )
       const registry = yield* ToolRegistry.Service
 
-      expect(yield* registry.execute(call({ url: "https://1.1.1.1", format: "markdown" }))).toEqual({
+      expect(yield* executeTool(registry, call({ url: "https://1.1.1.1", format: "markdown" }))).toEqual({
         type: "text",
         value: "# Hello\n\nworld",
       })
-      expect(yield* registry.execute(call({ url: "https://1.1.1.1", format: "text" }))).toEqual({
+      expect(yield* executeTool(registry, call({ url: "https://1.1.1.1", format: "text" }))).toEqual({
         type: "text",
         value: "Helloworld",
       })
     }),
   )
 
-  it.effect("exposes managed overflow through an opaque resource URI", () =>
+  it.effect("returns an error result when HTML-to-Markdown conversion throws", () =>
     Effect.gen(function* () {
       reset()
-      truncate = (input) =>
-        Effect.succeed({
-          content: "HEAD\n\n... output truncated; full content available as tool-output://opaque ...\n\nTAIL",
-          truncated: true,
-          resource: new ToolOutputStore.Resource({
-            uri: "tool-output://opaque",
-            mime: input.mime ?? "text/plain",
-            size: input.content.length,
+      respond = () =>
+        Effect.succeed(
+          new Response("<div>".repeat(10_000) + "content" + "</div>".repeat(10_000), {
+            headers: { "content-type": "text/html" },
           }),
-        })
+        )
       const registry = yield* ToolRegistry.Service
-      const settled = yield* registry.settle(call({ url: "https://1.1.1.1", format: "html" }, "call-overflow"))
+      const url = "https://1.1.1.1/deep-html"
 
-      expect(settled.result).toMatchObject({ type: "text", value: expect.stringContaining("tool-output://opaque") })
-      expect(settled.output?.structured).toMatchObject({
-        truncated: true,
-        resource: { uri: "tool-output://opaque", mime: "text/html" },
+      expect(yield* executeTool(registry, call({ url, format: "markdown" }))).toEqual({
+        type: "error",
+        value: `Unable to fetch ${url}`,
       })
-      expect(truncations).toEqual([{ sessionID, toolCallID: "call-overflow", content: "hello", mime: "text/html" }])
     }),
   )
 
@@ -222,7 +205,7 @@ describe("WebFetchTool contribution", () => {
             headers: { "content-type": "text/plain", "content-length": String(WebFetchTool.MAX_RESPONSE_BYTES + 1) },
           }),
         )
-      expect(yield* registry.execute(call({ url: "https://1.1.1.1/declared", format: "text" }))).toEqual({
+      expect(yield* executeTool(registry, call({ url: "https://1.1.1.1/declared", format: "text" }))).toEqual({
         type: "error",
         value: "Unable to fetch https://1.1.1.1/declared",
       })
@@ -231,7 +214,7 @@ describe("WebFetchTool contribution", () => {
         Effect.succeed(
           new Response("x".repeat(WebFetchTool.MAX_RESPONSE_BYTES + 1), { headers: { "content-type": "text/plain" } }),
         )
-      expect(yield* registry.execute(call({ url: "https://1.1.1.1/streamed", format: "text" }))).toEqual({
+      expect(yield* executeTool(registry, call({ url: "https://1.1.1.1/streamed", format: "text" }))).toEqual({
         type: "error",
         value: "Unable to fetch https://1.1.1.1/streamed",
       })
@@ -243,17 +226,16 @@ describe("WebFetchTool contribution", () => {
       reset()
       const registry = yield* ToolRegistry.Service
       respond = () => Effect.succeed(new Response("png", { headers: { "content-type": "image/png" } }))
-      expect(yield* registry.execute(call({ url: "https://1.1.1.1/image", format: "html" }))).toEqual({
+      expect(yield* executeTool(registry, call({ url: "https://1.1.1.1/image", format: "html" }))).toEqual({
         type: "error",
         value: "Unable to fetch https://1.1.1.1/image",
       })
 
       respond = () => Effect.succeed(new Response("pdf", { headers: { "content-type": "application/pdf" } }))
-      expect(yield* registry.execute(call({ url: "https://1.1.1.1/file", format: "html" }))).toEqual({
+      expect(yield* executeTool(registry, call({ url: "https://1.1.1.1/file", format: "html" }))).toEqual({
         type: "error",
         value: "Unable to fetch https://1.1.1.1/file",
       })
-      expect(truncations).toEqual([])
     }),
   )
 
@@ -269,7 +251,7 @@ describe("WebFetchTool contribution", () => {
         )
       const registry = yield* ToolRegistry.Service
 
-      expect(yield* registry.execute(call({ url: "https://1.1.1.1", format: "text" }))).toEqual({
+      expect(yield* executeTool(registry, call({ url: "https://1.1.1.1", format: "text" }))).toEqual({
         type: "text",
         value: "ok",
       })
@@ -284,9 +266,10 @@ describe("WebFetchTool contribution", () => {
       reset()
       respond = () => Effect.never
       const registry = yield* ToolRegistry.Service
-      const fiber = yield* registry
-        .execute(call({ url: "https://1.1.1.1/slow", format: "text", timeout: 1 }))
-        .pipe(Effect.forkChild)
+      const fiber = yield* executeTool(
+        registry,
+        call({ url: "https://1.1.1.1/slow", format: "text", timeout: 1 }),
+      ).pipe(Effect.forkChild)
       yield* TestClock.adjust(Duration.seconds(1))
 
       expect(yield* Fiber.join(fiber)).toEqual({ type: "error", value: "Unable to fetch https://1.1.1.1/slow" })

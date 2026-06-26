@@ -1,66 +1,31 @@
-import { ProjectCopy } from "@opencode-ai/core/project/copy"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { Schema } from "effect"
-import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
+import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "../middleware/authorization"
 import { InstanceContextMiddleware } from "../middleware/instance-context"
 import { WorkspaceRoutingMiddleware, WorkspaceRoutingQuery } from "../middleware/workspace-routing"
-import { described } from "./metadata"
 
-const root = "/experimental/project/:projectID/copy"
-
-export const CreatePayload = Schema.Struct({
-  strategy: ProjectCopy.StrategyID,
-  directory: ProjectCopy.CreateInput.fields.directory,
-})
-export const RemovePayload = Schema.Struct({
-  directory: ProjectCopy.RemoveInput.fields.directory,
+export const GenerateNamePayload = Schema.Struct({
+  context: Schema.optional(Schema.String),
 })
 
-export const ProjectCopyApi = HttpApi.make("projectCopy").add(
-  HttpApiGroup.make("projectCopy")
+export const ProjectCopyApi = HttpApi.make("projectCopyName").add(
+  HttpApiGroup.make("projectCopyName")
     .add(
-      HttpApiEndpoint.post("create", root, {
+      HttpApiEndpoint.post("generateName", "/experimental/project/:projectID/copy/generate-name", {
         params: { projectID: ProjectV2.ID },
         query: WorkspaceRoutingQuery,
-        payload: CreatePayload,
-        success: described(ProjectCopy.Copy, "Project copy created"),
-        error: HttpApiError.BadRequest,
+        payload: GenerateNamePayload,
+        success: Schema.Struct({ name: Schema.String }),
       }).annotateMerge(
         OpenApi.annotations({
-          identifier: "experimental.projectCopy.create",
-          summary: "Create project copy",
-          description: "Create a local physical copy of a project using the selected strategy.",
-        }),
-      ),
-      HttpApiEndpoint.delete("remove", root, {
-        params: { projectID: ProjectV2.ID },
-        query: WorkspaceRoutingQuery,
-        payload: RemovePayload,
-        success: described(HttpApiSchema.NoContent, "Project copy removed"),
-        error: HttpApiError.BadRequest,
-      }).annotateMerge(
-        OpenApi.annotations({
-          identifier: "experimental.projectCopy.remove",
-          summary: "Remove project copy",
-          description: "Remove a local physical copy of a project using the selected strategy.",
-        }),
-      ),
-      HttpApiEndpoint.post("refresh", `${root}/refresh`, {
-        params: { projectID: ProjectV2.ID },
-        query: WorkspaceRoutingQuery,
-        payload: HttpApiSchema.NoContent,
-        success: described(HttpApiSchema.NoContent, "Project copies refreshed"),
-        error: HttpApiError.BadRequest,
-      }).annotateMerge(
-        OpenApi.annotations({
-          identifier: "experimental.projectCopy.refresh",
-          summary: "Refresh project copies",
-          description: "Discover local project copies using one or all configured strategies.",
+          identifier: "experimental.projectCopy.generateName",
+          summary: "Generate project copy name",
+          description: "Generate a short name for a project copy from task context.",
         }),
       ),
     )
-    .annotateMerge(OpenApi.annotations({ title: "projectCopy", description: "Project copy management routes." }))
+    .annotateMerge(OpenApi.annotations({ title: "projectCopy", description: "Project copy naming routes." }))
     .middleware(InstanceContextMiddleware)
     .middleware(WorkspaceRoutingMiddleware)
     .middleware(Authorization),

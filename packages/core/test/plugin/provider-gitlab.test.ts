@@ -1,19 +1,45 @@
+import { AISDK } from "@opencode-ai/core/aisdk"
 import { describe, expect, mock } from "bun:test"
-import { Effect, Layer } from "effect"
-import { Auth } from "@opencode-ai/core/auth"
+import { Effect } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
-import { EventV2 } from "@opencode-ai/core/event"
-import { Location } from "@opencode-ai/core/location"
+import { ModelV2 } from "@opencode-ai/core/model"
 import { PluginV2 } from "@opencode-ai/core/plugin"
-import { AccountPlugin } from "@opencode-ai/core/plugin/account"
+import { PluginHost } from "@opencode-ai/core/plugin/host"
 import { GitLabPlugin } from "@opencode-ai/core/plugin/provider/gitlab"
 import { ProviderV2 } from "@opencode-ai/core/provider"
-import { AbsolutePath } from "@opencode-ai/core/schema"
-import { location } from "../fixture/location"
 import { testEffect } from "../lib/effect"
-import { it, model, npmLayer, withEnv } from "./provider-helper"
+import { PluginTestLayer } from "./fixture"
 
 const gitlabSDKOptions: Record<string, unknown>[] = []
+const it = testEffect(PluginTestLayer)
+
+const addPlugin = Effect.fn(function* () {
+  const plugin = yield* PluginV2.Service
+  const aisdk = yield* AISDK.Service
+  const host = yield* PluginHost.make(plugin)
+  yield* GitLabPlugin.effect(host)
+})
+
+function withEnv<A, E, R>(vars: Record<string, string | undefined>, effect: () => Effect.Effect<A, E, R>) {
+  return Effect.acquireUseRelease(
+    Effect.sync(() => {
+      const previous = Object.fromEntries(Object.keys(vars).map((key) => [key, process.env[key]]))
+      Object.entries(vars).forEach(([key, value]) => {
+        if (value === undefined) delete process.env[key]
+        else process.env[key] = value
+      })
+      return previous
+    }),
+    effect,
+    (previous) =>
+      Effect.sync(() =>
+        Object.entries(previous).forEach(([key, value]) => {
+          if (value === undefined) delete process.env[key]
+          else process.env[key] = value
+        }),
+      ),
+  )
+}
 
 void mock.module("gitlab-ai-provider", () => ({
   VERSION: "test-version",
@@ -28,17 +54,6 @@ void mock.module("gitlab-ai-provider", () => ({
   isWorkflowModel: (id: string) => id === "duo-workflow" || id === "duo-workflow-exact",
 }))
 
-const itWithAccount = testEffect(
-  Catalog.locationLayer.pipe(
-    Layer.provideMerge(Auth.defaultLayer),
-    Layer.provideMerge(EventV2.defaultLayer),
-    Layer.provideMerge(
-      Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make("/") }))),
-    ),
-    Layer.provideMerge(npmLayer),
-  ),
-)
-
 describe("GitLabPlugin", () => {
   it.effect("creates SDKs with legacy default instance URL, token env, headers, and feature flags", () =>
     withEnv(
@@ -50,12 +65,16 @@ describe("GitLabPlugin", () => {
         Effect.gen(function* () {
           gitlabSDKOptions.length = 0
           const plugin = yield* PluginV2.Service
-          yield* plugin.add(GitLabPlugin)
-          yield* plugin.trigger(
-            "aisdk.sdk",
-            { model: model("gitlab", "claude"), package: "gitlab-ai-provider", options: { name: "gitlab" } },
-            {},
-          )
+          const aisdk = yield* AISDK.Service
+          yield* addPlugin()
+          yield* aisdk.runSDK({
+            model: ModelV2.Info.make({
+              ...ModelV2.Info.empty(ProviderV2.ID.make("gitlab"), ModelV2.ID.make("claude")),
+              api: { id: ModelV2.ID.make("claude"), type: "aisdk", package: "test-provider" },
+            }),
+            package: "gitlab-ai-provider",
+            options: { name: "gitlab" },
+          })
           expect(gitlabSDKOptions).toHaveLength(1)
           expect(gitlabSDKOptions[0].instanceUrl).toBe("https://gitlab.com")
           expect(gitlabSDKOptions[0].apiKey).toBe("env-token")
@@ -83,12 +102,16 @@ describe("GitLabPlugin", () => {
         Effect.gen(function* () {
           gitlabSDKOptions.length = 0
           const plugin = yield* PluginV2.Service
-          yield* plugin.add(GitLabPlugin)
-          yield* plugin.trigger(
-            "aisdk.sdk",
-            { model: model("gitlab", "claude"), package: "gitlab-ai-provider", options: { name: "gitlab" } },
-            {},
-          )
+          const aisdk = yield* AISDK.Service
+          yield* addPlugin()
+          yield* aisdk.runSDK({
+            model: ModelV2.Info.make({
+              ...ModelV2.Info.empty(ProviderV2.ID.make("gitlab"), ModelV2.ID.make("claude")),
+              api: { id: ModelV2.ID.make("claude"), type: "aisdk", package: "test-provider" },
+            }),
+            package: "gitlab-ai-provider",
+            options: { name: "gitlab" },
+          })
           expect(gitlabSDKOptions[0].instanceUrl).toBe("https://env.gitlab.example")
         }),
     ),
@@ -104,28 +127,28 @@ describe("GitLabPlugin", () => {
         Effect.gen(function* () {
           gitlabSDKOptions.length = 0
           const plugin = yield* PluginV2.Service
-          yield* plugin.add(GitLabPlugin)
-          yield* plugin.trigger(
-            "aisdk.sdk",
-            {
-              model: model("gitlab", "claude"),
-              package: "gitlab-ai-provider",
-              options: {
-                name: "gitlab",
-                instanceUrl: "https://configured.gitlab.example",
-                apiKey: "configured-token",
-                aiGatewayHeaders: {
-                  "anthropic-beta": "configured-beta",
-                  "x-gitlab-test": "1",
-                },
-                featureFlags: {
-                  duo_agent_platform: false,
-                  custom_flag: true,
-                },
+          const aisdk = yield* AISDK.Service
+          yield* addPlugin()
+          yield* aisdk.runSDK({
+            model: ModelV2.Info.make({
+              ...ModelV2.Info.empty(ProviderV2.ID.make("gitlab"), ModelV2.ID.make("claude")),
+              api: { id: ModelV2.ID.make("claude"), type: "aisdk", package: "test-provider" },
+            }),
+            package: "gitlab-ai-provider",
+            options: {
+              name: "gitlab",
+              instanceUrl: "https://configured.gitlab.example",
+              apiKey: "configured-token",
+              aiGatewayHeaders: {
+                "anthropic-beta": "configured-beta",
+                "x-gitlab-test": "1",
+              },
+              featureFlags: {
+                duo_agent_platform: false,
+                custom_flag: true,
               },
             },
-            {},
-          )
+          })
           expect(gitlabSDKOptions[0].instanceUrl).toBe("https://configured.gitlab.example")
           expect(gitlabSDKOptions[0].apiKey).toBe("configured-token")
           expect(gitlabSDKOptions[0].aiGatewayHeaders).toMatchObject({
@@ -145,133 +168,45 @@ describe("GitLabPlugin", () => {
     Effect.gen(function* () {
       gitlabSDKOptions.length = 0
       const plugin = yield* PluginV2.Service
-      yield* plugin.add(GitLabPlugin)
-      const result = yield* plugin.trigger(
-        "aisdk.sdk",
-        { model: model("gitlab", "claude"), package: "@ai-sdk/openai", options: { name: "gitlab" } },
-        {},
-      )
+      const aisdk = yield* AISDK.Service
+      yield* addPlugin()
+      const result = yield* aisdk.runSDK({
+        model: ModelV2.Info.make({
+          ...ModelV2.Info.empty(ProviderV2.ID.make("gitlab"), ModelV2.ID.make("claude")),
+          api: { id: ModelV2.ID.make("claude"), type: "aisdk", package: "test-provider" },
+        }),
+        package: "@ai-sdk/openai",
+        options: { name: "gitlab" },
+      })
       expect(result.sdk).toBeUndefined()
       expect(gitlabSDKOptions).toHaveLength(0)
     }),
   )
 
-  itWithAccount.effect("uses active account API token over GITLAB_TOKEN", () =>
-    withEnv(
-      {
-        GITLAB_TOKEN: "env-token",
-      },
-      () =>
-        Effect.gen(function* () {
-          gitlabSDKOptions.length = 0
-          const plugin = yield* PluginV2.Service
-          const accounts = yield* Auth.Service
-          const catalog = yield* Catalog.Service
-          const events = yield* EventV2.Service
-          yield* accounts.create({
-            serviceID: Auth.ServiceID.make("gitlab"),
-            credential: new Auth.ApiKeyCredential({ type: "api", key: "account-token" }),
-          })
-          yield* plugin.add({
-            ...AccountPlugin,
-            effect: AccountPlugin.effect.pipe(
-              Effect.provideService(Auth.Service, accounts),
-              Effect.provideService(Catalog.Service, catalog),
-              Effect.provideService(EventV2.Service, events),
-              Effect.provideService(PluginV2.Service, plugin),
-            ),
-          })
-          yield* plugin.add(GitLabPlugin)
-          const transform = yield* catalog.transform()
-          yield* transform((catalog) => catalog.provider.update(ProviderV2.ID.make("gitlab"), () => {}))
-          const provider = yield* catalog.provider.get(ProviderV2.ID.make("gitlab"))
-          yield* plugin.trigger(
-            "aisdk.sdk",
-            {
-              model: model("gitlab", "claude"),
-              package: "gitlab-ai-provider",
-              options: provider.request.body,
-            },
-            {},
-          )
-          expect(gitlabSDKOptions[0].apiKey).toBe("account-token")
-        }),
-    ),
-  )
-
-  itWithAccount.effect("uses active account OAuth access token when no API token exists", () =>
-    withEnv(
-      {
-        GITLAB_TOKEN: undefined,
-      },
-      () =>
-        Effect.gen(function* () {
-          gitlabSDKOptions.length = 0
-          const plugin = yield* PluginV2.Service
-          const accounts = yield* Auth.Service
-          const catalog = yield* Catalog.Service
-          const events = yield* EventV2.Service
-          yield* accounts.create({
-            serviceID: Auth.ServiceID.make("gitlab"),
-            credential: new Auth.OAuthCredential({
-              type: "oauth",
-              refresh: "refresh-token",
-              access: "account-oauth-token",
-              expires: 9999999999999,
-            }),
-          })
-          yield* plugin.add({
-            ...AccountPlugin,
-            effect: AccountPlugin.effect.pipe(
-              Effect.provideService(Auth.Service, accounts),
-              Effect.provideService(Catalog.Service, catalog),
-              Effect.provideService(EventV2.Service, events),
-              Effect.provideService(PluginV2.Service, plugin),
-            ),
-          })
-          yield* plugin.add(GitLabPlugin)
-          const transform = yield* catalog.transform()
-          yield* transform((catalog) => catalog.provider.update(ProviderV2.ID.make("gitlab"), () => {}))
-          const provider = yield* catalog.provider.get(ProviderV2.ID.make("gitlab"))
-          yield* plugin.trigger(
-            "aisdk.sdk",
-            {
-              model: model("gitlab", "claude"),
-              package: "gitlab-ai-provider",
-              options: provider.request.body,
-            },
-            {},
-          )
-          expect(gitlabSDKOptions[0].apiKey).toBe("account-oauth-token")
-        }),
-    ),
-  )
-
   it.effect("uses workflowChat for duo workflow models and preserves selectedModelRef", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
+      const aisdk = yield* AISDK.Service
       const calls: [string, unknown][] = []
-      yield* plugin.add(GitLabPlugin)
-      const result = yield* plugin.trigger(
-        "aisdk.language",
-        {
-          model: model("gitlab", "duo-workflow-custom", {
-            request: {
-              headers: {},
-              body: { workflowRef: "ref", workflowDefinition: "definition" },
-            },
-          }),
-          sdk: {
-            workflowChat: (id: string, options: unknown) => {
-              calls.push([id, options])
-              return { id, options }
-            },
-            agenticChat: () => undefined,
+      yield* addPlugin()
+      const result = yield* aisdk.runLanguage({
+        model: ModelV2.Info.make({
+          ...ModelV2.Info.empty(ProviderV2.ID.make("gitlab"), ModelV2.ID.make("duo-workflow-custom")),
+          api: { id: ModelV2.ID.make("duo-workflow-custom"), type: "aisdk", package: "test-provider" },
+          request: {
+            headers: {},
+            body: { workflowRef: "ref", workflowDefinition: "definition" },
           },
-          options: { featureFlags: { configured: true } },
+        }),
+        sdk: {
+          workflowChat: (id: string, options: unknown) => {
+            calls.push([id, options])
+            return { id, options }
+          },
+          agenticChat: () => undefined,
         },
-        {},
-      )
+        options: { featureFlags: { configured: true } },
+      })
       expect(calls).toEqual([
         ["duo-workflow", { featureFlags: { configured: true }, workflowDefinition: "definition" }],
       ])
@@ -286,23 +221,23 @@ describe("GitLabPlugin", () => {
   it.effect("uses exact static workflow model ids when the provider recognizes them", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
+      const aisdk = yield* AISDK.Service
       const calls: [string, unknown][] = []
-      yield* plugin.add(GitLabPlugin)
-      const result = yield* plugin.trigger(
-        "aisdk.language",
-        {
-          model: model("gitlab", "duo-workflow-exact"),
-          sdk: {
-            workflowChat: (id: string, options: unknown) => {
-              calls.push([id, options])
-              return { id, options }
-            },
-            agenticChat: () => undefined,
+      yield* addPlugin()
+      const result = yield* aisdk.runLanguage({
+        model: ModelV2.Info.make({
+          ...ModelV2.Info.empty(ProviderV2.ID.make("gitlab"), ModelV2.ID.make("duo-workflow-exact")),
+          api: { id: ModelV2.ID.make("duo-workflow-exact"), type: "aisdk", package: "test-provider" },
+        }),
+        sdk: {
+          workflowChat: (id: string, options: unknown) => {
+            calls.push([id, options])
+            return { id, options }
           },
-          options: { featureFlags: { configured: true } },
+          agenticChat: () => undefined,
         },
-        {},
-      )
+        options: { featureFlags: { configured: true } },
+      })
       expect(calls).toEqual([
         ["duo-workflow-exact", { featureFlags: { configured: true }, workflowDefinition: undefined }],
       ])
@@ -313,28 +248,27 @@ describe("GitLabPlugin", () => {
   it.effect("uses provider feature flags instead of request feature flags", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
+      const aisdk = yield* AISDK.Service
       const calls: [string, unknown][] = []
-      yield* plugin.add(GitLabPlugin)
-      yield* plugin.trigger(
-        "aisdk.language",
-        {
-          model: model("gitlab", "duo-workflow-custom", {
-            request: {
-              headers: {},
-              body: { featureFlags: { request_flag: true } },
-            },
-          }),
-          sdk: {
-            workflowChat: (id: string, options: unknown) => {
-              calls.push([id, options])
-              return { id, options }
-            },
-            agenticChat: () => undefined,
+      yield* addPlugin()
+      yield* aisdk.runLanguage({
+        model: ModelV2.Info.make({
+          ...ModelV2.Info.empty(ProviderV2.ID.make("gitlab"), ModelV2.ID.make("duo-workflow-custom")),
+          api: { id: ModelV2.ID.make("duo-workflow-custom"), type: "aisdk", package: "test-provider" },
+          request: {
+            headers: {},
+            body: { featureFlags: { request_flag: true } },
           },
-          options: { featureFlags: { configured: true } },
+        }),
+        sdk: {
+          workflowChat: (id: string, options: unknown) => {
+            calls.push([id, options])
+            return { id, options }
+          },
+          agenticChat: () => undefined,
         },
-        {},
-      )
+        options: { featureFlags: { configured: true } },
+      })
       expect(calls).toEqual([["duo-workflow", { featureFlags: { configured: true }, workflowDefinition: undefined }]])
     }),
   )
@@ -342,31 +276,30 @@ describe("GitLabPlugin", () => {
   it.effect("uses agenticChat with provider aiGatewayHeaders and feature flags for normal models", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
+      const aisdk = yield* AISDK.Service
       const calls: [string, unknown][] = []
-      yield* plugin.add(GitLabPlugin)
-      yield* plugin.trigger(
-        "aisdk.language",
-        {
-          model: model("gitlab", "claude", {
-            request: { headers: { h: "v" }, body: {} },
-          }),
-          sdk: {
-            workflowChat: () => undefined,
-            agenticChat: (id: string, options: unknown) => {
-              const selected = options as {
-                aiGatewayHeaders?: Record<string, string>
-                featureFlags?: Record<string, boolean>
-              }
-              calls.push([
-                id,
-                { aiGatewayHeaders: { ...selected.aiGatewayHeaders }, featureFlags: { ...selected.featureFlags } },
-              ])
-            },
+      yield* addPlugin()
+      yield* aisdk.runLanguage({
+        model: ModelV2.Info.make({
+          ...ModelV2.Info.empty(ProviderV2.ID.make("gitlab"), ModelV2.ID.make("claude")),
+          api: { id: ModelV2.ID.make("claude"), type: "aisdk", package: "test-provider" },
+          request: { headers: { h: "v" }, body: {} },
+        }),
+        sdk: {
+          workflowChat: () => undefined,
+          agenticChat: (id: string, options: unknown) => {
+            const selected = options as {
+              aiGatewayHeaders?: Record<string, string>
+              featureFlags?: Record<string, boolean>
+            }
+            calls.push([
+              id,
+              { aiGatewayHeaders: { ...selected.aiGatewayHeaders }, featureFlags: { ...selected.featureFlags } },
+            ])
           },
-          options: { aiGatewayHeaders: { fallback: "header" }, featureFlags: { duo_agent_platform: true } },
         },
-        {},
-      )
+        options: { aiGatewayHeaders: { fallback: "header" }, featureFlags: { duo_agent_platform: true } },
+      })
       expect(calls).toEqual([
         ["claude", { aiGatewayHeaders: { fallback: "header" }, featureFlags: { duo_agent_platform: true } }],
       ])

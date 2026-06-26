@@ -8,6 +8,7 @@ import { mkdir } from "node:fs/promises"
 import path from "node:path"
 import { registerAdapter } from "../../src/control-plane/adapters"
 import { WorkspaceV2 } from "@opencode-ai/core/workspace"
+import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import type { WorkspaceAdapter } from "../../src/control-plane/types"
 import { Workspace } from "../../src/control-plane/workspace"
 import { InstanceRef, WorkspaceRef } from "../../src/effect/instance-ref"
@@ -53,7 +54,7 @@ const it = testEffect(
     InstanceLayer.layer,
     Project.defaultLayer,
     workspaceLayer,
-  ),
+  ).pipe(Layer.provide(Ripgrep.defaultLayer)),
 )
 
 const instanceContextTestLayer = Layer.mergeAll(
@@ -333,7 +334,7 @@ describe("HttpApi instance context middleware", () => {
         directory: workspaceDir,
       })
       yield* serveDisposeProbe()
-      const disposed = yield* waitDisposedEvent.pipe(Effect.forkScoped)
+      const disposed = yield* waitDisposedEvent.pipe(Effect.forkScoped({ startImmediately: true }))
 
       const response = yield* HttpClientRequest.post(`/dispose-probe?workspace=${workspace.id}`).pipe(
         HttpClient.execute,

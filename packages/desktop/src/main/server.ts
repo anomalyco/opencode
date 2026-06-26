@@ -2,11 +2,10 @@ import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { app, utilityProcess } from "electron"
 import type { Details } from "electron"
-import { DEFAULT_SERVER_URL_KEY, WSL_ENABLED_KEY } from "./constants"
+import { getLogger } from "./logging"
 import { getUserShell, loadShellEnv } from "./shell-env"
 import { getStore } from "./store"
-
-export type WslConfig = { enabled: boolean }
+import { DEFAULT_SERVER_URL_KEY } from "./store-keys"
 
 export type HealthCheck = { wait: Promise<void> }
 
@@ -42,19 +41,10 @@ export function setDefaultServerUrl(url: string | null) {
   getStore().delete(DEFAULT_SERVER_URL_KEY)
 }
 
-export function getWslConfig(): WslConfig {
-  const value = getStore().get(WSL_ENABLED_KEY)
-  return { enabled: typeof value === "boolean" ? value : false }
-}
-
-export function setWslConfig(config: WslConfig) {
-  getStore().set(WSL_ENABLED_KEY, config.enabled)
-}
-
 export function preferAppEnv(userDataPath: string) {
   const shell = process.platform === "win32" ? null : getUserShell()
   Object.assign(process.env, {
-    ...(shell ? loadShellEnv(shell) : null),
+    ...(shell ? loadShellEnv(shell, getLogger()) : null),
     OPENCODE_EXPERIMENTAL_ICON_DISCOVERY: "true",
     OPENCODE_EXPERIMENTAL_FILEWATCHER: "true",
     OPENCODE_CLIENT: "desktop",
@@ -223,6 +213,7 @@ function createSidecarEnv(): Record<string, string> {
   )
   delete env.DEBUG
   if (process.platform === "linux") delete env.LD_PRELOAD
+  if (!app.isPackaged) env.OPENCODE_DISABLE_CHANNEL_DB = "1"
   return env
 }
 
