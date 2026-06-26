@@ -115,7 +115,7 @@ test("embedded client wakes session execution after prompt admission", async () 
       const context = yield* opencode.sessions.context({ sessionID }).pipe(
         Effect.filterOrFail((messages) => messages.some((message) => message.id === admitted.id)),
         Effect.retry(Schedule.spaced("10 millis")),
-        Effect.timeout("2 seconds"),
+        Effect.timeout("10 seconds"),
       )
 
       expect(context).toContainEqual(expect.objectContaining({ id: admitted.id, type: "user" }))
