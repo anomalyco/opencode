@@ -1,6 +1,7 @@
 import type { BoxRenderable, TextareaRenderable, ScrollBoxRenderable } from "@opentui/core"
 import { pathToFileURL } from "bun"
 import fuzzysort from "fuzzysort"
+import os from "node:os"
 import path from "path"
 import { firstBy } from "remeda"
 import { createMemo, createResource, createEffect, onMount, onCleanup, Index, Show, createSignal } from "solid-js"
@@ -23,7 +24,13 @@ import { useFrecency } from "../../prompt/frecency"
 import { useBindings, useCommandSlashes, useOpencodeModeStack } from "../../keymap"
 import { displayCharAt, mentionTriggerIndex } from "../../prompt/display"
 import type { FileSystemEntry } from "@opencode-ai/sdk/v2"
-import { findReferenceAlias, findReferencePath, referenceMentionPath } from "./autocomplete-reference"
+import {
+  createFileSearchRequest,
+  fileSearchMentionPath,
+  findReferenceAlias,
+  withHomeReference,
+  withRootReference,
+} from "./autocomplete-reference"
 
 function removeLineRange(input: string) {
   const hashIndex = input.lastIndexOf("#")
@@ -240,21 +247,22 @@ export function Autocomplete(props: {
     }
   }
 
-  function createFilePart(
-    item: FileSystemEntry,
-    filePath: string,
-    lineRange?: { startLine: number; endLine?: number },
-  ) {
-    const urlObj = pathToFileURL(filePath)
+  function createFilePart(input: {
+    entry: FileSystemEntry
+    absolutePath: string
+    lineRange?: { startLine: number; endLine?: number }
+    sourcePath?: string
+  }) {
+    const urlObj = pathToFileURL(input.absolutePath)
     const filename =
-      lineRange && item.type !== "directory"
-        ? `${item.path}#${lineRange.startLine}${lineRange.endLine ? `-${lineRange.endLine}` : ""}`
-        : item.path
+      input.lineRange && input.entry.type !== "directory"
+        ? `${input.entry.path}#${input.lineRange.startLine}${input.lineRange.endLine ? `-${input.lineRange.endLine}` : ""}`
+        : input.entry.path
 
-    if (lineRange && item.type !== "directory") {
-      urlObj.searchParams.set("start", String(lineRange.startLine))
-      if (lineRange.endLine !== undefined) {
-        urlObj.searchParams.set("end", String(lineRange.endLine))
+    if (input.lineRange && input.entry.type !== "directory") {
+      urlObj.searchParams.set("start", String(input.lineRange.startLine))
+      if (input.lineRange.endLine !== undefined) {
+        urlObj.searchParams.set("end", String(input.lineRange.endLine))
       }
     }
 
@@ -262,7 +270,7 @@ export function Autocomplete(props: {
       filename,
       part: {
         type: "file" as const,
-        mime: item.type === "directory" ? "application/x-directory" : "text/plain",
+        mime: input.entry.type === "directory" ? "application/x-directory" : "text/plain",
         filename,
         url: urlObj.href,
         source: {
@@ -272,26 +280,29 @@ export function Autocomplete(props: {
             end: 0,
             value: "",
           },
-          path: item.path,
+          path: input.sourcePath ?? input.entry.path,
         },
       },
     }
   }
 
-  const references = createMemo(() => data.location.reference.list() ?? [])
+  const baseDirectory = createMemo(() => location()?.directory || sync.path.directory || paths.cwd)
+  const references = createMemo(() =>
+    withRootReference(withHomeReference(data.location.reference.list() ?? [], os.homedir()), path.parse(baseDirectory()).root),
+  )
 
   const referenceMatch = createMemo(() => {
     if (!store.visible || store.visible === "/") return
     return findReferenceAlias(extractLineRange(search()).baseQuery, references())
   })
 
-  const referencePathMatch = createMemo(() => {
+  const fileSearchRequest = createMemo(() => {
     if (!store.visible || store.visible === "/") return
-    return findReferencePath(extractLineRange(search()).baseQuery, references())
+    return createFileSearchRequest(extractLineRange(search()).baseQuery, baseDirectory(), references())
   })
 
-  function normalizeMentionPath(filePath: string) {
-    const baseDir = location()?.directory || sync.path.directory || paths.cwd
+  function toBaseRelativeMentionPath(filePath: string) {
+    const baseDir = baseDirectory()
     const absolute = path.resolve(filePath)
     const relative = path.relative(baseDir, absolute)
 
@@ -303,12 +314,16 @@ export function Autocomplete(props: {
   }
 
   function insertFileMention(input: { filePath: string; lineStart: number; lineEnd: number }) {
-    const item = normalizeMentionPath(input.filePath)
+    const mentionPath = toBaseRelativeMentionPath(input.filePath)
     const lineRange = {
       startLine: input.lineStart,
       endLine: input.lineEnd > input.lineStart ? input.lineEnd : undefined,
     }
-    const { filename, part } = createFilePart({ path: item, type: "file" }, input.filePath, lineRange)
+    const { filename, part } = createFilePart({
+      entry: { path: mentionPath, type: "file" },
+      absolutePath: input.filePath,
+      lineRange,
+    })
     const index = store.visible === "@" ? store.index : props.input().cursorOffset
 
     setStore("visible", false)
@@ -317,20 +332,21 @@ export function Autocomplete(props: {
   }
 
   const [files] = createResource(
-    () => ({ query: search(), location: location(), reference: referencePathMatch() }),
+    () => ({ query: search(), location: location(), request: fileSearchRequest() }),
     async (input) => {
       if (!store.visible || store.visible === "/") return []
-      const { lineRange, baseQuery } = extractLineRange(input.query ?? "")
-      const reference = input.reference
+      const { lineRange } = extractLineRange(input.query ?? "")
+      const request = input.request
 
-      if (!reference && referenceMatch()) return []
+      if (!request) return []
+      if (!request.reference && referenceMatch()) return []
 
       // Get files from SDK
       const result = await sdk.client.v2.fs.find({
-        query: reference?.query ?? baseQuery,
+        query: request.query,
         limit: "20",
         location: {
-          directory: reference?.reference.path ?? input.location?.directory,
+          directory: request.directory,
           workspace: input.location?.workspaceID ?? project.workspace.current(),
         },
       })
@@ -343,12 +359,14 @@ export function Autocomplete(props: {
         const width = props.anchor().width - 4
         options.push(
           ...result.data.data.map((item): AutocompleteOption => {
-            const mentionPath = reference ? referenceMentionPath(reference.reference.name, item.path) : item.path
-            const { filename, part } = createFilePart(
-              { ...item, path: mentionPath },
-              path.join(result.data.location.directory, item.path),
+            const mentionPath = fileSearchMentionPath(request, item.path)
+            const filePath = path.join(result.data.location.directory, item.path)
+            const { filename, part } = createFilePart({
+              entry: { ...item, path: mentionPath },
+              absolutePath: filePath,
               lineRange,
-            )
+              sourcePath: request.reference ? filePath : mentionPath,
+            })
             return {
               display: Locale.truncateMiddle(filename, width),
               value: filename,
@@ -482,13 +500,13 @@ export function Autocomplete(props: {
   const options = createMemo((prev: AutocompleteOption[] | undefined) => {
     const filesValue = files()
     const referenceMatchValue = referenceMatch()
-    const referencePathMatchValue = referencePathMatch()
+    const fileSearchRequestValue = fileSearchRequest()
     const agentsValue = agents()
     const referenceAliasesValue = referenceAliases()
     const commandsValue = commands()
     const searchValue = search()
 
-    if (store.visible === "@" && referenceMatchValue && !referencePathMatchValue) {
+    if (store.visible === "@" && referenceMatchValue && !fileSearchRequestValue?.reference) {
       return referenceAliasesValue.filter((item) => item.display === `@${referenceMatchValue.name}`)
     }
 
@@ -506,7 +524,7 @@ export function Autocomplete(props: {
       return prev
     }
 
-    if (store.visible === "@" && referencePathMatchValue) {
+    if (store.visible === "@" && fileSearchRequestValue?.reference) {
       return fileOptions
     }
 
@@ -575,7 +593,7 @@ export function Autocomplete(props: {
     const input = props.input()
     const currentCursorOffset = input.cursorOffset
 
-    const displayText = (selected.value ?? selected.display).trimEnd()
+    const displayText = (selected.path ?? selected.value ?? selected.display).trimEnd()
     const path = displayText.startsWith("@") ? displayText.slice(1) : displayText
 
     input.cursorOffset = store.index
@@ -584,7 +602,7 @@ export function Autocomplete(props: {
     const endCursor = input.logicalCursor
 
     input.deleteRange(startCursor.row, startCursor.col, endCursor.row, endCursor.col)
-    input.insertText("@" + path + "/")
+    input.insertText("@" + path.replace(/\/+$/, "") + "/")
 
     setStore("selected", 0)
   }

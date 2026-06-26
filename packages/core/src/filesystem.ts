@@ -1,11 +1,12 @@
 export * as FileSystem from "./filesystem"
 
 import path from "path"
-import { Context, Effect, Layer, Schema } from "effect"
+import { Context, Effect, Layer, Schema, Scope } from "effect"
 import { FSUtil } from "./fs-util"
 import { Location } from "./location"
 import { PositiveInt, RelativePath } from "./schema"
 import { FileSystemSearch } from "./filesystem/search"
+import { Ripgrep } from "./ripgrep"
 import { Entry, FileSystem, FindInput, Match } from "@opencode-ai/schema/filesystem"
 export { Entry, Match, Submatch } from "@opencode-ai/schema/filesystem"
 
@@ -60,8 +61,23 @@ const baseLayer = Layer.effect(
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
     const location = yield* Location.Service
-    const search = yield* FileSystemSearch.Service
+    const ripgrep = yield* Ripgrep.Service
+    const scope = yield* Scope.Scope
     const root = yield* fs.realPath(location.directory).pipe(Effect.orDie)
+    const search = yield* Effect.cached(
+      Layer.buildWithScope(
+        FileSystemSearch.locationLayer.pipe(
+          Layer.provide(
+            Layer.mergeAll(
+              Layer.succeed(FSUtil.Service, fs),
+              Layer.succeed(Location.Service, location),
+              Layer.succeed(Ripgrep.Service, ripgrep),
+            ),
+          ),
+        ),
+        scope,
+      ).pipe(Effect.map((context) => Context.get(context, FileSystemSearch.Service))),
+    )
     const resolve = Effect.fnUntraced(function* (input?: RelativePath) {
       const absolute = path.resolve(location.directory, input ?? ".")
       if (!FSUtil.contains(location.directory, absolute))
@@ -70,46 +86,75 @@ const baseLayer = Layer.effect(
       if (!FSUtil.contains(root, real)) return yield* Effect.die(new Error("Path escapes the location"))
       return { absolute, real, directory: location.directory, root }
     })
+    const list: Interface["list"] = Effect.fn("FileSystem.list")(function* (input = {}) {
+      const target = yield* resolve(input.path)
+      const info = yield* fs.stat(target.real).pipe(Effect.orDie)
+      if (info.type !== "Directory") return yield* Effect.die(new Error("Path is not a directory"))
+      return yield* fs.readDirectoryEntries(target.real).pipe(
+        Effect.orDie,
+        Effect.map((items) =>
+          items
+            .flatMap((item) => {
+              if (item.type !== "file" && item.type !== "directory") return []
+              const absolute = path.join(target.absolute, item.name)
+              const relative = path.relative(target.directory, absolute)
+              return [
+                Entry.make({
+                  path: RelativePath.make(relative + (item.type === "directory" ? path.sep : "")),
+                  type: item.type,
+                }),
+              ]
+            })
+            .sort(compareEntry),
+        ),
+      )
+    })
+    const find: Interface["find"] = Effect.fn("FileSystem.find")(function* (input) {
+      if (input.query.trim() === "") {
+        const entries = yield* list()
+        return entries
+          .filter((entry) => input.type === undefined || entry.type === input.type)
+          .slice(0, input.limit ?? 50)
+      }
+      const service = yield* search
+      return yield* service.find(input)
+    })
+    const glob: Interface["glob"] = Effect.fn("FileSystem.glob")(function* (input) {
+      const service = yield* search
+      return yield* service.glob(input)
+    })
+    const grep: Interface["grep"] = Effect.fn("FileSystem.grep")(function* (input) {
+      const service = yield* search
+      return yield* service.grep(input)
+    })
+    const read: Interface["read"] = Effect.fn("FileSystem.read")(function* (input) {
+      const target = yield* resolve(input.path)
+      const info = yield* fs.stat(target.real).pipe(Effect.orDie)
+      if (info.type !== "File") return yield* Effect.die(new Error("Path is not a file"))
+      return {
+        content: yield* fs.readFile(target.real).pipe(Effect.orDie),
+        mime: FSUtil.mimeType(target.real),
+      }
+    })
     return Service.of({
-      find: search.find,
-      glob: search.glob,
-      grep: search.grep,
-      read: Effect.fn("FileSystem.read")(function* (input) {
-        const target = yield* resolve(input.path)
-        const info = yield* fs.stat(target.real).pipe(Effect.orDie)
-        if (info.type !== "File") return yield* Effect.die(new Error("Path is not a file"))
-        return {
-          content: yield* fs.readFile(target.real).pipe(Effect.orDie),
-          mime: FSUtil.mimeType(target.real),
-        }
-      }),
-      list: Effect.fn("FileSystem.list")(function* (input = {}) {
-        const target = yield* resolve(input.path)
-        const info = yield* fs.stat(target.real).pipe(Effect.orDie)
-        if (info.type !== "Directory") return yield* Effect.die(new Error("Path is not a directory"))
-        return yield* fs.readDirectoryEntries(target.real).pipe(
-          Effect.orDie,
-          Effect.map((items) =>
-            items
-              .flatMap((item) => {
-                if (item.type !== "file" && item.type !== "directory") return []
-                const absolute = path.join(target.absolute, item.name)
-                const relative = path.relative(target.directory, absolute)
-                return [
-                  Entry.make({
-                    path: RelativePath.make(relative + (item.type === "directory" ? path.sep : "")),
-                    type: item.type,
-                  }),
-                ]
-              })
-              .sort((a, b) => (a.type === b.type ? a.path.localeCompare(b.path) : a.type === "directory" ? -1 : 1)),
-          ),
-        )
-      }),
+      find,
+      glob,
+      grep,
+      read,
+      list,
     })
   }),
 )
 
-export const layer = baseLayer.pipe(Layer.provide(FileSystemSearch.locationLayer), Layer.provide(FSUtil.defaultLayer))
+export const layer = baseLayer.pipe(Layer.provide(FSUtil.defaultLayer))
 
 export const locationLayer = layer
+
+function compareEntry(a: Entry, b: Entry) {
+  if (a.type !== b.type) return a.type === "directory" ? -1 : 1
+  return hiddenRank(a) - hiddenRank(b) || a.path.localeCompare(b.path)
+}
+
+function hiddenRank(entry: Entry) {
+  return path.basename(entry.path).startsWith(".") ? 1 : 0
+}
