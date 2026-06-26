@@ -41,7 +41,7 @@ export function DialogModel(props: { providerID?: string }) {
             description: provider.name,
             category,
             disabled: provider.id === "opencode" && model.id.includes("-nano"),
-            footer: model.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
+            footer: modelPriceFooter(provider.id, model.cost),
             onSelect: () => {
               onSelect(provider.id, model.id)
             },
@@ -79,7 +79,7 @@ export function DialogModel(props: { providerID?: string }) {
               : undefined,
             category: connected() ? provider.name : undefined,
             disabled: provider.id === "opencode" && model.includes("-nano"),
-            footer: info.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
+            footer: modelPriceFooter(provider.id, info.cost),
             onSelect() {
               onSelect(provider.id, model)
             },
@@ -178,6 +178,24 @@ export function DialogModel(props: { providerID?: string }) {
       current={local.model.current()}
     />
   )
+}
+
+// Costs are stored as USD per 1M tokens. Trim to at most 2 decimals so prices
+// read as "$1.4" / "$5" / "$0.27" rather than "$1.40" / "$5.00".
+function formatModelPrice(value: number): string {
+  return `$${Math.round(value * 100) / 100}`
+}
+
+// Right-aligned price column shown on each picker row: "$<input> / $<output>"
+// per 1M tokens. opencode's free models keep their "Free" label, and models
+// without a positive input price show no footer.
+export function modelPriceFooter(
+  providerID: string,
+  cost: { input?: number; output?: number } | undefined,
+): string | undefined {
+  const input = cost?.input ?? 0
+  if (input === 0) return providerID === "opencode" ? "Free" : undefined
+  return `${formatModelPrice(input)} / ${formatModelPrice(cost?.output ?? 0)}`
 }
 
 export function sortModelOptions<T extends { footer?: string; releaseDate: string | number; title: string }>(

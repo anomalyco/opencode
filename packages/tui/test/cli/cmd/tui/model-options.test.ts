@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { sortModelOptions } from "../../../../src/component/dialog-model"
+import { modelPriceFooter, sortModelOptions } from "../../../../src/component/dialog-model"
 
 describe("sortModelOptions", () => {
   test("orders provider-scoped model choices by newest release first", () => {
@@ -26,5 +26,23 @@ describe("sortModelOptions", () => {
     )
 
     expect(sorted.map((model) => model.title)).toEqual(["Alpha", "Gamma", "Beta"])
+  })
+})
+
+describe("modelPriceFooter", () => {
+  test("formats input / output price per 1M tokens, trimming trailing zeros", () => {
+    expect(modelPriceFooter("mammouth-ai", { input: 1.4, output: 4.4 })).toBe("$1.4 / $4.4")
+    expect(modelPriceFooter("mammouth-ai", { input: 5, output: 25 })).toBe("$5 / $25")
+    expect(modelPriceFooter("mammouth-ai", { input: 1.75, output: 14 })).toBe("$1.75 / $14")
+    expect(modelPriceFooter("mammouth-ai", { input: 0.27, output: 0.4 })).toBe("$0.27 / $0.4")
+  })
+
+  test("keeps the Free label for opencode zero-cost models", () => {
+    expect(modelPriceFooter("opencode", { input: 0, output: 0 })).toBe("Free")
+  })
+
+  test("shows no footer for non-opencode models without a price", () => {
+    expect(modelPriceFooter("mammouth-ai", { input: 0, output: 0 })).toBeUndefined()
+    expect(modelPriceFooter("mammouth-ai", undefined)).toBeUndefined()
   })
 })
