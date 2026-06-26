@@ -1,6 +1,8 @@
 import type { APIEvent } from "@solidjs/start/server"
 import { Resource } from "@opencode-ai/console-resource"
 
+const dataPath = "/data"
+
 export async function statsProxy(evt: APIEvent) {
   const req = evt.request.clone()
   const targetUrl = new URL(req.url)
@@ -8,8 +10,12 @@ export async function statsProxy(evt: APIEvent) {
   targetUrl.hostname = Resource.App.stage === "production" ? "stats.opencode.ai" : "stats.dev.opencode.ai"
   targetUrl.port = ""
 
-  if (targetUrl.pathname.startsWith("/stats/_build/") || targetUrl.pathname === "/stats/banner.png") {
-    targetUrl.pathname = targetUrl.pathname.slice("/stats".length)
+  if (
+    targetUrl.pathname.startsWith(`${dataPath}/_build/`) ||
+    targetUrl.pathname === `${dataPath}/banner.jpg` ||
+    targetUrl.pathname === `${dataPath}/banner.png`
+  ) {
+    targetUrl.pathname = targetUrl.pathname.slice(dataPath.length)
   }
 
   const response = await fetch(targetUrl, {
@@ -32,6 +38,17 @@ export async function statsProxy(evt: APIEvent) {
   })
 }
 
+export function statsRedirect(evt: APIEvent) {
+  const url = new URL(evt.request.url)
+  url.pathname = `${dataPath}${url.pathname.slice("/stats".length)}`
+  return new Response(null, {
+    status: 308,
+    headers: {
+      Location: url.toString(),
+    },
+  })
+}
+
 function rewriteStatsHtml(html: string) {
-  return html.replaceAll('"/_build/', '"/stats/_build/').replaceAll("'/_build/", "'/stats/_build/")
+  return html.replaceAll('"/_build/', `"${dataPath}/_build/`).replaceAll("'/_build/", `'${dataPath}/_build/`)
 }

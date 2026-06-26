@@ -1,3 +1,4 @@
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import { Session } from "./session"
@@ -5,7 +6,6 @@ import { SessionID, MessageID, PartID } from "./schema"
 import { Provider } from "@/provider/provider"
 import { MessageV2 } from "./message-v2"
 import { Token } from "@/util/token"
-import { Log } from "@opencode-ai/core/util/log"
 import { SessionProcessor } from "./processor"
 import { Agent } from "@/agent/agent"
 import { Plugin } from "@/plugin"
@@ -13,29 +13,17 @@ import { Config } from "@/config/config"
 import { NotFoundError } from "@/storage/storage"
 
 import { Effect, Layer, Context } from "effect"
-import * as DateTime from "effect/DateTime"
 import { InstanceState } from "@/effect/instance-state"
 import { isOverflow as overflow, usable } from "./overflow"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
-import { SessionEvent } from "@opencode-ai/core/session/event"
-import { SessionMessage } from "@opencode-ai/core/session/message"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
-import { EventV2 } from "@opencode-ai/core/event"
 import { buildPrompt } from "@opencode-ai/core/session/compaction"
+import { SessionCompactionEvent } from "@opencode-ai/schema/session-compaction-event"
 
-const log = Log.create({ service: "session.compaction" })
-
-export const Event = {
-  Compacted: EventV2.define({
-    type: "session.compacted",
-    schema: {
-      sessionID: SessionID,
-    },
-  }),
-}
+export const Event = SessionCompactionEvent
 
 export const PRUNE_MINIMUM = 20_000
 export const PRUNE_PROTECT = 40_000
@@ -237,7 +225,9 @@ export const layer = Layer.effect(
           estimate,
         })
         if (split) keep = split
-        else if (!keep) log.info("tail fallback", { budget, size, total })
+        else if (!keep) {
+          yield* Effect.logInfo("tail fallback", { budget, size, total })
+        }
         break
       }
 
@@ -253,7 +243,7 @@ export const layer = Layer.effect(
     const prune = Effect.fn("SessionCompaction.prune")(function* (input: { sessionID: SessionID }) {
       const cfg = yield* config.get()
       if (!cfg.compaction?.prune) return
-      log.info("pruning")
+      yield* Effect.logInfo("pruning")
 
       const msgs = yield* session
         .messages({ sessionID: input.sessionID })
@@ -284,7 +274,7 @@ export const layer = Layer.effect(
         }
       }
 
-      log.info("found", { pruned, total })
+      yield* Effect.logInfo("found", { pruned, total })
       if (pruned > PRUNE_MINIMUM) {
         for (const part of toPrune) {
           if (part.state.status === "completed") {
@@ -292,7 +282,7 @@ export const layer = Layer.effect(
             yield* session.updatePart(part)
           }
         }
-        log.info("pruned", { count: toPrune.length })
+        yield* Effect.logInfo("pruned", { count: toPrune.length })
       }
     })
 
@@ -362,18 +352,6 @@ export const layer = Layer.effect(
         stripMedia: true,
         toolOutputMaxChars: TOOL_OUTPUT_MAX_CHARS,
       })
-      const tailIndex = selected.tail_start_id
-        ? history.findIndex((message) => message.info.id === selected.tail_start_id)
-        : -1
-      const recent =
-        tailIndex < 0
-          ? ""
-          : JSON.stringify(
-              yield* MessageV2.toModelMessagesEffect(history.slice(tailIndex), model, {
-                stripMedia: true,
-                toolOutputMaxChars: TOOL_OUTPUT_MAX_CHARS,
-              }),
-            )
       const ctx = yield* InstanceState.context
       const msg: SessionV1.Assistant = {
         id: MessageID.ascending(),
@@ -527,25 +505,6 @@ export const layer = Layer.effect(
 
       if (processor.message.error) return "stop"
       if (result === "continue") {
-        const summary = summaryText(
-          (yield* session.messages({ sessionID: input.sessionID }).pipe(Effect.orDie)).find(
-            (item) => item.info.id === msg.id,
-          ) ?? {
-            info: msg,
-            parts: [],
-          },
-        )
-        if (flags.experimentalEventSystem) {
-          if (summary)
-            yield* events.publish(SessionEvent.Compaction.Ended, {
-              sessionID: input.sessionID,
-              messageID: SessionMessage.ID.make(input.parentID),
-              timestamp: DateTime.makeUnsafe(Date.now()),
-              reason: input.auto ? "auto" : "manual",
-              text: summary ?? "",
-              recent,
-            })
-        }
         yield* events.publish(Event.Compacted, { sessionID: input.sessionID })
       }
       return result
@@ -574,14 +533,6 @@ export const layer = Layer.effect(
         auto: input.auto,
         overflow: input.overflow,
       })
-      if (flags.experimentalEventSystem) {
-        yield* events.publish(SessionEvent.Compaction.Started, {
-          sessionID: input.sessionID,
-          messageID: SessionMessage.ID.make(msg.id),
-          timestamp: DateTime.makeUnsafe(Date.now()),
-          reason: input.auto ? "auto" : "manual",
-        })
-      }
     })
 
     return Service.of({
@@ -605,5 +556,20 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(EventV2Bridge.defaultLayer),
   ),
 )
+
+export const node = LayerNode.make({
+  service: Service,
+  layer: layer,
+  deps: [
+    Config.node,
+    Session.node,
+    Agent.node,
+    Plugin.node,
+    SessionProcessor.node,
+    Provider.node,
+    EventV2Bridge.node,
+    RuntimeFlags.node,
+  ],
+})
 
 export * as SessionCompaction from "./compaction"

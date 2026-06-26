@@ -34,8 +34,11 @@ export class SizeError extends Schema.TaggedErrorClass<SizeError>()("Image.SizeE
 export interface Interface {
   readonly normalize: (
     resource: string,
-    content: FileSystem.BinaryContent,
-  ) => Effect.Effect<FileSystem.BinaryContent, ResizerUnavailableError | DecodeError | SizeError>
+    content: FileSystem.Content & { readonly encoding: "base64" },
+  ) => Effect.Effect<
+    FileSystem.Content & { readonly encoding: "base64" },
+    ResizerUnavailableError | DecodeError | SizeError
+  >
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Image") {}
@@ -50,7 +53,10 @@ export const layer = Layer.effect(
         catch: () => new ResizerUnavailableError(),
       }).pipe(Effect.flatMap((adapter) => adapter.make)),
     )
-    const normalize = Effect.fn("Image.normalize")(function* (resource: string, content: FileSystem.BinaryContent) {
+    const normalize = Effect.fn("Image.normalize")(function* (
+      resource: string,
+      content: FileSystem.Content & { readonly encoding: "base64" },
+    ) {
       const image = Object.assign(
         {},
         ...(yield* config.entries()).flatMap((entry) =>

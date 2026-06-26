@@ -1,11 +1,8 @@
 import { EffectBridge } from "@/effect/bridge"
 import type { InstanceContext } from "@/project/instance-context"
 import { InstanceStore } from "@/project/instance-store"
-import * as Log from "@opencode-ai/core/util/log"
 import { Effect } from "effect"
 import { HttpEffect, HttpMiddleware, HttpServerRequest } from "effect/unstable/http"
-
-const log = Log.create({ service: "server" })
 
 type MarkedInstance = {
   ctx: InstanceContext
@@ -51,7 +48,7 @@ export const disposeMiddleware: HttpMiddleware.HttpMiddleware = (effect) =>
     if (!marked) return response
     disposeAfterResponse.delete(request.source)
     yield* Effect.uninterruptible(marked.bridge.run(marked.store.dispose(marked.ctx))).pipe(
-      Effect.catchCause((cause) => Effect.sync(() => log.warn("instance disposal failed", { cause }))),
+      Effect.catchCause((cause) => Effect.logWarning("instance disposal failed", { cause })),
     )
     return response
   })

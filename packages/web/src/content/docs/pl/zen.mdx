@@ -77,6 +77,7 @@ Możesz też uzyskać dostęp do naszych modeli przez poniższe endpointy API.
 | GPT 5                  | gpt-5                  | `https://opencode.ai/zen/v1/responses`               | `@ai-sdk/openai`            |
 | GPT 5 Codex            | gpt-5-codex            | `https://opencode.ai/zen/v1/responses`               | `@ai-sdk/openai`            |
 | GPT 5 Nano             | gpt-5-nano             | `https://opencode.ai/zen/v1/responses`               | `@ai-sdk/openai`            |
+| Claude Fable 5         | claude-fable-5         | `https://opencode.ai/zen/v1/messages`                | `@ai-sdk/anthropic`         |
 | Claude Opus 4.8        | claude-opus-4-8        | `https://opencode.ai/zen/v1/messages`                | `@ai-sdk/anthropic`         |
 | Claude Opus 4.7        | claude-opus-4-7        | `https://opencode.ai/zen/v1/messages`                | `@ai-sdk/anthropic`         |
 | Claude Opus 4.6        | claude-opus-4-6        | `https://opencode.ai/zen/v1/messages`                | `@ai-sdk/anthropic`         |
@@ -94,9 +95,11 @@ Możesz też uzyskać dostęp do naszych modeli przez poniższe endpointy API.
 | Qwen3.7 Plus           | qwen3.7-plus           | `https://opencode.ai/zen/v1/messages`                | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus           | qwen3.6-plus           | `https://opencode.ai/zen/v1/messages`                | `@ai-sdk/anthropic`         |
 | Qwen3.5 Plus           | qwen3.5-plus           | `https://opencode.ai/zen/v1/messages`                | `@ai-sdk/anthropic`         |
+| DeepSeek V4 Pro        | deepseek-v4-pro        | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Flash      | deepseek-v4-flash      | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | MiniMax M2.7           | minimax-m2.7           | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | MiniMax M2.5           | minimax-m2.5           | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
+| GLM 5.2                | glm-5.2                | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | GLM 5.1                | glm-5.1                | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | GLM 5                  | glm-5                  | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | Kimi K2.5              | kimi-k2.5              | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
@@ -104,6 +107,7 @@ Możesz też uzyskać dostęp do naszych modeli przez poniższe endpointy API.
 | Grok Build 0.1         | grok-build-0.1         | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | Big Pickle             | big-pickle             | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | MiMo-V2.5 Free         | mimo-v2.5-free         | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
+| North Mini Code Free   | north-mini-code-free   | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | Nemotron 3 Ultra Free  | nemotron-3-ultra-free  | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Flash Free | deepseek-v4-flash-free | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 
@@ -132,9 +136,11 @@ Obsługujemy model pay-as-you-go. Poniżej znajdują się ceny **za 1M tokenów*
 | Big Pickle                        | Free    | Free    | Free           | -              |
 | DeepSeek V4 Flash Free            | Free    | Free    | Free           | -              |
 | MiMo-V2.5 Free                    | Free    | Free    | Free           | -              |
+| North Mini Code Free              | Free    | Free    | Free           | -              |
 | Nemotron 3 Ultra Free             | Free    | Free    | Free           | -              |
 | MiniMax M2.7                      | $0.30   | $1.20   | $0.06          | $0.375         |
 | MiniMax M2.5                      | $0.30   | $1.20   | $0.06          | $0.375         |
+| GLM 5.2                           | $1.40   | $4.40   | $0.26          | -              |
 | GLM 5.1                           | $1.40   | $4.40   | $0.26          | -              |
 | GLM 5                             | $1.00   | $3.20   | $0.20          | -              |
 | Kimi K2.5                         | $0.60   | $3.00   | $0.10          | -              |
@@ -143,8 +149,10 @@ Obsługujemy model pay-as-you-go. Poniżej znajdują się ceny **za 1M tokenów*
 | Qwen3.7 Plus                      | $0.40   | $1.60   | $0.04          | $0.50          |
 | Qwen3.6 Plus                      | $0.50   | $3.00   | $0.05          | $0.625         |
 | Qwen3.5 Plus                      | $0.20   | $1.20   | $0.02          | $0.25          |
-| DeepSeek V4 Flash                 | $0.14   | $0.28   | $0.03          | -              |
+| DeepSeek V4 Pro                   | $1.74   | $3.48   | $0.145         | -              |
+| DeepSeek V4 Flash                 | $0.14   | $0.28   | $0.028         | -              |
 | Grok Build 0.1                    | $1.00   | $2.00   | $0.20          | -              |
+| Claude Fable 5                    | $10.00  | $50.00  | $1.00          | $12.50         |
 | Claude Opus 4.8                   | $5.00   | $25.00  | $0.50          | $6.25          |
 | Claude Opus 4.7                   | $5.00   | $25.00  | $0.50          | $6.25          |
 | Claude Opus 4.6                   | $5.00   | $25.00  | $0.50          | $6.25          |
@@ -191,6 +199,7 @@ Darmowe modele:
 
 - DeepSeek V4 Flash Free jest dostępny w OpenCode przez ograniczony czas. Zespół wykorzystuje ten czas do zbierania opinii i ulepszania modelu.
 - MiMo-V2.5 Free jest dostępny w OpenCode przez ograniczony czas. Zespół wykorzystuje ten czas do zbierania opinii i ulepszania modelu.
+- North Mini Code Free jest dostępny w OpenCode przez ograniczony czas. Zespół wykorzystuje ten czas do zbierania opinii i ulepszania modelu.
 - Nemotron 3 Ultra Free jest dostępny w OpenCode przez ograniczony czas. Zespół wykorzystuje ten czas do zbierania opinii i ulepszania modelu.
 - Big Pickle to stealth model, który jest darmowy w OpenCode przez ograniczony czas. Zespół wykorzystuje ten czas do zbierania opinii i ulepszania modelu.
 
@@ -246,6 +255,7 @@ Wszystkie nasze modele są hostowane w US. Nasi dostawcy stosują politykę zero
 - Big Pickle: W czasie darmowego okresu zebrane dane mogą być wykorzystywane do ulepszania modelu.
 - DeepSeek V4 Flash Free: W czasie darmowego okresu zebrane dane mogą być wykorzystywane do ulepszania modelu.
 - MiMo-V2.5 Free: W czasie darmowego okresu zebrane dane mogą być wykorzystywane do ulepszania modelu.
+- North Mini Code Free: W okresie bezpłatnego dostępu zebrane dane mogą być przechowywane i wykorzystywane do ulepszania modelu. Nie przesyłaj danych osobowych ani poufnych. Zapoznaj się z naszym [Regulaminem korzystania](https://cohere.com/terms-of-use) i [Polityką prywatności](https://cohere.com/privacy).
 - Nemotron 3 Ultra Free (darmowe endpointy NVIDIA): Tylko do użytku próbnego — nie przesyłaj danych osobowych ani poufnych. Twoje korzystanie jest rejestrowane w celach bezpieczeństwa oraz w celu ulepszania produktów i usług NVIDIA. Rejestrowane dane sesji wykorzystywane do celów ulepszania nie są powiązane z Twoją tożsamością ani żadnym trwałym identyfikatorem. Aby uzyskać więcej informacji o naszych praktykach przetwarzania danych, zapoznaj się z naszą [Polityką prywatności](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf). Korzystając z tego endpointu, wyrażasz zgodę na gromadzenie, rejestrowanie i wykorzystywanie przez nas takich informacji oraz na [NVIDIA API Trial Terms of Service](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf).
 - OpenAI APIs: Żądania są przechowywane przez 30 dni zgodnie z [OpenAI's Data Policies](https://platform.openai.com/docs/guides/your-data).
 - Anthropic APIs: Żądania są przechowywane przez 30 dni zgodnie z [Anthropic's Data Policies](https://docs.anthropic.com/en/docs/claude-code/data-usage).

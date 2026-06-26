@@ -9,6 +9,7 @@ import {
   type ContentPart,
   type LLMRequest,
   type MediaPart,
+  type ToolFileContent,
   type TextPart,
   type ToolResultPart,
 } from "../schema"
@@ -18,6 +19,7 @@ export { isRecord }
 export const Json = Schema.fromJsonString(Schema.Unknown)
 export const decodeJson = Schema.decodeUnknownSync(Json)
 export const encodeJson = Schema.encodeSync(Json)
+const isJson = Schema.is(Schema.Json)
 export const JsonObject = Schema.Record(Schema.String, Schema.Unknown)
 export const optionalArray = <const S extends Schema.Top>(schema: S) => Schema.optional(Schema.Array(schema))
 export const optionalNull = <const S extends Schema.Top>(schema: S) => Schema.optional(Schema.NullOr(schema))
@@ -187,8 +189,11 @@ export const parseToolInput = (route: string, name: string, raw: string) =>
   parseJson(route, raw || "{}", `Invalid JSON input for ${route} tool call ${name}`)
 
 export const IMAGE_MIMES = ["image/png", "image/jpeg", "image/gif", "image/webp"] as const
-export const MAX_MEDIA_ENCODED_BYTES = 8 * 1024 * 1024
-export const MAX_MEDIA_DECODED_BYTES = 6 * 1024 * 1024
+export const VIDEO_MIMES = ["video/mp4", "video/webm", "video/quicktime"] as const
+export const AUDIO_MIMES = ["audio/wav", "audio/mp3", "audio/aiff", "audio/aac", "audio/ogg", "audio/flac"] as const
+export const MEDIA_MIMES = [...IMAGE_MIMES, ...VIDEO_MIMES, ...AUDIO_MIMES] as const
+export const MAX_MEDIA_ENCODED_BYTES = 28 * 1024 * 1024
+export const MAX_MEDIA_DECODED_BYTES = 20 * 1024 * 1024
 
 const base64Pattern = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/
 
@@ -233,11 +238,20 @@ export const validateMedia = Effect.fn("ProviderShared.validateMedia")(function*
   return { mime, base64, dataUrl: `data:${mime};base64,${base64}`, bytes } satisfies ValidatedMedia
 })
 
+export const validateToolFile = (route: string, part: ToolFileContent, supportedMimes: ReadonlySet<string>) =>
+  validateMedia(route, { type: "media", mediaType: part.mime, data: part.uri, filename: part.name }, supportedMimes)
+
 export const trimBaseUrl = (value: string) => value.replace(/\/+$/, "")
 
 export const toolResultText = (part: ToolResultPart) => {
-  if (part.result.type === "text" || part.result.type === "error") return String(part.result.value)
-  if (part.result.type === "content") return encodeJson(part.result.value)
+  if (part.result.type === "text") return String(part.result.value)
+  if (part.result.type === "error") {
+    const value = part.result.value
+    const prototype =
+      typeof value === "object" && value !== null && !Array.isArray(value) && Object.getPrototypeOf(value)
+    const structured = Array.isArray(value) || prototype === Object.prototype || prototype === null
+    return structured && isJson(value) ? encodeJson(value) : String(value)
+  }
   return encodeJson(part.result.value)
 }
 

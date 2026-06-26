@@ -1,20 +1,18 @@
 import { describe, expect, test } from "bun:test"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
-import { Database } from "@opencode-ai/core/database/database"
-import { Effect, Layer, Option } from "effect"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { SessionProjector } from "@opencode-ai/core/session/projector"
+import { Effect, Option } from "effect"
 import { Session as SessionNs } from "@/session/session"
 import { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID, type SessionID } from "../../src/session/schema"
 
 import { NotFoundError } from "@/storage/storage"
-import * as Log from "@opencode-ai/core/util/log"
 import { testEffect } from "../lib/effect"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 
-void Log.init({ print: false })
-
-const it = testEffect(Layer.mergeAll(SessionNs.defaultLayer, Database.defaultLayer))
+const it = testEffect(LayerNode.buildLayer(LayerNode.group([SessionNs.node, MessageV2.node, SessionProjector.node])))
 
 const withSession = <A, E, R>(
   fn: (input: { session: SessionNs.Interface; sessionID: SessionID }) => Effect.Effect<A, E, R>,

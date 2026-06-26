@@ -269,7 +269,12 @@ const lowerToolResultContent = Effect.fn("BedrockConverse.lowerToolResultContent
       content.push({ text: item.text })
       continue
     }
-    const media = yield* BedrockMedia.lower(item)
+    const media = yield* BedrockMedia.lower({
+      type: "media",
+      mediaType: item.mime,
+      data: item.uri,
+      filename: item.name,
+    })
     if (!("image" in media))
       return yield* ProviderShared.invalidRequest("Bedrock Converse only supports image media in tool results")
     content.push(media)
@@ -407,6 +412,9 @@ const fromRequest = Effect.fn("BedrockConverse.fromRequest")(function* (request:
             stopSequences: generation?.stop,
           },
     toolConfig,
+    // Converse's base inferenceConfig has no topK; Anthropic/Nova accept it
+    // as a model-specific field, so it goes through additionalModelRequestFields.
+    additionalModelRequestFields: generation?.topK === undefined ? undefined : { top_k: generation.topK },
   }
 })
 

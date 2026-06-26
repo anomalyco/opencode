@@ -70,7 +70,9 @@ describe("Config", () => {
     Effect.sync(() => {
       expect(ConfigMigrateV1.isV1({ snapshot: false })).toBe(true)
       expect(ConfigMigrateV1.isV1({ snapshot: false, agents: {} })).toBe(true)
+      expect(ConfigMigrateV1.isV1({ reference: {} })).toBe(true)
       expect(ConfigMigrateV1.isV1({ shell: "/bin/zsh", model: "anthropic/claude" })).toBe(false)
+      expect(ConfigMigrateV1.isV1({ references: {} })).toBe(false)
     }),
   )
 
@@ -104,7 +106,6 @@ describe("Config", () => {
       expect(migrated.providers?.bedrock?.api).toEqual({
         type: "aisdk",
         package: "@ai-sdk/amazon-bedrock",
-        url: undefined,
         settings: { region: "us-east-1", profile: "dev" },
       })
       expect(migrated.providers?.bedrock?.request).toEqual({
@@ -297,14 +298,14 @@ describe("Config", () => {
                 },
                 tool_output: { max_lines: 1000, max_bytes: 32768 },
                 mcp: {
-                  timeout: 5000,
+                  timeout: { startup: 5000, request: 60000 },
                   servers: {
                     local: {
                       type: "local",
                       command: ["node", "./mcp/server.js"],
                       environment: { API_KEY: "secret" },
                       disabled: false,
-                      timeout: 10000,
+                      timeout: { request: 10000 },
                     },
                     remote: {
                       type: "remote",
@@ -312,6 +313,7 @@ describe("Config", () => {
                       headers: { Authorization: "Bearer token" },
                       oauth: { client_id: "client", scope: "read write", callback_port: 19876 },
                       disabled: true,
+                      timeout: { startup: 15000 },
                     },
                   },
                 },
@@ -382,14 +384,14 @@ describe("Config", () => {
             })
             expect(documents[0]?.info.tool_output).toEqual({ max_lines: 1000, max_bytes: 32768 })
             expect(documents[0]?.info.mcp).toEqual({
-              timeout: 5000,
+              timeout: { startup: 5000, request: 60000 },
               servers: {
                 local: {
                   type: "local",
                   command: ["node", "./mcp/server.js"],
                   environment: { API_KEY: "secret" },
                   disabled: false,
-                  timeout: 10000,
+                  timeout: { request: 10000 },
                 },
                 remote: {
                   type: "remote",
@@ -397,6 +399,7 @@ describe("Config", () => {
                   headers: { Authorization: "Bearer token" },
                   oauth: { client_id: "client", scope: "read write", callback_port: 19876 },
                   disabled: true,
+                  timeout: { startup: 15000 },
                 },
               },
             })
@@ -425,6 +428,42 @@ describe("Config", () => {
               "opencode-helicone-session",
               { package: "@my-org/audit-plugin", options: { endpoint: "https://audit.example.com" } },
             ])
+          }).pipe(Effect.provide(testLayer(tmp.path)))
+        }),
+      ),
+    ),
+  )
+
+  it.live("migrates the deprecated reference key into references", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            fs.writeFile(
+              path.join(tmp.path, "opencode.json"),
+              JSON.stringify({
+                reference: {
+                  local: { path: "../library" },
+                  sdk: { repository: "github.com/example/sdk", branch: "main" },
+                  shorthand: "github.com/example/docs",
+                },
+              }),
+            ),
+          )
+
+          return yield* Effect.gen(function* () {
+            const config = yield* Config.Service
+            const documents = (yield* config.entries()).filter((entry) => entry.type === "document")
+
+            expect(documents).toHaveLength(1)
+            expect(documents[0]?.info.references).toEqual({
+              local: { path: "../library" },
+              sdk: { repository: "github.com/example/sdk", branch: "main" },
+              shorthand: "github.com/example/docs",
+            })
           }).pipe(Effect.provide(testLayer(tmp.path)))
         }),
       ),
@@ -464,7 +503,9 @@ describe("Config", () => {
                   ["@my-org/audit-plugin", { endpoint: "https://audit.example.com" }],
                 ],
                 skills: { paths: ["./skills"], urls: ["https://example.com/.well-known/skills/"] },
-                reference: { docs: { path: "../docs" } },
+                references: {
+                  docs: { path: "../docs", description: "Use for product documentation", hidden: true },
+                },
                 attachment: { image: { auto_resize: false, max_width: 1200 } },
                 provider: {
                   custom: {
@@ -502,11 +543,12 @@ describe("Config", () => {
                 compaction: { auto: true, tail_turns: 3, preserve_recent_tokens: 2000, reserved: 10000 },
                 experimental: { mcp_timeout: 5000 },
                 mcp: {
-                  local: { type: "local", command: ["node", "server.js"], enabled: false },
+                  local: { type: "local", command: ["node", "server.js"], enabled: false, timeout: 10000 },
                   remote: {
                     type: "remote",
                     url: "https://mcp.example.com",
                     oauth: { clientId: "client", callbackPort: 19876 },
+                    timeout: 20000,
                   },
                 },
               }),
@@ -540,7 +582,9 @@ describe("Config", () => {
               { package: "@my-org/audit-plugin", options: { endpoint: "https://audit.example.com" } },
             ])
             expect(documents[0]?.info.skills).toEqual(["./skills", "https://example.com/.well-known/skills/"])
-            expect(documents[0]?.info.references).toEqual({ docs: { path: "../docs" } })
+            expect(documents[0]?.info.references).toEqual({
+              docs: { path: "../docs", description: "Use for product documentation", hidden: true },
+            })
             expect(documents[0]?.info.attachments).toEqual({ image: { auto_resize: false, max_width: 1200 } })
             expect(documents[0]?.info.providers?.custom).toMatchObject({
               request: { body: { apiKey: "secret" } },
@@ -557,9 +601,9 @@ describe("Config", () => {
               models: {
                 model: {
                   request: {
-                    body: { temperature: 0.3, reasoningEffort: "high", serviceTier: "priority" },
+                    body: { temperature: 0.3, reasoning_effort: "high", service_tier: "priority" },
                   },
-                  variants: [{ id: "high", body: { reasoningEffort: "high", reasoningSummary: "auto" } }],
+                  variants: [{ id: "high", body: { reasoning_effort: "high", reasoning_summary: "auto" } }],
                 },
               },
             })
@@ -582,13 +626,19 @@ describe("Config", () => {
               buffer: 10000,
             })
             expect(documents[0]?.info.mcp).toMatchObject({
-              timeout: 5000,
+              timeout: { request: 5000 },
               servers: {
-                local: { type: "local", command: ["node", "server.js"], disabled: true },
+                local: {
+                  type: "local",
+                  command: ["node", "server.js"],
+                  disabled: true,
+                  timeout: { request: 10000 },
+                },
                 remote: {
                   type: "remote",
                   url: "https://mcp.example.com",
                   oauth: { client_id: "client", callback_port: 19876 },
+                  timeout: { request: 20000 },
                 },
               },
             })

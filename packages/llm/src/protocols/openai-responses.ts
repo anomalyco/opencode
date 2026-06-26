@@ -14,7 +14,7 @@ import {
   type TextPart,
   type ToolCallPart,
   type ToolDefinition,
-  type ToolResultContentPart,
+  type ToolContent,
   type ToolResultPart,
 } from "../schema"
 import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared"
@@ -258,6 +258,8 @@ const lowerTool = (tool: ToolDefinition): OpenAIResponsesTool => ({
   name: tool.name,
   description: tool.description,
   parameters: ProviderShared.openAiToolInputSchema(tool.inputSchema),
+  // TODO: Read this from OpenAI-specific tool options so direct LLM callers can opt into strict schemas.
+  strict: false,
 })
 
 const lowerToolChoice = (toolChoice: NonNullable<LLMRequest["toolChoice"]>) =>
@@ -318,10 +320,10 @@ const lowerUserContent = Effect.fn("OpenAIResponses.lowerUserContent")(function*
 // Tool results may carry structured text/images. Keep media as provider-native
 // content instead of JSON-stringifying base64 into a prompt string.
 const lowerToolResultContentItem = Effect.fn("OpenAIResponses.lowerToolResultContentItem")(function* (
-  item: ToolResultContentPart,
+  item: ToolContent,
 ) {
   if (item.type === "text") return { type: "input_text" as const, text: item.text }
-  const media = yield* ProviderShared.validateMedia(
+  const media = yield* ProviderShared.validateToolFile(
     "OpenAI Responses",
     item,
     new Set<string>(ProviderShared.IMAGE_MIMES),
@@ -334,7 +336,7 @@ const lowerToolResultOutput = Effect.fn("OpenAIResponses.lowerToolResultOutput")
   // compatibility with existing cassettes and provider expectations.
   if (part.result.type !== "content") return ProviderShared.toolResultText(part)
   // Preserve the narrowed array element type when compiled through a consumer package.
-  const content: ReadonlyArray<ToolResultContentPart> = part.result.value
+  const content: ReadonlyArray<ToolContent> = part.result.value
   return yield* Effect.forEach(content, lowerToolResultContentItem)
 })
 

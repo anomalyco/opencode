@@ -92,21 +92,20 @@ export function make<Input extends SchemaType<any>, Output extends SchemaType<an
                 ),
               ),
             ),
-            Effect.map((output) =>
-              ToolOutput.make(
-                output,
+            Effect.map((output) => ({
+              structured: output,
+              content:
                 config.toModelOutput?.({ input, output }).map((part) =>
                   part.type === "text"
                     ? { type: "text" as const, text: part.text }
                     : {
                         type: "file" as const,
-                        source: { type: "data" as const, data: part.data },
+                        uri: `data:${part.mime};base64,${part.data}`,
                         mime: part.mime,
                         name: part.name,
                       },
-                ) ?? (typeof output === "string" ? [{ type: "text", text: output }] : []),
-              ),
-            ),
+                ) ?? (typeof output === "string" ? [{ type: "text" as const, text: output }] : []),
+            })),
           ),
         ),
       ),

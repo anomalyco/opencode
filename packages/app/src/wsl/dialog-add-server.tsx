@@ -71,6 +71,17 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
     if (!distro) return null
     return current()?.opencodeChecks[distro] ?? null
   })
+  const wslReady = createMemo(() => !!current()?.runtime?.available && !current()?.pendingRestart)
+  const distroReady = createMemo(() => {
+    const probe = selectedProbe()
+    if (!probe || !selectedDistro()) return false
+    if (selectedInstalled()?.version === 1) return false
+    return probe.canExecute && probe.hasBash && probe.hasCurl
+  })
+  const opencodeReady = createMemo(() => {
+    const check = opencodeCheck()
+    return !!check?.resolvedPath && !check.error
+  })
   const distroWarningProbe = createMemo(() => {
     const probe = selectedProbe()
     if (!probe) return null
@@ -105,17 +116,6 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
   const installingOpencode = createMemo(() => {
     const job = current()?.job
     return job?.kind === "install-opencode" && job.distro === selectedDistro()
-  })
-  const wslReady = createMemo(() => !!current()?.runtime?.available && !current()?.pendingRestart)
-  const distroReady = createMemo(() => {
-    const probe = selectedProbe()
-    if (!probe || !selectedDistro()) return false
-    if (selectedInstalled()?.version === 1) return false
-    return probe.canExecute && probe.hasBash && probe.hasCurl
-  })
-  const opencodeReady = createMemo(() => {
-    const check = opencodeCheck()
-    return !!check?.resolvedPath && !check.error
   })
   const allReady = createMemo(() => wslReady() && distroReady() && opencodeReady())
   const addDisabled = createMemo(() => {
