@@ -1166,13 +1166,13 @@
     z-index: 20;
     height: calc(32px + var(--tool-content-gap));
     padding-bottom: var(--tool-content-gap);
-    background-color: var(--v2-background-bg-layer-01);
+    background-color: var(--v2-background-bg-base);
   }
 }
 
 [data-component="accordion"][data-scope="apply-patch"] {
   [data-slot="accordion-trigger"] {
-    background-color: var(--v2-background-bg-layer-01) !important;
+    background-color: var(--v2-background-bg-base) !important;
   }
 
   [data-slot="apply-patch-trigger-content"] {
