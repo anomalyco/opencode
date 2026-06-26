@@ -41,6 +41,7 @@ import { ConfigReference } from "./reference"
 import { ConfigServer } from "./server"
 import { ConfigSkills } from "./skills"
 import { ConfigVariable } from "./variable"
+import { ConfigWorkflow } from "./workflow"
 import { Npm } from "@opencode-ai/core/npm"
 import { withTransientReadRetry } from "@/util/effect-http-client"
 import { ConfigExperimental } from "@opencode-ai/core/config/experimental"
@@ -286,6 +287,10 @@ export const Info = Schema.Struct({
       }),
     }),
   ),
+  workflow: Schema.optional(ConfigWorkflow.Info).annotate({
+    description:
+      "Workflow configuration. Set disable: true to disable the workflow tool, or adjust concurrency/agent/timeout limits.",
+  }),
   experimental: Schema.optional(
     Schema.Struct({
       disable_paste_summary: Schema.optional(Schema.Boolean),

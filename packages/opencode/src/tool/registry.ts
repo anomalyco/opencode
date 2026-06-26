@@ -9,6 +9,7 @@ import { ReadTool } from "./read"
 import { TaskTool } from "./task"
 import { TodoWriteTool } from "./todo"
 import { WebFetchTool } from "./webfetch"
+import { WorkflowTool } from "./workflow"
 import { WriteTool } from "./write"
 import { InvalidTool } from "./invalid"
 import { SkillTool } from "./skill"
@@ -49,6 +50,7 @@ import { Bus } from "../bus"
 import { Agent } from "../agent/agent"
 import { Git } from "@/git"
 import { Skill } from "../skill"
+import { Workflow } from "@/workflow"
 import { Permission } from "@/permission"
 import { Reference } from "@/reference/reference"
 import { BackgroundJob } from "@/background/job"
@@ -98,6 +100,7 @@ export const layer: Layer.Layer<
   | Instruction.Service
   | AppFileSystem.Service
   | Bus.Service
+  | Workflow.Service
   | HttpClient.HttpClient
   | ChildProcessSpawner
   | Ripgrep.Service
@@ -132,6 +135,7 @@ export const layer: Layer.Layer<
     const greptool = yield* GrepTool
     const patchtool = yield* ApplyPatchTool
     const skilltool = yield* SkillTool
+    const workflowtool = yield* WorkflowTool
     const agent = yield* Agent.Service
 
     const state = yield* InstanceState.make<State>(
@@ -241,6 +245,7 @@ export const layer: Layer.Layer<
           question: Tool.init(question),
           lsp: Tool.init(lsptool),
           plan: Tool.init(plan),
+          workflow: Tool.init(workflowtool),
         })
 
         return {
@@ -263,6 +268,7 @@ export const layer: Layer.Layer<
             tool.patch,
             ...(flags.experimentalLspTool ? [tool.lsp] : []),
             ...(flags.experimentalPlanMode && flags.client === "cli" ? [tool.plan] : []),
+            ...(flags.experimentalWorkflows && !flags.disableWorkflows ? [tool.workflow] : []),
           ],
           task: tool.task,
           read: tool.read,
@@ -372,6 +378,7 @@ export const layer: Layer.Layer<
 export const defaultLayer = Layer.suspend(() =>
   layer
     .pipe(
+      Layer.provide(Workflow.defaultLayer),
       Layer.provide(Config.defaultLayer),
       Layer.provide(Plugin.defaultLayer),
       Layer.provide(Question.defaultLayer),
@@ -386,14 +393,16 @@ export const defaultLayer = Layer.suspend(() =>
       Layer.provide(LSP.defaultLayer),
       Layer.provide(Instruction.defaultLayer),
       Layer.provide(AppFileSystem.defaultLayer),
-      Layer.provide(Bus.layer),
       Layer.provide(FetchHttpClient.layer),
       Layer.provide(Format.defaultLayer),
       Layer.provide(CrossSpawnSpawner.defaultLayer),
-      Layer.provide(Ripgrep.defaultLayer),
       Layer.provide(Truncate.defaultLayer),
+      Layer.provide(Ripgrep.defaultLayer),
     )
-    .pipe(Layer.provide(RuntimeFlags.defaultLayer)),
+    .pipe(
+      Layer.provide(Bus.layer),
+      Layer.provide(RuntimeFlags.defaultLayer),
+    ),
 )
 
 function isZodType(value: unknown): value is z.ZodType {

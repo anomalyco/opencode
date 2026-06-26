@@ -7,6 +7,7 @@ import { Effect, Layer, Context, Schema } from "effect"
 import { Config } from "@/config/config"
 import { MCP } from "../mcp"
 import { Skill } from "../skill"
+import { WorkflowDiscovery } from "@/workflow/discovery"
 import PROMPT_INITIALIZE from "./template/initialize.txt"
 import PROMPT_REVIEW from "./template/review.txt"
 
@@ -148,6 +149,21 @@ export const layer = Layer.effect(
             return item.content
           },
           hints: [],
+        }
+      }
+
+      const dirs = yield* config.directories()
+      const workflows = yield* Effect.promise(() => WorkflowDiscovery.discoverWorkflows(dirs))
+      for (const wf of workflows) {
+        if (commands[wf.name]) continue
+        commands[wf.name] = {
+          name: wf.name,
+          description: wf.description,
+          source: "command",
+          get template() {
+            return WorkflowDiscovery.workflowTemplate(wf.script)
+          },
+          hints: ["$ARGUMENTS"],
         }
       }
 

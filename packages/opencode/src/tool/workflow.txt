@@ -1,0 +1,32 @@
+Execute a JavaScript workflow script that orchestrates multiple subagents in parallel.
+
+Use this tool when a task requires:
+- Fan-out: processing many files/items in parallel with multiple agents
+- Loop-until-done: iterating until a condition is met
+- Adversarial verification: having a separate agent verify work
+- Tournament: comparing multiple approaches
+- Multi-phase workflows: classify → act → verify → synthesize
+
+Available helpers inside the workflow script:
+- agent({ prompt, agent?, model? }) → Promise<{ text, ok, sessionID }> — spawn a subagent worker
+- parallel(items, fn, concurrency?) → Promise<AgentResult[]> — run fn over items in parallel (default 8 concurrent)
+- sleep(ms) → Promise<void> — sleep for ms milliseconds
+- args — string of arguments passed to the workflow
+
+The script must return a value (string recommended). The return value becomes the tool output.
+Intermediate results stay in script variables, NOT in the LLM context window.
+
+IMPORTANT: The script runs in a sandbox. You cannot use require, import, process, globalThis, eval,
+new Function, fetch, setTimeout, setInterval, Buffer, child_process, or filesystem/shell APIs.
+Only the helpers (agent, parallel, sleep) and safe globals (JSON, Math, Array, Object, String,
+Number, Boolean, Date, RegExp, Map, Set, Promise, Error, parseInt, parseFloat, console) are available.
+
+Example:
+const files = await agent({ prompt: "List all .ts files in src/", agent: "explore" })
+const results = await parallel(JSON.parse(files.text), (file) =>
+  agent({ prompt: `Review ${file} for issues`, agent: "general" })
+)
+return results.map(r => r.text).join("\n")
+
+If `save` is provided, the script is saved as a reusable slash command at .opencode/workflows/<name>.js.
+Saved workflows can be invoked as /<name> <args>.

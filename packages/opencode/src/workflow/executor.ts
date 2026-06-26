@@ -13,6 +13,9 @@ import * as Log from "@opencode-ai/core/util/log"
 
 const log = Log.create({ service: "workflow.executor" })
 
+// Bus event definitions for workflow progress. The property shapes mirror the
+// schemas in ./events.ts but use BusEvent.define for the opencode bus system.
+
 const WorkflowSpawnEvent = BusEvent.define("workflow.spawn", Schema.Struct({
   workerIndex: Schema.Number,
   agent: Schema.String,
@@ -64,7 +67,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Workflow") {}
 
-export const layer = Layer.effect(
+export const defaultLayer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const config = yield* Config.Service
@@ -86,18 +89,18 @@ export const layer = Layer.effect(
         workerIndexCounter: 0,
       }
 
-      function nextWorkerIndex() {
-        return state.workerIndexCounter++
-      }
-
-      const agent = async (params: { prompt: string; agent?: string; model?: string }): Promise<AgentResult> => {
-        const idx = nextWorkerIndex()
+      function allocateWorker(): number {
+        const idx = state.workerIndexCounter++
         state.totalWorkers++
-        state.activeWorkers++
-
         if (state.totalWorkers > maxAgents) {
           throw new WorkflowLimitError({ limit: "max_agents", value: state.totalWorkers, max: maxAgents })
         }
+        return idx
+      }
+
+      const agent = async (params: { prompt: string; agent?: string; model?: string }): Promise<AgentResult> => {
+        const idx = allocateWorker()
+        state.activeWorkers++
 
         const agentName = params.agent ?? "general"
 
@@ -108,6 +111,11 @@ export const layer = Layer.effect(
         }))
 
         try {
+          // bypassAgentCheck: true is intentional — the workflow tool asks for permission
+          // once when the script is approved. Workers inherit the parent session's
+          // permission ruleset via deriveSubagentSessionPermission(), which restricts
+          // what tools each worker can use. The subagent type is constrained by the
+          // agent definitions available in the system.
           const result = await bridge.promise(spawnWorker({
             subagentType: agentName,
             prompt: params.prompt,
