@@ -1767,7 +1767,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     <Show when={!agentsLoading()}>
                       <div
                         data-component="prompt-agent-control"
-                        style={agentsShouldFadeIn() ? { animation: "fade-in 0.3s" } : undefined}
+                        classList={{ "animate-in fade-in duration-300": agentsShouldFadeIn() }}
                       >
                         <TooltipKeybind
                           placement="top"
@@ -1796,7 +1796,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       <Show when={store.mode !== "shell"}>
                         <div
                           data-component="prompt-model-control"
-                          style={providersShouldFadeIn() ? { animation: "fade-in 0.3s" } : undefined}
+                          classList={{ "animate-in fade-in duration-300": providersShouldFadeIn() }}
                         >
                           <Show
                             when={props.controls.model.paid}
@@ -1875,7 +1875,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                         <Show when={showVariantControl()}>
                           <div
                             data-component="prompt-variant-control"
-                            style={providersShouldFadeIn() ? { animation: "fade-in 0.3s" } : undefined}
+                            classList={{ "animate-in fade-in duration-300": providersShouldFadeIn() }}
                           >
                             <TooltipKeybind
                               placement="top"
