@@ -167,7 +167,10 @@ export function createPromptProjectController(input: {
 
 export type PromptProjectController = ReturnType<typeof createPromptProjectController>
 
-export function PromptProjectSelector(props: { controller: PromptProjectController }) {
+export function PromptProjectSelector(props: {
+  controller: PromptProjectController
+  placement?: "bottom" | "bottom-start"
+}) {
   let contentRef: HTMLDivElement | undefined
   let restoreTrigger = true
 
@@ -229,7 +232,7 @@ export function PromptProjectSelector(props: { controller: PromptProjectControll
   return (
     <DropdownMenu
       open={props.controller.open()}
-      placement="bottom"
+      placement={props.placement ?? "bottom"}
       gutter={4}
       modal={false}
       onOpenChange={(open) => props.controller.setOpen(open)}
@@ -380,6 +383,7 @@ function ProjectTrigger(props: ComponentProps<"button"> & { controller: PromptPr
         ...local.classList,
         "hover:bg-v2-overlay-simple-overlay-hover": !local.controller.open(),
         "bg-v2-overlay-simple-overlay-pressed": local.controller.open(),
+        "text-v2-text-text-muted": local.controller.open(),
       }}
       onClick={local.onClick ?? (() => local.controller.setOpen(true))}
       onKeyDown={(event) => {

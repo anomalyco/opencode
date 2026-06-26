@@ -41,7 +41,7 @@ export function PromptWorkspaceSelector(props: {
     <>
       <span class="hidden select-none opacity-50 sm:inline mx-1">/</span>
       <MenuV2 placement="bottom" gutter={4} onOpenChange={onOpenChange}>
-        <MenuV2.Trigger class="flex h-7 min-w-0 max-w-[203px] items-center gap-1.5 rounded-sm px-1.5 hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none data-[expanded]:bg-v2-overlay-simple-overlay-pressed">
+        <MenuV2.Trigger class="flex h-7 min-w-0 max-w-[203px] items-center gap-1.5 rounded-sm px-1.5 hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none data-[expanded]:bg-v2-overlay-simple-overlay-pressed data-[expanded]:text-v2-text-text-muted">
           <IconV2 name={icon()} class="shrink-0 text-v2-icon-icon-muted" />
           <span class="min-w-0 truncate">{label()}</span>
           <Icon name="chevron-down" size="small" class="shrink-0 text-v2-icon-icon-muted" />

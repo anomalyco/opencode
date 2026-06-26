@@ -21,6 +21,8 @@ import { useComposerCommands } from "@/pages/session/use-composer-commands"
 import { NEW_SESSION_CONTENT_WIDTH } from "@/pages/session/new-session-layout"
 import { PromptWorkspaceSelector } from "@/components/prompt-workspace-selector"
 
+const showWorkspaceBar = import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"
+
 /**
  * The `/new-session` draft page. Unlike `session.tsx`, this only renders the prompt
  * composer for a brand-new session — no terminal, review pane, file tree, or message
@@ -103,7 +105,7 @@ export default function NewSessionPage() {
                     </div>
                   }
                 >
-                  <div class="flex flex-col gap-8">
+                  <div class="flex flex-col" classList={{ "gap-8": showWorkspaceBar, "gap-3": !showWorkspaceBar }}>
                     <PromptInput
                       controls={inputController()}
                       variant="new-session"
@@ -120,23 +122,34 @@ export default function NewSessionPage() {
                       }
                     />
                     <Show when={projectController.selected()}>
-                      <div class="flex min-h-7 min-w-0 flex-col items-center justify-center gap-0 px-2 text-v2-text-text-faint sm:flex-row">
-                        <PromptProjectSelector controller={projectController} />
-                        <PromptWorkspaceSelector
-                          value={newSessionWorktree()}
-                          projectRoot={projectRoot()}
-                          workspaces={sync().project?.sandboxes ?? []}
-                          branch={selectedBranch()}
-                          onChange={(value) =>
-                            setStore(
-                              "worktree",
-                              value === "main" && sync().project?.worktree !== sdk().directory
-                                ? sync().project?.worktree
-                                : value,
-                            )
-                          }
-                          onDone={() => inputRef?.focus()}
+                      <div
+                        class="flex min-h-7 min-w-0 items-center gap-0 text-v2-text-text-faint"
+                        classList={{
+                          "flex-col justify-center sm:flex-row": showWorkspaceBar,
+                          "justify-start": !showWorkspaceBar,
+                        }}
+                      >
+                        <PromptProjectSelector
+                          controller={projectController}
+                          placement={showWorkspaceBar ? "bottom" : "bottom-start"}
                         />
+                        <Show when={showWorkspaceBar}>
+                          <PromptWorkspaceSelector
+                            value={newSessionWorktree()}
+                            projectRoot={projectRoot()}
+                            workspaces={sync().project?.sandboxes ?? []}
+                            branch={selectedBranch()}
+                            onChange={(value) =>
+                              setStore(
+                                "worktree",
+                                value === "main" && sync().project?.worktree !== sdk().directory
+                                  ? sync().project?.worktree
+                                  : value,
+                              )
+                            }
+                            onDone={() => inputRef?.focus()}
+                          />
+                        </Show>
                       </div>
                     </Show>
                   </div>
