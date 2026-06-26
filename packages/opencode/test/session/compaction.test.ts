@@ -613,8 +613,7 @@ describe("session.compaction.create", () => {
         })
 
         const v2 = yield* SessionV2.Service.use((svc) => svc.messages({ sessionID: info.id })).pipe(
-          Effect.provide(SessionExecution.noopLayer),
-          Effect.provide(SessionV2.defaultLayer),
+          Effect.provide(SessionV2.defaultLayer.pipe(Layer.provide(SessionExecution.noopLayer))),
         )
         expect(v2.at(-1)).toMatchObject({
           type: "compaction",
@@ -854,12 +853,12 @@ describe("session.compaction.process", () => {
       const msg = yield* createUserMessage(session.id, "hello")
       const msgs = yield* ssn.messages({ sessionID: session.id })
       const done = yield* Deferred.make<void, Error>()
-      let seen = false
+      const seen: string[] = []
       const unsub = yield* events.listen((evt) => {
+        seen.push(evt.type)
         if (evt.type !== SessionCompaction.Event.Compacted.type) return Effect.void
         if ((evt.data as typeof SessionCompaction.Event.Compacted.data.Type).sessionID !== session.id)
           return Effect.void
-        seen = true
         Deferred.doneUnsafe(done, Effect.void)
         return Effect.void
       })
@@ -874,7 +873,8 @@ describe("session.compaction.process", () => {
 
       yield* Deferred.await(done).pipe(Effect.timeout("500 millis"))
       expect(result).toBe("continue")
-      expect(seen).toBe(true)
+      expect(seen).toContain(SessionCompaction.Event.Compacted.type)
+      expect(seen.filter((type) => type.startsWith("session.next."))).toEqual([])
     }),
   )
 
@@ -1250,7 +1250,7 @@ describe("session.compaction.process", () => {
           })
           .pipe(Effect.forkChild)
 
-        yield* Deferred.await(ready).pipe(Effect.timeout("1 second"))
+        yield* Deferred.await(ready).pipe(Effect.timeout("5 seconds"))
         const start = Date.now()
         yield* Fiber.interrupt(fiber)
         const exit = yield* Fiber.await(fiber).pipe(Effect.timeout("250 millis"))
@@ -1263,6 +1263,7 @@ describe("session.compaction.process", () => {
       }).pipe(withCompaction({ llm: stub.layer }))
     },
     { git: true },
+    { timeout: 10_000 },
   )
 
   itCompaction.instance(

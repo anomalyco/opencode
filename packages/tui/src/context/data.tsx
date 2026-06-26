@@ -21,6 +21,7 @@ import type {
 import { createStore, produce } from "solid-js/store"
 import { createSimpleContext } from "./helper"
 import { useSDK } from "./sdk"
+import { useEvent } from "./event"
 import { createSignal, onCleanup, onMount } from "solid-js"
 
 type LocationData = {
@@ -71,6 +72,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
     })
 
     const sdk = useSDK()
+    const events = useEvent()
     const [defaultLocation, setDefaultLocation] = createSignal<LocationRef>({
       directory: sdk.directory ?? process.cwd(),
     })
@@ -119,12 +121,12 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
       },
     }
 
-    function handleEvent(event: V2Event, metadata: { directory: string; workspace: string | undefined }) {
+    function handleEvent(event: V2Event) {
       switch (event.type) {
         case "catalog.updated":
           void Promise.all([
-            result.location.model.refresh({ directory: metadata.directory, workspaceID: metadata.workspace }),
-            result.location.provider.refresh({ directory: metadata.directory, workspaceID: metadata.workspace }),
+            result.location.model.refresh(event.location),
+            result.location.provider.refresh(event.location),
           ])
           break
         case "session.next.agent.switched":
@@ -161,18 +163,6 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           break
         }
         case "session.next.prompt.admitted":
-          break
-        case "session.next.prompt.promoted":
-          message.update(event.data.sessionID, (draft) => {
-            message.prepend(draft, {
-              id: event.data.messageID,
-              type: "user",
-              text: event.data.prompt.text,
-              files: event.data.prompt.files,
-              agents: event.data.prompt.agents,
-              time: { created: event.data.timeCreated },
-            })
-          })
           break
         case "session.next.context.updated":
           message.update(event.data.sessionID, (draft) => {
@@ -263,19 +253,13 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           break
         case "session.next.text.delta":
           message.update(event.data.sessionID, (draft) => {
-            const match = message.latestText(
-              message.assistant(draft, event.data.assistantMessageID),
-              event.data.textID,
-            )
+            const match = message.latestText(message.assistant(draft, event.data.assistantMessageID), event.data.textID)
             if (match) match.text += event.data.delta
           })
           break
         case "session.next.text.ended":
           message.update(event.data.sessionID, (draft) => {
-            const match = message.latestText(
-              message.assistant(draft, event.data.assistantMessageID),
-              event.data.textID,
-            )
+            const match = message.latestText(message.assistant(draft, event.data.assistantMessageID), event.data.textID)
             if (match) match.text = event.data.text
           })
           break
@@ -292,28 +276,19 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           break
         case "session.next.tool.input.delta":
           message.update(event.data.sessionID, (draft) => {
-            const match = message.latestTool(
-              message.assistant(draft, event.data.assistantMessageID),
-              event.data.callID,
-            )
+            const match = message.latestTool(message.assistant(draft, event.data.assistantMessageID), event.data.callID)
             if (match?.state.status === "pending") match.state.input += event.data.delta
           })
           break
         case "session.next.tool.input.ended":
           message.update(event.data.sessionID, (draft) => {
-            const match = message.latestTool(
-              message.assistant(draft, event.data.assistantMessageID),
-              event.data.callID,
-            )
+            const match = message.latestTool(message.assistant(draft, event.data.assistantMessageID), event.data.callID)
             if (match?.state.status === "pending") match.state.input = event.data.text
           })
           break
         case "session.next.tool.called":
           message.update(event.data.sessionID, (draft) => {
-            const match = message.latestTool(
-              message.assistant(draft, event.data.assistantMessageID),
-              event.data.callID,
-            )
+            const match = message.latestTool(message.assistant(draft, event.data.assistantMessageID), event.data.callID)
             if (!match) return
             match.time.ran = event.data.timestamp
             match.provider = event.data.provider
@@ -322,10 +297,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           break
         case "session.next.tool.progress":
           message.update(event.data.sessionID, (draft) => {
-            const match = message.latestTool(
-              message.assistant(draft, event.data.assistantMessageID),
-              event.data.callID,
-            )
+            const match = message.latestTool(message.assistant(draft, event.data.assistantMessageID), event.data.callID)
             if (match?.state.status !== "running") return
             match.state.structured = event.data.structured
             match.state.content = [...event.data.content]
@@ -333,10 +305,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           break
         case "session.next.tool.success":
           message.update(event.data.sessionID, (draft) => {
-            const match = message.latestTool(
-              message.assistant(draft, event.data.assistantMessageID),
-              event.data.callID,
-            )
+            const match = message.latestTool(message.assistant(draft, event.data.assistantMessageID), event.data.callID)
             if (match?.state.status !== "running") return
             match.state = {
               status: "completed",
@@ -355,10 +324,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           break
         case "session.next.tool.failed":
           message.update(event.data.sessionID, (draft) => {
-            const match = message.latestTool(
-              message.assistant(draft, event.data.assistantMessageID),
-              event.data.callID,
-            )
+            const match = message.latestTool(message.assistant(draft, event.data.assistantMessageID), event.data.callID)
             if (!match || (match.state.status !== "pending" && match.state.status !== "running")) return
             match.state = {
               status: "error",
@@ -403,8 +369,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             )
             if (match) {
               match.text = event.data.text
-              if (event.data.providerMetadata !== undefined)
-                match.providerMetadata = event.data.providerMetadata
+              if (event.data.providerMetadata !== undefined) match.providerMetadata = event.data.providerMetadata
             }
           })
           break
@@ -429,26 +394,23 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           break
         case "integration.updated":
           void Promise.all([
-            result.location.integration.refresh({ directory: metadata.directory, workspaceID: metadata.workspace }),
-            result.location.model.refresh({ directory: metadata.directory, workspaceID: metadata.workspace }),
-            result.location.provider.refresh({ directory: metadata.directory, workspaceID: metadata.workspace }),
+            result.location.integration.refresh(event.location),
+            result.location.model.refresh(event.location),
+            result.location.provider.refresh(event.location),
           ])
           break
       }
     }
 
     onMount(() => {
-      const controller = new AbortController()
-      onCleanup(() => controller.abort())
-      void (async () => {
-        const events = await sdk.client.v2.event.subscribe({ signal: controller.signal })
-        for await (const event of events.stream) {
-          handleEvent(event, {
-            directory: event.location?.directory ?? defaultLocation().directory,
-            workspace: event.location?.workspaceID,
-          })
-        }
-      })().catch(() => {})
+      const unsub = events.subscribe((event, metadata) => {
+        handleEvent({
+          ...event,
+          data: event.properties,
+          location: { directory: metadata.directory, workspaceID: metadata.workspace },
+        } as V2Event)
+      })
+      onCleanup(unsub)
     })
 
     const result = {

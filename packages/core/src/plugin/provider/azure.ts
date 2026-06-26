@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import { define } from "@opencode-ai/plugin/v2/effect"
+import { define } from "../internal"
 import { ProviderV2 } from "../../provider"
 
 function selectLanguage(sdk: any, modelID: string, useChat: boolean) {
@@ -28,8 +28,7 @@ export const AzurePlugin = define({
         }
       }),
     )
-    yield* ctx.aisdk.hook(
-      "sdk",
+    yield* ctx.aisdk.sdk(
       Effect.fn(function* (evt) {
         if (evt.package !== "@ai-sdk/azure") return
         if (evt.model.providerID === ProviderV2.ID.azure) {
@@ -47,8 +46,7 @@ export const AzurePlugin = define({
         evt.sdk = mod.createAzure(evt.options)
       }),
     )
-    yield* ctx.aisdk.hook(
-      "language",
+    yield* ctx.aisdk.language(
       Effect.fn(function* (evt) {
         if (evt.model.providerID !== ProviderV2.ID.azure) return
         evt.language = selectLanguage(evt.sdk, evt.model.api.id, Boolean(evt.options.useCompletionUrls))
@@ -74,8 +72,7 @@ export const AzureCognitiveServicesPlugin = define({
         }
       }),
     )
-    yield* ctx.aisdk.hook(
-      "language",
+    yield* ctx.aisdk.language(
       Effect.fn(function* (evt) {
         if (evt.model.providerID !== ProviderV2.ID.make("azure-cognitive-services")) return
         evt.language = selectLanguage(evt.sdk, evt.model.api.id, Boolean(evt.options.useCompletionUrls))

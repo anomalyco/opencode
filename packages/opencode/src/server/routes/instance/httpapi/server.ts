@@ -283,8 +283,8 @@ export function createRoutes(
       HttpServer.layerServices,
     ]),
     Layer.provide(LayerNode.buildLayer(app)),
-    Layer.provide(Layer.succeed(CorsConfig)(options)),
-    Layer.provide(Observability.layer),
+    Layer.provide(Layer.succeed(CorsConfig)(corsOptions)),
+    Layer.provideMerge(Observability.layer),
   )
 }
 
