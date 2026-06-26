@@ -65,7 +65,7 @@ describe("OpenAIPlugin", () => {
       const aisdk = yield* AISDK.Service
       yield* addPlugin()
       const result = yield* aisdk.runSDK({
-        model: new ModelV2.Info({
+        model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.make("custom-openai"), ModelV2.ID.make("gpt-5")),
           api: { id: ModelV2.ID.make("gpt-5"), type: "aisdk", package: "test-provider" },
         }),
@@ -82,7 +82,7 @@ describe("OpenAIPlugin", () => {
       const aisdk = yield* AISDK.Service
       yield* addPlugin()
       const result = yield* aisdk.runSDK({
-        model: new ModelV2.Info({
+        model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.openai, ModelV2.ID.make("gpt-5")),
           api: { id: ModelV2.ID.make("gpt-5"), type: "aisdk", package: "test-provider" },
         }),
@@ -100,7 +100,7 @@ describe("OpenAIPlugin", () => {
       const calls: string[] = []
       yield* addPlugin()
       const result = yield* aisdk.runLanguage({
-        model: new ModelV2.Info({
+        model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.openai, ModelV2.ID.make("alias")),
           api: { id: ModelV2.ID.make("gpt-5"), type: "aisdk", package: "test-provider" },
         }),
@@ -119,7 +119,7 @@ describe("OpenAIPlugin", () => {
       const calls: string[] = []
       yield* addPlugin()
       const result = yield* aisdk.runLanguage({
-        model: new ModelV2.Info({
+        model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.anthropic, ModelV2.ID.make("gpt-5")),
           api: { id: ModelV2.ID.make("gpt-5"), type: "aisdk", package: "test-provider" },
         }),
@@ -135,7 +135,7 @@ describe("OpenAIPlugin", () => {
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
       yield* catalog.transform((catalog) => {
-        const item = new ProviderV2.Info({
+        const item = ProviderV2.Info.make({
           ...ProviderV2.Info.empty(ProviderV2.ID.openai),
           api: { type: "aisdk", package: "@ai-sdk/openai" },
         })
@@ -157,7 +157,7 @@ describe("OpenAIPlugin", () => {
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
       yield* catalog.transform((catalog) => {
-        const item = new ProviderV2.Info({
+        const item = ProviderV2.Info.make({
           ...ProviderV2.Info.empty(ProviderV2.ID.make("custom-openai")),
           api: { type: "aisdk", package: "test-provider" },
         })

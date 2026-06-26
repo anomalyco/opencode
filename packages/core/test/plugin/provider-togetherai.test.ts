@@ -39,7 +39,7 @@ describe("TogetherAIPlugin", () => {
       const aisdk = yield* AISDK.Service
       yield* addPlugin()
       const result = yield* aisdk.runSDK({
-        model: new ModelV2.Info({
+        model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.make("togetherai"), ModelV2.ID.make("model")),
           api: { id: ModelV2.ID.make("model"), type: "aisdk", package: "test-provider" },
         }),
@@ -57,7 +57,7 @@ describe("TogetherAIPlugin", () => {
       yield* addPlugin()
 
       const ignored = yield* aisdk.runSDK({
-        model: new ModelV2.Info({
+        model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.make("togetherai"), ModelV2.ID.make("model")),
           api: { id: ModelV2.ID.make("model"), type: "aisdk", package: "test-provider" },
         }),
@@ -67,7 +67,7 @@ describe("TogetherAIPlugin", () => {
       expect(ignored.sdk).toBeUndefined()
 
       const result = yield* aisdk.runSDK({
-        model: new ModelV2.Info({
+        model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.make("togetherai"), ModelV2.ID.make("model")),
           api: { id: ModelV2.ID.make("model"), type: "aisdk", package: "test-provider" },
         }),
@@ -85,7 +85,7 @@ describe("TogetherAIPlugin", () => {
       yield* addPlugin()
 
       const result = yield* aisdk.runSDK({
-        model: new ModelV2.Info({
+        model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.make("custom-togetherai"), ModelV2.ID.make("model")),
           api: { id: ModelV2.ID.make("model"), type: "aisdk", package: "test-provider" },
         }),
@@ -105,7 +105,7 @@ describe("TogetherAIPlugin", () => {
       yield* addPlugin()
 
       const result = yield* aisdk.runLanguage({
-        model: new ModelV2.Info({
+        model: ModelV2.Info.make({
           ...ModelV2.Info.empty(
             ProviderV2.ID.make("togetherai"),
             ModelV2.ID.make("meta-llama/Llama-3.3-70B-Instruct-Turbo"),

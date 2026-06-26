@@ -94,6 +94,6 @@ export const layer = Layer.effect(
 
 export const defaultLayer = layer.pipe(Layer.provide(FSUtil.defaultLayer))
 
-export const node = LayerNode.make(layer, [FSUtil.node])
+export const node = LayerNode.make({ service: Service, layer: layer, deps: [FSUtil.node] })
 
 export * as Auth from "."

@@ -2,10 +2,9 @@ export * as SessionInput from "./input"
 
 import { and, asc, eq, isNull, lte } from "drizzle-orm"
 import { DateTime, Effect, Schema } from "effect"
+import { Admitted, Delivery } from "@opencode-ai/schema/session-input"
 import type { Database } from "../database/database"
 import type { EventV2 } from "../event"
-import { NonNegativeInt } from "../schema"
-import { V2Schema } from "../v2-schema"
 import { SessionEvent } from "./event"
 import { SessionMessage } from "./message"
 import { Prompt } from "./prompt"
@@ -14,24 +13,13 @@ import { SessionInputTable, SessionMessageTable } from "./sql"
 
 type DatabaseService = Database.Interface["db"]
 
-export const Delivery = Schema.Literals(["steer", "queue"])
-export type Delivery = typeof Delivery.Type
-
-export class Admitted extends Schema.Class<Admitted>("SessionInput.Admitted")({
-  admittedSeq: NonNegativeInt,
-  id: SessionMessage.ID,
-  sessionID: SessionSchema.ID,
-  prompt: Prompt,
-  delivery: Delivery,
-  timeCreated: V2Schema.DateTimeUtcFromMillis,
-  promotedSeq: NonNegativeInt.pipe(Schema.optional),
-}) {}
+export { Admitted, Delivery }
 
 const decodePrompt = Schema.decodeUnknownSync(Prompt)
 const encodePrompt = Schema.encodeSync(Prompt)
 
 const fromRow = (row: typeof SessionInputTable.$inferSelect): Admitted =>
-  new Admitted({
+  Admitted.make({
     admittedSeq: row.admitted_seq,
     id: SessionMessage.ID.make(row.id),
     sessionID: SessionSchema.ID.make(row.session_id),
@@ -76,7 +64,7 @@ export const admit = Effect.fn("SessionInput.admit")(function* (
         event.durable === undefined
           ? Effect.die("Prompt admission event is missing aggregate sequence")
           : Effect.succeed(
-              new Admitted({
+              Admitted.make({
                 admittedSeq: event.durable.seq,
                 id: input.id,
                 sessionID: input.sessionID,

@@ -99,6 +99,8 @@ void mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
       return serverCapabilities
     }
 
+    getInstructions() {}
+
     async listTools() {
       listToolsCalls++
       return { tools: [{ name: "test_tool", inputSchema: { type: "object", properties: {} } }] }
@@ -223,6 +225,30 @@ mcpTest.instance("state() returns existing state when one is saved", () =>
     const state = yield* Effect.promise(() => provider.state())
     expect(state).toBe(existingState)
   }),
+)
+
+mcpTest.instance(
+  "auth status only reports credentials stored for the configured server URL",
+  () =>
+    Effect.gen(function* () {
+      const mcp = yield* MCP.Service
+      expect(transportCalls).toHaveLength(0)
+      yield* McpAuth.use.updateTokens("test-status-url", { accessToken: "old-token" }, "https://old.example.com/mcp")
+
+      expect(yield* mcp.getAuthStatus("test-status-url")).toBe("not_authenticated")
+
+      yield* McpAuth.use.updateTokens("test-status-url", { accessToken: "current-token" }, "https://example.com/mcp")
+      expect(yield* mcp.getAuthStatus("test-status-url")).toBe("authenticated")
+
+      yield* McpAuth.use.updateTokens(
+        "test-status-url",
+        { accessToken: "expired-token", expiresAt: 1 },
+        "https://example.com/mcp",
+      )
+      expect(yield* mcp.getAuthStatus("test-status-url")).toBe("expired")
+      expect(transportCalls).toHaveLength(0)
+    }),
+  { config: config("test-status-url") },
 )
 
 mcpTest.instance(

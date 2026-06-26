@@ -458,6 +458,6 @@ export const layer: Layer.Layer<Service, never, AccountRepo.Service | HttpClient
 
 export const defaultLayer = layer.pipe(Layer.provide(AccountRepo.defaultLayer), Layer.provide(FetchHttpClient.layer))
 
-export const node = LayerNode.make(layer, [AccountRepo.node, httpClient])
+export const node = LayerNode.make({ service: Service, layer: layer, deps: [AccountRepo.node, httpClient] })
 
 export * as Account from "./account"

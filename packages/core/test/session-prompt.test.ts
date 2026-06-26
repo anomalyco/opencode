@@ -9,6 +9,7 @@ import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
+import { LocationServiceMap } from "@opencode-ai/core/location-layer"
 import { Prompt } from "@opencode-ai/core/session/prompt"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
@@ -21,9 +22,11 @@ import { testEffect } from "./lib/effect"
 const executionCalls: SessionV2.ID[] = []
 const interruptCalls: SessionV2.ID[] = []
 const wakeCalls: SessionV2.ID[] = []
+const activeSessions = new Set<SessionV2.ID>()
 const execution = Layer.succeed(
   SessionExecution.Service,
   SessionExecution.Service.of({
+    active: Effect.sync(() => new Set(activeSessions)),
     resume: (sessionID) =>
       Effect.sync(() => {
         executionCalls.push(sessionID)
@@ -39,6 +42,7 @@ const execution = Layer.succeed(
   }),
 )
 const sessions = SessionV2.layer.pipe(
+  Layer.provide(LocationServiceMap.layer),
   Layer.provide(EventV2.defaultLayer),
   Layer.provide(Database.defaultLayer),
   Layer.provide(SessionStore.defaultLayer),
@@ -106,6 +110,13 @@ const eventCount = (type: string) =>
   )
 
 describe("SessionV2.prompt", () => {
+  it.effect("exposes the execution registry", () =>
+    Effect.gen(function* () {
+      activeSessions.add(sessionID)
+      expect(Array.from(yield* (yield* SessionV2.Service).active)).toEqual([sessionID])
+    }).pipe(Effect.ensuring(Effect.sync(() => activeSessions.clear()))),
+  )
+
   it.effect("delegates execution continuation through SessionExecution", () =>
     Effect.gen(function* () {
       yield* setup
@@ -147,7 +158,7 @@ describe("SessionV2.prompt", () => {
 
       const message = yield* session.prompt({
         sessionID,
-        prompt: new Prompt({ text: "Fix the failing tests" }),
+        prompt: Prompt.make({ text: "Fix the failing tests" }),
         resume: false,
       })
 
@@ -171,8 +182,8 @@ describe("SessionV2.prompt", () => {
       const fiber = yield* session.events({ sessionID }).pipe(Stream.take(4), Stream.runCollect, Effect.forkScoped)
       yield* Effect.yieldNow
 
-      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "First" }), resume: false })
-      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Second" }), resume: false })
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "First" }), resume: false })
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Second" }), resume: false })
       yield* SessionInput.promoteSteers(db, events, sessionID, Number.MAX_SAFE_INTEGER)
       const streamed = Array.from(yield* Fiber.join(fiber))
 
@@ -198,7 +209,7 @@ describe("SessionV2.prompt", () => {
       const session = yield* SessionV2.Service
       const message = yield* session.prompt({
         sessionID,
-        prompt: new Prompt({ text: "Fix the failing tests" }),
+        prompt: Prompt.make({ text: "Fix the failing tests" }),
         resume: false,
       })
 
@@ -217,7 +228,7 @@ describe("SessionV2.prompt", () => {
     Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
-      const input = { sessionID, prompt: new Prompt({ text: "Fix the failing tests" }), resume: false }
+      const input = { sessionID, prompt: Prompt.make({ text: "Fix the failing tests" }), resume: false }
 
       const first = yield* session.prompt(input)
       const second = yield* session.prompt(input)
@@ -235,7 +246,7 @@ describe("SessionV2.prompt", () => {
       const input = {
         sessionID,
         id: messageID,
-        prompt: new Prompt({ text: "Fix the failing tests" }),
+        prompt: Prompt.make({ text: "Fix the failing tests" }),
         resume: false,
       }
 
@@ -255,7 +266,7 @@ describe("SessionV2.prompt", () => {
       const input = {
         sessionID,
         id: messageID,
-        prompt: new Prompt({ text: "Recover committed prompt" }),
+        prompt: Prompt.make({ text: "Recover committed prompt" }),
         resume: false,
       }
       const first = yield* session.prompt(input)
@@ -276,13 +287,13 @@ describe("SessionV2.prompt", () => {
       yield* session.prompt({
         sessionID,
         id: messageID,
-        prompt: new Prompt({ text: "Fix the failing tests" }),
+        prompt: Prompt.make({ text: "Fix the failing tests" }),
       })
       const failure = yield* session
         .prompt({
           sessionID,
           id: messageID,
-          prompt: new Prompt({ text: "Delete the failing tests" }),
+          prompt: Prompt.make({ text: "Delete the failing tests" }),
           resume: false,
         })
         .pipe(Effect.flip)
@@ -301,14 +312,14 @@ describe("SessionV2.prompt", () => {
       yield* session.prompt({
         id: messageID,
         sessionID,
-        prompt: new Prompt({ text: "Fix the failing tests" }),
+        prompt: Prompt.make({ text: "Fix the failing tests" }),
         resume: false,
       })
       const failure = yield* session
         .prompt({
           id: messageID,
           sessionID,
-          prompt: new Prompt({ text: "Fix the failing tests" }),
+          prompt: Prompt.make({ text: "Fix the failing tests" }),
           delivery: "queue",
           resume: false,
         })
@@ -325,7 +336,7 @@ describe("SessionV2.prompt", () => {
       const input = {
         sessionID,
         id: messageID,
-        prompt: new Prompt({ text: "Fix the failing tests" }),
+        prompt: Prompt.make({ text: "Fix the failing tests" }),
         resume: false,
       }
 
@@ -344,7 +355,7 @@ describe("SessionV2.prompt", () => {
       const { db } = yield* Database.Service
       const session = yield* SessionV2.Service
       const events = yield* EventV2.Service
-      yield* session.prompt({ id: messageID, sessionID, prompt: new Prompt({ text: "Promote once" }), resume: false })
+      yield* session.prompt({ id: messageID, sessionID, prompt: Prompt.make({ text: "Promote once" }), resume: false })
 
       yield* Effect.all(
         [
@@ -368,9 +379,9 @@ describe("SessionV2.prompt", () => {
       const { db } = yield* Database.Service
       const session = yield* SessionV2.Service
       const events = yield* EventV2.Service
-      const first = yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Before cutoff" }), resume: false })
+      const first = yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Before cutoff" }), resume: false })
       const cutoff = first.admittedSeq
-      const second = yield* session.prompt({ sessionID, prompt: new Prompt({ text: "After cutoff" }), resume: false })
+      const second = yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "After cutoff" }), resume: false })
 
       yield* SessionInput.promoteSteers(db, events, sessionID, cutoff)
 
@@ -386,7 +397,12 @@ describe("SessionV2.prompt", () => {
       const session = yield* SessionV2.Service
       const events = yield* EventV2.Service
       wakeCalls.length = 0
-      yield* session.prompt({ id: messageID, sessionID, prompt: new Prompt({ text: "Replay pending" }), resume: false })
+      yield* session.prompt({
+        id: messageID,
+        sessionID,
+        prompt: Prompt.make({ text: "Replay pending" }),
+        resume: false,
+      })
       const recorded = yield* db
         .select()
         .from(EventTable)
@@ -422,7 +438,7 @@ describe("SessionV2.prompt", () => {
       yield* setup
       const session = yield* SessionV2.Service
       const events = yield* EventV2.Service
-      const prompt = new Prompt({ text: "Historical prompt" })
+      const prompt = Prompt.make({ text: "Historical prompt" })
       yield* events.publish(SessionEvent.Prompted, {
         sessionID,
         messageID,
@@ -443,7 +459,7 @@ describe("SessionV2.prompt", () => {
       yield* setup
       const session = yield* SessionV2.Service
       const events = yield* EventV2.Service
-      const prompt = new Prompt({ text: "Historical queued prompt" })
+      const prompt = Prompt.make({ text: "Historical queued prompt" })
       yield* events.publish(SessionEvent.Prompted, {
         sessionID,
         messageID,
@@ -478,7 +494,7 @@ describe("SessionV2.prompt", () => {
         .onConflictDoNothing()
         .run()
         .pipe(Effect.orDie)
-      const prompt = new Prompt({ text: "Fix the failing tests" })
+      const prompt = Prompt.make({ text: "Fix the failing tests" })
 
       yield* session.prompt({ id: messageID, sessionID, prompt, resume: false })
       const failure = yield* session
@@ -502,7 +518,7 @@ describe("SessionV2.prompt", () => {
       })
 
       const failure = yield* session
-        .prompt({ id: messageID, sessionID, prompt: new Prompt({ text: "Conflicting prompt" }), resume: false })
+        .prompt({ id: messageID, sessionID, prompt: Prompt.make({ text: "Conflicting prompt" }), resume: false })
         .pipe(Effect.flip)
 
       expect(failure).toMatchObject({ _tag: "Session.PromptConflictError", sessionID, messageID })
@@ -517,7 +533,7 @@ describe("SessionV2.prompt", () => {
       executionCalls.length = 0
       wakeCalls.length = 0
 
-      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Run by default" }) })
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Run by default" }) })
 
       expect(executionCalls).toEqual([])
       expect(wakeCalls).toEqual([sessionID])
@@ -533,7 +549,7 @@ describe("SessionV2.prompt", () => {
 
       yield* session.prompt({
         sessionID,
-        prompt: new Prompt({ text: "Run explicitly" }),
+        prompt: Prompt.make({ text: "Run explicitly" }),
         resume: true,
       })
 
@@ -549,7 +565,7 @@ describe("SessionV2.prompt", () => {
       executionCalls.length = 0
       wakeCalls.length = 0
 
-      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Do not run" }), resume: false })
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Do not run" }), resume: false })
 
       expect(executionCalls).toEqual([])
       expect(wakeCalls).toEqual([])
