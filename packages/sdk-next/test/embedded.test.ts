@@ -33,6 +33,7 @@ test("embedded client uses the real router and handlers", async () => {
       yield* opencode.sessions.switchModel({ sessionID, model })
       const selected = yield* opencode.sessions.get({ sessionID })
       const page = yield* opencode.sessions.list({ directory: AbsolutePath.make(directory) })
+      const active = yield* opencode.sessions.active()
       const admitted = yield* opencode.sessions.prompt({
         sessionID,
         prompt: Prompt.make({ text: "Do not run" }),
@@ -81,6 +82,7 @@ test("embedded client uses the real router and handlers", async () => {
       expect(selected.model?.id).toBe(model.id)
       expect(selected.model?.providerID).toBe(model.providerID)
       expect(page.data.some((session) => session.id === sessionID)).toBe(true)
+      expect(active).toEqual({})
       expect(admitted.sessionID).toBe(sessionID)
       expect(prompted.type).toBe("session.next.prompted")
       expect(wakeContext).toContainEqual(expect.objectContaining({ id: wake.id, type: "user" }))
