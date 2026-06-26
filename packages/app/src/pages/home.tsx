@@ -2,6 +2,7 @@ import type { Session } from "@opencode-ai/sdk/v2/client"
 import {
   createEffect,
   createMemo,
+  createResource,
   createRoot,
   For,
   Match,
@@ -525,10 +526,16 @@ function HomeProjectColumn(props: {
   const global = useGlobal()
   const dialog = useDialog()
   const controller = useServerManagementController({ navigateOnAdd: false })
-  const [state, setState] = persisted(
+  const [_state, setState, _, ready] = persisted(
     Persist.global("home.servers", ["home.servers.v1"]),
     createStore({ collapsed: {} as Record<string, boolean> }),
   )
+  const [state] = createResource(
+    () => ready.promise ?? Promise.resolve(),
+    (p) => p.then(() => _state),
+    { initialValue: _state },
+  )
+
   return (
     <aside
       class="mt-6 flex min-w-0 flex-col gap-4 lg:mt-14 lg:pt-[52px]"
@@ -560,7 +567,7 @@ function HomeProjectColumn(props: {
             const key = ServerConnection.key(item)
             const healthy = () => !!global.servers.health[key]?.healthy
             const serverCtx = global.ensureServerCtx(item)
-            const collapsed = () => !!state.collapsed[key]
+            const collapsed = () => !!state().collapsed[key]
             return (
               <div class="flex max-h-[min(572px,calc(100vh_-_300px))] min-w-0 flex-col gap-1 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 <HomeServerRow
@@ -573,7 +580,7 @@ function HomeProjectColumn(props: {
                   focusServer={props.focusServer}
                   chooseProject={props.chooseProject}
                   openEdit={(server) => dialog.show(() => <DialogServerV2 mode="edit" server={server} />)}
-                  toggleCollapsed={() => setState("collapsed", key, !state.collapsed[key])}
+                  toggleCollapsed={() => setState("collapsed", key, !state().collapsed[key])}
                   language={props.language}
                 />
                 <Show when={healthy() && !collapsed()}>
