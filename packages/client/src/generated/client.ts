@@ -24,6 +24,8 @@ import type {
   SessionsCommitOutput,
   SessionsContextInput,
   SessionsContextOutput,
+  SessionsHistoryInput,
+  SessionsHistoryOutput,
   SessionsEventsInput,
   SessionsEventsOutput,
   SessionsInterruptInput,
@@ -324,6 +326,18 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ).then((value) => value.data),
+      history: (input: SessionsHistoryInput, requestOptions?: RequestOptions) =>
+        request<SessionsHistoryOutput>(
+          {
+            method: "GET",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/history`,
+            query: { limit: input.limit, after: input.after },
+            successStatus: 200,
+            declaredStatuses: [404, 400, 401],
+            empty: false,
+          },
+          requestOptions,
+        ),
       events: (input: SessionsEventsInput, requestOptions?: RequestOptions): AsyncIterable<SessionsEventsOutput> =>
         sse<SessionsEventsOutput>(
           {

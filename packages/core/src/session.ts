@@ -34,6 +34,7 @@ import { Snapshot } from "./snapshot"
 import { SessionRevert } from "./session/revert"
 import { Revert } from "@opencode-ai/schema/revert"
 import { FSUtil } from "./fs-util"
+import { SessionDurable } from "@opencode-ai/schema/durable-event-manifest"
 
 export const RevertState = Revert.State
 export type RevertState = Revert.State
@@ -131,6 +132,14 @@ export interface Interface {
     sessionID: SessionSchema.ID
     after?: number
   }) => Stream.Stream<SessionEvent.DurableEvent, NotFoundError>
+  readonly history: (input: {
+    sessionID: SessionSchema.ID
+    after?: number
+    limit: number
+  }) => Effect.Effect<
+    { events: ReadonlyArray<SessionEvent.DurableEvent>; hasMore: boolean },
+    NotFoundError
+  >
   readonly switchAgent: (input: { sessionID: SessionSchema.ID; agent: string }) => Effect.Effect<void, NotFoundError>
   readonly switchModel: (input: {
     sessionID: SessionSchema.ID
@@ -347,6 +356,14 @@ export const layer = Layer.unwrap(
                   .get(input.sessionID)
                   .pipe(Effect.as(events.durable({ aggregateID: input.sessionID, after: input.after }))),
               ).pipe(Stream.filter((event): event is SessionEvent.DurableEvent => isDurableSessionEvent(event))),
+            history: Effect.fn("V2Session.history")(function* (input) {
+              yield* result.get(input.sessionID)
+              return yield* EventV2.readAggregate(db, {
+                ...input,
+                aggregateID: input.sessionID,
+                manifest: SessionDurable,
+              })
+            }),
             prompt: Effect.fn("V2Session.prompt")((input) =>
               Effect.uninterruptible(
                 Effect.gen(function* () {

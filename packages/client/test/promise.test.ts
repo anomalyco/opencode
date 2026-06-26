@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { isUnauthorizedError, OpenCode } from "../src"
+import { isSessionNotFoundError, isUnauthorizedError, OpenCode } from "../src"
 
 test("sessions.get returns the wire projection", async () => {
   const client = OpenCode.make({
@@ -19,6 +19,7 @@ test("sessions.get returns the wire projection", async () => {
 
 test("session methods use the public HTTP contract", async () => {
   const requests: Array<{ url: string; init?: RequestInit }> = []
+  let historyPage = 0
   const client = OpenCode.make({
     baseUrl: "http://localhost:3000",
     fetch: async (input, init) => {
@@ -28,6 +29,14 @@ test("session methods use the public HTTP contract", async () => {
         return new Response(`data: ${JSON.stringify(modelSwitchedEvent)}\n\n`, {
           headers: { "content-type": "text/event-stream" },
         })
+      }
+      if (url.includes("/history")) {
+        historyPage++
+        return Response.json(
+          historyPage === 1
+            ? { data: [modelSwitchedEvent], hasMore: true }
+            : { data: [], hasMore: false },
+        )
       }
       if (url.includes("/prompt")) return Response.json(admission)
       if (url.includes("/context")) return Response.json({ data: [] })
@@ -39,7 +48,7 @@ test("session methods use the public HTTP contract", async () => {
     },
   })
 
-  const page = await client.sessions.list({ limit: "10", order: "desc" })
+  const page = await client.sessions.list({ limit: 10, order: "desc" })
   const active = await client.sessions.active()
   const created = await client.sessions.create({ location: { directory: "/tmp/project" } })
   await client.sessions.switchAgent({ sessionID: "ses_test", agent: "build" })
@@ -55,8 +64,13 @@ test("session methods use the public HTTP contract", async () => {
   await client.sessions.compact({ sessionID: "ses_test" })
   await client.sessions.wait({ sessionID: "ses_test" })
   const context = await client.sessions.context({ sessionID: "ses_test" })
+  const history = await client.sessions.history({ sessionID: "ses_test", after: 0, limit: 1 })
+  const historyAfter = history.data.at(-1)?.durable?.seq
+  const historyNext = history.hasMore
+    ? await client.sessions.history({ sessionID: "ses_test", after: historyAfter, limit: 2 })
+    : undefined
   const events = []
-  for await (const event of client.sessions.events({ sessionID: "ses_test", after: "0" })) events.push(event)
+  for await (const event of client.sessions.events({ sessionID: "ses_test", after: 0 })) events.push(event)
   await client.sessions.interrupt({ sessionID: "ses_test" })
   const message = await client.sessions.message({ sessionID: "ses_test", messageID: "msg_model" })
 
@@ -65,6 +79,8 @@ test("session methods use the public HTTP contract", async () => {
   expect(created.id).toBe("ses_test")
   expect(admitted.id).toBe("msg_test")
   expect(context).toEqual([])
+  expect(history).toEqual({ data: [modelSwitchedEvent], hasMore: true })
+  expect(historyNext).toEqual({ data: [], hasMore: false })
   expect(events).toEqual([modelSwitchedEvent])
   expect(message).toEqual(modelSwitchedMessage)
   expect(requests.map((request) => [request.init?.method, request.url])).toEqual([
@@ -77,6 +93,8 @@ test("session methods use the public HTTP contract", async () => {
     ["POST", "http://localhost:3000/api/session/ses_test/compact"],
     ["POST", "http://localhost:3000/api/session/ses_test/wait"],
     ["GET", "http://localhost:3000/api/session/ses_test/context"],
+    ["GET", "http://localhost:3000/api/session/ses_test/history?limit=1&after=0"],
+    ["GET", "http://localhost:3000/api/session/ses_test/history?limit=2&after=1"],
     ["GET", "http://localhost:3000/api/session/ses_test/event?after=0"],
     ["POST", "http://localhost:3000/api/session/ses_test/interrupt"],
     ["GET", "http://localhost:3000/api/session/ses_test/message/msg_model"],
@@ -101,6 +119,24 @@ test("middleware errors remain declared client errors", async () => {
     throw new Error("Expected request to fail")
   } catch (error) {
     expect(isUnauthorizedError(error)).toBe(true)
+  }
+})
+
+test("sessions.history decodes SessionNotFoundError", async () => {
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async () =>
+      Response.json(
+        { _tag: "SessionNotFoundError", sessionID: "ses_missing", message: "Session not found" },
+        { status: 404 },
+      ),
+  })
+
+  try {
+    await client.sessions.history({ sessionID: "ses_missing" })
+    throw new Error("Expected request to fail")
+  } catch (error) {
+    expect(isSessionNotFoundError(error)).toBe(true)
   }
 })
 

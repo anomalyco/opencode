@@ -3,7 +3,7 @@ export * as EventV2 from "./event"
 import { Cause, Context, Effect, Layer, Option, PubSub, Schema, Stream } from "effect"
 import { Event } from "@opencode-ai/schema/event"
 import type { Data, Definition, Payload } from "@opencode-ai/schema/event"
-import { and, asc, eq, gt } from "drizzle-orm"
+import { and, asc, eq, gt, inArray } from "drizzle-orm"
 import { Database } from "./database/database"
 import { EventSequenceTable, EventTable } from "./event/sql"
 import { Location } from "./location"
@@ -46,6 +46,66 @@ export class InvalidDurableEventError extends Schema.TaggedErrorClass<InvalidDur
     message: Schema.String,
   },
 ) {}
+
+const decodeSerializedEvent = (event: SerializedEvent): Payload => {
+  const definition = Durable.get(event.type)
+  if (!definition?.durable) {
+    throw new InvalidDurableEventError({ type: event.type, message: `Unknown durable event type ${event.type}` })
+  }
+  return {
+    id: event.id,
+    type: definition.type,
+    durable: { aggregateID: event.aggregateID, seq: event.seq, version: definition.durable.version },
+    data: Schema.decodeUnknownSync(definition.data)(event.data),
+  }
+}
+
+export const readAggregate = Effect.fn("EventV2.readAggregate")(function* <A>(
+  db: Database.Interface["db"],
+  input: {
+    readonly aggregateID: string
+    readonly after?: number
+    readonly limit: number
+    readonly manifest: {
+      readonly definitions: ReadonlyMap<string, Definition>
+      readonly schema: Schema.Decoder<A, never>
+    }
+  },
+) {
+  const after = input.after ?? -1
+  const rows = yield* db
+    .select()
+    .from(EventTable)
+    .where(
+      and(
+        eq(EventTable.aggregate_id, input.aggregateID),
+        gt(EventTable.seq, after),
+        inArray(EventTable.type, Array.from(input.manifest.definitions.keys())),
+      ),
+    )
+    .orderBy(asc(EventTable.seq))
+    .limit(input.limit + 1)
+    .all()
+    .pipe(Effect.orDie)
+  const page = rows.slice(0, input.limit)
+  const decode = Schema.decodeUnknownSync(input.manifest.schema)
+  const events = page.map((event) =>
+    decode({
+      id: event.id,
+      type: input.manifest.definitions.get(event.type)?.type ?? event.type,
+      durable: {
+        aggregateID: event.aggregate_id,
+        seq: event.seq,
+        version: input.manifest.definitions.get(event.type)?.durable?.version,
+      },
+      data: event.data,
+    }),
+  )
+  return {
+    events,
+    hasMore: rows.length > input.limit,
+  }
+})
 
 export const define = Event.define
 export const versionedType = Event.versionedType
@@ -458,19 +518,6 @@ export const layerWith = (options?: LayerOptions) =>
         )
 
       const streamAll = (): Stream.Stream<Payload> => Stream.fromPubSub(pubsub.all)
-
-      const decodeSerializedEvent = (event: SerializedEvent) => {
-        const definition = Durable.get(event.type)
-        if (!definition?.durable) {
-          throw new InvalidDurableEventError({ type: event.type, message: `Unknown durable event type ${event.type}` })
-        }
-        return {
-          id: event.id,
-          type: definition.type,
-          durable: { aggregateID: event.aggregateID, seq: event.seq, version: definition.durable.version },
-          data: Schema.decodeUnknownSync(definition.data)(event.data),
-        }
-      }
 
       const readAfter = (aggregateID: string, after: number) =>
         (options?.beforeAggregateRead?.(aggregateID) ?? Effect.void).pipe(

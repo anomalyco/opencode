@@ -410,12 +410,12 @@ function renderImportedProjection(groups: ReadonlyArray<Group>, endpoints: Reado
 
 function renderPromiseTypes(groups: ReadonlyArray<Group>) {
   const types = new Map<SchemaAST.AST, string>()
-  const typeOf = (schema: Schema.Top) => {
-    const encoded = Schema.toEncoded(schema)
-    const cached = types.get(encoded.ast)
+  const typeOf = (schema: Schema.Top, decoded = false) => {
+    const projected = decoded ? Schema.toType(schema) : Schema.toEncoded(schema)
+    const cached = types.get(projected.ast)
     if (cached !== undefined) return cached
-    const type = structuralType(encoded)
-    types.set(encoded.ast, type)
+    const type = structuralType(projected)
+    types.set(projected.ast, type)
     return type
   }
   const errors = new Map(
@@ -449,7 +449,7 @@ function renderPromiseTypes(groups: ReadonlyArray<Group>) {
             const schema = schemas[field.source]
             if (schema === undefined)
               throw new GenerationError({ reason: `Missing input schema: ${prefix}.${field.name}` })
-            return `readonly ${JSON.stringify(field.name)}${field.optional ? "?" : ""}: (${typeOf(schema)})[${JSON.stringify(field.name)}]`
+            return `readonly ${JSON.stringify(field.name)}${field.optional ? "?" : ""}: (${typeOf(schema, field.source === "query")})[${JSON.stringify(field.name)}]`
           })
           .join("; ")
         const successSchema = endpoint.successes[0]
