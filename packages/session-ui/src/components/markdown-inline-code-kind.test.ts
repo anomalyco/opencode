@@ -4,7 +4,9 @@ import { inlineCodeKind } from "./markdown-inline-code-kind"
 describe("inlineCodeKind", () => {
   test("leaves code expressions as normal inline code", () => {
     expect(
-      inlineCodeKind(`case "question.asked": ... input.setStore("question", question.sessionID, [question]) / splice/insert`),
+      inlineCodeKind(
+        `case "question.asked": ... input.setStore("question", question.sessionID, [question]) / splice/insert`,
+      ),
     ).toBeUndefined()
     expect(inlineCodeKind(`<SessionQuestionDock request={request} ... />`)).toBeUndefined()
     expect(inlineCodeKind(`from sync.data.question + sync.data.session.`)).toBeUndefined()
