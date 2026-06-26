@@ -912,17 +912,17 @@ function isModelUsageLabelHidden(index: number, count: number) {
   return index !== count - 1 && index % interval !== 0
 }
 
-function formatRankMove(previousRank: number, rank: number) {
-  const change = previousRank - rank
+function formatRankMove(change: number) {
   if (change > 0) return `+${change}`
-  if (change < 0) return `${change}`
-  return "0"
+  return `${change}`
 }
 
 function formatModelRankMoveLabel(data: StatsModelData, i18n: ReturnType<typeof useI18n>) {
   if (data.rank === null) return i18n.t("model.noUsageLastWeek")
   if (data.previousRank === null) return i18n.t("model.newThisWeek")
-  return i18n.t("model.vsPreviousWeek", { change: formatRankMove(data.previousRank, data.rank) })
+  const change = data.previousRank - data.rank
+  if (change === 0) return i18n.t("model.sameAsPreviousWeek")
+  return i18n.t("model.vsPreviousWeek", { change: formatRankMove(change) })
 }
 
 function formatTokens(value: number) {
