@@ -54,12 +54,18 @@
         gap: 0;
         padding: 16px;
         flex-shrink: 0;
-        font-weight: 530;
-        font-size: 13px;
-        line-height: 16px;
-        letter-spacing: -0.04px;
-        color: var(--v2-text-text-base);
-        font-variation-settings: "slnt" 0;
+
+        [data-slot="dialog-header-title"] {
+          margin: 0;
+          flex: 1;
+          min-width: 0;
+          font-weight: 530;
+          font-size: 13px;
+          line-height: 16px;
+          letter-spacing: -0.04px;
+          color: var(--v2-text-text-base);
+          font-variation-settings: "slnt" 0;
+        }
 
         [data-slot="dialog-title-group"] {
           display: flex;

@@ -1,6 +1,6 @@
 import "@pierre/trees/web-components"
 import { FileTree } from "@pierre/trees"
-import { Dialog, DialogBody, DialogFooter, DialogHeader } from "@opencode-ai/ui/v2/dialog-v2"
+import { Dialog, DialogBody, DialogFooter, DialogHeader, DialogTitle } from "@opencode-ai/ui/v2/dialog-v2"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
@@ -269,7 +269,7 @@ export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
   return (
     <Dialog size="large" class="directory-picker-v2">
       <DialogHeader>
-        {props.title ?? language.t("command.project.open")}
+        <DialogTitle>{props.title ?? language.t("command.project.open")}</DialogTitle>
       </DialogHeader>
       <DividerV2 />
       <DialogBody class="directory-picker-v2-body pt-4!">

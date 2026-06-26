@@ -1,15 +1,16 @@
 import { Dialog as KobalteDialog } from "@kobalte/core/dialog"
-import { Dialog, DialogBody, DialogFooter, DialogHeader, DialogTitleGroup } from "./dialog-v2"
+import { Dialog, DialogBody, DialogFooter, DialogHeader, DialogTitle, DialogTitleGroup } from "./dialog-v2"
 import { ButtonV2 } from "./button-v2"
 
 const docs = `### Overview
 Dialog content wrapper built on Kobalte's dialog primitive with v2 styling.
 
-Compose with \`DialogHeader\`, \`DialogTitleGroup\`, \`DialogBody\`, and \`DialogFooter\`.
+Compose with \`DialogHeader\`, \`DialogTitle\`, \`DialogTitleGroup\`, \`DialogBody\`, and \`DialogFooter\`.
 
 ### API
 - \`Dialog\`: \`size\` (normal | large | x-large), \`variant\`, \`fit\`.
 - \`DialogHeader\`: row container with optional \`closeLabel\` and \`hideClose\`.
+- \`DialogTitle\`: accessible single-line header title.
 - \`DialogTitleGroup\`: column with \`title\` and required \`description\`.
 
 ### Accessibility
@@ -100,6 +101,25 @@ export const Sizes = {
         </KobalteDialog.Portal>
       </KobalteDialog>
     </div>
+  ),
+}
+
+export const TitleOnly = {
+  render: () => (
+    <KobalteDialog defaultOpen>
+      <KobalteDialog.Trigger as={ButtonV2} variant="neutral">
+        Open dialog
+      </KobalteDialog.Trigger>
+      <KobalteDialog.Portal>
+        <KobalteDialog.Overlay />
+        <Dialog>
+          <DialogHeader>
+            <DialogTitle>Open project</DialogTitle>
+          </DialogHeader>
+          <DialogBody>Dialog body content.</DialogBody>
+        </Dialog>
+      </KobalteDialog.Portal>
+    </KobalteDialog>
   ),
 }
 

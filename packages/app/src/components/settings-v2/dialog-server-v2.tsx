@@ -1,5 +1,5 @@
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
-import { Dialog, DialogBody, DialogFooter, DialogHeader } from "@opencode-ai/ui/v2/dialog-v2"
+import { Dialog, DialogBody, DialogFooter, DialogHeader, DialogTitle } from "@opencode-ai/ui/v2/dialog-v2"
 import { DividerV2 } from "@opencode-ai/ui/v2/divider-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
@@ -54,7 +54,9 @@ export const DialogServerV2: Component<{
 
   return (
     <Dialog fit class="settings-v2-server-dialog">
-      <DialogHeader hideClose={true}>{title()}</DialogHeader>
+      <DialogHeader hideClose={true}>
+        <DialogTitle>{title()}</DialogTitle>
+      </DialogHeader>
       <DividerV2 />
       <DialogBody class="flex w-full min-w-0 flex-1 flex-col px-4 pt-4 pb-2">
         <div class="flex w-full min-w-0 flex-col gap-6">

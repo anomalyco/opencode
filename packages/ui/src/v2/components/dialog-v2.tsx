@@ -33,6 +33,10 @@ export function DialogBody(props: ParentProps & { class?: ComponentProps<"div">[
   )
 }
 
+export function DialogTitle(props: ParentProps) {
+  return <Kobalte.Title data-slot="dialog-header-title">{props.children}</Kobalte.Title>
+}
+
 export function DialogTitleGroup(props: DialogTitleGroupProps) {
   const title = children(() => props.title)
   const description = children(() => props.description)
