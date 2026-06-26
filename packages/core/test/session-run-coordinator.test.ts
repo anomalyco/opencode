@@ -99,6 +99,45 @@ describe("SessionRunCoordinator", () => {
     ),
   )
 
+  it.effect("cleans active executions after failure and defect", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const failure = new Error("failed")
+        const defect = new Error("defect")
+        const coordinator = yield* SessionRunCoordinator.make({
+          drain: (key: string) => (key === "failure" ? Effect.fail(failure) : Effect.die(defect)),
+        })
+
+        const failed = yield* coordinator.run("failure").pipe(Effect.exit)
+        expect(Exit.isFailure(failed) && Cause.hasFails(failed.cause)).toBeTrue()
+        expect(Array.from(yield* coordinator.active)).toEqual([])
+
+        const died = yield* coordinator.run("defect").pipe(Effect.exit)
+        expect(Exit.isFailure(died) && Cause.hasDies(died.cause)).toBeTrue()
+        expect(Array.from(yield* coordinator.active)).toEqual([])
+      }),
+    ),
+  )
+
+  it.effect("cleans active executions when its scope closes", () =>
+    Effect.gen(function* () {
+      const started = yield* Deferred.make<void>()
+      const coordinator = yield* Effect.scoped(
+        Effect.gen(function* () {
+          const coordinator = yield* SessionRunCoordinator.make({
+            drain: () => Deferred.succeed(started, undefined).pipe(Effect.andThen(Effect.never)),
+          })
+          yield* coordinator.wake("session")
+          yield* Deferred.await(started)
+          expect(Array.from(yield* coordinator.active)).toEqual(["session"])
+          return coordinator
+        }),
+      )
+
+      expect(Array.from(yield* coordinator.active)).toEqual([])
+    }),
+  )
+
   it.effect("coalesces wakes received during active execution", () =>
     Effect.scoped(
       Effect.gen(function* () {
@@ -199,6 +238,7 @@ describe("SessionRunCoordinator", () => {
 
         const exit = yield* Fiber.await(resumed)
         expect(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)).toBeTrue()
+        expect(Array.from(yield* coordinator.active)).toEqual([])
         expect(runs).toBe(1)
       }),
     ),

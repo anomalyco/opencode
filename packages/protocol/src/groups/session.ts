@@ -73,10 +73,9 @@ export const SessionsCursor = Schema.String.pipe(
 )
 export type SessionsCursor = typeof SessionsCursor.Type
 
-export const SessionActive = Schema.Struct({
+const SessionActive = Schema.Struct({
   type: Schema.Literal("running"),
 }).annotate({ identifier: "SessionActive" })
-export interface SessionActive extends Schema.Schema.Type<typeof SessionActive> {}
 
 const SessionsQueryCursor = SessionsCursor.annotate({
   description: "Opaque pagination cursor returned as cursor.previous or cursor.next in the previous response.",
