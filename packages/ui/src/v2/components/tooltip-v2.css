@@ -1,3 +1,7 @@
+[data-component="tooltip-v2-trigger"] {
+  display: flex;
+}
+
 [data-component="tooltip-v2"] {
   box-sizing: border-box;
   display: inline-flex;
