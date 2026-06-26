@@ -814,6 +814,55 @@ it.instance("loop continues when finish is tool-calls", () =>
   }),
 )
 
+it.instance("loop stops when finish is tool-calls without tool parts", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const events = yield* EventV2Bridge.Service
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const session = yield* sessions.create({
+      title: "Malformed tool call finish",
+      permission: [{ permission: "*", pattern: "*", action: "allow" }],
+    })
+    const errors: NonNullable<SessionV1.Assistant["error"]>[] = []
+    const off = yield* events.listen((event) => {
+      if (event.type !== Session.Event.Error.type) return Effect.void
+      const data = event.data as typeof Session.Event.Error.data.Type
+      if (data.sessionID === session.id && data.error) errors.push(data.error)
+      return Effect.void
+    })
+    yield* prompt.prompt({
+      sessionID: session.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "hello" }],
+    })
+    yield* llm.push(reply().text("<invoke name=\"read\">").toolCalls())
+
+    const result = yield* prompt.loop({ sessionID: session.id })
+    const stored = yield* MessageV2.get({ sessionID: session.id, messageID: result.info.id })
+    yield* off
+
+    expect(yield* llm.calls).toBe(1)
+    expect(result.info.role).toBe("assistant")
+    expect(stored.info.role).toBe("assistant")
+    if (result.info.role === "assistant" && stored.info.role === "assistant") {
+      const error = result.info.error
+      expect(error).toBeDefined()
+      if (!error) return
+      expect(result.info.finish).toBe("error")
+      expect(error.name).toBe("APIError")
+      expect(JSON.stringify(error.data)).toContain("finished with tool-calls")
+      expect(stored.info.error).toEqual(error)
+      expect(errors).toContainEqual(error)
+      expect(result.parts.some((part) => part.type === "tool")).toBe(false)
+      expect(result.parts).toEqual(
+        expect.arrayContaining([expect.objectContaining({ type: "text", text: '<invoke name="read">' })]),
+      )
+    }
+  }),
+)
+
 it.instance("glob tool keeps instance context during prompt runs", () =>
   Effect.gen(function* () {
     const { dir, llm } = yield* useServerConfig(providerCfg)

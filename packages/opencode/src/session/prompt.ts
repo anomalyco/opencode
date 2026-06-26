@@ -1284,6 +1284,25 @@ export const layer = Layer.effect(
               toolChoice: format.type === "json_schema" ? "required" : undefined,
             })
 
+            if (handle.message.finish === "tool-calls") {
+              const parts = yield* MessageV2.parts(handle.message.id).pipe(
+                Effect.provideService(Database.Service, database),
+              )
+              const hasToolPart = parts.some((part) => part.type === "tool")
+              if (!hasToolPart) {
+                handle.message.error = new SessionV1.APIError({
+                  message: "Provider finished with tool-calls but did not emit any tool calls",
+                  isRetryable: false,
+                  metadata: { finish: "tool-calls" },
+                }).toObject()
+                handle.message.finish = "error"
+                handle.message.time.completed = Date.now()
+                yield* sessions.updateMessage(handle.message)
+                yield* events.publish(Session.Event.Error, { sessionID, error: handle.message.error })
+                return "break" as const
+              }
+            }
+
             if (structured !== undefined) {
               handle.message.structured = structured
               handle.message.finish = handle.message.finish ?? "stop"
