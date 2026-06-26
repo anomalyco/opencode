@@ -1,17 +1,17 @@
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { createEffect, createMemo, createRoot } from "solid-js"
 import { createStore } from "solid-js/store"
-import { ServerConnection, useServer } from "./server"
+import { createServerProjects, ServerConnection, useServer } from "./server"
 import { useServerHealth } from "@/utils/server-health"
-import { QueryClient } from "@tanstack/solid-query"
 import { createServerSdkContext } from "./server-sdk"
 import { createServerSyncContext } from "./server-sync"
 import { getOwner } from "solid-js/web"
-import { Persist, persisted } from "@/utils/persist"
+import { QueryClient } from "@tanstack/solid-query"
+import type { ServerScope } from "@/utils/server-scope"
 
 export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext({
   name: "Global",
-  init: (props: { defaultServer: ServerConnection.Key; servers?: Array<ServerConnection.Any> }) => {
+  init: () => {
     const server = useServer()
     const serverHealth = useServerHealth(
       () => server.list,
@@ -22,8 +22,6 @@ export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext(
         serverKey: undefined as ServerConnection.Key | undefined,
       },
     })
-
-    const serversAndProjects = createServersAndProjectStore()
 
     const settingsServer = createMemo(() => {
       const list = server.list
@@ -43,18 +41,25 @@ export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext(
 
     const owner = getOwner()
 
+    const ensureServerCtx = (conn: ServerConnection.Any) => {
+      const key = ServerConnection.key(conn)
+      const existing = serverCtxs.get(key)
+      if (existing) return existing.serverCtx
+      const root = createRoot((dispose) => {
+        const serverCtx = createServerCtx(conn, server.scope(key), server.projects.forServer(key))
+        return { dispose, serverCtx }
+      }, owner as any)
+      serverCtxs.set(key, root)
+      return root.serverCtx
+    }
+
     createMemo(() => {
       for (const conn of server.list) {
-        const key = ServerConnection.key(conn)
-        if (!serverCtxs.has(key)) {
-          const root = createRoot((dispose) => {
-            const serverCtx = createServerCtx(conn, serversAndProjects)
-            return { dispose, serverCtx }
-          }, owner as any)
-          serverCtxs.set(key, root)
-        }
+        ensureServerCtx(conn)
       }
+    })
 
+    createEffect(() => {
       for (const [key] of serverCtxs) {
         if (!server.list.find((conn) => ServerConnection.key(conn) === key)) {
           const { dispose } = serverCtxs.get(key)!
@@ -64,14 +69,9 @@ export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext(
       }
     })
 
-    const allServers = createMemo(
-      (): Array<ServerConnection.Any> =>
-        resolveServerList({ stored: serversAndProjects.store.list, props: props.servers }),
-    )
-
     return {
       servers: {
-        list: allServers,
+        list: () => server.list,
         health: serverHealth,
       },
       settings: {
@@ -85,34 +85,17 @@ export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext(
           },
         },
       },
-      createServerCtx(conn: ServerConnection.Any) {
-        const key = ServerConnection.key(conn)
-        const ctx = serverCtxs.get(key)
-        if (!ctx) return createServerCtx(conn, serversAndProjects)
-        return ctx.serverCtx
+      ensureServerCtx(conn: ServerConnection.Any) {
+        return ensureServerCtx(conn)
       },
     }
   },
 })
 
-type StoredProject = { worktree: string; expanded: boolean }
-type StoredServer = string | ServerConnection.HttpBase | ServerConnection.Http
-
-const createServersAndProjectStore = () => {
-  const [store, setStore, _, ready] = persisted(
-    Persist.global("server", ["server.v3"]),
-    createStore({
-      list: [] as StoredServer[],
-      projects: {} as Record<string, StoredProject[]>,
-      lastProject: {} as Record<string, string>,
-    }),
-  )
-  return { store, setStore, ready }
-}
-
 function createServerCtx(
   conn: ServerConnection.Any,
-  { store, setStore }: ReturnType<typeof createServersAndProjectStore>,
+  scope: ServerScope,
+  projects: ReturnType<typeof createServerProjects>,
 ) {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -123,12 +106,8 @@ function createServerCtx(
       },
     },
   })
-
-  const sdk = createServerSdkContext(conn)
+  const sdk = createServerSdkContext(conn, scope)
   const sync = createServerSyncContext(sdk)
-
-  const key = ServerConnection.key(conn)
-  const storeKey = projectsKey(key)
 
   function enrich(project: { worktree: string; expanded: boolean }) {
     const [childStore] = sync.child(project.worktree, { bootstrap: false })
@@ -147,7 +126,7 @@ function createServerCtx(
     return base
   }
 
-  const projectsList = createMemo(() => (store.projects[storeKey] ?? []).map(enrich))
+  const projectsList = createMemo(() => projects.list().map(enrich))
 
   const isLocal =
     (conn?.type === "sidecar" && conn.variant === "base") || (conn?.type === "http" && isLocalHost(conn.http.url))
@@ -158,45 +137,8 @@ function createServerCtx(
     sync,
     isLocal,
     projects: {
+      ...projects,
       list: projectsList,
-      open(directory: string) {
-        const current = store.projects[storeKey] ?? []
-        if (current.find((x) => x.worktree === directory)) return
-        setStore("projects", storeKey, [{ worktree: directory, expanded: true }, ...current])
-      },
-      close(directory: string) {
-        const current = store.projects[storeKey] ?? []
-        setStore(
-          "projects",
-          storeKey,
-          current.filter((x) => x.worktree !== directory),
-        )
-      },
-      expand(directory: string) {
-        const current = store.projects[storeKey] ?? []
-        const index = current.findIndex((x) => x.worktree === directory)
-        if (index !== -1) setStore("projects", storeKey, index, "expanded", true)
-      },
-      collapse(directory: string) {
-        const current = store.projects[storeKey] ?? []
-        const index = current.findIndex((x) => x.worktree === directory)
-        if (index !== -1) setStore("projects", storeKey, index, "expanded", false)
-      },
-      move(directory: string, toIndex: number) {
-        const current = store.projects[storeKey] ?? []
-        const fromIndex = current.findIndex((x) => x.worktree === directory)
-        if (fromIndex === -1 || fromIndex === toIndex) return
-        const result = [...current]
-        const [item] = result.splice(fromIndex, 1)
-        result.splice(toIndex, 0, item)
-        setStore("projects", storeKey, result)
-      },
-      last() {
-        return store.lastProject[storeKey]
-      },
-      touch(directory: string) {
-        setStore("lastProject", storeKey, directory)
-      },
     },
   }
 }
@@ -206,43 +148,4 @@ export type ServerCtx = ReturnType<typeof createServerCtx>
 function isLocalHost(url: string) {
   const host = url.replace(/^https?:\/\//, "").split(":")[0]
   if (host === "localhost" || host === "127.0.0.1") return "local"
-}
-
-function projectsKey(key: ServerConnection.Key) {
-  if (key === "sidecar") return "local"
-  if (isLocalHost(key)) return "local"
-  return key
-}
-
-export function resolveServerList(input: {
-  props?: Array<ServerConnection.Any>
-  stored: StoredServer[]
-}): Array<ServerConnection.Any> {
-  const deduped = new Map<ServerConnection.Key, ServerConnection.Any>(
-    input.props?.map((v) => [ServerConnection.key(v), v]) ?? [],
-  )
-
-  for (const value of input.stored) {
-    const conn: ServerConnection.Http =
-      typeof value === "string"
-        ? {
-            type: "http" as const,
-            http: { url: value },
-          }
-        : "http" in value
-          ? value
-          : { type: "http", http: value }
-    const key = ServerConnection.key(conn)
-
-    const existing = deduped.get(key)
-    if (existing)
-      deduped.set(key, {
-        ...existing,
-        ...conn,
-        http: { ...existing.http, ...conn.http },
-      })
-    else deduped.set(key, conn)
-  }
-
-  return [...deduped.values()]
 }

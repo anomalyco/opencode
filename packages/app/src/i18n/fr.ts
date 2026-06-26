@@ -282,6 +282,11 @@ export const dict = {
   "dialog.fork.empty": "Aucun message à partir duquel bifurquer",
   "dialog.directory.search.placeholder": "Rechercher des dossiers",
   "dialog.directory.empty": "Aucun dossier trouvé",
+  "dialog.directory.action.selectFile": "Sélectionner le fichier",
+  "dialog.directory.action.selectFolder": "Sélectionner le dossier",
+  "dialog.directory.root": "Racine",
+  "dialog.directory.parent": "Parent",
+  "dialog.directory.readError": "Impossible de lire ce dossier",
   "dialog.server.title": "Serveurs",
   "dialog.server.description": "Changez le serveur OpenCode auquel cette application se connecte.",
   "dialog.server.search.placeholder": "Rechercher des serveurs",
@@ -601,9 +606,6 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Développer les parties de l'outil edit",
   "settings.general.row.editToolPartsExpanded.description":
     "Afficher les parties des outils edit, write et patch développées par défaut dans la chronologie",
-  "settings.general.row.showSessionProgressBar.title": "Afficher la barre de progression de la session",
-  "settings.general.row.showSessionProgressBar.description":
-    "Afficher la barre de progression animée en haut de la session lorsque l'agent travaille",
   "settings.general.row.wayland.title": "Utiliser Wayland natif",
   "settings.general.row.wayland.description": "Désactiver le repli X11 sur Wayland. Nécessite un redémarrage.",
   "settings.general.row.wayland.tooltip":

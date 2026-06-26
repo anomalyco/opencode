@@ -10,6 +10,7 @@ import { Provider } from "@/provider/provider"
 import { disposeAllInstances } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
 
 const it = testEffect(Layer.mergeAll(Provider.defaultLayer, Env.defaultLayer))
 
@@ -40,11 +41,6 @@ const mantleModelConfig = {
     input: ["text", "image", "pdf"] as Array<"text" | "image" | "pdf">,
     output: ["text"] as Array<"text">,
   },
-}
-
-const mantleOpenAIModelConfig = {
-  ...mantleModelConfig,
-  provider: { npm: "@ai-sdk/amazon-bedrock/mantle", api: "https://bedrock-mantle.us-east-2.api.aws/openai/v1" },
 }
 
 const withAuthJson = (contents: string) =>
@@ -112,8 +108,11 @@ it.instance(
   "Bedrock Mantle: GPT-5.5 uses Responses API and OpenAI base path",
   () =>
     Effect.gen(function* () {
-      yield* set("AWS_BEARER_TOKEN_BEDROCK", "test-bearer-token")
-      const model = yield* Provider.use.getModel(ProviderV2.ID.amazonBedrock, ProviderV2.ModelID.make("openai.gpt-5.5"))
+      yield* set("AWS_REGION", "")
+      yield* set("AWS_PROFILE", "")
+      yield* set("AWS_ACCESS_KEY_ID", "")
+      yield* set("AWS_BEARER_TOKEN_BEDROCK", "")
+      const model = yield* Provider.use.getModel(ProviderV2.ID.amazonBedrock, ModelV2.ID.make("openai.gpt-5.5"))
       const language = yield* Provider.use.getLanguage(model)
       expect((language as { provider: string }).provider).toBe("bedrock-mantle.responses")
       expect((language as { modelId: string }).modelId).toBe("openai.gpt-5.5")
@@ -128,8 +127,16 @@ it.instance(
     config: {
       provider: {
         "amazon-bedrock": {
-          options: { region: "us-east-2" },
-          models: { "openai.gpt-5.5": mantleOpenAIModelConfig },
+          options: { region: "us-east-2", apiKey: "test-bearer-token" },
+          models: {
+            "openai.gpt-5.5": {
+              ...mantleModelConfig,
+              provider: {
+                npm: "@ai-sdk/amazon-bedrock/mantle",
+                api: "https://bedrock-mantle.${AWS_REGION}.api.aws/openai/v1",
+              },
+            },
+          },
         },
       },
     },
@@ -143,7 +150,7 @@ it.instance(
       yield* set("AWS_BEARER_TOKEN_BEDROCK", "test-bearer-token")
       const model = yield* Provider.use.getModel(
         ProviderV2.ID.amazonBedrock,
-        ProviderV2.ModelID.make("openai.gpt-oss-safeguard-120b"),
+        ModelV2.ID.make("openai.gpt-oss-safeguard-120b"),
       )
       const language = yield* Provider.use.getLanguage(model)
       expect((language as { provider: string }).provider).toBe("bedrock-mantle.chat")

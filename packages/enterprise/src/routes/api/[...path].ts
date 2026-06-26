@@ -5,6 +5,8 @@ import { validator } from "hono-openapi"
 import z from "zod"
 import { cors } from "hono/cors"
 import { Share } from "~/core/share"
+import { Resource } from "sst"
+import { timingSafeEqual } from "node:crypto"
 
 const app = new Hono()
 
@@ -137,6 +139,20 @@ app
       return c.json({})
     },
   )
+  .delete("/support/actions/remove-share", async (c) => {
+    const authorization = c.req.header("authorization")
+    const expected = `Bearer ${(Resource as unknown as Record<string, { value: string }>).SUPPORT_API_KEY.value}`
+    const actual = Buffer.from(authorization ?? "")
+    const secret = Buffer.from(expected)
+    if (actual.length !== secret.length || !timingSafeEqual(actual, secret))
+      return c.json({ error: "Unauthorized" }, 401)
+
+    const body = z.object({ shareID: z.string().min(1) }).safeParse(await c.req.json().catch(() => undefined))
+    if (!body.success) return c.json({ error: "Invalid request", issues: body.error.issues }, 400)
+    return Share.removeAdmin({ id: body.data.shareID })
+      .then(() => c.json({ success: true, message: "Share removed" }))
+      .catch((error) => c.json({ error: error instanceof Error ? error.message : String(error) }, 400))
+  })
 
 export function GET(event: APIEvent) {
   return app.fetch(event.request)
