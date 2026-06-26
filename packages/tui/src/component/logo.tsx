@@ -1,17 +1,23 @@
 import { TextAttributes } from "@opentui/core"
 import { For } from "solid-js"
 import { useTheme } from "../context/theme"
-import { wordmark } from "../logo"
+import { wordmark, wordmarkGradient } from "../logo"
 
 export function Logo() {
-  const { theme } = useTheme()
+  const { mode } = useTheme()
+
+  // Resolve the gradient color for a wordmark line, reactive on the theme mode.
+  const color = (index: number) => {
+    const gradient = wordmarkGradient[mode()]
+    return gradient[index] ?? gradient[gradient.length - 1]
+  }
 
   return (
     <box>
       <For each={wordmark}>
-        {(line) => (
+        {(line, index) => (
           <box flexDirection="row">
-            <text fg={theme.text} attributes={TextAttributes.BOLD} selectable={false}>
+            <text fg={color(index())} attributes={TextAttributes.BOLD} selectable={false}>
               {line}
             </text>
           </box>
