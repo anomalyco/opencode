@@ -7,12 +7,13 @@ import { same } from "@/utils/same"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Accordion } from "@opencode-ai/ui/accordion"
 import { StickyAccordionHeader } from "@opencode-ai/ui/sticky-accordion-header"
-import { File } from "@opencode-ai/ui/file"
-import { Markdown } from "@opencode-ai/ui/markdown"
+import { File } from "@opencode-ai/session-ui/file"
+import { Markdown } from "@opencode-ai/session-ui/markdown"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import type { Message, Part, UserMessage } from "@opencode-ai/sdk/v2/client"
 import { useLanguage } from "@/context/language"
 import { useProviders } from "@/hooks/use-providers"
+import { useSDK } from "@/context/sdk"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { getSessionContextMetrics } from "./session-context-metrics"
 import { estimateSessionContextBreakdown, type SessionContextBreakdownKey } from "./session-context-breakdown"
@@ -93,16 +94,17 @@ const emptyUserMessages: UserMessage[] = []
 export function SessionContextTab() {
   const sync = useSync()
   const language = useLanguage()
-  const providers = useProviders()
+  const sdk = useSDK()
+  const providers = useProviders(() => sdk().directory)
   const { params, view } = useSessionLayout()
 
-  const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
+  const info = createMemo(() => (params.id ? sync().session.get(params.id) : undefined))
 
   const messages = createMemo(
     () => {
       const id = params.id
       if (!id) return emptyMessages
-      return (sync.data.message[id] ?? []) as Message[]
+      return (sync().data.message[id] ?? []) as Message[]
     },
     emptyMessages,
     { equals: same },
@@ -180,7 +182,7 @@ export function SessionContextTab() {
         if (!c?.input) return []
         return estimateSessionContextBreakdown({
           messages: messages(),
-          parts: sync.data.part as Record<string, Part[] | undefined>,
+          parts: sync().data.part as Record<string, Part[] | undefined>,
           input: c.input,
           systemPrompt: systemPrompt(),
         })
@@ -221,7 +223,7 @@ export function SessionContextTab() {
   let scroll: HTMLDivElement | undefined
   let frame: number | undefined
   let pending: { x: number; y: number } | undefined
-  const getParts = (id: string) => (sync.data.part[id] ?? []) as Part[]
+  const getParts = (id: string) => (sync().data.part[id] ?? []) as Part[]
 
   const restoreScroll = () => {
     const el = scroll

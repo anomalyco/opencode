@@ -83,6 +83,26 @@ describe("Bedrock Converse route", () => {
     }),
   )
 
+  it.effect("passes topK through additionalModelRequestFields as top_k", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<BedrockConverse.BedrockConverseBody>(
+        LLM.updateRequest(baseRequest, { generation: { maxTokens: 64, temperature: 0, topK: 40 } }),
+      )
+
+      // Converse's inferenceConfig has no topK; Anthropic/Nova read it from
+      // additionalModelRequestFields as top_k.
+      expect(prepared.body.inferenceConfig).toEqual({ maxTokens: 64, temperature: 0 })
+      expect(prepared.body.additionalModelRequestFields).toEqual({ top_k: 40 })
+    }),
+  )
+
+  it.effect("omits additionalModelRequestFields when topK is unset", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<BedrockConverse.BedrockConverseBody>(baseRequest)
+      expect(prepared.body.additionalModelRequestFields).toBeUndefined()
+    }),
+  )
+
   it.effect("lowers chronological system updates to wrapped user text in order", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare<BedrockConverse.BedrockConverseBody>(
@@ -189,7 +209,7 @@ describe("Bedrock Converse route", () => {
                 type: "content",
                 value: [
                   { type: "text", text: "Screenshot captured." },
-                  { type: "media", mediaType: "image/png", data: "AAAA" },
+                  { type: "file", uri: "data:image/png;base64,AAAA", mime: "image/png" },
                 ],
               },
             }),
@@ -351,6 +371,23 @@ describe("Bedrock Converse route", () => {
     }),
   )
 
+  it.effect("classifies input-too-long validation exceptions", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(baseRequest).pipe(
+        Effect.provide(
+          fixedBytes(eventStreamBody(["validationException", { message: "Input is too long for requested model" }])),
+        ),
+      )
+
+      expect(response.events.find((event) => event.type === "provider-error")).toEqual({
+        type: "provider-error",
+        message: "Input is too long for requested model",
+        classification: "context-overflow",
+        retryable: false,
+      })
+    }),
+  )
+
   it.effect("rejects requests with no auth path", () =>
     Effect.gen(function* () {
       const unsignedModel = AmazonBedrock.configure({
@@ -492,8 +529,8 @@ describe("Bedrock Converse route", () => {
           model,
           messages: [
             Message.user([
-              { type: "media", mediaType: "application/pdf", data: "PDFDATA", filename: "report.pdf" },
-              { type: "media", mediaType: "text/csv", data: "CSVDATA" },
+              { type: "media", mediaType: "application/pdf", data: "UERGREFUQQ==", filename: "report.pdf" },
+              { type: "media", mediaType: "text/csv", data: "Q1NWREFUQQ==" },
             ]),
           ],
         }),
@@ -505,9 +542,9 @@ describe("Bedrock Converse route", () => {
             role: "user",
             content: [
               // Filename round-trips when supplied.
-              { document: { format: "pdf", name: "report.pdf", source: { bytes: "PDFDATA" } } },
+              { document: { format: "pdf", name: "report.pdf", source: { bytes: "UERGREFUQQ==" } } },
               // Falls back to a stable placeholder when filename is missing.
-              { document: { format: "csv", name: "document.csv", source: { bytes: "CSVDATA" } } },
+              { document: { format: "csv", name: "document.csv", source: { bytes: "Q1NWREFUQQ==" } } },
             ],
           },
         ],

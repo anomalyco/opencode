@@ -1,6 +1,7 @@
 import type { Session } from "@opencode-ai/sdk/v2/client"
 import { Avatar } from "@opencode-ai/ui/avatar"
 import { Icon } from "@opencode-ai/ui/icon"
+import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
@@ -33,8 +34,10 @@ export const ProjectIcon = (props: {
   const hasError = createMemo(() => dirs().some((directory) => notification.project.unseenHasError(directory)))
   const hasPermissions = createMemo(() =>
     dirs().some((directory) => {
-      const [store] = serverSync.child(directory, { bootstrap: false })
-      return hasProjectPermissions(store.permission, (item) => !permission.autoResponds(item, directory))
+      return hasProjectPermissions(serverSync().session.data.permission, (item) => {
+        if (serverSync().session.get(item.sessionID)?.directory !== directory) return false
+        return !permission.autoResponds(item, directory)
+      })
     }),
   )
   const notify = createMemo(() => props.notify && (hasPermissions() || unseenCount() > 0))
@@ -149,18 +152,25 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
   const serverSync = useServerSync()
   const unseenCount = createMemo(() => notification.session.unseenCount(props.session.id))
   const hasError = createMemo(() => notification.session.unseenHasError(props.session.id))
-  const [sessionStore] = serverSync.child(props.session.directory)
+  const [sessionStore] = serverSync().child(props.session.directory)
   const hasPermissions = createMemo(() => {
-    return !!sessionPermissionRequest(sessionStore.session, sessionStore.permission, props.session.id, (item) => {
-      return !permission.autoResponds(item, props.session.directory)
-    })
+    return !!sessionPermissionRequest(
+      sessionStore.session,
+      serverSync().session.data.permission,
+      props.session.id,
+      (item) => {
+        return !permission.autoResponds(item, props.session.directory)
+      },
+    )
   })
   const isWorking = createMemo(() => {
     if (hasPermissions()) return false
-    return sessionStore.session_working(props.session.id)
+    return serverSync().session.data.session_working(props.session.id)
   })
 
-  const tint = createMemo(() => messageAgentColor(sessionStore.message[props.session.id], sessionStore.agent))
+  const tint = createMemo(() =>
+    messageAgentColor(serverSync().session.data.message[props.session.id], sessionStore.agent),
+  )
   const tooltip = createMemo(() => props.showTooltip ?? (props.mobile || !props.sidebarExpanded()))
   const currentChild = createMemo(() => {
     if (!props.showChild) return
@@ -291,7 +301,7 @@ export const NewSessionItem = (props: {
       }}
     >
       <div class="shrink-0 size-6 flex items-center justify-center">
-        <Icon name="new-session" size="small" class="text-icon-weak" />
+        <IconV2 name="edit" size="small" class="text-icon-weak" />
       </div>
       <span class="text-14-regular text-text-strong min-w-0 flex-1 truncate">{label}</span>
     </A>

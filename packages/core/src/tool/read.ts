@@ -1,100 +1,105 @@
 export * as ReadTool from "./read"
 
-import { Tool, ToolFailure } from "@opencode-ai/llm"
-import { Cause, Effect, Layer, Schema } from "effect"
+import { ToolFailure } from "@opencode-ai/llm"
+import path from "path"
+import { Effect, Layer, Schema } from "effect"
 import { FileSystem } from "../filesystem"
-import { NonNegativeInt, PositiveInt } from "../schema"
+import { FSUtil } from "../fs-util"
+import { Image } from "../image"
+import { Location } from "../location"
 import { PermissionV2 } from "../permission"
-import { ToolOutputStore } from "../tool-output-store"
-import { ToolRegistry } from "../tool-registry"
+import { AbsolutePath } from "../schema"
+import { ReadToolFileSystem } from "./read-filesystem"
+import { Tool } from "./tool"
+import { Tools } from "./tools"
 
 export const name = "read"
+const SUPPORTED_IMAGE_MIMES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"])
 const LocationInput = Schema.Struct({
-  ...FileSystem.ReadInput.fields,
-  offset: FileSystem.ListPageInput.fields.offset.annotate({
+  path: Schema.String,
+  offset: ReadToolFileSystem.PageInput.fields.offset.annotate({
     description: "The 1-based directory entry or text line offset to start reading from",
   }),
-  limit: FileSystem.ListPageInput.fields.limit.annotate({
+  limit: ReadToolFileSystem.PageInput.fields.limit.annotate({
     description: "The maximum number of directory entries or text lines to read",
   }),
 })
-const ResourceInput = Schema.Struct({
-  resource: Schema.String,
-  offset: NonNegativeInt.pipe(Schema.optional),
-  limit: PositiveInt.check(Schema.isLessThanOrEqualTo(ToolOutputStore.MAX_READ_BYTES)).pipe(Schema.optional),
-})
-const Input = Schema.Union([LocationInput, ResourceInput])
-const Success = Schema.Union([FileSystem.Content, FileSystem.TextPage, FileSystem.ListPage, ToolOutputStore.Page])
-
-const definition = Tool.make({
-  description:
-    "Read a text or binary file, page through a large UTF-8 text file by line offset, list a directory page relative to the current location, or page through a managed tool-output resource by opaque URI.",
-  parameters: Input,
-  success: Success,
-})
+const Input = LocationInput
+const Output = Schema.Union([FileSystem.Content, ReadToolFileSystem.TextPage, ReadToolFileSystem.ListPage])
 
 export const layer = Layer.effectDiscard(
   Effect.gen(function* () {
-    const registry = yield* ToolRegistry.Service
-    const filesystem = yield* FileSystem.Service
-    const resources = yield* ToolOutputStore.Service
+    const tools = yield* Tools.Service
+    const fs = yield* FSUtil.Service
+    const reader = yield* ReadToolFileSystem.Service
+    const location = yield* Location.Service
+    const image = yield* Image.Service
+    const permission = yield* PermissionV2.Service
 
-    yield* registry.contribute((editor) =>
-      editor.set(name, {
-        tool: definition,
-        execute: ({ parameters, sessionID, assertPermission }) => {
-          const input = parameters
-          return Effect.gen(function* () {
-            if ("resource" in input)
-              return yield* resources.read({ sessionID, uri: input.resource, offset: input.offset, limit: input.limit })
-            const resolved = yield* filesystem.resolveReadPath(input)
-            if (resolved.type === "directory") {
-              const { offset, limit } = input
-              const target = resolved.target
-              yield* assertPermission({ action: name, resources: [target.resource], save: ["*"] })
-              const final = yield* filesystem.resolveReadPath(input)
-              if (
-                final.type !== "directory" ||
-                final.target.resource !== target.resource ||
-                final.target.real !== target.real
-              )
-                return yield* Effect.die(new Error("Directory changed after permission approval"))
-              return yield* filesystem.listPageResolved(final.target, { offset, limit })
-            }
-            const target = resolved.target
-            yield* assertPermission({
-              action: name,
-              resources: [target.resource],
-              save: ["*"],
-            })
-            const final = yield* filesystem.resolveReadPath(input)
-            if (final.type !== "file" || final.target.resource !== target.resource || final.target.real !== target.real)
-              return yield* Effect.die(new Error("File changed after permission approval"))
-            if (
-              final.target.size > FileSystem.MAX_READ_BYTES ||
-              input.offset !== undefined ||
-              input.limit !== undefined
+    yield* tools
+      .register({
+        [name]: Tool.make({
+          description:
+            "Read a text file or supported image, page through a large UTF-8 text file by line offset, or list a directory page. Relative paths resolve from the current location; absolute paths are read directly.",
+          input: Input,
+          output: Output,
+          toModelOutput: ({ input, output }) => {
+            if (!("encoding" in output) || output.encoding !== "base64" || !SUPPORTED_IMAGE_MIMES.has(output.mime))
+              return []
+            return [
+              { type: "text", text: "Image read successfully" },
+              { type: "file", data: output.content, mime: output.mime, name: input.path },
+            ]
+          },
+          execute: (input, context) => {
+            return Effect.gen(function* () {
+              const absolute = path.resolve(location.directory, input.path)
+              const selected = path.isAbsolute(input.path) ? path.dirname(absolute) : location.directory
+              if (!path.isAbsolute(input.path) && !FSUtil.contains(location.directory, absolute))
+                return yield* Effect.die(new Error("Path escapes the allowed read root"))
+              const real = yield* fs.realPath(absolute)
+              const root = yield* fs.realPath(selected)
+              if (!FSUtil.contains(root, real))
+                return yield* Effect.die(new Error("Path escapes the allowed read root"))
+              const resource = path.relative(root, real).replaceAll("\\", "/") || "."
+              const target = AbsolutePath.make(real)
+              const type = yield* reader.inspect(target)
+              yield* permission.assert({
+                action: name,
+                resources: [resource],
+                save: ["*"],
+                sessionID: context.sessionID,
+                agent: context.agent,
+                source: { type: "tool", messageID: context.assistantMessageID, callID: context.toolCallID },
+              })
+              if (type === "directory") return yield* reader.list(target, { offset: input.offset, limit: input.limit })
+              const content = yield* reader.read(target, resource, {
+                offset: input.offset,
+                limit: input.limit,
+              })
+              if ("encoding" in content && content.encoding === "base64" && SUPPORTED_IMAGE_MIMES.has(content.mime)) {
+                return yield* image
+                  .normalize(resource, { ...content, encoding: "base64" })
+                  .pipe(Effect.catchTag("Image.ResizerUnavailableError", () => Effect.succeed(content)))
+              }
+              if ("encoding" in content && content.encoding === "base64")
+                return yield* Effect.fail(new ReadToolFileSystem.BinaryFileError({ resource }))
+              return content
+            }).pipe(
+              Effect.mapError((error) => {
+                const message =
+                  error instanceof ReadToolFileSystem.BinaryFileError ||
+                  error instanceof ReadToolFileSystem.MediaIngestLimitError ||
+                  error instanceof Image.DecodeError ||
+                  error instanceof Image.SizeError
+                    ? error.message
+                    : `Unable to read ${input.path}`
+                return new ToolFailure({ message })
+              }),
             )
-              return yield* filesystem.readTextPageResolved(final.target, { offset: input.offset, limit: input.limit })
-            return yield* filesystem.readResolved(final.target, FileSystem.MAX_READ_BYTES)
-          }).pipe(
-            Effect.catchCause((cause) =>
-              Effect.fail(
-                new ToolFailure({
-                  message: `Unable to read ${"resource" in input ? input.resource : input.path}`,
-                  error: Cause.squash(cause),
-                }),
-              ),
-            ),
-          )
-        },
-      }),
-    )
+          },
+        }),
+      })
+      .pipe(Effect.orDie)
   }),
-)
-export const locationLayer = layer.pipe(
-  Layer.provideMerge(ToolRegistry.layer),
-  Layer.provideMerge(FileSystem.locationLayer),
-  Layer.provideMerge(PermissionV2.locationLayer),
-  Layer.provideMerge(ToolOutputStore.defaultLayer),
 )

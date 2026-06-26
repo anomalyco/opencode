@@ -7,9 +7,15 @@ import { EffectDrizzleSqlite } from "@opencode-ai/effect-drizzle-sqlite"
 import { Effect, Layer } from "effect"
 import { eq, inArray, sql } from "drizzle-orm"
 import { DatabaseMigration } from "@opencode-ai/core/database/migration"
+import { migrations } from "@opencode-ai/core/database/migration.gen"
 import sessionUsageMigration from "@opencode-ai/core/database/migration/20260510033149_session_usage"
 import normalizeStoragePathsMigration from "@opencode-ai/core/database/migration/20260601010001_normalize_storage_paths"
 import sessionMessageProjectionOrderMigration from "@opencode-ai/core/database/migration/20260603040000_session_message_projection_order"
+import eventSourcedSessionInputMigration from "@opencode-ai/core/database/migration/20260604172448_event_sourced_session_input"
+import contextEpochAgentMigration from "@opencode-ai/core/database/migration/20260605042240_add_context_epoch_agent"
+import simplifyIntegrationCredentialsMigration from "@opencode-ai/core/database/migration/20260611192811_lush_chimera"
+import simplifySessionInputMigration from "@opencode-ai/core/database/migration/20260622202450_simplify_session_input"
+import { EventV2 } from "@opencode-ai/core/event"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
@@ -18,6 +24,8 @@ import { SessionTable } from "@opencode-ai/core/session/sql"
 import sessionMetadataMigration from "@opencode-ai/core/database/migration/20260511173437_session-metadata"
 import type { SqlClient as SqlClientService } from "effect/unstable/sql/SqlClient"
 import { Database } from "@opencode-ai/core/database/database"
+import { SessionProjector } from "@opencode-ai/core/session/projector"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { tmpdir } from "./fixture/tmpdir"
 
 const run = <A, E>(effect: Effect.Effect<A, E, SqlClientService>) =>
@@ -62,15 +70,25 @@ describe("DatabaseMigration", () => {
         expect(
           yield* db.get(sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'session_input'`),
         ).toEqual({ name: "session_input" })
-        expect(yield* db.get(sql`SELECT count(*) as count FROM migration`)).toEqual({ count: 29 })
+        expect(
+          yield* db.get(sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'session_context_epoch'`),
+        ).toEqual({ name: "session_context_epoch" })
+        expect(
+          yield* db.get(
+            sql`SELECT name FROM pragma_table_info('session_context_epoch') WHERE name IN ('agent', 'replacement_seq', 'revision')`,
+          ),
+        ).toBeUndefined()
+        expect(yield* db.get(sql`SELECT count(*) as count FROM migration`)).toEqual({ count: migrations.length })
         expect(
           yield* db.all(
-            sql`SELECT name FROM sqlite_master WHERE type = 'index' AND name IN ('event_aggregate_seq_idx', 'event_aggregate_type_seq_idx', 'session_input_session_pending_seq_idx', 'session_input_session_pending_delivery_seq_idx', 'session_message_session_idx', 'session_message_session_type_idx', 'session_message_session_seq_idx', 'session_message_session_type_seq_idx', 'session_message_session_time_created_id_idx') ORDER BY name`,
+            sql`SELECT name FROM sqlite_master WHERE type = 'index' AND name IN ('event_aggregate_seq_idx', 'event_aggregate_type_seq_idx', 'session_input_session_pending_seq_idx', 'session_input_session_pending_delivery_seq_idx', 'session_input_session_admitted_seq_idx', 'session_input_session_promoted_seq_idx', 'session_message_session_idx', 'session_message_session_type_idx', 'session_message_session_seq_idx', 'session_message_session_type_seq_idx', 'session_message_session_time_created_id_idx') ORDER BY name`,
           ),
         ).toEqual([
           { name: "event_aggregate_seq_idx" },
           { name: "event_aggregate_type_seq_idx" },
+          { name: "session_input_session_admitted_seq_idx" },
           { name: "session_input_session_pending_delivery_seq_idx" },
+          { name: "session_input_session_promoted_seq_idx" },
           { name: "session_message_session_seq_idx" },
           { name: "session_message_session_time_created_id_idx" },
           { name: "session_message_session_type_seq_idx" },
@@ -79,13 +97,241 @@ describe("DatabaseMigration", () => {
     )
   })
 
-  test("backfills projected Session message order from durable event sequence", async () => {
+  test("rejects a non-empty database without a session table", async () => {
+    await expect(
+      run(
+        Effect.gen(function* () {
+          const db = yield* makeDb
+          yield* db.run(sql`CREATE TABLE unrelated (id text PRIMARY KEY)`)
+          yield* DatabaseMigration.apply(db)
+        }),
+      ),
+    ).rejects.toThrow("Database is not empty and has no session table")
+  })
+
+  test("backfills existing Context Epoch rows to the build agent", async () => {
     await run(
       Effect.gen(function* () {
         const db = yield* makeDb
+        yield* db.run(
+          sql`CREATE TABLE session_context_epoch (session_id text PRIMARY KEY, baseline text NOT NULL, snapshot text NOT NULL, baseline_seq integer NOT NULL, replacement_seq integer, revision integer DEFAULT 0 NOT NULL)`,
+        )
+        yield* db.run(
+          sql`INSERT INTO session_context_epoch (session_id, baseline, snapshot, baseline_seq) VALUES ('ses_existing', 'baseline', '{}', 0)`,
+        )
+
+        yield* DatabaseMigration.applyOnly(db, [contextEpochAgentMigration])
+
+        expect(yield* db.get(sql`SELECT agent FROM session_context_epoch WHERE session_id = 'ses_existing'`)).toEqual({
+          agent: "build",
+        })
+      }),
+    )
+  })
+
+  test("keeps legacy credential fields nullable", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.run(
+          sql`CREATE TABLE credential (id text PRIMARY KEY, connector_id text NOT NULL, method_id text NOT NULL, label text NOT NULL, value text NOT NULL, active integer DEFAULT false NOT NULL, time_created integer NOT NULL, time_updated integer NOT NULL)`,
+        )
+        yield* db.run(
+          sql`CREATE UNIQUE INDEX credential_connector_active_idx ON credential (connector_id) WHERE active = 1`,
+        )
+        yield* DatabaseMigration.applyOnly(db, [simplifyIntegrationCredentialsMigration])
+
+        yield* db.run(
+          sql`INSERT INTO credential (id, connector_id, method_id, label, value, active, time_created, time_updated) VALUES ('legacy', 'openai', 'oauth', 'Legacy', '{}', 1, 1, 1)`,
+        )
+        yield* db.run(
+          sql`INSERT INTO credential (id, integration_id, label, value, time_created, time_updated) VALUES ('current', 'anthropic', 'Current', '{}', 2, 2)`,
+        )
+        expect(yield* db.get(sql`SELECT connector_id, method_id, active FROM credential WHERE id = 'current'`)).toEqual(
+          { connector_id: null, method_id: null, active: null },
+        )
+      }),
+    )
+  })
+
+  test("resets beta history and rebuilds event-sourced Session input storage", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.run(sql`CREATE TABLE session (id text PRIMARY KEY, workspace_id text)`)
+        yield* db.run(sql`CREATE TABLE workspace (id text PRIMARY KEY)`)
+        yield* db.run(sql`CREATE TABLE message (id text PRIMARY KEY)`)
+        yield* db.run(sql`CREATE TABLE part (id text PRIMARY KEY)`)
+        yield* db.run(sql`CREATE TABLE event_sequence (aggregate_id text PRIMARY KEY, seq integer NOT NULL)`)
+        yield* db.run(
+          sql`CREATE TABLE event (id text PRIMARY KEY, aggregate_id text NOT NULL, seq integer NOT NULL, type text NOT NULL, data text NOT NULL)`,
+        )
+        yield* db.run(sql`CREATE INDEX event_aggregate_seq_idx ON event (aggregate_id, seq)`)
+        yield* db.run(sql`CREATE INDEX event_aggregate_type_seq_idx ON event (aggregate_id, type, seq)`)
+        yield* db.run(
+          sql`CREATE TABLE session_message (id text PRIMARY KEY, session_id text NOT NULL, type text NOT NULL, seq integer NOT NULL, time_created integer NOT NULL, time_updated integer NOT NULL, data text NOT NULL)`,
+        )
+        yield* db.run(sql`CREATE INDEX session_message_session_seq_idx ON session_message (session_id, seq)`)
+        yield* db.run(
+          sql`CREATE TABLE session_input (seq integer PRIMARY KEY AUTOINCREMENT, id text NOT NULL UNIQUE, session_id text NOT NULL, prompt text NOT NULL, delivery text NOT NULL, promoted_seq integer, time_created integer NOT NULL)`,
+        )
+        yield* db.run(
+          sql`CREATE INDEX session_input_session_pending_delivery_seq_idx ON session_input (session_id, promoted_seq, delivery, seq)`,
+        )
+        yield* db.run(sql`INSERT INTO session (id, workspace_id) VALUES ('session', 'wrk_old')`)
+        yield* db.run(sql`INSERT INTO workspace (id) VALUES ('wrk_old')`)
+        yield* db.run(sql`INSERT INTO message (id) VALUES ('message')`)
+        yield* db.run(sql`INSERT INTO part (id) VALUES ('part')`)
+        yield* db.run(sql`INSERT INTO event_sequence (aggregate_id, seq) VALUES ('session', 0)`)
+        yield* db.run(
+          sql`INSERT INTO event (id, aggregate_id, seq, type, data) VALUES ('evt_old', 'session', 0, 'old.1', '{}')`,
+        )
+        yield* db.run(
+          sql`INSERT INTO session_message (id, session_id, type, seq, time_created, time_updated, data) VALUES ('msg_old', 'session', 'user', 0, 1, 1, '{}')`,
+        )
+        yield* db.run(
+          sql`INSERT INTO session_input (id, session_id, prompt, delivery, time_created) VALUES ('msg_pending', 'session', '{}', 'steer', 1)`,
+        )
+
+        yield* DatabaseMigration.applyOnly(db, [eventSourcedSessionInputMigration])
+
+        expect(yield* db.all(sql`SELECT id, workspace_id FROM session`)).toEqual([
+          { id: "session", workspace_id: null },
+        ])
+        expect(yield* db.all(sql`SELECT id FROM workspace`)).toEqual([])
+        expect(yield* db.all(sql`SELECT id FROM message`)).toEqual([{ id: "message" }])
+        expect(yield* db.all(sql`SELECT id FROM part`)).toEqual([{ id: "part" }])
+        expect(yield* db.all(sql`SELECT id FROM event`)).toEqual([])
+        expect(yield* db.all(sql`SELECT aggregate_id FROM event_sequence`)).toEqual([])
+        expect(yield* db.all(sql`SELECT id FROM session_message`)).toEqual([])
+        expect(yield* db.all(sql`SELECT id FROM session_input`)).toEqual([])
+        expect(
+          (yield* db.all<{ name: string }>(sql`PRAGMA table_info(session_input)`)).map((column) => column.name),
+        ).toEqual(["id", "session_id", "prompt", "delivery", "admitted_seq", "promoted_seq", "time_created"])
+        expect(
+          (yield* db.all<{ name: string; unique: number }>(sql`PRAGMA index_list(session_message)`)).find(
+            (index) => index.name === "session_message_session_seq_idx",
+          ),
+        ).toMatchObject({ unique: 1 })
+        expect(
+          (yield* db.all<{ name: string; unique: number }>(sql`PRAGMA index_list(event)`)).find(
+            (index) => index.name === "event_aggregate_seq_idx",
+          ),
+        ).toMatchObject({ unique: 1 })
+        expect(
+          (yield* db.all<{ name: string; unique: number }>(sql`PRAGMA index_list(session_input)`)).filter((index) =>
+            ["session_input_session_admitted_seq_idx", "session_input_session_promoted_seq_idx"].includes(index.name),
+          ),
+        ).toEqual([
+          expect.objectContaining({ name: "session_input_session_promoted_seq_idx", unique: 1 }),
+          expect.objectContaining({ name: "session_input_session_admitted_seq_idx", unique: 1 }),
+        ])
+      }),
+    )
+  })
+
+  test("preserves canonical V1 state and restarts its event stream", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.run(sql`PRAGMA foreign_keys = ON`)
+        yield* DatabaseMigration.apply(db)
+        yield* db.run(
+          sql`INSERT INTO project (id, worktree, time_created, time_updated, sandboxes) VALUES ('global', '/project', 1, 1, '[]')`,
+        )
+        yield* db.run(
+          sql`INSERT INTO workspace (id, type, project_id, time_used) VALUES ('workspace', 'local', 'global', 1)`,
+        )
+        yield* db.run(
+          sql`INSERT INTO session (id, project_id, workspace_id, slug, directory, title, version, time_created, time_updated) VALUES ('session', 'global', 'workspace', 'session', '/project', 'Before', 'test', 1, 1)`,
+        )
+        yield* db.run(
+          sql`INSERT INTO message (id, session_id, time_created, time_updated, data) VALUES ('message', 'session', 1, 1, '{}')`,
+        )
+        yield* db.run(
+          sql`INSERT INTO part (id, message_id, session_id, time_created, time_updated, data) VALUES ('part', 'message', 'session', 1, 1, '{}')`,
+        )
+        yield* db.run(sql`INSERT INTO event_sequence (aggregate_id, seq) VALUES ('session', 9)`)
+        yield* db.run(
+          sql`INSERT INTO event (id, aggregate_id, seq, type, data) VALUES ('event', 'session', 9, 'session.updated.1', '{}')`,
+        )
+        yield* db.run(
+          sql`INSERT INTO session_input (id, session_id, prompt, delivery, admitted_seq, time_created) VALUES ('input', 'session', '{}', 'steer', 9, 1)`,
+        )
+        yield* db.run(
+          sql`INSERT INTO session_message (id, session_id, type, seq, time_created, time_updated, data) VALUES ('projected', 'session', 'user', 9, 1, 1, '{}')`,
+        )
+        yield* db.run(
+          sql`INSERT INTO session_context_epoch (session_id, baseline, snapshot, baseline_seq) VALUES ('session', 'baseline', '{}', 9)`,
+        )
+        yield* db.run(sql`DELETE FROM migration WHERE id = ${simplifySessionInputMigration.id}`)
+        yield* DatabaseMigration.applyOnly(db, [simplifySessionInputMigration])
+
+        const database = Layer.succeed(Database.Service, { db })
+        const events = EventV2.layer.pipe(Layer.provide(database))
+        yield* EventV2.Service.use((service) =>
+          service.publish(SessionV1.Event.Updated, {
+            sessionID: SessionSchema.ID.make("session"),
+            info: {
+              id: SessionSchema.ID.make("session"),
+              slug: "session",
+              projectID: ProjectV2.ID.global,
+              directory: "/project",
+              title: "After",
+              version: "test",
+              time: { created: 1, updated: 2 },
+            },
+          }),
+        ).pipe(
+          Effect.provide(
+            Layer.merge(events, SessionProjector.layer.pipe(Layer.provide(events), Layer.provide(database))),
+          ),
+        )
+
+        expect(
+          yield* db.get(sql`
+            SELECT
+              (SELECT title FROM session WHERE id = 'session') AS title,
+              (SELECT workspace_id FROM session WHERE id = 'session') AS workspaceID,
+              (SELECT COUNT(*) FROM message WHERE id = 'message') AS messages,
+              (SELECT COUNT(*) FROM part WHERE id = 'part') AS parts,
+              (SELECT COUNT(*) FROM workspace) AS workspaces,
+              (SELECT COUNT(*) FROM session_input) AS sessionInputs,
+              (SELECT COUNT(*) FROM session_message) AS sessionMessages,
+              (SELECT COUNT(*) FROM session_context_epoch) AS contextEpochs,
+              (SELECT seq FROM event_sequence WHERE aggregate_id = 'session') AS seq,
+              (SELECT type FROM event WHERE aggregate_id = 'session') AS eventType
+          `),
+        ).toEqual({
+          title: "After",
+          workspaceID: null,
+          messages: 1,
+          parts: 1,
+          workspaces: 0,
+          sessionInputs: 0,
+          sessionMessages: 0,
+          contextEpochs: 0,
+          seq: 0,
+          eventType: "session.updated.1",
+        })
+      }),
+    )
+  })
+
+  test("resets incompatible projected Session messages before adding sequence order", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.run(sql`CREATE TABLE session (id text PRIMARY KEY)`)
+        yield* db.run(
+          sql`CREATE TABLE message (id text PRIMARY KEY, session_id text NOT NULL, time_created integer NOT NULL, time_updated integer NOT NULL, data text NOT NULL)`,
+        )
+        yield* db.run(
+          sql`CREATE TABLE part (id text PRIMARY KEY, message_id text NOT NULL, session_id text NOT NULL, time_created integer NOT NULL, time_updated integer NOT NULL, data text NOT NULL)`,
+        )
         yield* db.run(sql`CREATE TABLE event (id text PRIMARY KEY, seq integer NOT NULL)`)
         yield* db.run(
-          sql`CREATE TABLE session_message (id text PRIMARY KEY, session_id text NOT NULL, type text NOT NULL, time_created integer NOT NULL, data text NOT NULL)`,
+          sql`CREATE TABLE session_message (id text PRIMARY KEY, session_id text NOT NULL, type text NOT NULL, time_created integer NOT NULL, time_updated integer NOT NULL, data text NOT NULL)`,
         )
         yield* db.run(
           sql`CREATE INDEX session_message_session_time_created_id_idx ON session_message (session_id, time_created, id)`,
@@ -93,38 +339,38 @@ describe("DatabaseMigration", () => {
         yield* db.run(
           sql`CREATE INDEX session_message_session_type_time_created_id_idx ON session_message (session_id, type, time_created, id)`,
         )
-        yield* db.run(sql`INSERT INTO event (id, seq) VALUES ('evt_z', 0), ('evt_a', 1)`)
+        yield* db.run(sql`INSERT INTO session (id) VALUES ('session')`)
         yield* db.run(
-          sql`INSERT INTO session_message (id, session_id, type, time_created, data) VALUES ('evt_z', 'session', 'user', 0, '{}'), ('evt_a', 'session', 'user', 0, '{}')`,
+          sql`INSERT INTO message (id, session_id, time_created, time_updated, data) VALUES ('legacy_message', 'session', 1, 1, '{"role":"user"}')`,
+        )
+        yield* db.run(
+          sql`INSERT INTO part (id, message_id, session_id, time_created, time_updated, data) VALUES ('legacy_part', 'legacy_message', 'session', 1, 1, '{"type":"text","text":"hello"}')`,
+        )
+        yield* db.run(
+          sql`INSERT INTO session_message (id, session_id, type, time_created, time_updated, data) VALUES ('stale_projection', 'session', 'user', 1, 1, '{}')`,
         )
 
         yield* DatabaseMigration.applyOnly(db, [sessionMessageProjectionOrderMigration])
 
-        expect(yield* db.all(sql`SELECT id, seq FROM session_message ORDER BY seq`)).toEqual([
-          { id: "evt_z", seq: 0 },
-          { id: "evt_a", seq: 1 },
+        expect(yield* db.all(sql`SELECT id, session_id, data FROM message`)).toEqual([
+          { id: "legacy_message", session_id: "session", data: '{"role":"user"}' },
         ])
+        expect(yield* db.all(sql`SELECT id, message_id, session_id, data FROM part`)).toEqual([
+          {
+            id: "legacy_part",
+            message_id: "legacy_message",
+            session_id: "session",
+            data: '{"type":"text","text":"hello"}',
+          },
+        ])
+        expect(yield* db.all(sql`SELECT id FROM session_message`)).toEqual([])
+
+        yield* db.run(
+          sql`INSERT INTO session_message (id, session_id, type, seq, time_created, time_updated, data) VALUES ('fresh_projection', 'session', 'user', 7, 2, 2, '{}')`,
+        )
+        expect(yield* db.get(sql`SELECT id, seq FROM session_message`)).toEqual({ id: "fresh_projection", seq: 7 })
       }),
     )
-  })
-
-  test("fails projected Session message order backfill without a durable event", async () => {
-    await expect(
-      run(
-        Effect.gen(function* () {
-          const db = yield* makeDb
-          yield* db.run(sql`CREATE TABLE event (id text PRIMARY KEY, seq integer NOT NULL)`)
-          yield* db.run(
-            sql`CREATE TABLE session_message (id text PRIMARY KEY, session_id text NOT NULL, type text NOT NULL, time_created integer NOT NULL, data text NOT NULL)`,
-          )
-          yield* db.run(
-            sql`INSERT INTO session_message (id, session_id, type, time_created, data) VALUES ('evt_missing', 'session', 'user', 0, '{}')`,
-          )
-
-          yield* DatabaseMigration.applyOnly(db, [sessionMessageProjectionOrderMigration])
-        }),
-      ),
-    ).rejects.toThrow("Cannot migrate session_message projections without matching durable events")
   })
 
   test("runs session usage backfill in order with schema changes", async () => {

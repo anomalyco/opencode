@@ -3,7 +3,8 @@ export * as Watcher from "./watcher"
 // @ts-ignore
 import { createWrapper } from "@parcel/watcher/wrapper"
 import type ParcelWatcher from "@parcel/watcher"
-import { Cause, Context, Effect, Layer, Schema } from "effect"
+import { Cause, Context, Effect, Layer } from "effect"
+import { FileSystemWatcher } from "@opencode-ai/schema/filesystem-watcher"
 import path from "path"
 import { Config } from "../config"
 import { EventV2 } from "../event"
@@ -12,24 +13,14 @@ import { FSUtil } from "../fs-util"
 import { Git } from "../git"
 import { Location } from "../location"
 import { lazy } from "../util/lazy"
-import * as Log from "../util/log"
 import { Ignore } from "./ignore"
 import { Protected } from "./protected"
 
 declare const OPENCODE_LIBC: string | undefined
 
-const log = Log.create({ service: "file.watcher" })
 const SUBSCRIBE_TIMEOUT_MS = 10_000
 
-export const Event = {
-  Updated: EventV2.define({
-    type: "file.watcher.updated",
-    schema: {
-      file: Schema.String,
-      event: Schema.Literals(["add", "change", "unlink"]),
-    },
-  }),
-}
+export const Event = FileSystemWatcher.Event
 
 const watcher = lazy((): typeof import("@parcel/watcher") | undefined => {
   try {
@@ -38,8 +29,7 @@ const watcher = lazy((): typeof import("@parcel/watcher") | undefined => {
       `@parcel/watcher-${process.platform}-${process.arch}${process.platform === "linux" ? `-${libc || "glibc"}` : ""}`,
     )
     return createWrapper(binding) as typeof import("@parcel/watcher")
-  } catch (error) {
-    log.error("failed to load watcher binding", { error })
+  } catch {
     return
   }
 })
@@ -71,14 +61,17 @@ export const layer = Layer.effect(
     const backend = getBackend()
     const location = yield* Location.Service
     if (!backend) {
-      log.error("watcher backend not supported", { directory: location.directory, platform: process.platform })
+      yield* Effect.logError("watcher backend not supported", {
+        directory: location.directory,
+        platform: process.platform,
+      })
       return Service.of({})
     }
 
     const w = watcher()
     if (!w) return Service.of({})
 
-    log.info("watcher backend", { directory: location.directory, platform: process.platform, backend })
+    yield* Effect.logInfo("watcher backend", { directory: location.directory, platform: process.platform, backend })
     const events = yield* EventV2.Service
     const fs = yield* FSUtil.Service
     const git = yield* Git.Service
@@ -103,9 +96,8 @@ export const layer = Layer.effect(
         Effect.tap((subscription) => Effect.sync(() => subscriptions.push(subscription))),
         Effect.timeout(SUBSCRIBE_TIMEOUT_MS),
         Effect.catchCause((cause) => {
-          log.error("failed to subscribe", { directory, cause: Cause.pretty(cause) })
           pending.then((subscription) => subscription.unsubscribe()).catch(() => {})
-          return Effect.void
+          return Effect.logError("failed to subscribe", { directory, cause: Cause.pretty(cause) })
         }),
       )
     }
@@ -120,7 +112,7 @@ export const layer = Layer.effect(
     }
 
     if (location.vcs?.type === "git") {
-      const resolved = yield* git.dir(location.directory)
+      const resolved = (yield* git.repo.discover(location.directory))?.gitDirectory
       const vcs = resolved ? yield* fs.realPath(resolved).pipe(Effect.catch(() => Effect.succeed(resolved))) : undefined
       if (vcs && !config.includes(".git") && !config.includes(vcs) && (!resolved || !config.includes(resolved))) {
         const ignore = (yield* fs.readDirectoryEntries(vcs).pipe(Effect.catch(() => Effect.succeed([])))).flatMap(
@@ -133,8 +125,9 @@ export const layer = Layer.effect(
     return Service.of({})
   }).pipe(
     Effect.catchCause((cause) => {
-      log.error("failed to init watcher service", { cause: Cause.pretty(cause) })
-      return Effect.succeed(Service.of({}))
+      return Effect.logError("failed to init watcher service", { cause: Cause.pretty(cause) }).pipe(
+        Effect.as(Service.of({})),
+      )
     }),
   ),
 )

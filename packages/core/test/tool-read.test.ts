@@ -1,114 +1,56 @@
-import { describe, expect } from "bun:test"
-import { Effect, Layer } from "effect"
+import { beforeEach, describe, expect } from "bun:test"
+import path from "path"
+import { Effect, Exit, Layer, PlatformError } from "effect"
+import { Config } from "@opencode-ai/core/config"
+import { ConfigAttachments } from "@opencode-ai/core/config/attachments"
 import { FileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
+import { Location } from "@opencode-ai/core/location"
+import { Image } from "@opencode-ai/core/image"
 import { PermissionV2 } from "@opencode-ai/core/permission"
 import { SessionV2 } from "@opencode-ai/core/session"
-import { ToolRegistry } from "@opencode-ai/core/tool-registry"
+import { AbsolutePath } from "@opencode-ai/core/schema"
+import { Global } from "@opencode-ai/core/global"
+import { location } from "./fixture/location"
+import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { ReadTool } from "@opencode-ai/core/tool/read"
-import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
-import { RelativePath } from "@opencode-ai/core/schema"
+import { ReadToolFileSystem } from "@opencode-ai/core/tool/read-filesystem"
 import { testEffect } from "./lib/effect"
+import { toolIdentity, executeTool, settleTool, toolDefinitions } from "./lib/tool"
 
 const assertions: PermissionV2.AssertInput[] = []
-const reads: FileSystem.ReadInput[] = []
-const textPageInputs: FileSystem.TextPageInput[] = []
-const pages: FileSystem.ListTarget[] = []
-const pageInputs: Pick<FileSystem.ListPageInput, "offset" | "limit">[] = []
-let resolvedInput: FileSystem.ReadInput | undefined
+const missingPath = "__missing_read_target__.txt"
+const missingAbsolutePath = path.join(process.cwd(), missingPath)
+const readCalls: {
+  input: AbsolutePath
+  page: ReadToolFileSystem.PageInput
+}[] = []
+const listCalls: ReadToolFileSystem.PageInput[] = []
+let resolvedType: "file" | "directory" = "file"
 let resolveFailure: unknown
-let listResolveFailure: unknown = new Error("not a directory")
-let listReal = "/project/src"
-let size = 5
-let real = "/project/README.md"
-let afterApproval = () => {}
-const resourceReads: ToolOutputStore.ReadInput[] = []
-const filesystem = Layer.succeed(
-  FileSystem.Service,
-  FileSystem.Service.of({
-    read: () => Effect.die("unused"),
-    resolveReadPath: (input) =>
-      resolveFailure === undefined
-        ? Effect.succeed({
-            type: "file" as const,
-            target: new FileSystem.ReadTarget({
-              real,
-              resource: input.reference === undefined ? "README.md" : `${input.reference}:README.md`,
-              size,
-              dev: 1,
-            }),
-          })
-        : listResolveFailure === undefined
-          ? Effect.succeed({
-              type: "directory" as const,
-              target: new FileSystem.ListTarget({
-                absolute: `/project/${input.path ?? "."}`,
-                real: listReal,
-                directory: "/project",
-                root: "/project",
-                resource: input.path ?? ".",
-              }),
-            })
-          : Effect.die(resolveFailure),
-    resolveRead: (input) =>
+let readResult: FileSystem.Content | ReadToolFileSystem.TextPage = {
+  uri: "file:///README.md",
+  name: "README.md",
+  content: "hello",
+  encoding: "utf8",
+  mime: "text/plain",
+}
+let readFailure: ReadToolFileSystem.ReadError | undefined
+let configEntries: Config.Entry[] = []
+const reader = Layer.succeed(
+  ReadToolFileSystem.Service,
+  ReadToolFileSystem.Service.of({
+    inspect: () => (resolveFailure === undefined ? Effect.succeed(resolvedType) : Effect.die(resolveFailure)),
+    read: (input, _resource, page = {}) => {
+      readCalls.push({ input, page })
+      if (readFailure !== undefined) return Effect.fail(readFailure)
+      return Effect.succeed(readResult)
+    },
+    list: (_path, input = {}) =>
       Effect.sync(() => {
-        resolvedInput = input
-      }).pipe(
-        Effect.andThen(
-          resolveFailure === undefined
-            ? Effect.succeed(
-                new FileSystem.ReadTarget({
-                  real,
-                  resource: input.reference === undefined ? "README.md" : `${input.reference}:README.md`,
-                  size,
-                  dev: 1,
-                }),
-              )
-            : Effect.die(resolveFailure),
-        ),
-      ),
-    readResolved: () =>
-      Effect.sync(() => {
-        reads.push({ path: RelativePath.make("README.md") })
-        return new FileSystem.TextContent({ type: "text", content: "hello", mime: "text/plain" })
+        listCalls.push(input)
+        return new ReadToolFileSystem.ListPage({ entries: [], truncated: false })
       }),
-    readTextPageResolved: (_target, page = {}) =>
-      Effect.sync(() => {
-        textPageInputs.push(page)
-        return new FileSystem.TextPage({
-          type: "text-page",
-          content: "hello",
-          mime: "text/plain",
-          offset: page.offset ?? 1,
-          truncated: true,
-          next: (page.offset ?? 1) + 1,
-        })
-      }),
-    resolveRoot: () => Effect.die("unused"),
-    revalidateRoot: Effect.succeed,
-    list: () => Effect.die("unused"),
-    resolveList: (input = {}) =>
-      listResolveFailure === undefined
-        ? Effect.succeed(
-            new FileSystem.ListTarget({
-              absolute: `/project/${input.path ?? "."}`,
-              real: listReal,
-              directory: "/project",
-              root: "/project",
-              resource: input.path ?? ".",
-            }),
-          )
-        : Effect.die(listResolveFailure),
-    listResolved: () => Effect.die("unused"),
-    listPage: () => Effect.die("unused"),
-    listPageResolved: (target, page = {}) =>
-      Effect.sync(() => {
-        pages.push(target)
-        pageInputs.push(page)
-        return new FileSystem.ListPage({ entries: [], truncated: false })
-      }),
-    find: () => Effect.die("unused"),
-    grep: () => Effect.die("unused"),
-    isIgnored: () => false,
   }),
 )
 let allow = true
@@ -118,7 +60,6 @@ const permission = Layer.succeed(
     assert: (input) =>
       Effect.sync(() => {
         assertions.push(input)
-        if (allow) afterApproval()
       }).pipe(Effect.andThen(allow ? Effect.void : Effect.fail(new PermissionV2.DeniedError({ rules: [] })))),
     ask: () => Effect.die("unused"),
     reply: () => Effect.die("unused"),
@@ -127,129 +68,461 @@ const permission = Layer.succeed(
     list: () => Effect.die("unused"),
   }),
 )
-const registry = ToolRegistry.layer.pipe(Layer.provide(permission))
-const resources = Layer.succeed(
-  ToolOutputStore.Service,
-  ToolOutputStore.Service.of({
-    limits: () => Effect.die("unused"),
-    write: () => Effect.die("unused"),
-    truncate: () => Effect.die("unused"),
-    cleanup: () => Effect.die("unused"),
-    read: (input) =>
-      Effect.sync(() => {
-        resourceReads.push(input)
-        return new ToolOutputStore.Page({
-          resource: new ToolOutputStore.Resource({ uri: input.uri, mime: "text/plain", size: 5 }),
-          content: "hello",
-          offset: input.offset ?? 0,
-          truncated: false,
-        })
+const registry = ToolRegistry.defaultLayer.pipe(Layer.provide(permission))
+const config = Layer.succeed(Config.Service, Config.Service.of({ entries: () => Effect.succeed(configEntries) }))
+const image = Image.layer.pipe(Layer.provide(config))
+const testFileSystem = Layer.effect(
+  FSUtil.Service,
+  FSUtil.Service.use((fs) =>
+    Effect.succeed(
+      FSUtil.Service.of({
+        ...fs,
+        realPath: (path) =>
+          path === missingAbsolutePath
+            ? Effect.fail(
+                PlatformError.systemError({
+                  _tag: "NotFound",
+                  module: "FileSystem",
+                  method: "realPath",
+                  pathOrDescriptor: path,
+                }),
+              )
+            : Effect.succeed(path),
       }),
-  }),
+    ),
+  ),
+).pipe(Layer.provide(FSUtil.defaultLayer))
+const infrastructure = Layer.mergeAll(
+  testFileSystem,
+  Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(process.cwd()) }))),
+  Global.layerWith({ data: Global.Path.data }),
+)
+const unavailableImage = Layer.succeed(
+  Image.Service,
+  Image.Service.of({ normalize: () => Effect.fail(new Image.ResizerUnavailableError()) }),
 )
 const read = ReadTool.layer.pipe(
   Layer.provide(registry),
-  Layer.provide(filesystem),
+  Layer.provide(reader),
   Layer.provide(permission),
-  Layer.provide(resources),
+  Layer.provide(config),
+  Layer.provide(image),
+  Layer.provide(infrastructure),
 )
-const it = testEffect(Layer.mergeAll(registry, filesystem, permission, resources, read))
+const it = testEffect(Layer.mergeAll(registry, reader, permission, config, image, infrastructure, read))
+const unavailableRead = ReadTool.layer.pipe(
+  Layer.provide(registry),
+  Layer.provide(reader),
+  Layer.provide(permission),
+  Layer.provide(config),
+  Layer.provide(unavailableImage),
+  Layer.provide(infrastructure),
+)
+const itWithoutResizer = testEffect(
+  Layer.mergeAll(registry, reader, permission, config, unavailableImage, infrastructure, unavailableRead),
+)
 const sessionID = SessionV2.ID.make("ses_read_tool_test")
 
 describe("ReadTool", () => {
+  beforeEach(() => {
+    assertions.length = 0
+    readCalls.length = 0
+    listCalls.length = 0
+    allow = true
+    resolvedType = "file"
+    resolveFailure = undefined
+    readResult = {
+      uri: "file:///README.md",
+      name: "README.md",
+      content: "hello",
+      encoding: "utf8",
+      mime: "text/plain",
+    }
+    readFailure = undefined
+    configEntries = []
+  })
+
   it.effect("registers, authorizes, and reads through the location filesystem", () =>
     Effect.gen(function* () {
-      assertions.length = 0
-      reads.length = 0
-      allow = true
-      resolveFailure = undefined
-      listResolveFailure = new Error("not a directory")
-      size = 5
-      real = "/project/README.md"
-      afterApproval = () => {}
-      resolvedInput = undefined
       const registry = yield* ToolRegistry.Service
 
-      expect(yield* registry.definitions()).toMatchObject([{ name: "read" }])
+      expect(yield* toolDefinitions(registry)).toMatchObject([{ name: "read" }])
+      expect(yield* toolDefinitions(registry, [{ action: "read", resource: "*", effect: "deny" }])).toEqual([])
       expect(
-        yield* registry.execute({
+        yield* executeTool(registry, {
           sessionID,
+          ...toolIdentity,
           call: { type: "tool-call", id: "call-read", name: "read", input: { path: "README.md" } },
         }),
-      ).toEqual({ type: "json", value: { type: "text", content: "hello", mime: "text/plain" } })
+      ).toEqual({
+        type: "json",
+        value: {
+          uri: "file:///README.md",
+          name: "README.md",
+          content: "hello",
+          encoding: "utf8",
+          mime: "text/plain",
+        },
+      })
       expect(assertions).toMatchObject([{ sessionID, action: "read", resources: ["README.md"], save: ["*"] }])
-      expect(reads).toEqual([{ path: RelativePath.make("README.md") }])
+      expect(readCalls).toEqual([
+        {
+          input: AbsolutePath.make(path.join(process.cwd(), "README.md")),
+          page: { offset: undefined, limit: undefined },
+        },
+      ])
+    }),
+  )
+
+  it.effect("returns a small PNG as native media instead of durable base64 text", () =>
+    Effect.gen(function* () {
+      const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+      readResult = {
+        uri: "file:///pixel.png",
+        name: "pixel.png",
+        content: png,
+        encoding: "base64",
+        mime: "image/png",
+      }
+      const registry = yield* ToolRegistry.Service
+
+      expect(
+        yield* executeTool(registry, {
+          sessionID,
+          ...toolIdentity,
+          call: { type: "tool-call", id: "call-image", name: "read", input: { path: "pixel.png" } },
+        }),
+      ).toEqual({
+        type: "content",
+        value: [
+          { type: "text", text: "Image read successfully" },
+          { type: "file", uri: `data:image/png;base64,${png}`, mime: "image/png", name: "pixel.png" },
+        ],
+      })
+      expect(readCalls).toEqual([
+        {
+          input: AbsolutePath.make(path.join(process.cwd(), "pixel.png")),
+          page: { offset: undefined, limit: undefined },
+        },
+      ])
+
+      const settled = yield* settleTool(registry, {
+        sessionID,
+        ...toolIdentity,
+        call: { type: "tool-call", id: "call-image-settle", name: "read", input: { path: "pixel.png" } },
+      })
+      expect(settled.output?.structured).toMatchObject({
+        uri: "file:///pixel.png",
+        name: "pixel.png",
+        mime: "image/png",
+        encoding: "base64",
+      })
+      expect(settled.output?.content).toMatchObject([
+        { type: "text", text: "Image read successfully" },
+        { type: "file", mime: "image/png", uri: `data:image/png;base64,${png}` },
+      ])
+    }),
+  )
+
+  it.effect("preserves a PNG above the generic text limit as native media", () =>
+    Effect.gen(function* () {
+      const photon = yield* Effect.promise(() => import("@silvia-odwyer/photon-node"))
+      const pixels = Uint8Array.from({ length: 256 * 256 * 4 }, (_, index) => (index * 73 + (index >> 3)) % 256)
+      const source = new photon.PhotonImage(pixels, 256, 256)
+      const png = Buffer.from(source.get_bytes()).toString("base64")
+      source.free()
+      expect(Buffer.byteLength(png)).toBeGreaterThan(50 * 1024)
+      readResult = {
+        uri: "file:///large.png",
+        name: "large.png",
+        content: png,
+        encoding: "base64",
+        mime: "image/png",
+      }
+      const registry = yield* ToolRegistry.Service
+
+      const settled = yield* settleTool(registry, {
+        sessionID,
+        ...toolIdentity,
+        call: { type: "tool-call", id: "call-large-image", name: "read", input: { path: "large.png" } },
+      })
+
+      expect(settled.outputPaths).toBeUndefined()
+      expect(settled.output?.structured).toMatchObject({
+        uri: "file:///large.png",
+        name: "large.png",
+        mime: "image/png",
+        encoding: "base64",
+      })
+      expect(settled.result).toEqual({
+        type: "content",
+        value: [
+          { type: "text", text: "Image read successfully" },
+          { type: "file", uri: `data:image/png;base64,${png}`, mime: "image/png", name: "large.png" },
+        ],
+      })
+    }),
+  )
+
+  itWithoutResizer.effect("returns the original image when the resizer is unavailable", () =>
+    Effect.gen(function* () {
+      const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+      readResult = {
+        uri: "file:///pixel.png",
+        name: "pixel.png",
+        content: png,
+        encoding: "base64",
+        mime: "image/png",
+      }
+      const registry = yield* ToolRegistry.Service
+
+      expect(
+        yield* executeTool(registry, {
+          sessionID,
+          ...toolIdentity,
+          call: { type: "tool-call", id: "call-image-fallback", name: "read", input: { path: "pixel.png" } },
+        }),
+      ).toMatchObject({
+        type: "content",
+        value: [{ type: "text" }, { type: "file", uri: `data:image/png;base64,${png}`, mime: "image/png" }],
+      })
+    }),
+  )
+
+  it.effect("rejects invalid image data returned by the filesystem", () =>
+    Effect.gen(function* () {
+      readResult = {
+        uri: "file:///truncated.png",
+        name: "truncated.png",
+        content: "iVBORw0KGgo=",
+        encoding: "base64",
+        mime: "image/png",
+      }
+      const registry = yield* ToolRegistry.Service
+
+      expect(
+        yield* executeTool(registry, {
+          sessionID,
+          ...toolIdentity,
+          call: { type: "tool-call", id: "call-truncated-image", name: "read", input: { path: "truncated.png" } },
+        }),
+      ).toEqual({ type: "error", value: "Image could not be decoded: truncated.png" })
+    }),
+  )
+
+  it.effect("rejects oversized images when resizing is disabled", () =>
+    Effect.gen(function* () {
+      const photon = yield* Effect.promise(() => import("@silvia-odwyer/photon-node"))
+      const source = new photon.PhotonImage(new Uint8Array(Array.from({ length: 16 * 4 }, () => 255)), 16, 1)
+      const base64 = Buffer.from(source.get_bytes()).toString("base64")
+      source.free()
+      readResult = {
+        uri: "file:///wide.png",
+        name: "wide.png",
+        content: base64,
+        encoding: "base64",
+        mime: "image/png",
+      }
+      configEntries = [
+        new Config.Document({
+          type: "document",
+          info: new Config.Info({
+            attachments: new ConfigAttachments.Info({
+              image: new ConfigAttachments.Image({ auto_resize: false, max_width: 4 }),
+            }),
+          }),
+        }),
+      ]
+      const registry = yield* ToolRegistry.Service
+      const result = yield* executeTool(registry, {
+        sessionID,
+        ...toolIdentity,
+        call: { type: "tool-call", id: "call-wide-image", name: "read", input: { path: "wide.png" } },
+      })
+
+      expect(result.type).toBe("error")
+      if (result.type === "error") expect(result.value).toContain("exceeding configured limits 4x2000")
+    }),
+  )
+
+  it.effect("resizes images to configured dimensions before returning media", () =>
+    Effect.gen(function* () {
+      const photon = yield* Effect.promise(() => import("@silvia-odwyer/photon-node"))
+      const source = new photon.PhotonImage(new Uint8Array(Array.from({ length: 16 * 4 }, () => 255)), 16, 1)
+      const base64 = Buffer.from(source.get_bytes()).toString("base64")
+      source.free()
+      readResult = {
+        uri: "file:///wide.png",
+        name: "wide.png",
+        content: base64,
+        encoding: "base64",
+        mime: "image/png",
+      }
+      configEntries = [
+        new Config.Document({
+          type: "document",
+          info: new Config.Info({
+            attachments: new ConfigAttachments.Info({ image: new ConfigAttachments.Image({ max_width: 4 }) }),
+          }),
+        }),
+      ]
+      const registry = yield* ToolRegistry.Service
+      const result = yield* executeTool(registry, {
+        sessionID,
+        ...toolIdentity,
+        call: { type: "tool-call", id: "call-resize-image", name: "read", input: { path: "wide.png" } },
+      })
+
+      expect(result.type).toBe("content")
+      if (result.type !== "content") return
+      const media = result.value[1]
+      expect(media?.type).toBe("file")
+      if (media?.type !== "file") return
+      const resized = photon.PhotonImage.new_from_byteslice(Buffer.from(media.uri.split(",")[1] ?? "", "base64"))
+      expect(resized.get_width()).toBeLessThanOrEqual(4)
+      expect(resized.get_height()).toBeLessThanOrEqual(2_000)
+      resized.free()
+    }),
+  )
+
+  it.effect("enforces max base64 bytes after resize attempts", () =>
+    Effect.gen(function* () {
+      const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+      readResult = {
+        uri: "file:///pixel.png",
+        name: "pixel.png",
+        content: png,
+        encoding: "base64",
+        mime: "image/png",
+      }
+      configEntries = [
+        new Config.Document({
+          type: "document",
+          info: new Config.Info({
+            attachments: new ConfigAttachments.Info({
+              image: new ConfigAttachments.Image({ max_base64_bytes: 1 }),
+            }),
+          }),
+        }),
+      ]
+      const registry = yield* ToolRegistry.Service
+      const result = yield* executeTool(registry, {
+        sessionID,
+        ...toolIdentity,
+        call: { type: "tool-call", id: "call-max-bytes", name: "read", input: { path: "pixel.png" } },
+      })
+
+      expect(result.type).toBe("error")
+      if (result.type === "error") expect(result.value).toContain("/1 bytes")
+    }),
+  )
+
+  it.effect("returns supported image contents despite a misleading binary extension", () =>
+    Effect.gen(function* () {
+      const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+      readResult = {
+        uri: "file:///pixel.bin",
+        name: "pixel.bin",
+        content: png,
+        encoding: "base64",
+        mime: "image/png",
+      }
+      const registry = yield* ToolRegistry.Service
+
+      expect(
+        yield* executeTool(registry, {
+          sessionID,
+          ...toolIdentity,
+          call: { type: "tool-call", id: "call-disguised-image", name: "read", input: { path: "pixel.bin" } },
+        }),
+      ).toMatchObject({
+        type: "content",
+        value: [{ type: "text" }, { type: "file", mime: "image/png", name: "pixel.bin" }],
+      })
+    }),
+  )
+
+  it.effect("returns expected filesystem failures to the model", () =>
+    Effect.gen(function* () {
+      readFailure = new ReadToolFileSystem.BinaryFileError({ resource: "archive.dat" })
+      const registry = yield* ToolRegistry.Service
+
+      expect(
+        yield* executeTool(registry, {
+          sessionID,
+          ...toolIdentity,
+          call: {
+            type: "tool-call",
+            id: "call-binary",
+            name: "read",
+            input: { path: "archive.dat", offset: 2, limit: 1 },
+          },
+        }),
+      ).toEqual({ type: "error", value: "Cannot read binary file: archive.dat" })
+      expect(readCalls).toEqual([
+        { input: AbsolutePath.make(path.join(process.cwd(), "archive.dat")), page: { offset: 2, limit: 1 } },
+      ])
+    }),
+  )
+
+  it.effect("preserves unexpected filesystem defects", () =>
+    Effect.gen(function* () {
+      resolveFailure = new Error("unexpected")
+      const registry = yield* ToolRegistry.Service
+
+      expect(
+        Exit.isFailure(
+          yield* executeTool(registry, {
+            sessionID,
+            ...toolIdentity,
+            call: { type: "tool-call", id: "call-defect", name: "read", input: { path: "README.md" } },
+          }).pipe(Effect.exit),
+        ),
+      ).toBe(true)
     }),
   )
 
   it.effect("does not read when permission is denied", () =>
     Effect.gen(function* () {
-      assertions.length = 0
-      reads.length = 0
       allow = false
-      resolveFailure = undefined
-      listResolveFailure = new Error("not a directory")
-      size = 5
-      real = "/project/README.md"
-      afterApproval = () => {}
-      resolvedInput = undefined
       const registry = yield* ToolRegistry.Service
 
       expect(
-        yield* registry.execute({
+        yield* executeTool(registry, {
           sessionID,
+          ...toolIdentity,
           call: { type: "tool-call", id: "call-read", name: "read", input: { path: "README.md" } },
         }),
       ).toEqual({ type: "error", value: "Unable to read README.md" })
-      expect(reads).toEqual([])
+      expect(readCalls).toEqual([])
     }),
   )
 
-  it.effect("reads an opaque managed resource without treating it as a path", () =>
+  it.effect("returns missing paths as model-visible tool failures", () =>
     Effect.gen(function* () {
-      resourceReads.length = 0
-      assertions.length = 0
       const registry = yield* ToolRegistry.Service
 
       expect(
-        yield* registry.execute({
+        yield* executeTool(registry, {
           sessionID,
-          call: {
-            type: "tool-call",
-            id: "call-read-resource",
-            name: "read",
-            input: { resource: "tool-output://opaque", offset: 2, limit: 10 },
-          },
+          ...toolIdentity,
+          call: { type: "tool-call", id: "call-missing-path", name: "read", input: { path: missingPath } },
         }),
-      ).toEqual({
-        type: "json",
-        value: {
-          resource: { uri: "tool-output://opaque", mime: "text/plain", size: 5 },
-          content: "hello",
-          offset: 2,
-          truncated: false,
-        },
-      })
-      expect(resourceReads).toEqual([{ sessionID, uri: "tool-output://opaque", offset: 2, limit: 10 }])
+      ).toEqual({ type: "error", value: `Unable to read ${missingPath}` })
       expect(assertions).toEqual([])
+      expect(readCalls).toEqual([])
     }),
   )
 
   it.effect("lists a bounded directory page through read", () =>
     Effect.gen(function* () {
-      assertions.length = 0
-      pages.length = 0
-      pageInputs.length = 0
-      allow = true
-      resolveFailure = new Error("Path is not a file")
-      listResolveFailure = undefined
-      listReal = "/project/src"
-      afterApproval = () => {}
+      resolvedType = "directory"
       const registry = yield* ToolRegistry.Service
 
       expect(
-        yield* registry.execute({
+        yield* executeTool(registry, {
           sessionID,
+          ...toolIdentity,
           call: {
             type: "tool-call",
             id: "call-read-directory",
@@ -259,109 +532,62 @@ describe("ReadTool", () => {
         }),
       ).toEqual({ type: "json", value: { entries: [], truncated: false } })
       expect(assertions).toMatchObject([{ sessionID, action: "read", resources: ["src"], save: ["*"] }])
-      expect(pageInputs).toEqual([{ offset: 2, limit: 10 }])
+      expect(listCalls).toEqual([{ offset: 2, limit: 10 }])
     }),
   )
 
   it.effect("does not list a directory when permission is denied", () =>
     Effect.gen(function* () {
-      pages.length = 0
       allow = false
-      resolveFailure = new Error("Path is not a file")
-      listResolveFailure = undefined
-      listReal = "/project/src"
-      afterApproval = () => {}
+      resolvedType = "directory"
       const registry = yield* ToolRegistry.Service
 
       expect(
-        yield* registry.execute({
+        yield* executeTool(registry, {
           sessionID,
+          ...toolIdentity,
           call: { type: "tool-call", id: "call-read-directory-denied", name: "read", input: { path: "src" } },
         }),
       ).toEqual({ type: "error", value: "Unable to read src" })
-      expect(pages).toEqual([])
+      expect(listCalls).toEqual([])
     }),
   )
 
-  it.effect("does not list when the directory changes after permission approval", () =>
+  it.effect("preserves unexpected resolution defects", () =>
     Effect.gen(function* () {
-      pages.length = 0
-      allow = true
-      resolveFailure = new Error("Path is not a file")
-      listResolveFailure = undefined
-      listReal = "/project/src"
-      afterApproval = () => {
-        listReal = "/outside/src"
-      }
-      const registry = yield* ToolRegistry.Service
-
-      expect(
-        yield* registry.execute({
-          sessionID,
-          call: { type: "tool-call", id: "call-read-directory-swapped", name: "read", input: { path: "src" } },
-        }),
-      ).toEqual({ type: "error", value: "Unable to read src" })
-      expect(pages).toEqual([])
-    }),
-  )
-
-  it.effect("authorizes project references with their canonical identity", () =>
-    Effect.gen(function* () {
-      assertions.length = 0
-      reads.length = 0
-      allow = true
-      resolveFailure = undefined
-      listResolveFailure = new Error("not a directory")
-      size = 5
-      real = "/project/README.md"
-      afterApproval = () => {}
-      resolvedInput = undefined
-      const registry = yield* ToolRegistry.Service
-
-      yield* registry.execute({
-        sessionID,
-        call: { type: "tool-call", id: "call-read", name: "read", input: { path: "README.md", reference: "docs" } },
-      })
-
-      expect(assertions).toMatchObject([{ resources: ["docs:README.md"] }])
-    }),
-  )
-
-  it.effect("settles missing files as typed tool errors", () =>
-    Effect.gen(function* () {
-      allow = true
-      reads.length = 0
-      real = "/project/README.md"
-      afterApproval = () => {}
       const registry = yield* ToolRegistry.Service
 
       resolveFailure = new Error("missing")
-      listResolveFailure = new Error("missing")
       expect(
-        yield* registry.execute({
-          sessionID,
-          call: { type: "tool-call", id: "call-missing", name: "read", input: { path: "missing.txt" } },
-        }),
-      ).toEqual({ type: "error", value: "Unable to read missing.txt" })
+        Exit.isFailure(
+          yield* executeTool(registry, {
+            sessionID,
+            ...toolIdentity,
+            call: { type: "tool-call", id: "call-missing", name: "read", input: { path: "missing.txt" } },
+          }).pipe(Effect.exit),
+        ),
+      ).toBe(true)
 
-      expect(reads).toEqual([])
+      expect(readCalls).toEqual([])
     }),
   )
 
-  it.effect("reads large UTF-8 text files as bounded pages with continuation", () =>
+  it.effect("forwards pagination and returns bounded text pages with continuation", () =>
     Effect.gen(function* () {
-      textPageInputs.length = 0
-      allow = true
-      resolveFailure = undefined
-      listResolveFailure = new Error("not a directory")
-      size = FileSystem.MAX_READ_BYTES + 1
-      real = "/project/large.txt"
-      afterApproval = () => {}
+      readResult = new ReadToolFileSystem.TextPage({
+        type: "text-page",
+        content: "hello",
+        mime: "text/plain",
+        offset: 2,
+        truncated: true,
+        next: 3,
+      })
       const registry = yield* ToolRegistry.Service
 
       expect(
-        yield* registry.execute({
+        yield* executeTool(registry, {
           sessionID,
+          ...toolIdentity,
           call: {
             type: "tool-call",
             id: "call-large",
@@ -373,30 +599,30 @@ describe("ReadTool", () => {
         type: "json",
         value: { type: "text-page", content: "hello", mime: "text/plain", offset: 2, truncated: true, next: 3 },
       })
-      expect(textPageInputs).toEqual([{ offset: 2, limit: 1 }])
+      expect(readCalls).toEqual([
+        { input: AbsolutePath.make(path.join(process.cwd(), "large.txt")), page: { offset: 2, limit: 1 } },
+      ])
     }),
   )
 
-  it.effect("does not read when the file changes after permission approval", () =>
+  it.effect("rejects unsupported binary discovered by a direct read", () =>
     Effect.gen(function* () {
-      assertions.length = 0
-      reads.length = 0
-      allow = true
-      resolveFailure = undefined
-      listResolveFailure = new Error("not a directory")
-      size = 5
-      real = "/project/README.md"
-      afterApproval = () => {
-        real = "/outside/README.md"
+      readResult = {
+        uri: "file:///late-binary",
+        name: "late-binary",
+        content: "AAECAw==",
+        encoding: "base64",
+        mime: "application/octet-stream",
       }
       const registry = yield* ToolRegistry.Service
+
       expect(
-        yield* registry.execute({
+        yield* executeTool(registry, {
           sessionID,
-          call: { type: "tool-call", id: "call-swapped", name: "read", input: { path: "README.md" } },
+          ...toolIdentity,
+          call: { type: "tool-call", id: "call-direct-binary", name: "read", input: { path: "late-binary" } },
         }),
-      ).toEqual({ type: "error", value: "Unable to read README.md" })
-      expect(reads).toEqual([])
+      ).toEqual({ type: "error", value: "Cannot read binary file: late-binary" })
     }),
   )
 })

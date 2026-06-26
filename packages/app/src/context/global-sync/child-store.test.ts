@@ -1,12 +1,19 @@
 import { beforeAll, describe, expect, mock, test } from "bun:test"
 import { createRoot, getOwner, type Owner } from "solid-js"
 import { createStore } from "solid-js/store"
-import type { NormalizedProviderListResponse } from "@opencode-ai/ui/context"
+import type { NormalizedProviderListResponse } from "@opencode-ai/session-ui/context"
 import type { State } from "./types"
 import type { QueryOptionsApi } from "../server-sync"
+import { ServerScope } from "@/utils/server-scope"
 
 let createChildStoreManager: typeof import("./child-store").createChildStoreManager
 const querySingles: Array<() => { queryKey?: unknown[]; enabled?: boolean }> = []
+const persist: typeof import("@/utils/persist").persisted = (_target, store) => [
+  store[0],
+  store[1],
+  null,
+  Object.assign(() => true, { promise: undefined }),
+]
 
 const child = () => createStore({} as State)
 const provider = { all: new Map(), connected: [], default: {} } satisfies NormalizedProviderListResponse
@@ -42,12 +49,6 @@ function createOwner(callback: (owner: Owner) => void) {
 }
 
 beforeAll(async () => {
-  mock.module("@/utils/persist", () => ({
-    Persist: {
-      workspace: (...parts: string[]) => parts.join(":"),
-    },
-    persisted: (_target: string, store: unknown[]) => [store[0], store[1], null, () => true],
-  }))
   mock.module("@tanstack/solid-query", () => ({
     useQuery: (options: () => { queryKey?: unknown[]; enabled?: boolean }) => {
       querySingles.push(options)
@@ -80,6 +81,8 @@ describe("createChildStoreManager", () => {
 
     const manager = createChildStoreManager({
       owner,
+      scope: ServerScope.local,
+      persist,
       isBooting: () => false,
       isLoadingSessions: () => false,
       onBootstrap() {},
@@ -109,6 +112,8 @@ describe("createChildStoreManager", () => {
     const dispose = createOwner((owner) => {
       manager = createChildStoreManager({
         owner,
+        scope: ServerScope.local,
+        persist,
         isBooting: () => false,
         isLoadingSessions: () => false,
         onBootstrap(directory) {
@@ -128,6 +133,7 @@ describe("createChildStoreManager", () => {
       const [store] = manager.child("/project")
 
       expect(store.status).toBe("loading")
+      expect(store.limit).toBe(5)
       expect(bootstraps).toEqual(["/project"])
     } finally {
       dispose()
@@ -140,6 +146,8 @@ describe("createChildStoreManager", () => {
     const dispose = createOwner((owner) => {
       manager = createChildStoreManager({
         owner,
+        scope: ServerScope.local,
+        persist,
         isBooting: () => false,
         isLoadingSessions: () => false,
         onBootstrap() {},
@@ -171,6 +179,8 @@ describe("createChildStoreManager", () => {
     const dispose = createOwner((owner) => {
       manager = createChildStoreManager({
         owner,
+        scope: ServerScope.local,
+        persist,
         isBooting: () => false,
         isLoadingSessions: () => false,
         onBootstrap() {},

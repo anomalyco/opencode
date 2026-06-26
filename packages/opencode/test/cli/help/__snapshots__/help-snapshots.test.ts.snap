@@ -27,7 +27,7 @@ exports[`opencode CLI help-text snapshots every documented command emits stable 
 manage MCP (Model Context Protocol) servers
 
 Commands:
-  opencode mcp add            add an MCP server
+  opencode mcp add [name]     add an MCP server
   opencode mcp list           list MCP servers and their status                        [aliases: ls]
   opencode mcp auth [name]    authenticate with an OAuth-enabled MCP server
   opencode mcp logout [name]  remove OAuth credentials for an MCP server
@@ -50,17 +50,21 @@ Positionals:
   url  http://localhost:4096                                                     [string] [required]
 
 Options:
-  -h, --help        show help                                                              [boolean]
-  -v, --version     show version number                                                    [boolean]
-      --print-logs  print logs to stderr                                                   [boolean]
-      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --pure        run without external plugins                                           [boolean]
-      --dir         directory to run in                                                     [string]
-  -c, --continue    continue the last session                                              [boolean]
-  -s, --session     session id to continue                                                  [string]
-      --fork        fork the session when continuing (use with --continue or --session)    [boolean]
-  -p, --password    basic auth password (defaults to OPENCODE_SERVER_PASSWORD)              [string]
-  -u, --username    basic auth username (defaults to OPENCODE_SERVER_USERNAME or 'opencode')[string]"
+  -h, --help          show help                                                            [boolean]
+  -v, --version       show version number                                                  [boolean]
+      --print-logs    print logs to stderr                                                 [boolean]
+      --log-level     log level                 [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure          run without external plugins                                         [boolean]
+      --dir           directory to run in                                                   [string]
+  -c, --continue      continue the last session                                            [boolean]
+  -s, --session       session id to continue                                                [string]
+      --fork          fork the session when continuing (use with --continue or --session)  [boolean]
+  -p, --password      basic auth password (defaults to OPENCODE_SERVER_PASSWORD)            [string]
+  -u, --username      basic auth username (defaults to OPENCODE_SERVER_USERNAME or 'opencode')
+                                                                                            [string]
+      --mini          start the minimal interactive interface             [boolean] [default: false]
+      --no-replay     disable mini session history replay on resume and after resize       [boolean]
+      --replay-limit  cap visible mini replay to the newest N messages                      [number]"
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode run --help 1`] = `
@@ -103,16 +107,8 @@ Options:
       --variant                       model variant (provider-specific reasoning effort, e.g., high,
                                       max, minimal)                                         [string]
       --thinking                      show thinking blocks                                 [boolean]
-      --replay                        replay interactive session history on resume and after resize
-                                      (use --no-replay to disable)         [boolean] [default: true]
-      --replay-limit                  cap visible interactive replay to the newest N messages
-                                                                                            [number]
-  -i, --interactive                   run in direct interactive split-footer mode
-                                                                          [boolean] [default: false]
       --dangerously-skip-permissions  auto-approve permissions that are not explicitly denied
-                                      (dangerous!)                        [boolean] [default: false]
-      --demo                          enable direct interactive demo slash commands; pass one as the
-                                      message to run it immediately       [boolean] [default: false]"
+                                      (dangerous!)                        [boolean] [default: false]"
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode debug --help 1`] = `
@@ -149,9 +145,9 @@ exports[`opencode CLI help-text snapshots every documented command emits stable 
 manage AI providers and credentials
 
 Commands:
-  opencode providers list         list providers and credentials                       [aliases: ls]
-  opencode providers login [url]  log in to a provider
-  opencode providers logout       log out from a configured provider
+  opencode providers list               list providers and credentials                 [aliases: ls]
+  opencode providers login [url]        log in to a provider
+  opencode providers logout [provider]  log out from a configured provider
 
 Options:
   -h, --help        show help                                                              [boolean]
@@ -425,16 +421,22 @@ Options:
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode mcp add --help 1`] = `
-"opencode mcp add
+"opencode mcp add [name]
 
 add an MCP server
+
+Positionals:
+  name  name of the MCP server                                                              [string]
 
 Options:
   -h, --help        show help                                                              [boolean]
   -v, --version     show version number                                                    [boolean]
       --print-logs  print logs to stderr                                                   [boolean]
       --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --pure        run without external plugins                                           [boolean]"
+      --pure        run without external plugins                                           [boolean]
+      --url         URL for a remote MCP server                                             [string]
+      --env         environment variable for a local MCP server (KEY=VALUE)                  [array]
+      --header      HTTP header for a remote MCP server (KEY=VALUE)                          [array]"
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode mcp auth --help 1`] = `
@@ -504,9 +506,12 @@ Options:
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode providers logout --help 1`] = `
-"opencode providers logout
+"opencode providers logout [provider]
 
 log out from a configured provider
+
+Positionals:
+  provider  provider id or name to log out from                                             [string]
 
 Options:
   -h, --help        show help                                                              [boolean]
