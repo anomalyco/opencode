@@ -1033,7 +1033,6 @@ function SessionGroupView(props: {
     })
   const grouped = createMemo(() => parts(props.refs))
   const pending = createMemo(() => parts(props.pending))
-  const failed = createMemo(() => grouped().some((part) => part.state.status === "error"))
   const label = createMemo(() => {
     const counts = grouped().reduce<Record<string, number>>((result, part) => {
       const tool = toolDisplay(part.name)
@@ -1055,7 +1054,7 @@ function SessionGroupView(props: {
         <Show when={grouped().length > 0}>
           <InlineToolRow
             icon={props.completed ? "→" : "✱"}
-            color={failed() ? theme.error : hover() ? theme.text : theme.textMuted}
+            color={hover() ? theme.text : theme.textMuted}
             complete={props.completed}
             pending={label()}
             spinner={!props.completed}
