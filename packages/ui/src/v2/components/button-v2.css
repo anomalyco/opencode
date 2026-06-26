@@ -89,6 +89,30 @@
   cursor: not-allowed;
 }
 
+/* Danger */
+[data-component="button-v2"][data-variant="danger"] {
+  background-color: var(--v2-background-bg-button-neutral);
+  color: var(--v2-state-fg-danger);
+  box-shadow: var(--v2-elevation-button-neutral);
+}
+
+[data-component="button-v2"][data-variant="danger"]:is(:hover, [data-state="hover"]):not(:disabled) {
+  background-image:
+    linear-gradient(90deg, var(--v2-overlay-simple-overlay-hover) 0%, var(--v2-overlay-simple-overlay-hover) 100%),
+    linear-gradient(90deg, var(--v2-background-bg-button-neutral) 0%, var(--v2-background-bg-button-neutral) 100%);
+}
+
+[data-component="button-v2"][data-variant="danger"]:is(:active, [data-state="pressed"]):not(:disabled) {
+  background-image:
+    linear-gradient(90deg, var(--v2-overlay-simple-overlay-pressed) 0%, var(--v2-overlay-simple-overlay-pressed) 100%),
+    linear-gradient(90deg, var(--v2-background-bg-button-neutral) 0%, var(--v2-background-bg-button-neutral) 100%);
+}
+
+[data-component="button-v2"][data-variant="danger"]:is(:disabled, [data-state="disabled"]) {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* Contrast */
 [data-component="button-v2"][data-variant="contrast"] {
   background-image:
