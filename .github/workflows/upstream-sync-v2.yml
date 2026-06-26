@@ -47,6 +47,10 @@ env:
   SYNC_BRANCH: sync/upstream
   # true only when manually dispatched with dry_run checked; scheduled runs are live.
   DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
+  # Disable husky in CI: the script runs its own typecheck gate and must be able to
+  # push the review branch even when typecheck fails. Otherwise the pre-push hook
+  # (full turbo typecheck) would block the workflow's own push.
+  HUSKY: "0"
 
 jobs:
   sync:
@@ -90,6 +94,7 @@ jobs:
       # App-token committer so the branch push is allowed to include upstream's
       # workflow file changes (the plain GITHUB_TOKEN cannot push to .github/workflows).
       - name: Setup Git Committer
+        id: committer
         uses: ./.github/actions/setup-git-committer
         with:
           opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
@@ -99,6 +104,10 @@ jobs:
         id: sync
         if: steps.guard.outputs.skip != 'true'
         run: |
+          # setup-bun runs `bun install`, which regenerates bun.lock and dirties the
+          # tracked tree. Discard that so the script's preflight sees a clean tree;
+          # the script reconciles and commits bun.lock itself during the run.
+          git checkout -- .
           args="--batch-size ${{ inputs.batch_size || '70' }}"
           if [ "$DRY_RUN" != "true" ]; then
             args="$args --push"
@@ -110,7 +119,9 @@ jobs:
       - name: Open / update the sync PR
         if: ${{ steps.guard.outputs.skip != 'true' && env.DRY_RUN != 'true' && steps.sync.outputs.result == 'ok' }}
         env:
-          GH_TOKEN: ${{ github.token }}
+          # Use the committer's App token (can create PRs); the default GITHUB_TOKEN
+          # may be blocked from creating PRs by org policy. Falls back to GITHUB_TOKEN.
+          GH_TOKEN: ${{ steps.committer.outputs.token || github.token }}
           SAFE: ${{ steps.sync.outputs.safe_to_push }}
           REVIEW: ${{ steps.sync.outputs.needs_review }}
           ESCALATED: ${{ steps.sync.outputs.escalated }}
