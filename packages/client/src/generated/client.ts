@@ -32,6 +32,7 @@ import type {
   SessionsInterruptOutput,
   SessionsMessageInput,
   SessionsMessageOutput,
+  EventsSubscribeOutput,
 } from "./types"
 import { ClientError } from "./client-error"
 
@@ -372,6 +373,13 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ).then((value) => value.data),
+    },
+    events: {
+      subscribe: (requestOptions?: RequestOptions): AsyncIterable<EventsSubscribeOutput> =>
+        sse<EventsSubscribeOutput>(
+          { method: "GET", path: `/api/event`, successStatus: 200, declaredStatuses: [401, 400], empty: false },
+          requestOptions,
+        ),
     },
   }
 }

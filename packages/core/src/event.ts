@@ -1,6 +1,6 @@
 export * as EventV2 from "./event"
 
-import { Cause, Context, Effect, Layer, Option, PubSub, Schema, Stream } from "effect"
+import { Cause, Context, Effect, Layer, Option, PubSub, Queue, Schema, Stream } from "effect"
 import { Event } from "@opencode-ai/schema/event"
 import type { Data, Definition, Payload } from "@opencode-ai/schema/event"
 import { and, asc, eq, gt, inArray } from "drizzle-orm"
@@ -107,6 +107,11 @@ export const readAggregate = Effect.fn("EventV2.readAggregate")(function* <A>(
   }
 })
 
+export class SubscriberOverflowError extends Schema.TaggedErrorClass<SubscriberOverflowError>()(
+  "EventV2.SubscriberOverflow",
+  { capacity: Schema.Int },
+) {}
+
 export const define = Event.define
 export const versionedType = Event.versionedType
 
@@ -143,6 +148,20 @@ export interface Interface {
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Event") {}
+
+export const allBounded = (events: Interface, capacity: number) =>
+  Effect.gen(function* () {
+    const queue = yield* Queue.dropping<Payload, SubscriberOverflowError>(capacity)
+    const unsubscribe = yield* events.listen((event) =>
+      Queue.offer(queue, event).pipe(
+        Effect.flatMap((accepted) =>
+          accepted ? Effect.void : Queue.fail(queue, new SubscriberOverflowError({ capacity })).pipe(Effect.asVoid),
+        ),
+      ),
+    )
+    yield* Effect.addFinalizer(() => unsubscribe.pipe(Effect.andThen(Queue.shutdown(queue)), Effect.asVoid))
+    return Stream.fromQueue(queue)
+  })
 
 export interface LayerOptions {
   readonly beforeAggregateRead?: (aggregateID: string) => Effect.Effect<void>
