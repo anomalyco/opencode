@@ -1109,7 +1109,6 @@ export function Prompt(props: PromptProps) {
               ? [
                   {
                     uri: part.url,
-                    mime: part.mime,
                     name: part.filename,
                     source: part.source
                       ? {
