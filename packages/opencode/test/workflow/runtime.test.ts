@@ -156,5 +156,23 @@ return "done"
         expect((err as WorkflowRuntimeError).message).toContain("line 2")
       }
     })
+
+    it("does not reject 'import' inside string literals", async () => {
+      const script = `const desc = "dynamic import of untrusted paths"\nreturn desc`
+      const result = await executeScript(script, mockHelpers, "")
+      expect(result).toBe("dynamic import of untrusted paths")
+    })
+
+    it("does not reject 'process' inside string literals", async () => {
+      const script = `const msg = "the process is simple"\nreturn msg`
+      const result = await executeScript(script, mockHelpers, "")
+      expect(result).toBe("the process is simple")
+    })
+
+    it("does not reject 'require' inside comments", async () => {
+      const script = `// we require user input\nreturn "ok"`
+      const result = await executeScript(script, mockHelpers, "")
+      expect(result).toBe("ok")
+    })
   })
 })

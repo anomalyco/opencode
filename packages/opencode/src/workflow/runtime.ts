@@ -16,7 +16,7 @@ export class WorkflowRuntimeError extends Error {
 // early with clear error messages before the script even reaches the VM.
 const FORBIDDEN_PATTERNS: ReadonlyArray<{ pattern: RegExp; reason: string }> = [
   { pattern: /\brequire\s*\(/, reason: "require() is not allowed in workflow scripts" },
-  { pattern: /\bimport\s*[\s(]/, reason: "import statements are not allowed in workflow scripts" },
+  { pattern: /\bimport\b/, reason: "import statements are not allowed in workflow scripts" },
   { pattern: /\bprocess\./, reason: "process.* is not allowed in workflow scripts" },
   { pattern: /\bglobalThis\b/, reason: "globalThis is not allowed in workflow scripts" },
   { pattern: /\beval\s*\(/, reason: "eval() is not allowed in workflow scripts" },
@@ -46,9 +46,60 @@ function findLineNumber(source: string, pattern: RegExp): number {
   return 0
 }
 
+// Strip string literals (', ", `) and comments (// and /* */) before checking
+// forbidden patterns. This prevents false positives where English words like
+// "import" or "process" appear inside string literals (e.g. "dynamic import of").
+function stripStringsAndComments(source: string): string {
+  let result = ""
+  let i = 0
+  while (i < source.length) {
+    const char = source[i]
+    const next = source[i + 1]
+
+    // Line comment — skip to end of line
+    if (char === "/" && next === "/") {
+      while (i < source.length && source[i] !== "\n") i++
+      continue
+    }
+
+    // Block comment — skip to closing */
+    if (char === "/" && next === "*") {
+      i += 2
+      while (i < source.length && !(source[i] === "*" && source[i + 1] === "/")) i++
+      i += 2
+      result += " "
+      continue
+    }
+
+    // String literals — replace with a space placeholder
+    if (char === '"' || char === "'" || char === "`") {
+      const quote = char
+      i++
+      while (i < source.length) {
+        if (source[i] === "\\") {
+          i += 2
+          continue
+        }
+        if (source[i] === quote) {
+          i++
+          break
+        }
+        i++
+      }
+      result += " "
+      continue
+    }
+
+    result += char
+    i++
+  }
+  return result
+}
+
 function validateScript(source: string): void {
+  const codeOnly = stripStringsAndComments(source)
   for (const { pattern, reason } of FORBIDDEN_PATTERNS) {
-    if (pattern.test(source)) {
+    if (pattern.test(codeOnly)) {
       const line = findLineNumber(source, pattern)
       const location = line > 0 ? ` at line ${line}` : ""
       throw new WorkflowRuntimeError(`${reason}${location}`, source)

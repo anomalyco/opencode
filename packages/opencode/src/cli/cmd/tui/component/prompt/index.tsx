@@ -62,6 +62,7 @@ import { Flag } from "@opencode-ai/core/flag/flag"
 import { type WorkspaceStatus } from "../workspace-label"
 import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut, useLeaderActive, useOpencodeKeymap } from "../../keymap"
 import { useTuiConfig } from "../../context/tui-config"
+import { WorkflowOverview, WorkflowStatusBar, useWorkflow, setWorkflowStore, cycleVerbosity, toggleTaskPanel, TaskPanel, StatusLine, useOscProgress, useWorkflowStatus, ContextBar } from "@tui/component/workflow"
 
 export type PromptProps = {
   sessionID?: string
@@ -149,6 +150,16 @@ export function Prompt(props: PromptProps) {
   const dialog = useDialog()
   const toast = useToast()
   const status = createMemo(() => sync.data.session_status?.[props.sessionID ?? ""] ?? { type: "idle" })
+  const workflow = useWorkflow(() => props.sessionID)
+  const workflowActive = createMemo(() => workflow.active())
+  const workflowStatus = useWorkflowStatus(() => props.sessionID)
+  const oscProgress = createMemo(() => {
+    const r = workflow.ratio()
+    if (workflow.active() && r.total > 0) return Math.round((r.done / r.total) * 100)
+    if (workflowStatus().state === "complete") return 100
+    return 100
+  })
+  useOscProgress({ state: () => workflowStatus().state, progress: oscProgress })
   const history = usePromptHistory()
   const stash = usePromptStash()
   const keymap = useOpencodeKeymap()
@@ -641,6 +652,41 @@ export function Prompt(props: PromptProps) {
           })
         },
       },
+      {
+        title: "Toggle workflow overview",
+        name: "workflow.overview",
+        category: "Session",
+        hidden: true,
+        enabled: workflowActive(),
+        run: () => {
+          const id = props.sessionID
+          if (!id) return
+          setWorkflowStore(id, "overviewOpen", (v) => !v)
+        },
+      },
+      {
+        title: "Cycle workflow verbosity",
+        name: "workflow.verbosity",
+        category: "Session",
+        hidden: true,
+        enabled: workflowActive(),
+        run: () => {
+          const id = props.sessionID
+          if (!id) return
+          cycleVerbosity(id)
+        },
+      },
+      {
+        title: "Toggle workflow task panel",
+        name: "workflow.tasks",
+        category: "Session",
+        hidden: true,
+        run: () => {
+          const id = props.sessionID
+          if (!id) return
+          toggleTaskPanel(id)
+        },
+      },
     ].map((entry) => ({
       namespace: "palette",
       ...entry,
@@ -662,6 +708,9 @@ export function Prompt(props: PromptProps) {
       "prompt.stash.list",
       "session.interrupt",
       "workspace.set",
+      "workflow.overview",
+      "workflow.verbosity",
+      "workflow.tasks",
     ]),
   }))
 
@@ -1684,6 +1733,11 @@ export function Prompt(props: PromptProps) {
             }
           />
         </box>
+        <Show when={workflowActive()}>
+          <WorkflowOverview sessionID={() => props.sessionID} />
+          <TaskPanel sessionID={() => props.sessionID} />
+          <WorkflowStatusBar sessionID={() => props.sessionID} />
+        </Show>
         <box width="100%" flexDirection="row" justifyContent="space-between">
           <Switch>
             <Match when={status().type === "retry_exhausted"}>
@@ -1715,7 +1769,7 @@ export function Prompt(props: PromptProps) {
                 }
 
                 return (
-                  <box flexDirection="row" gap={1} flexGrow={1} justifyContent="space-between">
+                  <box flexDirection="row" gap={1} flexGrow={1} justifyContent="space-between" alignItems="center">
                     <box flexShrink={0} flexDirection="row" gap={1}>
                       <box marginLeft={1}>
                         <text fg={theme.error}>✕</text>
@@ -1726,94 +1780,93 @@ export function Prompt(props: PromptProps) {
                         </text>
                       </box>
                     </box>
-                    <text fg={theme.text}>
-                      enter <span style={{ fg: theme.textMuted }}>retry</span>
-                      {" · "}
-                      esc <span style={{ fg: theme.textMuted }}>dismiss</span>
-                    </text>
+                    <box flexDirection="row" gap={1} alignItems="center">
+                      <ContextBar sessionID={() => props.sessionID} />
+                      <text fg={theme.text}>
+                        enter <span style={{ fg: theme.textMuted }}>retry</span>
+                        {" · "}
+                        esc <span style={{ fg: theme.textMuted }}>dismiss</span>
+                      </text>
+                    </box>
+                  </box>
+                )
+              })()}
+            </Match>
+            <Match when={status().type === "retry"}>
+              {(() => {
+                const retry = createMemo(() => {
+                  const s = status()
+                  if (s.type !== "retry") return
+                  return s
+                })
+                const message = createMemo(() => {
+                  const r = retry()
+                  if (!r) return
+                  if (r.message.includes("exceeded your current quota") && r.message.includes("gemini"))
+                    return "gemini is way too hot right now"
+                  if (r.message.length > 80) return r.message.slice(0, 80) + "..."
+                  return r.message
+                })
+                const isTruncated = createMemo(() => {
+                  const r = retry()
+                  if (!r) return false
+                  return r.message.length > 120
+                })
+                const [seconds, setSeconds] = createSignal(0)
+                onMount(() => {
+                  const timer = setInterval(() => {
+                    const next = retry()?.next
+                    if (next) setSeconds(Math.round((next - Date.now()) / 1000))
+                  }, 1000)
+
+                  onCleanup(() => {
+                    clearInterval(timer)
+                  })
+                })
+                const handleMessageClick = () => {
+                  const r = retry()
+                  if (!r) return
+                  if (isTruncated()) {
+                    void DialogAlert.show(dialog, "Retry Error", r.message)
+                  }
+                }
+
+                const retryText = () => {
+                  const r = retry()
+                  if (!r) return ""
+                  const baseMessage = message()
+                  const truncatedHint = isTruncated() ? " (click to expand)" : ""
+                  const duration = formatDuration(seconds())
+                  const retryInfo = ` [retrying ${duration ? `in ${duration} ` : ""}attempt #${r.attempt}]`
+                  return baseMessage + truncatedHint + retryInfo
+                }
+
+                return (
+                  <box flexDirection="row" gap={1} flexGrow={1} justifyContent="space-between" alignItems="center">
+                    <box flexShrink={0} flexDirection="row" gap={1} alignItems="center">
+                      <box marginLeft={1}>
+                        <Show when={kv.get("animations_enabled", true)} fallback={<text fg={theme.textMuted}>[⋯]</text>}>
+                          <spinner color={spinnerDef().color} frames={spinnerDef().frames} interval={40} />
+                        </Show>
+                      </box>
+                      <Show when={retry()}>
+                        <box onMouseUp={handleMessageClick}>
+                          <text fg={theme.error}>{retryText()}</text>
+                        </box>
+                      </Show>
+                    </box>
+                    <ContextBar sessionID={() => props.sessionID} />
                   </box>
                 )
               })()}
             </Match>
             <Match when={status().type !== "idle"}>
-              <box
-                flexDirection="row"
-                gap={1}
-                flexGrow={1}
-                justifyContent={status().type === "retry" ? "space-between" : "flex-start"}
-              >
-                <box flexShrink={0} flexDirection="row" gap={1}>
-                  <box marginLeft={1}>
-                    <Show when={kv.get("animations_enabled", true)} fallback={<text fg={theme.textMuted}>[⋯]</text>}>
-                      <spinner color={spinnerDef().color} frames={spinnerDef().frames} interval={40} />
-                    </Show>
-                  </box>
-                  <box flexDirection="row" gap={1} flexShrink={0}>
-                    {(() => {
-                      const retry = createMemo(() => {
-                        const s = status()
-                        if (s.type !== "retry") return
-                        return s
-                      })
-                      const message = createMemo(() => {
-                        const r = retry()
-                        if (!r) return
-                        if (r.message.includes("exceeded your current quota") && r.message.includes("gemini"))
-                          return "gemini is way too hot right now"
-                        if (r.message.length > 80) return r.message.slice(0, 80) + "..."
-                        return r.message
-                      })
-                      const isTruncated = createMemo(() => {
-                        const r = retry()
-                        if (!r) return false
-                        return r.message.length > 120
-                      })
-                      const [seconds, setSeconds] = createSignal(0)
-                      onMount(() => {
-                        const timer = setInterval(() => {
-                          const next = retry()?.next
-                          if (next) setSeconds(Math.round((next - Date.now()) / 1000))
-                        }, 1000)
-
-                        onCleanup(() => {
-                          clearInterval(timer)
-                        })
-                      })
-                      const handleMessageClick = () => {
-                        const r = retry()
-                        if (!r) return
-                        if (isTruncated()) {
-                          void DialogAlert.show(dialog, "Retry Error", r.message)
-                        }
-                      }
-
-                      const retryText = () => {
-                        const r = retry()
-                        if (!r) return ""
-                        const baseMessage = message()
-                        const truncatedHint = isTruncated() ? " (click to expand)" : ""
-                        const duration = formatDuration(seconds())
-                        const retryInfo = ` [retrying ${duration ? `in ${duration} ` : ""}attempt #${r.attempt}]`
-                        return baseMessage + truncatedHint + retryInfo
-                      }
-
-                      return (
-                        <Show when={retry()}>
-                          <box onMouseUp={handleMessageClick}>
-                            <text fg={theme.error}>{retryText()}</text>
-                          </box>
-                        </Show>
-                      )
-                    })()}
-                  </box>
-                </box>
-                <text fg={store.interrupt > 0 ? theme.primary : theme.text}>
-                  esc{" "}
-                  <span style={{ fg: store.interrupt > 0 ? theme.primary : theme.textMuted }}>
-                    {store.interrupt > 0 ? "again to interrupt" : "interrupt"}
-                  </span>
-                </text>
-              </box>
+              <StatusLine
+                sessionID={() => props.sessionID}
+                spinnerColor={() => spinnerDef().color}
+                spinnerFrames={() => spinnerDef().frames}
+                interrupt={() => store.interrupt}
+              />
             </Match>
             <Match when={warpNotice()}>
               {(notice) => (
@@ -1852,7 +1905,7 @@ export function Prompt(props: PromptProps) {
             </Match>
             <Match when={true}>{props.hint ?? <text />}</Match>
           </Switch>
-          <Show when={status().type !== "retry"}>
+          <Show when={status().type !== "retry_exhausted"}>
             <box gap={2} flexDirection="row">
               <Show when={editorContextLabelState() !== "none" ? editorFileLabelDisplay() : undefined}>
                 {(file) => (
