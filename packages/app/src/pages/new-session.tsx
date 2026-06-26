@@ -3,6 +3,7 @@ import { createStore } from "solid-js/store"
 import { useSearchParams } from "@solidjs/router"
 import { NewSessionDesignView } from "@/components/session"
 import { PromptInput } from "@/components/prompt-input"
+import { useSettingsCommand } from "@/components/settings-dialog"
 import {
   PromptProjectAddButton,
   PromptProjectSelector,
@@ -35,6 +36,7 @@ export default function NewSessionPage() {
   const [searchParams, setSearchParams] = useSearchParams<{ draftId?: string; prompt?: string }>()
 
   useComposerCommands()
+  useSettingsCommand()
 
   let inputRef: HTMLDivElement | undefined
 
