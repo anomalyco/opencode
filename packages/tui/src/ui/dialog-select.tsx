@@ -55,6 +55,7 @@ export interface DialogSelectProps<T> {
 export interface DialogSelectOption<T = any> {
   title: string
   titleView?: JSX.Element
+  titleSuffix?: JSX.Element
   value: T
   description?: string
   details?: string[]
@@ -613,6 +614,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                             <Option
                               title={option.title}
                               titleView={option.titleView}
+                              titleSuffix={option.titleSuffix}
                               footer={flatten() ? (option.category ?? option.footer) : option.footer}
                               titleWidth={option.titleWidth}
                               truncateTitle={option.truncateTitle}
@@ -660,6 +662,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
 function Option(props: {
   title: string
   titleView?: JSX.Element
+  titleSuffix?: JSX.Element
   description?: string
   active?: boolean
   current?: boolean
@@ -705,6 +708,7 @@ function Option(props: {
             : props.truncateTitle === "left"
               ? Locale.truncateLeft(props.title, props.titleWidth ?? 61)
               : Locale.truncate(props.title, props.titleWidth ?? 61))}
+        <Show when={props.titleSuffix}>{props.titleSuffix}</Show>
         <Show when={props.description}>
           <span style={{ fg: props.active && !props.muted ? fg : theme.textMuted }}> {props.description}</span>
         </Show>
