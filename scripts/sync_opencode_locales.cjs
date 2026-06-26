@@ -89,7 +89,12 @@ async function syncTarget(relativeDir, isJson = false) {
     return;
   }
 
-  const enFile = path.join(dirPath, isJson ? 'en.json' : 'en.ts');
+  let enFile;
+  if (relativeDir === 'packages/stats/app/src/i18n') {
+    enFile = path.join(baseDir, 'packages/stats/app/src/i18n.ts');
+  } else {
+    enFile = path.join(dirPath, isJson ? 'en.json' : 'en.ts');
+  }
   const trFile = path.join(dirPath, isJson ? 'tr.json' : 'tr.ts');
 
   if (!fs.existsSync(enFile)) {
@@ -171,6 +176,14 @@ async function syncTarget(relativeDir, isJson = false) {
         outContent += `  "${key}": "${escapedVal}",\n`;
       }
       outContent += `}\n`;
+    } else if (relativeDir.includes('packages/stats/app/src/i18n')) {
+      outContent += `export const dict = {\n`;
+      for (const key of enKeys) {
+        const trVal = trDict[key] || enDict[key];
+        const escapedVal = trVal.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n');
+        outContent += `  "${key}": "${escapedVal}",\n`;
+      }
+      outContent += `} as const\n`;
     } else {
       // General fallback
       outContent += `export const dict = {\n`;
@@ -193,6 +206,7 @@ async function run() {
   await syncTarget('packages/desktop/src/renderer/i18n', false);
   await syncTarget('packages/ui/src/i18n', false);
   await syncTarget('packages/web/src/content/i18n', true);
+  await syncTarget('packages/stats/app/src/i18n', false);
   console.log('\n=== Synchronization Completed Successfully! ===');
 }
 
