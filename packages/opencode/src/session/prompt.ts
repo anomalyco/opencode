@@ -669,6 +669,25 @@ export const layer = Layer.effect(
         format: input.format,
       }
 
+      const current = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
+      if (
+        current.agent !== info.agent ||
+        current.model?.providerID !== info.model.providerID ||
+        current.model?.id !== info.model.modelID ||
+        (current.model?.variant === "default" ? undefined : current.model?.variant) !== info.model.variant
+      ) {
+        yield* sessions.setAgentModel({
+          sessionID: input.sessionID,
+          agent: info.agent,
+          model: {
+            id: info.model.modelID,
+            providerID: info.model.providerID,
+            variant: info.model.variant ?? "default",
+          },
+          time: info.time.created,
+        })
+      }
+
       yield* Effect.addFinalizer(() => instruction.clear(info.id))
 
       type Draft<T> = T extends SessionV1.Part ? Omit<T, "id"> & { id?: string } : never

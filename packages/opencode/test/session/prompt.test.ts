@@ -554,21 +554,43 @@ it.instance("legacy prompt emits message events without session.next events", ()
     const events = yield* EventV2Bridge.Service
     const prompt = yield* SessionPrompt.Service
     const sessions = yield* Session.Service
-    const chat = yield* sessions.create({ title: "Pinned" })
+    const chat = yield* sessions.create({
+      title: "Pinned",
+      agent: "plan",
+      model: { providerID: ProviderV2.ID.make("old"), id: ModelV2.ID.make("old-model") },
+    })
     const seen: string[] = []
     const off = yield* events.listen((event) => {
       seen.push(event.type)
       return Effect.void
     })
 
-    yield* prompt.prompt({
+    const first = yield* prompt.prompt({
       sessionID: chat.id,
       agent: "build",
+      model: ref,
       noReply: true,
       parts: [{ type: "text", text: "hello" }],
     })
+    const second = yield* prompt.prompt({
+      sessionID: chat.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "again" }],
+    })
     yield* off
 
+    expect(first.info.role).toBe("user")
+    expect(second.info.role).toBe("user")
+    if (first.info.role === "user" && second.info.role === "user") {
+      expect(first.info.model).toEqual(ref)
+      expect(second.info.model).toEqual(ref)
+    }
+    expect(yield* sessions.get(chat.id)).toMatchObject({
+      agent: "build",
+      model: { providerID: ref.providerID, id: ref.modelID },
+    })
+    expect(seen).toContain(Session.Event.Updated.type)
     expect(seen).toContain(MessageV2.Event.Updated.type)
     expect(seen).toContain(MessageV2.Event.PartUpdated.type)
     expect(seen.filter((type) => type.startsWith("session.next."))).toEqual([])
