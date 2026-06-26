@@ -1,11 +1,8 @@
-import * as Log from "@opencode-ai/core/util/log"
 import type { Provider } from "./provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 
 export namespace LiteLLM {
-  const log = Log.create({ service: "litellm" })
-
   interface ModelInfoEntry {
     model_name: string
     litellm_params?: {
@@ -36,19 +33,8 @@ export namespace LiteLLM {
     }
   }
 
-  const INTERLEAVED_MODELS = ["claude", "anthropic"]
-
   function isWildcard(name: string): boolean {
     return name.includes("*") || name.includes("/*")
-  }
-
-  function inferInterleaved(
-    underlyingModel: string | undefined,
-  ): Provider.Model["capabilities"]["interleaved"] {
-    if (!underlyingModel) return false
-    const lower = underlyingModel.toLowerCase()
-    if (INTERLEAVED_MODELS.some((m) => lower.includes(m))) return true
-    return false
   }
 
   function costPerMillion(costPerToken: number | null | undefined): number {
@@ -125,7 +111,9 @@ export namespace LiteLLM {
           video: false,
           pdf: false,
         },
-        interleaved: inferInterleaved(underlyingModel),
+        interleaved: underlyingModel
+          ? ["claude", "anthropic"].some((model) => underlyingModel.toLowerCase().includes(model))
+          : false,
       },
       release_date: "",
       variants: {},
@@ -174,11 +162,12 @@ export namespace LiteLLM {
     const entries = data?.data
     if (!Array.isArray(entries)) return undefined
 
-    const models: Record<string, Provider.Model> = {}
-    for (const entry of entries) {
-      const model = toModel(entry)
-      if (model) models[model.id] = model
-    }
+    const models = Object.fromEntries(
+      entries
+        .map(toModel)
+        .filter((model): model is Provider.Model => model !== undefined)
+        .map((model) => [model.id, model]),
+    )
     return Object.keys(models).length > 0 ? models : undefined
   }
 
@@ -226,19 +215,11 @@ export namespace LiteLLM {
     // Try /model/info first for rich metadata, fall back to /models
     const rich = await fetchModelInfo(base, headers, timeout)
     if (rich) {
-      log.info("discovered models from LiteLLM /model/info", {
-        count: Object.keys(rich).length,
-        host,
-      })
       return rich
     }
 
     const basic = await fetchModelList(base, headers, timeout)
     if (Object.keys(basic).length > 0) {
-      log.info("discovered models from /models (fallback)", {
-        count: Object.keys(basic).length,
-        host,
-      })
       return basic
     }
 

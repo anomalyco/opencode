@@ -624,11 +624,6 @@ function ProviderConnection(props: {
   }
 
   function LiteLLMAuthView() {
-    const [formStore, setFormStore] = createStore({
-      baseURL: "",
-      apiKey: "",
-    })
-
     async function handleSubmit(e: SubmitEvent) {
       e.preventDefault()
 
@@ -636,10 +631,12 @@ function ProviderConnection(props: {
       const url = (data.get("baseURL") as string)?.trim() || "http://localhost:4000"
       const key = (data.get("apiKey") as string)?.trim()
 
-      await serverSync().updateConfig({
-        provider: {
-          litellm: {
-            options: { baseURL: url },
+      await serverSDK().client.global.config.update({
+        config: {
+          provider: {
+            litellm: {
+              options: { baseURL: url },
+            },
           },
         },
       })
@@ -664,16 +661,12 @@ function ProviderConnection(props: {
             label="Base URL"
             placeholder="http://localhost:4000"
             name="baseURL"
-            value={formStore.baseURL}
-            onChange={(v) => setFormStore("baseURL", v)}
           />
           <TextField
             type="text"
             label="API Key (optional)"
             placeholder="sk-..."
             name="apiKey"
-            value={formStore.apiKey}
-            onChange={(v) => setFormStore("apiKey", v)}
           />
           <Button class="w-auto" type="submit" size="large" variant="primary">
             {language.t("common.submit")}

@@ -869,16 +869,11 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
 
       const litellmAuth = yield* dep.auth("litellm")
 
-      const [apiKeyEnv, hostEnv, baseUrlEnv, customHeadersEnv, timeoutEnv] = yield* Effect.all(
-        [
-          dep.get("LITELLM_API_KEY"),
-          dep.get("LITELLM_HOST"),
-          dep.get("LITELLM_BASE_URL"),
-          dep.get("LITELLM_CUSTOM_HEADERS"),
-          dep.get("LITELLM_TIMEOUT"),
-        ],
-        { concurrency: "unbounded" },
-      )
+      const env = yield* dep.env()
+      const apiKeyEnv = env["LITELLM_API_KEY"]
+      const hostEnv = env["LITELLM_HOST"]
+      const baseUrlEnv = env["LITELLM_BASE_URL"]
+      const timeoutEnv = env["LITELLM_TIMEOUT"]
 
       // Skip discovery when there is no configuration at all
       if (!providerConfig && !apiKeyEnv && !hostEnv && !baseUrlEnv && litellmAuth?.type !== "api")
@@ -886,21 +881,9 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
 
       const baseURL = providerConfig?.options?.baseURL ?? hostEnv ?? baseUrlEnv ?? "http://localhost:4000"
 
-      const apiKey = (() => {
-        if (providerConfig?.options?.apiKey) return providerConfig.options.apiKey
-        if (apiKeyEnv) return apiKeyEnv
-        if (litellmAuth?.type === "api") return litellmAuth.key
-        return undefined
-      })()
-
-      const customHeaders = (() => {
-        if (!customHeadersEnv) return {}
-        try {
-          return JSON.parse(customHeadersEnv) as Record<string, string>
-        } catch {
-          return {}
-        }
-      })()
+      const apiKey =
+        providerConfig?.options?.apiKey ?? apiKeyEnv ?? (litellmAuth?.type === "api" ? litellmAuth.key : undefined)
+      const customHeaders = providerConfig?.options?.headers ?? {}
 
       const timeout = Number(timeoutEnv ?? "5000")
       const discovered = yield* Effect.promise(() =>
@@ -926,7 +909,6 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         options: {
           baseURL,
           apiKey,
-          litellmProxy: true,
           fetch: (input: any, init?: any) =>
             undiciFetch(typeof input === "string" ? input : (input as Request).url, {
               ...init,

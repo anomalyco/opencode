@@ -157,14 +157,8 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
     for (const key of Object.keys(tools)) tools[key] = { ...tools[key], strict: false }
   }
 
-  const isLiteLLMProxy =
-    input.model.providerID === "litellm" ||
-    input.provider.options?.["litellmProxy"] === true ||
-    input.model.providerID.toLowerCase().includes("litellm") ||
-    input.model.api.id.toLowerCase().includes("litellm")
-
   if (
-    (isLiteLLMProxy || input.model.providerID.includes("github-copilot")) &&
+    (input.model.providerID === "litellm" || input.model.providerID.includes("github-copilot")) &&
     Object.keys(tools).length === 0 &&
     hasToolCalls(input.messages)
   ) {
