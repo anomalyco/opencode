@@ -447,7 +447,12 @@ export function AppInterface(props: {
                 <ServerShell>{routerProps.children}</ServerShell>
               </TabsProvider>
             )}
-            base={window.__OPENCODE_BASE_PATH__?.replace(/\/$/, "") || undefined}
+            base={(() => {
+              const bp = window.__OPENCODE_BASE_PATH__?.replace(/\/$/, "")
+              if (bp) return bp
+              const baseUri = new URL(document.baseURI).pathname.replace(/\/+$/, "")
+              return baseUri && baseUri !== "/" ? baseUri : undefined
+            })()}
           >
             <Route component={SelectedServerLayout}>
               <Route path="/" component={HomeRoute} />
