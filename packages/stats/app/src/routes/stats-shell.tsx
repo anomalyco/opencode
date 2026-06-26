@@ -1,24 +1,16 @@
 import opencodeWordmarkDark from "../asset/logo-ornate-dark.svg"
 import { query } from "@solidjs/router"
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
+import { useI18n } from "../context/i18n"
+import { useLanguage } from "../context/language"
+import { route, type Locale } from "../lib/language"
 
 export type HeaderLink = { href: string; label: string }
 
-export const headerLinks = [
-  { href: "#top-models", label: "Top Models" },
-  { href: "#leaderboard", label: "Leaderboard" },
-  { href: "#session-cost", label: "Session Cost" },
-  { href: "#token-cost", label: "Token Cost" },
-  { href: "#cache-ratio", label: "Cache Ratio" },
-  { href: "#market-share", label: "Market Share" },
-  { href: "#geo-breakdown", label: "Geo Breakdown" },
-] as const
 export const githubLink = {
   href: "https://github.com/anomalyco/opencode",
   apiHref: "https://api.github.com/repos/anomalyco/opencode",
-  label: "GitHub",
   fallbackStars: "150K",
-  ariaLabel: "Star OpenCode on GitHub",
 }
 export const themePreferences = ["dark", "light", "system"] as const
 export const themeStorageKey = "opencode:stats-theme"
@@ -28,11 +20,6 @@ const compactNumberFormatter = new Intl.NumberFormat("en", {
   notation: "compact",
   maximumFractionDigits: 1,
 })
-const themePreferenceLabels = {
-  dark: "Dark",
-  light: "Light",
-  system: "System",
-} as const
 
 export const getGitHubStars = query(async () => {
   "use server"
@@ -66,13 +53,27 @@ export function applyThemePreference(preference: ThemePreference) {
 }
 
 export function Header(props: { githubStars: string; links?: readonly HeaderLink[]; brandHref?: string }) {
+  const i18n = useI18n()
+  const language = useLanguage()
   const [menuOpen, setMenuOpen] = createSignal(false)
   const [menuViewport, setMenuViewport] = createSignal(false)
-  const links = createMemo(() => props.links ?? headerLinks)
+  const links = createMemo(
+    () =>
+      props.links ?? [
+        { href: "#top-models", label: i18n.t("nav.topModels") },
+        { href: "#leaderboard", label: i18n.t("nav.leaderboard") },
+        { href: "#session-cost", label: i18n.t("nav.sessionCost") },
+        { href: "#token-cost", label: i18n.t("nav.tokenCost") },
+        { href: "#cache-ratio", label: i18n.t("nav.cacheRatio") },
+        { href: "#market-share", label: i18n.t("nav.marketShare") },
+        { href: "#geo-breakdown", label: i18n.t("nav.geoBreakdown") },
+      ],
+  )
+  const localHref = (href: string) => (href.startsWith("/") ? language.route(href) : href)
 
   createEffect(() => {
     if (typeof window === "undefined") return
-    const media = window.matchMedia("(max-width: 74.999rem)")
+    const media = window.matchMedia("(max-width: 89.999rem)")
     const update = () => setMenuViewport(media.matches)
     update()
     media.addEventListener("change", update)
@@ -101,15 +102,19 @@ export function Header(props: { githubStars: string; links?: readonly HeaderLink
   return (
     <header data-component="top" data-menu-open={menuOpen() ? "true" : undefined}>
       <div data-slot="header-bar">
-        <a data-slot="brand" href={props.brandHref ?? import.meta.env.BASE_URL} aria-label="Stats home">
-          <StatsWordmark />
+        <a
+          data-slot="brand"
+          href={localHref(props.brandHref ?? import.meta.env.BASE_URL)}
+          aria-label={i18n.t("header.brandLabel")}
+        >
+          <DataWordmark />
         </a>
-        <nav data-component="section-nav" aria-label="Stats sections">
+        <nav data-component="section-nav" aria-label={i18n.t("header.sectionNavLabel")}>
           <ul>
             <For each={links()}>
               {(link) => (
                 <li>
-                  <a href={link.href}>{link.label}</a>
+                  <a href={localHref(link.href)}>{link.label}</a>
                 </li>
               )}
             </For>
@@ -122,20 +127,20 @@ export function Header(props: { githubStars: string; links?: readonly HeaderLink
             href={githubLink.href}
             target="_blank"
             rel="noreferrer"
-            aria-label={`${githubLink.ariaLabel} (${props.githubStars} stars)`}
+            aria-label={`${i18n.t("header.githubAria")} (${props.githubStars} stars)`}
           >
-            <strong>{githubLink.label}</strong>
+            <strong>{i18n.t("header.github")}</strong>
             <span>[{props.githubStars}]</span>
           </a>
           <a data-slot="header-button" data-variant="contrast" href="https://opencode.ai/">
-            <strong>Try OpenCode</strong>
+            <strong>{i18n.t("header.tryOpenCode")}</strong>
           </a>
           <button
             data-slot="menu-button"
             type="button"
             aria-controls="stats-mobile-nav"
             aria-expanded={menuOpen() ? "true" : "false"}
-            aria-label={menuOpen() ? "Close navigation" : "Open navigation"}
+            aria-label={menuOpen() ? i18n.t("header.closeNav") : i18n.t("header.openNav")}
             onClick={() => setMenuOpen((value) => !value)}
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -146,21 +151,26 @@ export function Header(props: { githubStars: string; links?: readonly HeaderLink
           </button>
         </div>
       </div>
-      <nav id="stats-mobile-nav" data-slot="mobile-menu" aria-label="Stats sections" hidden={!menuOpen()}>
+      <nav
+        id="stats-mobile-nav"
+        data-slot="mobile-menu"
+        aria-label={i18n.t("header.sectionNavLabel")}
+        hidden={!menuOpen()}
+      >
         <a
           data-slot="mobile-menu-item"
           data-variant="github"
           href={githubLink.href}
           target="_blank"
           rel="noreferrer"
-          aria-label={`${githubLink.ariaLabel} (${props.githubStars} stars)`}
+          aria-label={`${i18n.t("header.githubAria")} (${props.githubStars} stars)`}
         >
-          <strong>{githubLink.label}</strong>
+          <strong>{i18n.t("header.github")}</strong>
           <span>[{props.githubStars}]</span>
         </a>
         <For each={links()}>
           {(link) => (
-            <a data-slot="mobile-menu-item" href={link.href} onClick={() => setMenuOpen(false)}>
+            <a data-slot="mobile-menu-item" href={localHref(link.href)} onClick={() => setMenuOpen(false)}>
               {link.label}
             </a>
           )}
@@ -170,41 +180,24 @@ export function Header(props: { githubStars: string; links?: readonly HeaderLink
   )
 }
 
-function StatsWordmark() {
+function DataWordmark() {
   return (
-    <span data-slot="stats-wordmark" aria-hidden="true">
-      <StatsMark />
-      <svg data-slot="brand-label" width="51" height="14" viewBox="0 0 50.8509 14" fill="none">
-        <path
-          d="M46.2359 14C45.2276 14 44.3356 13.819 43.56 13.4571C42.7973 13.0822 42.138 12.5328 41.5822 11.8089L43.1722 10.277C43.56 10.807 44.0124 11.2142 44.5295 11.4986C45.0466 11.7701 45.6283 11.9058 46.2747 11.9058C47.7225 11.9058 48.4464 11.2465 48.4464 9.92798C48.4464 9.38504 48.3172 8.97138 48.0586 8.68698C47.8001 8.40259 47.3735 8.19575 46.7788 8.06648L45.596 7.8338C44.3679 7.57525 43.463 7.13573 42.8813 6.51524C42.2996 5.89474 42.0088 5.02862 42.0088 3.9169C42.0088 2.62419 42.3901 1.6482 43.1528 0.98892C43.9284 0.32964 45.0272 0 46.4492 0C47.4187 0 48.2461 0.161588 48.9312 0.484764C49.6293 0.795014 50.2239 1.28624 50.7151 1.95845L49.1251 3.45152C48.789 2.99908 48.4076 2.66297 47.9811 2.44321C47.5545 2.21053 47.0309 2.09418 46.4104 2.09418C45.7253 2.09418 45.2211 2.22992 44.898 2.50139C44.5748 2.77285 44.4132 3.21237 44.4132 3.81995C44.4132 4.3241 44.536 4.71191 44.7816 4.98338C45.0401 5.25485 45.4538 5.45522 46.0226 5.58449L47.2054 5.83656C47.8647 5.97876 48.4206 6.15328 48.873 6.36011C49.3384 6.56694 49.7133 6.82548 49.9977 7.13573C50.295 7.44598 50.5083 7.8144 50.6376 8.241C50.7798 8.65466 50.8509 9.14589 50.8509 9.71468C50.8509 11.1108 50.4501 12.1773 49.6486 12.9141C48.8601 13.638 47.7225 14 46.2359 14Z"
-          fill="currentColor"
-        />
-        <path
-          d="M36.9543 2.34643V13.7675H34.5305V2.34643H31.1371V0.232856H40.367V2.34643H36.9543Z"
-          fill="currentColor"
-        />
-        <path
-          d="M28.6196 13.7675L27.6695 10.2384H23.3066L22.3565 13.7675H20.0296L23.9853 0.232856H27.049L31.0047 13.7675H28.6196ZM26.0407 4.57635L25.6141 2.42399H25.3426L24.916 4.57635L23.8883 8.27995H27.0878L26.0407 4.57635Z"
-          fill="currentColor"
-        />
-        <path
-          d="M16.4849 2.34643V13.7675H14.0611V2.34643H10.6678V0.232856H19.8977V2.34643H16.4849Z"
-          fill="currentColor"
-        />
-        <path
-          d="M4.65374 14C3.64543 14 2.75346 13.819 1.97784 13.4571C1.21514 13.0822 0.555863 12.5328 0 11.8089L1.59003 10.277C1.97784 10.807 2.43029 11.2142 2.94737 11.4986C3.46445 11.7701 4.04617 11.9058 4.69252 11.9058C6.14035 11.9058 6.86427 11.2465 6.86427 9.92798C6.86427 9.38504 6.735 8.97138 6.47646 8.68698C6.21791 8.40259 5.79132 8.19575 5.19668 8.06648L4.01385 7.8338C2.78578 7.57525 1.88089 7.13573 1.29917 6.51524C0.717452 5.89474 0.426593 5.02862 0.426593 3.9169C0.426593 2.62419 0.807941 1.6482 1.57064 0.98892C2.34626 0.32964 3.44506 0 4.86704 0C5.83657 0 6.6639 0.161588 7.34903 0.484764C8.04709 0.795014 8.64174 1.28624 9.13297 1.95845L7.54294 3.45152C7.20683 2.99908 6.82549 2.66297 6.39889 2.44321C5.9723 2.21053 5.44875 2.09418 4.82826 2.09418C4.14312 2.09418 3.63897 2.22992 3.31579 2.50139C2.99261 2.77285 2.83103 3.21237 2.83103 3.81995C2.83103 4.3241 2.95383 4.71191 3.19945 4.98338C3.45799 5.25485 3.87165 5.45522 4.44044 5.58449L5.62327 5.83656C6.28255 5.97876 6.83841 6.15328 7.29086 6.36011C7.75623 6.56694 8.13112 6.82548 8.41551 7.13573C8.71284 7.44598 8.92613 7.8144 9.0554 8.241C9.1976 8.65466 9.2687 9.14589 9.2687 9.71468C9.2687 11.1108 8.86796 12.1773 8.06648 12.9141C7.27793 13.638 6.14035 14 4.65374 14Z"
-          fill="currentColor"
-        />
-      </svg>
-    </span>
-  )
-}
-
-function StatsMark() {
-  return (
-    <svg data-slot="brand-mark" width="19" height="24" viewBox="0 0 19 24" fill="none" aria-hidden="true">
-      <path opacity="0.2" d="M14.25 19.2H4.75V9.6H14.25V19.2Z" fill="currentColor" />
-      <path d="M14.25 4.8H4.75V19.2H14.25V4.8ZM19 24H0V0H19V24Z" fill="currentColor" />
+    <svg data-slot="stats-wordmark" width="66" height="20" viewBox="0 0 66 20" fill="none" aria-hidden="true">
+      <path opacity="0.2" d="M12 16H4V8H12V16Z" fill="currentColor" />
+      <path d="M12 4H4V16H12V4ZM16 20H0V0H16V20Z" fill="currentColor" />
+      <path
+        d="M63.3543 16L62.5119 12.8711H58.6437L57.8013 16H55.7383L59.2454 4H61.9618L65.4689 16H63.3543ZM61.0678 7.851L60.6896 5.94269H60.4489L60.0707 7.851L59.1595 11.1347H61.9962L61.0678 7.851Z"
+        fill="currentColor"
+      />
+      <path d="M52.5951 5.87392V16H50.4461V5.87392H47.4375V4H55.6209V5.87392H52.5951Z" fill="currentColor" />
+      <path
+        d="M45.2059 16L44.3635 12.8711H40.4953L39.6529 16H37.5898L41.097 4H43.8133L47.3205 16H45.2059ZM42.9194 7.851L42.5411 5.94269H42.3004L41.9222 7.851L41.011 11.1347H43.8477L42.9194 7.851Z"
+        fill="currentColor"
+      />
+      <path
+        d="M28 4H32.0917C32.8138 4 33.4556 4.11461 34.0172 4.34384C34.5903 4.5616 35.0716 4.9169 35.4613 5.40974C35.8625 5.89112 36.1662 6.51003 36.3725 7.26648C36.5788 8.02292 36.6819 8.9341 36.6819 10C36.6819 11.0659 36.5788 11.9771 36.3725 12.7335C36.1662 13.49 35.8625 14.1146 35.4613 14.6075C35.0716 15.0888 34.5903 15.4441 34.0172 15.6734C33.4556 15.8911 32.8138 16 32.0917 16H28V4ZM32.0917 14.1261C32.8252 14.1261 33.3926 13.9026 33.7937 13.4556C34.1948 12.9971 34.3954 12.3152 34.3954 11.4097V8.59026C34.3954 7.68481 34.1948 7.0086 33.7937 6.5616C33.3926 6.10315 32.8252 5.87392 32.0917 5.87392H30.149V14.1261H32.0917Z"
+        fill="currentColor"
+      />
     </svg>
   )
 }
@@ -224,67 +217,73 @@ export function Footer(props: {
   onThemePreferenceChange: (preference: ThemePreference) => void
   links?: readonly HeaderLink[]
 }) {
+  const i18n = useI18n()
+  const language = useLanguage()
   const [subscribeOpen, setSubscribeOpen] = createSignal(false)
+  const localHref = (href: string) => (href.startsWith("/") ? language.route(href) : href)
   const modelStats = props.links ?? [
-    { href: "#top-models", label: "Top Models" },
-    { href: "#leaderboard", label: "Leaderboard" },
-    { href: "#session-cost", label: "Session Cost" },
-    { href: "#token-cost", label: "Token Cost" },
-    { href: "#cache-ratio", label: "Cache Ratio" },
-    { href: "#market-share", label: "Market Share" },
-    { href: "#geo-breakdown", label: "Geo Breakdown" },
+    { href: "#top-models", label: i18n.t("nav.topModels") },
+    { href: "#leaderboard", label: i18n.t("nav.leaderboard") },
+    { href: "#session-cost", label: i18n.t("nav.sessionCost") },
+    { href: "#token-cost", label: i18n.t("nav.tokenCost") },
+    { href: "#cache-ratio", label: i18n.t("nav.cacheRatio") },
+    { href: "#market-share", label: i18n.t("nav.marketShare") },
+    { href: "#geo-breakdown", label: i18n.t("nav.geoBreakdown") },
   ]
   const legal = [
-    { href: "https://opencode.ai/legal/terms-of-service", label: "Terms of service" },
-    { href: "https://opencode.ai/legal/privacy-policy", label: "Privacy policy" },
+    { href: "https://opencode.ai/legal/terms-of-service", label: i18n.t("footer.terms") },
+    { href: "https://opencode.ai/legal/privacy-policy", label: i18n.t("footer.privacy") },
   ]
   const connect = [
-    { href: "mailto:hello@opencode.ai", label: "Contact us" },
-    { href: "https://opencode.ai/discord", label: "Community" },
+    { href: "mailto:hello@opencode.ai", label: i18n.t("footer.contact") },
+    { href: "https://opencode.ai/discord", label: i18n.t("footer.community") },
     { href: "https://x.com/opencode", label: "X" },
-    githubLink,
-    { href: "https://www.youtube.com/@anomaly-co", label: "YouTube" },
+    { href: githubLink.href, label: i18n.t("header.github") },
+    { href: "https://www.youtube.com/@anomaly-co", label: i18n.t("footer.youtube") },
   ]
 
   return (
     <footer data-component="footer">
-      <SectionBridge label="GEO BREAKDOWN" href="#geo-breakdown" />
+      <SectionBridge label={i18n.t("nav.geoBreakdown").toUpperCase()} href="#geo-breakdown" />
       <div data-slot="footer-grid">
-        <a data-slot="footer-mark" href="https://opencode.ai" aria-label="OpenCode home">
+        <a data-slot="footer-mark" href="https://opencode.ai" aria-label={i18n.t("footer.homeAria")}>
           <OpenCodeMark />
         </a>
-        <FooterColumn title="Model Stats" links={modelStats} />
-        <FooterColumn title="Legal" links={legal} />
-        <FooterColumn title="Connect" links={connect} />
+        <FooterColumn title={i18n.t("footer.modelData")} links={modelStats} localHref={localHref} />
+        <FooterColumn title={i18n.t("footer.legal")} links={legal} localHref={localHref} />
+        <FooterColumn title={i18n.t("footer.connect")} links={connect} localHref={localHref} />
         <div data-slot="footer-column">
-          <h2>Newsletter</h2>
-          <p>Be the first to know about new releases.</p>
+          <h2>{i18n.t("footer.newsletter")}</h2>
+          <p>{i18n.t("footer.newsletterBody")}</p>
           <button data-slot="subscribe-button" type="button" onClick={() => setSubscribeOpen(true)}>
-            Subscribe
+            {i18n.t("footer.subscribe")}
           </button>
         </div>
       </div>
       <div data-slot="footer-pattern" aria-hidden="true" />
       <div data-slot="footer-bottom">
         <div>
-          <span>© 2026 Anomaly Innovations Inc.</span>
-          <span data-slot="status">All systems Operational</span>
+          <span>{i18n.t("footer.copyright")}</span>
+          <span data-slot="status">{i18n.t("footer.status")}</span>
         </div>
-        <div data-slot="theme-toggle" role="group" aria-label="Theme">
-          <For each={themePreferences}>
-            {(preference) => (
-              <button
-                data-slot="theme-option"
-                type="button"
-                aria-label={themePreferenceLabels[preference]}
-                aria-pressed={props.themePreference === preference ? "true" : "false"}
-                title={themePreferenceLabels[preference]}
-                onClick={() => props.onThemePreferenceChange(preference)}
-              >
-                <ThemePreferenceIcon preference={preference} />
-              </button>
-            )}
-          </For>
+        <div data-slot="footer-controls">
+          <FooterLanguageSwitcher />
+          <div data-slot="theme-toggle" role="group" aria-label={i18n.t("theme.groupLabel")}>
+            <For each={themePreferences}>
+              {(preference) => (
+                <button
+                  data-slot="theme-option"
+                  type="button"
+                  aria-label={i18n.t(themePreferenceLabelKey(preference))}
+                  aria-pressed={props.themePreference === preference ? "true" : "false"}
+                  title={i18n.t(themePreferenceLabelKey(preference))}
+                  onClick={() => props.onThemePreferenceChange(preference)}
+                >
+                  <ThemePreferenceIcon preference={preference} />
+                </button>
+              )}
+            </For>
+          </div>
         </div>
       </div>
       <Show when={subscribeOpen()}>
@@ -294,10 +293,36 @@ export function Footer(props: {
   )
 }
 
+function FooterLanguageSwitcher() {
+  const i18n = useI18n()
+  const language = useLanguage()
+
+  return (
+    <label data-slot="footer-language">
+      <span>{i18n.t("footer.language")}</span>
+      <select
+        value={language.locale()}
+        aria-label={i18n.t("footer.language")}
+        onChange={(event) => {
+          const locale = event.currentTarget.value as Locale
+          const url = new URL(window.location.href)
+          const current = `${url.pathname}${url.search}${url.hash}`
+          const href = `${route(locale, url.pathname)}${url.search}${url.hash}`
+          language.setLocale(locale)
+          if (href !== current) window.location.assign(href)
+        }}
+      >
+        <For each={language.locales}>{(locale) => <option value={locale}>{language.label(locale)}</option>}</For>
+      </select>
+    </label>
+  )
+}
+
 function SectionBridge(props: { label: string; href: string }) {
+  const i18n = useI18n()
   return (
     <a data-component="section-bridge" href={props.href}>
-      <span>LEAN MORE</span>
+      <span>{i18n.t("bridge.learnMore")}</span>
       <i />
       <strong>{props.label}</strong>
       <b>▸</b>
@@ -372,6 +397,7 @@ function ThemePreferenceIcon(props: { preference: ThemePreference }) {
 }
 
 function SubscribeModal(props: { onClose: () => void }) {
+  const i18n = useI18n()
   const [status, setStatus] = createSignal<"idle" | "pending" | "success" | "error">("idle")
   const [message, setMessage] = createSignal("")
   let input: HTMLInputElement | undefined
@@ -403,7 +429,12 @@ function SubscribeModal(props: { onClose: () => void }) {
       <div data-slot="modal-panel">
         <div data-slot="modal-brand">
           <img data-slot="modal-logo" src={opencodeWordmarkDark} alt="OpenCode" />
-          <button data-slot="modal-close" type="button" aria-label="Close newsletter signup" onClick={props.onClose}>
+          <button
+            data-slot="modal-close"
+            type="button"
+            aria-label={i18n.t("modal.closeNewsletter")}
+            onClick={props.onClose}
+          >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
               <path d="M4.44 4.44L11.56 11.56M11.56 4.44L4.44 11.56" stroke="currentColor" />
             </svg>
@@ -411,12 +442,8 @@ function SubscribeModal(props: { onClose: () => void }) {
         </div>
         <div data-slot="modal-body">
           <div data-slot="modal-intro">
-            <h2 id="subscribe-title">OpenCode Newsletter</h2>
-            <p>
-              Be the first to know
-              <br />
-              about new releases.
-            </p>
+            <h2 id="subscribe-title">{i18n.t("modal.title")}</h2>
+            <p>{i18n.t("modal.body")}</p>
           </div>
           <form
             data-slot="subscribe-form"
@@ -436,24 +463,24 @@ function SubscribeModal(props: { onClose: () => void }) {
                     setStatus("success")
                     return
                   }
-                  setMessage(await newsletterErrorMessage(response))
+                  setMessage(await newsletterErrorMessage(response, i18n.t("modal.error")))
                   setStatus("error")
                 },
                 () => {
-                  setMessage("Failed to subscribe")
+                  setMessage(i18n.t("modal.error"))
                   setStatus("error")
                 },
               )
             }}
           >
-            <input ref={input} type="email" name="email" placeholder="Email address" required />
+            <input ref={input} type="email" name="email" placeholder={i18n.t("modal.email")} required />
             <button type="submit" disabled={status() === "pending"}>
-              <span>{status() === "pending" ? "Subscribing..." : "Subscribe"}</span>
+              <span>{status() === "pending" ? i18n.t("modal.subscribing") : i18n.t("modal.subscribe")}</span>
             </button>
           </form>
           <div data-slot="subscribe-feedback" aria-live="polite">
             <Show when={status() === "success"}>
-              <p data-state="success">You're subscribed.</p>
+              <p data-state="success">{i18n.t("modal.success")}</p>
             </Show>
             <Show when={status() === "error"}>
               <p data-state="error">{message()}</p>
@@ -465,24 +492,30 @@ function SubscribeModal(props: { onClose: () => void }) {
   )
 }
 
-function newsletterErrorMessage(response: Response) {
+function newsletterErrorMessage(response: Response, fallback: string) {
   return response.json().then(
     (body: unknown) =>
-      body && typeof body === "object" && "error" in body && typeof body.error === "string"
-        ? body.error
-        : "Failed to subscribe",
-    () => "Failed to subscribe",
+      body && typeof body === "object" && "error" in body && typeof body.error === "string" ? body.error : fallback,
+    () => fallback,
   )
 }
 
-function FooterColumn(props: { title: string; links: readonly { href: string; label: string }[] }) {
+function FooterColumn(props: {
+  title: string
+  links: readonly { href: string; label: string }[]
+  localHref: (href: string) => string
+}) {
   return (
     <div data-slot="footer-column">
       <h2>{props.title}</h2>
       <nav aria-label={props.title}>
         <For each={props.links}>
           {(link) => (
-            <a href={link.href} target={link.href.startsWith("http") ? "_blank" : undefined} rel="noreferrer">
+            <a
+              href={props.localHref(link.href)}
+              target={link.href.startsWith("http") ? "_blank" : undefined}
+              rel="noreferrer"
+            >
               {link.label}
             </a>
           )}
@@ -490,4 +523,10 @@ function FooterColumn(props: { title: string; links: readonly { href: string; la
       </nav>
     </div>
   )
+}
+
+function themePreferenceLabelKey(preference: ThemePreference) {
+  if (preference === "dark") return "theme.dark"
+  if (preference === "light") return "theme.light"
+  return "theme.system"
 }

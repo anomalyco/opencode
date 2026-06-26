@@ -2,7 +2,8 @@ import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
-import { HttpRecorder, Redactor } from "@opencode-ai/http-recorder"
+import { HttpRecorder } from "@opencode-ai/http-recorder"
+import { HttpRecorderInternal } from "@opencode-ai/http-recorder/internal"
 import { describe, expect, test } from "bun:test"
 import { tool, type ModelMessage, type JSONValue } from "ai"
 import { Effect, Layer, Option, Schema, Stream } from "effect"
@@ -20,7 +21,6 @@ import { Env } from "@/env"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import type { Agent } from "../../src/agent/agent"
 import { LLM } from "../../src/session/llm"
-import { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, SessionID } from "../../src/session/schema"
 import { TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
@@ -58,8 +58,10 @@ const cloneModel = (model: ModelsDev.Provider["models"][string]) => {
   const cloned = structuredClone(model)
   const { experimental, ...rest } = cloned
   // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- The config schema accepts the same model shape except object-valued experimental metadata.
-  if (typeof experimental === "boolean")
+  if (typeof experimental === "boolean") {
+    // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- The fixture model already matches config input when experimental is boolean.
     return cloned as NonNullable<NonNullable<ConfigV1.Info["provider"]>[string]["models"]>[string]
+  }
   // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- Dropping non-boolean experimental metadata makes the fixture model match config input.
   return rest as NonNullable<NonNullable<ConfigV1.Info["provider"]>[string]["models"]>[string]
 }
@@ -221,7 +223,9 @@ function isSelected(scenario: RecordedScenario) {
 }
 
 const canRun = (scenario: RecordedScenario) =>
-  shouldRecord ? scenario.canRecord() : HttpRecorder.hasCassetteSync(scenario.cassette, { directory: FIXTURES_DIR })
+  shouldRecord
+    ? scenario.canRecord()
+    : HttpRecorderInternal.hasCassetteSync(scenario.cassette, { directory: FIXTURES_DIR })
 
 const recordError = (scenario: RecordedScenario) =>
   scenario.id === "openai-oauth"
@@ -233,18 +237,6 @@ const redactRecordedBody = (body: string) =>
     .replace(/wrk_[A-Z0-9]+/g, "wrk_redacted")
     .replace(/"safety_identifier"\s*:\s*"user-[^"]+"/g, '"safety_identifier":"user_redacted"')
     .replace(/"(access|access_token|refresh|refresh_token|accountId|account_id)"\s*:\s*"[^"]+"/g, '"$1":"redacted"')
-
-const recordingRedactor = Redactor.compose(
-  Redactor.defaults({
-    url: {
-      transform: (url) => url.replace(/\/proxy\/connections\/[^/]+\/v1/, "/proxy/connections/{connection}/v1"),
-    },
-  }),
-  {
-    request: (snapshot) => ({ ...snapshot, body: redactRecordedBody(snapshot.body) }),
-    response: (snapshot) => ({ ...snapshot, body: redactRecordedBody(snapshot.body) }),
-  },
-)
 
 function authLayer(scenario: RecordedScenario) {
   const replayAuth = shouldRecord ? scenario.recordAuth?.() : scenario.replayAuth
@@ -280,17 +272,24 @@ function recordedNativeLLMLayer(scenario: RecordedScenario) {
     Layer.provide(RuntimeFlags.defaultLayer),
   )
   // Only the HTTP client is recorded; RequestExecutor and the opencode LLM stack remain real.
-  const recordedHttp = HttpRecorder.cassetteLayer(scenario.cassette, {
-    directory: FIXTURES_DIR,
-    mode: shouldRecord ? "record" : "replay",
-    metadata: {
-      provider: scenario.providerID,
-      protocol: scenario.protocol,
-      route: scenario.protocol,
-      tags: scenario.tags,
-    },
-    redactor: recordingRedactor,
-  })
+  const metadata = {
+    provider: scenario.providerID,
+    protocol: scenario.protocol,
+    route: scenario.protocol,
+    tags: scenario.tags,
+  }
+  const redact = {
+    url: (url: string) => url.replace(/\/proxy\/connections\/[^/]+\/v1/, "/proxy/connections/{connection}/v1"),
+    body: redactRecordedBody,
+  }
+  const recordedHttp = shouldRecord
+    ? HttpRecorderInternal.cassetteLayer(scenario.cassette, {
+        directory: FIXTURES_DIR,
+        mode: "record",
+        metadata,
+        redactor: HttpRecorderInternal.Redactor.make(redact),
+      })
+    : HttpRecorder.http(scenario.cassette, { directory: FIXTURES_DIR, metadata, redact })
   const recordedClient = LLMClient.layer.pipe(
     Layer.provide(Layer.mergeAll(RequestExecutor.layer.pipe(Layer.provide(recordedHttp)), WebSocketExecutor.layer)),
   )

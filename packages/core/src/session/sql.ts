@@ -11,7 +11,9 @@ import type { SessionSchema } from "./schema"
 import type { MessageID, PartID, SessionV1 } from "../v1/session"
 import { WorkspaceV2 } from "../workspace"
 import { Timestamps } from "../database/schema.sql"
-import type { SystemContext } from "../system-context"
+import type { SystemContext } from "../system-context/index"
+import { AgentV2 } from "../agent"
+import type { Revert } from "@opencode-ai/schema/revert"
 
 type SessionMessageData = Omit<(typeof SessionMessage.Message)["Encoded"], "type" | "id">
 type V1MessageData = Omit<SessionV1.Info, "id" | "sessionID">
@@ -36,7 +38,7 @@ export const SessionTable = sqliteTable(
     summary_additions: integer(),
     summary_deletions: integer(),
     summary_files: integer(),
-    summary_diffs: text({ mode: "json" }).$type<Snapshot.FileDiff[]>(),
+    summary_diffs: text({ mode: "json" }).$type<Snapshot.LegacyFileDiff[]>(),
     metadata: text({ mode: "json" }).$type<Record<string, unknown>>(),
     cost: real().notNull().default(0),
     tokens_input: integer().notNull().default(0),
@@ -44,7 +46,7 @@ export const SessionTable = sqliteTable(
     tokens_reasoning: integer().notNull().default(0),
     tokens_cache_read: integer().notNull().default(0),
     tokens_cache_write: integer().notNull().default(0),
-    revert: text({ mode: "json" }).$type<{ messageID: MessageID; partID?: PartID; snapshot?: string; diff?: string }>(),
+    revert: text({ mode: "json" }).$type<Revert.State>(),
     permission: text({ mode: "json" }).$type<PermissionV1.Ruleset>(),
     agent: text(),
     model: text({ mode: "json" }).$type<{
@@ -171,6 +173,4 @@ export const SessionContextEpochTable = sqliteTable("session_context_epoch", {
   baseline: text().notNull(),
   snapshot: text({ mode: "json" }).notNull().$type<SystemContext.Snapshot>(),
   baseline_seq: integer().notNull(),
-  replacement_seq: integer(),
-  revision: integer().notNull().default(0),
 })

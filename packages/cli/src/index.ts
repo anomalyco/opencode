@@ -8,6 +8,8 @@ import { Runtime } from "./framework/runtime"
 import { Daemon } from "./services/daemon"
 
 const Handlers = Runtime.handlers(Commands, {
+  $: () => import("./commands/handlers/default"),
+  api: () => import("./commands/handlers/api"),
   debug: {
     agents: () => import("./commands/handlers/debug/agents"),
   },

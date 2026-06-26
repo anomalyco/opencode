@@ -5,7 +5,7 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import { testEffect } from "../lib/effect"
 import path from "path"
 
-const live = FSUtil.layer.pipe(Layer.provideMerge(NodeFileSystem.layer))
+const live = Layer.merge(FSUtil.defaultLayer, NodeFileSystem.layer)
 const { effect: it } = testEffect(live)
 
 describe("FSUtil", () => {
@@ -107,6 +107,21 @@ describe("FSUtil", () => {
         const result = yield* fs.readJson(file)
 
         expect(result).toEqual(data)
+      }),
+    )
+
+    it(
+      "fails invalid JSON through the error channel",
+      Effect.gen(function* () {
+        const fs = yield* FSUtil.Service
+        const filesys = yield* FileSystem.FileSystem
+        const tmp = yield* filesys.makeTempDirectoryScoped()
+        const file = path.join(tmp, "broken.json")
+        yield* filesys.writeFileString(file, "{")
+
+        const result = yield* fs.readJson(file).pipe(Effect.catch((error) => Effect.succeed(error)))
+
+        expect(result).toHaveProperty("_tag", "FileSystemError")
       }),
     )
   })

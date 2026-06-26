@@ -14,10 +14,11 @@ import {
   type ProviderMetadata,
   type ToolCallPart,
   type ToolDefinition,
-  type ToolResultContentPart,
+  type ToolContent,
   type ToolResultPart,
 } from "../schema"
 import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared"
+import { isContextOverflow } from "../provider-error"
 import * as Cache from "./utils/cache"
 import { Lifecycle } from "./utils/lifecycle"
 import { ToolStream } from "./utils/tool-stream"
@@ -302,14 +303,17 @@ const lowerServerToolResult = Effect.fn("AnthropicMessages.lowerServerToolResult
 })
 
 const lowerImage = Effect.fn("AnthropicMessages.lowerImage")(function* (part: MediaPart) {
-  if (!part.mediaType.startsWith("image/"))
-    return yield* invalid(`Anthropic Messages user media content only supports images`)
+  const media = yield* ProviderShared.validateMedia(
+    "Anthropic Messages",
+    part,
+    new Set<string>(ProviderShared.IMAGE_MIMES),
+  )
   return {
     type: "image" as const,
     source: {
       type: "base64" as const,
-      media_type: part.mediaType,
-      data: ProviderShared.mediaBase64(part),
+      media_type: media.mime,
+      data: media.base64,
     },
   } satisfies AnthropicImageBlock
 })
@@ -317,19 +321,22 @@ const lowerImage = Effect.fn("AnthropicMessages.lowerImage")(function* (part: Me
 // Tool results may carry structured text/images. Keep media as provider-native
 // content instead of JSON-stringifying base64 into a prompt string.
 const lowerToolResultContentItem = Effect.fn("AnthropicMessages.lowerToolResultContentItem")(function* (
-  item: ToolResultContentPart,
+  item: ToolContent,
 ) {
   if (item.type === "text") return { type: "text" as const, text: item.text } satisfies AnthropicTextBlock
-  if (item.mediaType.startsWith("image/"))
-    return {
-      type: "image" as const,
-      source: {
-        type: "base64" as const,
-        media_type: item.mediaType,
-        data: ProviderShared.mediaBase64(item),
-      },
-    } satisfies AnthropicImageBlock
-  return yield* invalid(`Anthropic Messages tool-result media content only supports images, got ${item.mediaType}`)
+  const media = yield* ProviderShared.validateToolFile(
+    "Anthropic Messages",
+    item,
+    new Set<string>(ProviderShared.IMAGE_MIMES),
+  )
+  return {
+    type: "image" as const,
+    source: {
+      type: "base64" as const,
+      media_type: media.mime,
+      data: media.base64,
+    },
+  } satisfies AnthropicImageBlock
 })
 
 const lowerToolResultContent = Effect.fn("AnthropicMessages.lowerToolResultContent")(function* (part: ToolResultPart) {
@@ -337,7 +344,7 @@ const lowerToolResultContent = Effect.fn("AnthropicMessages.lowerToolResultConte
   // with existing cassettes and provider expectations.
   if (part.result.type !== "content") return ProviderShared.toolResultText(part)
   // Preserve the narrowed array element type when compiled through a consumer package.
-  const content: ReadonlyArray<ToolResultContentPart> = part.result.value
+  const content: ReadonlyArray<ToolContent> = part.result.value
   return yield* Effect.forEach(content, lowerToolResultContentItem)
 })
 
@@ -786,7 +793,12 @@ const providerErrorMessage = (event: AnthropicEvent): string => {
 
 const onError = (state: ParserState, event: AnthropicEvent): StepResult => [
   state,
-  [LLMEvent.providerError({ message: providerErrorMessage(event) })],
+  [
+    LLMEvent.providerError({
+      message: providerErrorMessage(event),
+      classification: isContextOverflow(event.error?.message ?? "") ? "context-overflow" : undefined,
+    }),
+  ],
 ]
 
 const step = (state: ParserState, event: AnthropicEvent) => {

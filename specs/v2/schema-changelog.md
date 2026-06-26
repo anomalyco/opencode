@@ -1,5 +1,34 @@
 # V2 Schema Changelog
 
+## 2026-06-22: Simplify Session Input Promotion
+
+- Keep `session.next.prompt.admitted.1` as the durable, client-visible record of pending Session input.
+- Replace `session.next.prompt.promoted.1` with the existing `session.next.prompted.1` event when input becomes model-visible.
+- Preserve the prompt endpoint, admission receipt, idempotency, steer/queue ordering, and atomic user-message projection.
+- Reset experimental V2 events, projections, inputs, Context Epochs, and synchronized workspace state while preserving canonical V1 `session`, `message`, and `part` rows.
+
+## 2026-06-22: Reset Unpublished Compaction Event
+
+- Replace the unpublished `session.next.compaction.ended.1` payload with the current checkpoint payload and remove its legacy decoder.
+- Reset experimental events, sequences, Session inputs, projected Session messages, Context Epochs, synchronized workspace rows, and Session workspace links.
+- Preserve canonical V1 `session`, `message`, and `part` rows.
+
+## 2026-06-22: Make Session Interruption Process-Local
+
+- Remove the unprojected `session.next.interrupt.requested.1` event from the experimental durable Session event union and generated SDK.
+- No canonical V1 data requires migration; experimental V2 event history containing the retired event is disposable.
+
+## 2026-06-05: Execute Automatic Session Compaction
+
+- Trigger automatic compaction before provider turns using the complete estimated request and absolute model-aware headroom.
+- Preserve the existing structured summary contract and update prior summaries with newly compacted history.
+- Store token-bounded recent history as plain serialized text inside the checkpoint instead of replaying provider-native messages.
+- Keep compaction starts durable and progress deltas live-only; activate history cutover only from a durable completed summary.
+- Store the completed event with the current checkpoint payload containing stable message identity, reason, summary, and recent context.
+- Reload the replacement Context Epoch and continue the original pending turn after compaction.
+- Preserve full durable history; compaction changes only the active model representation.
+- Defer provider-overflow recovery, explicit manual compaction, and deterministic old tool-result pruning.
+
 Record V2 database, durable-event, projected-message, HTTP, and generated SDK schema changes here. Each entry states why the contract changed and whether consumers or stored data need compatibility handling. Commit messages for schema-affecting changes should include the same summary.
 
 This document covers meaningful contract changes introduced on the `feat/opencode-embedded-api` branch since its divergence from `origin/dev`. Mechanical file moves and internal refactors are omitted unless they changed stored data, replay behavior, public HTTP or SDK shapes, or model-facing tool contracts.
@@ -54,26 +83,6 @@ Compatibility:
 - The `session.next.*` lifecycle event family predates this branch; this branch refines its experimental V2 durability and replay contracts.
 - Durable replay cursors are per-aggregate event sequences; ephemeral deltas are intentionally absent after reconnect.
 
-### Deterministic IDs From External Keys
-
-Affected schema:
-
-- Session and Event ID construction helpers.
-
-Change:
-
-- Add deterministic `SessionSchema.ID.fromExternal(...)` and `EventV2.ID.fromExternal(...)` constructors for trusted external keys.
-
-Reason:
-
-- Embedded adapters need stable local identities when the same external conversation or stimulus is delivered more than once.
-- Deterministic IDs let durable admission and event publication retain their idempotency boundaries across retries.
-
-Compatibility:
-
-- Existing generated Session and Event IDs retain their current prefixes and generation behavior.
-- Deterministic constructors are additive internal helpers; public ID schemas remain strings with their existing prefixes.
-
 ### Durable Step Settlement Ownership
 
 Affected schema:
@@ -109,7 +118,7 @@ Change:
 Reason:
 
 - Prompt admission and model-visible promotion must be separate durable operations.
-- Steering must promote at safe provider-turn boundaries while queued prompts remain separate FIFO activities.
+- Steering must promote at safe provider-turn boundaries while queued prompts remain pending in FIFO order until continuation would otherwise end.
 
 Compatibility:
 
@@ -167,28 +176,26 @@ Compatibility:
 - Tool results are durably settled before provider continuation.
 - Legacy text, JSON, and inline-media results remain convertible; unresolved URL and file sources must be materialized or explicitly rejected before provider lowering.
 
-### Managed Tool-Output Resources
+### Managed Tool-Output Files
 
 Affected schema:
 
-- New `ToolOutputStore.Resource` and `ToolOutputStore.Page` schemas.
-- New `tool-output://<opaque-id>` URI contract.
-- `read` tool resource-page input.
+- New optional managed `outputPath` and `outputPaths` fields on tool results and completed Session tool state.
+- Absolute managed output paths accepted by ordinary `read` and `grep` inputs.
 
 Change:
 
-- Spill oversized model-facing tool text into Session-owned opaque managed resources.
-- Page stored UTF-8 content by byte offset with bounded reads and explicit `truncated` and `next` metadata.
+- Spill oversized model-facing tool text into globally unique files under OpenCode's shared tool-output directory.
+- Include the absolute file path in the bounded preview so ordinary `read`, `grep`, and `bash` operations can inspect it.
 
 Reason:
 
 - Tool results need bounded model context without discarding the full output.
-- Opaque Session ownership prevents one Session from reading another Session's managed output.
+- Filesystem resolution admits only direct generated `tool_*` files from the managed directory, while existing permissions whitelist that directory.
 
 Compatibility:
 
-- This is an additive internal and model-facing resource contract.
-- Managed output is retained for a bounded period and is not a public filesystem path.
+- Managed output is retained for a bounded period and exposed as a normal host filesystem path.
 
 ### Location-Scoped Filesystem Read And Search Contracts
 
@@ -687,6 +694,22 @@ Compatibility:
 - Foreground V2 bash execution is unchanged.
 - Reintroduce background bash only with durable status observation, completion delivery, and explicit cancellation semantics.
 
+## 2026-06-18: Remove Bash Description Input
+
+Affected schema:
+
+- V1 and Core V2 model-facing `bash` tool parameters.
+
+Change:
+
+- Remove the V1 required and V2 optional `description` parameter.
+- Derive shell presentation from the command or a generic shell label instead of model-authored description metadata.
+
+Compatibility:
+
+- Existing persisted tool calls may still contain `description`, but new tool definitions no longer expose or require it.
+- Shell command execution behavior is unchanged.
+
 ## 2026-06-04: Add Durable Session Context Snapshots
 
 Affected schema:
@@ -768,3 +791,46 @@ Change:
 Compatibility:
 
 - Watcher-backed per-file `Refreshable` instruction observations, configured sources, nested discovery, and plugin-defined context remain follow-up slices.
+
+## 2026-06-05: Admit Selected-Agent Skill Guidance
+
+Affected schema:
+
+- Add `session_context_epoch.agent` so each durable baseline records its owning effective agent.
+- No synchronized event, public HTTP API, or generated SDK schema changes.
+
+Change:
+
+- Compose selected-agent, permission-filtered available-skill guidance with Location-wide System Context before Context Epoch admission.
+- Keep skill bodies behind the existing permission-checked `skill` tool and remove the unfiltered skill list from its Location-wide definition.
+- Stop missing-skill errors from enumerating the unfiltered Location-wide skill catalog.
+- Bind local tool authorization and pending permission requests to the provider turn's effective agent.
+- Keep absolute skill locations out of available-skill guidance; expose body and location only through the permission-checked `skill` tool.
+- Request Context Epoch replacement after an agent switch, dynamically re-observe the effective agent during retries, and fence first-epoch creation against the authoritative effective agent.
+- Fence existing-epoch replacement against the authoritative effective agent and block cross-agent provider turns while replacement context is unavailable.
+- Group the System Context algebra, registry, and built-ins under `system-context/`; keep source producers and Context Epoch persistence with their owning Skill, instruction, and Session modules; rename projected conversation selection to Session History.
+- Add the canonical V1-to-V2 runtime-context parity checklist to `specs/v2/session.md`.
+
+Compatibility:
+
+- Existing Context Epoch rows backfill the default `build` agent and reconcile to another selected agent at the next safe provider-turn boundary.
+
+## 2026-06-22: Simplify Session Context Rebaselining
+
+Affected schema:
+
+- Remove `session_context_epoch.agent`, `session_context_epoch.replacement_seq`, and `session_context_epoch.revision`.
+- No synchronized event, public HTTP API, or generated SDK schema changes.
+
+Change:
+
+- Sample the effective agent and model once for each provider turn; selection changes apply to the next turn.
+- Preserve the immutable baseline and admit ordinary System Context changes as chronological `ContextUpdated` messages.
+- Rebuild the baseline directly after completed compaction instead of maintaining pending replacement state.
+- Preserve the old baseline and its effective chronological updates while a post-compaction baseline cannot be rendered completely.
+- Rely on the process-local Session execution lane instead of optimistic concurrency state between Context Epoch writers.
+
+Compatibility:
+
+- Existing Context Epoch rows migrate in place by dropping the obsolete selection and pending-replacement columns.
+- Model and agent switches no longer discard earlier chronological System Context updates by forcing a new baseline.

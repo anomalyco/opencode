@@ -1,9 +1,10 @@
 export * as SessionProjector from "./projector"
 
-import { and, desc, eq, sql } from "drizzle-orm"
+import { and, desc, eq, gt, or, sql } from "drizzle-orm"
 import { DateTime, Effect, Layer, Schema } from "effect"
 import { Database } from "../database/database"
 import { EventV2 } from "../event"
+import { LayerNode } from "../effect/layer-node"
 import { SessionEvent } from "./event"
 import { SessionV1 } from "../v1/session"
 import { WorkspaceTable } from "../control-plane/workspace.sql"
@@ -12,7 +13,7 @@ import { SessionMessageUpdater } from "./message-updater"
 import { SessionInput } from "./input"
 import { WorkspaceV2 } from "../workspace"
 import { SessionContextEpoch } from "./context-epoch"
-import { MessageTable, PartTable, SessionMessageTable, SessionTable } from "./sql"
+import { MessageTable, PartTable, SessionInputTable, SessionMessageTable, SessionTable } from "./sql"
 import type { DeepMutable } from "../schema"
 
 type DatabaseService = Database.Interface["db"]
@@ -20,7 +21,6 @@ type DatabaseService = Database.Interface["db"]
 const decodeMessage = Schema.decodeUnknownSync(SessionMessage.Message)
 const encodeMessage = Schema.encodeSync(SessionMessage.Message)
 
-class PromptAlreadyProjected extends Error {}
 export class SessionAlreadyProjected extends Error {}
 
 type Usage = {
@@ -66,7 +66,7 @@ function sessionRow(info: SessionV1.SessionInfo): typeof SessionTable.$inferInse
     tokens_reasoning: (info.tokens ?? { reasoning: 0 }).reasoning,
     tokens_cache_read: (info.tokens ?? { cache: { read: 0 } }).cache.read,
     tokens_cache_write: (info.tokens ?? { cache: { write: 0 } }).cache.write,
-    revert: info.revert ?? null,
+    revert: info.revert ? { ...info.revert, messageID: SessionMessage.ID.make(info.revert.messageID) } : null,
     permission: info.permission ? [...info.permission] : undefined,
     time_created: info.time.created,
     time_updated: info.time.updated,
@@ -114,7 +114,7 @@ function run(db: DatabaseService, event: SessionEvent.Event) {
     const decodeRow = (row: typeof SessionMessageTable.$inferSelect) =>
       decodeMessage({ ...row.data, id: row.id, type: row.type })
     const updateMessage = (message: SessionMessage.Message) => {
-      if (event.seq === undefined) return Effect.die("Synchronized Session event is missing aggregate sequence")
+      if (event.durable === undefined) return Effect.die("Durable Session event is missing aggregate sequence")
       const encoded = encodeMessage(message)
       const { id, type, ...data } = encoded
       return db
@@ -168,23 +168,6 @@ function run(db: DatabaseService, event: SessionEvent.Event) {
           return message.type === "assistant" ? message : undefined
         })
       },
-      getCurrentCompaction() {
-        return Effect.gen(function* () {
-          const row = yield* db
-            .select()
-            .from(SessionMessageTable)
-            .where(
-              and(eq(SessionMessageTable.session_id, event.data.sessionID), eq(SessionMessageTable.type, "compaction")),
-            )
-            .orderBy(desc(SessionMessageTable.seq))
-            .limit(1)
-            .get()
-            .pipe(Effect.orDie)
-          if (!row) return
-          const message = decodeRow(row)
-          return message.type === "compaction" ? message : undefined
-        })
-      },
       getCurrentShell(callID) {
         return Effect.gen(function* () {
           const rows = yield* db
@@ -200,7 +183,6 @@ function run(db: DatabaseService, event: SessionEvent.Event) {
         })
       },
       updateAssistant: updateMessage,
-      updateCompaction: updateMessage,
       updateShell: updateMessage,
       appendMessage,
     }
@@ -209,7 +191,7 @@ function run(db: DatabaseService, event: SessionEvent.Event) {
 }
 
 function insertMessage(db: DatabaseService, event: SessionEvent.Event, message: SessionMessage.Message) {
-  if (event.seq === undefined) return Effect.die("Synchronized Session event is missing aggregate sequence")
+  if (event.durable === undefined) return Effect.die("Durable Session event is missing aggregate sequence")
   const encoded = encodeMessage(message)
   const { id, type, ...data } = encoded
   return db
@@ -218,7 +200,7 @@ function insertMessage(db: DatabaseService, event: SessionEvent.Event, message: 
       id: SessionMessage.ID.make(id),
       session_id: event.data.sessionID,
       type,
-      seq: event.seq,
+      seq: event.durable.seq,
       time_created: DateTime.toEpochMillis(message.time.created),
       data,
     })
@@ -230,7 +212,6 @@ export const layer = Layer.effectDiscard(
   Effect.gen(function* () {
     const events = yield* EventV2.Service
     const { db } = yield* Database.Service
-    yield* events.beforeCommit((event) => SessionInput.guardReservedID(db, event))
     yield* events.project(SessionV1.Event.Created, (event) =>
       Effect.gen(function* () {
         const stored = yield* db
@@ -364,40 +345,27 @@ export const layer = Layer.effectDiscard(
           .run()
           .pipe(Effect.orDie)
         yield* run(db, event)
-        if (event.seq === undefined)
-          return yield* Effect.die("Synchronized Session event is missing aggregate sequence")
-        yield* SessionContextEpoch.requestReplacement(db, event.data.sessionID, event.seq)
       }),
     )
     yield* events.project(SessionEvent.Prompted, (event) =>
       Effect.gen(function* () {
-        const messageID = event.data.messageID
-        const existing = yield* db
-          .select({ id: SessionMessageTable.id })
-          .from(SessionMessageTable)
-          .where(eq(SessionMessageTable.id, messageID))
-          .get()
-          .pipe(Effect.orDie)
-        if (existing) return yield* Effect.die(new PromptAlreadyProjected())
-        yield* run(db, event)
-        if (event.seq === undefined)
-          return yield* Effect.die("Synchronized Session event is missing aggregate sequence")
-        yield* SessionInput.projectLegacyPrompted(db, {
-          id: messageID,
+        if (event.durable === undefined) return yield* Effect.die("Durable Session event is missing aggregate sequence")
+        yield* SessionInput.projectPrompted(db, {
+          id: event.data.messageID,
           sessionID: event.data.sessionID,
           prompt: event.data.prompt,
           delivery: event.data.delivery,
           timeCreated: event.data.timestamp,
-          promotedSeq: event.seq,
+          promotedSeq: event.durable.seq,
         })
+        yield* run(db, event)
       }),
     )
-    yield* events.project(SessionEvent.PromptLifecycle.Admitted, (event) =>
+    yield* events.project(SessionEvent.PromptAdmitted, (event) =>
       Effect.gen(function* () {
-        if (event.seq === undefined)
-          return yield* Effect.die("Synchronized Session event is missing aggregate sequence")
+        if (event.durable === undefined) return yield* Effect.die("Durable Session event is missing aggregate sequence")
         yield* SessionInput.projectAdmitted(db, {
-          admittedSeq: event.seq,
+          admittedSeq: event.durable.seq,
           id: event.data.messageID,
           sessionID: event.data.sessionID,
           prompt: event.data.prompt,
@@ -406,29 +374,7 @@ export const layer = Layer.effectDiscard(
         })
       }),
     )
-    yield* events.project(SessionEvent.PromptLifecycle.Promoted, (event) =>
-      Effect.gen(function* () {
-        if (event.seq === undefined)
-          return yield* Effect.die("Synchronized Session event is missing aggregate sequence")
-        yield* insertMessage(
-          db,
-          event,
-          yield* SessionInput.projectPromoted(db, {
-            id: event.data.messageID,
-            sessionID: event.data.sessionID,
-            prompt: event.data.prompt,
-            timeCreated: event.data.timeCreated,
-            promotedSeq: event.seq,
-          }),
-        )
-      }),
-    )
-    yield* events.project(SessionEvent.ContextUpdated, (event) => {
-      if (!event.replay || event.seq === undefined) return run(db, event)
-      return run(db, event).pipe(
-        Effect.andThen(SessionContextEpoch.requestReplacement(db, event.data.sessionID, event.seq)),
-      )
-    })
+    yield* events.project(SessionEvent.ContextUpdated, (event) => run(db, event))
     yield* events.project(SessionEvent.Synthetic, (event) => run(db, event))
     yield* events.project(SessionEvent.Shell.Started, (event) => run(db, event))
     yield* events.project(SessionEvent.Shell.Ended, (event) => run(db, event))
@@ -446,15 +392,68 @@ export const layer = Layer.effectDiscard(
     yield* events.project(SessionEvent.Reasoning.Started, (event) => run(db, event))
     yield* events.project(SessionEvent.Reasoning.Ended, (event) => run(db, event))
     // yield* events.project(SessionEvent.Retried, (event) => run(db, event))
-    yield* events.project(SessionEvent.Compaction.Started, (event) => run(db, event))
-    yield* events.project(SessionEvent.Compaction.Delta, (event) => run(db, event))
-    yield* events.project(SessionEvent.Compaction.Ended, (event) => {
-      if (event.seq === undefined) return Effect.die("Synchronized Session event is missing aggregate sequence")
-      return run(db, event).pipe(
-        Effect.andThen(SessionContextEpoch.requestReplacement(db, event.data.sessionID, event.seq)),
-      )
-    })
+    yield* events.project(SessionEvent.Compaction.Ended, (event) => run(db, event))
+    yield* events.project(SessionEvent.RevertEvent.Staged, (event) =>
+      db
+        .update(SessionTable)
+        .set({
+          revert: { ...event.data.revert, files: event.data.revert.files ? [...event.data.revert.files] : undefined },
+          time_updated: DateTime.toEpochMillis(event.data.timestamp),
+        })
+        .where(eq(SessionTable.id, event.data.sessionID))
+        .run()
+        .pipe(Effect.orDie, Effect.asVoid),
+    )
+    yield* events.project(SessionEvent.RevertEvent.Cleared, (event) =>
+      db
+        .update(SessionTable)
+        .set({ revert: null, time_updated: DateTime.toEpochMillis(event.data.timestamp) })
+        .where(eq(SessionTable.id, event.data.sessionID))
+        .run()
+        .pipe(Effect.orDie, Effect.asVoid),
+    )
+    yield* events.project(SessionEvent.RevertEvent.Committed, (event) =>
+      Effect.gen(function* () {
+        const boundary = yield* db
+          .select({ seq: SessionMessageTable.seq })
+          .from(SessionMessageTable)
+          .where(
+            and(
+              eq(SessionMessageTable.session_id, event.data.sessionID),
+              eq(SessionMessageTable.id, event.data.messageID),
+            ),
+          )
+          .get()
+          .pipe(Effect.orDie)
+        if (!boundary) return yield* Effect.die(`Revert boundary message not found: ${event.data.messageID}`)
+        yield* db
+          .delete(SessionMessageTable)
+          .where(
+            and(eq(SessionMessageTable.session_id, event.data.sessionID), gt(SessionMessageTable.seq, boundary.seq)),
+          )
+          .run()
+          .pipe(Effect.orDie)
+        yield* db
+          .delete(SessionInputTable)
+          .where(
+            and(
+              eq(SessionInputTable.session_id, event.data.sessionID),
+              or(gt(SessionInputTable.admitted_seq, boundary.seq), gt(SessionInputTable.promoted_seq, boundary.seq)),
+            ),
+          )
+          .run()
+          .pipe(Effect.orDie)
+        yield* db
+          .update(SessionTable)
+          .set({ revert: null, time_updated: DateTime.toEpochMillis(event.data.timestamp) })
+          .where(eq(SessionTable.id, event.data.sessionID))
+          .run()
+          .pipe(Effect.orDie)
+        yield* SessionContextEpoch.reset(db, event.data.sessionID)
+      }),
+    )
   }),
 )
 
 export const defaultLayer = layer.pipe(Layer.provide(EventV2.defaultLayer), Layer.provide(Database.defaultLayer))
+export const node = LayerNode.make({ name: "session-projector", layer, deps: [EventV2.node, Database.node] })

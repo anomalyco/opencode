@@ -7,27 +7,25 @@ import type {
   ProviderAuthResponse,
   QuestionRequest,
   Session,
-  Todo,
 } from "@opencode-ai/sdk/v2/client"
 import { showToast } from "@/utils/toast"
 import { getFilename } from "@opencode-ai/core/util/path"
 import { retry } from "@opencode-ai/core/util/retry"
 import { batch } from "solid-js"
-import { reconcile, type SetStoreFunction, type Store } from "solid-js/store"
+import { produce, reconcile, type SetStoreFunction, type Store } from "solid-js/store"
 import type { State, VcsCache } from "./types"
+import type { ServerSession } from "../server-session"
 import { cmp, normalizeAgentList, normalizeProviderList } from "./utils"
 import { formatServerError } from "@/utils/server-errors"
 import { QueryClient, queryOptions } from "@tanstack/solid-query"
 import { loadMcpQuery } from "../server-sync"
-import { NormalizedProviderListResponse } from "@opencode-ai/ui/context"
+import { NormalizedProviderListResponse } from "@opencode-ai/session-ui/context"
+import { ScopedKey, type ServerScope } from "@/utils/server-scope"
 
 type GlobalStore = {
   ready: boolean
   path: Path
   project: Project[]
-  session_todo: {
-    [sessionID: string]: Todo[]
-  }
   provider: NormalizedProviderListResponse
   provider_auth: ProviderAuthResponse
   config: Config
@@ -59,8 +57,8 @@ function errors(list: PromiseSettledResult<unknown>[]) {
 
 const providerRev = new Map<string, number>()
 
-export function clearProviderRev(directory: string) {
-  providerRev.delete(directory)
+export function clearProviderRev(scope: ServerScope, directory: string) {
+  providerRev.delete(ScopedKey.from(scope, directory))
 }
 
 function runAll(list: Array<() => Promise<unknown>>) {
@@ -83,15 +81,15 @@ function showErrors(input: {
   })
 }
 
-export const loadGlobalConfigQuery = (sdk: OpencodeClient) =>
+export const loadGlobalConfigQuery = (scope: ServerScope, sdk: OpencodeClient) =>
   queryOptions({
-    queryKey: ["config"],
+    queryKey: [scope, "config"],
     queryFn: () => retry(() => sdk.global.config.get().then((x) => x.data!)),
   })
 
-export const loadProjectsQuery = (sdk: OpencodeClient) =>
+export const loadProjectsQuery = (scope: ServerScope, sdk: OpencodeClient) =>
   queryOptions({
-    queryKey: ["project"],
+    queryKey: [scope, "project"],
     queryFn: () =>
       retry(() =>
         sdk.project.list().then((x) => {
@@ -106,6 +104,7 @@ export const loadProjectsQuery = (sdk: OpencodeClient) =>
 
 export async function bootstrapGlobal(input: {
   serverSDK: OpencodeClient
+  scope: ServerScope
   requestFailedTitle: string
   translate: (key: string, vars?: Record<string, string | number>) => string
   formatMoreCount: (count: number) => string
@@ -113,12 +112,12 @@ export async function bootstrapGlobal(input: {
   queryClient: QueryClient
 }) {
   const slow = [
-    () => input.queryClient.fetchQuery(loadGlobalConfigQuery(input.serverSDK)),
-    () => input.queryClient.fetchQuery(loadProvidersQuery(null, input.serverSDK)),
-    () => input.queryClient.fetchQuery(loadPathQuery(null, input.serverSDK)),
+    () => input.queryClient.fetchQuery(loadGlobalConfigQuery(input.scope, input.serverSDK)),
+    () => input.queryClient.fetchQuery(loadProvidersQuery(input.scope, null, input.serverSDK)),
+    () => input.queryClient.fetchQuery(loadPathQuery(input.scope, null, input.serverSDK)),
     () =>
       input.queryClient
-        .fetchQuery(loadProjectsQuery(input.serverSDK))
+        .fetchQuery(loadProjectsQuery(input.scope, input.serverSDK))
         .then((data) => input.setGlobalStore("project", data)),
   ]
   await runAll(slow)
@@ -178,26 +177,27 @@ function warmSessions(input: {
   ).then(() => undefined)
 }
 
-export const loadProvidersQuery = (directory: string | null, sdk: OpencodeClient) =>
+export const loadProvidersQuery = (scope: ServerScope, directory: string | null, sdk: OpencodeClient) =>
   queryOptions({
-    queryKey: [directory, "providers"],
+    queryKey: [scope, directory, "providers"],
     queryFn: () => retry(() => sdk.provider.list().then((x) => normalizeProviderList(x.data!))),
   })
 
-export const loadAgentsQuery = (directory: string | null, sdk: OpencodeClient) =>
+export const loadAgentsQuery = (scope: ServerScope, directory: string | null, sdk: OpencodeClient) =>
   queryOptions({
-    queryKey: [directory, "agents"],
+    queryKey: [scope, directory, "agents"],
     queryFn: () => retry(() => sdk.app.agents().then((x) => normalizeAgentList(x.data))),
   })
 
-export const loadPathQuery = (directory: string | null, sdk: OpencodeClient) =>
+export const loadPathQuery = (scope: ServerScope, directory: string | null, sdk: OpencodeClient) =>
   queryOptions<Path>({
-    queryKey: [directory, "path"],
+    queryKey: [scope, directory, "path"],
     queryFn: () => retry(() => sdk.path.get().then((x) => x.data!)),
   })
 
 export async function bootstrapDirectory(input: {
   directory: string
+  scope: ServerScope
   mcp: boolean
   sdk: OpencodeClient
   store: Store<State>
@@ -212,6 +212,7 @@ export async function bootstrapDirectory(input: {
     provider: NormalizedProviderListResponse
   }
   queryClient: QueryClient
+  session?: ServerSession
 }) {
   const loading = input.store.status !== "complete"
   const seededProject = projectID(input.directory, input.global.project)
@@ -223,23 +224,47 @@ export async function bootstrapDirectory(input: {
   }
   if (loading) input.setStore("status", "partial")
 
-  const rev = (providerRev.get(input.directory) ?? 0) + 1
-  providerRev.set(input.directory, rev)
+  const revKey = ScopedKey.from(input.scope, input.directory)
+  const rev = (providerRev.get(revKey) ?? 0) + 1
+  providerRev.set(revKey, rev)
   ;(async () => {
     const slow = [
       () => Promise.resolve(input.loadSessions(input.directory)),
       () =>
         input.queryClient
-          .ensureQueryData(loadAgentsQuery(input.directory, input.sdk))
+          .ensureQueryData(loadAgentsQuery(input.scope, input.directory, input.sdk))
           .then((data) => input.setStore("agent", data)),
       () =>
         retry(() => input.sdk.config.get().then((x) => input.setStore("config", reconcile(x.data!, { merge: false })))),
-      () => retry(() => input.sdk.session.status().then((x) => input.setStore("session_status", x.data!))),
+      () =>
+        retry(() =>
+          input.sdk.session.status().then(async (x) => {
+            if (input.session) {
+              const statuses = x.data ?? {}
+              await Promise.all(
+                Object.keys(statuses).map((sessionID) => input.session!.resolve(sessionID).catch(() => undefined)),
+              )
+              input.session.set(
+                "session_status",
+                produce((draft) => {
+                  for (const sessionID of Object.keys(draft)) {
+                    if (statuses[sessionID]) continue
+                    if (input.session?.get(sessionID)?.directory === input.directory) delete draft[sessionID]
+                  }
+                }),
+              )
+              for (const [sessionID, status] of Object.entries(statuses)) {
+                input.session.set("session_status", sessionID, reconcile(status))
+              }
+            }
+            if (!input.session) input.setStore("session_status", x.data!)
+          }),
+        ),
       !seededProject &&
         (() => retry(() => input.sdk.project.current()).then((x) => input.setStore("project", x.data!.id))),
       !seededPath &&
         (() =>
-          input.queryClient.ensureQueryData(loadPathQuery(input.directory, input.sdk)).then((data) => {
+          input.queryClient.ensureQueryData(loadPathQuery(input.scope, input.directory, input.sdk)).then((data) => {
             const next = projectID(data.directory ?? input.directory, input.global.project)
             if (next) input.setStore("project", next)
           })),
@@ -259,21 +284,25 @@ export async function bootstrapDirectory(input: {
             const grouped = groupBySession(
               (x.data ?? []).filter((perm): perm is PermissionRequest => !!perm?.id && !!perm.sessionID),
             )
-            return warmSessions({ ids, store: input.store, setStore: input.setStore, sdk: input.sdk }).then(() =>
+            const warm = input.session
+              ? Promise.all(ids.map((sessionID) => input.session!.resolve(sessionID))).then(() => undefined)
+              : warmSessions({ ids, store: input.store, setStore: input.setStore, sdk: input.sdk })
+            return warm.then(() =>
               batch(() => {
-                for (const sessionID of Object.keys(input.store.permission)) {
+                const current = input.session?.data.permission ?? input.store.permission
+                for (const sessionID of Object.keys(current)) {
                   if (grouped[sessionID]) continue
-                  input.setStore("permission", sessionID, [])
+                  if (input.session?.get(sessionID)?.directory !== input.directory) continue
+                  if (input.session) input.session.set("permission", sessionID, [])
+                  if (!input.session) input.setStore("permission", sessionID, [])
                 }
                 for (const [sessionID, permissions] of Object.entries(grouped)) {
-                  input.setStore(
-                    "permission",
-                    sessionID,
-                    reconcile(
-                      permissions.filter((p) => !!p?.id).sort((a, b) => cmp(a.id, b.id)),
-                      { key: "id" },
-                    ),
+                  const value = reconcile(
+                    permissions.filter((p) => !!p?.id).sort((a, b) => cmp(a.id, b.id)),
+                    { key: "id" },
                   )
+                  if (input.session) input.session.set("permission", sessionID, value)
+                  if (!input.session) input.setStore("permission", sessionID, value)
                 }
               }),
             )
@@ -284,30 +313,34 @@ export async function bootstrapDirectory(input: {
           input.sdk.question.list().then((x) => {
             const ids = (x.data ?? []).map((question) => question?.sessionID).filter((id): id is string => !!id)
             const grouped = groupBySession((x.data ?? []).filter((q): q is QuestionRequest => !!q?.id && !!q.sessionID))
-            return warmSessions({ ids, store: input.store, setStore: input.setStore, sdk: input.sdk }).then(() =>
+            const warm = input.session
+              ? Promise.all(ids.map((sessionID) => input.session!.resolve(sessionID))).then(() => undefined)
+              : warmSessions({ ids, store: input.store, setStore: input.setStore, sdk: input.sdk })
+            return warm.then(() =>
               batch(() => {
-                for (const sessionID of Object.keys(input.store.question)) {
+                const current = input.session?.data.question ?? input.store.question
+                for (const sessionID of Object.keys(current)) {
                   if (grouped[sessionID]) continue
-                  input.setStore("question", sessionID, [])
+                  if (input.session?.get(sessionID)?.directory !== input.directory) continue
+                  if (input.session) input.session.set("question", sessionID, [])
+                  if (!input.session) input.setStore("question", sessionID, [])
                 }
                 for (const [sessionID, questions] of Object.entries(grouped)) {
-                  input.setStore(
-                    "question",
-                    sessionID,
-                    reconcile(
-                      questions.filter((q) => !!q?.id).sort((a, b) => cmp(a.id, b.id)),
-                      { key: "id" },
-                    ),
+                  const value = reconcile(
+                    questions.filter((q) => !!q?.id).sort((a, b) => cmp(a.id, b.id)),
+                    { key: "id" },
                   )
+                  if (input.session) input.session.set("question", sessionID, value)
+                  if (!input.session) input.setStore("question", sessionID, value)
                 }
               }),
             )
           }),
         ),
       () => Promise.resolve(input.loadSessions(input.directory)),
-      input.mcp && (() => input.queryClient.fetchQuery(loadMcpQuery(input.directory, input.sdk))),
+      input.mcp && (() => input.queryClient.fetchQuery(loadMcpQuery(input.scope, input.directory, input.sdk))),
       () =>
-        input.queryClient.fetchQuery(loadProvidersQuery(input.directory, input.sdk)).catch((err) => {
+        input.queryClient.fetchQuery(loadProvidersQuery(input.scope, input.directory, input.sdk)).catch((err) => {
           const project = getFilename(input.directory)
           showToast({
             variant: "error",

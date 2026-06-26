@@ -3,7 +3,6 @@ import os from "os"
 import { createWriteStream } from "node:fs"
 import * as Tool from "./tool"
 import path from "path"
-import * as Log from "@opencode-ai/core/util/log"
 import { containsPath, type InstanceContext } from "../project/instance-context"
 import { InstanceState } from "@/effect/instance-state"
 import { lazy } from "@/util/lazy"
@@ -13,7 +12,7 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import { fileURLToPath } from "url"
 import { Config } from "@/config/config"
 import { RuntimeFlags } from "@/effect/runtime-flags"
-import { Shell } from "@/shell/shell"
+import { Shell } from "@opencode-ai/core/shell"
 import { ShellID } from "./shell/id"
 
 import * as Truncate from "./truncate"
@@ -81,8 +80,6 @@ type Chunk = {
   text: string
   size: number
 }
-
-export const log = Log.create({ service: "shell-tool" })
 
 const resolveWasm = (asset: string) => {
   if (asset.startsWith("file://")) return fileURLToPath(asset)
@@ -263,11 +260,7 @@ const parse = Effect.fn("ShellTool.parse")(function* (command: string, ps: boole
   return tree
 })
 
-const ask = Effect.fn("ShellTool.ask")(function* (
-  ctx: Tool.Context,
-  scan: Scan,
-  input: { command: string; description: string },
-) {
+const ask = Effect.fn("ShellTool.ask")(function* (ctx: Tool.Context, scan: Scan, input: { command: string }) {
   if (scan.dirs.size > 0) {
     const directories = Array.from(scan.dirs)
     const globs = directories.map((dir) => {
@@ -280,7 +273,6 @@ const ask = Effect.fn("ShellTool.ask")(function* (
       always: globs,
       metadata: {
         command: input.command,
-        description: input.description,
         directories,
         patterns: globs,
       },
@@ -294,7 +286,6 @@ const ask = Effect.fn("ShellTool.ask")(function* (
     always: Array.from(scan.always),
     metadata: {
       command: input.command,
-      description: input.description,
     },
   })
 })
@@ -406,7 +397,7 @@ export const ShellTool = Tool.define(
         if (cmd && (FILES.has(cmd) || (shellKind === "cmd" && CMD_FILES.has(cmd)))) {
           for (const arg of pathArgs(command, ps, shellKind === "cmd")) {
             const resolved = yield* argPath(arg, cwd, ps, shell)
-            log.info("resolved path", { arg, resolved })
+            yield* Effect.logInfo("resolved path", { arg, resolved })
             if (!resolved || containsPath(resolved, instance)) continue
             const dir = (yield* fs.isDir(resolved)) ? resolved : path.dirname(resolved)
             scan.dirs.add(dir)
@@ -441,7 +432,6 @@ export const ShellTool = Tool.define(
         cwd: string
         env: NodeJS.ProcessEnv
         timeout: number
-        description: string
       },
       ctx: Tool.Context,
     ) {
@@ -485,7 +475,6 @@ export const ShellTool = Tool.define(
       yield* ctx.metadata({
         metadata: {
           output: "",
-          description: input.description,
         },
       })
 
@@ -526,7 +515,6 @@ export const ShellTool = Tool.define(
                       ctx.metadata({
                         metadata: {
                           output: last,
-                          description: input.description,
                         },
                       }),
                     ),
@@ -537,7 +525,6 @@ export const ShellTool = Tool.define(
               return ctx.metadata({
                 metadata: {
                   output: last,
-                  description: input.description,
                 },
               })
             }),
@@ -596,11 +583,10 @@ export const ShellTool = Tool.define(
         output += "\n\n<shell_metadata>\n" + meta.join("\n") + "\n</shell_metadata>"
       }
       return {
-        title: input.description,
+        title: input.command,
         metadata: {
           output: last || preview(output),
           exit: code,
-          description: input.description,
           truncated: cut,
           ...(cut && file ? { outputPath: file } : {}),
         },
@@ -615,7 +601,7 @@ export const ShellTool = Tool.define(
         const name = Shell.name(shell)
         const limits = yield* trunc.limits()
         const prompt = ShellPrompt.render(name, process.platform, limits, defaultTimeoutMs)
-        log.info("shell tool using shell", { shell })
+        yield* Effect.logInfo("shell tool using shell", { shell })
 
         return {
           description: prompt.description,
@@ -649,7 +635,6 @@ export const ShellTool = Tool.define(
                   cwd,
                   env: yield* shellEnv(ctx, cwd),
                   timeout,
-                  description: params.description,
                 },
                 ctx,
               )

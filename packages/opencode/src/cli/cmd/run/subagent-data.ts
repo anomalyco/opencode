@@ -292,10 +292,25 @@ function metadata(part: ToolPart, key: string) {
   return ("metadata" in part.state ? part.state.metadata?.[key] : undefined) ?? part.metadata?.[key]
 }
 
+function taskStatus(part: ToolPart): FooterSubagentTab["status"] {
+  if (part.state.status === "completed") {
+    return "completed"
+  }
+
+  if (part.state.status === "error") {
+    if (metadata(part, "interrupted") === true || text(part.state.error) === "Tool execution aborted") {
+      return "cancelled"
+    }
+
+    return "error"
+  }
+
+  return "running"
+}
+
 function taskTab(part: ToolPart, sessionID: string): FooterSubagentTab {
   const label = Locale.titlecase(text(part.state.input.subagent_type) ?? "general")
   const description = text(part.state.input.description) ?? stateTitle(part) ?? inputLabel(part.state.input) ?? ""
-  const status = part.state.status === "error" ? "error" : part.state.status === "completed" ? "completed" : "running"
 
   return {
     sessionID,
@@ -303,7 +318,7 @@ function taskTab(part: ToolPart, sessionID: string): FooterSubagentTab {
     callID: part.callID,
     label,
     description,
-    status,
+    status: taskStatus(part),
     background: metadata(part, "background") === true,
     title: stateTitle(part),
     toolCalls: num(metadata(part, "toolcalls")) ?? num(metadata(part, "toolCalls")) ?? num(metadata(part, "calls")),
@@ -454,6 +469,29 @@ function ensureBlockerTab(
     lastUpdatedAt: Date.now(),
   })
   ensureDetail(data, sessionID)
+  return true
+}
+
+function isAbortedAssistantMessage(info: Message) {
+  return info.role === "assistant" && info.error?.name === "MessageAbortedError"
+}
+
+function cancelSubagentTab(data: SubagentData, sessionID: string) {
+  const current = data.tabs.get(sessionID)
+  if (!current || current.status !== "running") {
+    return false
+  }
+
+  const next = {
+    ...current,
+    status: "cancelled" as const,
+    lastUpdatedAt: Date.now(),
+  }
+  if (sameSubagentTab(current, next)) {
+    return false
+  }
+
+  data.tabs.set(sessionID, next)
   return true
 }
 
@@ -751,22 +789,6 @@ export function bootstrapSubagentCalls(input: {
   return changed || beforeCallCount !== detail.data.call.size || queueChanged(detail.data, before)
 }
 
-export function clearFinishedSubagents(data: SubagentData) {
-  let changed = false
-
-  for (const [sessionID, tab] of data.tabs.entries()) {
-    if (tab.status === "running") {
-      continue
-    }
-
-    data.tabs.delete(sessionID)
-    data.details.delete(sessionID)
-    changed = true
-  }
-
-  return changed
-}
-
 export function reduceSubagentData(input: {
   data: SubagentData
   event: Event
@@ -807,38 +829,48 @@ export function reduceSubagentData(input: {
   }
 
   const detail = ensureDetail(input.data, sessionID)
+  const cancelled =
+    event.type === "message.updated" && isAbortedAssistantMessage(event.properties.info)
+      ? cancelSubagentTab(input.data, sessionID)
+      : false
   if (event.type === "session.status") {
     if (event.properties.status.type !== "retry") {
-      return false
+      return cancelled
     }
 
-    return appendCommits(detail, [
-      {
-        kind: "error",
-        text: event.properties.status.message,
-        phase: "start",
-        source: "system",
-        messageID: `retry:${event.properties.status.attempt}`,
-      },
-    ])
+    return (
+      appendCommits(detail, [
+        {
+          kind: "error",
+          text: event.properties.status.message,
+          phase: "start",
+          source: "system",
+          messageID: `retry:${event.properties.status.attempt}`,
+        },
+      ]) || cancelled
+    )
   }
 
   if (event.type === "session.error" && event.properties.error) {
-    return appendCommits(detail, [
-      {
-        kind: "error",
-        text: formatError(event.properties.error),
-        phase: "start",
-        source: "system",
-        messageID: `session.error:${event.properties.sessionID}:${formatError(event.properties.error)}`,
-      },
-    ])
+    return (
+      appendCommits(detail, [
+        {
+          kind: "error",
+          text: formatError(event.properties.error),
+          phase: "start",
+          source: "system",
+          messageID: `session.error:${event.properties.sessionID}:${formatError(event.properties.error)}`,
+        },
+      ]) || cancelled
+    )
   }
 
-  return applyChildEvent({
-    detail,
-    event,
-    thinking: input.thinking,
-    limits: input.limits,
-  })
+  return (
+    applyChildEvent({
+      detail,
+      event,
+      thinking: input.thinking,
+      limits: input.limits,
+    }) || cancelled
+  )
 }
