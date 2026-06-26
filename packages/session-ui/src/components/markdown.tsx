@@ -25,6 +25,7 @@ import {
 import { markdownBlockKey, type MarkdownToken } from "./markdown-worker-protocol"
 import { shouldResetCodeTokens, type RenderedCodeState } from "./markdown-code-state"
 import { getCachedMarkdown, sanitizeMarkdown, touchCachedMarkdown, type MarkdownCacheEntry } from "./markdown-cache"
+import { inlineCodeKind } from "./markdown-inline-code-kind"
 
 type RenderedBlock =
   | (MarkdownCacheEntry & { key: string; mode: Exclude<Block["mode"], "code"> })
@@ -155,6 +156,12 @@ function codeLanguage(block: HTMLPreElement) {
 }
 
 function applyCodeMetadata(wrapper: HTMLElement, language: string | undefined) {
+  if (!document.body.hasAttribute("data-new-layout")) {
+    delete wrapper.dataset.language
+    delete wrapper.dataset.codeKind
+    return
+  }
+
   if (language) wrapper.dataset.language = language
   else delete wrapper.dataset.language
 
@@ -222,11 +229,23 @@ function markCodeLinks(root: HTMLDivElement) {
   }
 }
 
+function markInlineCode(root: HTMLDivElement) {
+  const codeNodes = Array.from(root.querySelectorAll(":not(pre) > code"))
+  for (const code of codeNodes) {
+    if (!(code instanceof HTMLElement)) continue
+    delete code.dataset.inlineCodeKind
+    const kind = inlineCodeKind(code.textContent ?? "")
+    if (kind) code.dataset.inlineCodeKind = kind
+  }
+}
+
 function decorate(root: HTMLDivElement, labels: CopyLabels) {
   const blocks = Array.from(root.querySelectorAll("pre"))
   for (const block of blocks) {
     ensureCodeWrapper(block, labels)
   }
+  if (!document.body.hasAttribute("data-new-layout")) return
+  markInlineCode(root)
   markCodeLinks(root)
 }
 

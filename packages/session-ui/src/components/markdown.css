@@ -319,6 +319,68 @@
   }
 }
 
+body:not([data-new-layout]) [data-component="markdown"] {
+  color: var(--text-strong);
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-size: 14px;
+    color: var(--text-strong);
+    font-weight: var(--font-weight-medium);
+  }
+
+  strong,
+  b {
+    color: var(--text-strong);
+  }
+
+  li::marker {
+    color: var(--text-weak);
+  }
+
+  blockquote {
+    border-left: 2px solid var(--border-weak-base);
+    color: var(--text-weak);
+  }
+
+  .shiki {
+    border-color: var(--border-weak-base);
+  }
+
+  :not(pre) > code {
+    color: var(--syntax-string);
+    padding: 0;
+    border-radius: 0;
+    background: none;
+  }
+
+  [data-slot="markdown-copy-button"]::after {
+    border: 1px solid var(--border-weak-base, rgba(0, 0, 0, 0.07));
+  }
+
+  [data-slot="markdown-copy-button"][data-variant="secondary"] {
+    border: 1px solid var(--border-weak-base);
+  }
+
+  [data-slot="markdown-copy-button"][data-variant="secondary"] [data-slot="icon-svg"] {
+    color: var(--icon-base);
+  }
+
+  th,
+  td {
+    border-bottom: 1px solid var(--border-weaker-base);
+  }
+
+  th {
+    color: var(--text-strong);
+    border-bottom-color: var(--border-weak-base);
+  }
+}
+
 [data-component="markdown"] a.external-link:hover > code {
   text-decoration: underline;
   text-underline-offset: 2px;

@@ -1,6 +1,5 @@
 import { checksum } from "@opencode-ai/core/util/encode"
 import DOMPurify from "dompurify"
-import { inlineCodeKind } from "./markdown-inline-code-kind"
 import { project } from "./markdown-stream"
 
 export type MarkdownCacheEntry = {
@@ -22,12 +21,6 @@ const config = {
 
 if (typeof window !== "undefined" && DOMPurify.isSupported) {
   DOMPurify.addHook("afterSanitizeAttributes", (node: Element) => {
-    if (node instanceof HTMLElement && node.tagName === "CODE" && node.parentElement?.tagName !== "PRE") {
-      delete node.dataset.inlineCodeKind
-      const kind = inlineCodeKind(node.textContent ?? "")
-      if (kind) node.dataset.inlineCodeKind = kind
-    }
-
     if (!(node instanceof HTMLAnchorElement)) return
     if (node.target !== "_blank") return
 
