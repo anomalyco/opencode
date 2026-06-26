@@ -257,10 +257,7 @@ export function TabNavItem(props: {
         }}
       </Show>
 
-      <div
-        data-slot="tab-close"
-        class="group-hover:bg-[var(--tab-bg)] group-data-[active=true]:bg-[var(--tab-bg)]"
-      >
+      <div data-slot="tab-close" class="group-hover:bg-[var(--tab-bg)] group-data-[active=true]:bg-[var(--tab-bg)]">
         <IconButtonV2
           size="small"
           variant="ghost-muted"
