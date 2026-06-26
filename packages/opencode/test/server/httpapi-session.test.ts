@@ -4,7 +4,7 @@ import { NodeHttpServer, NodeServices } from "@effect/platform-node"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
-import { Cause, Config, Effect, Exit, Layer, Schedule } from "effect"
+import { Cause, Config, Effect, Exit, Layer } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse, HttpRouter, HttpServer } from "effect/unstable/http"
 import { layerWebSocketConstructorGlobal } from "effect/unstable/socket/Socket"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
@@ -34,7 +34,7 @@ import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, provideInstanceEffect, TestInstance, tmpdirScoped } from "../fixture/fixture"
 import { TestLLMServer } from "../lib/llm-server"
 import { testProviderConfig } from "../lib/test-provider"
-import { testEffect } from "../lib/effect"
+import { pollWithTimeout, testEffect } from "../lib/effect"
 
 const originalWorkspaces = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
 const workspaceLayer = Workspace.defaultLayer.pipe(
@@ -624,40 +624,22 @@ describe("session HttpApi", () => {
           message: "Prompt message ID conflicts with an existing durable record: msg_http_prompt",
           resource: "msg_http_prompt",
         })
-      }),
-    { git: true, config: { formatter: false, lsp: false } },
-  )
 
-  it.instance(
-    "wakes v2 session execution by default",
-    () =>
-      Effect.gen(function* () {
-        const test = yield* TestInstance
-        const headers = { "x-opencode-directory": test.directory }
-        const session = yield* createSession({
-          title: "v2 prompt wake",
-          model: { providerID: ProviderV2.ID.make("test"), id: ModelV2.ID.make("embedded") },
-        })
-        const response = yield* request(`/api/session/${session.id}/prompt`, {
+        const wakeID = SessionMessage.ID.make("msg_http_wake")
+        const wake = yield* request(`/api/session/${session.id}/prompt`, {
           method: "POST",
           headers: { ...headers, "content-type": "application/json" },
-          body: JSON.stringify({ id: "msg_http_wake", prompt: { text: "hello" } }),
+          body: JSON.stringify({ id: wakeID, prompt: { text: "hello again" } }),
         })
-
-        expect(response.status).toBe(200)
-        const promoted = yield* Database.Service.use(({ db }) =>
-          db
-            .select({ promoted_seq: SessionInputTable.promoted_seq })
-            .from(SessionInputTable)
-            .where(eq(SessionInputTable.id, SessionMessage.ID.make("msg_http_wake")))
-            .get()
-            .pipe(Effect.orDie),
-        ).pipe(
-          Effect.filterOrFail((row): row is { promoted_seq: number } => typeof row?.promoted_seq === "number"),
-          Effect.retry(Schedule.spaced("10 millis")),
-          Effect.timeout("10 seconds"),
+        expect(wake.status).toBe(200)
+        const message = yield* pollWithTimeout(
+          requestJson<{ data: SessionMessage.Message[] }>(`/api/session/${session.id}/message`, { headers }).pipe(
+            Effect.map(({ data }) => data.find((message) => message.id === wakeID)),
+          ),
+          "V2 prompt was not promoted after wake",
+          "10 seconds",
         )
-        expect(promoted.promoted_seq).toBeNumber()
+        expect(message).toMatchObject({ id: wakeID, type: "user" })
       }),
     { git: true, config: { formatter: false, lsp: false } },
   )
