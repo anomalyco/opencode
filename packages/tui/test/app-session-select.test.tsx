@@ -32,28 +32,30 @@ test("publishes tui.session.select when the TUI navigates to a session route", a
   const core = await import("@opentui/core")
   mock.module("@opentui/core", () => ({ ...core, createCliRenderer: async () => setup.renderer }))
   const events = createEventSource()
+  const sessions: Record<string, unknown> = {
+    dummy: {
+      id: "dummy",
+      title: "Demo session",
+      slug: "dummy",
+      projectID: "project",
+      directory,
+      version: "0.0.0-test",
+      time: { created: 0, updated: 0 },
+    },
+    other: {
+      id: "other",
+      title: "Other session",
+      slug: "other",
+      projectID: "project",
+      directory,
+      version: "0.0.0-test",
+      time: { created: 0, updated: 0 },
+    },
+  }
   const calls = createFetch((url) => {
-    if (url.pathname === "/session")
-      return json([
-        {
-          id: "dummy",
-          title: "Demo session",
-          slug: "dummy",
-          projectID: "project",
-          directory,
-          version: "0.0.0-test",
-          time: { created: 0, updated: 0 },
-        },
-        {
-          id: "other",
-          title: "Other session",
-          slug: "other",
-          projectID: "project",
-          directory,
-          version: "0.0.0-test",
-          time: { created: 0, updated: 0 },
-        },
-      ])
+    if (url.pathname === "/session") return json(Object.values(sessions))
+    const m = url.pathname.match(/^\/session\/([^/]+)$/)
+    if (m && sessions[m[1]!]) return json(sessions[m[1]!])
   })
 
   let api: TuiPluginApi | undefined
@@ -108,14 +110,101 @@ test("publishes tui.session.select when the TUI navigates to a session route", a
     await setup.renderOnce()
     await Bun.sleep(20)
     await setup.renderOnce()
+    // No new publish in response to the inbound select.
+    const sinceInbound = calls.tuiPublish.slice(beforeInbound)
+    expect(sinceInbound).toEqual([])
 
     const publishes = parsePublishes(calls.tuiPublish.map((r) => r.body))
     const sessionIds = publishes.filter((p) => p.type === "tui.session.select").map((p) => p.properties?.sessionID)
 
     expect(sessionIds).toContain("dummy")
     expect(sessionIds).toContain("other")
-    // No echo from the inbound select event
+
+    api?.keymap.dispatchCommand("app.exit")
+    await task
+  } finally {
+    if (!setup.renderer.isDestroyed) setup.renderer.destroy()
+    mock.restore()
+  }
+})
+
+test("publishes tui.session.deselect when leaving a session route for home", async () => {
+  const setup = await createTestRenderer({ width: 80, height: 24, useThread: false })
+  const core = await import("@opentui/core")
+  mock.module("@opentui/core", () => ({ ...core, createCliRenderer: async () => setup.renderer }))
+  const events = createEventSource()
+  const dummy = {
+    id: "dummy",
+    title: "Demo session",
+    slug: "dummy",
+    projectID: "project",
+    directory,
+    version: "0.0.0-test",
+    time: { created: 0, updated: 0 },
+  }
+  const calls = createFetch((url) => {
+    if (url.pathname === "/session") return json([dummy])
+    if (url.pathname === "/session/dummy") return json(dummy)
+  })
+
+  let api: TuiPluginApi | undefined
+  let started!: () => void
+  const ready = new Promise<void>((resolve) => {
+    started = resolve
+  })
+
+  try {
+    const { run } = await import("../src/app")
+    const task = Effect.runPromise(
+      run({
+        url: "http://test",
+        directory,
+        config: createTuiResolvedConfig({ plugin_enabled: {} }),
+        fetch: calls.fetch,
+        events: events.source,
+        args: { continue: true },
+        pluginHost: {
+          async start(input) {
+            api = input.api
+            started()
+          },
+          async dispose() {},
+        },
+      }).pipe(Effect.provide(Global.defaultLayer)),
+    )
+
+    await ready
+    await setup.renderOnce()
+    await setup.renderOnce()
+
+    // Wait for the initial session.select publish to land
+    await wait(() => calls.tuiPublish.some((r) => r.body?.includes('"dummy"')))
+
+    // Navigate to home — should publish tui.session.deselect
+    api?.route.navigate("home")
+    await setup.renderOnce()
+    await wait(() => calls.tuiPublish.some((r) => r.body?.includes("tui.session.deselect")))
+
+    // Inbound tui.session.deselect echo guard: we're already on home, but emit
+    // anyway and confirm no duplicate publish.
+    const beforeInbound = calls.tuiPublish.length
+    events.emit({
+      directory,
+      project: "proj_test",
+      payload: {
+        type: "tui.session.deselect",
+        properties: {},
+      } as any,
+    })
+    await setup.renderOnce()
+    await Bun.sleep(20)
+    await setup.renderOnce()
     expect(calls.tuiPublish.length).toBe(beforeInbound)
+
+    const publishes = parsePublishes(calls.tuiPublish.map((r) => r.body))
+    const types = publishes.map((p) => p.type)
+    expect(types).toContain("tui.session.select")
+    expect(types).toContain("tui.session.deselect")
 
     api?.keymap.dispatchCommand("app.exit")
     await task

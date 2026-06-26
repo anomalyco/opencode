@@ -55,4 +55,9 @@ export const SessionSelect = Event.define({
   },
 })
 
-export const Definitions = Event.inventory(PromptAppend, CommandExecute, ToastShow, SessionSelect)
+export const SessionDeselect = Event.define({
+  type: "tui.session.deselect",
+  schema: {},
+})
+
+export const Definitions = Event.inventory(PromptAppend, CommandExecute, ToastShow, SessionSelect, SessionDeselect)

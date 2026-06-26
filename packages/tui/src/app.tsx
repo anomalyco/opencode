@@ -968,13 +968,14 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
     })
   })
 
-  // Track the most recent inbound `tui.session.select` so the publish effect
-  // below doesn't echo it back to the bus when the inbound listener navigates
-  // in response. Cleared on the next microtask: if the inbound caused an
-  // actual route change, the effect runs synchronously in the same microtask
-  // and consumes the value; otherwise the entry is dropped so a later genuine
-  // navigation to the same sessionID is published normally.
+  // Track the most recent inbound `tui.session.select` / `tui.session.deselect`
+  // so the publish effect below doesn't echo them back to the bus when the
+  // inbound listeners navigate in response. Cleared on the next microtask: if
+  // the inbound caused an actual route change, the effect runs synchronously
+  // in the same microtask and consumes the value; otherwise the entry is
+  // dropped so a later genuine navigation publishes normally.
   let inboundSessionID: string | null = null
+  let inboundDeselect = false
 
   event.on("tui.session.select", (evt, { workspace }) => {
     if (workspace !== project.workspace.current()) return
@@ -988,24 +989,49 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
     })
   })
 
-  // Publish `tui.session.select` whenever the TUI navigates to a session route
-  // from anywhere — session picker, quick-switch keybinds, prompt resolution,
-  // initial-route restore. Plugins can subscribe to detect session switches
-  // regardless of whether navigation originated externally (HTTP) or in-TUI.
-  // See https://github.com/anomalyco/opencode/issues/31051.
+  event.on("tui.session.deselect", (_evt, { workspace }) => {
+    if (workspace !== project.workspace.current()) return
+    inboundDeselect = true
+    queueMicrotask(() => {
+      inboundDeselect = false
+    })
+    route.navigate({ type: "home" })
+  })
+
+  // Publish `tui.session.select` / `tui.session.deselect` whenever the TUI's
+  // session-route focus changes (entering a session, switching sessions, or
+  // leaving for any non-session route). Plugins can subscribe to either to
+  // detect focus changes regardless of whether navigation originated
+  // externally (HTTP) or in-TUI. See https://github.com/anomalyco/opencode/issues/31051.
   createEffect(
     on(
       () => (route.data.type === "session" ? route.data.sessionID : null),
       (sessionID, previous) => {
-        if (!sessionID || sessionID === previous) return
-        if (sessionID === inboundSessionID) {
-          inboundSessionID = null
+        if (sessionID === previous) return
+        if (sessionID) {
+          if (sessionID === inboundSessionID) {
+            inboundSessionID = null
+            return
+          }
+          sdk.client.tui.publish({
+            body: {
+              type: "tui.session.select",
+              properties: { sessionID },
+            },
+          })
+          return
+        }
+        // sessionID transitioned to null — we just navigated away from a
+        // session route to home (or any non-session route).
+        if (previous == null) return
+        if (inboundDeselect) {
+          inboundDeselect = false
           return
         }
         sdk.client.tui.publish({
           body: {
-            type: "tui.session.select",
-            properties: { sessionID },
+            type: "tui.session.deselect",
+            properties: {},
           },
         })
       },

@@ -75,6 +75,7 @@ export type Event =
   | EventTuiCommandExecute2
   | EventTuiToastShow2
   | EventTuiSessionSelect2
+  | EventTuiSessionDeselect2
   | EventMcpToolsChanged
   | EventMcpBrowserOpenFailed
   | EventCommandExecuted
@@ -1487,6 +1488,13 @@ export type GlobalEvent = {
       }
     | {
         id: string
+        type: "tui.session.deselect"
+        properties: {
+          [key: string]: unknown
+        }
+      }
+    | {
+        id: string
         type: "mcp.tools.changed"
         properties: {
           server: string
@@ -2707,6 +2715,13 @@ export type EventTuiSessionSelect = {
   }
 }
 
+export type EventTuiSessionDeselect = {
+  type: "tui.session.deselect"
+  properties: {
+    [key: string]: unknown
+  }
+}
+
 export type Workspace = {
   id: string
   type: string
@@ -2866,6 +2881,7 @@ export type V2Event =
   | V2EventTuiCommandExecute
   | V2EventTuiToastShow
   | V2EventTuiSessionSelect
+  | V2EventTuiSessionDeselect
   | V2EventMcpToolsChanged
   | V2EventMcpBrowserOpenFailed
   | V2EventCommandExecuted
@@ -2954,6 +2970,14 @@ export type EventTuiSessionSelect2 = {
      * Session ID to navigate to
      */
     sessionID: string
+  }
+}
+
+export type EventTuiSessionDeselect2 = {
+  id: string
+  type: "tui.session.deselect"
+  properties: {
+    [key: string]: unknown
   }
 }
 
@@ -5773,6 +5797,23 @@ export type V2EventTuiSessionSelect = {
      * Session ID to navigate to
      */
     sessionID: string
+  }
+}
+
+export type V2EventTuiSessionDeselect = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  type: "tui.session.deselect"
+  data: {
+    [key: string]: unknown
   }
 }
 
@@ -10947,7 +10988,12 @@ export type TuiShowToastResponses = {
 export type TuiShowToastResponse = TuiShowToastResponses[keyof TuiShowToastResponses]
 
 export type TuiPublishData = {
-  body?: EventTuiPromptAppend | EventTuiCommandExecute | EventTuiToastShow | EventTuiSessionSelect
+  body?:
+    | EventTuiPromptAppend
+    | EventTuiCommandExecute
+    | EventTuiToastShow
+    | EventTuiSessionSelect
+    | EventTuiSessionDeselect
   path?: never
   query?: {
     directory?: string

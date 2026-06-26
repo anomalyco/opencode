@@ -9077,6 +9077,9 @@
                   },
                   {
                     "$ref": "#/components/schemas/EventTuiSessionSelect"
+                  },
+                  {
+                    "$ref": "#/components/schemas/EventTuiSessionDeselect"
                   }
                 ]
               }
@@ -15135,6 +15138,9 @@
             "$ref": "#/components/schemas/Event.tui.session.select"
           },
           {
+            "$ref": "#/components/schemas/Event.tui.session.deselect"
+          },
+          {
             "$ref": "#/components/schemas/EventMcpToolsChanged"
           },
           {
@@ -19647,6 +19653,25 @@
                   },
                   "type": {
                     "type": "string",
+                    "enum": ["tui.session.deselect"]
+                  },
+                  "properties": {
+                    "type": "object",
+                    "properties": {}
+                  }
+                },
+                "required": ["id", "type", "properties"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^evt_"
+                  },
+                  "type": {
+                    "type": "string",
                     "enum": ["mcp.tools.changed"]
                   },
                   "properties": {
@@ -23157,6 +23182,21 @@
         "required": ["type", "properties"],
         "additionalProperties": false
       },
+      "EventTuiSessionDeselect": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["tui.session.deselect"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        "required": ["type", "properties"],
+        "additionalProperties": false
+      },
       "Workspace": {
         "type": "object",
         "properties": {
@@ -23666,6 +23706,9 @@
             "$ref": "#/components/schemas/V2EventTuiSessionSelect"
           },
           {
+            "$ref": "#/components/schemas/V2EventTuiSessionDeselect"
+          },
+          {
             "$ref": "#/components/schemas/V2EventMcpToolsChanged"
           },
           {
@@ -23903,6 +23946,25 @@
             },
             "required": ["sessionID"],
             "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "Event.tui.session.deselect": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["tui.session.deselect"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {}
           }
         },
         "required": ["id", "type", "properties"],
@@ -32219,6 +32281,47 @@
             },
             "required": ["sessionID"],
             "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventTuiSessionDeselect": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["tui.session.deselect"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {}
           }
         },
         "required": ["id", "type", "data"],
