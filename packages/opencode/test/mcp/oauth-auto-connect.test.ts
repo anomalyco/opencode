@@ -299,6 +299,34 @@ mcpTest.instance(
 )
 
 mcpTest.instance(
+  "finishAuth() connects an OAuth server configured as disabled",
+  () =>
+    Effect.gen(function* () {
+      yield* Effect.addFinalizer(() => Effect.promise(() => McpOAuthCallback.stop()).pipe(Effect.ignore))
+      const mcp = yield* MCP.Service
+      const name = "test-disabled-auth-success"
+
+      expect((yield* mcp.startAuth(name)).authorizationUrl).toContain("https://auth.example.com/authorize")
+      connectSucceedsImmediately = true
+
+      expect((yield* mcp.finishAuth(name, "valid-code")).status).toBe("connected")
+      const status = yield* mcp.status()
+      expect(status[name]?.status).toBe("connected")
+    }),
+  {
+    config: {
+      mcp: {
+        "test-disabled-auth-success": {
+          type: "remote",
+          url: "https://example.com/mcp",
+          enabled: false,
+        },
+      },
+    },
+  },
+)
+
+mcpTest.instance(
   "auth status only reports credentials stored for the configured server URL",
   () =>
     Effect.gen(function* () {
