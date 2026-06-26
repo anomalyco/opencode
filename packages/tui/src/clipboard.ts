@@ -73,6 +73,11 @@ export async function read() {
   if (text) return { data: text, mime: "text/plain" }
 }
 
+export async function readText() {
+  const { default: clipboardy } = await import("clipboardy")
+  return clipboardy.read().catch(() => undefined)
+}
+
 export function copyCommand(
   os: NodeJS.Platform,
   wayland: boolean,
