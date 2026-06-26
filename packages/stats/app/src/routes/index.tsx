@@ -32,6 +32,7 @@ import { useI18n } from "../context/i18n"
 import { useLanguage } from "../context/language"
 import { localizedUrl } from "../lib/language"
 import { findModelCatalogEntry, getModelCatalog, type ModelCatalog } from "./model-catalog"
+import { SectionHeading } from "./section-heading"
 import { setStatsPageCacheHeaders } from "./stats-cache"
 import {
   applyThemePreference,
@@ -273,7 +274,11 @@ function Hero(props: { updatedAt: string | null }) {
       </p>
       <div data-slot="hero-canvas">
         <div data-slot="hero-pattern" aria-hidden="true" />
-        <h1>{i18n.t("footer.modelData")}</h1>
+        <h1>
+          <a data-slot="heading-link" href="#overview">
+            {i18n.t("footer.modelData")}
+          </a>
+        </h1>
         <p data-slot="hero-copy">{i18n.t("home.heroCopy")}</p>
       </div>
     </section>
@@ -296,7 +301,7 @@ function StatsLoading() {
   return (
     <>
       <Hero updatedAt={null} />
-      <ChartSection title={i18n.t("home.usageTitle")}>
+      <ChartSection id="top-models" title={i18n.t("home.usageTitle")}>
         <EmptyState title={i18n.t("home.loadingTitle")} description={i18n.t("home.loadingDescription")} />
       </ChartSection>
     </>
@@ -314,7 +319,15 @@ function ChartSection(props: {
     <section id={props.id} data-section="chart">
       <div data-slot="section-header">
         <div>
-          <h2>{props.title}</h2>
+          <h2>
+            <Show when={props.id} fallback={props.title}>
+              {(id) => (
+                <a data-slot="heading-link" href={`#${id()}`}>
+                  {props.title}
+                </a>
+              )}
+            </Show>
+          </h2>
           {props.description && <p>{props.description}</p>}
         </div>
         {props.controls}
@@ -324,12 +337,8 @@ function ChartSection(props: {
   )
 }
 
-function SectionTitle(props: { title: string; description: string }) {
-  return (
-    <p data-slot="section-title">
-      <strong>{props.title}.</strong> <span>{props.description}</span>
-    </p>
-  )
+function SectionTitle(props: { id: string; title: string; description: string }) {
+  return <SectionHeading href={`#${props.id}`} title={props.title} description={props.description} />
 }
 
 function SectionBridge(props: { label: string; href: string }) {
@@ -405,9 +414,13 @@ function TopModelsSection(props: { data: StatsHomeData["usage"]; leaderboard: St
 
   return (
     <section id="top-models" data-section="top-models">
-      <h2 data-slot="top-models-title">
-        <strong>{i18n.t("nav.topModels")}.</strong> <span>{i18n.t("home.topModelsDescription")}</span>
-      </h2>
+      <SectionHeading
+        as="h2"
+        slot="top-models-title"
+        href="#top-models"
+        title={i18n.t("nav.topModels")}
+        description={i18n.t("home.topModelsDescription")}
+      />
       <Show
         when={data().some((item) => usageTotal(item) > 0)}
         fallback={<EmptyState title={i18n.t("home.noUsageTitle")} description={i18n.t("home.noUsageDescription")} />}
@@ -802,7 +815,11 @@ function UniqueUsersSection(props: { data: StatsHomeData["users"] }) {
   return (
     <section id="unique-users" data-section="unique-users">
       <SectionBridge label={i18n.t("nav.topModels").toUpperCase()} href="#top-models" />
-      <SectionTitle title={i18n.t("home.uniqueUsersTitle")} description={i18n.t("home.uniqueUsersDescription")} />
+      <SectionTitle
+        id="unique-users"
+        title={i18n.t("home.uniqueUsersTitle")}
+        description={i18n.t("home.uniqueUsersDescription")}
+      />
       <Show
         when={data().some((item) => usageTotal(item) > 0)}
         fallback={
@@ -1073,7 +1090,11 @@ function MarketShareSection(props: { data: StatsHomeData["market"] }) {
       }}
     >
       <SectionBridge label={i18n.t("nav.cacheRatio").toUpperCase()} href="#cache-ratio" />
-      <SectionTitle title={i18n.t("home.marketShareTitle")} description={i18n.t("home.marketShareDescription")} />
+      <SectionTitle
+        id="market-share"
+        title={i18n.t("home.marketShareTitle")}
+        description={i18n.t("home.marketShareDescription")}
+      />
       <Show
         when={activeDay()}
         fallback={<EmptyState title={i18n.t("home.noMarketTitle")} description={i18n.t("home.noMarketDescription")} />}
@@ -1298,7 +1319,7 @@ function GeoBreakdownSection(props: { data: StatsHomeData["country"] }) {
       }}
     >
       <SectionBridge label={i18n.t("nav.marketShare").toUpperCase()} href="#market-share" />
-      <SectionTitle title={i18n.t("home.geoTitle")} description={i18n.t("home.geoDescription")} />
+      <SectionTitle id="geo-breakdown" title={i18n.t("home.geoTitle")} description={i18n.t("home.geoDescription")} />
       <Show
         when={data().length > 0}
         fallback={<EmptyState title={i18n.t("home.noGeoTitle")} description={i18n.t("home.noGeoDescription")} />}
@@ -1583,7 +1604,11 @@ function TokenCostSection(props: { data: StatsHomeData["tokenCost"]; catalog: Mo
   return (
     <section id="token-cost" data-section="token-cost">
       <SectionBridge label={i18n.t("nav.sessionCost").toUpperCase()} href="#session-cost" />
-      <SectionTitle title={i18n.t("home.tokenCostTitle")} description={i18n.t("home.tokenCostDescription")} />
+      <SectionTitle
+        id="token-cost"
+        title={i18n.t("home.tokenCostTitle")}
+        description={i18n.t("home.tokenCostDescription")}
+      />
       <Show
         when={visible().length > 0}
         fallback={
@@ -1666,7 +1691,11 @@ function CacheRatioSection(props: { data: StatsHomeData["cacheRatio"] }) {
   return (
     <section id="cache-ratio" data-section="cache-ratio">
       <SectionBridge label={i18n.t("nav.tokenCost").toUpperCase()} href="#token-cost" />
-      <SectionTitle title={i18n.t("home.cacheRatioTitle")} description={i18n.t("home.cacheRatioDescription")} />
+      <SectionTitle
+        id="cache-ratio"
+        title={i18n.t("home.cacheRatioTitle")}
+        description={i18n.t("home.cacheRatioDescription")}
+      />
       <Show
         when={visible().length > 0}
         fallback={<EmptyState title={i18n.t("home.noCacheTitle")} description={i18n.t("home.noCacheDescription")} />}
@@ -1792,7 +1821,11 @@ function SessionCostSection(props: { data: StatsHomeData["sessionCost"] }) {
   return (
     <section id="session-cost" data-section="session-cost">
       <SectionBridge label={i18n.t("nav.topModels").toUpperCase()} href="#top-models" />
-      <SectionTitle title={i18n.t("home.sessionCostTitle")} description={i18n.t("home.sessionCostDescription")} />
+      <SectionTitle
+        id="session-cost"
+        title={i18n.t("home.sessionCostTitle")}
+        description={i18n.t("home.sessionCostDescription")}
+      />
       <Show
         when={visible().length > 0}
         fallback={
