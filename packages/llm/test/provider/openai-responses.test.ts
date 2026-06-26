@@ -50,6 +50,7 @@ describe("OpenAI Responses route", () => {
           { role: "system", content: "You are concise." },
           { role: "user", content: [{ type: "input_text", text: "Say hello." }] },
         ],
+        store: false,
         stream: true,
         max_output_tokens: 20,
         temperature: 0,
@@ -161,16 +162,16 @@ describe("OpenAI Responses route", () => {
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare(
         LLM.updateRequest(request, {
-          model: OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).responsesWebSocket(
-            "gpt-4.1-mini",
-          ),
+          model: OpenAIResponses.webSocketRoute
+            .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
+            .model({ id: "gpt-4.1-mini" }),
         }),
       )
 
       expect(prepared.route).toBe("openai-responses-websocket")
       expect(prepared.protocol).toBe("openai-responses")
       expect(prepared.metadata).toEqual({ transport: "websocket-json" })
-      expect(prepared.body).toMatchObject({ model: "gpt-4.1-mini", stream: true })
+      expect(prepared.body).toMatchObject({ model: "gpt-4.1-mini", store: false, stream: true })
     }),
   )
 
@@ -356,7 +357,13 @@ describe("OpenAI Responses route", () => {
           { type: "function_call", call_id: "call_1", name: "lookup", arguments: '{"query":"weather"}' },
           { type: "function_call_output", call_id: "call_1", output: '{"forecast":"sunny"}' },
         ],
+        store: false,
         stream: true,
+        max_output_tokens: undefined,
+        temperature: undefined,
+        tool_choice: undefined,
+        tools: undefined,
+        top_p: undefined,
       })
     }),
   )
@@ -863,7 +870,9 @@ describe("OpenAI Responses route", () => {
 
   it.effect("closes reasoning summary parts when storage is not disabled", () =>
     Effect.gen(function* () {
-      const response = yield* LLMClient.generate(request).pipe(
+      const response = yield* LLMClient.generate(
+        LLM.updateRequest(request, { providerOptions: { openai: { store: true } } }),
+      ).pipe(
         Effect.provide(
           fixedResponse(
             sseEvents(

@@ -980,6 +980,7 @@ export const route = Route.make({
   endpoint,
   auth,
   transport: httpTransport,
+  defaults: { providerOptions: { openai: { store: false } } },
 })
 
 const decodeWebSocketMessage = ProviderShared.validateWith(Schema.decodeUnknownEffect(OpenAIResponsesWebSocketMessage))
@@ -1007,6 +1008,7 @@ export const webSocketRoute = Route.make({
   endpoint,
   auth,
   transport: webSocketTransport,
+  defaults: { providerOptions: { openai: { store: false } } },
 })
 
 export * as OpenAIResponses from "./openai-responses"
