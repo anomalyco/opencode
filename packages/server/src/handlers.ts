@@ -27,7 +27,7 @@ import { Credential } from "@opencode-ai/core/credential"
 import { ProjectCopyHandler } from "./handlers/project-copy"
 
 const sessionLayer = SessionV2.defaultLayer.pipe(
-  Layer.provide(SessionExecutionLocal.defaultLayer),
+  Layer.provideMerge(SessionExecutionLocal.defaultLayer),
   Layer.provide(LocationServiceMap.layer),
 )
 
