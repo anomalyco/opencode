@@ -657,6 +657,7 @@ export const dict = {
   "session.new.worktree.mainWithBranch": "Main branch ({{branch}})",
   "session.new.worktree.create": "Create new worktree",
   "session.new.workspace.runIn": "Run session in",
+  "session.new.workspace.triggerLocal": "Local",
   "session.new.workspace.local": "Local repository",
   "session.new.workspace.existing": "Workspace…",
   "session.new.lastModified": "Last modified",
@@ -1025,7 +1026,7 @@ export const dict = {
   "session.delete.button": "Delete session",
 
   "workspace.new": "New workspace",
-  "workspace.type.local": "Local",
+  "workspace.type.local": "local",
   "workspace.type.sandbox": "sandbox",
   "workspace.create.failed.title": "Failed to create workspace",
   "workspace.delete.failed.title": "Failed to delete workspace",

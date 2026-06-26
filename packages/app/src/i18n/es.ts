@@ -829,7 +829,7 @@ export const dict = {
   "session.delete.button": "Eliminar sesión",
 
   "workspace.new": "Nuevo espacio de trabajo",
-  "workspace.type.local": "Local",
+  "workspace.type.local": "local",
   "workspace.type.sandbox": "sandbox",
   "workspace.create.failed.title": "Fallo al crear espacio de trabajo",
   "workspace.delete.failed.title": "Fallo al eliminar espacio de trabajo",

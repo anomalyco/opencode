@@ -32,7 +32,7 @@ export function PromptWorkspaceSelector(props: {
     props.onDone()
   }
   const label = () => {
-    if (selected() === "main") return language.t("workspace.type.local")
+    if (selected() === "main") return language.t("session.new.workspace.triggerLocal")
     if (props.value === "create") return language.t("workspace.new")
     return getFilename(props.value)
   }
