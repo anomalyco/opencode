@@ -11130,6 +11130,97 @@
         ]
       }
     },
+    "/api/session/{sessionID}/history": {
+      "get": {
+        "tags": ["sessions"],
+        "operationId": "v2.session.history",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses"
+            },
+            "required": true
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "SessionHistory",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionHistory"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SessionNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/SessionNotFoundError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SessionNotFoundError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Read one finite page of public durable Session events after an exclusive aggregate sequence. Newly committed events may appear on later pages.",
+        "summary": "Get session history",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.session.history({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/api/session/{sessionID}/event": {
       "get": {
         "tags": ["sessions"],
@@ -11169,96 +11260,7 @@
                       "type": "string"
                     },
                     "data": {
-                      "type": "string",
-                      "contentSchema": {
-                        "oneOf": [
-                          {
-                            "$ref": "#/components/schemas/SessionNextAgentSwitched"
-                          },
-                          {
-                            "$ref": "#/components/schemas/SessionNextModelSwitched"
-                          },
-                          {
-                            "$ref": "#/components/schemas/SessionNextMoved"
-                          },
-                          {
-                            "$ref": "#/components/schemas/SessionNextPrompted"
-                          },
-                          {
-                            "$ref": "#/components/schemas/SessionNextPromptAdmitted"
-                          },
-                          {
-                            "$ref": "#/components/schemas/SessionNextContextUpdated"
-                          },
-                          {
-                            "$ref": "#/components/schemas/SessionNextSynthetic"
-                          },
-                          {
-                            "$ref": "#/components/schemas/SessionNextShellStarted"
-                          },
-                          {
-                            "$ref": "#/components/schemas/SessionNextShellEnded"
-                          },
-                          {
-                            "$ref": "#/components/schemas/SessionNextStepStarted"
-                          },
-                          {
-                            "$ref": "#/components/schemas/SessionNextStepEnded"
-                          },
-                          {
-                            "$ref": "#/components/schemas/SessionNextStepFailed"
-                          },
-                          {
-                            "$ref": "#/components/schemas/SessionNextTextStarted"
-                          },
-                          {
-                            "$ref": "#/components/schemas/SessionNextTextEnded"
-                          },
-                          {
-                            "$ref": "#/components/schemas/SessionNextToolInputStarted"
-                          },
-                          {
-                            "$ref": "#/components/schemas/SessionNextToolInputEnded"
-                          },
-                          {
-                            "$ref": "#/components/schemas/SessionNextToolCalled"
-                          },
-                          {
-                            "$ref": "#/components/schemas/SessionNextToolProgress"
-                          },
-                          {
-                            "$ref": "#/components/schemas/SessionNextToolSuccess"
-                          },
-                          {
-                            "$ref": "#/components/schemas/SessionNextToolFailed"
-                          },
-                          {
-                            "$ref": "#/components/schemas/SessionNextReasoningStarted"
-                          },
-                          {
-                            "$ref": "#/components/schemas/SessionNextReasoningEnded"
-                          },
-                          {
-                            "$ref": "#/components/schemas/SessionNextRetried"
-                          },
-                          {
-                            "$ref": "#/components/schemas/SessionNextCompactionStarted"
-                          },
-                          {
-                            "$ref": "#/components/schemas/SessionNextCompactionEnded"
-                          },
-                          {
-                            "$ref": "#/components/schemas/SessionNextRevertStaged"
-                          },
-                          {
-                            "$ref": "#/components/schemas/SessionNextRevertCleared"
-                          },
-                          {
-                            "$ref": "#/components/schemas/SessionNextRevertCommitted"
-                          }
-                        ]
-                      },
-                      "contentMediaType": "application/json"
+                      "$ref": "#/components/schemas/SessionDurableEvent1"
                     }
                   },
                   "required": ["id", "event", "data"],
@@ -23626,6 +23628,117 @@
         "required": ["_tag", "message"],
         "additionalProperties": false
       },
+      "SessionDurableEvent": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/SessionNextAgentSwitched"
+          },
+          {
+            "$ref": "#/components/schemas/SessionNextModelSwitched"
+          },
+          {
+            "$ref": "#/components/schemas/SessionNextMoved"
+          },
+          {
+            "$ref": "#/components/schemas/SessionNextPrompted"
+          },
+          {
+            "$ref": "#/components/schemas/SessionNextPromptAdmitted"
+          },
+          {
+            "$ref": "#/components/schemas/SessionNextContextUpdated"
+          },
+          {
+            "$ref": "#/components/schemas/SessionNextSynthetic"
+          },
+          {
+            "$ref": "#/components/schemas/SessionNextShellStarted"
+          },
+          {
+            "$ref": "#/components/schemas/SessionNextShellEnded"
+          },
+          {
+            "$ref": "#/components/schemas/SessionNextStepStarted"
+          },
+          {
+            "$ref": "#/components/schemas/SessionNextStepEnded"
+          },
+          {
+            "$ref": "#/components/schemas/SessionNextStepFailed"
+          },
+          {
+            "$ref": "#/components/schemas/SessionNextTextStarted"
+          },
+          {
+            "$ref": "#/components/schemas/SessionNextTextEnded"
+          },
+          {
+            "$ref": "#/components/schemas/SessionNextToolInputStarted"
+          },
+          {
+            "$ref": "#/components/schemas/SessionNextToolInputEnded"
+          },
+          {
+            "$ref": "#/components/schemas/SessionNextToolCalled"
+          },
+          {
+            "$ref": "#/components/schemas/SessionNextToolProgress"
+          },
+          {
+            "$ref": "#/components/schemas/SessionNextToolSuccess"
+          },
+          {
+            "$ref": "#/components/schemas/SessionNextToolFailed"
+          },
+          {
+            "$ref": "#/components/schemas/SessionNextReasoningStarted"
+          },
+          {
+            "$ref": "#/components/schemas/SessionNextReasoningEnded"
+          },
+          {
+            "$ref": "#/components/schemas/SessionNextRetried"
+          },
+          {
+            "$ref": "#/components/schemas/SessionNextCompactionStarted"
+          },
+          {
+            "$ref": "#/components/schemas/SessionNextCompactionEnded"
+          },
+          {
+            "$ref": "#/components/schemas/SessionNextRevertStaged"
+          },
+          {
+            "$ref": "#/components/schemas/SessionNextRevertCleared"
+          },
+          {
+            "$ref": "#/components/schemas/SessionNextRevertCommitted"
+          }
+        ]
+      },
+      "SessionHistory": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SessionDurableEvent"
+            }
+          },
+          "hasMore": {
+            "type": "boolean"
+          }
+        },
+        "required": ["data", "hasMore"],
+        "additionalProperties": false
+      },
+      "SessionDurableEvent1": {
+        "type": "string",
+        "contentSchema": {
+          "$ref": "#/components/schemas/SessionDurableEvent"
+        },
+        "contentMediaType": "application/json"
+      },
       "SessionMessagesResponse": {
         "type": "object",
         "properties": {
@@ -27643,42 +27756,10 @@
                 "type": "string"
               },
               "seq": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["NaN"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["-Infinity"]
-                  }
-                ]
+                "type": "integer"
               },
               "version": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["NaN"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["-Infinity"]
-                  }
-                ]
+                "type": "integer"
               }
             },
             "required": ["aggregateID", "seq", "version"],
@@ -27733,42 +27814,10 @@
                 "type": "string"
               },
               "seq": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["NaN"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["-Infinity"]
-                  }
-                ]
+                "type": "integer"
               },
               "version": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["NaN"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["-Infinity"]
-                  }
-                ]
+                "type": "integer"
               }
             },
             "required": ["aggregateID", "seq", "version"],
@@ -27823,42 +27872,10 @@
                 "type": "string"
               },
               "seq": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["NaN"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["-Infinity"]
-                  }
-                ]
+                "type": "integer"
               },
               "version": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["NaN"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["-Infinity"]
-                  }
-                ]
+                "type": "integer"
               }
             },
             "required": ["aggregateID", "seq", "version"],
@@ -27912,42 +27929,10 @@
                 "type": "string"
               },
               "seq": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["NaN"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["-Infinity"]
-                  }
-                ]
+                "type": "integer"
               },
               "version": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["NaN"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["-Infinity"]
-                  }
-                ]
+                "type": "integer"
               }
             },
             "required": ["aggregateID", "seq", "version"],
@@ -28006,42 +27991,10 @@
                 "type": "string"
               },
               "seq": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["NaN"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["-Infinity"]
-                  }
-                ]
+                "type": "integer"
               },
               "version": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["NaN"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["-Infinity"]
-                  }
-                ]
+                "type": "integer"
               }
             },
             "required": ["aggregateID", "seq", "version"],
@@ -28100,42 +28053,10 @@
                 "type": "string"
               },
               "seq": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["NaN"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["-Infinity"]
-                  }
-                ]
+                "type": "integer"
               },
               "version": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["NaN"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["-Infinity"]
-                  }
-                ]
+                "type": "integer"
               }
             },
             "required": ["aggregateID", "seq", "version"],
@@ -28190,42 +28111,10 @@
                 "type": "string"
               },
               "seq": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["NaN"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["-Infinity"]
-                  }
-                ]
+                "type": "integer"
               },
               "version": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["NaN"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["-Infinity"]
-                  }
-                ]
+                "type": "integer"
               }
             },
             "required": ["aggregateID", "seq", "version"],
@@ -28280,42 +28169,10 @@
                 "type": "string"
               },
               "seq": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["NaN"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["-Infinity"]
-                  }
-                ]
+                "type": "integer"
               },
               "version": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["NaN"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["-Infinity"]
-                  }
-                ]
+                "type": "integer"
               }
             },
             "required": ["aggregateID", "seq", "version"],
@@ -28373,42 +28230,10 @@
                 "type": "string"
               },
               "seq": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["NaN"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["-Infinity"]
-                  }
-                ]
+                "type": "integer"
               },
               "version": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["NaN"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["-Infinity"]
-                  }
-                ]
+                "type": "integer"
               }
             },
             "required": ["aggregateID", "seq", "version"],
@@ -28462,42 +28287,10 @@
                 "type": "string"
               },
               "seq": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["NaN"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["-Infinity"]
-                  }
-                ]
+                "type": "integer"
               },
               "version": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["NaN"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["-Infinity"]
-                  }
-                ]
+                "type": "integer"
               }
             },
             "required": ["aggregateID", "seq", "version"],
@@ -28558,42 +28351,10 @@
                 "type": "string"
               },
               "seq": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["NaN"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["-Infinity"]
-                  }
-                ]
+                "type": "integer"
               },
               "version": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["NaN"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["-Infinity"]
-                  }
-                ]
+                "type": "integer"
               }
             },
             "required": ["aggregateID", "seq", "version"],
@@ -28689,42 +28450,10 @@
                 "type": "string"
               },
               "seq": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["NaN"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["-Infinity"]
-                  }
-                ]
+                "type": "integer"
               },
               "version": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["NaN"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["-Infinity"]
-                  }
-                ]
+                "type": "integer"
               }
             },
             "required": ["aggregateID", "seq", "version"],
@@ -28779,42 +28508,10 @@
                 "type": "string"
               },
               "seq": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["NaN"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["-Infinity"]
-                  }
-                ]
+                "type": "integer"
               },
               "version": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["NaN"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["-Infinity"]
-                  }
-                ]
+                "type": "integer"
               }
             },
             "required": ["aggregateID", "seq", "version"],
@@ -28869,42 +28566,10 @@
                 "type": "string"
               },
               "seq": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["NaN"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["-Infinity"]
-                  }
-                ]
+                "type": "integer"
               },
               "version": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["NaN"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["-Infinity"]
-                  }
-                ]
+                "type": "integer"
               }
             },
             "required": ["aggregateID", "seq", "version"],
@@ -28962,42 +28627,10 @@
                 "type": "string"
               },
               "seq": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["NaN"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["-Infinity"]
-                  }
-                ]
+                "type": "integer"
               },
               "version": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["NaN"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["-Infinity"]
-                  }
-                ]
+                "type": "integer"
               }
             },
             "required": ["aggregateID", "seq", "version"],
@@ -29055,42 +28688,10 @@
                 "type": "string"
               },
               "seq": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["NaN"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["-Infinity"]
-                  }
-                ]
+                "type": "integer"
               },
               "version": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["NaN"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["-Infinity"]
-                  }
-                ]
+                "type": "integer"
               }
             },
             "required": ["aggregateID", "seq", "version"],
@@ -29148,42 +28749,10 @@
                 "type": "string"
               },
               "seq": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["NaN"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["-Infinity"]
-                  }
-                ]
+                "type": "integer"
               },
               "version": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["NaN"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["-Infinity"]
-                  }
-                ]
+                "type": "integer"
               }
             },
             "required": ["aggregateID", "seq", "version"],
@@ -29257,42 +28826,10 @@
                 "type": "string"
               },
               "seq": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["NaN"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["-Infinity"]
-                  }
-                ]
+                "type": "integer"
               },
               "version": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["NaN"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["-Infinity"]
-                  }
-                ]
+                "type": "integer"
               }
             },
             "required": ["aggregateID", "seq", "version"],
@@ -29356,42 +28893,10 @@
                 "type": "string"
               },
               "seq": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["NaN"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["-Infinity"]
-                  }
-                ]
+                "type": "integer"
               },
               "version": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["NaN"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["-Infinity"]
-                  }
-                ]
+                "type": "integer"
               }
             },
             "required": ["aggregateID", "seq", "version"],
@@ -29475,42 +28980,10 @@
                 "type": "string"
               },
               "seq": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["NaN"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["-Infinity"]
-                  }
-                ]
+                "type": "integer"
               },
               "version": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["NaN"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["-Infinity"]
-                  }
-                ]
+                "type": "integer"
               }
             },
             "required": ["aggregateID", "seq", "version"],
@@ -29582,42 +29055,10 @@
                 "type": "string"
               },
               "seq": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["NaN"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["-Infinity"]
-                  }
-                ]
+                "type": "integer"
               },
               "version": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["NaN"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["-Infinity"]
-                  }
-                ]
+                "type": "integer"
               }
             },
             "required": ["aggregateID", "seq", "version"],
@@ -29675,42 +29116,10 @@
                 "type": "string"
               },
               "seq": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["NaN"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["-Infinity"]
-                  }
-                ]
+                "type": "integer"
               },
               "version": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["NaN"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["-Infinity"]
-                  }
-                ]
+                "type": "integer"
               }
             },
             "required": ["aggregateID", "seq", "version"],
@@ -29771,42 +29180,10 @@
                 "type": "string"
               },
               "seq": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["NaN"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["-Infinity"]
-                  }
-                ]
+                "type": "integer"
               },
               "version": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["NaN"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["-Infinity"]
-                  }
-                ]
+                "type": "integer"
               }
             },
             "required": ["aggregateID", "seq", "version"],
@@ -29860,42 +29237,10 @@
                 "type": "string"
               },
               "seq": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["NaN"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["-Infinity"]
-                  }
-                ]
+                "type": "integer"
               },
               "version": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["NaN"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["-Infinity"]
-                  }
-                ]
+                "type": "integer"
               }
             },
             "required": ["aggregateID", "seq", "version"],
@@ -29951,42 +29296,10 @@
                 "type": "string"
               },
               "seq": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["NaN"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["-Infinity"]
-                  }
-                ]
+                "type": "integer"
               },
               "version": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["NaN"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["-Infinity"]
-                  }
-                ]
+                "type": "integer"
               }
             },
             "required": ["aggregateID", "seq", "version"],
@@ -30048,42 +29361,10 @@
                 "type": "string"
               },
               "seq": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["NaN"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["-Infinity"]
-                  }
-                ]
+                "type": "integer"
               },
               "version": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["NaN"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["-Infinity"]
-                  }
-                ]
+                "type": "integer"
               }
             },
             "required": ["aggregateID", "seq", "version"],
@@ -30134,42 +29415,10 @@
                 "type": "string"
               },
               "seq": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["NaN"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["-Infinity"]
-                  }
-                ]
+                "type": "integer"
               },
               "version": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["NaN"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["-Infinity"]
-                  }
-                ]
+                "type": "integer"
               }
             },
             "required": ["aggregateID", "seq", "version"],
@@ -30217,42 +29466,10 @@
                 "type": "string"
               },
               "seq": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["NaN"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["-Infinity"]
-                  }
-                ]
+                "type": "integer"
               },
               "version": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["NaN"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["-Infinity"]
-                  }
-                ]
+                "type": "integer"
               }
             },
             "required": ["aggregateID", "seq", "version"],

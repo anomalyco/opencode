@@ -1,16 +1,7 @@
 import { expect, test } from "bun:test"
 import { DateTime, Effect, Stream } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/unstable/http"
-import {
-  AbsolutePath,
-  Agent,
-  Location,
-  Model,
-  OpenCode,
-  Prompt,
-  Session,
-  SessionMessage,
-} from "../src/effect"
+import { AbsolutePath, Agent, Location, Model, OpenCode, Prompt, Session, SessionMessage } from "../src/effect"
 
 test("sessions.get returns the decoded Effect projection", async () => {
   const httpClient = HttpClient.make((request) =>
@@ -46,9 +37,7 @@ test("session methods retain decoded Effect inputs and outputs", async () => {
         HttpClientResponse.fromWeb(
           request,
           Response.json(
-            historyPage === 1
-              ? { data: [modelSwitchedEvent], hasMore: true }
-              : { data: [], hasMore: false },
+            historyPage === 1 ? { data: [modelSwitchedEvent], hasMore: true } : { data: [], hasMore: false },
           ),
         ),
       )

@@ -136,10 +136,7 @@ export interface Interface {
     sessionID: SessionSchema.ID
     after?: number
     limit: number
-  }) => Effect.Effect<
-    { events: ReadonlyArray<SessionEvent.DurableEvent>; hasMore: boolean },
-    NotFoundError
-  >
+  }) => Effect.Effect<{ events: ReadonlyArray<SessionEvent.DurableEvent>; hasMore: boolean }, NotFoundError>
   readonly switchAgent: (input: { sessionID: SessionSchema.ID; agent: string }) => Effect.Effect<void, NotFoundError>
   readonly switchModel: (input: {
     sessionID: SessionSchema.ID

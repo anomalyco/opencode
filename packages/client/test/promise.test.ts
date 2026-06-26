@@ -33,9 +33,7 @@ test("session methods use the public HTTP contract", async () => {
       if (url.includes("/history")) {
         historyPage++
         return Response.json(
-          historyPage === 1
-            ? { data: [modelSwitchedEvent], hasMore: true }
-            : { data: [], hasMore: false },
+          historyPage === 1 ? { data: [modelSwitchedEvent], hasMore: true } : { data: [], hasMore: false },
         )
       }
       if (url.includes("/prompt")) return Response.json(admission)
