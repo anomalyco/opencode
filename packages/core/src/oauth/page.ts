@@ -205,7 +205,7 @@ const STYLES = `
     text-rendering: optimizeLegibility;
   }
   .card {
-    width: min(100%, 25rem);
+    width: min(100%, 28rem);
     padding: 2.25rem 2rem 1.75rem;
     background: var(--oc-card);
     border: 1px solid var(--oc-border-weak);
