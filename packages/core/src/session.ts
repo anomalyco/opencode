@@ -443,7 +443,6 @@ export const defaultLayer = layer.pipe(
   Layer.provide(
     Layer.unwrap(Effect.promise(() => import("./location-layer")).pipe(Effect.map((m) => m.LocationServiceMap.layer))),
   ),
-  Layer.provide(SessionExecution.noopLayer),
   Layer.provide(SessionStore.defaultLayer),
   Layer.provide(SessionProjector.defaultLayer),
   Layer.provide(EventV2.defaultLayer),

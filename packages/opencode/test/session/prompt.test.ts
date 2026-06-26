@@ -697,8 +697,7 @@ noLLMServer.instance.skip(
       })
 
       const messages = yield* SessionV2.Service.use((session) => session.messages({ sessionID: chat.id })).pipe(
-        Effect.provide(SessionExecution.noopLayer),
-        Effect.provide(SessionV2.defaultLayer),
+        Effect.provide(SessionV2.defaultLayer.pipe(Layer.provide(SessionExecution.noopLayer))),
       )
       const { db } = yield* Database.Service
       const row = yield* db

@@ -39,6 +39,17 @@ test("embedded client uses the real router and handlers", async () => {
         resume: false,
       })
       const context = yield* opencode.sessions.context({ sessionID })
+      const wake = yield* opencode.sessions.prompt({
+        sessionID,
+        prompt: Prompt.make({ text: "Promote this input" }),
+      })
+      const prompted = yield* opencode.sessions.events({ sessionID }).pipe(
+        Stream.filter((event) => event.type === "session.next.prompted" && event.data.messageID === wake.id),
+        Stream.runHead,
+        Effect.timeout("10 seconds"),
+        Effect.map(Option.getOrThrow),
+      )
+      const wakeContext = yield* opencode.sessions.context({ sessionID })
       const event = yield* opencode.sessions
         .events({ sessionID })
         .pipe(Stream.take(1), Stream.runHead, Effect.map(Option.getOrUndefined))
@@ -71,6 +82,8 @@ test("embedded client uses the real router and handlers", async () => {
       expect(selected.model?.providerID).toBe(model.providerID)
       expect(page.data.some((session) => session.id === sessionID)).toBe(true)
       expect(admitted.sessionID).toBe(sessionID)
+      expect(prompted.type).toBe("session.next.prompted")
+      expect(wakeContext).toContainEqual(expect.objectContaining({ id: wake.id, type: "user" }))
       expect(context.some((message) => message.type === "model-switched")).toBe(true)
       expect(event).toMatchObject({ type: "session.next.model.switched", durable: { seq: 1 } })
       expect(message).toEqual(modelMessage)
