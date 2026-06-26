@@ -2690,6 +2690,10 @@ export type InvalidCursorError = {
   message: string
 }
 
+export type SessionActive = {
+  type: "running"
+}
+
 export type SessionNotFoundError = {
   _tag: "SessionNotFoundError"
   sessionID: string
@@ -11939,6 +11943,39 @@ export type V2SessionCreateResponses = {
 }
 
 export type V2SessionCreateResponse = V2SessionCreateResponses[keyof V2SessionCreateResponses]
+
+export type V2SessionActiveData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/api/session/active"
+}
+
+export type V2SessionActiveErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+}
+
+export type V2SessionActiveError = V2SessionActiveErrors[keyof V2SessionActiveErrors]
+
+export type V2SessionActiveResponses = {
+  /**
+   * Success
+   */
+  200: {
+    data: {
+      [key: string]: unknown | SessionActive
+    }
+  }
+}
+
+export type V2SessionActiveResponse = V2SessionActiveResponses[keyof V2SessionActiveResponses]
 
 export type V2SessionGetData = {
   body?: never

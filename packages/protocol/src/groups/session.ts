@@ -73,6 +73,10 @@ export const SessionsCursor = Schema.String.pipe(
 )
 export type SessionsCursor = typeof SessionsCursor.Type
 
+const SessionActive = Schema.Struct({
+  type: Schema.Literal("running"),
+}).annotate({ identifier: "SessionActive" })
+
 const SessionsQueryCursor = SessionsCursor.annotate({
   description: "Opaque pagination cursor returned as cursor.previous or cursor.next in the previous response.",
 })
@@ -121,6 +125,18 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
           identifier: "v2.session.create",
           summary: "Create session",
           description: "Create a session at the requested location.",
+        }),
+      ),
+    )
+    .add(
+      HttpApiEndpoint.get("session.active", "/api/session/active", {
+        success: Schema.Struct({ data: Schema.Record(Session.ID, SessionActive) }),
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.session.active",
+          summary: "List active sessions",
+          description:
+            "Retrieve foreground Session drains currently owned by this OpenCode process. Sessions absent from the result are inactive.",
         }),
       ),
     )

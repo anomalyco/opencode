@@ -243,6 +243,8 @@ export type SessionsCreateOutput = {
   }
 }["data"]
 
+export type SessionsActiveOutput = { readonly data: { readonly [x: string]: { readonly type: "running" } } }["data"]
+
 export type SessionsGetInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
 
 export type SessionsGetOutput = {

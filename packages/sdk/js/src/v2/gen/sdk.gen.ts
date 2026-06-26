@@ -333,6 +333,8 @@ import type {
   V2QuestionRequestListResponses,
   V2ReferenceListErrors,
   V2ReferenceListResponses,
+  V2SessionActiveErrors,
+  V2SessionActiveResponses,
   V2SessionCompactErrors,
   V2SessionCompactResponses,
   V2SessionContextErrors,
@@ -5498,6 +5500,18 @@ export class Session3 extends HeyApiClient {
         ...options?.headers,
         ...params.headers,
       },
+    })
+  }
+
+  /**
+   * List active sessions
+   *
+   * Retrieve foreground Session drains currently owned by this OpenCode process. Sessions absent from the result are inactive.
+   */
+  public active<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<V2SessionActiveResponses, V2SessionActiveErrors, ThrowOnError>({
+      url: "/api/session/active",
+      ...options,
     })
   }
 
