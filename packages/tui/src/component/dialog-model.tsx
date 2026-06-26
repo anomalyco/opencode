@@ -206,9 +206,7 @@ export function modelPriceFooter(
 }
 
 // A coarse 1-4 price tier shown as a "$$·" indicator after the model name.
-// The calculation is based on the average of the input and output costs,
-// with the input cost weighted double, as it's the more significant factor for most use cases.
-// The tiers are defined as follows:
+// The calculation is a "average" price per token, weighted 2:1 for input vs output. The tiers are defined as follows:
 // Tiers (USD per 1M tokens): x<=1 -> 1, 1<x<=10 -> 2, 10<x<17 -> 3, x>=17 -> 4.
 export function modelPriceTier(cost: { input?: number; output?: number } | undefined): number | undefined {
   const input = cost?.input ?? 0
