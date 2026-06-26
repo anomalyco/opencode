@@ -176,6 +176,25 @@ describe("WebFetchTool registration", () => {
     }),
   )
 
+  it.effect("returns an error result when HTML-to-Markdown conversion throws", () =>
+    Effect.gen(function* () {
+      reset()
+      respond = () =>
+        Effect.succeed(
+          new Response("<div>".repeat(10_000) + "content" + "</div>".repeat(10_000), {
+            headers: { "content-type": "text/html" },
+          }),
+        )
+      const registry = yield* ToolRegistry.Service
+      const url = "https://1.1.1.1/deep-html"
+
+      expect(yield* executeTool(registry, call({ url, format: "markdown" }))).toEqual({
+        type: "error",
+        value: `Unable to fetch ${url}`,
+      })
+    }),
+  )
+
   it.effect("rejects declared and streamed oversized bodies", () =>
     Effect.gen(function* () {
       reset()

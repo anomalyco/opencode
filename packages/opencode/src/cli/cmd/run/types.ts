@@ -1,4 +1,4 @@
-// Shared type vocabulary for the direct interactive mode (`run --interactive`).
+// Shared type vocabulary for the direct interactive mode (`opencode --mini`).
 //
 // Direct mode uses a split-footer terminal layout: immutable scrollback for the
 // session transcript, and a mutable footer for prompt input, status, and

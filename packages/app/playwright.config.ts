@@ -10,7 +10,14 @@ const reuse = !process.env.CI
 const workers = Number(process.env.PLAYWRIGHT_WORKERS ?? (process.env.CI ? 5 : 0)) || undefined
 export default defineConfig({
   testDir: "./e2e",
-  testIgnore: enabled ? [] : ["**/*"],
+  // Our fork keeps all e2e off unless explicitly opted in via OPENCODE_RUN_PLAYWRIGHT.
+  // When enabled, preserve upstream's gating that keeps the performance benchmarks
+  // (which have their own config) out of the general e2e run.
+  testIgnore: enabled
+    ? process.env.OPENCODE_PERFORMANCE === "1"
+      ? "performance/**/*.test.ts"
+      : "performance/**"
+    : ["**/*"],
   outputDir: "./e2e/test-results",
   timeout: 60_000,
   expect: {

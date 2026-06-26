@@ -1,6 +1,7 @@
 import path from "path"
 import { Context, Duration, Effect, Layer, Option, Schedule, Schema } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/http"
+import { ModelsDev } from "@opencode-ai/schema/models-dev"
 import { Global } from "./global"
 import { Flag } from "./flag/flag"
 import { Flock } from "./util/flock"
@@ -247,12 +248,7 @@ const withMammouthProvider = (base: Record<string, Provider>): Effect.Effect<Rec
         })),
       )
 
-export const Event = {
-  Refreshed: EventV2.define({
-    type: "models-dev.refreshed",
-    schema: {},
-  }),
-}
+export const Event = ModelsDev.Event
 
 declare const OPENCODE_MODELS_DEV: Record<string, Provider> | undefined
 

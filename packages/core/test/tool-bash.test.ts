@@ -134,10 +134,9 @@ describe("BashTool", () => {
             const definitions = yield* toolDefinitions(registry)
             expect(definitions.map((tool) => tool.name)).toEqual(["bash"])
             expect(definitions[0]?.inputSchema).not.toHaveProperty("properties.background")
+            expect(definitions[0]?.inputSchema).not.toHaveProperty("properties.description")
             expect(yield* toolDefinitions(registry, [{ action: "bash", resource: "*", effect: "deny" }])).toEqual([])
-            expect(
-              yield* settleTool(registry, call({ command: "pwd", description: "Print working directory" })),
-            ).toEqual({
+            expect(yield* settleTool(registry, call({ command: "pwd" }))).toEqual({
               result: { type: "text", value: "hello\n\n\nCommand exited with code 0." },
               output: {
                 structured: {

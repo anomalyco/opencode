@@ -1,4 +1,3 @@
-import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { Tag } from "@opencode-ai/ui/v2/badge-v2"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
@@ -14,7 +13,7 @@ import { ServerConnection, serverName } from "@/context/server"
 import { useServerManagementController } from "../dialog-select-server"
 import { DialogServerV2 } from "./dialog-server-v2"
 import { SettingsListV2 } from "./parts/list"
-import { isWslServer, useFilteredWslServers, WslAddServerButton, WslServerSettings } from "@/wsl/settings"
+import { AddServerMenu, isWslServer, useFilteredWslServers, WslServerSettings } from "@/wsl/settings"
 import "./settings-v2.css"
 
 export const SettingsServersV2: Component = () => {
@@ -55,10 +54,7 @@ export const SettingsServersV2: Component = () => {
       >
         <div class="settings-v2-tab-header-row">
           <h2 class="settings-v2-tab-title">{language.t("status.popover.tab.servers")}</h2>
-          <ButtonV2 variant="ghost-muted" icon="plus" onClick={openAdd}>
-            {language.t("dialog.server.add.button")}
-          </ButtonV2>
-          <WslAddServerButton />
+          <AddServerMenu onAddServer={openAdd} />
         </div>
         <Show when={showSearch()}>
           <div class="settings-v2-tab-search">

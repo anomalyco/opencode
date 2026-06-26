@@ -45,15 +45,17 @@ async function generate() {
       if (await Bun.file(target).exists()) throw new Error(`Database migration already exists: ${name}`)
       await Bun.write(
         target,
-        renderMigration(name, await Bun.file(path.join(incremental, name, "migration.sql")).text()),
+        await formatTypescript(
+          renderMigration(name, await Bun.file(path.join(incremental, name, "migration.sql")).text()),
+        ),
       )
       await fs.copyFile(path.join(incremental, name, "snapshot.json"), snapshot)
     }
 
     await fs.mkdir(full)
     await drizzle(temporary, full, "schema")
-    await Bun.write(schema, renderSchema(await generatedSql(full)))
-    await Bun.write(registry, renderRegistry(await typescriptMigrations()))
+    await Bun.write(schema, await formatTypescript(renderSchema(await generatedSql(full))))
+    await Bun.write(registry, await formatTypescript(renderRegistry(await typescriptMigrations())))
   } finally {
     await fs.rm(temporary, { recursive: true, force: true })
   }
@@ -76,12 +78,12 @@ async function check() {
 
     await fs.mkdir(full)
     await drizzle(temporary, full, "schema")
-    if ((await Bun.file(schema).text()) !== renderSchema(await generatedSql(full))) {
+    if ((await Bun.file(schema).text()) !== (await formatTypescript(renderSchema(await generatedSql(full))))) {
       throw new Error("Current database schema is stale. Run `bun script/migration.ts` from packages/core.")
     }
 
     const migrations = await typescriptMigrations()
-    if ((await Bun.file(registry).text()) !== renderRegistry(migrations)) {
+    if ((await Bun.file(registry).text()) !== (await formatTypescript(renderRegistry(migrations)))) {
       throw new Error("Database migration registry is stale. Run `bun script/migration.ts` from packages/core.")
     }
   } finally {
@@ -168,6 +170,18 @@ function renderRun(statement: string) {
 
 function escapeTemplate(line: string) {
   return line.replaceAll("\\", "\\\\").replaceAll("`", "\\`").replaceAll("${", "\\${")
+}
+
+async function formatTypescript(input: string) {
+  const prettier = await import("prettier")
+  const typescript = await import("prettier/plugins/typescript")
+  const estree = await import("prettier/plugins/estree")
+  return prettier.format(input, {
+    parser: "typescript",
+    plugins: [typescript.default, estree.default],
+    semi: false,
+    printWidth: 120,
+  })
 }
 
 function renderRegistry(names: string[]) {

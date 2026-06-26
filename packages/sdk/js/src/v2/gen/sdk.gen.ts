@@ -29,6 +29,8 @@ import type {
   EventTuiPromptAppend,
   EventTuiSessionSelect,
   EventTuiToastShow,
+  ExperimentalCapabilitiesGetErrors,
+  ExperimentalCapabilitiesGetResponses,
   ExperimentalConsoleGetErrors,
   ExperimentalConsoleGetResponses,
   ExperimentalConsoleListOrgsErrors,
@@ -351,6 +353,16 @@ import type {
   V2SessionQuestionRejectResponses,
   V2SessionQuestionReplyErrors,
   V2SessionQuestionReplyResponses,
+  V2SessionRevertClearErrors,
+  V2SessionRevertClearResponses,
+  V2SessionRevertCommitErrors,
+  V2SessionRevertCommitResponses,
+  V2SessionRevertStageErrors,
+  V2SessionRevertStageResponses,
+  V2SessionSwitchAgentErrors,
+  V2SessionSwitchAgentResponses,
+  V2SessionSwitchModelErrors,
+  V2SessionSwitchModelResponses,
   V2SessionWaitErrors,
   V2SessionWaitResponses,
   V2SkillListErrors,
@@ -623,6 +635,42 @@ export class ControlPlane extends HeyApiClient {
         ...options?.headers,
         ...params.headers,
       },
+    })
+  }
+}
+
+export class Capabilities extends HeyApiClient {
+  /**
+   * Get experimental capabilities
+   *
+   * Get experimental features enabled on the OpenCode server.
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      ExperimentalCapabilitiesGetResponses,
+      ExperimentalCapabilitiesGetErrors,
+      ThrowOnError
+    >({
+      url: "/experimental/capabilities",
+      ...options,
+      ...params,
     })
   }
 }
@@ -1178,6 +1226,11 @@ export class Experimental extends HeyApiClient {
   private _controlPlane?: ControlPlane
   get controlPlane(): ControlPlane {
     return (this._controlPlane ??= new ControlPlane({ client: this.client }))
+  }
+
+  private _capabilities?: Capabilities
+  get capabilities(): Capabilities {
+    return (this._capabilities ??= new Capabilities({ client: this.client }))
   }
 
   private _console?: Console
@@ -5021,6 +5074,91 @@ export class Agent extends HeyApiClient {
   }
 }
 
+export class Revert extends HeyApiClient {
+  /**
+   * Stage session revert
+   *
+   * Stage or move a reversible session boundary and optionally apply its file changes.
+   */
+  public stage<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      messageID?: string
+      files?: boolean
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "body", key: "messageID" },
+            { in: "body", key: "files" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      V2SessionRevertStageResponses,
+      V2SessionRevertStageErrors,
+      ThrowOnError
+    >({
+      url: "/api/session/{sessionID}/revert/stage",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Clear staged revert
+   */
+  public clear<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "sessionID" }] }])
+    return (options?.client ?? this.client).post<
+      V2SessionRevertClearResponses,
+      V2SessionRevertClearErrors,
+      ThrowOnError
+    >({
+      url: "/api/session/{sessionID}/revert/clear",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Commit staged revert
+   */
+  public commit<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "sessionID" }] }])
+    return (options?.client ?? this.client).post<
+      V2SessionRevertCommitResponses,
+      V2SessionRevertCommitErrors,
+      ThrowOnError
+    >({
+      url: "/api/session/{sessionID}/revert/commit",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Permission2 extends HeyApiClient {
   /**
    * List session permission requests
@@ -5295,6 +5433,88 @@ export class Session3 extends HeyApiClient {
   }
 
   /**
+   * Switch session agent
+   *
+   * Switch the agent used by subsequent provider turns.
+   */
+  public switchAgent<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      agent?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "body", key: "agent" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      V2SessionSwitchAgentResponses,
+      V2SessionSwitchAgentErrors,
+      ThrowOnError
+    >({
+      url: "/api/session/{sessionID}/agent",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Switch session model
+   *
+   * Switch the model used by subsequent provider turns.
+   */
+  public switchModel<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      model?: {
+        id: string
+        providerID: string
+        variant?: string
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "body", key: "model" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      V2SessionSwitchModelResponses,
+      V2SessionSwitchModelErrors,
+      ThrowOnError
+    >({
+      url: "/api/session/{sessionID}/model",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
    * Send message
    *
    * Durably admit one session input and schedule agent-loop execution unless resume is false.
@@ -5424,6 +5644,11 @@ export class Session3 extends HeyApiClient {
       ...options,
       ...params,
     })
+  }
+
+  private _revert?: Revert
+  get revert(): Revert {
+    return (this._revert ??= new Revert({ client: this.client }))
   }
 
   private _permission?: Permission2
@@ -6114,22 +6339,12 @@ export class Event2 extends HeyApiClient {
   /**
    * Subscribe to events
    *
-   * Subscribe to native event payloads for a location.
+   * Subscribe to native event payloads for the server.
    */
-  public subscribe<ThrowOnError extends boolean = false>(
-    parameters?: {
-      location?: {
-        directory?: string
-        workspace?: string
-      }
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "location" }] }])
+  public subscribe<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
     return (options?.client ?? this.client).sse.get<V2EventSubscribeResponses, V2EventSubscribeErrors, ThrowOnError>({
       url: "/api/event",
       ...options,
-      ...params,
     })
   }
 }
