@@ -151,6 +151,6 @@ function busyError(sessionID: SessionID) {
   return new Session.BusyError({ sessionID })
 }
 
-export const node = LayerNode.make(layer, [BackgroundJob.node, SessionStatus.node])
+export const node = LayerNode.make({ service: Service, layer: layer, deps: [BackgroundJob.node, SessionStatus.node] })
 
 export * as SessionRunState from "./run-state"

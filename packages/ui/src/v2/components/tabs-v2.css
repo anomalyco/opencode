@@ -45,6 +45,7 @@
   align-items: center;
   flex-shrink: 0;
   white-space: nowrap;
+  user-select: none;
 }
 
 [data-component="tabs-v2"] [data-slot="tabs-v2-trigger"] {
@@ -54,6 +55,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   outline: none;
+  user-select: none;
 
   font-size: 13px;
   font-weight: 440;
@@ -61,7 +63,7 @@
   letter-spacing: -0.04px;
 }
 
-[data-component="tabs-v2"] [data-slot="tabs-v2-trigger"]:focus-visible {
+[data-component="tabs-v2"] [data-slot="tabs-v2-trigger"]:is(:focus, :focus-visible) {
   outline: none;
   box-shadow: none;
 }

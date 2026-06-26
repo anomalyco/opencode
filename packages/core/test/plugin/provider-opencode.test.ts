@@ -150,21 +150,18 @@ describe("OpencodePlugin", () => {
             cost: [{ input: 1, output: 2, cache: { read: 0.1, write: 0 } }],
             limit: { context: 1000, output: 100 },
           })
-          expect(model.request).toMatchObject({ body: { custom: "value" }, generation: { temperature: 0.5 } })
-          expect(model.request.body).toEqual({ custom: "value" })
+          expect(model.request.body).toEqual({ custom: "value", temperature: 0.5 })
           expect(model.variants).toEqual([
             {
               id: ModelV2.VariantID.make("high"),
               headers: {},
-              body: {},
-              generation: { temperature: 0.2 },
-              options: {},
+              body: { temperature: 0.2 },
             },
           ])
           expect(
             required(yield* catalog.model.get(ProviderV2.ID.make("remote"), ModelV2.ID.make("disabled"))).enabled,
           ).toBe(false)
-          expect(yield* catalog.model.get(ProviderV2.ID.make("remote"), ModelV2.ID.make("stale"))).toBeUndefined()
+          expect(yield* catalog.model.get(ProviderV2.ID.make("remote"), ModelV2.ID.make("stale"))).toBeDefined()
           expect(authorization).toContain("Bearer secret")
         }),
       ({ server }) => Effect.promise(() => server.stop(true)),

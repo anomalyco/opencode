@@ -781,9 +781,6 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Розгортати частини інструменту редагування",
   "settings.general.row.editToolPartsExpanded.description":
     "Показувати частини інструментів редагування, запису та патчів розгорнутими за замовчуванням на часовій шкалі",
-  "settings.general.row.showSessionProgressBar.title": "Показувати індикатор прогресу сесії",
-  "settings.general.row.showSessionProgressBar.description":
-    "Відображати анімований індикатор прогресу вгорі сесії, коли агент працює",
 
   "settings.general.row.wayland.title": "Використовувати нативний Wayland",
   "settings.general.row.wayland.description": "Вимкнути резервний X11 на Wayland. Потребує перезапуску.",

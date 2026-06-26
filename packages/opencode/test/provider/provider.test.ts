@@ -652,6 +652,102 @@ it.instance("getSmallModel returns appropriate small model", () =>
   }),
 )
 
+it.instance("getSmallModel prefers Gemini for Google Vertex", () =>
+  Effect.gen(function* () {
+    yield* set("GOOGLE_VERTEX_PROJECT", "test-project")
+    const model = yield* Provider.use.getSmallModel(ProviderV2.ID.googleVertex)
+    expect(model).toBeDefined()
+    expect(model?.id).toContain("gemini")
+  }),
+)
+
+it.instance(
+  "getSmallModel selects the latest model in the preferred family",
+  Effect.gen(function* () {
+    const model = yield* Provider.use.getSmallModel(ProviderV2.ID.make("test-provider"))
+    expect(model?.id).toBe(ModelV2.ID.make("new-flash"))
+  }),
+  {
+    config: {
+      provider: {
+        "test-provider": {
+          name: "Test Provider",
+          npm: "@ai-sdk/openai-compatible",
+          models: {
+            "old-flash": { family: "gemini-flash", release_date: "2025-01-01" },
+            "new-flash": { family: "gemini-flash", release_date: "2026-01-01" },
+            "newer-haiku": { family: "claude-haiku", release_date: "2026-06-01" },
+          },
+          options: { apiKey: "test-key" },
+        },
+      },
+    },
+  },
+)
+
+it.instance(
+  "getSmallModel matches exact model families",
+  Effect.gen(function* () {
+    const model = yield* Provider.use.getSmallModel(ProviderV2.ID.make("test-provider"))
+    expect(model?.id).toBe(ModelV2.ID.make("claude-haiku"))
+  }),
+  {
+    config: {
+      provider: {
+        "test-provider": {
+          name: "Test Provider",
+          npm: "@ai-sdk/openai-compatible",
+          models: {
+            "glm-flash": { family: "glm-flash", release_date: "2026-06-01" },
+            "claude-haiku": { family: "claude-haiku", release_date: "2026-01-01" },
+          },
+          options: { apiKey: "test-key" },
+        },
+      },
+    },
+  },
+)
+
+it.instance(
+  "getSmallModel ignores model IDs without family metadata",
+  Effect.gen(function* () {
+    const model = yield* Provider.use.getSmallModel(ProviderV2.ID.make("test-provider"))
+    expect(model).toBeUndefined()
+  }),
+  {
+    config: {
+      provider: {
+        "test-provider": {
+          name: "Test Provider",
+          npm: "@ai-sdk/openai-compatible",
+          models: {
+            "gpt-5-nano": { release_date: "2026-01-01" },
+          },
+          options: { apiKey: "test-key" },
+        },
+      },
+    },
+  },
+)
+
+it.instance("getSmallModel skips inferred models for Azure", () =>
+  Effect.gen(function* () {
+    yield* set("AZURE_RESOURCE_NAME", "test-resource")
+    yield* set("AZURE_API_KEY", "test-key")
+    const model = yield* Provider.use.getSmallModel(ProviderV2.ID.azure)
+    expect(model).toBeUndefined()
+  }),
+)
+
+it.instance("getSmallModel skips inferred models for Azure Cognitive Services", () =>
+  Effect.gen(function* () {
+    yield* set("AZURE_COGNITIVE_SERVICES_RESOURCE_NAME", "test-resource")
+    yield* set("AZURE_COGNITIVE_SERVICES_API_KEY", "test-key")
+    const model = yield* Provider.use.getSmallModel(ProviderV2.ID.make("azure-cognitive-services"))
+    expect(model).toBeUndefined()
+  }),
+)
+
 it.instance(
   "getSmallModel respects config small_model override",
   Effect.gen(function* () {

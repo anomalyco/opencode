@@ -18,6 +18,7 @@ export default function NewLayout(props: ParentProps) {
   createEffect(() => setV2Toast(true))
   createEffect(() => {
     if (!notification.ready() || !params.id) return
+    if (notification.session.unseenCount(params.id) === 0) return
     notification.session.markViewed(params.id)
   })
 
@@ -32,7 +33,13 @@ export default function NewLayout(props: ParentProps) {
   }
 
   return (
-    <div class="relative bg-v2-background-bg-deep flex-1 min-h-0 min-w-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text">
+    <div
+      class="relative bg-v2-background-bg-deep flex-1 min-h-0 min-w-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text"
+      style={{
+        "padding-top": "env(safe-area-inset-top, 0px)",
+        "padding-bottom": "env(safe-area-inset-bottom, 0px)",
+      }}
+    >
       <Titlebar update={update} />
       <main class="flex-1 min-h-0 min-w-0 overflow-x-hidden flex flex-col items-start contain-strict">
         <Suspense>{props.children}</Suspense>

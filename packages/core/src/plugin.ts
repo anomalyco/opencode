@@ -1,7 +1,8 @@
 export * as PluginV2 from "./plugin"
 
-import { Context, Deferred, Effect, Exit, Layer, Schema, Scope } from "effect"
-import type { Plugin } from "@opencode-ai/plugin/v2/effect"
+import { Context, Deferred, Effect, Exit, Layer, Scope } from "effect"
+import type { Plugin as PluginRuntime } from "@opencode-ai/plugin/v2/effect"
+import { Plugin } from "@opencode-ai/schema/plugin"
 import { AgentV2 } from "./agent"
 import { AISDK } from "./aisdk"
 import { Catalog } from "./catalog"
@@ -14,20 +15,12 @@ import { Reference } from "./reference"
 import { SkillV2 } from "./skill"
 import { State } from "./state"
 
-export const ID = Schema.String.pipe(Schema.brand("Plugin.ID"))
+export const ID = Plugin.ID
 export type ID = typeof ID.Type
-
-export const Event = {
-  Added: EventV2.define({
-    type: "plugin.added",
-    schema: {
-      id: ID,
-    },
-  }),
-}
+export const Event = Plugin.Event
 
 export interface Interface {
-  readonly add: (id: ID, effect: Plugin["effect"]) => Effect.Effect<void>
+  readonly add: (id: ID, effect: PluginRuntime["effect"]) => Effect.Effect<void>
   readonly remove: (id: ID) => Effect.Effect<void>
   readonly wait: (id: ID) => Effect.Effect<void>
 }
@@ -44,9 +37,9 @@ export const layer = Layer.effect(
     const loading = new Set<ID>()
     const waiters = new Map<ID, Set<Deferred.Deferred<void>>>()
     const failures = new Map<ID, Exit.Exit<void, never>>()
-    let host: Parameters<Plugin["effect"]>[0]
+    let host: Parameters<PluginRuntime["effect"]>[0]
 
-    const add = Effect.fn("Plugin.add")(function* (id: ID, effect: Plugin["effect"]) {
+    const add = Effect.fn("Plugin.add")(function* (id: ID, effect: PluginRuntime["effect"]) {
       if (loading.has(id)) return yield* Effect.die(`Plugin load cycle detected for ${id}`)
 
       yield* locks.withLock(id)(

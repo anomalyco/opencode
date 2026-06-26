@@ -1,37 +1,29 @@
 import type { Message, UserMessage } from "@opencode-ai/sdk/v2"
 import { createMemo, createResource, onCleanup, untrack, type Accessor } from "solid-js"
-import { getSessionPrefetch, SESSION_PREFETCH_TTL } from "@/context/global-sync/session-prefetch"
-import { useSDK } from "@/context/sdk"
-import { useServerSDK } from "@/context/server-sdk"
+import { useServerSync } from "@/context/server-sync"
 import { useSync } from "@/context/sync"
 import { same } from "@/utils/same"
 
 const emptyUserMessages: UserMessage[] = []
+const sessionFreshness = 15_000
 
 export function createTimelineModel(input: {
   sessionID: Accessor<string | undefined>
   revertMessageID: Accessor<string | undefined>
 }) {
-  const sdk = useSDK()
-  const serverSDK = useServerSDK()
+  const serverSync = useServerSync()
   const sync = useSync()
   let refreshFrame: number | undefined
   let refreshTimer: number | undefined
 
   const [resource] = createResource(
-    () => [sdk().directory, input.sessionID()] as const,
-    ([directory, id]) => {
+    () => input.sessionID(),
+    (id) => {
       clearRefresh()
       if (!id) return
 
       const cached = untrack(() => sync().data.message[id] !== undefined)
-      const stale = cached
-        ? (() => {
-            const info = getSessionPrefetch(serverSDK().scope, directory, id)
-            if (!info) return true
-            return Date.now() - info.at > SESSION_PREFETCH_TTL
-          })()
-        : false
+      const stale = cached && !serverSync().session.fresh(id, sessionFreshness)
 
       refreshFrame = requestAnimationFrame(() => {
         refreshFrame = undefined

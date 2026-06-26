@@ -1,5 +1,5 @@
 import "../index.css"
-import { Link, Meta, Title } from "@solidjs/meta"
+import { Meta, Title } from "@solidjs/meta"
 import {
   getStatsLabData,
   type LabUsageModelEntry,
@@ -9,6 +9,10 @@ import {
 import { createAsync, query, useParams } from "@solidjs/router"
 import { createMemo, createSignal, For, onMount, Show, type JSX } from "solid-js"
 import { getRequestEvent } from "solid-js/web"
+import { LocaleLinks } from "../../component/locale-links"
+import { useI18n } from "../../context/i18n"
+import { useLanguage } from "../../context/language"
+import { localizedUrl } from "../../lib/language"
 import {
   findModelCatalogLab,
   formatCatalogLabName,
@@ -28,21 +32,7 @@ import {
   type ThemePreference,
 } from "../stats-shell"
 
-const statsCanonicalBaseUrl = "https://opencode.ai/data/"
 const statsUnfurlPath = "banner.png"
-const statsUnfurlAlt = "OpenCode Data wordmark on a dark patterned background"
-const statsUnfurlUrl = new URL(statsUnfurlPath, statsCanonicalBaseUrl).toString()
-const labHeaderLinks: readonly HeaderLink[] = [
-  { href: "#overview", label: "Overview" },
-  { href: "#usage", label: "Usage" },
-  { href: "#models", label: "Models" },
-]
-const labFooterLinks: readonly HeaderLink[] = [
-  { href: import.meta.env.BASE_URL, label: "Data Home" },
-  { href: `${import.meta.env.BASE_URL}#top-models`, label: "Top Models" },
-  { href: `${import.meta.env.BASE_URL}#market-share`, label: "Market Share" },
-  { href: `${import.meta.env.BASE_URL}#geo-breakdown`, label: "Geo Breakdown" },
-]
 
 const getLabData = query(async (lab: string) => {
   "use server"
@@ -50,6 +40,8 @@ const getLabData = query(async (lab: string) => {
 }, "getStatsLabData")
 
 export default function StatsLab() {
+  const i18n = useI18n()
+  const language = useLanguage()
   const event = getRequestEvent()
   event?.response.headers.set("Cache-Control", "public, max-age=60, s-maxage=300, stale-while-revalidate=86400")
   const params = useParams()
@@ -69,12 +61,22 @@ export default function StatsLab() {
   const githubStars = createAsync(() => getGitHubStars())
   const [themePreference, setThemePreference] = createSignal<ThemePreference>("system")
   const labName = createMemo(() => lab()?.name ?? formatCatalogLabName(labParam()))
-  const labTitle = createMemo(() => `${labName()} AI Model Usage & Rankings | OpenCode Data`)
-  const labDescription = createMemo(
-    () =>
-      `Compare ${labName()} models used in OpenCode Go, including token usage, model rankings, context windows, release dates, costs, and model-specific data.`,
-  )
-  const labUrl = createMemo(() => new URL(lab()?.id ?? labParam(), statsCanonicalBaseUrl).toString())
+  const labTitle = createMemo(() => i18n.t("lab.title", { lab: labName() }))
+  const labDescription = createMemo(() => i18n.t("lab.description", { lab: labName() }))
+  const labPath = createMemo(() => `/data/${lab()?.id ?? labParam()}`)
+  const labUrl = createMemo(() => localizedUrl(language.locale(), labPath()))
+  const statsUnfurlUrl = new URL(statsUnfurlPath, localizedUrl("en", "/data/")).toString()
+  const labHeaderLinks = createMemo<readonly HeaderLink[]>(() => [
+    { href: "#overview", label: i18n.t("nav.overview") },
+    { href: "#usage", label: i18n.t("nav.usage") },
+    { href: "#models", label: i18n.t("nav.models") },
+  ])
+  const labFooterLinks = createMemo<readonly HeaderLink[]>(() => [
+    { href: import.meta.env.BASE_URL, label: i18n.t("nav.dataHome") },
+    { href: `${import.meta.env.BASE_URL}#top-models`, label: i18n.t("nav.topModels") },
+    { href: `${import.meta.env.BASE_URL}#market-share`, label: i18n.t("nav.marketShare") },
+    { href: `${import.meta.env.BASE_URL}#geo-breakdown`, label: i18n.t("nav.geoBreakdown") },
+  ])
   const updateThemePreference = (preference: ThemePreference) => {
     applyThemePreference(preference)
     setThemePreference(preference)
@@ -94,7 +96,7 @@ export default function StatsLab() {
     <main data-page="stats" data-theme={themePreference()}>
       <Title>{labTitle()}</Title>
       <Meta name="description" content={labDescription()} />
-      <Link rel="canonical" href={labUrl()} />
+      <LocaleLinks path={labPath()} />
       <Meta property="og:type" content="website" />
       <Meta property="og:site_name" content="OpenCode" />
       <Meta property="og:title" content={labTitle()} />
@@ -104,13 +106,13 @@ export default function StatsLab() {
       <Meta property="og:image:type" content="image/png" />
       <Meta property="og:image:width" content="1200" />
       <Meta property="og:image:height" content="630" />
-      <Meta property="og:image:alt" content={statsUnfurlAlt} />
+      <Meta property="og:image:alt" content={i18n.t("app.unfurlAlt")} />
       <Meta name="twitter:card" content="summary_large_image" />
       <Meta name="twitter:title" content={labTitle()} />
       <Meta name="twitter:description" content={labDescription()} />
       <Meta name="twitter:image" content={statsUnfurlUrl} />
-      <Meta name="twitter:image:alt" content={statsUnfurlAlt} />
-      <Header githubStars={githubStars() ?? "150K"} links={labHeaderLinks} brandHref={import.meta.env.BASE_URL} />
+      <Meta name="twitter:image:alt" content={i18n.t("app.unfurlAlt")} />
+      <Header githubStars={githubStars() ?? "150K"} links={labHeaderLinks()} brandHref={import.meta.env.BASE_URL} />
       <div data-component="container">
         <div data-component="content">
           <Show when={catalog() !== undefined} fallback={<LabLoading />}>
@@ -128,7 +130,7 @@ export default function StatsLab() {
         <Footer
           themePreference={themePreference()}
           onThemePreferenceChange={updateThemePreference}
-          links={labFooterLinks}
+          links={labFooterLinks()}
         />
       </div>
     </main>
@@ -136,15 +138,17 @@ export default function StatsLab() {
 }
 
 function LabLoading() {
+  const i18n = useI18n()
+  const language = useLanguage()
   return (
     <section id="overview" data-section="lab-hero">
       <div data-slot="model-hero-grid">
         <div data-slot="model-hero-copy">
-          <a data-slot="model-back-link" href={import.meta.env.BASE_URL}>
-            Data
+          <a data-slot="model-back-link" href={language.route(import.meta.env.BASE_URL)}>
+            {i18n.t("footer.modelData")}
           </a>
-          <h1>Model Lab</h1>
-          <p>Reading model availability and recent OpenCode usage.</p>
+          <h1>{i18n.t("lab.loadingTitle")}</h1>
+          <p>{i18n.t("lab.loadingDescription")}</p>
         </div>
       </div>
     </section>
@@ -152,15 +156,17 @@ function LabLoading() {
 }
 
 function LabNotFound(props: { lab: string }) {
+  const i18n = useI18n()
+  const language = useLanguage()
   return (
     <section id="overview" data-section="lab-hero">
       <div data-slot="model-hero-grid">
         <div data-slot="model-hero-copy">
-          <a data-slot="model-back-link" href={import.meta.env.BASE_URL}>
-            Data
+          <a data-slot="model-back-link" href={language.route(import.meta.env.BASE_URL)}>
+            {i18n.t("footer.modelData")}
           </a>
           <h1>{formatCatalogLabName(props.lab)}</h1>
-          <p>No models matched this lab.</p>
+          <p>{i18n.t("lab.notFound")}</p>
         </div>
       </div>
     </section>
@@ -168,6 +174,8 @@ function LabNotFound(props: { lab: string }) {
 }
 
 function LabHero(props: { lab: ModelCatalogLab; stats: StatsLabData | null }) {
+  const i18n = useI18n()
+  const language = useLanguage()
   const latest = createMemo(
     () =>
       props.lab.models
@@ -179,28 +187,33 @@ function LabHero(props: { lab: ModelCatalogLab; stats: StatsLabData | null }) {
 
   return (
     <section id="overview" data-section="lab-hero">
-      <a data-slot="model-back-link" href={import.meta.env.BASE_URL}>
-        Data
+      <a data-slot="model-back-link" href={language.route(import.meta.env.BASE_URL)}>
+        {i18n.t("footer.modelData")}
       </a>
       <div data-slot="model-hero-grid">
         <div data-slot="model-hero-copy">
           <h1>{props.lab.name}</h1>
           <div data-slot="model-hero-pattern" aria-hidden="true" />
           <p>
-            Explore {props.lab.models.length} {props.lab.name} models used in OpenCode
-            <Show when={featuredModels().length > 0}> including {formatList(featuredModels())}</Show>. Compare recent
-            token usage, context windows, release dates, and model-specific data.
+            {i18n.t("lab.heroPrefix", { count: props.lab.models.length, lab: props.lab.name })}
+            <Show when={featuredModels().length > 0}>
+              {" "}
+              {i18n.t("lab.heroIncluding", { models: formatList(featuredModels(), language.tag(language.locale())) })}
+            </Show>
+            . {i18n.t("lab.heroSuffix")}
           </p>
         </div>
         <div data-component="model-rank-panel">
-          <span>Tokens Processed</span>
-          <strong>{props.stats ? formatTokens(props.stats.totals.tokens) : "Pending"}</strong>
+          <span>{i18n.t("lab.tokensProcessed")}</span>
+          <strong>{props.stats ? formatTokens(props.stats.totals.tokens) : i18n.t("lab.pending")}</strong>
           <p>
             {props.stats
-              ? `${formatPercent(props.stats.tokenShare)} of recent OpenCode usage`
+              ? i18n.t("lab.shareOfUsage", { share: formatPercent(props.stats.tokenShare) })
               : latest()
-                ? `Latest release ${formatCatalogDate(latest())}`
-                : "Usage appears after model activity lands"}
+                ? i18n.t("lab.latestRelease", {
+                    date: formatCatalogDate(latest(), language.tag(language.locale()), i18n.t("home.unknown")),
+                  })
+                : i18n.t("lab.usageAfterActivity")}
           </p>
         </div>
       </div>
@@ -209,6 +222,7 @@ function LabHero(props: { lab: ModelCatalogLab; stats: StatsLabData | null }) {
 }
 
 function LabUsageSection(props: { lab: ModelCatalogLab; data: StatsLabData | null }) {
+  const i18n = useI18n()
   const [activeIndex, setActiveIndex] = createSignal<number>()
   const usage = createMemo(() => props.data?.usage ?? [])
   const max = createMemo(() => Math.max(0, ...usage().map((item) => item.tokens)) || 1)
@@ -221,23 +235,18 @@ function LabUsageSection(props: { lab: ModelCatalogLab; data: StatsLabData | nul
   return (
     <section id="usage" data-section="model-panel">
       <p data-slot="section-title">
-        <strong>{props.lab.name} token usage.</strong>{" "}
-        <span>Daily OpenCode token volume over the last two months.</span>
+        <strong>{i18n.t("lab.usageTitle", { lab: props.lab.name })}.</strong>{" "}
+        <span>{i18n.t("lab.usageDescription")}</span>
       </p>
       <Show
         when={usage().some((item) => item.tokens > 0)}
-        fallback={
-          <LabEmptyState
-            title="No usage yet"
-            description="Recent token usage appears here once this lab has activity."
-          />
-        }
+        fallback={<LabEmptyState title={i18n.t("lab.noUsageTitle")} description={i18n.t("lab.noUsageDescription")} />}
       >
         <div
           data-component="model-usage-chart"
           data-dense-labels={isLabUsageDense(usage().length) ? "true" : undefined}
           role="img"
-          aria-label={`${props.lab.name} daily token usage chart`}
+          aria-label={i18n.t("lab.dailyTokenChart", { lab: props.lab.name })}
           style={{ "--model-usage-count": usage().length } as JSX.CSSProperties}
           onPointerLeave={(event) => {
             if (event.pointerType === "touch") return
@@ -266,7 +275,7 @@ function LabUsageSection(props: { lab: ModelCatalogLab; data: StatsLabData | nul
                   data-slot="model-usage-column"
                   role="button"
                   tabIndex={0}
-                  aria-label={`${point.date} ${formatTokens(point.tokens)} tokens`}
+                  aria-label={`${point.date} ${formatTokens(point.tokens)} ${i18n.t("lab.tokens")}`}
                   data-active={activeIndex() === index() ? "true" : undefined}
                   data-muted={activeIndex() !== undefined && activeIndex() !== index() ? "true" : undefined}
                   onPointerDown={(event) => {
@@ -298,11 +307,13 @@ function LabUsageSection(props: { lab: ModelCatalogLab; data: StatsLabData | nul
                         data-placement={index() > usage().length * 0.62 ? "left" : "right"}
                       >
                         <strong>{active().date}</strong>
-                        <span>{formatTokens(active().tokens)} tokens</span>
+                        <span>
+                          {formatTokens(active().tokens)} {i18n.t("lab.tokens")}
+                        </span>
                         <div data-slot="tooltip-divider" />
                         <p>
                           <span data-slot="tooltip-label">
-                            <i /> Daily tokens
+                            <i /> {i18n.t("lab.dailyTokens")}
                           </span>
                           <b>{formatTokens(active().tokens)}</b>
                         </p>
@@ -320,11 +331,13 @@ function LabUsageSection(props: { lab: ModelCatalogLab; data: StatsLabData | nul
 }
 
 function LabModelsSection(props: { lab: ModelCatalogLab; usage: LabUsageModelEntry[] }) {
+  const i18n = useI18n()
   const usageBySlug = createMemo(() => new Map(props.usage.map((item) => [item.slug, item])))
   return (
     <section id="models" data-section="model-panel">
       <p data-slot="section-title">
-        <strong>{props.lab.name} models.</strong> <span>Recent usage and limits.</span>
+        <strong>{i18n.t("lab.modelsTitle", { lab: props.lab.name })}.</strong>{" "}
+        <span>{i18n.t("lab.recentUsageAndLimits")}</span>
       </p>
       <div data-component="lab-model-grid">
         <For each={props.lab.models}>
@@ -336,29 +349,31 @@ function LabModelsSection(props: { lab: ModelCatalogLab; usage: LabUsageModelEnt
 }
 
 function LabModelCard(props: { model: ModelCatalogEntry; usage: LabUsageModelEntry | undefined }) {
+  const i18n = useI18n()
+  const language = useLanguage()
   return (
-    <a data-component="lab-model-card" href={`${import.meta.env.BASE_URL}${props.model.id}`}>
+    <a data-component="lab-model-card" href={language.route(`${import.meta.env.BASE_URL}${props.model.id}`)}>
       <strong>{props.model.name}</strong>
       <div data-slot="lab-model-card-meta">
         <p>
-          <b>Usage</b>
+          <b>{i18n.t("lab.usage")}</b>
           <em>{props.usage ? formatTokens(props.usage.tokens) : "—"}</em>
         </p>
         <p>
-          <b>Share</b>
+          <b>{i18n.t("lab.share")}</b>
           <em>{props.usage ? formatPercent(props.usage.share) : "—"}</em>
         </p>
         <p>
-          <b>Context</b>
-          <em>{formatCatalogLimit(props.model.limit?.context)}</em>
+          <b>{i18n.t("model.context")}</b>
+          <em>{formatCatalogLimit(props.model.limit?.context, i18n.t("home.unknown"))}</em>
         </p>
         <p>
-          <b>Output</b>
-          <em>{formatCatalogLimit(props.model.limit?.output)}</em>
+          <b>{i18n.t("model.output")}</b>
+          <em>{formatCatalogLimit(props.model.limit?.output, i18n.t("home.unknown"))}</em>
         </p>
         <p>
-          <b>Release</b>
-          <em>{formatCatalogDate(props.model.releaseDate)}</em>
+          <b>{i18n.t("model.release")}</b>
+          <em>{formatCatalogDate(props.model.releaseDate, language.tag(language.locale()), i18n.t("home.unknown"))}</em>
         </p>
       </div>
     </a>
@@ -374,18 +389,18 @@ function LabEmptyState(props: { title: string; description: string }) {
   )
 }
 
-function formatCatalogLimit(value: number | undefined) {
-  return value === undefined ? "Unknown" : formatTokens(value)
+function formatCatalogLimit(value: number | undefined, unknown: string) {
+  return value === undefined ? unknown : formatTokens(value)
 }
 
-function formatCatalogDate(value: string | undefined) {
-  if (!value) return "Unknown"
+function formatCatalogDate(value: string | undefined, locale: string, unknown: string) {
+  if (!value) return unknown
   const match = /^(\d{4})(?:-(\d{2}))?(?:-(\d{2}))?$/.exec(value)
   if (!match) return value
   const year = Number(match[1])
   const month = match[2] ? Number(match[2]) - 1 : 0
   const day = match[3] ? Number(match[3]) : 1
-  return new Intl.DateTimeFormat("en", {
+  return new Intl.DateTimeFormat(locale, {
     month: match[2] ? "short" : undefined,
     day: match[3] ? "numeric" : undefined,
     year: "numeric",
@@ -393,10 +408,9 @@ function formatCatalogDate(value: string | undefined) {
   }).format(new Date(Date.UTC(year, month, day)))
 }
 
-function formatList(values: string[]) {
+function formatList(values: string[], locale = "en") {
   if (values.length <= 1) return values[0] ?? ""
-  if (values.length === 2) return `${values[0]} and ${values[1]}`
-  return `${values.slice(0, -1).join(", ")}, and ${values[values.length - 1]}`
+  return new Intl.ListFormat(locale, { style: "long", type: "conjunction" }).format(values)
 }
 
 function formatPercent(value: number) {

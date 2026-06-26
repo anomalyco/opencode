@@ -415,26 +415,30 @@ function isJsonSchemaObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
 }
 
-export const node = LayerNode.make(layer.pipe(Layer.provide(Ripgrep.defaultLayer)), [
-  Config.node,
-  Plugin.node,
-  Question.node,
-  Todo.node,
-  Agent.node,
-  Skill.node,
-  Session.node,
-  BackgroundJob.node,
-  Provider.node,
-  LSP.node,
-  Instruction.node,
-  FSUtil.node,
-  EventV2Bridge.node,
-  httpClient,
-  CrossSpawnSpawner.node,
-  Format.node,
-  Truncate.node,
-  RuntimeFlags.node,
-  Database.node,
-])
+export const node = LayerNode.make({
+  service: Service,
+  layer: layer.pipe(Layer.provide(Ripgrep.defaultLayer)),
+  deps: [
+    Config.node,
+    Plugin.node,
+    Question.node,
+    Todo.node,
+    Agent.node,
+    Skill.node,
+    Session.node,
+    BackgroundJob.node,
+    Provider.node,
+    LSP.node,
+    Instruction.node,
+    FSUtil.node,
+    EventV2Bridge.node,
+    httpClient,
+    CrossSpawnSpawner.node,
+    Format.node,
+    Truncate.node,
+    RuntimeFlags.node,
+    Database.node,
+  ],
+})
 
 export * as ToolRegistry from "./registry"

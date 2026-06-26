@@ -238,6 +238,6 @@ export const layer = Layer.effect(
 )
 
 export const defaultLayer = layer.pipe(Layer.provide(CrossSpawnSpawner.defaultLayer))
-export const node = LayerNode.make(layer, [CrossSpawnSpawner.node])
+export const node = LayerNode.make({ service: Service, layer: layer, deps: [CrossSpawnSpawner.node] })
 
 export * as AppProcess from "./process"

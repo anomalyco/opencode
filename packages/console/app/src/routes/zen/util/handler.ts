@@ -196,10 +196,12 @@ export async function handler(
           providerInfo.modifyHeaders(headers, providerInfo.apiKey, stickyId)
           Object.entries(providerInfo.headerModifier ?? {}).forEach(([k, v]) => {
             if (v === "$ip") return headers.set(k, ip)
+            if (v === "$caller") return headers.set(k, stickyId)
             if (v === "$session") return headers.set(k, sessionId)
             if (v === "$model") return headers.set(k, model)
             if (v === "$request") return headers.set(k, requestId)
             if (v === "$project") return headers.set(k, projectId)
+            if (v === "$workspace" && authInfo?.workspaceID) return headers.set(k, authInfo.workspaceID)
             headers.set(k, v)
           })
           headers.delete("host")
@@ -354,7 +356,7 @@ export async function handler(
               responseLength += value.length
               buffer += decoder.decode(value, { stream: true })
 
-              const parts = buffer.split(providerInfo.streamSeparator)
+              const parts = buffer.split(/\r\n\r\n|\n\n|\r\r/)
               buffer = parts.pop() ?? ""
 
               for (let part of parts) {
