@@ -144,7 +144,7 @@ function escapeHtml(value: string) {
 
 // Curated subset of OC-2 tokens (packages/ui/src/styles/theme.css). Default is
 // light; dark applies via prefers-color-scheme. The [data-theme] selectors let a
-// host force a scheme (used by the preview harness) without changing the default.
+// host force a scheme without changing the default.
 const LIGHT_VARS = `
     --oc-bg: #f8f8f8;
     --oc-card: #fcfcfc;
