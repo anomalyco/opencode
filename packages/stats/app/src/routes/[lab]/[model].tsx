@@ -31,6 +31,7 @@ import {
   type ModelCatalogEntry,
 } from "../model-catalog"
 import { runStatsEffect } from "../../stats-runtime"
+import { setStatsPageCacheHeaders } from "../stats-cache"
 import {
   applyThemePreference,
   Footer,
@@ -86,7 +87,7 @@ export default function StatsModel() {
   const i18n = useI18n()
   const language = useLanguage()
   const event = getRequestEvent()
-  event?.response.headers.set("Cache-Control", "public, max-age=60, s-maxage=300, stale-while-revalidate=86400")
+  setStatsPageCacheHeaders(event?.response.headers)
   const params = useParams()
   const labParam = createMemo(() => params.lab ?? "")
   const modelParam = createMemo(() => params.model ?? "")
