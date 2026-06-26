@@ -633,7 +633,7 @@
 
 [data-component="dialog-v2"].settings-v2-server-dialog [data-slot="dialog-header"] {
   align-items: center;
-  padding: 24px 24px 0;
+  padding: 24px 24px 16px;
 }
 
 [data-component="dialog-v2"].settings-v2-server-dialog [data-slot="dialog-body"] {
