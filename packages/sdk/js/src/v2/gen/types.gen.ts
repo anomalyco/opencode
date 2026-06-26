@@ -2762,8 +2762,10 @@ export type SessionDurableEvent =
   | SessionNextRevertCommitted
 
 export type SessionHistory = {
-  events: Array<SessionDurableEvent>
-  cursor?: string
+  data: Array<SessionDurableEvent>
+  cursor: {
+    next?: string
+  }
 }
 
 export type SessionDurableEvent1 = string
@@ -12428,7 +12430,6 @@ export type V2SessionHistoryData = {
   }
   query?: {
     limit?: string
-    after?: string
     cursor?: string
   }
   url: "/api/session/{sessionID}/history"

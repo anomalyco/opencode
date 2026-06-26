@@ -3,7 +3,7 @@
 ## 2026-06-26: Add Finite Session History
 
 - Add `GET /api/session/:sessionID/history` and generated Promise, Effect, and legacy JavaScript client methods.
-- Page only public durable Session events with an exclusive initial `after` and an opaque continuation cursor that preserves the fixed aggregate cutoff.
+- Page only public durable Session events from one optional opaque cursor; omission starts before sequence zero, while `SessionHistoryCursor.after(sequence)` starts from an acknowledged durable checkpoint.
 - Keep aggregate gaps legal, cap pages at 100 events, and preserve the existing durable replay-and-tail `sessions.events()` stream unchanged.
 - Add no migration or durable-event version; this is a finite read API over the existing event manifest.
 

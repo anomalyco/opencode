@@ -48,31 +48,6 @@ describe("HttpApiCodegen.generate", () => {
     )
   })
 
-  test("preserves union-of-struct query inputs", () => {
-    const contract = compileContract(
-      api(
-        HttpApiEndpoint.get("history", "/session/:sessionID/history", {
-          params: { sessionID: Schema.String },
-          query: Schema.Union([
-            Schema.Struct({ after: Schema.optional(Schema.Number), cursor: Schema.optional(Schema.Never) }),
-            Schema.Struct({ after: Schema.optional(Schema.Never), cursor: Schema.String }),
-          ]),
-          success: Schema.String,
-        }),
-      ),
-    )
-
-    const promise = emitPromise(contract).files.find((file) => file.path === "types.ts")?.content
-    const effect = emitEffectImported(contract, { module: "@example/api", api: "Api" }).files.find(
-      (file) => file.path === "client.ts",
-    )?.content
-
-    expect(promise).toContain("& ({ readonly")
-    expect(effect).toContain('type Endpoint0_0Input = { readonly "sessionID":')
-    expect(effect).toContain('& Endpoint0_0Request["query"]')
-    expect(effect).toContain("query: input")
-  })
-
   test("emits an Effect client against an imported authoritative API", () => {
     const output = emitEffectImported(
       compileContract(

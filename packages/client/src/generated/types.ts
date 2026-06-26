@@ -281,13 +281,15 @@ export type SessionsGetOutput = {
   }
 }["data"]
 
-export type SessionsSwitchAgentInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] } & {
+export type SessionsSwitchAgentInput = {
+  readonly sessionID: { readonly sessionID: string }["sessionID"]
   readonly agent: { readonly agent: string }["agent"]
 }
 
 export type SessionsSwitchAgentOutput = void
 
-export type SessionsSwitchModelInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] } & {
+export type SessionsSwitchModelInput = {
+  readonly sessionID: { readonly sessionID: string }["sessionID"]
   readonly model: {
     readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
   }["model"]
@@ -295,7 +297,8 @@ export type SessionsSwitchModelInput = { readonly sessionID: { readonly sessionI
 
 export type SessionsSwitchModelOutput = void
 
-export type SessionsPromptInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] } & {
+export type SessionsPromptInput = {
+  readonly sessionID: { readonly sessionID: string }["sessionID"]
   readonly id?: {
     readonly id?: string | null
     readonly prompt: {
@@ -403,7 +406,8 @@ export type SessionsWaitInput = { readonly sessionID: { readonly sessionID: stri
 
 export type SessionsWaitOutput = void
 
-export type SessionsStageInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] } & {
+export type SessionsStageInput = {
+  readonly sessionID: { readonly sessionID: string }["sessionID"]
   readonly messageID: { readonly messageID: string; readonly files?: boolean | undefined }["messageID"]
   readonly files?: { readonly messageID: string; readonly files?: boolean | undefined }["files"]
 }
@@ -587,14 +591,14 @@ export type SessionsContextOutput = {
   >
 }["data"]
 
-export type SessionsHistoryInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] } & {
-  readonly limit?: string | undefined
-  readonly after?: string | undefined
-  readonly cursor?: string | undefined
+export type SessionsHistoryInput = {
+  readonly sessionID: { readonly sessionID: string }["sessionID"]
+  readonly limit?: { readonly limit?: string | undefined; readonly cursor?: string | undefined }["limit"]
+  readonly cursor?: { readonly limit?: string | undefined; readonly cursor?: string | undefined }["cursor"]
 }
 
 export type SessionsHistoryOutput = {
-  readonly events: ReadonlyArray<
+  readonly data: ReadonlyArray<
     | {
         readonly id: string
         readonly metadata?: { readonly [x: string]: JsonValue }
@@ -1156,10 +1160,11 @@ export type SessionsHistoryOutput = {
         readonly data: { readonly timestamp: number; readonly sessionID: string; readonly messageID: string }
       }
   >
-  readonly cursor?: string
+  readonly cursor: { readonly next?: string }
 }
 
-export type SessionsEventsInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] } & {
+export type SessionsEventsInput = {
+  readonly sessionID: { readonly sessionID: string }["sessionID"]
   readonly after?: { readonly after?: string | undefined }["after"]
 }
 

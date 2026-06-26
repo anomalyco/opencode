@@ -1072,7 +1072,7 @@ const scenarios: Scenario[] = [
     .seeded((ctx) => ctx.session({ title: "Session history" }))
     .at((ctx) => ({
       path: `${route("/api/session/{sessionID}/history", { sessionID: ctx.state.id })}?${new URLSearchParams({
-        after: "0",
+        cursor: cursor({ after: 0 }),
         limit: "2",
       })}`,
       headers: ctx.headers(),
@@ -1081,10 +1081,11 @@ const scenarios: Scenario[] = [
       200,
       (body) => {
         object(body)
-        array(body.events)
+        array(body.data)
+        object(body.cursor)
         check(
-          body.cursor === undefined || typeof body.cursor === "string",
-          "Expected an optional opaque history cursor",
+          body.cursor.next === undefined || typeof body.cursor.next === "string",
+          "Expected an optional next cursor",
         )
       },
       "none",

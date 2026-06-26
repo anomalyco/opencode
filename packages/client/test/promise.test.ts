@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { isInvalidCursorError, isUnauthorizedError, OpenCode } from "../src"
+import { isInvalidCursorError, isUnauthorizedError, OpenCode, SessionHistoryCursor } from "../src"
 
 test("sessions.get returns the wire projection", async () => {
   const client = OpenCode.make({
@@ -33,7 +33,9 @@ test("session methods use the public HTTP contract", async () => {
       if (url.includes("/history")) {
         historyPage++
         return Response.json(
-          historyPage === 1 ? { events: [modelSwitchedEvent], cursor: "opaque_history_cursor" } : { events: [] },
+          historyPage === 1
+            ? { data: [modelSwitchedEvent], cursor: { next: "opaque_history_cursor" } }
+            : { data: [], cursor: {} },
         )
       }
       if (url.includes("/prompt")) return Response.json(admission)
@@ -62,14 +64,11 @@ test("session methods use the public HTTP contract", async () => {
   await client.sessions.compact({ sessionID: "ses_test" })
   await client.sessions.wait({ sessionID: "ses_test" })
   const context = await client.sessions.context({ sessionID: "ses_test" })
-  const history = await client.sessions.history({ sessionID: "ses_test", after: "0", limit: "1" })
-  const historyNext = history.cursor
-    ? await client.sessions.history({ sessionID: "ses_test", cursor: history.cursor, limit: "2" })
+  const initialCursor = SessionHistoryCursor.after(0)
+  const history = await client.sessions.history({ sessionID: "ses_test", cursor: initialCursor, limit: "1" })
+  const historyNext = history.cursor.next
+    ? await client.sessions.history({ sessionID: "ses_test", cursor: history.cursor.next, limit: "2" })
     : undefined
-  if (false) {
-    // @ts-expect-error after starts a snapshot while cursor continues one
-    await client.sessions.history({ sessionID: "ses_test", after: "0", cursor: "opaque_history_cursor" })
-  }
   const events = []
   for await (const event of client.sessions.events({ sessionID: "ses_test", after: "0" })) events.push(event)
   await client.sessions.interrupt({ sessionID: "ses_test" })
@@ -80,8 +79,9 @@ test("session methods use the public HTTP contract", async () => {
   expect(created.id).toBe("ses_test")
   expect(admitted.id).toBe("msg_test")
   expect(context).toEqual([])
-  expect(history).toEqual({ events: [modelSwitchedEvent], cursor: "opaque_history_cursor" })
-  expect(historyNext).toEqual({ events: [] })
+  expect(initialCursor).toBe("eyJhZnRlciI6MH0")
+  expect(history).toEqual({ data: [modelSwitchedEvent], cursor: { next: "opaque_history_cursor" } })
+  expect(historyNext).toEqual({ data: [], cursor: {} })
   expect(events).toEqual([modelSwitchedEvent])
   expect(message).toEqual(modelSwitchedMessage)
   expect(requests.map((request) => [request.init?.method, request.url])).toEqual([
@@ -94,7 +94,7 @@ test("session methods use the public HTTP contract", async () => {
     ["POST", "http://localhost:3000/api/session/ses_test/compact"],
     ["POST", "http://localhost:3000/api/session/ses_test/wait"],
     ["GET", "http://localhost:3000/api/session/ses_test/context"],
-    ["GET", "http://localhost:3000/api/session/ses_test/history?limit=1&after=0"],
+    ["GET", `http://localhost:3000/api/session/ses_test/history?limit=1&cursor=${initialCursor}`],
     ["GET", "http://localhost:3000/api/session/ses_test/history?limit=2&cursor=opaque_history_cursor"],
     ["GET", "http://localhost:3000/api/session/ses_test/event?after=0"],
     ["POST", "http://localhost:3000/api/session/ses_test/interrupt"],
@@ -135,6 +135,11 @@ test("sessions.history decodes InvalidCursorError", async () => {
   } catch (error) {
     expect(isInvalidCursorError(error)).toBe(true)
   }
+})
+
+test("SessionHistoryCursor rejects invalid durable checkpoints", () => {
+  expect(() => SessionHistoryCursor.after(-1)).toThrow(RangeError)
+  expect(() => SessionHistoryCursor.after(1.5)).toThrow(RangeError)
 })
 
 const session = {
