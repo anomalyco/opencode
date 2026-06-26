@@ -32,6 +32,7 @@ import { useI18n } from "../context/i18n"
 import { useLanguage } from "../context/language"
 import { localizedUrl } from "../lib/language"
 import { findModelCatalogEntry, getModelCatalog, type ModelCatalog } from "./model-catalog"
+import { setStatsPageCacheHeaders } from "./stats-cache"
 import {
   applyThemePreference,
   Footer,
@@ -121,7 +122,7 @@ export default function StatsHome() {
   const i18n = useI18n()
   const language = useLanguage()
   const event = getRequestEvent()
-  event?.response.headers.set("Cache-Control", "public, max-age=60, s-maxage=300, stale-while-revalidate=86400")
+  setStatsPageCacheHeaders(event?.response.headers)
   const statsHomeUrl = localizedUrl(language.locale(), "/data/")
   const statsUnfurlUrl = new URL(statsUnfurlPath, localizedUrl("en", "/data/")).toString()
   const data = createAsync(() => getData())
