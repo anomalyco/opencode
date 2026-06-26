@@ -2,11 +2,7 @@ import { SessionV2 } from "@opencode-ai/core/session"
 import { DateTime, Effect, Stream } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import { Api } from "../api"
-import {
-  SessionHistoryCursor,
-  SessionHistoryCursorInternal,
-  SessionsCursor,
-} from "@opencode-ai/protocol/groups/session"
+import { SessionsCursor } from "@opencode-ai/protocol/groups/session"
 import {
   ConflictError,
   InvalidCursorError,
@@ -336,28 +332,16 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.history",
         Effect.fn(function* (ctx) {
-          const continuation =
-            ctx.query.cursor !== undefined
-              ? yield* SessionHistoryCursor.parse(ctx.query.cursor).pipe(
-                  Effect.mapError(() => new InvalidCursorError({ message: "Invalid cursor" })),
-                )
-              : undefined
           return yield* session
             .history({
               sessionID: ctx.params.sessionID,
-              after: continuation?.after,
-              through: continuation?.through,
+              after: ctx.query.after,
               limit: ctx.query.limit ?? DefaultSessionHistoryLimit,
             })
             .pipe(
               Effect.map((page) => ({
                 data: page.events,
-                cursor: {
-                  next:
-                    page.nextAfter === undefined
-                      ? undefined
-                      : SessionHistoryCursorInternal.next(page.nextAfter, page.through),
-                },
+                hasMore: page.hasMore,
               })),
               Effect.catchTag(
                 "Session.NotFoundError",
@@ -366,10 +350,6 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                     sessionID: error.sessionID,
                     message: `Session not found: ${error.sessionID}`,
                   }),
-              ),
-              Effect.catchTag(
-                "Session.InvalidCursorError",
-                (error) => new InvalidCursorError({ message: error.message }),
               ),
             )
         }),

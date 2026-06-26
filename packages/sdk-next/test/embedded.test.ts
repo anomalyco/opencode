@@ -4,11 +4,6 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Effect, Option, Schema, Stream } from "effect"
-import { SessionHistoryCursor } from "../src"
-
-test("exports the Session history checkpoint constructor", () => {
-  expect(String(SessionHistoryCursor.after(0))).toBe("eyJhZnRlciI6MH0")
-})
 
 test("embedded client uses the real router and handlers", async () => {
   const directory = await mkdtemp(join(tmpdir(), "opencode-embedded-"))

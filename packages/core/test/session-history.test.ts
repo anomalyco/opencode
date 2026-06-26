@@ -74,7 +74,21 @@ describe("SessionV2.history", () => {
 
       const first = yield* session.history({ sessionID, limit: 10 })
 
-      expect(first).toEqual({ events: [], through: -1, nextAfter: undefined })
+      expect(first).toEqual({ events: [], hasMore: false })
+    }),
+  )
+
+  it.effect("treats after as an exclusive aggregate sequence", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionV2.Service
+      const created = yield* session.create({ location })
+      yield* session.switchAgent({ sessionID: created.id, agent: "one" })
+      yield* session.switchAgent({ sessionID: created.id, agent: "two" })
+
+      const page = yield* session.history({ sessionID: created.id, after: 1, limit: 10 })
+
+      expect(page.events.map((event) => event.durable?.seq)).toEqual([2])
+      expect(page.hasMore).toBe(false)
     }),
   )
 
@@ -89,23 +103,22 @@ describe("SessionV2.history", () => {
       yield* session.switchAgent({ sessionID: created.id, agent: "three" })
 
       const first = yield* session.history({ sessionID: created.id, limit: 2 })
+      const after = first.events.at(-1)?.durable?.seq
       const second = yield* session.history({
         sessionID: created.id,
-        after: first.nextAfter,
-        through: first.through,
+        after,
         limit: 2,
       })
       const sequence = [...first.events, ...second.events].map((event) => event.durable?.seq)
 
-      expect(first.through).toBe(4)
-      expect(first.nextAfter).toBe(3)
-      expect(second.nextAfter).toBeUndefined()
+      expect(first.hasMore).toBe(true)
+      expect(second.hasMore).toBe(false)
       expect(sequence).toEqual([1, 3, 4])
       expect(new Set(sequence).size).toBe(sequence.length)
     }),
   )
 
-  it.effect("keeps the first page cutoff when later events commit", () =>
+  it.effect("includes events committed between pages", () =>
     Effect.gen(function* () {
       const session = yield* SessionV2.Service
       const created = yield* session.create({ location })
@@ -116,31 +129,37 @@ describe("SessionV2.history", () => {
       yield* session.switchAgent({ sessionID: created.id, agent: "later" })
       const second = yield* session.history({
         sessionID: created.id,
-        after: first.nextAfter,
-        through: first.through,
+        after: first.events.at(-1)?.durable?.seq,
         limit: 10,
       })
 
-      expect(first.through).toBe(2)
-      expect([...first.events, ...second.events].map((event) => event.durable?.seq)).toEqual([1, 2])
-      expect(second.nextAfter).toBeUndefined()
+      expect(first.hasMore).toBe(true)
+      expect([...first.events, ...second.events].map((event) => event.durable?.seq)).toEqual([1, 2, 3])
+      expect(second.hasMore).toBe(false)
     }),
   )
 
-  it.effect("rejects invalid cursor combinations with the typed error", () =>
+  it.effect("reports exhaustion for exact-limit and limit-plus-one pages", () =>
     Effect.gen(function* () {
       const session = yield* SessionV2.Service
       const created = yield* session.create({ location })
+      yield* session.switchAgent({ sessionID: created.id, agent: "one" })
+      yield* session.switchAgent({ sessionID: created.id, agent: "two" })
 
-      const reversed = yield* session
-        .history({ sessionID: created.id, after: 1, through: 0, limit: 10 })
-        .pipe(Effect.flip)
-      const future = yield* session.history({ sessionID: created.id, through: 1, limit: 10 }).pipe(Effect.flip)
-      const afterHead = yield* session.history({ sessionID: created.id, after: 1, limit: 10 }).pipe(Effect.flip)
+      const exact = yield* session.history({ sessionID: created.id, limit: 2 })
+      const oneMore = yield* session.history({ sessionID: created.id, limit: 1 })
+      const exhausted = yield* session.history({
+        sessionID: created.id,
+        after: oneMore.events.at(-1)?.durable?.seq,
+        limit: 1,
+      })
 
-      expect(reversed._tag).toBe("Session.InvalidCursorError")
-      expect(future._tag).toBe("Session.InvalidCursorError")
-      expect(afterHead._tag).toBe("Session.InvalidCursorError")
+      expect(exact.events).toHaveLength(2)
+      expect(exact.hasMore).toBe(false)
+      expect(oneMore.events).toHaveLength(1)
+      expect(oneMore.hasMore).toBe(true)
+      expect(exhausted.events).toHaveLength(1)
+      expect(exhausted.hasMore).toBe(false)
     }),
   )
 

@@ -1072,7 +1072,7 @@ const scenarios: Scenario[] = [
     .seeded((ctx) => ctx.session({ title: "Session history" }))
     .at((ctx) => ({
       path: `${route("/api/session/{sessionID}/history", { sessionID: ctx.state.id })}?${new URLSearchParams({
-        cursor: cursor({ after: 0 }),
+        after: "0",
         limit: "2",
       })}`,
       headers: ctx.headers(),
@@ -1082,11 +1082,7 @@ const scenarios: Scenario[] = [
       (body) => {
         object(body)
         array(body.data)
-        object(body.cursor)
-        check(
-          body.cursor.next === undefined || typeof body.cursor.next === "string",
-          "Expected an optional next cursor",
-        )
+        check(typeof body.hasMore === "boolean", "Expected a history exhaustion signal")
       },
       "none",
     ),
@@ -1099,9 +1095,9 @@ const scenarios: Scenario[] = [
     .json(404, object, "status"),
   http.protected
     .get("/api/session/{sessionID}/history", "v2.session.history.invalid")
-    .seeded((ctx) => ctx.session({ title: "Invalid history cursor" }))
+    .seeded((ctx) => ctx.session({ title: "Invalid history sequence" }))
     .at((ctx) => ({
-      path: `${route("/api/session/{sessionID}/history", { sessionID: ctx.state.id })}?cursor=malformed`,
+      path: `${route("/api/session/{sessionID}/history", { sessionID: ctx.state.id })}?after=-1`,
       headers: ctx.headers(),
     }))
     .json(400, object, "status"),

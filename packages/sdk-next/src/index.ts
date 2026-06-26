@@ -11,7 +11,6 @@ export {
   Provider,
   RelativePath,
   Session,
-  SessionHistoryCursor,
   SessionInput,
   SessionMessage,
 } from "@opencode-ai/client/effect"

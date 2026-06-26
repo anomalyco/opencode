@@ -67,7 +67,7 @@ export const isUnknownError = (value: unknown): value is UnknownError =>
 export type SessionsListInput = {
   readonly workspace?: {
     readonly workspace?: string | undefined
-    readonly limit?: string | undefined
+    readonly limit?: number | undefined
     readonly order?: "asc" | "desc" | undefined
     readonly search?: string | undefined
     readonly directory?: string | undefined
@@ -77,7 +77,7 @@ export type SessionsListInput = {
   }["workspace"]
   readonly limit?: {
     readonly workspace?: string | undefined
-    readonly limit?: string | undefined
+    readonly limit?: number | undefined
     readonly order?: "asc" | "desc" | undefined
     readonly search?: string | undefined
     readonly directory?: string | undefined
@@ -87,7 +87,7 @@ export type SessionsListInput = {
   }["limit"]
   readonly order?: {
     readonly workspace?: string | undefined
-    readonly limit?: string | undefined
+    readonly limit?: number | undefined
     readonly order?: "asc" | "desc" | undefined
     readonly search?: string | undefined
     readonly directory?: string | undefined
@@ -97,7 +97,7 @@ export type SessionsListInput = {
   }["order"]
   readonly search?: {
     readonly workspace?: string | undefined
-    readonly limit?: string | undefined
+    readonly limit?: number | undefined
     readonly order?: "asc" | "desc" | undefined
     readonly search?: string | undefined
     readonly directory?: string | undefined
@@ -107,7 +107,7 @@ export type SessionsListInput = {
   }["search"]
   readonly directory?: {
     readonly workspace?: string | undefined
-    readonly limit?: string | undefined
+    readonly limit?: number | undefined
     readonly order?: "asc" | "desc" | undefined
     readonly search?: string | undefined
     readonly directory?: string | undefined
@@ -117,7 +117,7 @@ export type SessionsListInput = {
   }["directory"]
   readonly project?: {
     readonly workspace?: string | undefined
-    readonly limit?: string | undefined
+    readonly limit?: number | undefined
     readonly order?: "asc" | "desc" | undefined
     readonly search?: string | undefined
     readonly directory?: string | undefined
@@ -127,7 +127,7 @@ export type SessionsListInput = {
   }["project"]
   readonly subpath?: {
     readonly workspace?: string | undefined
-    readonly limit?: string | undefined
+    readonly limit?: number | undefined
     readonly order?: "asc" | "desc" | undefined
     readonly search?: string | undefined
     readonly directory?: string | undefined
@@ -137,7 +137,7 @@ export type SessionsListInput = {
   }["subpath"]
   readonly cursor?: {
     readonly workspace?: string | undefined
-    readonly limit?: string | undefined
+    readonly limit?: number | undefined
     readonly order?: "asc" | "desc" | undefined
     readonly search?: string | undefined
     readonly directory?: string | undefined
@@ -593,8 +593,8 @@ export type SessionsContextOutput = {
 
 export type SessionsHistoryInput = {
   readonly sessionID: { readonly sessionID: string }["sessionID"]
-  readonly limit?: { readonly limit?: string | undefined; readonly cursor?: string | undefined }["limit"]
-  readonly cursor?: { readonly limit?: string | undefined; readonly cursor?: string | undefined }["cursor"]
+  readonly limit?: { readonly limit?: number | undefined; readonly after?: number | undefined }["limit"]
+  readonly after?: { readonly limit?: number | undefined; readonly after?: number | undefined }["after"]
 }
 
 export type SessionsHistoryOutput = {
@@ -603,11 +603,7 @@ export type SessionsHistoryOutput = {
         readonly id: string
         readonly metadata?: { readonly [x: string]: JsonValue }
         readonly type: "session.next.agent.switched"
-        readonly durable?: {
-          readonly aggregateID: string
-          readonly seq: number | "Infinity" | "-Infinity" | "NaN"
-          readonly version: number | "Infinity" | "-Infinity" | "NaN"
-        }
+        readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
         readonly location?: { readonly directory: string; readonly workspaceID?: string }
         readonly data: {
           readonly timestamp: number
@@ -620,11 +616,7 @@ export type SessionsHistoryOutput = {
         readonly id: string
         readonly metadata?: { readonly [x: string]: JsonValue }
         readonly type: "session.next.model.switched"
-        readonly durable?: {
-          readonly aggregateID: string
-          readonly seq: number | "Infinity" | "-Infinity" | "NaN"
-          readonly version: number | "Infinity" | "-Infinity" | "NaN"
-        }
+        readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
         readonly location?: { readonly directory: string; readonly workspaceID?: string }
         readonly data: {
           readonly timestamp: number
@@ -637,11 +629,7 @@ export type SessionsHistoryOutput = {
         readonly id: string
         readonly metadata?: { readonly [x: string]: JsonValue }
         readonly type: "session.next.moved"
-        readonly durable?: {
-          readonly aggregateID: string
-          readonly seq: number | "Infinity" | "-Infinity" | "NaN"
-          readonly version: number | "Infinity" | "-Infinity" | "NaN"
-        }
+        readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
         readonly location?: { readonly directory: string; readonly workspaceID?: string }
         readonly data: {
           readonly timestamp: number
@@ -654,11 +642,7 @@ export type SessionsHistoryOutput = {
         readonly id: string
         readonly metadata?: { readonly [x: string]: JsonValue }
         readonly type: "session.next.prompted"
-        readonly durable?: {
-          readonly aggregateID: string
-          readonly seq: number | "Infinity" | "-Infinity" | "NaN"
-          readonly version: number | "Infinity" | "-Infinity" | "NaN"
-        }
+        readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
         readonly location?: { readonly directory: string; readonly workspaceID?: string }
         readonly data: {
           readonly timestamp: number
@@ -685,11 +669,7 @@ export type SessionsHistoryOutput = {
         readonly id: string
         readonly metadata?: { readonly [x: string]: JsonValue }
         readonly type: "session.next.prompt.admitted"
-        readonly durable?: {
-          readonly aggregateID: string
-          readonly seq: number | "Infinity" | "-Infinity" | "NaN"
-          readonly version: number | "Infinity" | "-Infinity" | "NaN"
-        }
+        readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
         readonly location?: { readonly directory: string; readonly workspaceID?: string }
         readonly data: {
           readonly timestamp: number
@@ -716,11 +696,7 @@ export type SessionsHistoryOutput = {
         readonly id: string
         readonly metadata?: { readonly [x: string]: JsonValue }
         readonly type: "session.next.context.updated"
-        readonly durable?: {
-          readonly aggregateID: string
-          readonly seq: number | "Infinity" | "-Infinity" | "NaN"
-          readonly version: number | "Infinity" | "-Infinity" | "NaN"
-        }
+        readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
         readonly location?: { readonly directory: string; readonly workspaceID?: string }
         readonly data: {
           readonly timestamp: number
@@ -733,11 +709,7 @@ export type SessionsHistoryOutput = {
         readonly id: string
         readonly metadata?: { readonly [x: string]: JsonValue }
         readonly type: "session.next.synthetic"
-        readonly durable?: {
-          readonly aggregateID: string
-          readonly seq: number | "Infinity" | "-Infinity" | "NaN"
-          readonly version: number | "Infinity" | "-Infinity" | "NaN"
-        }
+        readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
         readonly location?: { readonly directory: string; readonly workspaceID?: string }
         readonly data: {
           readonly timestamp: number
@@ -750,11 +722,7 @@ export type SessionsHistoryOutput = {
         readonly id: string
         readonly metadata?: { readonly [x: string]: JsonValue }
         readonly type: "session.next.shell.started"
-        readonly durable?: {
-          readonly aggregateID: string
-          readonly seq: number | "Infinity" | "-Infinity" | "NaN"
-          readonly version: number | "Infinity" | "-Infinity" | "NaN"
-        }
+        readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
         readonly location?: { readonly directory: string; readonly workspaceID?: string }
         readonly data: {
           readonly timestamp: number
@@ -768,11 +736,7 @@ export type SessionsHistoryOutput = {
         readonly id: string
         readonly metadata?: { readonly [x: string]: JsonValue }
         readonly type: "session.next.shell.ended"
-        readonly durable?: {
-          readonly aggregateID: string
-          readonly seq: number | "Infinity" | "-Infinity" | "NaN"
-          readonly version: number | "Infinity" | "-Infinity" | "NaN"
-        }
+        readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
         readonly location?: { readonly directory: string; readonly workspaceID?: string }
         readonly data: {
           readonly timestamp: number
@@ -785,11 +749,7 @@ export type SessionsHistoryOutput = {
         readonly id: string
         readonly metadata?: { readonly [x: string]: JsonValue }
         readonly type: "session.next.step.started"
-        readonly durable?: {
-          readonly aggregateID: string
-          readonly seq: number | "Infinity" | "-Infinity" | "NaN"
-          readonly version: number | "Infinity" | "-Infinity" | "NaN"
-        }
+        readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
         readonly location?: { readonly directory: string; readonly workspaceID?: string }
         readonly data: {
           readonly timestamp: number
@@ -804,11 +764,7 @@ export type SessionsHistoryOutput = {
         readonly id: string
         readonly metadata?: { readonly [x: string]: JsonValue }
         readonly type: "session.next.step.ended"
-        readonly durable?: {
-          readonly aggregateID: string
-          readonly seq: number | "Infinity" | "-Infinity" | "NaN"
-          readonly version: number | "Infinity" | "-Infinity" | "NaN"
-        }
+        readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
         readonly location?: { readonly directory: string; readonly workspaceID?: string }
         readonly data: {
           readonly timestamp: number
@@ -830,11 +786,7 @@ export type SessionsHistoryOutput = {
         readonly id: string
         readonly metadata?: { readonly [x: string]: JsonValue }
         readonly type: "session.next.step.failed"
-        readonly durable?: {
-          readonly aggregateID: string
-          readonly seq: number | "Infinity" | "-Infinity" | "NaN"
-          readonly version: number | "Infinity" | "-Infinity" | "NaN"
-        }
+        readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
         readonly location?: { readonly directory: string; readonly workspaceID?: string }
         readonly data: {
           readonly timestamp: number
@@ -847,11 +799,7 @@ export type SessionsHistoryOutput = {
         readonly id: string
         readonly metadata?: { readonly [x: string]: JsonValue }
         readonly type: "session.next.text.started"
-        readonly durable?: {
-          readonly aggregateID: string
-          readonly seq: number | "Infinity" | "-Infinity" | "NaN"
-          readonly version: number | "Infinity" | "-Infinity" | "NaN"
-        }
+        readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
         readonly location?: { readonly directory: string; readonly workspaceID?: string }
         readonly data: {
           readonly timestamp: number
@@ -864,11 +812,7 @@ export type SessionsHistoryOutput = {
         readonly id: string
         readonly metadata?: { readonly [x: string]: JsonValue }
         readonly type: "session.next.text.ended"
-        readonly durable?: {
-          readonly aggregateID: string
-          readonly seq: number | "Infinity" | "-Infinity" | "NaN"
-          readonly version: number | "Infinity" | "-Infinity" | "NaN"
-        }
+        readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
         readonly location?: { readonly directory: string; readonly workspaceID?: string }
         readonly data: {
           readonly timestamp: number
@@ -882,11 +826,7 @@ export type SessionsHistoryOutput = {
         readonly id: string
         readonly metadata?: { readonly [x: string]: JsonValue }
         readonly type: "session.next.tool.input.started"
-        readonly durable?: {
-          readonly aggregateID: string
-          readonly seq: number | "Infinity" | "-Infinity" | "NaN"
-          readonly version: number | "Infinity" | "-Infinity" | "NaN"
-        }
+        readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
         readonly location?: { readonly directory: string; readonly workspaceID?: string }
         readonly data: {
           readonly timestamp: number
@@ -900,11 +840,7 @@ export type SessionsHistoryOutput = {
         readonly id: string
         readonly metadata?: { readonly [x: string]: JsonValue }
         readonly type: "session.next.tool.input.ended"
-        readonly durable?: {
-          readonly aggregateID: string
-          readonly seq: number | "Infinity" | "-Infinity" | "NaN"
-          readonly version: number | "Infinity" | "-Infinity" | "NaN"
-        }
+        readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
         readonly location?: { readonly directory: string; readonly workspaceID?: string }
         readonly data: {
           readonly timestamp: number
@@ -918,11 +854,7 @@ export type SessionsHistoryOutput = {
         readonly id: string
         readonly metadata?: { readonly [x: string]: JsonValue }
         readonly type: "session.next.tool.called"
-        readonly durable?: {
-          readonly aggregateID: string
-          readonly seq: number | "Infinity" | "-Infinity" | "NaN"
-          readonly version: number | "Infinity" | "-Infinity" | "NaN"
-        }
+        readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
         readonly location?: { readonly directory: string; readonly workspaceID?: string }
         readonly data: {
           readonly timestamp: number
@@ -941,11 +873,7 @@ export type SessionsHistoryOutput = {
         readonly id: string
         readonly metadata?: { readonly [x: string]: JsonValue }
         readonly type: "session.next.tool.progress"
-        readonly durable?: {
-          readonly aggregateID: string
-          readonly seq: number | "Infinity" | "-Infinity" | "NaN"
-          readonly version: number | "Infinity" | "-Infinity" | "NaN"
-        }
+        readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
         readonly location?: { readonly directory: string; readonly workspaceID?: string }
         readonly data: {
           readonly timestamp: number
@@ -963,11 +891,7 @@ export type SessionsHistoryOutput = {
         readonly id: string
         readonly metadata?: { readonly [x: string]: JsonValue }
         readonly type: "session.next.tool.success"
-        readonly durable?: {
-          readonly aggregateID: string
-          readonly seq: number | "Infinity" | "-Infinity" | "NaN"
-          readonly version: number | "Infinity" | "-Infinity" | "NaN"
-        }
+        readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
         readonly location?: { readonly directory: string; readonly workspaceID?: string }
         readonly data: {
           readonly timestamp: number
@@ -991,11 +915,7 @@ export type SessionsHistoryOutput = {
         readonly id: string
         readonly metadata?: { readonly [x: string]: JsonValue }
         readonly type: "session.next.tool.failed"
-        readonly durable?: {
-          readonly aggregateID: string
-          readonly seq: number | "Infinity" | "-Infinity" | "NaN"
-          readonly version: number | "Infinity" | "-Infinity" | "NaN"
-        }
+        readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
         readonly location?: { readonly directory: string; readonly workspaceID?: string }
         readonly data: {
           readonly timestamp: number
@@ -1014,11 +934,7 @@ export type SessionsHistoryOutput = {
         readonly id: string
         readonly metadata?: { readonly [x: string]: JsonValue }
         readonly type: "session.next.reasoning.started"
-        readonly durable?: {
-          readonly aggregateID: string
-          readonly seq: number | "Infinity" | "-Infinity" | "NaN"
-          readonly version: number | "Infinity" | "-Infinity" | "NaN"
-        }
+        readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
         readonly location?: { readonly directory: string; readonly workspaceID?: string }
         readonly data: {
           readonly timestamp: number
@@ -1032,11 +948,7 @@ export type SessionsHistoryOutput = {
         readonly id: string
         readonly metadata?: { readonly [x: string]: JsonValue }
         readonly type: "session.next.reasoning.ended"
-        readonly durable?: {
-          readonly aggregateID: string
-          readonly seq: number | "Infinity" | "-Infinity" | "NaN"
-          readonly version: number | "Infinity" | "-Infinity" | "NaN"
-        }
+        readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
         readonly location?: { readonly directory: string; readonly workspaceID?: string }
         readonly data: {
           readonly timestamp: number
@@ -1051,11 +963,7 @@ export type SessionsHistoryOutput = {
         readonly id: string
         readonly metadata?: { readonly [x: string]: JsonValue }
         readonly type: "session.next.retried"
-        readonly durable?: {
-          readonly aggregateID: string
-          readonly seq: number | "Infinity" | "-Infinity" | "NaN"
-          readonly version: number | "Infinity" | "-Infinity" | "NaN"
-        }
+        readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
         readonly location?: { readonly directory: string; readonly workspaceID?: string }
         readonly data: {
           readonly timestamp: number
@@ -1075,11 +983,7 @@ export type SessionsHistoryOutput = {
         readonly id: string
         readonly metadata?: { readonly [x: string]: JsonValue }
         readonly type: "session.next.compaction.started"
-        readonly durable?: {
-          readonly aggregateID: string
-          readonly seq: number | "Infinity" | "-Infinity" | "NaN"
-          readonly version: number | "Infinity" | "-Infinity" | "NaN"
-        }
+        readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
         readonly location?: { readonly directory: string; readonly workspaceID?: string }
         readonly data: {
           readonly timestamp: number
@@ -1092,11 +996,7 @@ export type SessionsHistoryOutput = {
         readonly id: string
         readonly metadata?: { readonly [x: string]: JsonValue }
         readonly type: "session.next.compaction.ended"
-        readonly durable?: {
-          readonly aggregateID: string
-          readonly seq: number | "Infinity" | "-Infinity" | "NaN"
-          readonly version: number | "Infinity" | "-Infinity" | "NaN"
-        }
+        readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
         readonly location?: { readonly directory: string; readonly workspaceID?: string }
         readonly data: {
           readonly timestamp: number
@@ -1111,11 +1011,7 @@ export type SessionsHistoryOutput = {
         readonly id: string
         readonly metadata?: { readonly [x: string]: JsonValue }
         readonly type: "session.next.revert.staged"
-        readonly durable?: {
-          readonly aggregateID: string
-          readonly seq: number | "Infinity" | "-Infinity" | "NaN"
-          readonly version: number | "Infinity" | "-Infinity" | "NaN"
-        }
+        readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
         readonly location?: { readonly directory: string; readonly workspaceID?: string }
         readonly data: {
           readonly timestamp: number
@@ -1139,11 +1035,7 @@ export type SessionsHistoryOutput = {
         readonly id: string
         readonly metadata?: { readonly [x: string]: JsonValue }
         readonly type: "session.next.revert.cleared"
-        readonly durable?: {
-          readonly aggregateID: string
-          readonly seq: number | "Infinity" | "-Infinity" | "NaN"
-          readonly version: number | "Infinity" | "-Infinity" | "NaN"
-        }
+        readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
         readonly location?: { readonly directory: string; readonly workspaceID?: string }
         readonly data: { readonly timestamp: number; readonly sessionID: string }
       }
@@ -1151,21 +1043,17 @@ export type SessionsHistoryOutput = {
         readonly id: string
         readonly metadata?: { readonly [x: string]: JsonValue }
         readonly type: "session.next.revert.committed"
-        readonly durable?: {
-          readonly aggregateID: string
-          readonly seq: number | "Infinity" | "-Infinity" | "NaN"
-          readonly version: number | "Infinity" | "-Infinity" | "NaN"
-        }
+        readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
         readonly location?: { readonly directory: string; readonly workspaceID?: string }
         readonly data: { readonly timestamp: number; readonly sessionID: string; readonly messageID: string }
       }
   >
-  readonly cursor: { readonly next?: string }
+  readonly hasMore: boolean
 }
 
 export type SessionsEventsInput = {
   readonly sessionID: { readonly sessionID: string }["sessionID"]
-  readonly after?: { readonly after?: string | undefined }["after"]
+  readonly after?: { readonly after?: number | undefined }["after"]
 }
 
 export type SessionsEventsOutput =

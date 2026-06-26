@@ -5715,13 +5715,13 @@ export class Session3 extends HeyApiClient {
   /**
    * Get session history
    *
-   * Read one finite page of public durable Session events. Omit cursor to start at the beginning, or pass cursor.next unchanged to continue the fixed snapshot; an omitted cursor.next means the snapshot is exhausted.
+   * Read one finite page of public durable Session events after an exclusive aggregate sequence. Newly committed events may appear on later pages.
    */
   public history<ThrowOnError extends boolean = false>(
     parameters: {
       sessionID: string
-      limit?: string
-      cursor?: string
+      limit?: number
+      after?: number
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -5732,7 +5732,7 @@ export class Session3 extends HeyApiClient {
           args: [
             { in: "path", key: "sessionID" },
             { in: "query", key: "limit" },
-            { in: "query", key: "cursor" },
+            { in: "query", key: "after" },
           ],
         },
       ],

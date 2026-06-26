@@ -103,18 +103,10 @@ export class PromptConflictError extends Schema.TaggedErrorClass<PromptConflictE
   sessionID: SessionSchema.ID,
   messageID: SessionMessage.ID,
 }) {}
-export class InvalidCursorError extends Schema.TaggedErrorClass<InvalidCursorError>()("Session.InvalidCursorError", {
-  message: Schema.String,
-}) {}
 export const MessageNotFoundError = SessionRevert.MessageNotFoundError
 export type MessageNotFoundError = SessionRevert.MessageNotFoundError
 
-export type Error =
-  | NotFoundError
-  | MessageDecodeError
-  | OperationUnavailableError
-  | PromptConflictError
-  | InvalidCursorError
+export type Error = NotFoundError | MessageDecodeError | OperationUnavailableError | PromptConflictError
 
 export interface Interface {
   readonly list: (input?: ListInput) => Effect.Effect<SessionSchema.Info[]>
@@ -143,15 +135,10 @@ export interface Interface {
   readonly history: (input: {
     sessionID: SessionSchema.ID
     after?: number
-    through?: number
     limit: number
   }) => Effect.Effect<
-    {
-      events: ReadonlyArray<SessionEvent.DurableEvent>
-      through: number
-      nextAfter?: number
-    },
-    NotFoundError | InvalidCursorError
+    { events: ReadonlyArray<SessionEvent.DurableEvent>; hasMore: boolean },
+    NotFoundError
   >
   readonly switchAgent: (input: { sessionID: SessionSchema.ID; agent: string }) => Effect.Effect<void, NotFoundError>
   readonly switchModel: (input: {
@@ -375,7 +362,7 @@ export const layer = Layer.unwrap(
                 ...input,
                 aggregateID: input.sessionID,
                 manifest: SessionDurable,
-              }).pipe(Effect.mapError((error) => new InvalidCursorError({ message: error.message })))
+              })
             }),
             prompt: Effect.fn("V2Session.prompt")((input) =>
               Effect.uninterruptible(

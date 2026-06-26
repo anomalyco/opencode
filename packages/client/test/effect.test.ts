@@ -9,7 +9,6 @@ import {
   OpenCode,
   Prompt,
   Session,
-  SessionHistoryCursor,
   SessionMessage,
 } from "../src/effect"
 
@@ -48,8 +47,8 @@ test("session methods retain decoded Effect inputs and outputs", async () => {
           request,
           Response.json(
             historyPage === 1
-              ? { data: [modelSwitchedEvent], cursor: { next: "opaque_history_cursor" } }
-              : { data: [], cursor: {} },
+              ? { data: [modelSwitchedEvent], hasMore: true }
+              : { data: [], hasMore: false },
           ),
         ),
       )
@@ -100,13 +99,13 @@ test("session methods retain decoded Effect inputs and outputs", async () => {
     const context = yield* client.sessions.context({ sessionID: Session.ID.make("ses_test") })
     const history = yield* client.sessions.history({
       sessionID: Session.ID.make("ses_test"),
-      cursor: SessionHistoryCursor.after(0),
+      after: 0,
       limit: 1,
     })
-    const historyNext = history.cursor.next
+    const historyNext = history.hasMore
       ? yield* client.sessions.history({
           sessionID: Session.ID.make("ses_test"),
-          cursor: history.cursor.next,
+          after: history.data.at(-1)?.durable?.seq,
           limit: 2,
         })
       : undefined
@@ -131,20 +130,23 @@ test("session methods retain decoded Effect inputs and outputs", async () => {
   expect(DateTime.toEpochMillis(result.admitted.timeCreated)).toBe(1_717_171_717_000)
   expect(result.context).toEqual([])
   expect(DateTime.toEpochMillis(result.history.data[0].data.timestamp)).toBe(1_717_171_717_000)
-  expect(result.history).toEqual(expect.objectContaining({ cursor: { next: "opaque_history_cursor" } }))
-  expect(result.historyNext).toEqual({ data: [], cursor: {} })
-  expect(historyQueries[0]).toEqual({ limit: "1", cursor: "eyJhZnRlciI6MH0" })
-  expect(historyQueries[1]).toEqual({ limit: "2", cursor: "opaque_history_cursor" })
+  expect(result.history).toEqual(expect.objectContaining({ hasMore: true }))
+  expect(result.historyNext).toEqual({ data: [], hasMore: false })
+  expect(historyQueries[0]).toEqual({ limit: "1", after: "0" })
+  expect(historyQueries[1]).toEqual({ limit: "2", after: "1" })
   expect(DateTime.toEpochMillis(result.events[0].data.timestamp)).toBe(1_717_171_717_000)
   expect(result.message).toEqual(expect.objectContaining({ id: "msg_model", type: "model-switched" }))
 })
 
-test("sessions.history retains the typed InvalidCursorError", async () => {
+test("sessions.history retains the typed SessionNotFoundError", async () => {
   const httpClient = HttpClient.make((request) =>
     Effect.succeed(
       HttpClientResponse.fromWeb(
         request,
-        Response.json({ _tag: "InvalidCursorError", message: "Invalid cutoff" }, { status: 400 }),
+        Response.json(
+          { _tag: "SessionNotFoundError", sessionID: "ses_missing", message: "Session not found" },
+          { status: 404 },
+        ),
       ),
     ),
   )
@@ -152,13 +154,12 @@ test("sessions.history retains the typed InvalidCursorError", async () => {
     const client = yield* OpenCode.make({ baseUrl: "http://localhost:3000" })
     return yield* client.sessions
       .history({
-        sessionID: Session.ID.make("ses_test"),
-        cursor: SessionHistoryCursor.after(0),
+        sessionID: Session.ID.make("ses_missing"),
       })
       .pipe(Effect.flip)
   }).pipe(Effect.provideService(HttpClient.HttpClient, httpClient), Effect.runPromise)
 
-  expect(error._tag).toBe("InvalidCursorError")
+  expect(error._tag).toBe("SessionNotFoundError")
 })
 
 const session = {

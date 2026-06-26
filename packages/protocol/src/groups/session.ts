@@ -3,7 +3,7 @@ import { SessionInput } from "@opencode-ai/schema/session-input"
 import { PromptInput } from "@opencode-ai/schema/prompt-input"
 import { Session } from "@opencode-ai/schema/session"
 import { Project } from "@opencode-ai/schema/project"
-import { AbsolutePath, NonNegativeInt, optional, PositiveInt, RelativePath, statics } from "@opencode-ai/schema/schema"
+import { AbsolutePath, NonNegativeInt, PositiveInt, RelativePath, statics } from "@opencode-ai/schema/schema"
 import { Workspace } from "@opencode-ai/schema/workspace"
 import { Context, Effect, Encoding, Result, Schema, Struct } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
@@ -80,40 +80,6 @@ export const SessionsCursor = Schema.String.pipe(
 )
 export type SessionsCursor = typeof SessionsCursor.Type
 
-const SessionHistoryCursorInput = Schema.Struct({
-  after: Schema.Int.check(Schema.isGreaterThanOrEqualTo(-1)),
-  through: Schema.Int.check(Schema.isGreaterThanOrEqualTo(-1)).pipe(Schema.optional),
-})
-const SessionHistoryCursorJson = Schema.fromJsonString(SessionHistoryCursorInput)
-const encodeSessionHistoryCursor = Schema.encodeSync(SessionHistoryCursorJson)
-const decodeSessionHistoryCursor = Schema.decodeUnknownEffect(SessionHistoryCursorJson)
-
-export const SessionHistoryCursor = Schema.String.pipe(
-  Schema.brand("Session.HistoryCursor"),
-  statics((schema) => {
-    const make = schema.make.bind(schema)
-    return {
-      after: (sequence: number) =>
-        make(
-          Encoding.encodeBase64Url(encodeSessionHistoryCursor({ after: Schema.decodeSync(NonNegativeInt)(sequence) })),
-        ),
-      parse: (input: string) =>
-        Effect.suspend(() => {
-          const result = Encoding.decodeBase64UrlString(input)
-          return Result.isFailure(result)
-            ? Effect.fail(invalidCursor)
-            : decodeSessionHistoryCursor(result.success).pipe(Effect.mapError(() => invalidCursor))
-        }),
-    }
-  }),
-)
-export type SessionHistoryCursor = typeof SessionHistoryCursor.Type
-
-export const SessionHistoryCursorInternal = {
-  next: (after: number, through: number) =>
-    Schema.decodeSync(SessionHistoryCursor)(Encoding.encodeBase64Url(encodeSessionHistoryCursor({ after, through }))),
-}
-
 const SessionActive = Schema.Struct({
   type: Schema.Literal("running"),
 }).annotate({ identifier: "SessionActive" })
@@ -122,7 +88,7 @@ const SessionHistoryLimit = PositiveInt.check(Schema.isLessThanOrEqualTo(100))
 
 export const SessionHistoryQuery = Schema.Struct({
   limit: Schema.NumberFromString.pipe(Schema.decodeTo(SessionHistoryLimit), Schema.optional),
-  cursor: SessionHistoryCursor.pipe(Schema.optional),
+  after: Schema.NumberFromString.pipe(Schema.decodeTo(NonNegativeInt), Schema.optional),
 })
 
 const SessionsQueryCursor = SessionsCursor.annotate({
@@ -343,9 +309,9 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
         query: SessionHistoryQuery,
         success: Schema.Struct({
           data: Schema.Array(SessionEvent.Durable),
-          cursor: Schema.Struct({ next: optional(SessionHistoryCursor) }),
+          hasMore: Schema.Boolean,
         }).annotate({ identifier: "SessionHistory" }),
-        error: [SessionNotFoundError, InvalidCursorError],
+        error: SessionNotFoundError,
       })
         .middleware(sessionLocationMiddleware)
         .annotateMerge(
@@ -353,7 +319,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
             identifier: "v2.session.history",
             summary: "Get session history",
             description:
-              "Read one finite page of public durable Session events. Omit cursor to start at the beginning, or pass cursor.next unchanged to continue the fixed snapshot; an omitted cursor.next means the snapshot is exhausted.",
+              "Read one finite page of public durable Session events after an exclusive aggregate sequence. Newly committed events may appear on later pages.",
           }),
         ),
     )

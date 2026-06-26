@@ -3,7 +3,7 @@ export * as EventV2 from "./event"
 import { Cause, Context, Effect, Layer, Option, PubSub, Schema, Stream } from "effect"
 import { Event } from "@opencode-ai/schema/event"
 import type { Data, Definition, Payload } from "@opencode-ai/schema/event"
-import { and, asc, eq, gt, inArray, lte } from "drizzle-orm"
+import { and, asc, eq, gt, inArray } from "drizzle-orm"
 import { Database } from "./database/database"
 import { EventSequenceTable, EventTable } from "./event/sql"
 import { Location } from "./location"
@@ -47,10 +47,6 @@ export class InvalidDurableEventError extends Schema.TaggedErrorClass<InvalidDur
   },
 ) {}
 
-export class InvalidCursorError extends Schema.TaggedErrorClass<InvalidCursorError>()("EventV2.InvalidCursorError", {
-  message: Schema.String,
-}) {}
-
 const decodeSerializedEvent = (event: SerializedEvent): Payload => {
   const definition = Durable.get(event.type)
   if (!definition?.durable) {
@@ -69,7 +65,6 @@ export const readAggregate = Effect.fn("EventV2.readAggregate")(function* <A>(
   input: {
     readonly aggregateID: string
     readonly after?: number
-    readonly through?: number
     readonly limit: number
     readonly manifest: {
       readonly definitions: ReadonlyMap<string, Definition>
@@ -78,43 +73,21 @@ export const readAggregate = Effect.fn("EventV2.readAggregate")(function* <A>(
   },
 ) {
   const after = input.after ?? -1
-  const result = yield* db
-    .transaction((tx) =>
-      Effect.gen(function* () {
-        const sequence = yield* tx
-          .select({ seq: EventSequenceTable.seq })
-          .from(EventSequenceTable)
-          .where(eq(EventSequenceTable.aggregate_id, input.aggregateID))
-          .get()
-          .pipe(Effect.orDie)
-        const head = sequence?.seq ?? -1
-        if (input.through !== undefined && input.through > head) {
-          return yield* new InvalidCursorError({ message: "History cutoff is above the current aggregate head" })
-        }
-        const through = input.through ?? head
-        if (through < after) {
-          return yield* new InvalidCursorError({ message: "History cutoff must not be less than the cursor" })
-        }
-        const rows = yield* tx
-          .select()
-          .from(EventTable)
-          .where(
-            and(
-              eq(EventTable.aggregate_id, input.aggregateID),
-              gt(EventTable.seq, after),
-              lte(EventTable.seq, through),
-              inArray(EventTable.type, Array.from(input.manifest.definitions.keys())),
-            ),
-          )
-          .orderBy(asc(EventTable.seq))
-          .limit(input.limit + 1)
-          .all()
-          .pipe(Effect.orDie)
-        return { rows, through }
-      }),
+  const rows = yield* db
+    .select()
+    .from(EventTable)
+    .where(
+      and(
+        eq(EventTable.aggregate_id, input.aggregateID),
+        gt(EventTable.seq, after),
+        inArray(EventTable.type, Array.from(input.manifest.definitions.keys())),
+      ),
     )
-    .pipe(Effect.catchTag("SqlError", Effect.die))
-  const page = result.rows.slice(0, input.limit)
+    .orderBy(asc(EventTable.seq))
+    .limit(input.limit + 1)
+    .all()
+    .pipe(Effect.orDie)
+  const page = rows.slice(0, input.limit)
   const decode = Schema.decodeUnknownSync(input.manifest.schema)
   const events = page.map((event) =>
     decode({
@@ -130,8 +103,7 @@ export const readAggregate = Effect.fn("EventV2.readAggregate")(function* <A>(
   )
   return {
     events,
-    through: result.through,
-    nextAfter: result.rows.length > input.limit ? page.at(-1)?.seq : undefined,
+    hasMore: rows.length > input.limit,
   }
 })
 

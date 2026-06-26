@@ -75,6 +75,24 @@ const generatedTypes = await Bun.file("./src/v2/gen/types.gen.ts").text()
 if (/export type SessionNext\w+1 =/.test(generatedTypes)) {
   throw new Error("Session history generated duplicate Session event variants")
 }
+const historyTypesPatched = generatedTypes.replace(
+  /(export type V2SessionHistoryData = \{[\s\S]*?query\?: \{\s*limit\?: )string([;,]\s*after\?: )string/,
+  "$1number$2number",
+)
+if (historyTypesPatched === generatedTypes) {
+  throw new Error("Session history numeric query patch did not apply")
+}
+await Bun.write("./src/v2/gen/types.gen.ts", historyTypesPatched)
+
+const generatedSdk = await Bun.file("./src/v2/gen/sdk.gen.ts").text()
+const historySdkPatched = generatedSdk.replace(
+  /(Get session history[\s\S]*?parameters: \{\s*sessionID: string[;,]\s*limit\?: )string([;,]\s*after\?: )string/,
+  "$1number$2number",
+)
+if (historySdkPatched === generatedSdk) {
+  throw new Error("Session history numeric SDK patch did not apply")
+}
+await Bun.write("./src/v2/gen/sdk.gen.ts", historySdkPatched)
 
 // Patch a @hey-api/openapi-ts codegen bug: SseFn incorrectly passes the
 // endpoint's TError into the second generic of ServerSentEventsResult, which

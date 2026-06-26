@@ -153,12 +153,12 @@ type Endpoint0_13Request = Parameters<RawClient["server.session"]["session.histo
 type Endpoint0_13Input = {
   readonly sessionID: Endpoint0_13Request["params"]["sessionID"]
   readonly limit?: Endpoint0_13Request["query"]["limit"]
-  readonly cursor?: Endpoint0_13Request["query"]["cursor"]
+  readonly after?: Endpoint0_13Request["query"]["after"]
 }
 const Endpoint0_13 = (raw: RawClient["server.session"]) => (input: Endpoint0_13Input) =>
   raw["session.history"]({
     params: { sessionID: input.sessionID },
-    query: { limit: input.limit, cursor: input.cursor },
+    query: { limit: input.limit, after: input.after },
   }).pipe(Effect.mapError(mapClientError))
 
 type Endpoint0_14Request = Parameters<RawClient["server.session"]["session.events"]>[0]

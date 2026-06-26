@@ -2763,9 +2763,7 @@ export type SessionDurableEvent =
 
 export type SessionHistory = {
   data: Array<SessionDurableEvent>
-  cursor: {
-    next?: string
-  }
+  hasMore: boolean
 }
 
 export type SessionDurableEvent1 = string
@@ -4096,8 +4094,8 @@ export type SessionNextAgentSwitched = {
   type: "session.next.agent.switched"
   durable?: {
     aggregateID: string
-    seq: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-    version: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    seq: number
+    version: number
   }
   location?: LocationRef
   data: {
@@ -4116,8 +4114,8 @@ export type SessionNextModelSwitched = {
   type: "session.next.model.switched"
   durable?: {
     aggregateID: string
-    seq: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-    version: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    seq: number
+    version: number
   }
   location?: LocationRef
   data: {
@@ -4136,8 +4134,8 @@ export type SessionNextMoved = {
   type: "session.next.moved"
   durable?: {
     aggregateID: string
-    seq: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-    version: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    seq: number
+    version: number
   }
   location?: LocationRef
   data: {
@@ -4156,8 +4154,8 @@ export type SessionNextPrompted = {
   type: "session.next.prompted"
   durable?: {
     aggregateID: string
-    seq: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-    version: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    seq: number
+    version: number
   }
   location?: LocationRef
   data: {
@@ -4177,8 +4175,8 @@ export type SessionNextPromptAdmitted = {
   type: "session.next.prompt.admitted"
   durable?: {
     aggregateID: string
-    seq: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-    version: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    seq: number
+    version: number
   }
   location?: LocationRef
   data: {
@@ -4198,8 +4196,8 @@ export type SessionNextContextUpdated = {
   type: "session.next.context.updated"
   durable?: {
     aggregateID: string
-    seq: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-    version: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    seq: number
+    version: number
   }
   location?: LocationRef
   data: {
@@ -4218,8 +4216,8 @@ export type SessionNextSynthetic = {
   type: "session.next.synthetic"
   durable?: {
     aggregateID: string
-    seq: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-    version: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    seq: number
+    version: number
   }
   location?: LocationRef
   data: {
@@ -4238,8 +4236,8 @@ export type SessionNextShellStarted = {
   type: "session.next.shell.started"
   durable?: {
     aggregateID: string
-    seq: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-    version: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    seq: number
+    version: number
   }
   location?: LocationRef
   data: {
@@ -4259,8 +4257,8 @@ export type SessionNextShellEnded = {
   type: "session.next.shell.ended"
   durable?: {
     aggregateID: string
-    seq: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-    version: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    seq: number
+    version: number
   }
   location?: LocationRef
   data: {
@@ -4279,8 +4277,8 @@ export type SessionNextStepStarted = {
   type: "session.next.step.started"
   durable?: {
     aggregateID: string
-    seq: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-    version: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    seq: number
+    version: number
   }
   location?: LocationRef
   data: {
@@ -4301,8 +4299,8 @@ export type SessionNextStepEnded = {
   type: "session.next.step.ended"
   durable?: {
     aggregateID: string
-    seq: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-    version: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    seq: number
+    version: number
   }
   location?: LocationRef
   data: {
@@ -4333,8 +4331,8 @@ export type SessionNextStepFailed = {
   type: "session.next.step.failed"
   durable?: {
     aggregateID: string
-    seq: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-    version: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    seq: number
+    version: number
   }
   location?: LocationRef
   data: {
@@ -4353,8 +4351,8 @@ export type SessionNextTextStarted = {
   type: "session.next.text.started"
   durable?: {
     aggregateID: string
-    seq: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-    version: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    seq: number
+    version: number
   }
   location?: LocationRef
   data: {
@@ -4373,8 +4371,8 @@ export type SessionNextTextEnded = {
   type: "session.next.text.ended"
   durable?: {
     aggregateID: string
-    seq: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-    version: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    seq: number
+    version: number
   }
   location?: LocationRef
   data: {
@@ -4394,8 +4392,8 @@ export type SessionNextToolInputStarted = {
   type: "session.next.tool.input.started"
   durable?: {
     aggregateID: string
-    seq: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-    version: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    seq: number
+    version: number
   }
   location?: LocationRef
   data: {
@@ -4415,8 +4413,8 @@ export type SessionNextToolInputEnded = {
   type: "session.next.tool.input.ended"
   durable?: {
     aggregateID: string
-    seq: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-    version: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    seq: number
+    version: number
   }
   location?: LocationRef
   data: {
@@ -4436,8 +4434,8 @@ export type SessionNextToolCalled = {
   type: "session.next.tool.called"
   durable?: {
     aggregateID: string
-    seq: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-    version: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    seq: number
+    version: number
   }
   location?: LocationRef
   data: {
@@ -4464,8 +4462,8 @@ export type SessionNextToolProgress = {
   type: "session.next.tool.progress"
   durable?: {
     aggregateID: string
-    seq: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-    version: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    seq: number
+    version: number
   }
   location?: LocationRef
   data: {
@@ -4488,8 +4486,8 @@ export type SessionNextToolSuccess = {
   type: "session.next.tool.success"
   durable?: {
     aggregateID: string
-    seq: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-    version: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    seq: number
+    version: number
   }
   location?: LocationRef
   data: {
@@ -4518,8 +4516,8 @@ export type SessionNextToolFailed = {
   type: "session.next.tool.failed"
   durable?: {
     aggregateID: string
-    seq: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-    version: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    seq: number
+    version: number
   }
   location?: LocationRef
   data: {
@@ -4544,8 +4542,8 @@ export type SessionNextReasoningStarted = {
   type: "session.next.reasoning.started"
   durable?: {
     aggregateID: string
-    seq: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-    version: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    seq: number
+    version: number
   }
   location?: LocationRef
   data: {
@@ -4565,8 +4563,8 @@ export type SessionNextReasoningEnded = {
   type: "session.next.reasoning.ended"
   durable?: {
     aggregateID: string
-    seq: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-    version: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    seq: number
+    version: number
   }
   location?: LocationRef
   data: {
@@ -4587,8 +4585,8 @@ export type SessionNextRetried = {
   type: "session.next.retried"
   durable?: {
     aggregateID: string
-    seq: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-    version: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    seq: number
+    version: number
   }
   location?: LocationRef
   data: {
@@ -4607,8 +4605,8 @@ export type SessionNextCompactionStarted = {
   type: "session.next.compaction.started"
   durable?: {
     aggregateID: string
-    seq: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-    version: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    seq: number
+    version: number
   }
   location?: LocationRef
   data: {
@@ -4627,8 +4625,8 @@ export type SessionNextCompactionEnded = {
   type: "session.next.compaction.ended"
   durable?: {
     aggregateID: string
-    seq: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-    version: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    seq: number
+    version: number
   }
   location?: LocationRef
   data: {
@@ -4649,8 +4647,8 @@ export type SessionNextRevertStaged = {
   type: "session.next.revert.staged"
   durable?: {
     aggregateID: string
-    seq: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-    version: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    seq: number
+    version: number
   }
   location?: LocationRef
   data: {
@@ -4668,8 +4666,8 @@ export type SessionNextRevertCleared = {
   type: "session.next.revert.cleared"
   durable?: {
     aggregateID: string
-    seq: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-    version: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    seq: number
+    version: number
   }
   location?: LocationRef
   data: {
@@ -4686,8 +4684,8 @@ export type SessionNextRevertCommitted = {
   type: "session.next.revert.committed"
   durable?: {
     aggregateID: string
-    seq: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-    version: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    seq: number
+    version: number
   }
   location?: LocationRef
   data: {
@@ -12429,17 +12427,17 @@ export type V2SessionHistoryData = {
     sessionID: string
   }
   query?: {
-    limit?: string
-    cursor?: string
+    limit?: number
+    after?: number
   }
   url: "/api/session/{sessionID}/history"
 }
 
 export type V2SessionHistoryErrors = {
   /**
-   * InvalidCursorError | InvalidRequestError
+   * InvalidRequestError
    */
-  400: InvalidCursorError | InvalidRequestError
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
