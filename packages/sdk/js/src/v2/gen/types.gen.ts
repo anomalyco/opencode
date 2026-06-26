@@ -2700,6 +2700,12 @@ export type SessionNotFoundError = {
   message: string
 }
 
+export type PromptInput = {
+  text: string
+  files?: Array<PromptInputFileAttachment>
+  agents?: Array<PromptAgentAttachment>
+}
+
 export type ConflictError = {
   _tag: "ConflictError"
   message: string
@@ -3812,6 +3818,13 @@ export type SessionV2Info = {
   location: LocationRef
   subpath?: string
   revert?: RevertState
+}
+
+export type PromptInputFileAttachment = {
+  uri: string
+  name?: string
+  description?: string
+  source?: PromptSource
 }
 
 export type SessionInputAdmitted = {
@@ -12091,7 +12104,7 @@ export type V2SessionSwitchModelResponse = V2SessionSwitchModelResponses[keyof V
 export type V2SessionPromptData = {
   body: {
     id?: string
-    prompt: Prompt
+    prompt: PromptInput
     delivery?: "steer" | "queue"
     resume?: boolean
   }

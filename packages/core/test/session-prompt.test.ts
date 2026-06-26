@@ -173,6 +173,27 @@ describe("SessionV2.prompt", () => {
     }),
   )
 
+  it.effect("resolves attachment MIME before admission", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+
+      const message = yield* session.prompt({
+        sessionID,
+        prompt: {
+          text: "Inspect this image",
+          files: [{ uri: "data:image/png;base64,aGVsbG8=", name: "image.png" }],
+        },
+        resume: false,
+      })
+
+      expect(message.prompt.files).toEqual([
+        { uri: "data:image/png;base64,aGVsbG8=", name: "image.png", mime: "image/png" },
+      ])
+      expect((yield* admitted(message.id))?.prompt.files).toEqual(message.prompt.files)
+    }),
+  )
+
   it.effect("streams durable Session events after an aggregate sequence", () =>
     Effect.gen(function* () {
       yield* setup

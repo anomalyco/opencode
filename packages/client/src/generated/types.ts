@@ -305,7 +305,6 @@ export type SessionsPromptInput = {
       readonly text: string
       readonly files?: ReadonlyArray<{
         readonly uri: string
-        readonly mime: string
         readonly name?: string
         readonly description?: string
         readonly source?: { readonly start: number; readonly end: number; readonly text: string }
@@ -324,7 +323,6 @@ export type SessionsPromptInput = {
       readonly text: string
       readonly files?: ReadonlyArray<{
         readonly uri: string
-        readonly mime: string
         readonly name?: string
         readonly description?: string
         readonly source?: { readonly start: number; readonly end: number; readonly text: string }
@@ -343,7 +341,6 @@ export type SessionsPromptInput = {
       readonly text: string
       readonly files?: ReadonlyArray<{
         readonly uri: string
-        readonly mime: string
         readonly name?: string
         readonly description?: string
         readonly source?: { readonly start: number; readonly end: number; readonly text: string }
@@ -362,7 +359,6 @@ export type SessionsPromptInput = {
       readonly text: string
       readonly files?: ReadonlyArray<{
         readonly uri: string
-        readonly mime: string
         readonly name?: string
         readonly description?: string
         readonly source?: { readonly start: number; readonly end: number; readonly text: string }
