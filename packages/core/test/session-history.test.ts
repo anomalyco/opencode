@@ -119,9 +119,11 @@ describe("SessionV2.history", () => {
         .history({ sessionID: created.id, after: 1, through: 0, limit: 10 })
         .pipe(Effect.flip)
       const future = yield* session.history({ sessionID: created.id, through: 1, limit: 10 }).pipe(Effect.flip)
+      const afterHead = yield* session.history({ sessionID: created.id, after: 1, limit: 10 }).pipe(Effect.flip)
 
       expect(reversed._tag).toBe("Session.InvalidCursorError")
       expect(future._tag).toBe("Session.InvalidCursorError")
+      expect(afterHead._tag).toBe("Session.InvalidCursorError")
     }),
   )
 

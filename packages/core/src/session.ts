@@ -105,6 +105,9 @@ export class PromptConflictError extends Schema.TaggedErrorClass<PromptConflictE
 export class InvalidCursorError extends Schema.TaggedErrorClass<InvalidCursorError>()("Session.InvalidCursorError", {
   message: Schema.String,
 }) {}
+const DurableEventTypes = SessionEvent.DurableDefinitions.flatMap((definition) =>
+  definition.durable ? [EventV2.versionedType(definition.type, definition.durable.version)] : [],
+)
 export const MessageNotFoundError = SessionRevert.MessageNotFoundError
 export type MessageNotFoundError = SessionRevert.MessageNotFoundError
 
@@ -369,11 +372,7 @@ export const layer = Layer.unwrap(
                 .readAggregate(db, {
                   ...input,
                   aggregateID: input.sessionID,
-                  types: SessionEvent.DurableDefinitions.flatMap((definition) =>
-                    definition.durable
-                      ? [EventV2.versionedType(definition.type, definition.durable.version)]
-                      : [],
-                  ),
+                  types: DurableEventTypes,
                 })
                 .pipe(
                   Effect.mapError((error) => new InvalidCursorError({ message: error.message })),

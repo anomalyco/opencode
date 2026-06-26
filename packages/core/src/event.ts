@@ -3,7 +3,7 @@ export * as EventV2 from "./event"
 import { Cause, Context, Effect, Layer, Option, PubSub, Schema, Stream } from "effect"
 import { Event } from "@opencode-ai/schema/event"
 import type { Data, Definition, Payload } from "@opencode-ai/schema/event"
-import { and, asc, eq, gt, inArray, lte, type SQL } from "drizzle-orm"
+import { and, asc, eq, gt, inArray, lte } from "drizzle-orm"
 import { Database } from "./database/database"
 import { EventSequenceTable, EventTable } from "./event/sql"
 import { Location } from "./location"
@@ -75,9 +75,6 @@ export const readAggregate = Effect.fn("EventV2.readAggregate")(function* (
   },
 ) {
   const after = input.after ?? -1
-  if (input.through !== undefined && input.through < after) {
-    return yield* new InvalidCursorError({ message: "History cutoff must not be less than the cursor" })
-  }
   return yield* db
     .transaction(() =>
       Effect.gen(function* () {
@@ -86,16 +83,20 @@ export const readAggregate = Effect.fn("EventV2.readAggregate")(function* (
           return yield* new InvalidCursorError({ message: "History cutoff is above the current aggregate head" })
         }
         const through = input.through ?? head
-        const conditions: SQL[] = [
-          eq(EventTable.aggregate_id, input.aggregateID),
-          gt(EventTable.seq, after),
-          lte(EventTable.seq, through),
-          inArray(EventTable.type, input.types),
-        ]
+        if (through < after) {
+          return yield* new InvalidCursorError({ message: "History cutoff must not be less than the cursor" })
+        }
         const rows = yield* db
           .select()
           .from(EventTable)
-          .where(and(...conditions))
+          .where(
+            and(
+              eq(EventTable.aggregate_id, input.aggregateID),
+              gt(EventTable.seq, after),
+              lte(EventTable.seq, through),
+              inArray(EventTable.type, input.types),
+            ),
+          )
           .orderBy(asc(EventTable.seq))
           .limit(input.limit + 1)
           .all()
