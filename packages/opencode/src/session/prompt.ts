@@ -56,6 +56,7 @@ import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionReminders } from "./reminders"
 import { SessionTools } from "./tools"
 import { LLMEvent } from "@opencode-ai/llm"
+import { MediaStore } from "@/media/store"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -1008,7 +1009,7 @@ export const layer = Layer.effect(
         { message: info, parts: resolvedParts },
       )
 
-      const parts = yield* Effect.forEach(resolvedParts, (part) =>
+      const normalizedParts = (yield* Effect.forEach(resolvedParts, (part) =>
         part.type === "file" && part.mime.startsWith("image/")
           ? image.normalize(part).pipe(
               Effect.catchIf(
@@ -1017,6 +1018,9 @@ export const layer = Layer.effect(
               ),
             )
           : Effect.succeed(part),
+      )) as SessionV1.Part[]
+      const parts: SessionV1.Part[] = yield* Effect.promise(() =>
+        Promise.all(normalizedParts.map((part) => (part.type === "file" ? MediaStore.archiveAttachment(part) : part))),
       )
 
       const parsed = decodeMessageInfo(info, { errors: "all", propertyOrder: "original" })
@@ -1258,7 +1262,11 @@ export const layer = Layer.effect(
               sys.environment(model),
               instruction.system().pipe(Effect.orDie),
               sys.mcp(agent, session.permission),
-              MessageV2.toModelMessagesEffect(msgs, model),
+              MessageV2.toModelMessagesEffect(msgs, model, {
+                maxInlineBytes: typeof model.options.media === "object" && model.options.media !== null
+                  ? (model.options.media as any).maxInlineBytes
+                  : undefined,
+              }),
             ])
             const system = [
               ...env,

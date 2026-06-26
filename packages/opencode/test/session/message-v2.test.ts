@@ -9,6 +9,7 @@ import { SessionID, MessageID, PartID } from "../../src/session/schema"
 import { Question } from "../../src/question"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
+import { MediaStore } from "../../src/media/store"
 
 const sessionID = SessionID.make("session")
 const providerID = ProviderV2.ID.make("test")
@@ -314,6 +315,133 @@ describe("session.message-v2.toModelMessage", () => {
           },
           { type: "text", text: "What did we do so far?" },
           { type: "text", text: "The following tool was executed by the user" },
+        ],
+      },
+    ])
+  })
+
+  test("resolves current-turn media refs before model conversion", async () => {
+    const messageID = "msg_user_media_ref"
+    const archived = await MediaStore.archiveAttachment({
+      ...basePart(messageID, "video"),
+      type: "file" as const,
+      mime: "video/mp4",
+      filename: "clip.mp4",
+      url: `data:video/mp4;base64,${Buffer.from("video").toString("base64")}`,
+    })
+
+    expect(archived.url).toStartWith("media://")
+    expect(await MessageV2.toModelMessages([{ info: userInfo(messageID), parts: [archived] }], model)).toStrictEqual([
+      {
+        role: "user",
+        content: [
+          {
+            type: "file",
+            mediaType: "video/mp4",
+            filename: "clip.mp4",
+            data: `data:video/mp4;base64,${Buffer.from("video").toString("base64")}`,
+          },
+        ],
+      },
+    ])
+  })
+
+  test("replaces old-turn video refs with placeholders", async () => {
+    const oldUserID = "msg_old_user_media_ref"
+    const newUserID = "msg_new_user_media_ref"
+    const archived = await MediaStore.archiveAttachment({
+      ...basePart(oldUserID, "video"),
+      type: "file" as const,
+      mime: "video/mp4",
+      filename: "clip.mp4",
+      url: `data:video/mp4;base64,${Buffer.from("video").toString("base64")}`,
+    })
+
+    expect(
+      await MessageV2.toModelMessages(
+        [
+          { info: userInfo(oldUserID), parts: [archived] },
+          {
+            info: userInfo(newUserID),
+            parts: [
+              {
+                ...basePart(newUserID, "text"),
+                type: "text",
+                text: "next turn",
+              },
+            ] as SessionV1.Part[],
+          },
+        ],
+        model,
+      ),
+    ).toStrictEqual([
+      {
+        role: "user",
+        content: [{ type: "text", text: "[Previously attached video: clip.mp4, video/mp4, 5 bytes]" }],
+      },
+      {
+        role: "user",
+        content: [{ type: "text", text: "next turn" }],
+      },
+    ])
+  })
+
+  test("replaces oversized video with placeholder when maxInlineBytes exceeded", async () => {
+    const messageID = "msg_user_oversized"
+    const largeVideo = "x".repeat(2000)
+    const archived = await MediaStore.archiveAttachment({
+      ...basePart(messageID, "video"),
+      type: "file" as const,
+      mime: "video/mp4",
+      filename: "big.mp4",
+      url: `data:video/mp4;base64,${Buffer.from(largeVideo).toString("base64")}`,
+    })
+    expect(archived.url).toStartWith("media://")
+
+    const result = await MessageV2.toModelMessages(
+      [{ info: userInfo(messageID), parts: [archived] }],
+      model,
+      { maxInlineBytes: 100 },
+    )
+    expect(result).toStrictEqual([
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: "[Previously attached video: big.mp4, video/mp4, 2000 bytes]",
+          },
+        ],
+      },
+    ])
+  })
+
+  test("inlines video when under maxInlineBytes limit", async () => {
+    const messageID = "msg_user_small"
+    const smallVideo = "tiny"
+    const archived = await MediaStore.archiveAttachment({
+      ...basePart(messageID, "video"),
+      type: "file" as const,
+      mime: "video/mp4",
+      filename: "small.mp4",
+      url: `data:video/mp4;base64,${Buffer.from(smallVideo).toString("base64")}`,
+    })
+
+    const result = await MessageV2.toModelMessages(
+      [{ info: userInfo(messageID), parts: [archived] }],
+      model,
+      { maxInlineBytes: 1_000_000 },
+    )
+    expect(result).toStrictEqual([
+      {
+        role: "user",
+        content: [
+          {
+            type: "file",
+            mediaType: "video/mp4",
+            filename: "small.mp4",
+            data: `data:video/mp4;base64,${Buffer.from(smallVideo).toString("base64")}`,
+          },
         ],
       },
     ])

@@ -35,6 +35,7 @@ import { isMedia } from "@/util/media"
 import type { SystemError } from "bun"
 import type { Provider } from "@/provider/provider"
 import { Effect, Schema } from "effect"
+import { MediaStore } from "@/media/store"
 
 export const node = LayerNode.group([Database.node])
 
@@ -130,13 +131,22 @@ function providerMeta(metadata: Record<string, any> | undefined) {
   return Object.keys(rest).length > 0 ? rest : undefined
 }
 
+const DEFAULT_MAX_INLINE_BYTES = 32_000_000
+
 export const toModelMessagesEffect = Effect.fnUntraced(function* (
   input: WithParts[],
   model: Provider.Model,
-  options?: { stripMedia?: boolean; toolOutputMaxChars?: number },
+  options?: { stripMedia?: boolean; toolOutputMaxChars?: number; maxInlineBytes?: number },
 ) {
   const result: UIMessage[] = []
   const toolNames = new Set<string>()
+  const latestUserIndex = input.findLastIndex((msg) => msg.info.role === "user")
+  const currentTurnMessageIDs = new Set(input.slice(Math.max(latestUserIndex, 0)).map((msg) => msg.info.id))
+  const shouldIncludeMedia = (attachment: { mime: string }, messageID: MessageID) => {
+    const kind = MediaStore.mediaKind(attachment.mime)
+    if (kind !== "video" && kind !== "audio") return true
+    return currentTurnMessageIDs.has(messageID)
+  }
   // Track media from tool results that need to be injected as user messages
   // for providers that don't support that media type in tool results.
   //
@@ -217,13 +227,32 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
               type: "text",
               text: `[Attached ${part.mime}: ${part.filename ?? "file"}]`,
             })
-          } else {
+          } else if (isMedia(part.mime) && !shouldIncludeMedia(part, msg.info.id)) {
             userMessage.parts.push({
-              type: "file",
-              url: part.url,
-              mediaType: part.mime,
-              filename: part.filename,
+              type: "text",
+              text: yield* Effect.promise(() => MediaStore.placeholder(part)),
             })
+          } else {
+            const attachment = yield* Effect.promise(() => MediaStore.resolveAttachment(part))
+            const maxBytes = options?.maxInlineBytes ?? DEFAULT_MAX_INLINE_BYTES
+            if (
+              isMedia(part.mime) &&
+              maxBytes > 0 &&
+              attachment.url.startsWith("data:") &&
+              Buffer.byteLength(attachment.url, "utf8") > maxBytes
+            ) {
+              userMessage.parts.push({
+                type: "text",
+                text: yield* Effect.promise(() => MediaStore.placeholder(part)),
+              })
+            } else {
+              userMessage.parts.push({
+                type: "file",
+                url: attachment.url,
+                mediaType: attachment.mime,
+                filename: attachment.filename,
+              })
+            }
           }
         }
 
@@ -292,27 +321,56 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
         if (part.type === "tool") {
           toolNames.add(part.tool)
           if (part.state.status === "completed") {
-            const outputText = part.state.time.compacted
+            const baseOutputText = part.state.time.compacted
               ? "[Old tool result content cleared]"
               : truncateToolOutput(part.state.output, options?.toolOutputMaxChars)
-            const attachments = part.state.time.compacted || options?.stripMedia ? [] : (part.state.attachments ?? [])
+            const rawAttachments =
+              part.state.time.compacted || options?.stripMedia ? [] : (part.state.attachments ?? [])
+            const skippedMedia = rawAttachments.filter((a) => isMedia(a.mime) && !shouldIncludeMedia(a, msg.info.id))
+            const placeholders = yield* Effect.promise(() =>
+              Promise.all(skippedMedia.map((a) => MediaStore.placeholder(a))),
+            )
+            const outputText = [baseOutputText, ...placeholders].filter(Boolean).join("\n")
+            const maxBytes = options?.maxInlineBytes ?? DEFAULT_MAX_INLINE_BYTES
+            const resolvedAttachments = yield* Effect.promise(() =>
+              Promise.all(
+                rawAttachments
+                  .filter((a) => !isMedia(a.mime) || shouldIncludeMedia(a, msg.info.id))
+                  .map((a) => MediaStore.resolveAttachment(a)),
+              ),
+            )
+            const attachments = resolvedAttachments.map((a) => {
+              if (
+                isMedia(a.mime) &&
+                maxBytes > 0 &&
+                a.url.startsWith("data:") &&
+                Buffer.byteLength(a.url, "utf8") > maxBytes
+              ) {
+                return { ...a, url: MediaStore.placeholderUrl(a), _oversized: true }
+              }
+              return a
+            })
+            const oversizedMedia = attachments.filter((a: any) => a._oversized)
+            const oversizedPlaceholders = oversizedMedia.map((a: any) => a.url)
+            const validAttachments = attachments.filter((a: any) => !a._oversized)
+            const finalOutputText = [outputText, ...oversizedPlaceholders].filter(Boolean).join("\n")
 
             // For providers that don't support media in tool results, extract media files
             // (images, PDFs) to be sent as a separate user message
-            const mediaAttachments = attachments.filter((a) => isMedia(a.mime))
+            const mediaAttachments = validAttachments.filter((a) => isMedia(a.mime))
             const extractedMedia = mediaAttachments.filter((a) => !supportsMediaInToolResult(a))
             if (extractedMedia.length > 0) {
               media.push(...extractedMedia)
             }
-            const finalAttachments = attachments.filter((a) => !isMedia(a.mime) || supportsMediaInToolResult(a))
+            const finalAttachments = validAttachments.filter((a) => !isMedia(a.mime) || supportsMediaInToolResult(a))
 
             const output =
               finalAttachments.length > 0
                 ? {
-                    text: outputText,
+                    text: finalOutputText,
                     attachments: finalAttachments,
                   }
-                : outputText
+                : finalOutputText
 
             assistantMessage.parts.push({
               type: ("tool-" + part.tool) as `tool-${string}`,
@@ -382,21 +440,37 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
         // Inject pending media as a user message for providers that don't support
         // media (images, PDFs) in tool results
         if (media.length > 0) {
-          result.push({
-            id: MessageID.ascending(),
-            role: "user",
-            parts: [
-              {
-                type: "text" as const,
-                text: SYNTHETIC_ATTACHMENT_PROMPT,
-              },
-              ...media.map((attachment) => ({
-                type: "file" as const,
+          const resolvedMedia = yield* Effect.promise(() =>
+            Promise.all(media.map((attachment) => MediaStore.resolveAttachment(attachment))),
+          )
+          const maxBytes = options?.maxInlineBytes ?? DEFAULT_MAX_INLINE_BYTES
+          const syntheticParts: Array<{ type: "text"; text: string } | { type: "file"; url: string; mediaType: string; filename?: string }> = [
+            { type: "text", text: SYNTHETIC_ATTACHMENT_PROMPT },
+          ]
+          for (const attachment of resolvedMedia) {
+            if (
+              isMedia(attachment.mime) &&
+              maxBytes > 0 &&
+              attachment.url.startsWith("data:") &&
+              Buffer.byteLength(attachment.url, "utf8") > maxBytes
+            ) {
+              syntheticParts.push({
+                type: "text",
+                text: yield* Effect.promise(() => MediaStore.placeholder(attachment)),
+              })
+            } else {
+              syntheticParts.push({
+                type: "file",
                 url: attachment.url,
                 mediaType: attachment.mime,
                 filename: attachment.filename,
-              })),
-            ],
+              })
+            }
+          }
+          result.push({
+            id: MessageID.ascending(),
+            role: "user",
+            parts: syntheticParts,
           })
         }
       }
@@ -419,7 +493,7 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
 export function toModelMessages(
   input: WithParts[],
   model: Provider.Model,
-  options?: { stripMedia?: boolean; toolOutputMaxChars?: number },
+  options?: { stripMedia?: boolean; toolOutputMaxChars?: number; maxInlineBytes?: number },
 ): Promise<ModelMessage[]> {
   return Effect.runPromise(toModelMessagesEffect(input, model, options))
 }
