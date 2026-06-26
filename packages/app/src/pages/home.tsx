@@ -341,15 +341,15 @@ export function NewHome() {
   }
 
   function unseenCount(conn: ServerConnection.Any, project: LocalProject) {
-    if (ServerConnection.key(conn) !== server.key) return 0
-    return directories(project).reduce((total, directory) => total + notification.project.unseenCount(directory), 0)
+    const state = notification.ensureServerState(ServerConnection.key(conn))
+    return directories(project).reduce((total, directory) => total + state.project.unseenCount(directory), 0)
   }
 
   function clearNotifications(conn: ServerConnection.Any, project: LocalProject) {
-    if (ServerConnection.key(conn) !== server.key) return
+    const state = notification.ensureServerState(ServerConnection.key(conn))
     directories(project)
-      .filter((directory) => notification.project.unseenCount(directory) > 0)
-      .forEach((directory) => notification.project.markViewed(directory))
+      .filter((directory) => state.project.unseenCount(directory) > 0)
+      .forEach((directory) => state.project.markViewed(directory))
   }
 
   function openSession(session: Session) {
