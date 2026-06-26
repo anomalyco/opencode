@@ -1,10 +1,12 @@
 import * as InstanceState from "@/effect/instance-state"
 import { FileSystem } from "@opencode-ai/core/filesystem"
 import { LocationServiceMap } from "@opencode-ai/core/location-layer"
-import { Ripgrep } from "@opencode-ai/core/filesystem/ripgrep"
+import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { FSUtil } from "@opencode-ai/core/fs-util"
+import { Location } from "@opencode-ai/core/location"
 import { AbsolutePath, RelativePath } from "@opencode-ai/core/schema"
-import { Effect, Layer } from "effect"
+import { Effect, Layer, Option } from "effect"
+import ignore from "ignore"
 import path from "path"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
@@ -16,28 +18,45 @@ export const fileHandlers = HttpApiBuilder.group(InstanceHttpApi, "file", (handl
 
     const filesystem = Effect.fnUntraced(function* <A, E, R>(effect: Effect.Effect<A, E, R>) {
       return yield* effect.pipe(
-        Effect.provide(locations.get({ directory: AbsolutePath.make((yield* InstanceState.context).directory) })),
+        Effect.provide(
+          locations.get(Location.Ref.make({ directory: AbsolutePath.make((yield* InstanceState.context).directory) })),
+        ),
       )
     })
 
     const findText = Effect.fn("FileHttpApi.findText")(function* (ctx: { query: { pattern: string } }) {
       return (yield* ripgrep
-        .search({ cwd: (yield* InstanceState.context).directory, pattern: ctx.query.pattern, limit: 10 })
-        .pipe(Effect.orDie)).items
+        .grep({ cwd: (yield* InstanceState.context).directory, pattern: ctx.query.pattern, limit: 10 })
+        .pipe(Effect.orDie)).map((match) => ({
+        path: { text: match.entry.path },
+        lines: { text: match.text },
+        line_number: match.line,
+        absolute_offset: match.offset,
+        submatches: match.submatches.map((submatch) => ({
+          match: { text: submatch.text },
+          start: submatch.start,
+          end: submatch.end,
+        })),
+      }))
     })
 
     const findFile = Effect.fn("FileHttpApi.findFile")(function* (ctx: {
       query: { query: string; dirs?: "true" | "false"; type?: "file" | "directory"; limit?: number }
     }) {
-      return (yield* filesystem(
-        FileSystem.Service.use((fs) =>
-          fs.find({
-            query: ctx.query.query,
-            limit: ctx.query.limit ?? 10,
-            type: ctx.query.type ?? (ctx.query.dirs === "false" ? "file" : undefined),
-          }),
-        ),
-      )).map((item) => item.path)
+      const directory = (yield* InstanceState.context).directory
+      const limit = ctx.query.limit ?? 10
+      const type = ctx.query.type ?? (ctx.query.dirs === "false" ? "file" : undefined)
+      const started = performance.now()
+      const found = yield* filesystem(FileSystem.Service.use((fs) => fs.find({ query: ctx.query.query, limit, type })))
+      yield* Effect.logInfo("find file", {
+        query: ctx.query.query,
+        type,
+        directory,
+        limit,
+        results: found.length,
+        duration: Math.round(performance.now() - started),
+      })
+      return found.map((item) => item.path)
     })
 
     const findSymbol = Effect.fn("FileHttpApi.findSymbol")(function* () {
@@ -47,19 +66,30 @@ export const fileHandlers = HttpApiBuilder.group(InstanceHttpApi, "file", (handl
     const list = Effect.fn("FileHttpApi.list")(function* (ctx: { query: { path: string } }) {
       const directory = (yield* InstanceState.context).directory
       return yield* filesystem(
-        FileSystem.Service.use((fs) =>
-          fs.list({ path: RelativePath.make(ctx.query.path) }).pipe(
-            Effect.map((items) =>
-              items.map((item) => ({
-                name: path.basename(item.path),
-                path: item.path,
-                absolute: path.join(directory, item.path),
-                type: item.type,
-                ignored: fs.isIgnored(item.path, item.type),
-              })),
+        Effect.gen(function* () {
+          const fs = yield* FileSystem.Service
+          const raw = yield* FSUtil.Service
+          const location = yield* Location.Service
+          const ignored = ignore()
+          const gitignore = yield* raw
+            .readFileString(path.join(location.project.directory, ".gitignore"))
+            .pipe(Effect.catch(() => Effect.succeed("")))
+          if (gitignore) ignored.add(gitignore)
+          const ignorefile = yield* raw
+            .readFileString(path.join(location.project.directory, ".ignore"))
+            .pipe(Effect.catch(() => Effect.succeed("")))
+          if (ignorefile) ignored.add(ignorefile)
+          return (yield* fs.list({ path: RelativePath.make(ctx.query.path) })).map((item) => ({
+            name: path.basename(item.path),
+            path: item.path,
+            absolute: path.resolve(location.directory, item.path),
+            type: item.type,
+            ignored: ignored.ignores(
+              path.relative(location.project.directory, path.resolve(location.directory, item.path)) +
+                (item.type === "directory" ? "/" : ""),
             ),
-          ),
-        ),
+          }))
+        }),
       )
     })
 
@@ -71,11 +101,26 @@ export const fileHandlers = HttpApiBuilder.group(InstanceHttpApi, "file", (handl
       return yield* filesystem(
         FileSystem.Service.use((fs) => fs.read({ path: RelativePath.make(ctx.query.path) })),
       ).pipe(
-        Effect.map((item) => ({
-          type: item.type,
-          content: item.type === "text" ? item.content.trim() : item.content,
-          ...(item.type === "binary" ? { encoding: item.encoding, mimeType: item.mime } : {}),
-        })),
+        Effect.flatMap((item) =>
+          Effect.gen(function* () {
+            const text = item.content.includes(0)
+              ? Option.none<string>()
+              : yield* Effect.sync(() => new TextDecoder("utf-8", { fatal: true }).decode(item.content)).pipe(
+                  Effect.option,
+                )
+            return { item, text }
+          }),
+        ),
+        Effect.map(({ item, text }) =>
+          Option.isSome(text)
+            ? { type: "text" as const, content: text.value.trim() }
+            : {
+                type: "binary" as const,
+                content: Buffer.from(item.content).toString("base64"),
+                encoding: "base64" as const,
+                mimeType: item.mime,
+              },
+        ),
       )
     })
 

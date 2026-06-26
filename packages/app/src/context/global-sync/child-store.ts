@@ -17,10 +17,13 @@ import { canDisposeDirectory, pickDirectoriesToEvict } from "./eviction"
 import { useQuery } from "@tanstack/solid-query"
 import { QueryOptionsApi } from "../server-sync"
 import { directoryKey, type DirectoryKey } from "./utils"
-import { NormalizedProviderListResponse } from "@opencode-ai/ui/context"
+import { NormalizedProviderListResponse } from "@opencode-ai/session-ui/context"
+import type { ServerScope } from "@/utils/server-scope"
 
 export function createChildStoreManager(input: {
   owner: Owner
+  scope: ServerScope
+  persist: typeof persisted
   isBooting: (directory: string) => boolean
   isLoadingSessions: (directory: string) => boolean
   onBootstrap: (directory: string) => void
@@ -147,8 +150,8 @@ export function createChildStoreManager(input: {
     if (!key) console.error("No directory provided")
     if (!children[key]) {
       const vcs = runWithOwner(input.owner, () =>
-        persisted(
-          Persist.workspace(directory, "vcs", ["vcs.v1"]),
+        input.persist(
+          Persist.serverWorkspace(input.scope, directory, "vcs", ["vcs.v1"]),
           createStore({ value: undefined as VcsInfo | undefined }),
         ),
       )
@@ -157,8 +160,8 @@ export function createChildStoreManager(input: {
       vcsCache.set(key, { store: vcsStore, setStore: vcs[1], ready: vcs[3] })
 
       const meta = runWithOwner(input.owner, () =>
-        persisted(
-          Persist.workspace(directory, "project", ["project.v1"]),
+        input.persist(
+          Persist.serverWorkspace(input.scope, directory, "project", ["project.v1"]),
           createStore({ value: undefined as ProjectMeta | undefined }),
         ),
       )
@@ -166,8 +169,8 @@ export function createChildStoreManager(input: {
       metaCache.set(key, { store: meta[0], setStore: meta[1], ready: meta[3] })
 
       const icon = runWithOwner(input.owner, () =>
-        persisted(
-          Persist.workspace(directory, "icon", ["icon.v1"]),
+        input.persist(
+          Persist.serverWorkspace(input.scope, directory, "icon", ["icon.v1"]),
           createStore({ value: undefined as string | undefined }),
         ),
       )

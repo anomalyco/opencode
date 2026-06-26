@@ -19,6 +19,7 @@ import { LLMGatewayPlugin } from "./provider/llmgateway"
 import { MistralPlugin } from "./provider/mistral"
 import { NvidiaPlugin } from "./provider/nvidia"
 import { OpenAIPlugin } from "./provider/openai"
+import { SnowflakeCortexPlugin } from "./provider/snowflake-cortex"
 import { OpenAICompatiblePlugin } from "./provider/openai-compatible"
 import { OpencodePlugin } from "./provider/opencode"
 import { OpenRouterPlugin } from "./provider/openrouter"
@@ -29,8 +30,10 @@ import { VercelPlugin } from "./provider/vercel"
 import { VenicePlugin } from "./provider/venice"
 import { XAIPlugin } from "./provider/xai"
 import { ZenmuxPlugin } from "./provider/zenmux"
+import type { PluginInternal } from "./internal"
+import type { Scope } from "effect"
 
-export const ProviderPlugins = [
+export const ProviderPlugins: PluginInternal.Plugin<PluginInternal.Requirements | Scope.Scope>[] = [
   AlibabaPlugin,
   AmazonBedrockPlugin,
   AnthropicPlugin,
@@ -53,6 +56,7 @@ export const ProviderPlugins = [
   MistralPlugin,
   NvidiaPlugin,
   OpencodePlugin,
+  SnowflakeCortexPlugin,
   OpenAICompatiblePlugin,
   OpenAIPlugin,
   OpenRouterPlugin,

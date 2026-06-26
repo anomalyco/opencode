@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test"
 import { mockOpenCodeServer } from "../utils/mock-server"
+import { expectAppVisible, expectSessionTitle } from "../utils/waits"
 
 const directory = "C:/OpenCode/ContextResizeRegression"
 const projectID = "proj_context_resize_regression"
@@ -23,15 +24,13 @@ test.describe("regression: session timeline context group resize", () => {
     await configurePage(page)
 
     await page.goto(`/${base64Encode(directory)}/session/${sessionID}`)
-    await expect(page.getByRole("heading", { name: title })).toBeVisible()
-    await expect(page.locator(`[data-timeline-part-ids="${contextIDs.join(",")}"]`).first()).toBeVisible()
-    await expect(page.locator(`[data-timeline-part-id="${followingTextID}"]`).first()).toBeVisible()
+    await expectSessionTitle(page, title)
+    await expectAppVisible(page.locator(`[data-timeline-part-ids="${contextIDs.join(",")}"]`).first())
+    await expectAppVisible(page.locator(`[data-timeline-part-id="${followingTextID}"]`).first())
     await settle(page)
 
     const samples = await sampleExpansion(page)
     const visibleOverlap = samples.filter((sample) => sample.frame >= 1 && sample.overlap > 0.5)
-
-    console.log("context resize samples", JSON.stringify(samples, null, 2))
 
     expect(samples[0]?.overlap).toBe(0)
     expect(visibleOverlap).toEqual([])
@@ -48,7 +47,6 @@ async function configurePage(page: Page) {
           editToolPartsExpanded: true,
           shellToolPartsExpanded: true,
           showReasoningSummaries: true,
-          showSessionProgressBar: true,
         },
       }),
     )
@@ -114,13 +112,15 @@ async function sampleExpansion(page: Page) {
 
         let frame = 1
         const tick = () => {
-          capture(frame, "raf")
-          frame += 1
-          if (frame > 8) {
-            resolve(samples)
-            return
-          }
-          requestAnimationFrame(tick)
+          setTimeout(() => {
+            capture(frame, "painted")
+            frame += 1
+            if (frame > 8) {
+              resolve(samples)
+              return
+            }
+            requestAnimationFrame(tick)
+          }, 0)
         }
         requestAnimationFrame(tick)
       }),

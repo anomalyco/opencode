@@ -10,7 +10,7 @@
 
 ## Conventions
 
-Per-type constructors live on the type, not as top-level re-exports. Use `Message.user(...)`, `Message.assistant(...)`, `Message.tool(...)`, `Model.make(...)`, `ToolDefinition.make(...)`, `ToolCallPart.make(...)`, `ToolResultPart.make(...)`, `ToolChoice.make(...)`, `ToolChoice.named(...)`, `SystemPart.make(...)`, and `GenerationOptions.make(...)` directly. The top-level `LLM` namespace is reserved for request-shaped call APIs: `LLM.request`, `LLM.generate`, `LLM.stream`, `LLM.updateRequest`, and `LLM.generateObject`. Two ways to construct the same thing is one too many.
+Per-type constructors live on the type, not as top-level re-exports. Use `Message.system(...)`, `Message.user(...)`, `Message.assistant(...)`, `Message.tool(...)`, `Model.make(...)`, `ToolDefinition.make(...)`, `ToolCallPart.make(...)`, `ToolResultPart.make(...)`, `ToolChoice.make(...)`, `ToolChoice.named(...)`, `SystemPart.make(...)`, and `GenerationOptions.make(...)` directly. The top-level `LLM` namespace is reserved for request-shaped call APIs: `LLM.request`, `LLM.generate`, `LLM.stream`, `LLM.updateRequest`, and `LLM.generateObject`. Two ways to construct the same thing is one too many.
 
 ## Tests
 
@@ -25,7 +25,7 @@ Primary in-repo integration point:
 
 - `packages/opencode/src/session/llm.ts` is the session-owned orchestration layer that decides whether a request uses AI SDK or this package's native route runtime.
 - `packages/opencode/src/session/llm/native-request.ts` is the lowering adapter from opencode's session/AI SDK-shaped data into this package's `LLMRequest` model.
-- `packages/opencode/src/session/llm/native-runtime.ts` is the execution adapter that calls `LLMClient.stream(...)` and bridges opencode tools into this package's tool runtime.
+- `packages/opencode/src/session/llm/native-runtime.ts` is the execution adapter that calls raw `LLMClient.stream(request)` and bridges one provider turn of opencode tool calls through this package's typed dispatcher.
 - `packages/opencode/src/session/llm/ai-sdk.ts` keeps the default AI SDK path compatible by converting AI SDK stream parts into this package's shared `LLMEvent`s.
 
 Keep this package independent of session concerns. Session auth, permissions, plugins, telemetry headers, and runtime selection belong in `packages/opencode/src/session/llm.ts` and its local adapters.
@@ -153,7 +153,7 @@ packages/llm/src/
     openai-compatible-profile.ts family defaults (deepseek, togetherai, ...)
     azure.ts / amazon-bedrock.ts / cloudflare.ts / github-copilot.ts / google.ts / xai.ts / openai.ts / anthropic.ts / openrouter.ts
   tool.ts                   typed tool() helper
-  tool-runtime.ts           implementation helpers for LLMClient tool execution
+  tool-runtime.ts           narrow one-call typed tool dispatcher
 ```
 
 The dependency arrow points down: `providers/*.ts` files import protocol routes and auth-option utilities; protocol modules import `endpoint`, `auth`, `framing`, and transport pieces. Protocols do not import provider facades. Lower-level modules know nothing about provider catalog metadata.
@@ -171,6 +171,20 @@ The dependency arrow points down: `providers/*.ts` files import protocol routes 
 
 If you find yourself copying a 3-to-5-line snippet between two protocols, lift it into `ProviderShared` next to these helpers rather than duplicating.
 
+### Chronological System Updates
+
+`LLMRequest.system` is the initial privileged prompt that applies ahead of the conversation. `Message.system(...)` is a separate, provider-neutral chronological operator update inside `LLMRequest.messages`; it applies only from its position in history onward and accepts text content only.
+
+Native chronological system messages are route/model-specific. Anthropic Messages lowers them natively for Claude Opus 4.8 (`claude-opus-4-8`). Other routes and models intentionally lower the update in place into ordinary user-compatible text using this stable escaped representation:
+
+```text
+<system-update>
+...
+</system-update>
+```
+
+The wrapped-user fallback preserves ordering while visibly lowering authority. Never silently pass a raw chronological `role: "system"` through a route that might reject it. Do not insert raw retrieved documents, tool output, or web content into privileged chronological system updates; keep untrusted content in ordinary user/tool channels.
+
 ### Tools
 
 Tool loops are represented in common messages and events:
@@ -187,9 +201,9 @@ const followUp = LLM.request({
 
 Routes lower these into provider-native assistant tool-call messages and tool-result messages. Streaming providers should emit `tool-input-delta` events while arguments arrive, then a final `tool-call` event with parsed input.
 
-### Tool runtime
+### Tool dispatch
 
-`LLM.stream({ request, tools })` executes model-requested tools with full type safety. Plain `LLM.stream(request)` only streams the model; if `request.tools` contains schemas, tool calls are returned for the caller to handle. Use `toolExecution: "none"` to pass executable tool definitions as schemas without invoking handlers. Add `stopWhen` to opt into follow-up model rounds after tool results.
+`LLM.stream(request)` and `LLM.generate(request)` each run exactly one provider turn. Add tool schemas to `request.tools` with `Tool.toDefinitions(tools)`. When a caller wants the package's typed one-call execution behavior, pass each canonical local `tool-call` event to `ToolRuntime.dispatch(tools, call)`.
 
 ```ts
 const get_weather = tool({
@@ -205,22 +219,25 @@ const get_weather = tool({
     }),
 })
 
-const events = yield* LLM.stream({
-  request,
-  tools: { get_weather, get_time, ... },
-  stopWhen: LLM.stepCountIs(10),
-}).pipe(Stream.runCollect)
+const tools = { get_weather, get_time, ... }
+const events = yield* LLM.stream(
+  LLM.updateRequest(request, { tools: Tool.toDefinitions(tools) }),
+).pipe(Stream.runCollect)
+
+const call = Array.from(events).find(LLMEvent.is.toolCall)
+if (call && !call.providerExecuted) {
+  const dispatched = yield* ToolRuntime.dispatch(tools, call)
+  // Persist call + dispatched.result, then construct the next request explicitly.
+}
 ```
 
-The runtime:
+The dispatcher:
 
-- Adds tool definitions (derived from each tool's `parameters` Schema via `Schema.toJsonSchemaDocument`) onto `request.tools`.
-- Streams the model.
-- On `tool-call`: looks up the named tool, decodes input against `parameters` Schema, dispatches to the typed `execute`, encodes the result against `success` Schema, emits `tool-result`.
-- Emits local `tool-result` events in the same step by default.
-- Loops only when `stopWhen` is provided and the step finishes with `tool-calls`, appending the assistant + tool messages.
+- On `tool-call`: looks up the named tool, decodes input against `parameters` Schema, dispatches to the typed `execute`, encodes the result against `success` Schema, and returns canonical `tool-result` events.
+- Does not stream providers, construct Session events, schedule fibers, append history, count steps, or continue model rounds.
+- Leaves persistence and continuation to the enclosing product flow.
 
-Handler dependencies (services, permissions, plugin hooks, abort handling) are closed over by the consumer at tool-construction time. The runtime's only environment requirement is `RequestExecutor.Service`. Build the tools record inside an `Effect.gen` once and reuse it across many runs.
+Handler dependencies (services, permissions, plugin hooks, abort handling) are closed over by the consumer at tool-construction time. Build the tools record inside an `Effect.gen` once and reuse it across many dispatches.
 
 Errors must be expressed as `ToolFailure`. The runtime catches it and emits a `tool-error` event, then a `tool-result` of `type: "error"`, so the model can self-correct on the next step. Anything that is not a `ToolFailure` is treated as a defect and fails the stream. Three recoverable error paths produce `tool-error` events:
 
@@ -231,8 +248,8 @@ Errors must be expressed as `ToolFailure`. The runtime catches it and emits a `t
 Provider-defined / hosted tools (Anthropic `web_search` / `code_execution` / `web_fetch`, OpenAI Responses `web_search_call` / `file_search_call` / `code_interpreter_call` / `mcp_call` / `local_shell_call` / `image_generation_call` / `computer_use_call`) pass through the runtime untouched:
 
 - Routes surface the model's call as a `tool-call` event with `providerExecuted: true`, and the provider's result as a matching `tool-result` event with `providerExecuted: true`.
-- The runtime detects `providerExecuted` on `tool-call` and **skips client dispatch** — no handler is invoked and no `tool-error` is raised for "unknown tool". The provider already executed it.
-- Both events are appended to the assistant message in `assistantContent` so the next round's history carries the call + result for context. Anthropic encodes them back as `server_tool_use` + `web_search_tool_result` (or `code_execution_tool_result` / `web_fetch_tool_result`) blocks; OpenAI Responses callers typically use `previous_response_id` instead of resending hosted-tool items.
+- Callers detect `providerExecuted` on `tool-call` and **skip local dispatch** — no handler is invoked and no `tool-error` is raised for "unknown tool". The provider already executed it.
+- Callers that continue should retain both events in explicit history when the protocol requires it. Anthropic encodes them back as `server_tool_use` + `web_search_tool_result` (or `code_execution_tool_result` / `web_fetch_tool_result`) blocks; OpenAI Responses callers typically use `previous_response_id` instead of resending hosted-tool items.
 
 Add provider-defined tools to `request.tools` (no runtime entry needed). The matching route must know how to lower the tool definition into the provider-native shape; right now Anthropic accepts `web_search` / `code_execution` / `web_fetch` and OpenAI Responses accepts the hosted tool names listed above.
 
@@ -297,7 +314,7 @@ Pass `provider`, `protocol`, and optional `tags` to `recordedTests(...)` / `reco
 
 Filters apply in replay and record mode. Combine them with `RECORD=true` when refreshing only one provider or scenario.
 
-**Binary response bodies.** Most providers stream text (SSE, JSON). AWS Bedrock streams binary AWS event-stream frames whose CRC32 fields would be mangled by a UTF-8 round-trip — those bodies are stored as base64 with `bodyEncoding: "base64"` on the response snapshot. Detection is by `Content-Type` in `@opencode-ai/http-recorder` (currently `application/vnd.amazon.eventstream` and `application/octet-stream`); cassettes for SSE/JSON routes omit the field and decode as text.
+**Binary response bodies.** Most providers stream text (SSE, JSON). The recorder treats known textual media types (`text/*`, JSON/XML structured types, JavaScript, forms, YAML, and SVG) as text and stores every other response as base64 with `bodyEncoding: "base64"`. This preserves binary formats such as AWS event-stream frames without a lossy UTF-8 round trip.
 
 **Matching strategy.** Replay walks the cassette in record order via an internal cursor: the Nth runtime request is served by the Nth recorded interaction, and each one is validated by comparing method, URL, allow-listed headers, and the canonical JSON body. This handles tool loops (each round's request differs as history grows) and retry/polling scenarios (successive byte-identical requests with different responses) uniformly. If a test reorders its requests, re-record the cassette. `scriptedResponses` (in `test/lib/http.ts`) is the deterministic counterpart for tests that don't need a live provider; it scripts response bodies in order without reading from disk.
 

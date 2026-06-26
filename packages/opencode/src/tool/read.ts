@@ -9,7 +9,6 @@ import { InstanceState } from "@/effect/instance-state"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import { Instruction } from "../session/instruction"
 import { isPdfAttachment, sniffAttachmentMime } from "@/util/media"
-import { Reference } from "@/reference/reference"
 
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
@@ -65,14 +64,13 @@ type Metadata = {
 export const ReadTool = Tool.define<
   typeof Parameters,
   Metadata,
-  FSUtil.Service | Instruction.Service | LSP.Service | Reference.Service | Scope.Scope
+  FSUtil.Service | Instruction.Service | LSP.Service | Scope.Scope
 >(
   "read",
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
     const instruction = yield* Instruction.Service
     const lsp = yield* LSP.Service
-    const reference = yield* Reference.Service
     const scope = yield* Scope.Scope
 
     const miss = Effect.fn("ReadTool.miss")(function* (filepath: string) {
@@ -240,7 +238,6 @@ export const ReadTool = Tool.define<
       if (process.platform === "win32") {
         filepath = FSUtil.normalizePath(filepath)
       }
-      yield* reference.ensure(filepath)
       const title = path.relative(instance.worktree, filepath)
 
       const stat = yield* fs.stat(filepath).pipe(
@@ -251,7 +248,7 @@ export const ReadTool = Tool.define<
       )
 
       yield* assertExternalDirectoryEffect(ctx, filepath, {
-        bypass: Boolean(ctx.extra?.["bypassCwdCheck"]) || (yield* reference.contains(filepath)),
+        bypass: Boolean(ctx.extra?.["bypassCwdCheck"]),
         kind: stat?.type === "Directory" ? "directory" : "file",
       })
 

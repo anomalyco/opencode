@@ -5,6 +5,7 @@ import { NonNegativeInt } from "@opencode-ai/core/schema"
 import { MessageError } from "./message-error"
 import { AuthError, OutputLengthError } from "./message-error"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
 export { AuthError, OutputLengthError } from "./message-error"
 
 export const ToolCall = Schema.Struct({
@@ -120,7 +121,7 @@ export const Info = Schema.Struct({
     assistant: Schema.optional(
       Schema.Struct({
         system: Schema.Array(Schema.String),
-        modelID: ProviderV2.ModelID,
+        modelID: ModelV2.ID,
         providerID: ProviderV2.ID,
         path: Schema.Struct({
           cwd: Schema.String,

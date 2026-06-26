@@ -306,6 +306,11 @@ export const dict = {
 
   "dialog.directory.search.placeholder": "Buscar carpetas",
   "dialog.directory.empty": "No se encontraron carpetas",
+  "dialog.directory.action.selectFile": "Seleccionar archivo",
+  "dialog.directory.action.selectFolder": "Seleccionar carpeta",
+  "dialog.directory.root": "Raíz",
+  "dialog.directory.parent": "Superior",
+  "dialog.directory.readError": "No se puede leer esta carpeta",
 
   "dialog.server.title": "Servidores",
   "dialog.server.description": "Cambiar a qué servidor de OpenCode se conecta esta app.",
@@ -662,9 +667,6 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Expandir partes de la herramienta de edición",
   "settings.general.row.editToolPartsExpanded.description":
     "Mostrar las partes de las herramientas de edición, escritura y parcheado expandidas por defecto en la línea de tiempo",
-  "settings.general.row.showSessionProgressBar.title": "Mostrar barra de progreso de la sesión",
-  "settings.general.row.showSessionProgressBar.description":
-    "Mostrar la barra de progreso animada en la parte superior de la sesión cuando el agente esté trabajando",
   "settings.general.row.wayland.title": "Usar Wayland nativo",
   "settings.general.row.wayland.description": "Deshabilitar fallback a X11 en Wayland. Requiere reinicio.",
   "settings.general.row.wayland.tooltip":
