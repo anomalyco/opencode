@@ -1,5 +1,6 @@
 export * as BashTool from "./bash"
 
+import { execSync } from "node:child_process"
 import path from "path"
 import { ToolFailure } from "@opencode-ai/llm"
 import { Duration, Effect, Layer, Schema } from "effect"
@@ -46,6 +47,38 @@ const Output = Schema.Struct({
 type Output = typeof Output.Type
 
 const defaultShell = () => (process.platform === "win32" ? (process.env.COMSPEC ?? "cmd.exe") : "/bin/sh")
+
+// Windows code page detection — lazy init, periodic refresh.
+const CODE_PAGE_MAP: Record<string, string> = {
+  "932": "shift-jis",
+  "936": "gbk",
+  "949": "euc-kr",
+  "950": "big5",
+}
+const CODEPAGE_TTL_MS = 30_000
+let codepageCache: string | undefined
+let codepageLastCheck = 0
+
+const detectCodePage = (): string => {
+  const now = Date.now()
+  if (codepageCache !== undefined && now - codepageLastCheck < CODEPAGE_TTL_MS) return codepageCache
+  codepageLastCheck = now
+  try {
+    const out = execSync("chcp.com", { encoding: "latin1", timeout: 2000 })
+    const m = (out as string).match(/(\d+)/)
+    codepageCache = m ? (CODE_PAGE_MAP[m[1]] ?? "utf-8") : "utf-8"
+  } catch {
+    codepageCache = "utf-8"
+  }
+  return codepageCache
+}
+
+const decodeOutput = (buf: Buffer): string => {
+  if (process.platform !== "win32") return buf.toString("utf8")
+  const cp = detectCodePage()
+  if (cp === "utf-8") return buf.toString("utf8")
+  return new TextDecoder(cp).decode(buf)
+}
 
 const compactOutput = (stdout: string, stderr: string) => {
   const output = stdout && stderr ? `${stdout}\n\nstderr:\n${stderr}` : stderr ? `stderr:\n${stderr}` : stdout
@@ -183,7 +216,7 @@ export const layer = Layer.effectDiscard(
                 }
               }
 
-              const compact = compactOutput(result.stdout.toString("utf8"), result.stderr.toString("utf8"))
+              const compact = compactOutput(decodeOutput(result.stdout), decodeOutput(result.stderr))
               const notice = captureNotice(result.stdoutTruncated, result.stderrTruncated)
               return {
                 command: input.command,
