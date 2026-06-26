@@ -24,6 +24,7 @@ import { ApiNotFoundError, PermissionNotFoundError, SessionBusyError } from "../
 import { described } from "./metadata"
 import { QueryBoolean } from "./query"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
 
 const root = "/session"
 export const ListQuery = Schema.Struct({
@@ -57,13 +58,13 @@ export const UpdatePayload = Schema.Struct({
 })
 export const ForkPayload = Schema.Struct(Struct.omit(Session.ForkInput.fields, ["sessionID"]))
 export const InitPayload = Schema.Struct({
-  modelID: ProviderV2.ModelID,
+  modelID: ModelV2.ID,
   providerID: ProviderV2.ID,
   messageID: MessageID,
 })
 export const SummarizePayload = Schema.Struct({
   providerID: ProviderV2.ID,
-  modelID: ProviderV2.ModelID,
+  modelID: ModelV2.ID,
   auto: Schema.optional(Schema.Boolean),
 })
 export const PromptPayload = Schema.Struct(Struct.omit(SessionPrompt.PromptInput.fields, ["sessionID"]))

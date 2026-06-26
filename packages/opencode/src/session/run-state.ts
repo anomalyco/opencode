@@ -1,10 +1,10 @@
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { InstanceState } from "@/effect/instance-state"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Runner } from "@/effect/runner"
 import { BackgroundJob } from "@/background/job"
 import { Effect, Latch, Layer, Scope, Context } from "effect"
 import { Session } from "./session"
-import { MessageV2 } from "./message-v2"
 import { SessionID } from "./schema"
 import { SessionStatus } from "./status"
 
@@ -78,7 +78,7 @@ export const layer = Layer.effect(
       yield* cancelBackgroundJobs(background, sessionID)
       const data = yield* InstanceState.get(state)
       const existing = data.runners.get(sessionID)
-      if (!existing || !existing.busy) {
+      if (!existing) {
         yield* status.set(sessionID, { type: "idle" })
         return
       }
@@ -150,5 +150,7 @@ const cancelBackgroundJobs = Effect.fn("SessionRunState.cancelBackgroundJobs")(f
 function busyError(sessionID: SessionID) {
   return new Session.BusyError({ sessionID })
 }
+
+export const node = LayerNode.make({ service: Service, layer: layer, deps: [BackgroundJob.node, SessionStatus.node] })
 
 export * as SessionRunState from "./run-state"

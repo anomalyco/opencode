@@ -1,22 +1,26 @@
 import { describe, expect } from "bun:test"
-import { Effect, Schema } from "effect"
+import fs from "fs/promises"
+import path from "path"
+import { Effect, Layer, Schema } from "effect"
 import { AgentV2 } from "@opencode-ai/core/agent"
 import { Config } from "@opencode-ai/core/config"
 import { ConfigAgentPlugin } from "@opencode-ai/core/config/plugin/agent"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { PermissionV2 } from "@opencode-ai/core/permission"
+import { AbsolutePath } from "@opencode-ai/core/schema"
+import { tmpdir } from "../fixture/tmpdir"
 import { testEffect } from "../lib/effect"
+import { agentHost, host } from "../plugin/host"
 
-const it = testEffect(AgentV2.locationLayer)
+const it = testEffect(Layer.mergeAll(AgentV2.locationLayer, FSUtil.defaultLayer))
 const decode = Schema.decodeUnknownSync(Config.Info)
 
 describe("ConfigAgentPlugin.Plugin", () => {
-  it.effect("applies global permissions between built-in and agent-specific permissions", () =>
+  it.effect("applies all global permissions before agent-specific permissions", () =>
     Effect.gen(function* () {
       const agents = yield* AgentV2.Service
       const build = AgentV2.ID.make("build")
-      const defaults = yield* agents.transform()
-
-      yield* defaults((editor) =>
+      yield* agents.transform((editor) =>
         editor.update(build, (agent) => {
           agent.mode = "primary"
           agent.permissions.push({ action: "bash", resource: "*", effect: "allow" })
@@ -24,11 +28,10 @@ describe("ConfigAgentPlugin.Plugin", () => {
       )
 
       const config = Config.Service.of({
-        directories: () => Effect.succeed([]),
-        get: () =>
+        entries: () =>
           Effect.succeed([
-            new Config.Loaded({
-              source: { type: "memory" },
+            new Config.Document({
+              type: "document",
               info: decode({
                 permissions: [{ action: "bash", resource: "*", effect: "ask" }],
                 agents: {
@@ -39,27 +42,33 @@ describe("ConfigAgentPlugin.Plugin", () => {
                     model: "openrouter/openai/gpt-5",
                     description: "Review changes",
                     mode: "subagent",
-                    permissions: [{ action: "edit", resource: "*", effect: "deny" }],
+                    permissions: [
+                      { action: "edit", resource: "*", effect: "deny" },
+                      { action: "read", resource: "*", effect: "deny" },
+                    ],
                   },
                   removed: { description: "Removed later" },
                 },
               }),
             }),
-            new Config.Loaded({
-              source: { type: "memory" },
+            new Config.Document({
+              type: "document",
               info: decode({
+                permissions: [{ action: "read", resource: "*", effect: "allow" }],
                 agents: {
                   reviewer: { variant: "high", hidden: true },
                   removed: { disabled: true },
+                  late: {
+                    permissions: [{ action: "edit", resource: "*", effect: "allow" }],
+                  },
                 },
               }),
             }),
           ]),
       })
 
-      yield* ConfigAgentPlugin.Plugin.effect.pipe(
+      yield* ConfigAgentPlugin.Plugin.effect(host({ agent: agentHost(agents) })).pipe(
         Effect.provideService(Config.Service, config),
-        Effect.provideService(AgentV2.Service, agents),
       )
 
       const buildAgent = yield* agents.get(build)
@@ -67,6 +76,7 @@ describe("ConfigAgentPlugin.Plugin", () => {
       expect(buildAgent.permissions).toEqual([
         { action: "bash", resource: "*", effect: "allow" },
         { action: "bash", resource: "*", effect: "ask" },
+        { action: "read", resource: "*", effect: "allow" },
         { action: "bash", resource: "git *", effect: "allow" },
       ])
       expect(PermissionV2.evaluate("bash", "git status", buildAgent.permissions).effect).toBe("allow")
@@ -82,7 +92,15 @@ describe("ConfigAgentPlugin.Plugin", () => {
       })
       expect(reviewer.permissions).toEqual([
         { action: "bash", resource: "*", effect: "ask" },
+        { action: "read", resource: "*", effect: "allow" },
         { action: "edit", resource: "*", effect: "deny" },
+        { action: "read", resource: "*", effect: "deny" },
+      ])
+      expect(PermissionV2.evaluate("read", "README.md", reviewer.permissions).effect).toBe("deny")
+      expect((yield* agents.get(AgentV2.ID.make("late")))?.permissions).toEqual([
+        { action: "bash", resource: "*", effect: "ask" },
+        { action: "read", resource: "*", effect: "allow" },
+        { action: "edit", resource: "*", effect: "allow" },
       ])
       expect(yield* agents.get(AgentV2.ID.make("removed"))).toBeUndefined()
     }),
@@ -92,11 +110,10 @@ describe("ConfigAgentPlugin.Plugin", () => {
     Effect.gen(function* () {
       const agents = yield* AgentV2.Service
       const config = Config.Service.of({
-        directories: () => Effect.succeed([]),
-        get: () =>
+        entries: () =>
           Effect.succeed([
-            new Config.Loaded({
-              source: { type: "memory" },
+            new Config.Document({
+              type: "document",
               info: decode({
                 agents: {
                   reviewer: {
@@ -107,24 +124,22 @@ describe("ConfigAgentPlugin.Plugin", () => {
                     hidden: true,
                     color: "warning",
                     steps: 12,
-                    options: {
+                    request: {
                       headers: { first: "one", shared: "first" },
-                      body: { enabled: true },
-                      aisdk: { provider: { profile: "review" }, request: { effort: "medium" } },
+                      body: { enabled: true, profile: "review", effort: "medium" },
                     },
                   },
                 },
               }),
             }),
-            new Config.Loaded({
-              source: { type: "memory" },
+            new Config.Document({
+              type: "document",
               info: decode({
                 agents: {
                   reviewer: {
-                    options: {
+                    request: {
                       headers: { shared: "last", second: "two" },
-                      body: { retries: 2 },
-                      aisdk: { request: { effort: "high" } },
+                      body: { retries: 2, effort: "high" },
                     },
                   },
                 },
@@ -133,9 +148,8 @@ describe("ConfigAgentPlugin.Plugin", () => {
           ]),
       })
 
-      yield* ConfigAgentPlugin.Plugin.effect.pipe(
+      yield* ConfigAgentPlugin.Plugin.effect(host({ agent: agentHost(agents) })).pipe(
         Effect.provideService(Config.Service, config),
-        Effect.provideService(AgentV2.Service, agents),
       )
 
       const reviewer = yield* agents.get(AgentV2.ID.make("reviewer"))
@@ -149,10 +163,9 @@ describe("ConfigAgentPlugin.Plugin", () => {
         steps: 12,
         model: { providerID: "anthropic", id: "claude-sonnet", variant: undefined },
       })
-      expect(reviewer.options).toEqual({
+      expect(reviewer.request).toEqual({
         headers: { first: "one", shared: "last", second: "two" },
-        body: { enabled: true, retries: 2 },
-        aisdk: { provider: { profile: "review" }, request: { effort: "high" } },
+        body: { enabled: true, profile: "review", retries: 2, effort: "high" },
       })
     }),
   )
@@ -161,26 +174,99 @@ describe("ConfigAgentPlugin.Plugin", () => {
     Effect.gen(function* () {
       const agents = yield* AgentV2.Service
       const build = AgentV2.ID.make("build")
-      const defaults = yield* agents.transform()
-      yield* defaults((editor) => editor.update(build, () => {}))
+      yield* agents.transform((editor) => editor.update(build, () => {}))
 
       const config = Config.Service.of({
-        directories: () => Effect.succeed([]),
-        get: () =>
+        entries: () =>
           Effect.succeed([
-            new Config.Loaded({
-              source: { type: "memory" },
+            new Config.Document({
+              type: "document",
               info: decode({ agents: { build: { disabled: true } } }),
             }),
           ]),
       })
 
-      yield* ConfigAgentPlugin.Plugin.effect.pipe(
+      yield* ConfigAgentPlugin.Plugin.effect(host({ agent: agentHost(agents) })).pipe(
         Effect.provideService(Config.Service, config),
-        Effect.provideService(AgentV2.Service, agents),
       )
 
       expect(yield* agents.get(build)).toBeUndefined()
     }),
+  )
+
+  it.live("loads legacy file-based agents from config directories", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(async () => {
+            await fs.mkdir(path.join(tmp.path, "agents", "team"), { recursive: true })
+            await fs.mkdir(path.join(tmp.path, "modes"), { recursive: true })
+            await fs.writeFile(
+              path.join(tmp.path, "agents", "reviewer.md"),
+              `---
+model: openrouter/openai/gpt-5
+description: Markdown description
+temperature: 0.5
+tools:
+  write: false
+---
+Review carefully.`,
+            )
+            await fs.writeFile(path.join(tmp.path, "agents", "team", "helper.md"), "Help the team.")
+            await fs.writeFile(
+              path.join(tmp.path, "agents", "native.md"),
+              `---
+request:
+  headers:
+    x-agent: native
+  body:
+    effort: high
+permissions:
+  - action: edit
+    resource: "*"
+    effect: deny
+---
+Use native v2 fields.`,
+            )
+            await fs.writeFile(path.join(tmp.path, "agents", "disabled.md"), "---\ndisabled: true\n---\nDisabled")
+            await fs.writeFile(path.join(tmp.path, "modes", "plan.md"), "Make a plan.")
+          })
+          const agents = yield* AgentV2.Service
+          const config = Config.Service.of({
+            entries: () =>
+              Effect.succeed([
+                new Config.Document({
+                  type: "document",
+                  info: decode({ agents: { reviewer: { description: "JSON description" } } }),
+                }),
+                new Config.Directory({ type: "directory", path: AbsolutePath.make(tmp.path) }),
+              ]),
+          })
+
+          yield* ConfigAgentPlugin.Plugin.effect(host({ agent: agentHost(agents) })).pipe(
+            Effect.provideService(Config.Service, config),
+          )
+
+          expect(yield* agents.get(AgentV2.ID.make("reviewer"))).toMatchObject({
+            model: { providerID: "openrouter", id: "openai/gpt-5" },
+            system: "Review carefully.",
+            description: "Markdown description",
+            request: { body: { temperature: 0.5 } },
+            permissions: [{ action: "edit", resource: "*", effect: "deny" }],
+          })
+          expect(yield* agents.get(AgentV2.ID.make("team/helper"))).toMatchObject({ system: "Help the team." })
+          expect(yield* agents.get(AgentV2.ID.make("native"))).toMatchObject({
+            system: "Use native v2 fields.",
+            request: { headers: { "x-agent": "native" }, body: { effort: "high" } },
+            permissions: [{ action: "edit", resource: "*", effect: "deny" }],
+          })
+          expect(yield* agents.get(AgentV2.ID.make("disabled"))).toBeUndefined()
+          expect(yield* agents.get(AgentV2.ID.make("plan"))).toMatchObject({ system: "Make a plan.", mode: "primary" })
+        }),
+      ),
+    ),
   )
 })

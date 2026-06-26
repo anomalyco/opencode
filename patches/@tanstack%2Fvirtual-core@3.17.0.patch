@@ -1,0 +1,58 @@
+diff --git a/dist/cjs/index.cjs b/dist/cjs/index.cjs
+index df75d0cf0347b62906e04e454d4f4ef062ed5c48..58913f2d30e0beee9d09dffa5ebcaab4601a2c22 100644
+--- a/dist/cjs/index.cjs
++++ b/dist/cjs/index.cjs
+@@ -526,6 +526,7 @@ class Virtualizer {
+       this.scrollOffset = this.scrollOffset ?? (typeof this.options.initialOffset === "function" ? this.options.initialOffset() : this.options.initialOffset);
+       return this.scrollOffset;
+     };
++    this.getLogicalScrollOffset = () => this.getScrollOffset() + this.scrollAdjustments;
+     this.getFurthestMeasurement = (measurements, index) => {
+       const furthestMeasurementsFound = /* @__PURE__ */ new Map();
+       const furthestMeasurements = /* @__PURE__ */ new Map();
+diff --git a/dist/cjs/index.d.cts b/dist/cjs/index.d.cts
+index c61ee17752565253f795c7fc7d57e86237ecbb52..705bb7e3a121b040fb1a3e7890179eaa3e9b219e 100644
+--- a/dist/cjs/index.d.cts
++++ b/dist/cjs/index.d.cts
+@@ -108,6 +108,7 @@ export declare class Virtualizer<TScrollElement extends Element | Window, TItemE
+     scrollRect: Rect | null;
+     scrollOffset: number | null;
+     scrollDirection: ScrollDirection | null;
++    getLogicalScrollOffset: () => number;
+     private scrollAdjustments;
+     private _iosDeferredAdjustment;
+     private _iosTouching;
+diff --git a/dist/esm/index.d.ts b/dist/esm/index.d.ts
+index b03abab604eb6578f6f56ff92c489259cfaf8f19..0495f372ea000dffc416c4f56809946f7ba73099 100644
+--- a/dist/esm/index.d.ts
++++ b/dist/esm/index.d.ts
+@@ -108,6 +108,7 @@ export declare class Virtualizer<TScrollElement extends Element | Window, TItemE
+     scrollRect: Rect | null;
+     scrollOffset: number | null;
+     scrollDirection: ScrollDirection | null;
++    getLogicalScrollOffset: () => number;
+     private scrollAdjustments;
+     private _iosDeferredAdjustment;
+     private _iosTouching;
+diff --git a/dist/esm/index.js b/dist/esm/index.js
+index e384cf7541978a2782b9dca68146e869b16ac3f2..53b15b7a36247ea4aa5b70b00d08b6d7dec3ea79 100644
+--- a/dist/esm/index.js
++++ b/dist/esm/index.js
+@@ -524,6 +524,7 @@ class Virtualizer {
+       this.scrollOffset = this.scrollOffset ?? (typeof this.options.initialOffset === "function" ? this.options.initialOffset() : this.options.initialOffset);
+       return this.scrollOffset;
+     };
++    this.getLogicalScrollOffset = () => this.getScrollOffset() + this.scrollAdjustments;
+     this.getFurthestMeasurement = (measurements, index) => {
+       const furthestMeasurementsFound = /* @__PURE__ */ new Map();
+       const furthestMeasurements = /* @__PURE__ */ new Map();
+diff --git a/src/index.ts b/src/index.ts
+index d35b3e0695a9c85b261bc1a4fbe23c0a60d5b204..d516a9d00f1233173f9a3e2144666c8159552f91 100644
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -1050,3 +1050,5 @@ export class Virtualizer<
++  getLogicalScrollOffset = () => this.getScrollOffset() + this.scrollAdjustments
++
+   private getFurthestMeasurement = (
+     measurements: Array<VirtualItem>,
+     index: number,

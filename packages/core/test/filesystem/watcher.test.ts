@@ -23,8 +23,7 @@ const it = testEffect(Layer.mergeAll(FSUtil.defaultLayer, EventV2.defaultLayer))
 const configLayer = Layer.succeed(
   Config.Service,
   Config.Service.of({
-    directories: () => Effect.succeed([]),
-    get: () => Effect.succeed([]),
+    entries: () => Effect.succeed([]),
   }),
 )
 

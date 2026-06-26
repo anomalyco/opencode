@@ -2,9 +2,10 @@ import { describe, expect, test } from "bun:test"
 import { createStore } from "solid-js/store"
 import { QueryClient } from "@tanstack/solid-query"
 import type { Config, OpencodeClient, Project } from "@opencode-ai/sdk/v2/client"
-import type { NormalizedProviderListResponse } from "@opencode-ai/ui/context"
-import { bootstrapDirectory } from "./bootstrap"
+import type { NormalizedProviderListResponse } from "@opencode-ai/session-ui/context"
+import { bootstrapDirectory, loadPathQuery, loadProvidersQuery } from "./bootstrap"
 import type { State, VcsCache } from "./types"
+import { ServerScope } from "@/utils/server-scope"
 
 const provider = { all: new Map(), connected: [], default: {} } satisfies NormalizedProviderListResponse
 
@@ -45,6 +46,7 @@ describe("bootstrapDirectory", () => {
 
     await bootstrapDirectory({
       directory: "/project",
+      scope: ServerScope.local,
       mcp: false,
       global: {
         config: {} satisfies Config,
@@ -87,5 +89,20 @@ describe("bootstrapDirectory", () => {
 
     expect(store.status).toBe("complete")
     expect(mcpReads).toEqual([])
+  })
+})
+
+describe("query keys", () => {
+  test("partitions identical directories by server scope", () => {
+    const client = {} as OpencodeClient
+    const remote = "https://debian.example" as typeof ServerScope.local
+
+    expect([...loadPathQuery(ServerScope.local, "/repo", client).queryKey]).toEqual(["local", "/repo", "path"])
+    expect([...loadPathQuery(remote, "/repo", client).queryKey]).toEqual(["https://debian.example", "/repo", "path"])
+    expect([...loadProvidersQuery(remote, null, client).queryKey]).toEqual([
+      "https://debian.example",
+      null,
+      "providers",
+    ])
   })
 })

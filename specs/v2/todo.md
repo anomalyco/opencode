@@ -15,12 +15,63 @@ and shell commands.
 
 ## Rework agent loop - Kit?
 
-I think this needs to be done so we can take advantage of the simpler data
-model. It can stop doing all the
+The first Effect-native local runner slice is implemented without bridging
+through legacy `SessionPrompt.loop(...)`:
 
-## Rework compaction - Aiden?
+- process-global `SessionExecution.resume(sessionID)` discovers Location from
+  the Session read model
+- cached Location-scoped `SessionRunner` resolves one supported catalog model
+  and issues one explicit `llm.stream(request)` provider turn at a time
+- durable V2 projections record text, reasoning, provider failures, tool calls,
+  tool results, and assistant output
+- a scoped `ToolRegistry` advertises definitions and the first permission-checked
+  `read` built-in
+- local continuation reloads projected history, and promoting new user input resets the selected agent's configured provider-turn allowance
+- concurrent resumes for one Session join one process-local run while different
+  Sessions remain concurrent
 
-The new agent loop needs to trigger compaction properly
+Prompt admission now uses a durable `session_input` inbox rather than immediate
+transcript projection. `steer` inputs promote at the next safe provider-turn
+boundary while the current drain requires continuation. `queue` inputs remain in
+a FIFO until the Session would otherwise become idle and then promote one at a time.
+
+Next reviewed slices:
+
+- preserve eager structured local-tool settlement: durably record each complete
+  call, start its child execution immediately, await every settlement after the
+  provider turn closes, then reload projected history once
+- revisit per-turn tool-call limits, output truncation, and operational
+  backpressure before broadening exposure; eager local execution is deliberately
+  unbounded in the current local slice while SQLite publication stays serialized
+- remove the public in-memory `@opencode-ai/llm` tool loop after replacing its
+  remaining one-turn native-adapter use with a narrow typed dispatcher
+- batch streamed deltas and add covering context indexes
+- expose replayable Session event cursors over HTTP and the generated SDK where remote consumers need them
+- integrate the new BackgroundJob service with V2 tool execution: support background
+  bash jobs and background agent dispatch with durable status observation,
+  completion delivery, and explicit cancellation / continuation semantics
+- add durable/clustered interruption, retries, and stale-owner fencing only as
+  their slices become concrete
+
+### Deferred durable continuation recovery
+
+Do not infer that ambiguous provider work is safe to retry from an advisory wake.
+The first inbox-driven runner intentionally omits outer provider-attempt markers
+until they have a concrete consumer and a complete recovery policy.
+
+Design post-crash continuation recovery as one explicit slice. It should model:
+
+- promoted input and projected-history state
+- queued-input promotion and steering assignment
+- provider-attempt preparation versus provider-dispatch ambiguity
+- required post-tool continuation across process loss
+- explicit `retry` and `abandon` decisions for unknown outcomes
+- bounded automatic retry only where provider and tool idempotency make it safe
+- retry budget, backoff, visible recovery status, startup discovery, and future
+  clustered ownership fencing
+
+Do not introduce an enclosing durable execution identity solely to group these
+facts; a process-local Session drain has no durable transcript boundary.
 
 ## Plugin API design - James?
 
@@ -53,8 +104,42 @@ want / config. They should register models into model database
 
 ## Event - Kit
 
-I have this v2/event.ts but it needs to be self contained instead of using the
-old bus system
+The self-contained durable `EventV2` core service is implemented. It owns
+sync-versioned persistence, transactional sequencing, pub/sub, replay, and
+replay-owner claims without relying on the old bus system.
+
+Remaining slices:
+
+- expose the embedded consumer-facing Session cursor API over HTTP and the
+  generated SDK where remote consumers need it
+- keep replay-owner claims distinct from future clustered Session execution
+  ownership and stale-runtime fencing
+
+## Deferred hardening cleanup
+
+Keep these visible, but do not block functionality slices on them unless a concrete
+failure appears during canary work:
+
+- serialize database migration claiming across processes; current migration
+  application is protected only by an in-process semaphore, so two processes
+  starting against one SQLite database can still race
+- simplify process-local durable-tail wake lifecycle with Effect `RcMap` and one
+  shared `PubSub.sliding<void>(1)` per active aggregate; keep SQLite cursor replay
+  and subscribe-before-history semantics unchanged
+- page large durable aggregate replay reads instead of loading every row after a
+  stale cursor into one array
+- decide whether connected tails need a periodic polling fallback for
+  cross-process SQLite writers; current advisory wakes are intentionally
+  process-local
+- stream-cap websearch body collection before parsing
+- add ripgrep execution timeout and bounded line framing
+- materialize or consistently reject unresolved URL and file attachment sources
+- decide stateless OpenAI Responses hosted-tool continuation behavior; reconstructed hosted output can replay as a stored `item_reference` when `store !== false`, while `store: false` intentionally omits the unavailable reference path
+- decide whether to preserve deprecated `@opencode-ai/llm` orchestration exports
+- preserve or alias renamed filesystem SDK generated type names if compatibility
+  consumers require them
+- revisit syscall-level mutation confinement for hostile external processes
+  (`openat`, `O_NOFOLLOW`, and descriptor-relative mutation where supported)
 
 ## Everything is hotreloadable - ???
 

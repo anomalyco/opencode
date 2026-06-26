@@ -14,9 +14,9 @@ import {
   type ScrollbackSurface,
 } from "@opentui/core"
 import { entryBody, entryCanStream, entryDone, entryFlags } from "./entry.body"
-import { withRunSpan } from "./otel"
 import { entryColor, entryLook, entrySyntax } from "./scrollback.shared"
-import { entryWriter, sameEntryGroup, separatorRows, spacerWriter } from "./scrollback.writer"
+import { turnSummaryCommit } from "./turn-summary"
+import { entryWriter, sameEntryGroup, separatorRows, spacerWriter, turnSummaryWriter } from "./scrollback.writer"
 import { type RunTheme } from "./theme"
 import type { RunDiffStyle, RunEntryBody, StreamCommit } from "./types"
 
@@ -33,8 +33,6 @@ type ActiveEntry = {
   pendingSpacerRows: number
   rendered: boolean
 }
-
-let nextId = 0
 
 function commitMarkdownBlocks(input: {
   surface: ScrollbackSurface
@@ -92,6 +90,7 @@ export class RunScrollbackStream {
   private sessionID?: () => string | undefined
   private treeSitterClient: TreeSitterClient | undefined
   private wrote: boolean
+  private pendingThemes: RunTheme[] = []
 
   constructor(
     private renderer: CliRenderer,
@@ -101,24 +100,60 @@ export class RunScrollbackStream {
       diffStyle?: RunDiffStyle
       sessionID?: () => string | undefined
       treeSitterClient?: TreeSitterClient
+      onThemeRelease?: (theme: RunTheme) => void
     } = {},
   ) {
     this.diffStyle = options.diffStyle
     this.sessionID = options.sessionID
     this.treeSitterClient = options.treeSitterClient ?? getTreeSitterClient()
     this.wrote = options.wrote ?? false
+    this.onThemeRelease = options.onThemeRelease
+  }
+
+  private onThemeRelease: ((theme: RunTheme) => void) | undefined
+
+  private releasePendingThemes(): void {
+    if (this.pendingThemes.length === 0) {
+      return
+    }
+
+    for (const theme of this.pendingThemes.splice(0)) this.onThemeRelease?.(theme)
+  }
+
+  public setTheme(theme: RunTheme): void {
+    if (this.theme === theme) {
+      return
+    }
+
+    const previous = this.theme
+    this.theme = theme
+    const active = this.active
+    if (!active) {
+      this.onThemeRelease?.(previous)
+      return
+    }
+
+    this.pendingThemes.push(previous)
+
+    const style = entryLook(active.commit, theme.entry)
+    if (active.renderable instanceof TextRenderable) {
+      active.renderable.fg = style.fg
+      active.renderable.attributes = style.attrs ?? 0
+      return
+    }
+
+    active.renderable.fg = entryColor(active.commit, theme)
+    active.renderable.syntaxStyle = entrySyntax(active.commit, theme)
   }
 
   private createEntry(commit: StreamCommit, body: ActiveBody): ActiveEntry {
     const surface = this.renderer.createScrollbackSurface({
       startOnNewLine: entryFlags(commit).startOnNewLine,
     })
-    const id = `run-scrollback-entry-${nextId++}`
     const style = entryLook(commit, this.theme.entry)
     const renderable =
       body.type === "text"
         ? new TextRenderable(surface.renderContext, {
-            id,
             content: "",
             width: "100%",
             wrapMode: "word",
@@ -127,7 +162,6 @@ export class RunScrollbackStream {
           })
         : body.type === "code"
           ? new CodeRenderable(surface.renderContext, {
-              id,
               content: "",
               filetype: body.filetype,
               syntaxStyle: entrySyntax(commit, this.theme),
@@ -139,7 +173,6 @@ export class RunScrollbackStream {
               treeSitterClient: this.treeSitterClient,
             })
           : new MarkdownRenderable(surface.renderContext, {
-              id,
               content: "",
               syntaxStyle: entrySyntax(commit, this.theme),
               width: "100%",
@@ -203,6 +236,7 @@ export class RunScrollbackStream {
       const renderable = active.renderable
       renderable.content = active.content
       active.surface.render()
+      this.releasePendingThemes()
       const targetRows = done ? active.surface.height : Math.max(active.committedRows, active.surface.height - 1)
       if (targetRows <= active.committedRows) {
         return false
@@ -226,6 +260,7 @@ export class RunScrollbackStream {
       renderable.content = active.content
       renderable.streaming = !done
       await active.surface.settle()
+      this.releasePendingThemes()
       const targetRows = done ? active.surface.height : Math.max(active.committedRows, active.surface.height - 1)
       if (targetRows <= active.committedRows) {
         return false
@@ -248,6 +283,7 @@ export class RunScrollbackStream {
     renderable.content = active.content
     renderable.streaming = !done
     await active.surface.settle()
+    this.releasePendingThemes()
     const targetBlockCount = done ? renderable._blockStates.length : renderable._stableBlockCount
     if (targetBlockCount <= active.committedBlocks) {
       return false
@@ -288,6 +324,7 @@ export class RunScrollbackStream {
       if (!active.surface.isDestroyed) {
         active.surface.destroy()
       }
+      this.releasePendingThemes()
     }
 
     return active.rendered ? active.commit : undefined
@@ -312,6 +349,14 @@ export class RunScrollbackStream {
     const same = sameEntryGroup(this.tail, commit)
     if (!same) {
       this.markRendered(await this.finishActive(false))
+    }
+
+    if (commit.summary) {
+      this.writeSpacer(1)
+      this.renderer.writeToScrollback(turnSummaryWriter({ ...commit.summary, theme: this.theme }))
+      this.markRendered(commit)
+      this.tail = commit
+      return
     }
 
     const body = entryBody(commit)
@@ -368,23 +413,19 @@ export class RunScrollbackStream {
     }
 
     this.active = undefined
+    this.releasePendingThemes()
   }
 
   public async complete(trailingNewline = false): Promise<void> {
-    return withRunSpan(
-      "RunScrollbackStream.complete",
-      {
-        "opencode.entry.active": !!this.active,
-        "opencode.trailing_newline": trailingNewline,
-        "session.id": this.sessionID?.() || undefined,
-      },
-      async () => {
-        this.markRendered(await this.finishActive(trailingNewline))
-      },
-    )
+    this.markRendered(await this.finishActive(trailingNewline))
+  }
+
+  public async writeTurnSummary(input: { agent: string; model: string; duration: string }): Promise<void> {
+    await this.append(turnSummaryCommit(input))
   }
 
   public destroy(): void {
     this.resetActive()
+    this.releasePendingThemes()
   }
 }

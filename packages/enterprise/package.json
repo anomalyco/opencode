@@ -1,6 +1,6 @@
 {
   "name": "@opencode-ai/enterprise",
-  "version": "1.15.13",
+  "version": "1.17.11",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -14,12 +14,14 @@
   },
   "dependencies": {
     "@opencode-ai/core": "workspace:*",
+    "@opencode-ai/session-ui": "workspace:*",
     "@opencode-ai/ui": "workspace:*",
     "aws4fetch": "^1.0.20",
     "@pierre/diffs": "catalog:",
     "@solidjs/router": "catalog:",
     "@solidjs/start": "catalog:",
     "@solidjs/meta": "catalog:",
+    "@hono/standard-validator": "catalog:",
     "hono": "catalog:",
     "hono-openapi": "catalog:",
     "js-base64": "3.7.7",

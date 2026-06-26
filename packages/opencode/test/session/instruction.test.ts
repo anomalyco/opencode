@@ -16,6 +16,7 @@ import { provideInstance, provideTmpdirInstance, testInstanceStoreLayer, tmpdirS
 import { testEffect } from "../lib/effect"
 import { TestConfig } from "../fixture/config"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
 
 const it = testEffect(Layer.mergeAll(CrossSpawnSpawner.defaultLayer, NodeFileSystem.layer, testInstanceStoreLayer))
 
@@ -77,7 +78,7 @@ function loaded(filepath: string): SessionV1.WithParts[] {
         agent: "build",
         model: {
           providerID: ProviderV2.ID.make("anthropic"),
-          modelID: ProviderV2.ModelID.make("claude-sonnet-4-20250514"),
+          modelID: ModelV2.ID.make("claude-sonnet-4-20250514"),
         },
       },
       parts: [
