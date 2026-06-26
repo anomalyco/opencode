@@ -112,8 +112,8 @@ function renderDocument(input: { title: string; body: string; script?: string })
 const AUTO_CLOSE_SCRIPT = `setTimeout(function(){try{window.close()}catch(e){}},2500)`
 
 function bootstrapScript(options: BootstrapOptions) {
-  return `var PROVIDER=${JSON.stringify(options.provider ?? "")};
-var TOKEN_URL=new URL(${JSON.stringify(options.tokenPath)},window.location.origin).href;
+  return `var PROVIDER=${scriptString(options.provider ?? "")};
+var TOKEN_URL=new URL(${scriptString(options.tokenPath)},window.location.origin).href;
 (function(){
   var card=document.getElementById("oc-card"),headline=document.getElementById("oc-headline"),message=document.getElementById("oc-message"),detail=document.getElementById("oc-detail"),footnote=document.getElementById("oc-footnote");
   function fail(text){card.dataset.status="error";headline.textContent="Authorization failed";message.textContent=PROVIDER?("opencode couldn't finish connecting to "+PROVIDER+"."):"opencode couldn't complete authorization.";if(text){detail.textContent=text;detail.hidden=false}footnote.textContent="Close this window and try again from opencode."}
@@ -131,6 +131,10 @@ var TOKEN_URL=new URL(${JSON.stringify(options.tokenPath)},window.location.origi
     }).catch(function(e){fail(String(e&&e.message?e.message:e))});
   }catch(e){fail(String(e&&e.message?e.message:e))}
 })()`
+}
+
+function scriptString(value: string) {
+  return JSON.stringify(value).replaceAll("<", "\\u003c")
 }
 
 function escapeHtml(value: string) {
