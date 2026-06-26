@@ -4,6 +4,7 @@ import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
+import { useI18n } from "@opencode-ai/ui/context"
 
 import { useCommand } from "@/context/command"
 import { DESKTOP_MENU, desktopMenuVisible, type DesktopMenuAction, type DesktopMenuEntry } from "@/desktop-menu"
@@ -46,6 +47,13 @@ export function WindowsAppMenu(props: {
     if (entry.href) props.platform.openLink(entry.href)
   }
 
+  const { t } = useI18n()
+
+  const menuLabel = (item: { label?: string; labelKey?: string }) => {
+    if (item.labelKey) return t(item.labelKey as never)
+    return item.label ?? ""
+  }
+
   return (
     <DropdownMenu gutter={4} modal={false} placement="bottom-start">
       {props.variant === "v2" ? (
@@ -79,7 +87,7 @@ export function WindowsAppMenu(props: {
           <DropdownMenu.Group>
             <DropdownMenu.GroupLabel class="desktop-app-menu-heading">OpenCode</DropdownMenu.GroupLabel>
             {DESKTOP_MENU.filter((menu) => desktopMenuVisible(menu, "windows")).map((menu) => (
-              <DesktopMenuSubmenu label={menu.label}>
+              <DesktopMenuSubmenu label={menuLabel(menu)}>
                 {menu.items
                   ?.filter((entry) => desktopMenuVisible(entry, "windows"))
                   .map((entry) =>
@@ -87,7 +95,7 @@ export function WindowsAppMenu(props: {
                       <DropdownMenu.Separator />
                     ) : (
                       <DesktopMenuItem
-                        label={entry.label ?? ""}
+                        label={menuLabel(entry)}
                         keybind={entry.command ? props.command.keybind(entry.command) : entry.accelerator?.windows}
                         disabled={entry.command ? commandDisabled(entry.command) : false}
                         onSelect={() => runEntry(entry)}
