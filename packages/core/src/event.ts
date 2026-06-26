@@ -1,6 +1,6 @@
 export * as EventV2 from "./event"
 
-import { Cause, Context, Effect, Layer, Option, PubSub, Queue, Schema, Scope, Stream } from "effect"
+import { Cause, Context, Effect, Layer, Option, PubSub, Queue, Schema, Stream } from "effect"
 import { Event } from "@opencode-ai/schema/event"
 import type { Data, Definition, Payload } from "@opencode-ai/schema/event"
 import { and, asc, eq, gt, inArray } from "drizzle-orm"
@@ -131,9 +131,6 @@ export interface Interface {
   ) => Effect.Effect<Payload<D>>
   readonly subscribe: <D extends Definition>(definition: D) => Stream.Stream<Payload<D>>
   readonly all: () => Stream.Stream<Payload>
-  readonly allBounded: (
-    capacity: number,
-  ) => Effect.Effect<Stream.Stream<Payload, SubscriberOverflowError>, never, Scope.Scope>
   readonly durable: (input: { readonly aggregateID: string; readonly after?: number }) => Stream.Stream<Payload>
   /** @deprecated Use `all()` and consume the returned stream. */
   readonly listen: (listener: Subscriber) => Effect.Effect<Unsubscribe>
@@ -151,6 +148,20 @@ export interface Interface {
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Event") {}
+
+export const allBounded = (events: Interface, capacity: number) =>
+  Effect.gen(function* () {
+    const queue = yield* Queue.dropping<Payload, SubscriberOverflowError>(capacity)
+    const unsubscribe = yield* events.listen((event) =>
+      Queue.offer(queue, event).pipe(
+        Effect.flatMap((accepted) =>
+          accepted ? Effect.void : Queue.fail(queue, new SubscriberOverflowError({ capacity })).pipe(Effect.asVoid),
+        ),
+      ),
+    )
+    yield* Effect.addFinalizer(() => unsubscribe.pipe(Effect.andThen(Queue.shutdown(queue)), Effect.asVoid))
+    return Stream.fromQueue(queue)
+  })
 
 export interface LayerOptions {
   readonly beforeAggregateRead?: (aggregateID: string) => Effect.Effect<void>
@@ -527,22 +538,6 @@ export const layerWith = (options?: LayerOptions) =>
 
       const streamAll = (): Stream.Stream<Payload> => Stream.fromPubSub(pubsub.all)
 
-      const allBounded = (capacity: number) =>
-        Effect.gen(function* () {
-          const queue = yield* Queue.dropping<Payload, SubscriberOverflowError>(capacity)
-          const unsubscribe = yield* listen((event) =>
-            Queue.offer(queue, event).pipe(
-              Effect.flatMap((accepted) =>
-                accepted
-                  ? Effect.void
-                  : Queue.fail(queue, new SubscriberOverflowError({ capacity })).pipe(Effect.asVoid),
-              ),
-            ),
-          )
-          yield* Effect.addFinalizer(() => unsubscribe.pipe(Effect.andThen(Queue.shutdown(queue)), Effect.asVoid))
-          return Stream.fromQueue(queue)
-        })
-
       const readAfter = (aggregateID: string, after: number) =>
         (options?.beforeAggregateRead?.(aggregateID) ?? Effect.void).pipe(
           Effect.andThen(
@@ -628,7 +623,6 @@ export const layerWith = (options?: LayerOptions) =>
         publish,
         subscribe,
         all: streamAll,
-        allBounded,
         durable,
         listen,
         project,

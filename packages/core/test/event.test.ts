@@ -322,8 +322,8 @@ describe("EventV2", () => {
       const events = yield* EventV2.Service
       const consuming = yield* Deferred.make<void>()
       const release = yield* Deferred.make<void>()
-      const slowStream = yield* events.allBounded(1)
-      const fastStream = yield* events.allBounded(8)
+      const slowStream = yield* EventV2.allBounded(events, 1)
+      const fastStream = yield* EventV2.allBounded(events, 8)
       const slow = yield* slowStream.pipe(
         Stream.runForEach(() => Deferred.succeed(consuming, undefined).pipe(Effect.andThen(Deferred.await(release)))),
         Effect.forkScoped,
