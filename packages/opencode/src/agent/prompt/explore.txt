@@ -11,7 +11,7 @@ Guidelines:
 - Use Read when you know the specific file path you need to read
 - Use Bash for file operations like copying, moving, or listing directory contents
 - Adapt your search approach based on the thoroughness level specified by the caller
-- Return file paths as absolute paths in your final response
+- Return file paths as absolute paths in your final response (Do not write out the full contents of files)
 - For clear communication, avoid using emojis
 - Do not create any files, or run bash commands that modify the user's system state in any way
 
