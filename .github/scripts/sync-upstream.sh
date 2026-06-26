@@ -125,10 +125,14 @@ while true; do
   fi
   log "Batch $batch -> ${target:0:9}  ($(git log -1 --format='%s' "$target"))"
 
+  # --no-commit so we always commit ourselves AFTER restoring workflow files,
+  # ensuring no commit (even a clean merge) modifies .github/workflows.
   set +e
-  git merge --no-edit "$target"
+  git merge --no-edit --no-ff --no-commit "$target"
   merge_rc=$?
   set -e
+  # A clean --no-commit merge exits 0 with staged changes and MERGE_HEAD set;
+  # a conflicted merge exits non-zero. Both are handled below.
 
   if [ "$merge_rc" -ne 0 ]; then
     # rerere (autoupdate) has already staged any remembered resolutions.
@@ -171,6 +175,15 @@ while true; do
     git merge --abort 2>/dev/null || true
     exit 4
   fi
+
+  # Keep our workflow files in EVERY commit. The push App token cannot create or
+  # update .github/workflows/* (GitHub rejects such a push), and our policy is
+  # .github/workflows/*:ours anyway. Force-restore the whole dir to the target
+  # branch so no pushed commit modifies a workflow file (covers upstream add/edit/
+  # delete). Per-batch to be safe against per-commit push checks.
+  git rm -rf --quiet --ignore-unmatch .github/workflows >/dev/null 2>&1 || true
+  git checkout "$TARGET_BRANCH" -- .github/workflows 2>/dev/null || true
+  git add -A .github/workflows 2>/dev/null || true
 
   # complete the batch merge (rerere records any new resolutions on commit)
   if ! git diff --cached --quiet || [ -f .git/MERGE_HEAD ]; then
