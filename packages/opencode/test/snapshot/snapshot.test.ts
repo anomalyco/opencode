@@ -1,10 +1,13 @@
 import { afterEach, expect } from "bun:test"
 import { $ } from "bun"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { AppProcess } from "@opencode-ai/core/process"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import fs from "fs/promises"
 import path from "path"
-import { Effect, Fiber, Layer } from "effect"
+import { Effect, Fiber, Layer, Stream } from "effect"
+import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
+import { Config } from "@/config/config"
 import { Snapshot } from "../../src/snapshot"
 import {
   disposeAllInstances,
@@ -45,6 +48,33 @@ const exists = (file: string) => FSUtil.Service.use((fs) => fs.existsSafe(file))
 const mkdirp = (dir: string) => FSUtil.Service.use((fs) => fs.ensureDir(dir))
 const rm = (file: string) =>
   FSUtil.Service.use((fs) => fs.remove(file, { recursive: true, force: true }).pipe(Effect.ignore))
+const encoder = new TextEncoder()
+
+function mockSpawner(
+  handler: (cmd: string, args: readonly string[]) => string | { code: number; stdout?: string; stderr?: string },
+) {
+  const spawner = ChildProcessSpawner.make((command) => {
+    const std = ChildProcess.isStandardCommand(command) ? command : undefined
+    const result = handler(std?.command ?? "", std?.args ?? [])
+    const output = typeof result === "string" ? { code: 0, stdout: result, stderr: "" } : result
+    return Effect.succeed(
+      ChildProcessSpawner.makeHandle({
+        pid: ChildProcessSpawner.ProcessId(0),
+        exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(output.code)),
+        isRunning: Effect.succeed(false),
+        kill: () => Effect.void,
+        stdin: { [Symbol.for("effect/Sink/TypeId")]: Symbol.for("effect/Sink/TypeId") } as any,
+        stdout: output.stdout ? Stream.make(encoder.encode(output.stdout)) : Stream.empty,
+        stderr: output.stderr ? Stream.make(encoder.encode(output.stderr)) : Stream.empty,
+        all: Stream.empty,
+        getInputFd: () => ({ [Symbol.for("effect/Sink/TypeId")]: Symbol.for("effect/Sink/TypeId") }) as any,
+        getOutputFd: () => Stream.empty,
+        unref: Effect.succeed(Effect.void),
+      }),
+    )
+  })
+  return Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, spawner)
+}
 
 const initialize = Effect.fn("SnapshotTest.initialize")(function* (dir: string) {
   const unique = Math.random().toString(36).slice(2)
@@ -101,6 +131,40 @@ const withGitConfigGlobal = <A, E, R>(config: string, self: Effect.Effect<A, E, 
         else delete process.env.GIT_CONFIG_GLOBAL
       }),
   )
+
+const diffFullCommandCounts = { show: 0, catFile: 0 }
+const diffFullLayer = Layer.mergeAll(
+  Snapshot.layer.pipe(
+    Layer.provide(
+      AppProcess.layer.pipe(
+        Layer.provide(
+          mockSpawner((cmd, args) => {
+            if (cmd !== "git") return ""
+            if (args.includes("cat-file")) {
+              diffFullCommandCounts.catFile += 1
+              return { code: 1, stderr: "batch unavailable" }
+            }
+            if (args.includes("show")) {
+              diffFullCommandCounts.show += 1
+              const ref = args.at(-1) ?? ""
+              return `${ref}\ncontent\n`
+            }
+            if (args.includes("check-ignore")) return { code: 1, stdout: "" }
+            if (args.includes("--name-status"))
+              return "M\tfile-1.txt\nM\tfile-2.txt\nM\tfile-3.txt\n"
+            if (args.includes("--numstat"))
+              return "1\t1\tfile-1.txt\n1\t1\tfile-2.txt\n1\t1\tfile-3.txt\n"
+            return ""
+          }),
+        ),
+      ),
+    ),
+    Layer.provide(FSUtil.defaultLayer),
+    Layer.provide(Config.defaultLayer),
+  ),
+  testInstanceStoreLayer,
+)
+const diffFullIt = testEffect(diffFullLayer)
 
 it.instance(
   "tracks deleted files correctly",
@@ -1209,6 +1273,23 @@ it.instance(
     yield* snapshot.revert([patch])
     for (let i = 0; i < base.length; i++) expect(yield* readText(base[i])).toBe(`base-${i}`)
     for (const file of fresh) expect(yield* exists(file)).toBe(false)
+  }),
+  { git: true },
+)
+
+diffFullIt.instance(
+  "diffFull stops loading rows once the limit is reached",
+  Effect.gen(function* () {
+    diffFullCommandCounts.show = 0
+    diffFullCommandCounts.catFile = 0
+
+    const snapshot = yield* Snapshot.Service
+    const diffs = yield* snapshot.diffFull("before", "after", { limit: 2 })
+
+    expect(diffs).toHaveLength(2)
+    expect(diffs.map((item) => item.file)).toEqual(["file-1.txt", "file-2.txt"])
+    expect(diffFullCommandCounts.catFile).toBe(1)
+    expect(diffFullCommandCounts.show).toBe(4)
   }),
   { git: true },
 )

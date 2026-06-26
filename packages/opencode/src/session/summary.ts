@@ -6,7 +6,12 @@ import { Snapshot } from "@/snapshot"
 import { Session } from "./session"
 import { SessionID, MessageID } from "./schema"
 import { Config } from "@/config/config"
-import { limitSummaryDiffs } from "./summary-diffs"
+import {
+  MAX_SUMMARY_DIFFS,
+  MAX_SUMMARY_PATCH_BYTES,
+  MAX_SUMMARY_TOTAL_PATCH_BYTES,
+  limitSummaryDiffs,
+} from "./summary-diffs"
 
 function unquoteGitPath(input: string) {
   if (!input.startsWith('"')) return input
@@ -67,7 +72,10 @@ function unquoteGitPath(input: string) {
 export interface Interface {
   readonly summarize: (input: { sessionID: SessionID; messageID: MessageID }) => Effect.Effect<void>
   readonly diff: (input: { sessionID: SessionID; messageID?: MessageID }) => Effect.Effect<Snapshot.FileDiff[]>
-  readonly computeDiff: (input: { messages: SessionV1.WithParts[] }) => Effect.Effect<Snapshot.FileDiff[]>
+  readonly computeDiff: (input: {
+    messages: SessionV1.WithParts[]
+    limit?: number
+  }) => Effect.Effect<Snapshot.FileDiff[]>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionSummary") {}
@@ -80,7 +88,10 @@ export const layer = Layer.effect(
     const events = yield* EventV2Bridge.Service
     const config = yield* Config.Service
 
-    const computeDiff = Effect.fn("SessionSummary.computeDiff")(function* (input: { messages: SessionV1.WithParts[] }) {
+    const computeDiff = Effect.fn("SessionSummary.computeDiff")(function* (input: {
+      messages: SessionV1.WithParts[]
+      limit?: number
+    }) {
       let from: string | undefined
       let to: string | undefined
       for (const item of input.messages) {
@@ -96,7 +107,18 @@ export const layer = Layer.effect(
           if (part.type === "step-finish" && part.snapshot) to = part.snapshot
         }
       }
-      if (from && to) return yield* snapshot.diffFull(from, to)
+      if (from && to)
+        return yield* snapshot.diffFull(
+          from,
+          to,
+          input.limit === undefined
+            ? undefined
+            : {
+                limit: input.limit,
+                maxPatchBytes: MAX_SUMMARY_PATCH_BYTES,
+                maxTotalPatchBytes: MAX_SUMMARY_TOTAL_PATCH_BYTES,
+              },
+        )
       return []
     })
 
@@ -122,7 +144,9 @@ export const layer = Layer.effect(
       )
       const target = messages.find((m) => m.info.id === input.messageID)
       if (!target || target.info.role !== "user") return
-      const msgDiffs = limitSummaryDiffs(yield* computeDiff({ messages }))
+      const msgDiffs = limitSummaryDiffs(
+        yield* computeDiff({ messages, limit: MAX_SUMMARY_DIFFS }),
+      )
       target.info.summary = { ...target.info.summary, diffs: msgDiffs }
       yield* sessions.updateMessage(target.info)
     })

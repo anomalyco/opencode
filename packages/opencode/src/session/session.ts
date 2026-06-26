@@ -44,6 +44,7 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { SessionMessageID } from "@opencode-ai/schema/session-message-id"
+import { limitSummaryDiffs } from "./summary-diffs"
 
 const runtime = makeRuntime(Database.Service, Database.defaultLayer)
 
@@ -65,7 +66,7 @@ export function fromRow(row: SessionRow): Info {
           additions: row.summary_additions ?? 0,
           deletions: row.summary_deletions ?? 0,
           files: row.summary_files ?? 0,
-          diffs: row.summary_diffs ?? undefined,
+          diffs: row.summary_diffs ? limitSummaryDiffs(row.summary_diffs) : undefined,
         }
       : undefined
   const share = row.share_url ? { url: row.share_url } : undefined
@@ -136,7 +137,7 @@ export function toRow(info: Info) {
     summary_additions: info.summary?.additions,
     summary_deletions: info.summary?.deletions,
     summary_files: info.summary?.files,
-    summary_diffs: info.summary?.diffs,
+    summary_diffs: info.summary?.diffs ? limitSummaryDiffs(info.summary.diffs) : undefined,
     metadata: info.metadata,
     cost: info.cost ?? 0,
     tokens_input: (info.tokens ?? EmptyTokens).input,

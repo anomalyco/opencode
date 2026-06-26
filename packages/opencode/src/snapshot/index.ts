@@ -29,9 +29,16 @@ interface GitResult {
   readonly code: ChildProcessSpawner.ExitCode
   readonly text: string
   readonly stderr: string
+  readonly truncated: boolean
 }
 
 type State = Omit<Interface, "init">
+
+type DiffOptions = {
+  readonly limit?: number
+  readonly maxPatchBytes?: number
+  readonly maxTotalPatchBytes?: number
+}
 
 export interface Interface {
   readonly init: () => Effect.Effect<void>
@@ -41,7 +48,7 @@ export interface Interface {
   readonly restore: (snapshot: string) => Effect.Effect<void>
   readonly revert: (patches: Patch[]) => Effect.Effect<void>
   readonly diff: (hash: string) => Effect.Effect<string>
-  readonly diffFull: (from: string, to: string) => Effect.Effect<FileDiff[]>
+  readonly diffFull: (from: string, to: string, options?: DiffOptions) => Effect.Effect<FileDiff[]>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Snapshot") {}
@@ -79,15 +86,19 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
           encodeNulTerminatedPaths(files.map((file) => `:(top,literal)${file}`))
 
         const git = Effect.fnUntraced(
-          function* (cmd: string[], opts?: { cwd?: string; env?: Record<string, string>; stdin?: string }) {
+          function* (
+            cmd: string[],
+            opts?: { cwd?: string; env?: Record<string, string>; stdin?: string; maxOutputBytes?: number },
+          ) {
             const result = yield* appProcess.run(
               ChildProcess.make("git", cmd, { cwd: opts?.cwd, env: opts?.env, extendEnv: true }),
-              { stdin: opts?.stdin },
+              { stdin: opts?.stdin, maxOutputBytes: opts?.maxOutputBytes },
             )
             return {
               code: ChildProcessSpawner.ExitCode(result.exitCode),
               text: result.stdout.toString("utf8"),
               stderr: result.stderr.toString("utf8"),
+              truncated: result.stdoutTruncated,
             } satisfies GitResult
           },
           Effect.catch((err) =>
@@ -95,6 +106,7 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
               code: ChildProcessSpawner.ExitCode(1),
               text: "",
               stderr: err instanceof Error ? err.message : String(err),
+              truncated: false,
             }),
           ),
         )
@@ -543,7 +555,7 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
           )
         })
 
-        const diffFull = Effect.fnUntraced(function* (from: string, to: string) {
+        const diffFull = Effect.fnUntraced(function* (from: string, to: string, options?: DiffOptions) {
           return yield* locked(
             Effect.gen(function* () {
               type Row = {
@@ -560,27 +572,28 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
                 ref: string
               }
 
+              const maxPatchBytes = options?.maxPatchBytes ?? options?.maxTotalPatchBytes
+              const maxTotalPatchBytes = options?.maxTotalPatchBytes
+              const limit = options?.limit ?? Number.POSITIVE_INFINITY
+
+              const read = Effect.fnUntraced(function* (ref: string) {
+                const result = yield* git(
+                  [...cfg, ...args(["show", ref])],
+                  maxPatchBytes === undefined ? undefined : { maxOutputBytes: maxPatchBytes },
+                )
+                return result.truncated ? "" : result.text
+              })
+
               const show = Effect.fnUntraced(function* (row: Row) {
                 if (row.binary) return ["", ""]
                 if (row.status === "added") {
-                  return [
-                    "",
-                    yield* git([...cfg, ...args(["show", `${to}:${row.file}`])]).pipe(Effect.map((item) => item.text)),
-                  ]
+                  return ["", yield* read(`${to}:${row.file}`)]
                 }
                 if (row.status === "deleted") {
-                  return [
-                    yield* git([...cfg, ...args(["show", `${from}:${row.file}`])]).pipe(
-                      Effect.map((item) => item.text),
-                    ),
-                    "",
-                  ]
+                  return [yield* read(`${from}:${row.file}`), ""]
                 }
                 return yield* Effect.all(
-                  [
-                    git([...cfg, ...args(["show", `${from}:${row.file}`])]).pipe(Effect.map((item) => item.text)),
-                    git([...cfg, ...args(["show", `${to}:${row.file}`])]).pipe(Effect.map((item) => item.text)),
-                  ],
+                  [read(`${from}:${row.file}`), read(`${to}:${row.file}`)],
                   { concurrency: 2 },
                 )
               })
@@ -606,9 +619,12 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
                       cwd: state.directory,
                       extendEnv: true,
                     }),
-                    { stdin: refs.map((item) => item.ref).join("\n") + "\n" },
+                    {
+                      stdin: refs.map((item) => item.ref).join("\n") + "\n",
+                      ...(maxTotalPatchBytes === undefined ? {} : { maxOutputBytes: maxTotalPatchBytes }),
+                    },
                   )
-                  if (batch.exitCode !== 0) {
+                  if (batch.exitCode !== 0 || batch.stdoutTruncated) {
                     yield* Effect.logInfo(
                       "git cat-file --batch failed during snapshot diff, falling back to per-file git show",
                       {
@@ -683,6 +699,7 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
 
               const result: FileDiff[] = []
               const status = new Map<string, "added" | "deleted" | "modified">()
+              let totalPatchBytes = 0
 
               const statuses = yield* git(
                 [...quote, ...args(["diff", "--no-ext-diff", "--name-status", "--no-renames", from, to, "--", "."])],
@@ -736,16 +753,41 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
               const patch = (file: string, before: string, after: string) =>
                 formatPatch(structuredPatch(file, file, before, after, "", "", { context: Number.MAX_SAFE_INTEGER }))
 
-              for (let i = 0; i < rows.length; i += step) {
-                const run = rows.slice(i, i + step)
+              for (let i = 0; i < rows.length && result.length < limit; i += step) {
+                const remaining = limit - result.length
+                const run = rows.slice(i, i + Math.min(step, remaining))
+                if (!run.length) break
                 const text = yield* load(run)
 
                 for (const row of run) {
                   const hit = text?.get(row.file) ?? { before: "", after: "" }
                   const [before, after] = row.binary ? ["", ""] : text ? [hit.before, hit.after] : yield* show(row)
+                  const nextPatch = row.binary ? "" : patch(row.file, before, after)
+                  const patchBytes = Buffer.byteLength(nextPatch)
+                  if (maxPatchBytes !== undefined && patchBytes > maxPatchBytes) {
+                    result.push({
+                      file: row.file,
+                      patch: "",
+                      additions: row.additions,
+                      deletions: row.deletions,
+                      status: row.status,
+                    })
+                    continue
+                  }
+                  if (maxTotalPatchBytes !== undefined && totalPatchBytes + patchBytes > maxTotalPatchBytes) {
+                    result.push({
+                      file: row.file,
+                      patch: "",
+                      additions: row.additions,
+                      deletions: row.deletions,
+                      status: row.status,
+                    })
+                    return result
+                  }
+                  totalPatchBytes += patchBytes
                   result.push({
                     file: row.file,
-                    patch: row.binary ? "" : patch(row.file, before, after),
+                    patch: nextPatch,
                     additions: row.additions,
                     deletions: row.deletions,
                     status: row.status,
@@ -791,8 +833,8 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
       diff: Effect.fn("Snapshot.diff")(function* (hash: string) {
         return yield* InstanceState.useEffect(state, (s) => s.diff(hash))
       }),
-      diffFull: Effect.fn("Snapshot.diffFull")(function* (from: string, to: string) {
-        return yield* InstanceState.useEffect(state, (s) => s.diffFull(from, to))
+      diffFull: Effect.fn("Snapshot.diffFull")(function* (from: string, to: string, options?: DiffOptions) {
+        return yield* InstanceState.useEffect(state, (s) => s.diffFull(from, to, options))
       }),
     })
   }),

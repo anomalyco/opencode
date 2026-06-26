@@ -35,6 +35,7 @@ import { isMedia } from "@/util/media"
 import type { SystemError } from "bun"
 import type { Provider } from "@/provider/provider"
 import { Effect, Schema } from "effect"
+import { limitSummaryDiffs } from "./summary-diffs"
 
 export const node = LayerNode.group([Database.node])
 
@@ -79,12 +80,16 @@ export const cursor = {
   },
 }
 
-const info = (row: typeof MessageTable.$inferSelect) =>
-  ({
+const info = (row: typeof MessageTable.$inferSelect) => {
+  const summary = row.data.summary
+  const diffs = summary?.diffs ? limitSummaryDiffs(summary.diffs) : undefined
+  return {
     ...row.data,
+    ...(summary ? { summary: diffs ? { ...summary, diffs } : summary } : {}),
     id: row.id,
     sessionID: row.session_id,
-  }) as Info
+  } as Info
+}
 
 const part = (row: typeof PartTable.$inferSelect) =>
   ({
