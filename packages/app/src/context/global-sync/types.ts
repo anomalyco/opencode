@@ -2,21 +2,20 @@ import type {
   Agent,
   Command,
   Config,
-  FileDiff,
   LspStatus,
   McpStatus,
   Message,
   Part,
   Path,
   PermissionRequest,
-  Project,
-  ProviderListResponse,
   QuestionRequest,
   Session,
   SessionStatus,
+  SnapshotFileDiff,
   Todo,
   VcsInfo,
 } from "@opencode-ai/sdk/v2/client"
+import { NormalizedProviderListResponse } from "@opencode-ai/session-ui/context"
 import type { Accessor } from "solid-js"
 import type { SetStoreFunction, Store } from "solid-js/store"
 
@@ -39,7 +38,7 @@ export type State = {
   projectMeta: ProjectMeta | undefined
   icon: string | undefined
   provider_ready: boolean
-  provider: ProviderListResponse
+  provider: NormalizedProviderListResponse
   config: Config
   path: Path
   session: Session[]
@@ -47,8 +46,9 @@ export type State = {
   session_status: {
     [sessionID: string]: SessionStatus
   }
+  session_working(id: string): boolean
   session_diff: {
-    [sessionID: string]: FileDiff[]
+    [sessionID: string]: SnapshotFileDiff[]
   }
   todo: {
     [sessionID: string]: Todo[]
@@ -73,6 +73,9 @@ export type State = {
   part: {
     [messageID: string]: Part[]
   }
+  part_text_accum_delta: {
+    [partID: string]: string
+  }
 }
 
 export type VcsCache = {
@@ -95,6 +98,7 @@ export type IconCache = {
 
 export type ChildOptions = {
   bootstrap?: boolean
+  mcp?: boolean
 }
 
 export type DirState = {

@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "version": "1.17.11",
+  "name": "@opencode-ai/http-recorder",
+  "description": "Record and replay Effect HTTP client traffic with deterministic cassettes",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/anomalyco/opencode.git",
+    "directory": "packages/http-recorder"
+  },
+  "homepage": "https://github.com/anomalyco/opencode/tree/dev/packages/http-recorder",
+  "bugs": "https://github.com/anomalyco/opencode/issues",
+  "keywords": [
+    "effect",
+    "http",
+    "recording",
+    "replay",
+    "testing",
+    "vcr"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "test": "bun test --timeout 30000 --only-failures",
+    "typecheck": "tsgo --noEmit",
+    "build": "bun ./script/build.ts",
+    "verify:package": "bun ./script/verify-package.ts"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./internal": "./src/internal.ts"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "devDependencies": {
+    "@tsconfig/node22": "catalog:",
+    "@types/bun": "catalog:",
+    "@types/node": "catalog:",
+    "@typescript/native-preview": "catalog:",
+    "effect": "catalog:",
+    "typescript": "catalog:"
+  },
+  "dependencies": {
+    "@effect/platform-node": "4.0.0-beta.83",
+    "@effect/platform-node-shared": "4.0.0-beta.83"
+  },
+  "peerDependencies": {
+    "effect": "4.0.0-beta.83"
+  }
+}

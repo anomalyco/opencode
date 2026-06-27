@@ -27,7 +27,7 @@ export default function Home() {
       const callback = () => {
         const text = button.textContent
         if (text) {
-          navigator.clipboard.writeText(text)
+          void navigator.clipboard.writeText(text)
           button.setAttribute("data-copied", "")
           setTimeout(() => {
             button.removeAttribute("data-copied")

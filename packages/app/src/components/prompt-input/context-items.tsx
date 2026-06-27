@@ -2,7 +2,7 @@ import { Component, For, Show } from "solid-js"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
-import { getDirectory, getFilename, getFilenameTruncated } from "@opencode-ai/util/path"
+import { getDirectory, getFilename, getFilenameTruncated } from "@opencode-ai/core/util/path"
 import type { ContextItem } from "@/context/prompt"
 
 type PromptContextItem = ContextItem & { key: string }
@@ -50,7 +50,7 @@ export const PromptContextItems: Component<ContextItemsProps> = (props) => {
                 >
                   <div class="flex items-center gap-1.5">
                     <FileIcon node={{ path: item.path, type: "file" }} class="shrink-0 size-3.5" />
-                    <div class="flex items-center text-11-regular min-w-0 font-medium">
+                    <div class="flex items-center text-[12px] min-w-0 font-medium leading-5">
                       <span class="text-text-strong whitespace-nowrap">{label}</span>
                       <Show when={item.selection}>
                         {(sel) => (

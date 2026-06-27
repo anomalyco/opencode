@@ -10,24 +10,27 @@ import { useLocal } from "@/context/local"
 import { popularProviders, useProviders } from "@/hooks/use-providers"
 import { ModelTooltip } from "./model-tooltip"
 import { useLanguage } from "@/context/language"
+import { decode64 } from "@/utils/base64"
 
 type ModelState = ReturnType<typeof useLocal>["model"]
 
 export const DialogSelectModelUnpaid: Component<{ model?: ModelState }> = (props) => {
-  const model = props.model ?? useLocal().model
+  const local = useLocal()
+  const model = props.model ?? local.model
   const dialog = useDialog()
-  const providers = useProviders()
+  const directory = () => decode64(local.slug())
+  const providers = useProviders(directory)
   const language = useLanguage()
 
   const connect = (provider: string) => {
     void import("./dialog-connect-provider").then((x) => {
-      dialog.show(() => <x.DialogConnectProvider provider={provider} />)
+      dialog.show(() => <x.DialogConnectProvider provider={provider} directory={directory} />)
     })
   }
 
   const all = () => {
     void import("./dialog-select-provider").then((x) => {
-      dialog.show(() => <x.DialogSelectProvider />)
+      dialog.show(() => <x.DialogSelectProvider directory={directory} />)
     })
   }
 
@@ -45,7 +48,7 @@ export const DialogSelectModelUnpaid: Component<{ model?: ModelState }> = (props
       <div class="flex flex-col gap-3 px-2.5" onKeyDown={handleKeyDown}>
         <div class="text-14-medium text-text-base px-2.5">{language.t("dialog.model.unpaid.freeModels.title")}</div>
         <List
-          class="[&_[data-slot=list-scroll]]:overflow-visible"
+          class="px-3 [&_[data-slot=list-scroll]]:overflow-visible"
           ref={(ref) => (listRef = ref)}
           items={model.list}
           current={model.current()}
@@ -90,8 +93,8 @@ export const DialogSelectModelUnpaid: Component<{ model?: ModelState }> = (props
             <div class="px-2 text-14-medium text-text-base">{language.t("dialog.model.unpaid.addMore.title")}</div>
             <div class="w-full">
               <List
-                class="w-full px-0"
-                key={(x) => x?.id}
+                class="w-full px-3"
+                key={(p) => p.id}
                 items={providers.popular}
                 activeIcon="plus-small"
                 sortBy={(a, b) => {

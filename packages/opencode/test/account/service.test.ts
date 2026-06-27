@@ -1,22 +1,33 @@
 import { expect } from "bun:test"
 import { Duration, Effect, Layer, Option, Schema } from "effect"
-import { HttpClient, HttpClientResponse } from "effect/unstable/http"
+import { sql } from "drizzle-orm"
+import { HttpClient, HttpClientError, HttpClientResponse } from "effect/unstable/http"
 
 import { AccountRepo } from "../../src/account/repo"
-import { Account } from "../../src/account"
-import { AccessToken, AccountID, DeviceCode, Login, Org, OrgID, RefreshToken, UserCode } from "../../src/account/schema"
-import { Database } from "../../src/storage/db"
+import { Account } from "../../src/account/account"
+import {
+  AccessToken,
+  AccountID,
+  AccountTransportError,
+  DeviceCode,
+  Login,
+  Org,
+  OrgID,
+  RefreshToken,
+  UserCode,
+} from "../../src/account/schema"
+import { Database } from "@opencode-ai/core/database/database"
 import { testEffect } from "../lib/effect"
 
 const truncate = Layer.effectDiscard(
-  Effect.sync(() => {
-    const db = Database.Client()
-    db.run(/*sql*/ `DELETE FROM account_state`)
-    db.run(/*sql*/ `DELETE FROM account`)
+  Effect.gen(function* () {
+    const { db } = yield* Database.Service
+    yield* db.run(sql`DELETE FROM account_state`)
+    yield* db.run(sql`DELETE FROM account`)
   }),
-)
+).pipe(Layer.provide(Database.defaultLayer))
 
-const it = testEffect(Layer.merge(AccountRepo.layer, truncate))
+const it = testEffect(Layer.merge(AccountRepo.defaultLayer, truncate))
 
 const insideEagerRefreshWindow = Duration.toMillis(Duration.minutes(1))
 const outsideEagerRefreshWindow = Duration.toMillis(Duration.minutes(10))
@@ -57,9 +68,58 @@ const deviceTokenClient = (body: unknown, status = 400) =>
 const poll = (body: unknown, status = 400) =>
   Account.Service.use((s) => s.poll(login())).pipe(Effect.provide(live(deviceTokenClient(body, status))))
 
+it.live("login normalizes trailing slashes in the provided server URL", () =>
+  Effect.gen(function* () {
+    const seen: Array<string> = []
+    const client = HttpClient.make((req) =>
+      Effect.gen(function* () {
+        seen.push(`${req.method} ${req.url}`)
+
+        if (req.url === "https://one.example.com/auth/device/code") {
+          return json(req, {
+            device_code: "device-code",
+            user_code: "user-code",
+            verification_uri_complete: "/device?user_code=user-code",
+            expires_in: 600,
+            interval: 5,
+          })
+        }
+
+        return json(req, {}, 404)
+      }),
+    )
+
+    const result = yield* Account.use.login("https://one.example.com/").pipe(Effect.provide(live(client)))
+
+    expect(seen).toEqual(["POST https://one.example.com/auth/device/code"])
+    expect(result.server).toBe("https://one.example.com")
+    expect(result.url).toBe("https://one.example.com/device?user_code=user-code")
+  }),
+)
+
+it.live("login maps transport failures to account transport errors", () =>
+  Effect.gen(function* () {
+    const client = HttpClient.make((req) =>
+      Effect.fail(
+        new HttpClientError.HttpClientError({
+          reason: new HttpClientError.TransportError({ request: req }),
+        }),
+      ),
+    )
+
+    const error = yield* Effect.flip(Account.use.login("https://one.example.com").pipe(Effect.provide(live(client))))
+
+    expect(error).toBeInstanceOf(AccountTransportError)
+    if (error instanceof AccountTransportError) {
+      expect(error.method).toBe("POST")
+      expect(error.url).toBe("https://one.example.com/auth/device/code")
+    }
+  }),
+)
+
 it.live("orgsByAccount groups orgs per account", () =>
   Effect.gen(function* () {
-    yield* AccountRepo.use((r) =>
+    yield* AccountRepo.Service.use((r) =>
       r.persistAccount({
         id: AccountID.make("user-1"),
         email: "one@example.com",
@@ -71,7 +131,7 @@ it.live("orgsByAccount groups orgs per account", () =>
       }),
     )
 
-    yield* AccountRepo.use((r) =>
+    yield* AccountRepo.Service.use((r) =>
       r.persistAccount({
         id: AccountID.make("user-2"),
         email: "two@example.com",
@@ -100,7 +160,7 @@ it.live("orgsByAccount groups orgs per account", () =>
       }),
     )
 
-    const rows = yield* Account.Service.use((s) => s.orgsByAccount()).pipe(Effect.provide(live(client)))
+    const rows = yield* Account.use.orgsByAccount().pipe(Effect.provide(live(client)))
 
     expect(rows.map((row) => [row.account.id, row.orgs.map((org) => org.id)]).map(([id, orgs]) => [id, orgs])).toEqual([
       [AccountID.make("user-1"), [OrgID.make("org-1")]],
@@ -114,7 +174,7 @@ it.live("token refresh persists the new token", () =>
   Effect.gen(function* () {
     const id = AccountID.make("user-1")
 
-    yield* AccountRepo.use((r) =>
+    yield* AccountRepo.Service.use((r) =>
       r.persistAccount({
         id,
         email: "user@example.com",
@@ -138,12 +198,12 @@ it.live("token refresh persists the new token", () =>
       ),
     )
 
-    const token = yield* Account.Service.use((s) => s.token(id)).pipe(Effect.provide(live(client)))
+    const token = yield* Account.use.token(id).pipe(Effect.provide(live(client)))
 
     expect(Option.getOrThrow(token)).toBeDefined()
     expect(String(Option.getOrThrow(token))).toBe("at_new")
 
-    const row = yield* AccountRepo.use((r) => r.getRow(id))
+    const row = yield* AccountRepo.use.getRow(id)
     const value = Option.getOrThrow(row)
     expect(value.access_token).toBe(AccessToken.make("at_new"))
     expect(value.refresh_token).toBe(RefreshToken.make("rt_new"))
@@ -155,7 +215,7 @@ it.live("token refreshes before expiry when inside the eager refresh window", ()
   Effect.gen(function* () {
     const id = AccountID.make("user-1")
 
-    yield* AccountRepo.use((r) =>
+    yield* AccountRepo.Service.use((r) =>
       r.persistAccount({
         id,
         email: "user@example.com",
@@ -183,12 +243,12 @@ it.live("token refreshes before expiry when inside the eager refresh window", ()
       }),
     )
 
-    const token = yield* Account.Service.use((s) => s.token(id)).pipe(Effect.provide(live(client)))
+    const token = yield* Account.use.token(id).pipe(Effect.provide(live(client)))
 
     expect(String(Option.getOrThrow(token))).toBe("at_new")
     expect(refreshCalls).toBe(1)
 
-    const row = yield* AccountRepo.use((r) => r.getRow(id))
+    const row = yield* AccountRepo.use.getRow(id)
     const value = Option.getOrThrow(row)
     expect(value.access_token).toBe(AccessToken.make("at_new"))
     expect(value.refresh_token).toBe(RefreshToken.make("rt_new"))
@@ -199,7 +259,7 @@ it.live("concurrent config and token requests coalesce token refresh", () =>
   Effect.gen(function* () {
     const id = AccountID.make("user-1")
 
-    yield* AccountRepo.use((r) =>
+    yield* AccountRepo.Service.use((r) =>
       r.persistAccount({
         id,
         email: "user@example.com",
@@ -252,7 +312,7 @@ it.live("concurrent config and token requests coalesce token refresh", () =>
     expect(String(Option.getOrThrow(token))).toBe("at_new")
     expect(refreshCalls).toBe(1)
 
-    const row = yield* AccountRepo.use((r) => r.getRow(id))
+    const row = yield* AccountRepo.use.getRow(id)
     const value = Option.getOrThrow(row)
     expect(value.access_token).toBe(AccessToken.make("at_new"))
     expect(value.refresh_token).toBe(RefreshToken.make("rt_new"))
@@ -263,7 +323,7 @@ it.live("config sends the selected org header", () =>
   Effect.gen(function* () {
     const id = AccountID.make("user-1")
 
-    yield* AccountRepo.use((r) =>
+    yield* AccountRepo.Service.use((r) =>
       r.persistAccount({
         id,
         email: "user@example.com",
@@ -325,7 +385,7 @@ it.live("poll stores the account and first org on success", () =>
       expect(res.email).toBe("user@example.com")
     }
 
-    const active = yield* AccountRepo.use((r) => r.active())
+    const active = yield* AccountRepo.use.active()
     expect(Option.getOrThrow(active)).toEqual(
       expect.objectContaining({
         id: "user-1",

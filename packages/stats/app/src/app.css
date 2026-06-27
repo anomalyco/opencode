@@ -1,0 +1,123 @@
+:root {
+  color-scheme: light dark;
+  --stats-bg: #f8f5ee;
+  --stats-ink: #16110d;
+  --stats-muted: #6d6257;
+  --stats-line: #ded5c9;
+  --stats-panel: #fffaf1;
+  --stats-accent: #2357ff;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --stats-bg: #11100e;
+    --stats-ink: #f7efe4;
+    --stats-muted: #b8aa99;
+    --stats-line: #322d27;
+    --stats-panel: #1a1714;
+    --stats-accent: #86a2ff;
+  }
+}
+
+html {
+  line-height: 1;
+  background: var(--stats-bg);
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  background:
+    radial-gradient(circle at top left, color-mix(in srgb, var(--stats-accent) 16%, transparent), transparent 32rem),
+    var(--stats-bg);
+  color: var(--stats-ink);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: inherit;
+}
+
+.shell {
+  box-sizing: border-box;
+  min-height: 100vh;
+  padding: 2rem clamp(1rem, 4vw, 4rem);
+}
+
+.panel {
+  display: grid;
+  gap: clamp(2rem, 8vw, 5rem);
+  box-sizing: border-box;
+  width: min(100%, 72rem);
+  margin: 0 auto;
+  padding: clamp(1.25rem, 4vw, 3rem);
+  border: 1px solid var(--stats-line);
+  border-radius: 1.5rem;
+  background: color-mix(in srgb, var(--stats-panel) 88%, transparent);
+}
+
+.eyebrow {
+  margin: 0 0 1rem;
+  color: var(--stats-muted);
+  font-size: 0.75rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+h1 {
+  max-width: 11ch;
+  margin: 0;
+  font-size: clamp(3rem, 14vw, 9rem);
+  line-height: 0.85;
+  letter-spacing: -0.08em;
+}
+
+.summary {
+  max-width: 42rem;
+  margin: 1.5rem 0 0;
+  color: var(--stats-muted);
+  font-size: clamp(1rem, 2vw, 1.25rem);
+  line-height: 1.6;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid var(--stats-line);
+  border-radius: 1rem;
+  background: var(--stats-line);
+}
+
+.metric {
+  padding: 1rem;
+  background: var(--stats-panel);
+}
+
+.metric b {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-size: clamp(1.5rem, 4vw, 3rem);
+  letter-spacing: -0.05em;
+}
+
+.metric span {
+  color: var(--stats-muted);
+  font-size: 0.8125rem;
+}
+
+.link {
+  display: inline-flex;
+  width: fit-content;
+  margin-top: 1.5rem;
+  color: var(--stats-accent);
+  text-decoration: none;
+}
+
+@media (max-width: 720px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -4,9 +4,10 @@ import path from "path"
 import { pathToFileURL } from "url"
 import { tmpdir } from "../../fixture/fixture"
 import { createTuiPluginApi } from "../../fixture/tui-plugin"
+import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 import { TuiConfig } from "../../../src/config/tui"
 
-const { TuiPluginRuntime } = await import("../../../src/cli/cmd/tui/plugin/runtime")
+const { TuiPluginRuntime } = await import("../../../src/plugin/tui/runtime")
 
 test("installs plugin without loading it", async () => {
   await using tmp = await tmpdir({
@@ -50,11 +51,9 @@ test("installs plugin without loading it", async () => {
   })
 
   process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
-  const cfg: Awaited<ReturnType<typeof TuiConfig.get>> = {
+  const config = createTuiResolvedConfig({
     plugin: [],
-    plugin_origins: undefined,
-  }
-  const get = spyOn(TuiConfig, "get").mockImplementation(async () => cfg)
+  })
   const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
   const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
   const api = createTuiPluginApi({
@@ -69,7 +68,7 @@ test("installs plugin without loading it", async () => {
   })
 
   try {
-    await TuiPluginRuntime.init(api)
+    await TuiPluginRuntime.init({ api, config })
     const out = await TuiPluginRuntime.installPlugin(tmp.extra.spec)
     expect(out).toMatchObject({
       ok: true,
@@ -82,7 +81,6 @@ test("installs plugin without loading it", async () => {
   } finally {
     await TuiPluginRuntime.dispose()
     cwd.mockRestore()
-    get.mockRestore()
     wait.mockRestore()
     delete process.env.OPENCODE_PLUGIN_META_FILE
   }
