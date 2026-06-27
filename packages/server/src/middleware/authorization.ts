@@ -1,16 +1,13 @@
 import { ServerAuth } from "../auth"
-import { UnauthorizedError } from "../errors"
-import { hasPtyConnectTicketURL } from "../groups/pty"
+import { UnauthorizedError } from "@opencode-ai/protocol/errors"
+import { Authorization } from "@opencode-ai/protocol/middleware/authorization"
+export { Authorization } from "@opencode-ai/protocol/middleware/authorization"
+import { hasPtyConnectTicketURL } from "@opencode-ai/protocol/groups/pty"
 import { Effect, Encoding, Layer, Redacted } from "effect"
 import { HttpEffect, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
-import { HttpApiMiddleware } from "effect/unstable/httpapi"
 
 const AUTH_TOKEN_QUERY = "auth_token"
 const WWW_AUTHENTICATE = 'Basic realm="Secure Area"'
-
-export class Authorization extends HttpApiMiddleware.Service<Authorization>()("@opencode/HttpApiAuthorization", {
-  error: UnauthorizedError,
-}) {}
 
 function emptyCredential() {
   return { username: "", password: Redacted.make("") }

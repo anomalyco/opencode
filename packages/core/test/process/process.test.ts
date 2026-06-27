@@ -40,6 +40,22 @@ describe("AppProcess", () => {
     )
 
     it.effect(
+      "captures stdout and stderr in emission order",
+      Effect.gen(function* () {
+        const svc = yield* AppProcess.Service
+        const script = [
+          'process.stdout.write("out 1\\n")',
+          'setTimeout(() => process.stderr.write("err 1\\n"), 10)',
+          'setTimeout(() => process.stdout.write("out 2\\n"), 20)',
+        ].join(";")
+        const result = yield* svc.run(cmd("-e", script), { combineOutput: true })
+        expect(result.output?.toString("utf8")).toBe("out 1\nerr 1\nout 2\n")
+        expect(result.stdout.toString("utf8")).toBe("")
+        expect(result.stderr.toString("utf8")).toBe("")
+      }),
+    )
+
+    it.effect(
       "non-zero exit returns RunResult; caller can require success",
       Effect.gen(function* () {
         const svc = yield* AppProcess.Service
@@ -61,6 +77,7 @@ describe("AppProcess", () => {
           if (reason && reason._tag === "Fail") {
             expect(reason.error).toBeInstanceOf(AppProcess.AppProcessError)
             expect((reason.error as AppProcess.AppProcessError).exitCode).toBe(1)
+            expect((reason.error as AppProcess.AppProcessError).message).toContain("Command failed (exit 1)")
           } else {
             throw new Error("expected fail reason")
           }
@@ -144,7 +161,7 @@ describe("AppProcess", () => {
             const script = `const fs=require('fs');fs.writeFileSync(${JSON.stringify(ready)},String(process.pid));process.on('SIGTERM',()=>{fs.writeFileSync(${JSON.stringify(settled)},'settled');process.exit(0)});setInterval(()=>{},60000)`
             return Effect.gen(function* () {
               const svc = yield* AppProcess.Service
-              const exit = yield* Effect.exit(svc.run(cmd("-e", script), { timeout: "1 second" }))
+              const exit = yield* Effect.exit(svc.run(cmd("-e", script), { timeout: "250 millis" }))
               expect(Exit.isFailure(exit)).toBe(true)
               expect(yield* waitForFile(ready)).toMatch(/^\d+$/)
               expect(yield* waitForFile(settled)).toBe("settled")

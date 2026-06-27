@@ -9,6 +9,7 @@ import { PositiveInt } from "../schema"
 import { PermissionV2 } from "../permission"
 import { Tool } from "./tool"
 import { Tools } from "./tools"
+import { collectBoundedResponseBody } from "./http-body"
 import { checksum } from "../util/encode"
 
 export const name = "websearch"
@@ -164,10 +165,12 @@ const callMcp = <F extends Schema.Struct.Fields>(
     )
     return yield* Effect.gen(function* () {
       const response = yield* HttpClient.filterStatusOk(http).execute(request)
-      const body = yield* response.text
-      if (Buffer.byteLength(body, "utf8") > MAX_RESPONSE_BYTES)
-        return yield* Effect.fail(new Error(`${tool} response exceeded ${MAX_RESPONSE_BYTES} bytes`))
-      return yield* parseResponse(body)
+      const body = yield* collectBoundedResponseBody(
+        response,
+        MAX_RESPONSE_BYTES,
+        () => new Error(`${tool} response exceeded ${MAX_RESPONSE_BYTES} bytes`),
+      )
+      return yield* parseResponse(body.toString("utf8"))
     }).pipe(
       Effect.timeoutOrElse({
         duration: Duration.seconds(25),

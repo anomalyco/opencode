@@ -7,14 +7,19 @@ import { Context, Effect, FileSystem, Layer, Schema } from "effect"
 import type { PlatformError } from "effect/PlatformError"
 import { Glob } from "./util/glob"
 import { serviceUse } from "./effect/service-use"
-import { LayerNode } from "./effect/layer-node"
+import { makeGlobalNode } from "./effect/node"
 import { filesystem } from "./effect/layer-node-platform"
 
 export namespace FSUtil {
   export class FileSystemError extends Schema.TaggedErrorClass<FileSystemError>()("FileSystemError", {
     method: Schema.String,
-    cause: Schema.optional(Schema.Defect),
-  }) {}
+    cause: Schema.optional(Schema.Defect()),
+  }) {
+    override get message() {
+      const detail = this.cause instanceof Error ? this.cause.message : this.cause && String(this.cause)
+      return `Filesystem operation failed: ${this.method}${detail ? `: ${detail}` : ""}`
+    }
+  }
 
   export type Error = PlatformError | FileSystemError
 
@@ -196,7 +201,7 @@ export namespace FSUtil {
   )
 
   export const defaultLayer = layer.pipe(Layer.provide(NodeFileSystem.layer))
-  export const node = LayerNode.make(layer, [filesystem])
+  export const node = makeGlobalNode({ service: Service, layer: layer, deps: [filesystem] })
 
   // Pure helpers that don't need Effect (path manipulation, sync operations)
   export function mimeType(p: string): string {

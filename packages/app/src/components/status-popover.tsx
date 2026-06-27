@@ -5,7 +5,8 @@ import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { Popover } from "@opencode-ai/ui/popover"
 import { Suspense, createMemo, createSignal, lazy, Show, type JSX } from "solid-js"
 import { useLanguage } from "@/context/language"
-import { useServer } from "@/context/server"
+import { ServerConnection, useServer } from "@/context/server"
+import { useServerSDK } from "@/context/server-sdk"
 import { useSync } from "@/context/sync"
 import { useGlobal } from "@/context/global"
 
@@ -81,11 +82,11 @@ export function StatusPopoverV2(props: { scope?: "server" }) {
 
 function DirectoryStatusPopover() {
   const language = useLanguage()
-  const server = useServer()
+  const server = useServerSDK()
   const global = useGlobal()
   const sync = useSync()
   const [shown, setShown] = createSignal(false)
-  const serverHealth = () => global.servers.health[server.key]?.healthy
+  const serverHealth = () => global.servers.health[ServerConnection.key(server().server)]?.healthy
   const ready = createMemo(() => serverHealth() === false || sync().data.mcp_ready)
   const mcpIssue = createMemo(() => {
     const mcp = Object.values(sync().data.mcp ?? {})

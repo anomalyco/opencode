@@ -10,8 +10,8 @@ import { tmpdir } from "./fixture/tmpdir"
 
 const base = "https://skills.example.test/catalog/"
 
-async function pull(skills: unknown[], files: Record<string, string> = {}) {
-  const tmp = await tmpdir()
+async function pull(skills: unknown[], files: Record<string, string> = {}, cache?: Awaited<ReturnType<typeof tmpdir>>) {
+  const tmp = cache ?? (await tmpdir())
   const requests: string[] = []
   const http = Layer.succeed(
     HttpClient.HttpClient,
@@ -99,6 +99,66 @@ describe("SkillDiscovery.pull", () => {
       expect(await fs.readFile(path.join(result.directories[0], "references", "guide.md"), "utf8")).toBe("# Guide")
     } finally {
       await result.tmp[Symbol.asyncDispose]()
+    }
+  })
+
+  test("refreshes cached files when the version changes", async () => {
+    const tmp = await tmpdir()
+    try {
+      const first = await pull(
+        [{ name: "deploy", version: "1", files: ["SKILL.md"] }],
+        {
+          [`${base}deploy/SKILL.md`]: "# Old",
+        },
+        tmp,
+      )
+      const second = await pull(
+        [{ name: "deploy", version: "2", files: ["SKILL.md"] }],
+        {
+          [`${base}deploy/SKILL.md`]: "# New",
+        },
+        tmp,
+      )
+
+      expect(await fs.readFile(path.join(first.directories[0], "SKILL.md"), "utf8")).toBe("# New")
+      expect(second.requests).toContain(`${base}deploy/SKILL.md`)
+      const third = await pull(
+        [{ name: "deploy", version: "2", files: ["SKILL.md"] }],
+        { [`${base}deploy/SKILL.md`]: "# Ignored" },
+        tmp,
+      )
+      expect(third.requests).toEqual([`${base}index.json`])
+    } finally {
+      await tmp[Symbol.asyncDispose]()
+    }
+  })
+
+  test("publishes complete updates and removes stale files", async () => {
+    const tmp = await tmpdir()
+    try {
+      const first = await pull(
+        [{ name: "deploy", version: "1", files: ["SKILL.md", "old.md"] }],
+        {
+          [`${base}deploy/SKILL.md`]: "# Old",
+          [`${base}deploy/old.md`]: "old reference",
+        },
+        tmp,
+      )
+      const root = first.directories[0]
+
+      await pull(
+        [{ name: "deploy", version: "2", files: ["SKILL.md", "missing.md"] }],
+        { [`${base}deploy/SKILL.md`]: "# Partial" },
+        tmp,
+      )
+      expect(await fs.readFile(path.join(root, "SKILL.md"), "utf8")).toBe("# Old")
+      expect(await fs.readFile(path.join(root, "old.md"), "utf8")).toBe("old reference")
+
+      await pull([{ name: "deploy", version: "3", files: ["SKILL.md"] }], { [`${base}deploy/SKILL.md`]: "# New" }, tmp)
+      expect(await fs.readFile(path.join(root, "SKILL.md"), "utf8")).toBe("# New")
+      expect(await Bun.file(path.join(root, "old.md")).exists()).toBe(false)
+    } finally {
+      await tmp[Symbol.asyncDispose]()
     }
   })
 })

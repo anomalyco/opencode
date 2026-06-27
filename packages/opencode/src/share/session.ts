@@ -56,6 +56,10 @@ export const defaultLayer = layer.pipe(
   Layer.provide(RuntimeFlags.defaultLayer),
 )
 
-export const node = LayerNode.make(layer, [Config.node, Session.node, ShareNext.node, RuntimeFlags.node])
+export const node = LayerNode.make({
+  service: Service,
+  layer: layer,
+  deps: [Config.node, Session.node, ShareNext.node, RuntimeFlags.node],
+})
 
 export * as SessionShare from "./session"

@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect } from "bun:test"
 import { Effect, Exit, Layer, Option } from "effect"
-import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { LayerNodeTree } from "@opencode-ai/core/effect/layer-node"
 import { httpClient } from "@opencode-ai/core/effect/layer-node-platform"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
@@ -19,7 +20,7 @@ import { provideTmpdirInstance } from "../fixture/fixture"
 import { resetDatabase } from "../fixture/db"
 import { pollWithTimeout, testEffect } from "../lib/effect"
 
-const env = LayerNode.buildLayer(CrossSpawnSpawner.node)
+const env = LayerNodeTree.compile(LayerNode.group([CrossSpawnSpawner.node]))
 const it = testEffect(env)
 
 const json = (req: Parameters<typeof HttpClientResponse.fromWeb>[0], body: unknown, status = 200) =>
@@ -34,13 +35,16 @@ const json = (req: Parameters<typeof HttpClientResponse.fromWeb>[0], body: unkno
 const none = HttpClient.make(() => Effect.die("unexpected http call"))
 
 function requestLayer(client: HttpClient.HttpClient) {
-  return LayerNode.buildLayer(LayerNode.group([ShareNext.node, AccountRepo.node]), {
-    replacements: [LayerNode.replace(httpClient, Layer.succeed(HttpClient.HttpClient, client))],
-  })
+  const replacement = LayerNode.replace(FetchHttpClient.layer, Layer.succeed(HttpClient.HttpClient, client))
+  return LayerNodeTree.compile(
+    LayerNode.group([ShareNext.node, AccountRepo.node]),
+    new Map([[replacement.source, replacement.replacement]]),
+  )
 }
 
 function integrationLayer(client: HttpClient.HttpClient) {
-  return LayerNode.buildLayer(
+  const replacement = LayerNode.replace(FetchHttpClient.layer, Layer.succeed(HttpClient.HttpClient, client))
+  return LayerNodeTree.compile(
     LayerNode.group([
       ShareNext.node,
       EventV2Bridge.node,
@@ -49,9 +53,7 @@ function integrationLayer(client: HttpClient.HttpClient) {
       AccountRepo.node,
       Database.node,
     ]),
-    {
-      replacements: [LayerNode.replace(httpClient, Layer.succeed(HttpClient.HttpClient, client))],
-    },
+    new Map([[replacement.source, replacement.replacement]]),
   )
 }
 
@@ -140,10 +142,10 @@ describe("ShareNext", () => {
   it.live("create posts share, persists it, and returns the result", () =>
     provideTmpdirInstance(
       () => {
-        const seen: HttpClientRequest.HttpClientRequest[] = []
+        const createRequests: HttpClientRequest.HttpClientRequest[] = []
         const client = HttpClient.make((req) => {
-          seen.push(req)
           if (req.url.endsWith("/api/share")) {
+            createRequests.push(req)
             return Effect.succeed(
               json(req, {
                 id: "shr_abc",
@@ -168,9 +170,9 @@ describe("ShareNext", () => {
           expect(row?.url).toBe("https://legacy-share.example.com/share/abc")
           expect(row?.secret).toBe("sec_123")
 
-          expect(seen).toHaveLength(1)
-          expect(seen[0].method).toBe("POST")
-          expect(seen[0].url).toBe("https://legacy-share.example.com/api/share")
+          expect(createRequests).toHaveLength(1)
+          expect(createRequests[0].method).toBe("POST")
+          expect(createRequests[0].url).toBe("https://legacy-share.example.com/api/share")
         }).pipe(Effect.provide(integrationLayer(client)))
       },
       { config: { enterprise: { url: "https://legacy-share.example.com" } } },

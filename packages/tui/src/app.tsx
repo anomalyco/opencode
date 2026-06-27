@@ -8,7 +8,7 @@ import { ClipboardProvider, useClipboard } from "./context/clipboard"
 import { ExitProvider, useExit } from "./context/exit"
 import { EpilogueProvider } from "./context/epilogue"
 import * as Selection from "./util/selection"
-import { createCliRenderer, MouseButton, type CliRenderer } from "@opentui/core"
+import { createCliRenderer, MouseButton } from "@opentui/core"
 import { RouteProvider, useRoute } from "./context/route"
 import {
   Switch,
@@ -35,6 +35,7 @@ import { SDKProvider, useSDK } from "./context/sdk"
 import { StartupLoading } from "./component/startup-loading"
 import { SyncProvider, useSync } from "./context/sync"
 import { DataProvider } from "./context/data"
+import { LocationProvider } from "./context/location"
 import { LocalProvider, useLocal } from "./context/local"
 import { DialogModel } from "./component/dialog-model"
 import { useConnected } from "./component/use-connected"
@@ -118,6 +119,7 @@ const appBindingCommands = [
   "theme.mode.lock",
   "help.show",
   "docs.open",
+  "diff.open",
   "workspace.list",
   "app.debug",
   "app.console",
@@ -181,21 +183,23 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
   const result = yield* Effect.scoped(
     Effect.gen(function* () {
       const renderer = yield* Effect.acquireRelease(
-        Effect.tryPromise(() =>
-          createCliRenderer({
-            externalOutputMode: "passthrough",
-            targetFps: 60,
-            gatherStats: false,
-            exitOnCtrlC: false,
-            useKittyKeyboard: {},
-            autoFocus: false,
-            openConsoleOnError: false,
-            useMouse: !Flag.OPENCODE_DISABLE_MOUSE && input.config.mouse,
-            consoleOptions: {
-              keyBindings: [{ name: "y", ctrl: true, action: "copy-selection" }],
-            },
-          }),
-        ),
+        Effect.tryPromise({
+          try: () =>
+            createCliRenderer({
+              externalOutputMode: "passthrough",
+              targetFps: 60,
+              gatherStats: false,
+              exitOnCtrlC: false,
+              useKittyKeyboard: {},
+              autoFocus: false,
+              openConsoleOnError: false,
+              useMouse: !Flag.OPENCODE_DISABLE_MOUSE && input.config.mouse,
+              consoleOptions: {
+                keyBindings: [{ name: "y", ctrl: true, action: "copy-selection" }],
+              },
+            }),
+          catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+        }),
         (renderer) =>
           Effect.sync(() => {
             destroyRenderer(renderer)
@@ -303,10 +307,12 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                                           <PromptHistoryProvider>
                                                             <PromptRefProvider>
                                                               <EditorContextProvider>
-                                                                <App
-                                                                  onSnapshot={input.onSnapshot}
-                                                                  pluginHost={input.pluginHost}
-                                                                />
+                                                                <LocationProvider>
+                                                                  <App
+                                                                    onSnapshot={input.onSnapshot}
+                                                                    pluginHost={input.pluginHost}
+                                                                  />
+                                                                </LocationProvider>
                                                               </EditorContextProvider>
                                                             </PromptRefProvider>
                                                           </PromptHistoryProvider>
