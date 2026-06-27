@@ -30,6 +30,7 @@ export interface TextFieldProps
   copyKind?: "clipboard" | "link"
   multiline?: boolean
   sensitive?: boolean
+  type?: string
 }
 
 export function TextField(props: TextFieldProps) {
@@ -108,7 +109,11 @@ export function TextField(props: TextFieldProps) {
           fallback={
             <Kobalte.Input
               {...others}
-              type={local.sensitive ? (revealed() ? "text" : "password") : local.type}
+              {...(local.sensitive
+                ? { type: revealed() ? "text" : "password" }
+                : local.type
+                  ? { type: local.type }
+                  : {})}
               data-slot="input-input"
               class={local.class}
             />
