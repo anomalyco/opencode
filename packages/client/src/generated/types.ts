@@ -1844,6 +1844,7 @@ export type MessagesListOutput = {
               readonly id: string
               readonly text: string
               readonly providerMetadata?: { readonly [x: string]: { readonly [x: string]: JsonValue } }
+              readonly time?: { readonly created: number; readonly completed?: number }
             }
           | {
               readonly type: "tool"

@@ -101,7 +101,6 @@ export const PtyGroup = HttpApiGroup.make("server.pty")
     HttpApiEndpoint.post("pty.connectToken", "/api/pty/:ptyID/connect-token", {
       params: { ptyID: Pty.ID },
       query: LocationQuery,
-      headers: { [PTY_CONNECT_TOKEN_HEADER]: Schema.Literal(PTY_CONNECT_TOKEN_HEADER_VALUE) },
       success: Location.response(PtyTicket.ConnectToken),
       error: [ForbiddenError, PtyNotFoundError],
     })
