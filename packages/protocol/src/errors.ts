@@ -25,6 +25,15 @@ export class ConflictError extends Schema.TaggedErrorClass<ConflictError>()(
   { httpApiStatus: 409 },
 ) {}
 
+export class SessionBusyError extends Schema.TaggedErrorClass<SessionBusyError>()(
+  "SessionBusyError",
+  {
+    sessionID: Schema.String,
+    message: Schema.String,
+  },
+  { httpApiStatus: 409 },
+) {}
+
 export class ServiceUnavailableError extends Schema.TaggedErrorClass<ServiceUnavailableError>()(
   "ServiceUnavailableError",
   {

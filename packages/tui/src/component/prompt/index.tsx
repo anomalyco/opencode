@@ -1104,6 +1104,13 @@ export function Prompt(props: PromptProps) {
           { throwOnError: true },
         )
       }
+      if (session?.revert) {
+        const revertResult = await sdk.client.v2.session.revert.commit({ sessionID })
+        if (revertResult.error) {
+          toast.show({ title: "Failed to commit revert", message: errorMessage(revertResult.error), variant: "error" })
+          return false
+        }
+      }
       const result = await sdk.client.v2.session.prompt({
         sessionID,
         prompt: {

@@ -409,6 +409,15 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         case "session.next.compaction.started":
           setStore("session", "status", event.data.sessionID, "running")
           break
+        case "session.next.revert.staged":
+          if (store.session.info[event.data.sessionID])
+            setStore("session", "info", event.data.sessionID, "revert", event.data.revert)
+          break
+        case "session.next.revert.cleared":
+        case "session.next.revert.committed":
+          if (store.session.info[event.data.sessionID])
+            setStore("session", "info", event.data.sessionID, "revert", undefined)
+          break
         case "session.next.compaction.delta":
           break
         case "session.next.compaction.ended":

@@ -3,11 +3,14 @@ import { useData } from "../../context/data"
 import { DialogSelect } from "../../ui/dialog-select"
 import { useClipboard } from "../../context/clipboard"
 import { useToast } from "../../ui/toast"
+import { useSDK } from "../../context/sdk"
+import { errorMessage } from "../../util/error"
 
 export function DialogMessage(props: { messageID: string; sessionID: string; setPrompt?: unknown }) {
   const data = useData()
   const clipboard = useClipboard()
   const toast = useToast()
+  const sdk = useSDK()
   const message = createMemo(() =>
     data.session.message.get(props.sessionID, props.messageID),
   )
@@ -20,8 +23,12 @@ export function DialogMessage(props: { messageID: string; sessionID: string; set
           title: "Revert",
           value: "session.revert",
           description: "undo messages and file changes",
-          onSelect: (dialog) => {
-            toast.show({ message: "Reverting is not implemented for V2 sessions yet", variant: "error", duration: 5000 })
+          onSelect: async (dialog) => {
+            const result = await sdk.client.v2.session.revert.stage({
+              sessionID: props.sessionID,
+              messageID: props.messageID,
+            })
+            if (result.error) toast.show({ message: errorMessage(result.error), variant: "error", duration: 5000 })
             dialog.clear()
           },
         },

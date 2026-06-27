@@ -378,7 +378,28 @@ export function Session() {
       value: "session.undo",
       category: "Session",
       slash: { name: "undo" },
-      run: () => unavailable("Undo"),
+      run: () => {
+        void (async () => {
+          const boundary = session()?.revert?.messageID
+          const list = messages()
+          let target: string | undefined
+          for (let i = list.length - 1; i >= 0; i--) {
+            const message = list[i]
+            if (message.type !== "user" || !message.text.trim()) continue
+            if (boundary && message.id >= boundary) continue
+            target = message.id
+            break
+          }
+          if (!target) {
+            toast.show({ message: "Nothing to undo", variant: "error", duration: 3000 })
+            dialog.clear()
+            return
+          }
+          const result = await sdk.client.v2.session.revert.stage({ sessionID: route.sessionID, messageID: target })
+          if (result.error) toast.show({ message: errorMessage(result.error), variant: "error", duration: 5000 })
+          dialog.clear()
+        })()
+      },
     },
     {
       title: "Redo",
@@ -386,7 +407,13 @@ export function Session() {
       category: "Session",
       enabled: !!session()?.revert?.messageID,
       slash: { name: "redo" },
-      run: () => unavailable("Redo"),
+      run: () => {
+        void (async () => {
+          const result = await sdk.client.v2.session.revert.clear({ sessionID: route.sessionID })
+          if (result.error) toast.show({ message: errorMessage(result.error), variant: "error", duration: 5000 })
+          dialog.clear()
+        })()
+      },
     },
     {
       title: sidebarVisible() ? "Hide sidebar" : "Show sidebar",
@@ -849,6 +876,11 @@ export function Session() {
                     />
                   )}
                 </For>
+                <Show when={session()?.revert?.messageID}>
+                  <RevertMessage
+                    count={messages().filter((message) => message.id > session()!.revert!.messageID).length}
+                  />
+                </Show>
               </scrollbox>
               <box flexShrink={0}>
                 <Show when={permissions().length > 0}>
@@ -1137,9 +1169,10 @@ function CompactionMessage() {
 
 function RevertMessage(props: { count: number }) {
   const { theme } = useTheme()
-  const dialog = useDialog()
-  const renderer = useRenderer()
+  const route = useRouteData("session")
+  const sdk = useSDK()
   const toast = useToast()
+  const renderer = useRenderer()
   const [hover, setHover] = createSignal(false)
   return (
     <box
@@ -1147,8 +1180,10 @@ function RevertMessage(props: { count: number }) {
       onMouseOut={() => setHover(false)}
       onMouseUp={() => {
         if (renderer.getSelection()?.getSelectedText()) return
-        toast.show({ message: "Redo is not implemented for V2 sessions yet", variant: "error", duration: 5000 })
-        dialog.clear()
+        void (async () => {
+          const result = await sdk.client.v2.session.revert.clear({ sessionID: route.sessionID })
+          if (result.error) toast.show({ message: errorMessage(result.error), variant: "error", duration: 5000 })
+        })()
       }}
       flexShrink={0}
       border={["left"]}
@@ -1157,7 +1192,7 @@ function RevertMessage(props: { count: number }) {
     >
       <box paddingTop={1} paddingBottom={1} paddingLeft={2} backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}>
         <text fg={theme.textMuted}>{props.count} message{props.count === 1 ? "" : "s"} reverted</text>
-        <text fg={theme.textMuted}>Redo is not implemented for V2 sessions yet</text>
+        <text fg={theme.textMuted}>Click to redo</text>
       </box>
     </box>
   )

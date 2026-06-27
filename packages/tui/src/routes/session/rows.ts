@@ -23,6 +23,13 @@ export type SessionRow =
 export function createSessionRows(sessionID: Accessor<string>) {
   const data = useData()
   const [rows, setRows] = createStore<SessionRow[]>([])
+  const revertBoundary = () => data.session.get(sessionID())?.revert?.messageID
+
+  function reduce() {
+    const messages = data.session.message.list(sessionID())
+    const boundary = revertBoundary()
+    return reduceSessionRows(boundary ? messages.filter((message) => message.id <= boundary) : messages)
+  }
 
   createEffect(() => {
     const pending = new Set(
@@ -44,14 +51,21 @@ export function createSessionRows(sessionID: Accessor<string>) {
 
   createEffect(
     on(sessionID, (id) => {
-      setRows(reconcile(reduceSessionRows(data.session.message.list(id))))
+      setRows(reconcile(reduce()))
       void data.session.message.refresh(id).then(
         () => {
           if (sessionID() !== id) return
-          setRows(reconcile(reduceSessionRows(data.session.message.list(id))))
+          setRows(reconcile(reduce()))
         },
         () => undefined,
       )
+    }),
+  )
+
+  // Re-reduce when the revert boundary changes (stage/clear/commit).
+  createEffect(
+    on(revertBoundary, () => {
+      setRows(reconcile(reduce()))
     }),
   )
 

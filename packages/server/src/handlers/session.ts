@@ -8,6 +8,7 @@ import {
   InvalidCursorError,
   MessageNotFoundError,
   ServiceUnavailableError,
+  SessionBusyError,
   SessionNotFoundError,
   UnknownError,
 } from "@opencode-ai/protocol/errors"
@@ -254,6 +255,14 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                     message: `Message not found: ${error.messageID}`,
                   }),
               ),
+              Effect.catchTag(
+                "Session.BusyError",
+                (error) =>
+                  new SessionBusyError({
+                    sessionID: error.sessionID,
+                    message: `Session is busy: ${error.sessionID}`,
+                  }),
+              ),
               Effect.catchTag("Snapshot.Error", (error) => {
                 const ref = `err_${crypto.randomUUID().slice(0, 8)}`
                 return Effect.logError("failed to stage session revert", { cause: error }).pipe(
@@ -283,6 +292,14 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                   message: `Session not found: ${error.sessionID}`,
                 }),
             ),
+            Effect.catchTag(
+              "Session.BusyError",
+              (error) =>
+                new SessionBusyError({
+                  sessionID: error.sessionID,
+                  message: `Session is busy: ${error.sessionID}`,
+                }),
+            ),
             Effect.catchTag("Snapshot.Error", (error) => {
               const ref = `err_${crypto.randomUUID().slice(0, 8)}`
               return Effect.logError("failed to clear session revert", { cause: error }).pipe(
@@ -310,6 +327,14 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                 new SessionNotFoundError({
                   sessionID: error.sessionID,
                   message: `Session not found: ${error.sessionID}`,
+                }),
+            ),
+            Effect.catchTag(
+              "Session.BusyError",
+              (error) =>
+                new SessionBusyError({
+                  sessionID: error.sessionID,
+                  message: `Session is busy: ${error.sessionID}`,
                 }),
             ),
           )
