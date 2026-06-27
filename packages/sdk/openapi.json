@@ -27588,6 +27588,19 @@
           },
           "providerMetadata": {
             "$ref": "#/components/schemas/LLMProviderMetadata"
+          },
+          "time": {
+            "type": "object",
+            "properties": {
+              "created": {
+                "type": "number"
+              },
+              "completed": {
+                "type": "number"
+              }
+            },
+            "required": ["created"],
+            "additionalProperties": false
           }
         },
         "required": ["type", "id", "text"],

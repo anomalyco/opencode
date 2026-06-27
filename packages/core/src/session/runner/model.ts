@@ -133,7 +133,7 @@ export const fromCatalogModel = (
   credential?: Credential.Value,
 ): Effect.Effect<Model, UnsupportedApiError> => {
   const resolved =
-    credential?.metadata === undefined
+    credential?.type !== "key" || credential.metadata === undefined
       ? model
       : produce(model, (draft) => {
           Object.assign(draft.request.body, credential.metadata)

@@ -317,6 +317,7 @@
         "ai-gateway-provider": "3.1.2",
         "bun-pty": "0.4.8",
         "cross-spawn": "catalog:",
+        "diff": "catalog:",
         "drizzle-orm": "catalog:",
         "effect": "catalog:",
         "fuzzysort": "3.1.0",

@@ -2565,7 +2565,7 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
-  it.effect("propagates unexpected local tool defects operationally", () =>
+  it.effect("returns unexpected local tool defects to the model and continues", () =>
     Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
@@ -2579,11 +2579,20 @@ describe("SessionRunnerLLM", () => {
           LLMEvent.stepFinish({ index: 0, reason: "tool-calls" }),
           LLMEvent.finish({ reason: "tool-calls" }),
         ],
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.textStart({ id: "text-after-defect" }),
+          LLMEvent.textDelta({ id: "text-after-defect", text: "Recovered" }),
+          LLMEvent.textEnd({ id: "text-after-defect" }),
+          LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+          LLMEvent.finish({ reason: "stop" }),
+        ],
       ]
 
-      expect(yield* session.resume(sessionID).pipe(Effect.catchDefect(Effect.succeed))).toBe("unexpected tool defect")
+      yield* session.resume(sessionID)
 
-      expect(requests).toHaveLength(1)
+      expect(requests).toHaveLength(2)
+      expect(requests[1]?.messages.map((message) => message.role)).toEqual(["user", "assistant", "tool"])
       expect(yield* session.context(sessionID)).toMatchObject([
         { type: "user", text: "Call defect" },
         {
@@ -2599,6 +2608,7 @@ describe("SessionRunnerLLM", () => {
             },
           ],
         },
+        { type: "assistant", finish: "stop", content: [{ type: "text", text: "Recovered" }] },
       ])
     }),
   )

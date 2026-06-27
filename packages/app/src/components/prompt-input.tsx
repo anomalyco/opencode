@@ -35,6 +35,8 @@ import { DockShellForm, DockTray } from "@opencode-ai/ui/dock-surface"
 import { Icon } from "@opencode-ai/ui/icon"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
+import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
+import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Select } from "@opencode-ai/ui/select"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
@@ -1362,7 +1364,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     shouldAnimate: providersShouldFadeIn(),
     paid: props.controls.model.paid,
     title: language.t("command.model.choose"),
-    keybind: command.keybind("model.choose"),
+    keybind: command.keybindParts("model.choose"),
     model: props.controls.model.selection,
     providerID: props.controls.model.selection.current()?.provider?.id,
     modelName: props.controls.model.selection.current()?.name ?? language.t("dialog.model.select.title"),
@@ -1379,7 +1381,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const showAgentControl = createMemo(() => props.controls.agents.visible && props.controls.agents.options.length > 0)
   const agentControlState = createMemo<ComposerAgentControlState>(() => ({
     title: language.t("command.agent.cycle"),
-    keybind: command.keybind("agent.cycle"),
+    keybind: command.keybindParts("agent.cycle"),
     options: props.controls.agents.options,
     current: props.controls.agents.current,
     style: control(),
@@ -1497,10 +1499,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               <div class="flex h-11 items-center px-2">
                 <div class="flex min-w-0 flex-1 items-center gap-0">
                   {fileAttachmentInput()}
-                  <TooltipKeybind
+                  <TooltipV2
                     placement="top"
-                    title={language.t("prompt.action.attachFile")}
-                    keybind={command.keybind("file.attach")}
+                    value={
+                      <>
+                        {language.t("prompt.action.attachFile")}
+                        <KeybindV2 keys={command.keybindParts("file.attach")} variant="neutral" />
+                      </>
+                    }
                   >
                     <IconButton
                       data-action="prompt-attach"
@@ -1514,7 +1520,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       tabIndex={store.mode === "normal" ? undefined : -1}
                       aria-label={language.t("prompt.action.attachFile")}
                     />
-                  </TooltipKeybind>
+                  </TooltipV2>
                   <Show when={showAgentControl()}>
                     <ComposerAgentControl state={agentControlState()} />
                   </Show>
@@ -1529,11 +1535,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                           !props.controls.model.selection.variant.current() && !store.variantOpen,
                       }}
                     >
-                      <TooltipKeybind
+                      <TooltipV2
                         placement="top"
                         gutter={4}
-                        title={language.t("command.model.variant.cycle")}
-                        keybind={command.keybind("model.variant.cycle")}
+                        value={
+                          <>
+                            {language.t("command.model.variant.cycle")}
+                            <KeybindV2 keys={command.keybindParts("model.variant.cycle")} variant="neutral" />
+                          </>
+                        }
                       >
                         <Select
                           size="normal"
@@ -1551,11 +1561,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                           triggerProps={{ "data-action": "prompt-model-variant" }}
                           variant="ghost"
                         />
-                      </TooltipKeybind>
+                      </TooltipV2>
                     </div>
                   </Show>
                 </div>
-                <Tooltip placement="top" inactive={!working() && blank()} value={tip()}>
+                <TooltipV2 placement="top" inactive={!working() && blank()} value={tip()}>
                   <IconButton
                     data-action="prompt-submit"
                     type="submit"
@@ -1570,7 +1580,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     }}
                     aria-label={stopping() ? language.t("prompt.action.stop") : language.t("prompt.action.send")}
                   />
-                </Tooltip>
+                </TooltipV2>
               </div>
             </DockShellForm>
           </div>
@@ -1916,7 +1926,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
 type ComposerAgentControlState = {
   title: string
-  keybind: string
+  keybind: string[]
   options: string[]
   current: string
   style: JSX.CSSProperties | undefined
@@ -1928,7 +1938,7 @@ type ComposerModelControlState = {
   shouldAnimate: boolean
   paid: boolean
   title: string
-  keybind: string
+  keybind: string[]
   model: ReturnType<typeof useLocal>["model"]
   providerID?: string
   modelName: string
@@ -1943,7 +1953,16 @@ function ComposerAgentControl(props: { state: ComposerAgentControlState }) {
       <div class="pointer-events-none absolute left-2 top-1/2 z-10 flex size-4 -translate-y-1/2 items-center justify-center text-v2-icon-icon-muted">
         <Icon name="sliders" size="small" />
       </div>
-      <TooltipKeybind placement="top" gutter={4} title={props.state.title} keybind={props.state.keybind}>
+      <TooltipV2
+        placement="top"
+        gutter={4}
+        value={
+          <>
+            {props.state.title}
+            <KeybindV2 keys={props.state.keybind} variant="neutral" />
+          </>
+        }
+      >
         <Select
           size="normal"
           options={props.state.options}
@@ -1955,7 +1974,7 @@ function ComposerAgentControl(props: { state: ComposerAgentControlState }) {
           triggerProps={{ "data-action": "prompt-agent" }}
           variant="ghost"
         />
-      </TooltipKeybind>
+      </TooltipV2>
     </div>
   )
 }
@@ -1966,7 +1985,16 @@ function ComposerModelControl(props: { state: ComposerModelControlState }) {
       <Show
         when={props.state.paid}
         fallback={
-          <TooltipKeybind placement="top" gutter={4} title={props.state.title} keybind={props.state.keybind}>
+          <TooltipV2
+            placement="top"
+            gutter={4}
+            value={
+              <>
+                {props.state.title}
+                <KeybindV2 keys={props.state.keybind} variant="neutral" />
+              </>
+            }
+          >
             <Button
               data-action="prompt-model"
               as="div"
@@ -1991,10 +2019,19 @@ function ComposerModelControl(props: { state: ComposerModelControlState }) {
                 <Icon name="chevron-down" size="small" class="text-v2-icon-icon-muted" />
               </span>
             </Button>
-          </TooltipKeybind>
+          </TooltipV2>
         }
       >
-        <TooltipKeybind placement="top" gutter={4} title={props.state.title} keybind={props.state.keybind}>
+        <TooltipV2
+          placement="top"
+          gutter={4}
+          value={
+            <>
+              {props.state.title}
+              <KeybindV2 keys={props.state.keybind} variant="neutral" />
+            </>
+          }
+        >
           <ModelSelectorPopover
             model={props.state.model}
             triggerAs={Button}
@@ -2023,7 +2060,7 @@ function ComposerModelControl(props: { state: ComposerModelControlState }) {
               <Icon name="chevron-down" size="small" class="text-v2-icon-icon-muted" />
             </span>
           </ModelSelectorPopover>
-        </TooltipKeybind>
+        </TooltipV2>
       </Show>
     </Show>
   )
