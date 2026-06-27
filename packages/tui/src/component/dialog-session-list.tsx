@@ -13,6 +13,7 @@ import { useLocal } from "../context/local"
 import { createDebouncedSignal } from "../util/signal"
 import { useToast } from "../ui/toast"
 import { useCommandShortcut } from "../keymap"
+import { DialogSessionRename } from "./dialog-session-rename"
 import { Spinner } from "./spinner"
 
 export function DialogSessionList() {
@@ -121,7 +122,8 @@ export function DialogSessionList() {
         {
           command: "session.rename",
           title: "rename",
-          onTrigger: () => unavailable("Renaming"),
+          onTrigger: (option: { value: string }) =>
+            DialogSessionRename.show(dialog, option.value, data.session.get(option.value)?.title),
         },
       ]}
       footerHints={quickSwitchFooterHints()}

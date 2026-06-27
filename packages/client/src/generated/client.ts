@@ -10,6 +10,8 @@ import type {
   SessionsSwitchAgentOutput,
   SessionsSwitchModelInput,
   SessionsSwitchModelOutput,
+  SessionsRenameInput,
+  SessionsRenameOutput,
   SessionsPromptInput,
   SessionsPromptOutput,
   SessionsCompactInput,
@@ -239,6 +241,18 @@ export function make(options: ClientOptions) {
             method: "POST",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/model`,
             body: { model: input.model },
+            successStatus: 204,
+            declaredStatuses: [404, 400, 401],
+            empty: true,
+          },
+          requestOptions,
+        ),
+      rename: (input: SessionsRenameInput, requestOptions?: RequestOptions) =>
+        request<SessionsRenameOutput>(
+          {
+            method: "POST",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/rename`,
+            body: { title: input.title },
             successStatus: 204,
             declaredStatuses: [404, 400, 401],
             empty: true,

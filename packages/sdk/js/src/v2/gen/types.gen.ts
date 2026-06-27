@@ -19,6 +19,7 @@ export type Event =
   | EventSessionNextAgentSwitched
   | EventSessionNextModelSwitched
   | EventSessionNextMoved
+  | EventSessionNextRenamed
   | EventSessionNextPrompted
   | EventSessionNextPromptAdmitted
   | EventSessionNextContextUpdated
@@ -850,6 +851,15 @@ export type GlobalEvent = {
       }
     | {
         id: string
+        type: "session.next.renamed"
+        properties: {
+          timestamp: number
+          sessionID: string
+          title: string
+        }
+      }
+    | {
+        id: string
         type: "session.next.prompted"
         properties: {
           timestamp: number
@@ -1611,6 +1621,7 @@ export type GlobalEvent = {
     | SyncEventSessionNextAgentSwitched
     | SyncEventSessionNextModelSwitched
     | SyncEventSessionNextMoved
+    | SyncEventSessionNextRenamed
     | SyncEventSessionNextPrompted
     | SyncEventSessionNextPromptAdmitted
     | SyncEventSessionNextContextUpdated
@@ -2760,6 +2771,7 @@ export type V2Event =
   | V2EventSessionNextAgentSwitched
   | V2EventSessionNextModelSwitched
   | V2EventSessionNextMoved
+  | V2EventSessionNextRenamed
   | V2EventSessionNextPrompted
   | V2EventSessionNextPromptAdmitted
   | V2EventSessionNextContextUpdated
@@ -3236,6 +3248,22 @@ export type SyncEventSessionNextMoved = {
       sessionID: string
       location: LocationRef
       subdirectory?: string
+    }
+  }
+}
+
+export type SyncEventSessionNextRenamed = {
+  type: "sync"
+  id: string
+  syncEvent: {
+    type: "session.next.renamed.1"
+    id: string
+    seq: number
+    aggregateID: string
+    data: {
+      timestamp: number
+      sessionID: string
+      title: string
     }
   }
 }
@@ -4110,6 +4138,25 @@ export type SessionNextMoved = {
     sessionID: string
     location: LocationRef
     subdirectory?: string
+  }
+}
+
+export type SessionNextRenamed = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.renamed"
+  durable?: {
+    aggregateID: string
+    seq: number | "NaN" | "Infinity" | "-Infinity"
+    version: number | "NaN" | "Infinity" | "-Infinity"
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    title: string
   }
 }
 
@@ -5165,6 +5212,25 @@ export type V2EventSessionNextMoved = {
     sessionID: string
     location: LocationRef
     subdirectory?: string
+  }
+}
+
+export type V2EventSessionNextRenamed = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  type: "session.next.renamed"
+  data: {
+    timestamp: number
+    sessionID: string
+    title: string
   }
 }
 
@@ -6833,6 +6899,16 @@ export type EventSessionNextMoved = {
     sessionID: string
     location: LocationRef
     subdirectory?: string
+  }
+}
+
+export type EventSessionNextRenamed = {
+  id: string
+  type: "session.next.renamed"
+  properties: {
+    timestamp: number
+    sessionID: string
+    title: string
   }
 }
 
@@ -12104,6 +12180,43 @@ export type V2SessionSwitchModelResponses = {
 }
 
 export type V2SessionSwitchModelResponse = V2SessionSwitchModelResponses[keyof V2SessionSwitchModelResponses]
+
+export type V2SessionRenameData = {
+  body: {
+    title: string
+  }
+  path: {
+    sessionID: string
+  }
+  query?: never
+  url: "/api/session/{sessionID}/rename"
+}
+
+export type V2SessionRenameErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * SessionNotFoundError
+   */
+  404: SessionNotFoundError
+}
+
+export type V2SessionRenameError = V2SessionRenameErrors[keyof V2SessionRenameErrors]
+
+export type V2SessionRenameResponses = {
+  /**
+   * <No Content>
+   */
+  204: void
+}
+
+export type V2SessionRenameResponse = V2SessionRenameResponses[keyof V2SessionRenameResponses]
 
 export type V2SessionPromptData = {
   body: {

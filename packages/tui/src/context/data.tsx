@@ -169,6 +169,10 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             })
           })
           break
+        case "session.next.renamed":
+          if (store.session.info[event.data.sessionID])
+            setStore("session", "info", event.data.sessionID, "title", event.data.title)
+          break
         case "session.next.prompted": {
           setStore("session", "status", event.data.sessionID, "running")
           message.update(event.data.sessionID, (draft, index) => {

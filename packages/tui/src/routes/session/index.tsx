@@ -42,6 +42,7 @@ import { useSDK } from "../../context/sdk"
 import { useEditorContext } from "../../context/editor"
 import { openEditor } from "../../editor"
 import { useDialog } from "../../ui/dialog"
+import { DialogSessionRename } from "../../component/dialog-session-rename"
 import { TodoItem } from "../../component/todo-item"
 import { DialogMessage } from "./dialog-message"
 import { Sidebar } from "./sidebar"
@@ -335,7 +336,7 @@ export function Session() {
       value: "session.rename",
       category: "Session",
       slash: { name: "rename" },
-      run: () => unavailable("Renaming"),
+      run: () => DialogSessionRename.show(dialog, route.sessionID, session()?.title),
     },
     {
       title: "Jump to message",
