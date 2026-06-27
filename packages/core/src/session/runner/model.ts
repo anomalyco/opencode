@@ -1,5 +1,6 @@
 export * as SessionRunnerModel from "./model"
 
+import { makeLocationNode } from "../../effect/node"
 import { type Model } from "@opencode-ai/llm"
 import * as AnthropicMessages from "@opencode-ai/llm/protocols/anthropic-messages"
 import * as OpenAICompatibleChat from "@opencode-ai/llm/protocols/openai-compatible-chat"
@@ -11,7 +12,6 @@ import { Catalog } from "../../catalog"
 import { Credential } from "../../credential"
 import { Integration } from "../../integration"
 import { ModelV2 } from "../../model"
-import { ModelRequest } from "../../model-request"
 import { ProviderV2 } from "../../provider"
 import { SessionSchema } from "../schema"
 
@@ -88,8 +88,6 @@ const apiKey = (model: ModelV2.Info, credential?: Credential.Value) => {
 }
 
 const withDefaults = (model: ModelV2.Info, route: AnyRoute) => {
-  const options = model.request.options ?? {}
-  const namespace = model.api.type === "aisdk" ? ModelRequest.namespace(model.api.package) : undefined
   const body = model.request.body
   const httpBody = Object.hasOwn(body, "apiKey")
     ? Object.fromEntries(Object.entries(body).filter(([key]) => key !== "apiKey"))
@@ -98,8 +96,6 @@ const withDefaults = (model: ModelV2.Info, route: AnyRoute) => {
     provider: model.providerID,
     endpoint: model.api.url === undefined ? undefined : { baseURL: model.api.url },
     headers: model.request.headers,
-    generation: model.request.generation,
-    providerOptions: namespace && Object.keys(options).length > 0 ? { [namespace]: options } : undefined,
     http: { body: httpBody },
     limits: { context: model.limit.context, output: model.limit.output },
   })
@@ -122,7 +118,8 @@ const withVariant = (
   return Effect.succeed(
     variant
       ? produce(model, (draft) => {
-          ModelRequest.assign(draft.request, variant)
+          Object.assign(draft.request.headers, variant.headers)
+          Object.assign(draft.request.body, variant.body)
         })
       : model,
   )
@@ -136,7 +133,7 @@ export const fromCatalogModel = (
   credential?: Credential.Value,
 ): Effect.Effect<Model, UnsupportedApiError> => {
   const resolved =
-    credential?.metadata === undefined
+    credential?.type !== "key" || credential.metadata === undefined
       ? model
       : produce(model, (draft) => {
           Object.assign(draft.request.body, credential.metadata)
@@ -217,3 +214,5 @@ export const locationLayer = Layer.effect(
     })
   }),
 )
+
+export const node = makeLocationNode({ service: Service, layer: locationLayer, deps: [Catalog.node, Integration.node] })

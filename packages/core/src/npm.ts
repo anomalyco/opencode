@@ -7,7 +7,7 @@ import { NodeFileSystem } from "@effect/platform-node"
 import { FSUtil } from "./fs-util"
 import { Global } from "./global"
 import { EffectFlock } from "./util/effect-flock"
-import { LayerNode } from "./effect/layer-node"
+import { makeGlobalNode } from "./effect/node"
 import { filesystem } from "./effect/layer-node-platform"
 import { makeRuntime } from "./effect/runtime"
 import { NpmConfig } from "./npm-config"
@@ -253,7 +253,11 @@ export const defaultLayer = layer.pipe(
   Layer.provide(Global.layer),
   Layer.provide(NodeFileSystem.layer),
 )
-export const node = LayerNode.make(layer, [FSUtil.node, Global.node, filesystem, EffectFlock.node])
+export const node = makeGlobalNode({
+  service: Service,
+  layer: layer,
+  deps: [FSUtil.node, Global.node, filesystem, EffectFlock.node],
+})
 
 const { runPromise } = makeRuntime(Service, defaultLayer)
 

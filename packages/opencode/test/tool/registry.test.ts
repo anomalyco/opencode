@@ -4,6 +4,7 @@ import fs from "fs/promises"
 import { fileURLToPath, pathToFileURL } from "url"
 import { Effect, Layer, Result, Schema } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { LayerNodeTree } from "@opencode-ai/core/effect/layer-node"
 import { ToolRegistry } from "@/tool/registry"
 import { Tool } from "@/tool/tool"
 import { disposeAllInstances, TestInstance } from "../fixture/fixture"
@@ -50,15 +51,21 @@ const brokenPluginLayer = Layer.succeed(
 
 const root = LayerNode.group([ToolRegistry.node, Agent.node])
 const replacements = [
-  LayerNode.replace(Config.node, configLayer),
-  LayerNode.replace(RuntimeFlags.node, RuntimeFlags.layer()),
+  LayerNode.replace(Config.layer, configLayer),
+  LayerNode.replace(RuntimeFlags.defaultLayer, RuntimeFlags.layer()),
 ]
 
-const it = testEffect(LayerNode.buildLayer(root, { replacements }))
+const it = testEffect(LayerNodeTree.compile(root, new Map(replacements.map((item) => [item.source, item.replacement]))))
 const withBrokenPlugin = testEffect(
-  LayerNode.buildLayer(root, {
-    replacements: [...replacements, LayerNode.replace(Plugin.node, brokenPluginLayer)],
-  }),
+  LayerNodeTree.compile(
+    root,
+    new Map(
+      [...replacements, LayerNode.replace(Plugin.layer, brokenPluginLayer)].map((item) => [
+        item.source,
+        item.replacement,
+      ]),
+    ),
+  ),
 )
 
 afterEach(async () => {

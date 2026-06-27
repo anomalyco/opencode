@@ -2,7 +2,6 @@ import { define } from "./internal"
 import { Effect, Stream } from "effect"
 import { EventV2 } from "../event"
 import { ModelV2 } from "../model"
-import { ModelRequest } from "../model-request"
 import { ModelsDev } from "../models-dev"
 import { ProviderV2 } from "../provider"
 
@@ -38,15 +37,12 @@ function cost(input: ModelsDev.Model["cost"]) {
   ]
 }
 
-function variants(model: ModelsDev.Model, packageName?: string) {
-  return Object.entries(model.experimental?.modes ?? {}).map(([id, item]) => {
-    const request = ModelRequest.normalizeAiSdkOptions(packageName, item.provider?.body ?? {})
-    return {
-      id: ModelV2.VariantID.make(id),
-      headers: { ...(item.provider?.headers ?? {}) },
-      ...request,
-    }
-  })
+function variants(model: ModelsDev.Model) {
+  return Object.entries(model.experimental?.modes ?? {}).map(([id, item]) => ({
+    id: ModelV2.VariantID.make(id),
+    headers: { ...(item.provider?.headers ?? {}) },
+    body: { ...(item.provider?.body ?? {}) },
+  }))
 }
 
 export const ModelsDevPlugin = define({
@@ -115,7 +111,7 @@ export const ModelsDevPlugin = define({
                 input: [...(model.modalities?.input ?? [])],
                 output: [...(model.modalities?.output ?? [])],
               }
-              draft.variants = variants(model, model.provider?.npm ?? item.npm)
+              draft.variants = variants(model)
               draft.time.released = released(model.release_date)
               draft.cost = cost(model.cost)
               draft.status = model.status ?? "active"

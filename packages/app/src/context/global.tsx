@@ -8,13 +8,11 @@ import { createServerSyncContext } from "./server-sync"
 import { getOwner } from "solid-js/web"
 import { QueryClient } from "@tanstack/solid-query"
 import type { ServerScope } from "@/utils/server-scope"
-import { createSessionPlacementStore } from "@/utils/session-placement"
 
 export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext({
   name: "Global",
   init: () => {
     const server = useServer()
-    const sessionPlacement = createSessionPlacementStore()
     const serverHealth = useServerHealth(
       () => server.list,
       () => true,
@@ -87,8 +85,7 @@ export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext(
           },
         },
       },
-      sessionPlacement,
-      createServerCtx(conn: ServerConnection.Any) {
+      ensureServerCtx(conn: ServerConnection.Any) {
         return ensureServerCtx(conn)
       },
     }

@@ -1,11 +1,12 @@
 export * as Pty from "./pty"
 
+import { makeLocationNode } from "./effect/node"
 import type { Disp, Proc } from "#pty"
 import { Context, Effect, Layer, Schema, Types } from "effect"
+import { Pty } from "@opencode-ai/schema/pty"
 import { Config } from "./config"
 import { EventV2 } from "./event"
 import { Location } from "./location"
-import { NonNegativeInt, PositiveInt } from "./schema"
 import { PtyID } from "./pty/schema"
 import { Shell } from "./shell"
 import { lazy } from "./util/lazy"
@@ -35,42 +36,18 @@ type Active = {
   listeners: Disp[]
 }
 
-export const Info = Schema.Struct({
-  id: PtyID,
-  title: Schema.String,
-  command: Schema.String,
-  args: Schema.Array(Schema.String),
-  cwd: Schema.String,
-  status: Schema.Literals(["running", "exited"]),
-  // Windows ConPTY assigns the child pid asynchronously, so 0 is valid at spawn time.
-  pid: NonNegativeInt,
-  // Present once status is "exited".
-  exitCode: Schema.optional(NonNegativeInt),
-}).annotate({ identifier: "Pty" })
-
+export const Info = Pty.Info
 export type Info = Types.DeepMutable<typeof Info.Type>
 
-export const CreateInput = Schema.Struct({
-  command: Schema.optional(Schema.String),
-  args: Schema.optional(Schema.Array(Schema.String)),
-  cwd: Schema.optional(Schema.String),
-  title: Schema.optional(Schema.String),
-  env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
-})
+export const CreateInput = Pty.CreateInput
 
 export type CreateInput = Types.DeepMutable<typeof CreateInput.Type>
 
-export const UpdateInput = Schema.Struct({
-  title: Schema.optional(Schema.String),
-  size: Schema.optional(
-    Schema.Struct({
-      rows: PositiveInt,
-      cols: PositiveInt,
-    }),
-  ),
-})
+export const UpdateInput = Pty.UpdateInput
 
 export type UpdateInput = Types.DeepMutable<typeof UpdateInput.Type>
+
+export const Event = Pty.Event
 
 export type AttachInput = {
   // Absolute output cursor to replay from. -1 tails from the current end; omitted replays the full retained buffer.
@@ -99,13 +76,6 @@ export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("Pty
 export class ExitedError extends Schema.TaggedErrorClass<ExitedError>()("Pty.ExitedError", {
   ptyID: PtyID,
 }) {}
-
-export const Event = {
-  Created: EventV2.define({ type: "pty.created", schema: { info: Info } }),
-  Updated: EventV2.define({ type: "pty.updated", schema: { info: Info } }),
-  Exited: EventV2.define({ type: "pty.exited", schema: { id: PtyID, exitCode: NonNegativeInt } }),
-  Deleted: EventV2.define({ type: "pty.deleted", schema: { id: PtyID } }),
-}
 
 export interface Interface {
   readonly list: () => Effect.Effect<Info[]>
@@ -344,3 +314,5 @@ export const layer = Layer.effect(
 )
 
 export const locationLayer = layer.pipe(Layer.provide(Config.locationLayer))
+
+export const node = makeLocationNode({ service: Service, layer, deps: [EventV2.node, Location.node, Config.node] })

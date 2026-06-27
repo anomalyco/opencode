@@ -1,10 +1,10 @@
 export * as SessionProjector from "./projector"
 
-import { and, desc, eq, sql } from "drizzle-orm"
+import { and, desc, eq, gt, or, sql } from "drizzle-orm"
 import { DateTime, Effect, Layer, Schema } from "effect"
 import { Database } from "../database/database"
 import { EventV2 } from "../event"
-import { LayerNode } from "../effect/layer-node"
+import { makeGlobalNode } from "../effect/node"
 import { SessionEvent } from "./event"
 import { SessionV1 } from "../v1/session"
 import { WorkspaceTable } from "../control-plane/workspace.sql"
@@ -13,7 +13,7 @@ import { SessionMessageUpdater } from "./message-updater"
 import { SessionInput } from "./input"
 import { WorkspaceV2 } from "../workspace"
 import { SessionContextEpoch } from "./context-epoch"
-import { MessageTable, PartTable, SessionMessageTable, SessionTable } from "./sql"
+import { MessageTable, PartTable, SessionInputTable, SessionMessageTable, SessionTable } from "./sql"
 import type { DeepMutable } from "../schema"
 
 type DatabaseService = Database.Interface["db"]
@@ -66,7 +66,7 @@ function sessionRow(info: SessionV1.SessionInfo): typeof SessionTable.$inferInse
     tokens_reasoning: (info.tokens ?? { reasoning: 0 }).reasoning,
     tokens_cache_read: (info.tokens ?? { cache: { read: 0 } }).cache.read,
     tokens_cache_write: (info.tokens ?? { cache: { write: 0 } }).cache.write,
-    revert: info.revert ?? null,
+    revert: info.revert ? { ...info.revert, messageID: SessionMessage.ID.make(info.revert.messageID) } : null,
     permission: info.permission ? [...info.permission] : undefined,
     time_created: info.time.created,
     time_updated: info.time.updated,
@@ -393,8 +393,67 @@ export const layer = Layer.effectDiscard(
     yield* events.project(SessionEvent.Reasoning.Ended, (event) => run(db, event))
     // yield* events.project(SessionEvent.Retried, (event) => run(db, event))
     yield* events.project(SessionEvent.Compaction.Ended, (event) => run(db, event))
+    yield* events.project(SessionEvent.RevertEvent.Staged, (event) =>
+      db
+        .update(SessionTable)
+        .set({
+          revert: { ...event.data.revert, files: event.data.revert.files ? [...event.data.revert.files] : undefined },
+          time_updated: DateTime.toEpochMillis(event.data.timestamp),
+        })
+        .where(eq(SessionTable.id, event.data.sessionID))
+        .run()
+        .pipe(Effect.orDie, Effect.asVoid),
+    )
+    yield* events.project(SessionEvent.RevertEvent.Cleared, (event) =>
+      db
+        .update(SessionTable)
+        .set({ revert: null, time_updated: DateTime.toEpochMillis(event.data.timestamp) })
+        .where(eq(SessionTable.id, event.data.sessionID))
+        .run()
+        .pipe(Effect.orDie, Effect.asVoid),
+    )
+    yield* events.project(SessionEvent.RevertEvent.Committed, (event) =>
+      Effect.gen(function* () {
+        const boundary = yield* db
+          .select({ seq: SessionMessageTable.seq })
+          .from(SessionMessageTable)
+          .where(
+            and(
+              eq(SessionMessageTable.session_id, event.data.sessionID),
+              eq(SessionMessageTable.id, event.data.messageID),
+            ),
+          )
+          .get()
+          .pipe(Effect.orDie)
+        if (!boundary) return yield* Effect.die(`Revert boundary message not found: ${event.data.messageID}`)
+        yield* db
+          .delete(SessionMessageTable)
+          .where(
+            and(eq(SessionMessageTable.session_id, event.data.sessionID), gt(SessionMessageTable.seq, boundary.seq)),
+          )
+          .run()
+          .pipe(Effect.orDie)
+        yield* db
+          .delete(SessionInputTable)
+          .where(
+            and(
+              eq(SessionInputTable.session_id, event.data.sessionID),
+              or(gt(SessionInputTable.admitted_seq, boundary.seq), gt(SessionInputTable.promoted_seq, boundary.seq)),
+            ),
+          )
+          .run()
+          .pipe(Effect.orDie)
+        yield* db
+          .update(SessionTable)
+          .set({ revert: null, time_updated: DateTime.toEpochMillis(event.data.timestamp) })
+          .where(eq(SessionTable.id, event.data.sessionID))
+          .run()
+          .pipe(Effect.orDie)
+        yield* SessionContextEpoch.reset(db, event.data.sessionID)
+      }),
+    )
   }),
 )
 
 export const defaultLayer = layer.pipe(Layer.provide(EventV2.defaultLayer), Layer.provide(Database.defaultLayer))
-export const node = LayerNode.make(layer, [EventV2.node, Database.node])
+export const node = makeGlobalNode({ name: "session-projector", layer, deps: [EventV2.node, Database.node] })

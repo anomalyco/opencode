@@ -290,21 +290,11 @@ function modelInfo(value: ModelV2.Info | ModelV2.MutableInfo) {
       ...value.request,
       headers: { ...value.request.headers },
       body: { ...value.request.body },
-      generation: value.request.generation && {
-        ...value.request.generation,
-        stop: value.request.generation.stop && [...value.request.generation.stop],
-      },
-      options: value.request.options && { ...value.request.options },
     },
     variants: value.variants.map((variant) => ({
       ...variant,
       headers: { ...variant.headers },
       body: { ...variant.body },
-      generation: variant.generation && {
-        ...variant.generation,
-        stop: variant.generation.stop && [...variant.generation.stop],
-      },
-      options: variant.options && { ...variant.options },
     })),
     time: { ...value.time },
     cost: value.cost.map((cost) => ({ ...cost, tier: cost.tier && { ...cost.tier }, cache: { ...cost.cache } })),

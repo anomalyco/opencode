@@ -1,31 +1,20 @@
-import { Context, Effect, Layer, Schema } from "effect"
-import { Ref } from "@opencode-ai/schema/location"
+import { Context, Effect, Layer } from "effect"
+import { Info, Ref, response } from "@opencode-ai/schema/location"
 import { Project } from "./project"
-import { AbsolutePath, optionalOmitUndefined } from "./schema"
-import { WorkspaceV2 } from "./workspace"
+import { LayerNode } from "./effect/layer-node"
+import { makeLocationNode, tags } from "./effect/node"
 
 export * as Location from "./location"
 
-export { Ref }
-
-export class Info extends Schema.Class<Info>("Location.Info")({
-  directory: AbsolutePath,
-  workspaceID: optionalOmitUndefined(WorkspaceV2.ID),
-  project: Schema.Struct({
-    id: Project.ID,
-    directory: AbsolutePath,
-  }),
-}) {}
+export { Info, Ref, response }
 
 export interface Interface extends Info {
   readonly vcs?: Project.Vcs
 }
 
-export function response<S extends Schema.Top>(data: S) {
-  return Schema.Struct({ location: Info, data })
-}
-
 export class Service extends Context.Service<Service, Interface>()("@opencode/Location") {}
+
+export const node = LayerNode.unbound(Service, tags.values.location)
 
 export const layer = (ref: Ref) =>
   Layer.effect(
@@ -41,3 +30,10 @@ export const layer = (ref: Ref) =>
       })
     }),
   )
+
+export const boundNode = (ref: Ref) =>
+  makeLocationNode({
+    service: Service,
+    layer: layer(ref),
+    deps: [Project.node],
+  })
