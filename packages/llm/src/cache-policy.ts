@@ -36,9 +36,9 @@ const resolve = (policy: CachePolicy | undefined): CachePolicyObject => {
   return policy
 }
 
-// Protocols whose wire format ignores inline cache markers (OpenAI's implicit
-// prefix caching, Gemini's implicit + out-of-band CachedContent). Skip the
-// whole policy pass for these — emitting hints would be harmless but pointless.
+// Protocols whose wire format supports inline cache markers. Only these receive
+// the policy pass; others (OpenAI's implicit prefix caching, Gemini's implicit
+// + out-of-band CachedContent) don't use inline hints, so the pass is skipped.
 const RESPECTS_INLINE_HINTS = new Set(["anthropic-messages", "bedrock-converse"])
 
 const makeHint = (ttlSeconds: number | undefined): CacheHint =>
