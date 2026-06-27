@@ -11,6 +11,7 @@ import { DialogPrompt } from "../ui/dialog-prompt"
 import { DialogSelect } from "../ui/dialog-select"
 import { Link } from "../ui/link"
 import { useToast } from "../ui/toast"
+import open from "open"
 
 const INTEGRATION_PRIORITY: Record<string, number> = {
   opencode: 0,
@@ -261,6 +262,12 @@ function OAuthAuto(props: { integration: IntegrationInfo; title: string; attempt
             .catch(toast.error)
         },
       },
+      {
+        key: "o",
+        desc: "Open authorization URL",
+        group: "Dialog",
+        cmd: () => open(props.attempt.url).catch(() => {}),
+      },
     ],
   }))
 
@@ -302,6 +309,7 @@ function OAuthAuto(props: { integration: IntegrationInfo; title: string; attempt
       instructions={props.attempt.instructions}
       message="Waiting for authorization..."
       copy
+      openURL
     />
   )
 }
@@ -354,6 +362,7 @@ function OAuthView(props: {
   instructions?: string
   message: string
   copy?: boolean
+  openURL?: boolean
 }) {
   const dialog = useDialog()
   const { theme } = useTheme()
@@ -376,11 +385,18 @@ function OAuthView(props: {
         )}
       </Show>
       <text fg={theme.textMuted}>{props.message}</text>
-      <Show when={props.copy}>
-        <text fg={theme.text}>
-          c <span style={{ fg: theme.textMuted }}>copy</span>
-        </text>
-      </Show>
+      <box flexDirection="row" gap={2}>
+        <Show when={props.copy}>
+          <text fg={theme.text}>
+            c <span style={{ fg: theme.textMuted }}>copy</span>
+          </text>
+        </Show>
+        <Show when={props.openURL}>
+          <text fg={theme.text}>
+            o <span style={{ fg: theme.textMuted }}>open</span>
+          </text>
+        </Show>
+      </box>
     </box>
   )
 }
