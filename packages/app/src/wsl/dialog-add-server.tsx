@@ -2,7 +2,7 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { showToast } from "@opencode-ai/ui/toast"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
-import { Dialog, DialogFooter, DialogHeader, DialogTitle } from "@opencode-ai/ui/v2/dialog-v2"
+import { Dialog, DialogBody, DialogFooter, DialogHeader, DialogTitle } from "@opencode-ai/ui/v2/dialog-v2"
 import { DividerV2 } from "@opencode-ai/ui/v2/divider-v2"
 import { RadioGroupV2, RadioItemV2 } from "@opencode-ai/ui/v2/radio-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
@@ -404,7 +404,7 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
             when={store.view === "main"}
             fallback={
               <>
-                <div class="settings-v2-wsl-dialog-body settings-v2-wsl-catalog-picker">
+                <DialogBody class="settings-v2-wsl-dialog-body settings-v2-wsl-catalog-picker">
                   <TextInputV2
                     class="settings-v2-wsl-catalog-search"
                     appearance="large"
@@ -434,7 +434,7 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
                       </For>
                     </RadioGroupV2>
                   </div>
-                </div>
+                </DialogBody>
                 <DialogFooter>
                   <ButtonV2 variant="neutral" disabled={busy()} onClick={closeCatalog}>
                     {language.t("common.cancel")}
@@ -455,7 +455,7 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
               </>
             }
           >
-            <div class="settings-v2-wsl-dialog-body">
+            <DialogBody class="settings-v2-wsl-dialog-body">
               <div class="settings-v2-wsl-section-header">
                 <span class="settings-v2-wsl-section-title">{language.t("wsl.onboarding.installedDistros")}</span>
                 <ButtonV2 variant="ghost-muted" size="small" disabled={busy()} onClick={refreshDistros}>
@@ -538,7 +538,7 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
                   </span>
                 </button>
               </Show>
-            </div>
+            </DialogBody>
 
             <DialogFooter>
               <ButtonV2 variant="neutral" disabled={store.adding} onClick={() => dialog.close()}>
