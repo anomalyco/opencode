@@ -136,6 +136,7 @@ function formatEditorContext(selection: EditorSelection) {
 }
 
 let stashed: { prompt: PromptInfo; cursor: number } | undefined
+let syncedSessionID: string | undefined
 
 export function Prompt(props: PromptProps) {
   let input: TextareaRenderable
@@ -304,7 +305,6 @@ export function Prompt(props: PromptProps) {
   )
 
   // Initialize agent/model/variant from last user message when session changes
-  let syncedSessionID: string | undefined
   createEffect(() => {
     const sessionID = props.sessionID
     const msg = lastUserMessage()
