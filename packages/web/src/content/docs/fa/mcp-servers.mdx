@@ -1,0 +1,512 @@
+---
+title: سرورهای MCP
+description: افزودن ابزارهای MCP محلی و راه دور.
+---
+
+می‌توانید با استفاده از _Model Context Protocol_ یا MCP، ابزارهای خارجی را به OpenCode اضافه کنید. OpenCode از سرورهای محلی و راه دور پشتیبانی می‌کند.
+
+پس از افزوده‌شدن، ابزارهای MCP به‌طور خودکار در کنار ابزارهای داخلی برای LLM در دسترس قرار می‌گیرند.
+
+---
+
+#### نکات احتیاطی
+
+وقتی از یک سرور MCP استفاده می‌کنید، به کانتکست افزوده می‌شود. اگر ابزارهای زیادی داشته باشید، این مقدار می‌تواند به‌سرعت بالا برود. بنابراین توصیه می‌کنیم در انتخاب سرورهای MCP که استفاده می‌کنید دقت کنید.
+
+:::tip
+سرورهای MCP به کانتکست شما اضافه می‌کنند، پس باید در انتخاب آن‌هایی که فعال می‌کنید دقت کنید.
+:::
+
+برخی سرورهای MCP، مانند سرور GitHub MCP، معمولاً تعداد زیادی توکن اضافه می‌کنند و به‌راحتی می‌توانند از محدودیت کانتکست فراتر بروند.
+
+---
+
+## فعال‌سازی
+
+می‌توانید سرورهای MCP را در [پیکربندی OpenCode](https://opencode.ai/docs/config/) زیر `mcp` تعریف کنید. هر MCP را با یک نام منحصربه‌فرد اضافه کنید. می‌توانید هنگام درخواست از LLM، با همان نام به آن MCP ارجاع دهید.
+
+```jsonc title="opencode.jsonc" {6}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "name-of-mcp-server": {
+      // ...
+      "enabled": true,
+    },
+    "name-of-other-mcp-server": {
+      // ...
+    },
+  },
+}
+```
+
+همچنین می‌توانید با تنظیم `enabled` روی `false` یک سرور را غیرفعال کنید. این کار زمانی مفید است که بخواهید یک سرور را موقتاً غیرفعال کنید بدون آنکه آن را از پیکربندی خود حذف کنید.
+
+---
+
+### بازنویسی مقادیر پیش‌فرض راه دور
+
+سازمان‌ها می‌توانند سرورهای MCP پیش‌فرض را از طریق نقطه پایانی `.well-known/opencode` خود ارائه دهند. ممکن است این سرورها به‌طور پیش‌فرض غیرفعال باشند، تا کاربران بتوانند فقط آن‌هایی را که نیاز دارند فعال کنند.
+
+برای فعال‌کردن یک سرور خاص از پیکربندی راه دور سازمانتان، آن را با `enabled: true` به پیکربندی محلی خود اضافه کنید:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "jira": {
+      "type": "remote",
+      "url": "https://jira.example.com/mcp",
+      "enabled": true
+    }
+  }
+}
+```
+
+مقادیر پیکربندی محلی شما بر مقادیر پیش‌فرض راه دور اولویت دارند. برای جزئیات بیشتر [اولویت پیکربندی](/docs/config#precedence-order) را ببینید.
+
+---
+
+## محلی
+
+سرورهای MCP محلی را با تنظیم `type` روی `"local"` در درون شیء MCP اضافه کنید.
+
+```jsonc title="opencode.jsonc" {15}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-local-mcp-server": {
+      "type": "local",
+      // Or ["bun", "x", "my-mcp-command"]
+      "command": ["npx", "-y", "my-mcp-command"],
+      "enabled": true,
+      "environment": {
+        "MY_ENV_VAR": "my_env_var_value",
+      },
+    },
+  },
+}
+```
+
+`command` همان روشی است که سرور MCP محلی با آن راه‌اندازی می‌شود. همچنین می‌توانید فهرستی از متغیرهای محیطی را نیز ارسال کنید.
+
+برای مثال، در اینجا نحوه افزودن سرور MCP آزمایشی [`@modelcontextprotocol/server-everything`](https://www.npmjs.com/package/@modelcontextprotocol/server-everything) آورده شده است.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "mcp_everything": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-everything"],
+    },
+  },
+}
+```
+
+و برای استفاده از آن می‌توانم `use the mcp_everything tool` را به درخواست‌هایم اضافه کنم.
+
+```txt "mcp_everything"
+use the mcp_everything tool to add the number 3 and 4
+```
+
+---
+
+#### گزینه‌ها
+
+در اینجا تمام گزینه‌های پیکربندی یک سرور MCP محلی آورده شده است.
+
+| گزینه         | نوع     | الزامی | توضیحات                                                                              |
+| ------------- | ------- | ------ | ------------------------------------------------------------------------------------ |
+| `type`        | String  | Y      | نوع اتصال سرور MCP، باید `"local"` باشد.                                              |
+| `command`     | Array   | Y      | فرمان و آرگومان‌های لازم برای اجرای سرور MCP.                                         |
+| `cwd`         | String  |        | دایرکتوری کاری برای فرایند سرور MCP. مسیرهای نسبی نسبت به فضای کاری تفسیر می‌شوند.    |
+| `environment` | Object  |        | متغیرهای محیطی که هنگام اجرای سرور تنظیم می‌شوند.                                     |
+| `enabled`     | Boolean |        | فعال یا غیرفعال‌کردن سرور MCP هنگام راه‌اندازی.                                       |
+| `timeout`     | Number  |        | مهلت زمانی بر حسب میلی‌ثانیه برای دریافت ابزارها از سرور MCP. مقدار پیش‌فرض ۵۰۰۰ (۵ ثانیه). |
+
+---
+
+## راه دور
+
+سرورهای MCP راه دور را با تنظیم `type` روی `"remote"` اضافه کنید.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-remote-mcp": {
+      "type": "remote",
+      "url": "https://my-mcp-server.com",
+      "enabled": true,
+      "headers": {
+        "Authorization": "Bearer MY_API_KEY"
+      }
+    }
+  }
+}
+```
+
+`url` همان آدرس URL سرور MCP راه دور است و با گزینه `headers` می‌توانید فهرستی از هدرها را ارسال کنید.
+
+---
+
+#### گزینه‌ها
+
+| گزینه     | نوع     | الزامی | توضیحات                                                                              |
+| --------- | ------- | ------ | ------------------------------------------------------------------------------------ |
+| `type`    | String  | Y      | نوع اتصال سرور MCP، باید `"remote"` باشد.                                             |
+| `url`     | String  | Y      | آدرس URL سرور MCP راه دور.                                                            |
+| `enabled` | Boolean |        | فعال یا غیرفعال‌کردن سرور MCP هنگام راه‌اندازی.                                       |
+| `headers` | Object  |        | هدرهایی که همراه درخواست ارسال می‌شوند.                                               |
+| `oauth`   | Object  |        | پیکربندی احراز هویت OAuth. بخش [OAuth](#oauth) را در پایین ببینید.                    |
+| `timeout` | Number  |        | مهلت زمانی بر حسب میلی‌ثانیه برای دریافت ابزارها از سرور MCP. مقدار پیش‌فرض ۵۰۰۰ (۵ ثانیه). |
+
+---
+
+## OAuth
+
+OpenCode به‌طور خودکار احراز هویت OAuth را برای سرورهای MCP راه دور مدیریت می‌کند. وقتی یک سرور به احراز هویت نیاز داشته باشد، OpenCode این کارها را انجام می‌دهد:
+
+1. تشخیص پاسخ 401 و آغاز جریان OAuth
+2. استفاده از **Dynamic Client Registration (RFC 7591)** در صورت پشتیبانی سرور
+3. ذخیره‌سازی امن توکن‌ها برای درخواست‌های آینده
+
+---
+
+### خودکار
+
+برای بیشتر سرورهای MCP دارای OAuth، به پیکربندی خاصی نیاز نیست. کافی است سرور راه دور را پیکربندی کنید:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-oauth-server": {
+      "type": "remote",
+      "url": "https://mcp.example.com/mcp"
+    }
+  }
+}
+```
+
+اگر سرور به احراز هویت نیاز داشته باشد، OpenCode هنگام نخستین تلاش برای استفاده از آن از شما می‌خواهد احراز هویت کنید. در غیر این صورت، می‌توانید [به‌صورت دستی جریان را آغاز کنید](#authenticating) با `opencode mcp auth <server-name>`.
+
+---
+
+### ثبت‌شده از پیش
+
+اگر اعتبارنامه‌های کلاینت را از ارائه‌دهنده سرور MCP دارید، می‌توانید آن‌ها را پیکربندی کنید:
+
+```json title="opencode.json" {7-11}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-oauth-server": {
+      "type": "remote",
+      "url": "https://mcp.example.com/mcp",
+      "oauth": {
+        "clientId": "{env:MY_MCP_CLIENT_ID}",
+        "clientSecret": "{env:MY_MCP_CLIENT_SECRET}",
+        "scope": "tools:read tools:execute"
+      }
+    }
+  }
+}
+```
+
+---
+
+### احراز هویت
+
+می‌توانید احراز هویت را به‌صورت دستی آغاز کنید یا اعتبارنامه‌ها را مدیریت کنید.
+
+احراز هویت با یک سرور MCP خاص:
+
+```bash
+opencode mcp auth my-oauth-server
+```
+
+فهرست تمام سرورهای MCP و وضعیت احراز هویت آن‌ها:
+
+```bash
+opencode mcp list
+```
+
+حذف اعتبارنامه‌های ذخیره‌شده:
+
+```bash
+opencode mcp logout my-oauth-server
+```
+
+فرمان `mcp auth` مرورگر شما را برای صدور مجوز باز می‌کند. پس از صدور مجوز، OpenCode توکن‌ها را به‌صورت امن در `~/.local/share/opencode/mcp-auth.json` ذخیره می‌کند.
+
+---
+
+#### غیرفعال‌کردن OAuth
+
+اگر می‌خواهید OAuth خودکار را برای یک سرور غیرفعال کنید (برای مثال، برای سرورهایی که به‌جای آن از کلیدهای API استفاده می‌کنند)، `oauth` را روی `false` تنظیم کنید:
+
+```json title="opencode.json" {7}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-api-key-server": {
+      "type": "remote",
+      "url": "https://mcp.example.com/mcp",
+      "oauth": false,
+      "headers": {
+        "Authorization": "Bearer {env:MY_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+---
+
+#### گزینه‌های OAuth
+
+| گزینه          | نوع             | توضیحات                                                                         |
+| -------------- | --------------- | ------------------------------------------------------------------------------- |
+| `oauth`        | Object \| false | شیء پیکربندی OAuth، یا `false` برای غیرفعال‌کردن تشخیص خودکار OAuth.             |
+| `clientId`     | String          | شناسه کلاینت OAuth. اگر ارائه نشود، ثبت دینامیک کلاینت تلاش خواهد شد.            |
+| `clientSecret` | String          | راز کلاینت OAuth، در صورتی که سرور مجوزدهی به آن نیاز داشته باشد.                |
+| `scope`        | String          | اسکوپ‌های OAuth که هنگام مجوزدهی درخواست می‌شوند.                                |
+
+#### اشکال‌زدایی
+
+اگر احراز هویت یک سرور MCP راه دور با خطا مواجه شد، می‌توانید مشکلات را با این دستورها تشخیص دهید:
+
+```bash
+# View auth status for all OAuth-capable servers
+opencode mcp auth list
+
+# Debug connection and OAuth flow for a specific server
+opencode mcp debug my-oauth-server
+```
+
+فرمان `mcp debug` وضعیت فعلی احراز هویت را نشان می‌دهد، اتصال HTTP را آزمایش می‌کند و جریان کشف OAuth را تلاش می‌کند.
+
+---
+
+## مدیریت
+
+سرورهای MCP شما به‌عنوان ابزار در OpenCode، در کنار ابزارهای داخلی در دسترس هستند. بنابراین می‌توانید آن‌ها را مانند هر ابزار دیگری از طریق پیکربندی OpenCode مدیریت کنید.
+
+---
+
+### سراسری
+
+این بدان معناست که می‌توانید آن‌ها را به‌صورت سراسری فعال یا غیرفعال کنید.
+
+```json title="opencode.json" {14}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-mcp-foo": {
+      "type": "local",
+      "command": ["bun", "x", "my-mcp-command-foo"]
+    },
+    "my-mcp-bar": {
+      "type": "local",
+      "command": ["bun", "x", "my-mcp-command-bar"]
+    }
+  },
+  "tools": {
+    "my-mcp-foo": false
+  }
+}
+```
+
+همچنین می‌توانیم از یک الگوی glob برای غیرفعال‌کردن همه MCPهای منطبق استفاده کنیم.
+
+```json title="opencode.json" {14}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-mcp-foo": {
+      "type": "local",
+      "command": ["bun", "x", "my-mcp-command-foo"]
+    },
+    "my-mcp-bar": {
+      "type": "local",
+      "command": ["bun", "x", "my-mcp-command-bar"]
+    }
+  },
+  "tools": {
+    "my-mcp*": false
+  }
+}
+```
+
+در اینجا از الگوی glob با عبارت `my-mcp*` برای غیرفعال‌کردن همه MCPها استفاده می‌کنیم.
+
+---
+
+### به ازای هر agent
+
+اگر تعداد زیادی سرور MCP دارید، ممکن است بخواهید آن‌ها را فقط به ازای هر agent فعال کنید و به‌صورت سراسری غیرفعال نگه دارید. برای این کار:
+
+1. آن را به‌عنوان ابزار به‌صورت سراسری غیرفعال کنید.
+2. در [پیکربندی agent](/docs/agents#tools) خود، سرور MCP را به‌عنوان ابزار فعال کنید.
+
+```json title="opencode.json" {11, 14-18}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-mcp": {
+      "type": "local",
+      "command": ["bun", "x", "my-mcp-command"],
+      "enabled": true
+    }
+  },
+  "tools": {
+    "my-mcp*": false
+  },
+  "agent": {
+    "my-agent": {
+      "tools": {
+        "my-mcp*": true
+      }
+    }
+  }
+}
+```
+
+---
+
+#### الگوهای glob
+
+الگوی glob از الگوهای ساده glob شبیه به regex استفاده می‌کند:
+
+- `*` با صفر یا چند کاراکتر دلخواه مطابقت دارد (برای مثال، `"my-mcp*"` با `my-mcp_search`، `my-mcp_list` و غیره مطابقت دارد.)
+- `?` دقیقاً با یک کاراکتر مطابقت دارد
+- همه کاراکترهای دیگر به‌صورت تحت‌اللفظی مطابقت می‌یابند
+
+:::note
+ابزارهای سرور MCP با نام سرور به‌عنوان پیشوند ثبت می‌شوند، بنابراین برای غیرفعال‌کردن همه ابزارهای یک سرور کافی است از این الگو استفاده کنید:
+
+```
+"mymcpservername_*": false
+```
+
+:::
+
+---
+
+## مثال‌ها
+
+در زیر مثال‌هایی از برخی سرورهای MCP رایج آورده شده است. اگر می‌خواهید سرورهای دیگری را مستند کنید، می‌توانید یک PR ارسال کنید.
+
+---
+
+### Sentry
+
+سرور [Sentry MCP](https://mcp.sentry.dev) را اضافه کنید تا با پروژه‌ها و issueهای Sentry خود تعامل کنید.
+
+```json title="opencode.json" {4-8}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "sentry": {
+      "type": "remote",
+      "url": "https://mcp.sentry.dev/mcp",
+      "oauth": {}
+    }
+  }
+}
+```
+
+پس از افزودن پیکربندی، با Sentry احراز هویت کنید:
+
+```bash
+opencode mcp auth sentry
+```
+
+این کار یک پنجره مرورگر را برای تکمیل جریان OAuth باز می‌کند و OpenCode را به حساب Sentry شما متصل می‌کند.
+
+پس از احراز هویت، می‌توانید از ابزارهای Sentry در درخواست‌های خود برای پرس‌وجوی issueها، پروژه‌ها و داده‌های خطا استفاده کنید.
+
+```txt "use sentry"
+Show me the latest unresolved issues in my project. use sentry
+```
+
+---
+
+### Context7
+
+سرور [Context7 MCP](https://github.com/upstash/context7) را اضافه کنید تا در مستندات جست‌وجو کنید.
+
+```json title="opencode.json" {4-7}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "context7": {
+      "type": "remote",
+      "url": "https://mcp.context7.com/mcp"
+    }
+  }
+}
+```
+
+اگر برای یک حساب رایگان ثبت‌نام کرده‌اید، می‌توانید از کلید API خود استفاده کنید و محدودیت نرخ بالاتری دریافت کنید.
+
+```json title="opencode.json" {7-9}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "context7": {
+      "type": "remote",
+      "url": "https://mcp.context7.com/mcp",
+      "headers": {
+        "CONTEXT7_API_KEY": "{env:CONTEXT7_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+در اینجا فرض می‌کنیم که متغیر محیطی `CONTEXT7_API_KEY` را تنظیم کرده‌اید.
+
+برای استفاده از سرور Context7 MCP، عبارت `use context7` را به درخواست‌های خود اضافه کنید.
+
+```txt "use context7"
+Configure a Cloudflare Worker script to cache JSON API responses for five minutes. use context7
+```
+
+به‌عنوان جایگزین، می‌توانید چیزی مانند این را به [AGENTS.md](/docs/rules/) خود اضافه کنید.
+
+```md title="AGENTS.md"
+When you need to search docs, use `context7` tools.
+```
+
+---
+
+### Grep by Vercel
+
+سرور [Grep by Vercel](https://grep.app) MCP را اضافه کنید تا در قطعه‌کدهای موجود در GitHub جست‌وجو کنید.
+
+```json title="opencode.json" {4-7}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "gh_grep": {
+      "type": "remote",
+      "url": "https://mcp.grep.app"
+    }
+  }
+}
+```
+
+از آنجا که سرور MCP خود را `gh_grep` نام‌گذاری کردیم، می‌توانید `use the gh_grep tool` را به درخواست‌های خود اضافه کنید تا agent از آن استفاده کند.
+
+```txt "use the gh_grep tool"
+What's the right way to set a custom domain in an SST Astro component? use the gh_grep tool
+```
+
+به‌عنوان جایگزین، می‌توانید چیزی مانند این را به [AGENTS.md](/docs/rules/) خود اضافه کنید.
+
+```md title="AGENTS.md"
+If you are unsure how to do something, use `gh_grep` to search code examples from GitHub.
+```

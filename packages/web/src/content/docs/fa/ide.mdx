@@ -1,0 +1,48 @@
+---
+title: IDE
+description: افزونه OpenCode برای VS Code، Cursor و سایر IDEها
+---
+
+OpenCode با VS Code، Cursor یا هر IDE‌ای که از یک ترمینال پشتیبانی کند یکپارچه می‌شود. برای شروع کافی است `opencode` را در ترمینال اجرا کنید.
+
+---
+
+## استفاده
+
+- **اجرای سریع**: از `Cmd+Esc` (Mac) یا `Ctrl+Esc` (Windows/Linux) برای باز کردن OpenCode در نمای ترمینال تقسیم‌شده استفاده کنید، یا اگر جلسه‌ای از قبل در حال اجراست روی آن تمرکز کنید.
+- **جلسه جدید**: از `Cmd+Shift+Esc` (Mac) یا `Ctrl+Shift+Esc` (Windows/Linux) برای شروع یک جلسه ترمینال جدید OpenCode استفاده کنید، حتی اگر جلسه‌ای از قبل باز باشد. همچنین می‌توانید روی دکمه OpenCode در رابط کاربری کلیک کنید.
+- **آگاهی از زمینه**: انتخاب یا تب فعلی خود را به‌طور خودکار با OpenCode به اشتراک بگذارید.
+- **میان‌برهای ارجاع به فایل**: از `Cmd+Option+K` (Mac) یا `Alt+Ctrl+K` (Linux/Windows) برای درج ارجاع‌های فایل استفاده کنید. برای مثال، `@File#L37-42`.
+
+---
+
+## نصب
+
+برای نصب OpenCode روی VS Code و فورک‌های محبوب آن مانند Cursor، Windsurf، VSCodium:
+
+1. VS Code را باز کنید
+2. ترمینال یکپارچه را باز کنید
+3. `opencode` را اجرا کنید - افزونه به‌طور خودکار نصب می‌شود
+
+اما اگر می‌خواهید هنگام اجرای `/editor` یا `/export` از TUI از IDE خودتان استفاده کنید، باید `export EDITOR="code --wait"` را تنظیم کنید. [بیشتر بدانید](/docs/tui/#editor-setup).
+
+---
+
+### نصب دستی
+
+در Extension Marketplace عبارت **OpenCode** را جستجو کنید و روی **Install** کلیک کنید.
+
+---
+
+### عیب‌یابی
+
+اگر نصب خودکار افزونه ناموفق بود:
+
+- مطمئن شوید که `opencode` را در ترمینال یکپارچه اجرا می‌کنید.
+- نصب بودن CLI مربوط به IDE خود را تأیید کنید:
+  - برای VS Code: دستور `code`
+  - برای Cursor: دستور `cursor`
+  - برای Windsurf: دستور `windsurf`
+  - برای VSCodium: دستور `codium`
+  - اگر نصب نیست، `Cmd+Shift+P` (Mac) یا `Ctrl+Shift+P` (Windows/Linux) را اجرا کنید و عبارت "Shell Command: Install 'code' command in PATH" (یا معادل آن برای IDE خود) را جستجو کنید
+- مطمئن شوید که VS Code مجوز نصب افزونه‌ها را دارد

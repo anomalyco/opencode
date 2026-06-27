@@ -1,0 +1,284 @@
+---
+title: سرور
+description: از طریق HTTP با سرور opencode تعامل کنید.
+---
+
+import config from "../../../../config.mjs"
+export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
+
+دستور `opencode serve` یک سرور HTTP بدون واجهه (headless) اجرا می‌کند که یک نقطه پایانی OpenAPI را در دسترس قرار می‌دهد تا یک کلاینت opencode بتواند از آن استفاده کند.
+
+---
+
+### استفاده
+
+```bash
+opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
+```
+
+#### گزینه‌ها
+
+| پرچم            | توضیحات                                | پیش‌فرض          |
+| --------------- | -------------------------------------- | ---------------- |
+| `--port`        | پورتی که روی آن گوش داده می‌شود         | `4096`           |
+| `--hostname`    | نام میزبانی که روی آن گوش داده می‌شود   | `127.0.0.1`      |
+| `--mdns`        | فعال‌سازی کشف mDNS                      | `false`          |
+| `--mdns-domain` | نام دامنه سفارشی برای سرویس mDNS        | `opencode.local` |
+| `--cors`        | مبدأهای مرورگر (Origins) اضافی مجاز     | `[]`             |
+
+`--cors` را می‌توان چندین بار پاس داد:
+
+```bash
+opencode serve --cors http://localhost:5173 --cors https://app.example.com
+```
+
+---
+
+### احراز هویت
+
+برای محافظت از سرور با احراز هویت پایه HTTP، مقدار `OPENCODE_SERVER_PASSWORD` را تنظیم کنید. نام کاربری به‌طور پیش‌فرض `opencode` است، یا برای بازنویسی آن `OPENCODE_SERVER_USERNAME` را تنظیم کنید. این مورد هم برای `opencode serve` و هم برای `opencode web` اعمال می‌شود.
+
+```bash
+OPENCODE_SERVER_PASSWORD=your-password opencode serve
+```
+
+---
+
+### چگونه کار می‌کند
+
+وقتی `opencode` را اجرا می‌کنید، یک TUI و یک سرور را راه‌اندازی می‌کند. جایی که TUI همان کلاینتی است که با سرور صحبت می‌کند. سرور یک نقطه پایانی مشخصات OpenAPI 3.1 را در دسترس قرار می‌دهد. این نقطه پایانی برای تولید یک [SDK](/docs/sdk) نیز استفاده می‌شود.
+
+:::tip
+از سرور opencode برای تعامل برنامه‌نویسی‌شده (programmatic) با opencode استفاده کنید.
+:::
+
+این معماری به opencode اجازه می‌دهد از چندین کلاینت پشتیبانی کند و به شما امکان می‌دهد به‌صورت برنامه‌نویسی‌شده با opencode تعامل داشته باشید.
+
+می‌توانید `opencode serve` را برای راه‌اندازی یک سرور مستقل اجرا کنید. اگر TUI ی opencode در حال اجرا باشد، `opencode serve` یک سرور جدید راه‌اندازی می‌کند.
+
+---
+
+#### اتصال به یک سرور موجود
+
+وقتی TUI را راه‌اندازی می‌کنید، به‌طور تصادفی یک پورت و نام میزبان اختصاص می‌دهد. در عوض می‌توانید [پرچم‌های](/docs/cli) `--hostname` و `--port` را پاس دهید. سپس از آن‌ها برای اتصال به سرور آن استفاده کنید.
+
+از نقطه پایانی [`/tui`](#tui) می‌توان برای هدایت TUI از طریق سرور استفاده کرد. برای مثال، می‌توانید یک پرامپت را از پیش پر کنید یا اجرا کنید. این تنظیمات توسط افزونه‌های [IDE](/docs/ide) ی OpenCode استفاده می‌شود.
+
+---
+
+## مشخصات (Spec)
+
+سرور یک مشخصات OpenAPI 3.1 منتشر می‌کند که می‌توان آن را در آدرس زیر مشاهده کرد:
+
+```
+http://<hostname>:<port>/doc
+```
+
+برای مثال، `http://localhost:4096/doc`. از این مشخصات برای تولید کلاینت‌ها یا بازرسی انواع درخواست و پاسخ استفاده کنید. یا آن را در یک کاوشگر Swagger مشاهده کنید.
+
+---
+
+## APIها
+
+سرور opencode APIهای زیر را در دسترس قرار می‌دهد.
+
+---
+
+### عمومی
+
+| متد   | مسیر             | توضیحات                         | پاسخ                                 |
+| ----- | ---------------- | ------------------------------- | ------------------------------------ |
+| `GET` | `/global/health` | دریافت سلامت و نسخه سرور         | `{ healthy: true, version: string }` |
+| `GET` | `/global/event`  | دریافت رویدادهای عمومی (جریان SSE) | جریان رویداد                       |
+
+---
+
+### پروژه
+
+| متد   | مسیر               | توضیحات                | پاسخ                                          |
+| ----- | ------------------ | ---------------------- | --------------------------------------------- |
+| `GET` | `/project`         | فهرست همه پروژه‌ها      | <a href={typesUrl}><code>Project[]</code></a> |
+| `GET` | `/project/current` | دریافت پروژه فعلی       | <a href={typesUrl}><code>Project</code></a>   |
+
+---
+
+### مسیر و VCS
+
+| متد   | مسیر    | توضیحات                              | پاسخ                                        |
+| ----- | ------- | ------------------------------------ | ------------------------------------------- |
+| `GET` | `/path` | دریافت مسیر فعلی                      | <a href={typesUrl}><code>Path</code></a>    |
+| `GET` | `/vcs`  | دریافت اطلاعات VCS برای پروژه فعلی    | <a href={typesUrl}><code>VcsInfo</code></a> |
+
+---
+
+### نمونه (Instance)
+
+| متد    | مسیر                | توضیحات                | پاسخ      |
+| ------ | ------------------- | ---------------------- | --------- |
+| `POST` | `/instance/dispose` | دور انداختن نمونه فعلی  | `boolean` |
+
+---
+
+### پیکربندی
+
+| متد     | مسیر                | توضیحات                            | پاسخ                                                                                     |
+| ------- | ------------------- | --------------------------------- | ---------------------------------------------------------------------------------------- |
+| `GET`   | `/config`           | دریافت اطلاعات پیکربندی            | <a href={typesUrl}><code>Config</code></a>                                               |
+| `PATCH` | `/config`           | به‌روزرسانی پیکربندی               | <a href={typesUrl}><code>Config</code></a>                                               |
+| `GET`   | `/config/providers` | فهرست ارائه‌دهندگان و مدل‌های پیش‌فرض | `{ providers: `<a href={typesUrl}>Provider[]</a>`, default: { [key: string]: string } }` |
+
+---
+
+### ارائه‌دهنده (Provider)
+
+| متد    | مسیر                             | توضیحات                            | پاسخ                                                                                |
+| ------ | -------------------------------- | --------------------------------- | ----------------------------------------------------------------------------------- |
+| `GET`  | `/provider`                      | فهرست همه ارائه‌دهندگان            | `{ all: `<a href={typesUrl}>Provider[]</a>`, default: {...}, connected: string[] }` |
+| `GET`  | `/provider/auth`                 | دریافت روش‌های احراز هویت ارائه‌دهنده | `{ [providerID: string]: `<a href={typesUrl}>ProviderAuthMethod[]</a>` }`        |
+| `POST` | `/provider/{id}/oauth/authorize` | تفویض یک ارائه‌دهنده با استفاده از OAuth | <a href={typesUrl}><code>ProviderAuthAuthorization</code></a>                  |
+| `POST` | `/provider/{id}/oauth/callback`  | مدیریت بازگشت تماس OAuth برای یک ارائه‌دهنده | `boolean`                                                                  |
+
+---
+
+### نشست‌ها
+
+| متد      | مسیر                                     | توضیحات                                  | یادداشت‌ها                                                                          |
+| -------- | ---------------------------------------- | ---------------------------------------- | ---------------------------------------------------------------------------------- |
+| `GET`    | `/session`                               | فهرست همه نشست‌ها                         | <a href={typesUrl}><code>Session[]</code></a> را برمی‌گرداند                       |
+| `POST`   | `/session`                               | ایجاد یک نشست جدید                        | بدنه: `{ parentID?, title? }`، <a href={typesUrl}><code>Session</code></a> را برمی‌گرداند |
+| `GET`    | `/session/status`                        | دریافت وضعیت همه نشست‌ها                  | `{ [sessionID: string]: `<a href={typesUrl}>SessionStatus</a>` }` را برمی‌گرداند   |
+| `GET`    | `/session/:id`                           | دریافت جزئیات نشست                        | <a href={typesUrl}><code>Session</code></a> را برمی‌گرداند                         |
+| `DELETE` | `/session/:id`                           | حذف یک نشست و همه داده‌های آن             | `boolean` را برمی‌گرداند                                                           |
+| `PATCH`  | `/session/:id`                           | به‌روزرسانی ویژگی‌های نشست                | بدنه: `{ title? }`، <a href={typesUrl}><code>Session</code></a> را برمی‌گرداند     |
+| `GET`    | `/session/:id/children`                  | دریافت نشست‌های فرزند یک نشست             | <a href={typesUrl}><code>Session[]</code></a> را برمی‌گرداند                       |
+| `GET`    | `/session/:id/todo`                      | دریافت فهرست کارهای (todo) یک نشست        | <a href={typesUrl}><code>Todo[]</code></a> را برمی‌گرداند                          |
+| `POST`   | `/session/:id/init`                      | تحلیل اپلیکیشن و ایجاد `AGENTS.md`        | بدنه: `{ messageID, providerID, modelID }`، `boolean` را برمی‌گرداند               |
+| `POST`   | `/session/:id/fork`                      | فورک یک نشست موجود در یک پیام             | بدنه: `{ messageID? }`، <a href={typesUrl}><code>Session</code></a> را برمی‌گرداند |
+| `POST`   | `/session/:id/abort`                     | لغو یک نشست در حال اجرا                   | `boolean` را برمی‌گرداند                                                           |
+| `POST`   | `/session/:id/share`                     | اشتراک‌گذاری یک نشست                      | <a href={typesUrl}><code>Session</code></a> را برمی‌گرداند                         |
+| `DELETE` | `/session/:id/share`                     | لغو اشتراک‌گذاری یک نشست                  | <a href={typesUrl}><code>Session</code></a> را برمی‌گرداند                         |
+| `GET`    | `/session/:id/diff`                      | دریافت diff برای این نشست                 | کوئری: `messageID?`، <a href={typesUrl}><code>FileDiff[]</code></a> را برمی‌گرداند |
+| `POST`   | `/session/:id/summarize`                 | خلاصه‌سازی نشست                           | بدنه: `{ providerID, modelID }`، `boolean` را برمی‌گرداند                          |
+| `POST`   | `/session/:id/revert`                    | بازگرداندن (revert) یک پیام               | بدنه: `{ messageID, partID? }`، `boolean` را برمی‌گرداند                           |
+| `POST`   | `/session/:id/unrevert`                  | بازیابی همه پیام‌های بازگردانده‌شده       | `boolean` را برمی‌گرداند                                                           |
+| `POST`   | `/session/:id/permissions/:permissionID` | پاسخ به یک درخواست مجوز                   | بدنه: `{ response, remember? }`، `boolean` را برمی‌گرداند                          |
+
+---
+
+### پیام‌ها
+
+| متد    | مسیر                              | توضیحات                                  | یادداشت‌ها                                                                                                                                                          |
+| ------ | --------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`  | `/session/:id/message`            | فهرست پیام‌های یک نشست                    | کوئری: `limit?`، `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}[]` را برمی‌گرداند                                                |
+| `POST` | `/session/:id/message`            | ارسال یک پیام و انتظار برای پاسخ          | بدنه: `{ messageID?, model?, agent?, noReply?, system?, tools?, parts }`، `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}` را برمی‌گرداند |
+| `GET`  | `/session/:id/message/:messageID` | دریافت جزئیات پیام                        | `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}` را برمی‌گرداند                                                                   |
+| `POST` | `/session/:id/prompt_async`       | ارسال یک پیام به‌صورت ناهمگام (بدون انتظار) | بدنه: مانند `/session/:id/message`، `204 No Content` را برمی‌گرداند                                                                                                 |
+| `POST` | `/session/:id/command`            | اجرای یک دستور اسلش (slash)               | بدنه: `{ messageID?, agent?, model?, command, arguments }`، `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}` را برمی‌گرداند      |
+| `POST` | `/session/:id/shell`              | اجرای یک دستور shell                      | بدنه: `{ agent, model?, command }`، `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}` را برمی‌گرداند                              |
+
+---
+
+### دستورها
+
+| متد   | مسیر       | توضیحات              | پاسخ                                          |
+| ----- | ---------- | ------------------- | --------------------------------------------- |
+| `GET` | `/command` | فهرست همه دستورها    | <a href={typesUrl}><code>Command[]</code></a> |
+
+---
+
+### فایل‌ها
+
+| متد   | مسیر                     | توضیحات                              | پاسخ                                                                                         |
+| ----- | ------------------------ | ------------------------------------ | ------------------------------------------------------------------------------------------- |
+| `GET` | `/find?pattern=<pat>`    | جستجوی متن در فایل‌ها                 | آرایه‌ای از اشیاء تطبیق با `path`، `lines`، `line_number`، `absolute_offset`، `submatches`   |
+| `GET` | `/find/file?query=<q>`   | یافتن فایل‌ها و دایرکتوری‌ها بر اساس نام | `string[]` (مسیرها)                                                                       |
+| `GET` | `/find/symbol?query=<q>` | یافتن نمادهای فضای کاری               | <a href={typesUrl}><code>Symbol[]</code></a>                                                |
+| `GET` | `/file?path=<path>`      | فهرست فایل‌ها و دایرکتوری‌ها          | <a href={typesUrl}><code>FileNode[]</code></a>                                              |
+| `GET` | `/file/content?path=<p>` | خواندن یک فایل                        | <a href={typesUrl}><code>FileContent</code></a>                                             |
+| `GET` | `/file/status`           | دریافت وضعیت فایل‌های ردیابی‌شده      | <a href={typesUrl}><code>File[]</code></a>                                                  |
+
+#### پارامترهای کوئری `/find/file`
+
+- `query` (الزامی) — رشته جستجو (تطبیق فازی)
+- `type` (اختیاری) — محدود کردن نتایج به `"file"` یا `"directory"`
+- `directory` (اختیاری) — بازنویسی ریشه پروژه برای جستجو
+- `limit` (اختیاری) — حداکثر نتایج (۱ تا ۲۰۰)
+- `dirs` (اختیاری) — پرچم قدیمی (`"false"` فقط فایل‌ها را برمی‌گرداند)
+
+---
+
+### ابزارها (آزمایشی)
+
+| متد   | مسیر                                        | توضیحات                              | پاسخ                                         |
+| ----- | ------------------------------------------- | ------------------------------------ | -------------------------------------------- |
+| `GET` | `/experimental/tool/ids`                    | فهرست همه شناسه‌های ابزار             | <a href={typesUrl}><code>ToolIDs</code></a>  |
+| `GET` | `/experimental/tool?provider=<p>&model=<m>` | فهرست ابزارها با اسکیماهای JSON برای یک مدل | <a href={typesUrl}><code>ToolList</code></a> |
+
+---
+
+### LSP، قالب‌بندها و MCP
+
+| متد    | مسیر         | توضیحات                    | پاسخ                                                     |
+| ------ | ------------ | -------------------------- | -------------------------------------------------------- |
+| `GET`  | `/lsp`       | دریافت وضعیت سرور LSP       | <a href={typesUrl}><code>LSPStatus[]</code></a>          |
+| `GET`  | `/formatter` | دریافت وضعیت قالب‌بندها     | <a href={typesUrl}><code>FormatterStatus[]</code></a>    |
+| `GET`  | `/mcp`       | دریافت وضعیت سرور MCP       | `{ [name: string]: `<a href={typesUrl}>MCPStatus</a>` }` |
+| `POST` | `/mcp`       | افزودن پویای سرور MCP       | بدنه: `{ name, config }`، یک شیء وضعیت MCP را برمی‌گرداند |
+
+---
+
+### عامل‌ها
+
+| متد   | مسیر     | توضیحات                  | پاسخ                                        |
+| ----- | -------- | ------------------------ | ------------------------------------------- |
+| `GET` | `/agent` | فهرست همه عامل‌های در دسترس | <a href={typesUrl}><code>Agent[]</code></a> |
+
+---
+
+### لاگ‌گیری
+
+| متد    | مسیر   | توضیحات                                                       | پاسخ      |
+| ------ | ------ | ------------------------------------------------------------ | --------- |
+| `POST` | `/log` | نوشتن ورودی لاگ. بدنه: `{ service, level, message, extra? }` | `boolean` |
+
+---
+
+### TUI
+
+| متد    | مسیر                    | توضیحات                                     | پاسخ                |
+| ------ | ----------------------- | ------------------------------------------- | ------------------- |
+| `POST` | `/tui/append-prompt`    | افزودن متن به پرامپت                         | `boolean`           |
+| `POST` | `/tui/open-help`        | باز کردن کادر گفتگوی راهنما                  | `boolean`           |
+| `POST` | `/tui/open-sessions`    | باز کردن انتخابگر نشست                       | `boolean`           |
+| `POST` | `/tui/open-themes`      | باز کردن انتخابگر تم                         | `boolean`           |
+| `POST` | `/tui/open-models`      | باز کردن انتخابگر مدل                        | `boolean`           |
+| `POST` | `/tui/submit-prompt`    | ارسال پرامپت فعلی                            | `boolean`           |
+| `POST` | `/tui/clear-prompt`     | پاک کردن پرامپت                             | `boolean`           |
+| `POST` | `/tui/execute-command`  | اجرای یک دستور (`{ command }`)              | `boolean`           |
+| `POST` | `/tui/show-toast`       | نمایش toast (`{ title?, message, variant }`) | `boolean`         |
+| `GET`  | `/tui/control/next`     | انتظار برای درخواست کنترل بعدی               | شیء درخواست کنترل   |
+| `POST` | `/tui/control/response` | پاسخ به یک درخواست کنترل (`{ body }`)        | `boolean`           |
+
+---
+
+### احراز هویت
+
+| متد   | مسیر        | توضیحات                                                       | پاسخ      |
+| ----- | ----------- | ------------------------------------------------------------ | --------- |
+| `PUT` | `/auth/:id` | تنظیم اعتبارنامه‌های احراز هویت. بدنه باید با اسکیمای ارائه‌دهنده مطابقت داشته باشد | `boolean` |
+
+---
+
+### رویدادها
+
+| متد   | مسیر     | توضیحات                                                                          | پاسخ                       |
+| ----- | -------- | -------------------------------------------------------------------------------- | -------------------------- |
+| `GET` | `/event` | جریان رویدادهای ارسالی از سرور (SSE). اولین رویداد `server.connected` است، سپس رویدادهای bus | جریان رویدادهای ارسالی از سرور |
+
+---
+
+### مستندات
+
+| متد   | مسیر   | توضیحات              | پاسخ                          |
+| ----- | ------ | ------------------- | ----------------------------- |
+| `GET` | `/doc` | مشخصات OpenAPI 3.1   | صفحه HTML با مشخصات OpenAPI    |

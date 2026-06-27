@@ -1,0 +1,321 @@
+---
+title: GitHub
+description: استفاده از OpenCode در issueها و pull-requestهای GitHub.
+---
+
+OpenCode با سیر کاری GitHub شما یکپارچه می‌شود. در کامنت خود `/opencode` یا `/oc` را ذکر کنید، و OpenCode وظایف را درون GitHub Actions runner شما اجرا خواهد کرد.
+
+---
+
+## ویژگی‌ها
+
+- **فرز issueها**: از OpenCode بخواهید یک issue را بررسی و برای شما توضیح دهد.
+- **رفع و پیاده‌سازی**: از OpenCode بخواهید یک issue را رفع کند یا یک قابلیت را پیاده‌سازی کند. سپس روی یک شاخه جدید کار می‌کند و یک PR با تمام تغییرات ارسال می‌کند.
+- **امن**: OpenCode درون runnerهای GitHub شما اجرا می‌شود.
+
+---
+
+## نصب
+
+دستور زیر را در پروژه‌ای که در یک مخزن GitHub قرار دارد اجرا کنید:
+
+```bash
+opencode github install
+```
+
+این کار شما را در نصب GitHub app، ایجاد workflow و تنظیم secretها راهنمایی می‌کند.
+
+---
+
+### راه‌اندازی دستی
+
+یا می‌توانید آن را به‌صورت دستی راه‌اندازی کنید.
+
+1. **نصب GitHub app**
+
+   به [**github.com/apps/opencode-agent**](https://github.com/apps/opencode-agent) بروید. مطمئن شوید که روی مخزن هدف نصب شده باشد.
+
+2. **افزودن workflow**
+
+   فایل workflow زیر را به `.github/workflows/opencode.yml` در مخزن خود اضافه کنید. حتماً `model` مناسب و کلیدهای API لازم را در `env` تنظیم کنید.
+
+   ```yml title=".github/workflows/opencode.yml" {24,26}
+   name: opencode
+
+   on:
+     issue_comment:
+       types: [created]
+     pull_request_review_comment:
+       types: [created]
+
+   jobs:
+     opencode:
+       if: |
+         contains(github.event.comment.body, '/oc') ||
+         contains(github.event.comment.body, '/opencode')
+       runs-on: ubuntu-latest
+       permissions:
+         id-token: write
+       steps:
+          - name: Checkout repository
+            uses: actions/checkout@v6
+            with:
+              fetch-depth: 1
+              persist-credentials: false
+
+          - name: Run OpenCode
+           uses: anomalyco/opencode/github@latest
+           env:
+             ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+           with:
+             model: anthropic/claude-sonnet-4-20250514
+             # share: true
+             # github_token: xxxx
+   ```
+
+3. **ذخیره کلیدهای API در secretها**
+
+   در **settings** سازمان یا پروژه خود، در سمت چپ گزینه **Secrets and variables** را باز کنید و **Actions** را انتخاب کنید. سپس کلیدهای API لازم را اضافه کنید.
+
+---
+
+## پیکربندی
+
+- `model`: مدلی که با OpenCode استفاده می‌شود. قالب آن به‌صورت `provider/model` است. این مورد **الزامی** است.
+- `agent`: agentی که استفاده می‌شود. باید یک agent اصلی باشد. در صورت یافت‌نشدن، به `default_agent` از پیکربندی یا `"build"` بازمی‌گردد.
+- `share`: اینکه آیا جلسه OpenCode به اشتراک گذاشته شود یا خیر. برای مخازن عمومی به‌طور پیش‌فرض **true** است.
+- `prompt`: پرامپت سفارشی اختیاری برای بازنویسی رفتار پیش‌فرض. از این برای سفارشی‌سازی نحوه پردازش درخواست‌ها توسط OpenCode استفاده کنید.
+- `token`: توکن دسترسی GitHub اختیاری برای انجام عملیاتی مانند ایجاد کامنت، commit کردن تغییرات و باز کردن pull request. به‌طور پیش‌فرض، OpenCode از توکن دسترسی نصب (installation access token) متعلق به OpenCode GitHub App استفاده می‌کند، بنابراین commitها، کامنت‌ها و pull requestها به‌گونه‌ای نمایش داده می‌شوند که گویی از سوی این اپلیکیشن آمده‌اند.
+
+  به‌عنوان جایگزین، می‌توانید از [`GITHUB_TOKEN` داخلی](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token) موجود در GitHub Action runner بدون نصب OpenCode GitHub App استفاده کنید. فقط مطمئن شوید که دسترسی‌های لازم را در workflow خود اعطا کرده‌اید:
+
+  ```yaml
+  permissions:
+    id-token: write
+    contents: write
+    pull-requests: write
+    issues: write
+  ```
+
+  در صورت تمایل، می‌توانید از [توکن‌های دسترسی شخصی](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens)(PAT) نیز استفاده کنید.
+
+---
+
+## رویدادهای پشتیبانی‌شده
+
+OpenCode می‌تواند با رویدادهای GitHub زیر فعال شود:
+
+| نوع رویداد                    | فعال‌شده توسط                          | جزئیات                                                                                                            |
+| ----------------------------- | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `issue_comment`               | کامنت روی یک issue یا PR               | `/opencode` یا `/oc` را در کامنت خود ذکر کنید. OpenCode کانتکست را می‌خواند و می‌تواند شاخه ایجاد کند، PR باز کند یا پاسخ دهد. |
+| `pull_request_review_comment` | کامنت روی خطوط کد خاص در یک PR         | `/opencode` یا `/oc` را هنگام بازبینی کد ذکر کنید. OpenCode مسیر فایل، شماره خطوط و کانتکست diff را دریافت می‌کند.  |
+| `issues`                      | باز یا ویرایش‌شدن issue                | فعال‌سازی خودکار OpenCode هنگام ایجاد یا تغییر issueها. به ورودی `prompt` نیاز دارد.                              |
+| `pull_request`                | باز یا به‌روزرسانی‌شدن PR              | فعال‌سازی خودکار OpenCode هنگام باز شدن، همگام‌سازی یا بازگشایی PRها. برای بازبینی‌های خودکار مفید است.            |
+| `schedule`                    | زمان‌بندی مبتنی بر Cron                | اجرای OpenCode بر اساس یک زمان‌بندی. به ورودی `prompt` نیاز دارد. خروجی به logها و PRها می‌رود (issueای برای کامنت‌گذاری وجود ندارد). |
+| `workflow_dispatch`           | فعال‌سازی دستی از رابط کاربری GitHub   | فعال‌سازی OpenCode به‌صورت درخواستی از طریق تب Actions. به ورودی `prompt` نیاز دارد. خروجی به logها و PRها می‌رود. |
+
+### مثال زمان‌بندی
+
+OpenCode را بر اساس یک زمان‌بندی اجرا کنید تا وظایف خودکار را انجام دهد:
+
+```yaml title=".github/workflows/opencode-scheduled.yml"
+name: Scheduled OpenCode Task
+
+on:
+  schedule:
+    - cron: "0 9 * * 1" # Every Monday at 9am UTC
+
+jobs:
+  opencode:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Run OpenCode
+        uses: anomalyco/opencode/github@latest
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        with:
+          model: anthropic/claude-sonnet-4-20250514
+          prompt: |
+            Review the codebase for any TODO comments and create a summary.
+            If you find issues worth addressing, open an issue to track them.
+```
+
+برای رویدادهای زمان‌بندی‌شده، ورودی `prompt` **الزامی** است، زیرا کامنتی برای استخراج دستورالعمل‌ها از آن وجود ندارد. workflowهای زمان‌بندی‌شده بدون کانتکست کاربر برای بررسی دسترسی اجرا می‌شوند، بنابراین اگر انتظار دارید OpenCode شاخه یا PR ایجاد کند، workflow باید دسترسی‌های `contents: write` و `pull-requests: write` را اعطا کند.
+
+---
+
+### مثال Pull Request
+
+PRها را به‌صورت خودکار هنگام باز یا به‌روزرسانی‌شدن بازبینی کنید:
+
+```yaml title=".github/workflows/opencode-review.yml"
+name: opencode-review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+      pull-requests: read
+      issues: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: anomalyco/opencode/github@latest
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          model: anthropic/claude-sonnet-4-20250514
+          use_github_token: true
+          prompt: |
+            Review this pull request:
+            - Check for code quality issues
+            - Look for potential bugs
+            - Suggest improvements
+```
+
+برای رویدادهای `pull_request`، اگر `prompt`ی ارائه نشود، OpenCode به‌طور پیش‌فرض pull request را بازبینی می‌کند.
+
+---
+
+### مثال فرز Issueها
+
+issueهای جدید را به‌صورت خودکار فرز کنید. این مثال حساب‌های قدیمی‌تر از ۳۰ روز را فیلتر می‌کند تا اسپم کاهش یابد:
+
+```yaml title=".github/workflows/opencode-triage.yml"
+name: Issue Triage
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Check account age
+        id: check
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const user = await github.rest.users.getByUsername({
+              username: context.payload.issue.user.login
+            });
+            const created = new Date(user.data.created_at);
+            const days = (Date.now() - created) / (1000 * 60 * 60 * 24);
+            return days >= 30;
+          result-encoding: string
+
+      - uses: actions/checkout@v6
+        if: steps.check.outputs.result == 'true'
+        with:
+          persist-credentials: false
+
+      - uses: anomalyco/opencode/github@latest
+        if: steps.check.outputs.result == 'true'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        with:
+          model: anthropic/claude-sonnet-4-20250514
+          prompt: |
+            Review this issue. If there's a clear fix or relevant docs:
+            - Provide documentation links
+            - Add error handling guidance for code examples
+            Otherwise, do not comment.
+```
+
+برای رویدادهای `issues`، ورودی `prompt` **الزامی** است، زیرا کامنتی برای استخراج دستورالعمل‌ها از آن وجود ندارد.
+
+---
+
+## پرامپت‌های سفارشی
+
+پرامپت پیش‌فرض را بازنویسی کنید تا رفتار OpenCode را برای workflow خود سفارشی‌سازی کنید.
+
+```yaml title=".github/workflows/opencode.yml"
+- uses: anomalyco/opencode/github@latest
+  with:
+    model: anthropic/claude-sonnet-4-5
+    prompt: |
+      Review this pull request:
+      - Check for code quality issues
+      - Look for potential bugs
+      - Suggest improvements
+```
+
+این برای اعمال معیارهای بازبینی خاص، استانداردهای کدنویسی یا حوزه‌های تمرکز مرتبط با پروژه شما مفید است.
+
+---
+
+## مثال‌ها
+
+در اینجا چند مثال از نحوه استفاده از OpenCode در GitHub آورده شده است.
+
+- **توضیح یک issue**
+
+  این کامنت را در یک GitHub issue اضافه کنید.
+
+  ```
+  /opencode explain this issue
+  ```
+
+  OpenCode کل رشته (thread)، از جمله تمام کامنت‌ها را می‌خواند و با یک توضیح روشن پاسخ می‌دهد.
+
+- **رفع یک issue**
+
+  در یک GitHub issue بنویسید:
+
+  ```
+  /opencode fix this
+  ```
+
+  و OpenCode یک شاخه جدید ایجاد می‌کند، تغییرات را پیاده‌سازی می‌کند و یک PR با تغییرات باز می‌کند.
+
+- **بازبینی PRها و اعمال تغییرات**
+
+  کامنت زیر را روی یک GitHub PR بگذارید.
+
+  ```
+  Delete the attachment from S3 when the note is removed /oc
+  ```
+
+  OpenCode تغییر درخواست‌شده را پیاده‌سازی می‌کند و آن را در همان PR کامیت می‌کند.
+
+- **بازبینی خطوط کد خاص**
+
+  مستقیماً روی خطوط کد در تب «Files» مربوط به PR یک کامنت بگذارید. OpenCode به‌طور خودکار فایل، شماره خطوط و کانتکست diff را تشخیص می‌دهد تا پاسخ‌های دقیق ارائه دهد.
+
+  ```
+  [Comment on specific lines in Files tab]
+  /oc add error handling here
+  ```
+
+  هنگام کامنت‌گذاری روی خطوط خاص، OpenCode این موارد را دریافت می‌کند:
+  - فایل دقیقی که در حال بازبینی است
+  - خطوط مشخص کد
+  - کانتکست diff پیرامون
+  - اطلاعات شماره خط
+
+  این امکان درخواست‌های هدفمندتر را بدون نیاز به مشخص‌کردن دستی مسیر فایل‌ها یا شماره خطوط فراهم می‌کند.

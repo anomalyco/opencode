@@ -1,0 +1,322 @@
+---
+title: فرمان‌ها
+description: ساخت فرمان‌های سفارشی برای کارهای تکراری.
+---
+
+فرمان‌های سفارشی به شما امکان می‌دهند یک پرامپت را مشخص کنید که می‌خواهید هنگام اجرای آن فرمان در TUI اجرا شود.
+
+```bash frame="none"
+/my-command
+```
+
+فرمان‌های سفارشی علاوه بر فرمان‌های داخلی مانند `/init`، `/undo`، `/redo`، `/share`، `/help` هستند. [بیشتر بدانید](/docs/tui#commands).
+
+---
+
+## ساخت فایل‌های فرمان
+
+برای تعریف فرمان‌های سفارشی، فایل‌های markdown را در دایرکتوری `commands/` بسازید.
+
+فایل `.opencode/commands/test.md` را بسازید:
+
+```md title=".opencode/commands/test.md"
+---
+description: Run tests with coverage
+agent: build
+model: anthropic/claude-3-5-sonnet-20241022
+---
+
+Run the full test suite with coverage report and show any failures.
+Focus on the failing tests and suggest fixes.
+```
+
+‏frontmatter ویژگی‌های فرمان را تعریف می‌کند. محتوا به قالب تبدیل می‌شود.
+
+فرمان را با تایپ `/` و سپس نام فرمان استفاده کنید.
+
+```bash frame="none"
+"/test"
+```
+
+---
+
+## پیکربندی
+
+می‌توانید فرمان‌های سفارشی را از طریق پیکربندی OpenCode یا با ساخت فایل‌های markdown در دایرکتوری `commands/` اضافه کنید.
+
+---
+
+### JSON
+
+از گزینهٔ `command` در [پیکربندی](/docs/config) OpenCode خود استفاده کنید:
+
+```json title="opencode.jsonc" {4-12}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "command": {
+    // این به نام فرمان تبدیل می‌شود
+    "test": {
+      // این پرامپتی است که به LLM ارسال خواهد شد
+      "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes.",
+      // این به‌عنوان توضیحات در TUI نمایش داده می‌شود
+      "description": "Run tests with coverage",
+      "agent": "build",
+      "model": "anthropic/claude-3-5-sonnet-20241022"
+    }
+  }
+}
+```
+
+اکنون می‌توانید این فرمان را در TUI اجرا کنید:
+
+```bash frame="none"
+/test
+```
+
+---
+
+### Markdown
+
+همچنین می‌توانید فرمان‌ها را با استفاده از فایل‌های markdown تعریف کنید. آن‌ها را در این مکان‌ها قرار دهید:
+
+- سراسری: `~/.config/opencode/commands/`
+- به ازای هر پروژه: `.opencode/commands/`
+
+```markdown title="~/.config/opencode/commands/test.md"
+---
+description: Run tests with coverage
+agent: build
+model: anthropic/claude-3-5-sonnet-20241022
+---
+
+Run the full test suite with coverage report and show any failures.
+Focus on the failing tests and suggest fixes.
+```
+
+نام فایل markdown به نام فرمان تبدیل می‌شود. برای مثال، `test.md` به شما امکان می‌دهد این را اجرا کنید:
+
+```bash frame="none"
+/test
+```
+
+---
+
+## پیکربندی پرامپت
+
+پرامپت‌های فرمان‌های سفارشی از چندین جانگه‌دار (placeholder) و نحو ویژه پشتیبانی می‌کنند.
+
+---
+
+### آرگومان‌ها
+
+با استفاده از جانگه‌دار `$ARGUMENTS` آرگومان‌ها را به فرمان‌ها ارسال کنید.
+
+```md title=".opencode/commands/component.md"
+---
+description: Create a new component
+---
+
+Create a new React component named $ARGUMENTS with TypeScript support.
+Include proper typing and basic structure.
+```
+
+فرمان را با آرگومان‌ها اجرا کنید:
+
+```bash frame="none"
+/component Button
+```
+
+و `$ARGUMENTS` با `Button` جایگزین خواهد شد.
+
+همچنین می‌توانید با استفاده از پارامترهای موقعیتی به آرگومان‌های جداگانه دسترسی داشته باشید:
+
+- `$1` - آرگومان اول
+- `$2` - آرگومان دوم
+- `$3` - آرگومان سوم
+- و همین‌طور ادامه...
+
+برای مثال:
+
+```md title=".opencode/commands/create-file.md"
+---
+description: Create a new file with content
+---
+
+Create a file named $1 in the directory $2
+with the following content: $3
+```
+
+فرمان را اجرا کنید:
+
+```bash frame="none"
+/create-file config.json src "{ \"key\": \"value\" }"
+```
+
+این موارد جایگزین می‌شوند:
+
+- `$1` با `config.json`
+- `$2` با `src`
+- `$3` با `{ "key": "value" }`
+
+---
+
+### خروجی shell
+
+از _!`command`_ برای تزریق خروجی [فرمان bash](/docs/tui#bash-commands) به پرامپت خود استفاده کنید.
+
+برای مثال، برای ساخت یک فرمان سفارشی که پوشش تست را تحلیل می‌کند:
+
+```md title=".opencode/commands/analyze-coverage.md"
+---
+description: Analyze test coverage
+---
+
+Here are the current test results:
+!`npm test`
+
+Based on these results, suggest improvements to increase coverage.
+```
+
+یا برای مرور تغییرات اخیر:
+
+```md title=".opencode/commands/review-changes.md"
+---
+description: Review recent changes
+---
+
+Recent git commits:
+!`git log --oneline -10`
+
+Review these changes and suggest any improvements.
+```
+
+فرمان‌ها در دایرکتوری ریشهٔ پروژهٔ شما اجرا می‌شوند و خروجی آن‌ها بخشی از پرامپت می‌شود.
+
+---
+
+### ارجاع به فایل‌ها
+
+فایل‌ها را در فرمان خود با استفاده از `@` و سپس نام فایل بگنجانید.
+
+```md title=".opencode/commands/review-component.md"
+---
+description: Review component
+---
+
+Review the component in @src/components/Button.tsx.
+Check for performance issues and suggest improvements.
+```
+
+محتوای فایل به‌صورت خودکار در پرامپت گنجانده می‌شود.
+
+---
+
+## گزینه‌ها
+
+بیایید گزینه‌های پیکربندی را با جزئیات بررسی کنیم.
+
+---
+
+### Template
+
+گزینهٔ `template` پرامپتی را تعریف می‌کند که هنگام اجرای فرمان به LLM ارسال خواهد شد.
+
+```json title="opencode.json"
+{
+  "command": {
+    "test": {
+      "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes."
+    }
+  }
+}
+```
+
+این یک گزینهٔ پیکربندی **الزامی** است.
+
+---
+
+### Description
+
+از گزینهٔ `description` برای ارائهٔ توضیح کوتاهی از کاری که فرمان انجام می‌دهد استفاده کنید.
+
+```json title="opencode.json"
+{
+  "command": {
+    "test": {
+      "description": "Run tests with coverage"
+    }
+  }
+}
+```
+
+این به‌عنوان توضیحات در TUI هنگام تایپ فرمان نمایش داده می‌شود.
+
+---
+
+### Agent
+
+از پیکربندی `agent` برای مشخص کردن اختیاری اینکه کدام [عامل](/docs/agents) باید این فرمان را اجرا کند استفاده کنید.
+اگر این یک [زیرعامل](/docs/agents/#subagents) باشد، فرمان به‌صورت پیش‌فرض یک فراخوانی زیرعامل را راه‌اندازی می‌کند.
+برای غیرفعال کردن این رفتار، `subtask` را روی `false` تنظیم کنید.
+
+```json title="opencode.json"
+{
+  "command": {
+    "review": {
+      "agent": "plan"
+    }
+  }
+}
+```
+
+این یک گزینهٔ پیکربندی **اختیاری** است. اگر مشخص نشود، به‌صورت پیش‌فرض از عامل فعلی شما استفاده می‌شود.
+
+---
+
+### Subtask
+
+از مقدار بولی `subtask` برای وادار کردن فرمان به راه‌اندازی یک فراخوانی [زیرعامل](/docs/agents/#subagents) استفاده کنید.
+این زمانی مفید است که می‌خواهید فرمان زمینهٔ اصلی شما را آلوده نکند و عامل را **وادار** می‌کند که به‌عنوان یک زیرعامل عمل کند،
+حتی اگر `mode` در پیکربندی [عامل](/docs/agents) روی `primary` تنظیم شده باشد.
+
+```json title="opencode.json"
+{
+  "command": {
+    "analyze": {
+      "subtask": true
+    }
+  }
+}
+```
+
+این یک گزینهٔ پیکربندی **اختیاری** است.
+
+---
+
+### Model
+
+از پیکربندی `model` برای بازنویسی مدل پیش‌فرض این فرمان استفاده کنید.
+
+```json title="opencode.json"
+{
+  "command": {
+    "analyze": {
+      "model": "anthropic/claude-3-5-sonnet-20241022"
+    }
+  }
+}
+```
+
+این یک گزینهٔ پیکربندی **اختیاری** است.
+
+---
+
+## داخلی
+
+‏opencode شامل چندین فرمان داخلی مانند `/init`، `/undo`، `/redo`، `/share`، `/help` است؛ [بیشتر بدانید](/docs/tui#commands).
+
+:::note
+فرمان‌های سفارشی می‌توانند فرمان‌های داخلی را بازنویسی کنند.
+:::
+
+اگر یک فرمان سفارشی با همان نام تعریف کنید، فرمان داخلی را بازنویسی می‌کند.

@@ -1,0 +1,112 @@
+---
+title: Windows (WSL)
+description: برای بهترین تجربه، OpenCode را روی Windows با استفاده از WSL اجرا کنید.
+---
+
+import { Steps } from "@astrojs/starlight/components"
+
+اگرچه OpenCode می‌تواند مستقیماً روی Windows اجرا شود، برای بهترین تجربه استفاده از [Windows Subsystem for Linux (WSL)](https://learn.microsoft.com/en-us/windows/wsl/install) را توصیه می‌کنیم. WSL یک محیط Linux فراهم می‌کند که به‌طور یکپارچه با ویژگی‌های OpenCode کار می‌کند.
+
+:::tip[چرا WSL؟]
+WSL کارایی بهتری برای سیستم فایل، پشتیبانی کامل از terminal و سازگاری با ابزارهای توسعه‌ای که OpenCode به آن‌ها متکی است ارائه می‌دهد.
+:::
+
+---
+
+## راه‌اندازی
+
+<Steps>
+
+1. **نصب WSL**
+
+   اگر هنوز این کار را نکرده‌اید، [WSL را نصب کنید](https://learn.microsoft.com/en-us/windows/wsl/install) با استفاده از راهنمای رسمی Microsoft.
+
+2. **نصب OpenCode در WSL**
+
+   پس از راه‌اندازی WSL، terminal مربوط به WSL خود را باز کنید و OpenCode را با استفاده از یکی از [روش‌های نصب](/docs/) نصب کنید.
+
+   ```bash
+   curl -fsSL https://opencode.ai/install | bash
+   ```
+
+3. **استفاده از OpenCode از طریق WSL**
+
+   به دایرکتوری پروژه خود بروید (دسترسی به فایل‌های Windows از طریق `/mnt/c/`، `/mnt/d/` و غیره) و OpenCode را اجرا کنید.
+
+   ```bash
+   cd /mnt/c/Users/YourName/project
+   opencode
+   ```
+
+</Steps>
+
+---
+
+## برنامه دسکتاپ + سرور WSL
+
+اگر استفاده از برنامه دسکتاپ OpenCode را ترجیح می‌دهید اما می‌خواهید سرور را در WSL اجرا کنید:
+
+1. **سرور را در WSL راه‌اندازی کنید** با `--hostname 0.0.0.0` تا اتصالات خارجی مجاز شوند:
+
+   ```bash
+   opencode serve --hostname 0.0.0.0 --port 4096
+   ```
+
+2. **برنامه دسکتاپ را** به `http://localhost:4096` **متصل کنید**
+
+:::note
+اگر `localhost` در تنظیمات شما کار نکرد، به‌جای آن با استفاده از آدرس IP مربوط به WSL متصل شوید (از داخل WSL: `hostname -I`) و از `http://<wsl-ip>:4096` استفاده کنید.
+:::
+
+:::caution
+هنگام استفاده از `--hostname 0.0.0.0`، مقدار `OPENCODE_SERVER_PASSWORD` را تنظیم کنید تا سرور ایمن شود.
+:::
+
+```bash
+OPENCODE_SERVER_PASSWORD=your-password opencode serve --hostname 0.0.0.0
+```
+
+---
+
+## کلاینت وب + WSL
+
+برای بهترین تجربه وب روی Windows:
+
+1. **`opencode web` را در terminal مربوط به WSL اجرا کنید** به‌جای PowerShell:
+
+   ```bash
+   opencode web --hostname 0.0.0.0
+   ```
+
+2. **از مرورگر Windows خود دسترسی پیدا کنید** در `http://localhost:<port>` (OpenCode آدرس URL را چاپ می‌کند)
+
+اجرای `opencode web` از طریق WSL، دسترسی صحیح به سیستم فایل و یکپارچه‌سازی با terminal را تضمین می‌کند، در حالی که همچنان از مرورگر Windows شما قابل دسترسی است.
+
+---
+
+## دسترسی به فایل‌های Windows
+
+WSL می‌تواند از طریق دایرکتوری `/mnt/` به تمام فایل‌های Windows شما دسترسی داشته باشد:
+
+- درایو `C:` ‏← `/mnt/c/`
+- درایو `D:` ‏← `/mnt/d/`
+- و همین‌طور...
+
+مثال:
+
+```bash
+cd /mnt/c/Users/YourName/Documents/project
+opencode
+```
+
+:::tip
+برای روان‌ترین تجربه، در نظر بگیرید که مخزن خود را در سیستم فایل WSL کلون/کپی کنید (برای مثال زیر `~/code/`) و OpenCode را همان‌جا اجرا کنید.
+:::
+
+---
+
+## نکات
+
+- OpenCode را برای پروژه‌های ذخیره‌شده روی درایوهای Windows در WSL در حال اجرا نگه دارید — دسترسی به فایل‌ها یکپارچه است
+- از [افزونه WSL در VS Code](https://code.visualstudio.com/docs/remote/wsl) در کنار OpenCode برای یک گردش‌کار توسعه یکپارچه استفاده کنید
+- پیکربندی و جلسات OpenCode شما در محیط WSL در مسیر `~/.local/share/opencode/` ذخیره می‌شوند

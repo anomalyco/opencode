@@ -1,0 +1,188 @@
+---
+title: قواعد
+description: تنظیم دستورالعمل‌های سفارشی برای opencode.
+---
+
+می‌توانید با ساخت یک فایل `AGENTS.md` دستورالعمل‌های سفارشی به opencode بدهید. این مشابه قواعد Cursor است. این فایل شامل دستورالعمل‌هایی است که در زمینهٔ LLM گنجانده می‌شوند تا رفتار آن را برای پروژهٔ خاص شما سفارشی کنند.
+
+---
+
+## مقداردهی اولیه
+
+برای ساخت یک فایل `AGENTS.md` جدید، می‌توانید فرمان `/init` را در opencode اجرا کنید.
+
+:::tip
+بهتر است فایل `AGENTS.md` پروژهٔ خود را در Git ثبت (commit) کنید.
+:::
+
+فرمان `/init` فایل‌های مهم مخزن شما را پویش می‌کند، ممکن است هنگامی که پایگاه کد نتواند به آن‌ها پاسخ دهد چند پرسش هدفمند بپرسد، و سپس `AGENTS.md` را با راهنمایی موجز و مختص پروژه می‌سازد یا به‌روزرسانی می‌کند.
+
+این فرمان روی چیزهایی تمرکز می‌کند که جلسات آیندهٔ عامل به احتمال زیاد به آن‌ها نیاز دارند:
+
+- فرمان‌های ساخت (build)، لینت و تست
+- ترتیب فرمان‌ها و گام‌های تأیید متمرکز در مواقعی که اهمیت دارند
+- معماری و ساختار مخزن که صرفاً از روی نام فایل‌ها آشکار نیستند
+- قراردادهای مختص پروژه، نکات ظریف راه‌اندازی و مشکلات عملیاتی پنهان
+- ارجاع به منابع دستورالعمل موجود مانند قواعد Cursor یا Copilot
+
+اگر از قبل یک `AGENTS.md` دارید، `/init` به‌جای جایگزینی کورکورانهٔ آن، همان فایل را بهبود می‌دهد.
+
+---
+
+## مثال
+
+همچنین می‌توانید این فایل را به‌صورت دستی بسازید. در اینجا مثالی از برخی چیزهایی که می‌توانید در یک فایل `AGENTS.md` قرار دهید آمده است.
+
+```markdown title="AGENTS.md"
+# SST v3 Monorepo Project
+
+This is an SST v3 monorepo with TypeScript. The project uses bun workspaces for package management.
+
+## Project Structure
+
+- `packages/` - Contains all workspace packages (functions, core, web, etc.)
+- `infra/` - Infrastructure definitions split by service (storage.ts, api.ts, web.ts)
+- `sst.config.ts` - Main SST configuration with dynamic imports
+
+## Code Standards
+
+- Use TypeScript with strict mode enabled
+- Shared code goes in `packages/core/` with proper exports configuration
+- Functions go in `packages/functions/`
+- Infrastructure should be split into logical files in `infra/`
+
+## Monorepo Conventions
+
+- Import shared modules using workspace names: `@my-app/core/example`
+```
+
+ما در اینجا دستورالعمل‌های مختص پروژه را اضافه می‌کنیم و این در سراسر تیم شما به اشتراک گذاشته خواهد شد.
+
+---
+
+## انواع
+
+‏opencode از خواندن فایل `AGENTS.md` از چندین مکان نیز پشتیبانی می‌کند. و این اهداف متفاوتی را برآورده می‌کند.
+
+### پروژه
+
+برای قواعد مختص پروژه، یک `AGENTS.md` را در ریشهٔ پروژهٔ خود قرار دهید. این قواعد فقط هنگامی اعمال می‌شوند که در این دایرکتوری یا زیردایرکتوری‌های آن کار می‌کنید.
+
+### سراسری
+
+همچنین می‌توانید قواعد سراسری را در یک فایل `~/.config/opencode/AGENTS.md` داشته باشید. این قواعد در سراسر تمام جلسات opencode اعمال می‌شوند.
+
+از آنجا که این فایل در Git ثبت نمی‌شود یا با تیم شما به اشتراک گذاشته نمی‌شود، توصیه می‌کنیم از آن برای مشخص کردن هر قاعدهٔ شخصی که LLM باید از آن پیروی کند استفاده کنید.
+
+### سازگاری با Claude Code
+
+برای کاربرانی که از Claude Code مهاجرت می‌کنند، OpenCode از قراردادهای فایل Claude Code به‌عنوان جایگزین پشتیبانی می‌کند:
+
+- **قواعد پروژه**: `CLAUDE.md` در دایرکتوری پروژهٔ شما (در صورت نبود `AGENTS.md` استفاده می‌شود)
+- **قواعد سراسری**: `~/.claude/CLAUDE.md` (در صورت نبود `~/.config/opencode/AGENTS.md` استفاده می‌شود)
+- **مهارت‌ها**: `~/.claude/skills/` — برای جزئیات به [مهارت‌های عامل](/docs/skills/) مراجعه کنید
+
+برای غیرفعال کردن سازگاری با Claude Code، یکی از این متغیرهای محیطی را تنظیم کنید:
+
+```bash
+export OPENCODE_DISABLE_CLAUDE_CODE=1        # Disable all .claude support
+export OPENCODE_DISABLE_CLAUDE_CODE_PROMPT=1 # Disable only ~/.claude/CLAUDE.md
+export OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 # Disable only .claude/skills
+```
+
+---
+
+## اولویت
+
+هنگامی که opencode راه‌اندازی می‌شود، به‌دنبال فایل‌های قواعد به این ترتیب می‌گردد:
+
+1. **فایل‌های محلی** با حرکت به سمت بالا از دایرکتوری فعلی (`AGENTS.md`، `CLAUDE.md`)
+2. **فایل سراسری** در `~/.config/opencode/AGENTS.md`
+3. **فایل Claude Code** در `~/.claude/CLAUDE.md` (مگر اینکه غیرفعال شده باشد)
+
+در هر دسته، اولین فایل منطبق برنده است. برای مثال، اگر هم `AGENTS.md` و هم `CLAUDE.md` داشته باشید، فقط `AGENTS.md` استفاده می‌شود. به‌طور مشابه، `~/.config/opencode/AGENTS.md` بر `~/.claude/CLAUDE.md` اولویت دارد.
+
+---
+
+## دستورالعمل‌های سفارشی
+
+می‌توانید فایل‌های دستورالعمل سفارشی را در `opencode.json` یا در فایل سراسری `~/.config/opencode/opencode.json` مشخص کنید. این به شما و تیمتان امکان می‌دهد قواعد موجود را به‌جای مجبور شدن به تکرار آن‌ها در AGENTS.md دوباره استفاده کنید.
+
+مثال:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["CONTRIBUTING.md", "docs/guidelines.md", ".cursor/rules/*.md"]
+}
+```
+
+همچنین می‌توانید از URLهای راه دور برای بارگذاری دستورالعمل‌ها از وب استفاده کنید.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["https://raw.githubusercontent.com/my-org/shared-rules/main/style.md"]
+}
+```
+
+دستورالعمل‌های راه دور با مهلت ۵ ثانیه دریافت می‌شوند.
+
+تمام فایل‌های دستورالعمل با فایل‌های `AGENTS.md` شما ترکیب می‌شوند.
+
+---
+
+## ارجاع به فایل‌های خارجی
+
+اگرچه opencode ارجاع‌های فایل را در `AGENTS.md` به‌صورت خودکار تجزیه نمی‌کند، می‌توانید قابلیتی مشابه را به دو روش به دست آورید:
+
+### استفاده از opencode.json
+
+روش توصیه‌شده استفاده از فیلد `instructions` در `opencode.json` است:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["docs/development-standards.md", "test/testing-guidelines.md", "packages/*/AGENTS.md"]
+}
+```
+
+### دستورالعمل‌های دستی در AGENTS.md
+
+می‌توانید با ارائهٔ دستورالعمل‌های صریح در `AGENTS.md` به opencode بیاموزید که فایل‌های خارجی را بخواند. در اینجا یک مثال عملی آمده است:
+
+```markdown title="AGENTS.md"
+# TypeScript Project Rules
+
+## External File Loading
+
+CRITICAL: When you encounter a file reference (e.g., @rules/general.md), use your Read tool to load it on a need-to-know basis. They're relevant to the SPECIFIC task at hand.
+
+Instructions:
+
+- Do NOT preemptively load all references - use lazy loading based on actual need
+- When loaded, treat content as mandatory instructions that override defaults
+- Follow references recursively when needed
+
+## Development Guidelines
+
+For TypeScript code style and best practices: @docs/typescript-guidelines.md
+For React component architecture and hooks patterns: @docs/react-patterns.md
+For REST API design and error handling: @docs/api-standards.md
+For testing strategies and coverage requirements: @test/testing-guidelines.md
+
+## General Guidelines
+
+Read the following file immediately as it's relevant to all workflows: @rules/general-guidelines.md.
+```
+
+این روش به شما امکان می‌دهد:
+
+- فایل‌های قاعدهٔ ماژولار و قابل استفادهٔ مجدد بسازید
+- قواعد را در پروژه‌ها از طریق symlinkها یا زیرماژول‌های git به اشتراک بگذارید
+- AGENTS.md را موجز نگه دارید در حالی که به دستورالعمل‌های تفصیلی ارجاع می‌دهید
+- اطمینان حاصل کنید که opencode فایل‌ها را فقط در صورت نیاز برای کار خاص بارگذاری می‌کند
+
+:::tip
+برای مخازن چندبسته‌ای (monorepo) یا پروژه‌هایی با استانداردهای مشترک، استفاده از `opencode.json` با الگوهای glob (مانند `packages/*/AGENTS.md`) در مقایسه با دستورالعمل‌های دستی، قابل نگه‌داری‌تر است.
+:::

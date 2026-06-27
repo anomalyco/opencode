@@ -1,0 +1,369 @@
+---
+title: تم‌ها
+description: یک تم داخلی را انتخاب کنید یا تم خود را تعریف کنید.
+---
+
+با OpenCode می‌توانید از میان چندین تم داخلی یکی را انتخاب کنید، از تمی که با تم ترمینال شما تطبیق می‌یابد استفاده کنید، یا تم سفارشی خود را تعریف کنید.
+
+به‌طور پیش‌فرض، OpenCode از تم خودمان به نام `opencode` استفاده می‌کند.
+
+---
+
+## الزامات ترمینال
+
+برای اینکه تم‌ها با پالت رنگ کامل خود به‌درستی نمایش داده شوند، ترمینال شما باید از **truecolor** (رنگ ۲۴ بیتی) پشتیبانی کند. بیشتر ترمینال‌های مدرن به‌طور پیش‌فرض از این قابلیت پشتیبانی می‌کنند، اما ممکن است لازم باشد آن را فعال کنید:
+
+- **بررسی پشتیبانی**: دستور `echo $COLORTERM` را اجرا کنید - باید `truecolor` یا `24bit` را چاپ کند
+- **فعال‌سازی truecolor**: متغیر محیطی `COLORTERM=truecolor` را در پروفایل shell خود تنظیم کنید
+- **سازگاری ترمینال**: مطمئن شوید که شبیه‌ساز ترمینال شما از رنگ ۲۴ بیتی پشتیبانی می‌کند (بیشتر ترمینال‌های مدرن مانند iTerm2، Alacritty، Kitty، Windows Terminal و نسخه‌های اخیر GNOME Terminal این کار را می‌کنند)
+
+بدون پشتیبانی از truecolor، ممکن است تم‌ها با دقت رنگ کمتری نمایش داده شوند یا به نزدیک‌ترین تقریب در میان ۲۵۶ رنگ بازگردند.
+
+---
+
+## تم‌های داخلی
+
+OpenCode همراه با چندین تم داخلی عرضه می‌شود.
+
+| نام                    | توضیحات                                                                       |
+| ---------------------- | ---------------------------------------------------------------------------- |
+| `system`               | با رنگ پس‌زمینه ترمینال شما تطبیق می‌یابد                                     |
+| `tokyonight`           | مبتنی بر تم [Tokyonight](https://github.com/folke/tokyonight.nvim)            |
+| `everforest`           | مبتنی بر تم [Everforest](https://github.com/sainnhe/everforest)               |
+| `ayu`                  | مبتنی بر تم تیره [Ayu](https://github.com/ayu-theme)                          |
+| `catppuccin`           | مبتنی بر تم [Catppuccin](https://github.com/catppuccin)                       |
+| `catppuccin-macchiato` | مبتنی بر تم [Catppuccin](https://github.com/catppuccin)                       |
+| `gruvbox`              | مبتنی بر تم [Gruvbox](https://github.com/morhetz/gruvbox)                     |
+| `kanagawa`             | مبتنی بر تم [Kanagawa](https://github.com/rebelot/kanagawa.nvim)              |
+| `nord`                 | مبتنی بر تم [Nord](https://github.com/nordtheme/nord)                         |
+| `matrix`               | تم سبز روی سیاه با سبک هکری                                                   |
+| `one-dark`             | مبتنی بر تم تیره [Atom One](https://github.com/Th3Whit3Wolf/one-nvim)         |
+
+و موارد بیشتر؛ ما به‌طور مداوم در حال افزودن تم‌های جدید هستیم.
+
+---
+
+## تم سیستم
+
+تم `system` طوری طراحی شده که به‌صورت خودکار با طرح رنگ ترمینال شما تطبیق یابد. برخلاف تم‌های سنتی که از رنگ‌های ثابت استفاده می‌کنند، تم _system_:
+
+- **تولید مقیاس خاکستری**: یک مقیاس خاکستری سفارشی بر اساس رنگ پس‌زمینه ترمینال شما ایجاد می‌کند تا کنتراست بهینه تضمین شود.
+- **استفاده از رنگ‌های ANSI**: از رنگ‌های استاندارد ANSI (۰ تا ۱۵) برای برجسته‌سازی سینتکس و عناصر واجهه استفاده می‌کند، که به پالت رنگ ترمینال شما احترام می‌گذارند.
+- **حفظ پیش‌فرض‌های ترمینال**: از `none` برای رنگ‌های متن و پس‌زمینه استفاده می‌کند تا ظاهر بومی ترمینال شما حفظ شود.
+
+تم سیستم برای کاربرانی است که:
+
+- می‌خواهند OpenCode با ظاهر ترمینال آن‌ها مطابقت داشته باشد
+- از طرح‌های رنگ سفارشی ترمینال استفاده می‌کنند
+- ظاهری یکدست در همه اپلیکیشن‌های ترمینال را ترجیح می‌دهند
+
+---
+
+## استفاده از یک تم
+
+می‌توانید با باز کردن انتخابگر تم از طریق دستور `/theme` یک تم را انتخاب کنید. یا می‌توانید آن را در `tui.json` مشخص کنید.
+
+```json title="tui.json" {3}
+{
+  "$schema": "https://opencode.ai/tui.json",
+  "theme": "tokyonight"
+}
+```
+
+---
+
+## تم‌های سفارشی
+
+OpenCode از یک سیستم تم انعطاف‌پذیر مبتنی بر JSON پشتیبانی می‌کند که به کاربران اجازه می‌دهد به‌راحتی تم‌ها را ایجاد و سفارشی کنند.
+
+---
+
+### سلسله‌مراتب
+
+تم‌ها از چندین دایرکتوری به ترتیب زیر بارگذاری می‌شوند، که در آن دایرکتوری‌های بعدی، دایرکتوری‌های قبلی را بازنویسی می‌کنند:
+
+1. **تم‌های داخلی** - این‌ها در فایل اجرایی تعبیه شده‌اند
+2. **دایرکتوری پیکربندی کاربر** - تعریف‌شده در `~/.config/opencode/themes/*.json` یا `$XDG_CONFIG_HOME/opencode/themes/*.json`
+3. **دایرکتوری ریشه پروژه** - تعریف‌شده در `<project-root>/.opencode/themes/*.json`
+4. **دایرکتوری کاری فعلی** - تعریف‌شده در `./.opencode/themes/*.json`
+
+اگر چندین دایرکتوری شامل تمی با نام یکسان باشند، تم از دایرکتوری با اولویت بالاتر استفاده خواهد شد.
+
+---
+
+### ایجاد یک تم
+
+برای ایجاد یک تم سفارشی، یک فایل JSON در یکی از دایرکتوری‌های تم ایجاد کنید.
+
+برای تم‌های سطح کاربر:
+
+```bash no-frame
+mkdir -p ~/.config/opencode/themes
+vim ~/.config/opencode/themes/my-theme.json
+```
+
+و برای تم‌های مخصوص پروژه.
+
+```bash no-frame
+mkdir -p .opencode/themes
+vim .opencode/themes/my-theme.json
+```
+
+---
+
+### فرمت JSON
+
+تم‌ها از یک فرمت JSON انعطاف‌پذیر با پشتیبانی از موارد زیر استفاده می‌کنند:
+
+- **رنگ‌های هگزادسیمال**: `"#ffffff"`
+- **رنگ‌های ANSI**: `3` (۰ تا ۲۵۵)
+- **ارجاع‌های رنگ**: `"primary"` یا تعریف‌های سفارشی
+- **متغیرهای تیره/روشن**: `{"dark": "#000", "light": "#fff"}`
+- **بدون رنگ**: `"none"` - از رنگ پیش‌فرض ترمینال استفاده می‌کند یا شفاف است
+
+---
+
+### تعریف‌های رنگ
+
+بخش `defs` اختیاری است و به شما اجازه می‌دهد رنگ‌های قابل استفاده مجدد را تعریف کنید که می‌توانند در تم ارجاع داده شوند.
+
+---
+
+### پیش‌فرض‌های ترمینال
+
+مقدار خاص `"none"` را می‌توان برای هر رنگی استفاده کرد تا رنگ پیش‌فرض ترمینال را به ارث ببرد. این به‌ویژه برای ایجاد تم‌هایی که به‌طور یکپارچه با طرح رنگ ترمینال شما ترکیب می‌شوند مفید است:
+
+- `"text": "none"` - از رنگ پیش‌زمینه پیش‌فرض ترمینال استفاده می‌کند
+- `"background": "none"` - از رنگ پس‌زمینه پیش‌فرض ترمینال استفاده می‌کند
+
+---
+
+### مثال
+
+در اینجا یک مثال از یک تم سفارشی آورده شده است:
+
+```json title="my-theme.json"
+{
+  "$schema": "https://opencode.ai/theme.json",
+  "defs": {
+    "nord0": "#2E3440",
+    "nord1": "#3B4252",
+    "nord2": "#434C5E",
+    "nord3": "#4C566A",
+    "nord4": "#D8DEE9",
+    "nord5": "#E5E9F0",
+    "nord6": "#ECEFF4",
+    "nord7": "#8FBCBB",
+    "nord8": "#88C0D0",
+    "nord9": "#81A1C1",
+    "nord10": "#5E81AC",
+    "nord11": "#BF616A",
+    "nord12": "#D08770",
+    "nord13": "#EBCB8B",
+    "nord14": "#A3BE8C",
+    "nord15": "#B48EAD"
+  },
+  "theme": {
+    "primary": {
+      "dark": "nord8",
+      "light": "nord10"
+    },
+    "secondary": {
+      "dark": "nord9",
+      "light": "nord9"
+    },
+    "accent": {
+      "dark": "nord7",
+      "light": "nord7"
+    },
+    "error": {
+      "dark": "nord11",
+      "light": "nord11"
+    },
+    "warning": {
+      "dark": "nord12",
+      "light": "nord12"
+    },
+    "success": {
+      "dark": "nord14",
+      "light": "nord14"
+    },
+    "info": {
+      "dark": "nord8",
+      "light": "nord10"
+    },
+    "text": {
+      "dark": "nord4",
+      "light": "nord0"
+    },
+    "textMuted": {
+      "dark": "nord3",
+      "light": "nord1"
+    },
+    "background": {
+      "dark": "nord0",
+      "light": "nord6"
+    },
+    "backgroundPanel": {
+      "dark": "nord1",
+      "light": "nord5"
+    },
+    "backgroundElement": {
+      "dark": "nord1",
+      "light": "nord4"
+    },
+    "border": {
+      "dark": "nord2",
+      "light": "nord3"
+    },
+    "borderActive": {
+      "dark": "nord3",
+      "light": "nord2"
+    },
+    "borderSubtle": {
+      "dark": "nord2",
+      "light": "nord3"
+    },
+    "diffAdded": {
+      "dark": "nord14",
+      "light": "nord14"
+    },
+    "diffRemoved": {
+      "dark": "nord11",
+      "light": "nord11"
+    },
+    "diffContext": {
+      "dark": "nord3",
+      "light": "nord3"
+    },
+    "diffHunkHeader": {
+      "dark": "nord3",
+      "light": "nord3"
+    },
+    "diffHighlightAdded": {
+      "dark": "nord14",
+      "light": "nord14"
+    },
+    "diffHighlightRemoved": {
+      "dark": "nord11",
+      "light": "nord11"
+    },
+    "diffAddedBg": {
+      "dark": "#3B4252",
+      "light": "#E5E9F0"
+    },
+    "diffRemovedBg": {
+      "dark": "#3B4252",
+      "light": "#E5E9F0"
+    },
+    "diffContextBg": {
+      "dark": "nord1",
+      "light": "nord5"
+    },
+    "diffLineNumber": {
+      "dark": "nord2",
+      "light": "nord4"
+    },
+    "diffAddedLineNumberBg": {
+      "dark": "#3B4252",
+      "light": "#E5E9F0"
+    },
+    "diffRemovedLineNumberBg": {
+      "dark": "#3B4252",
+      "light": "#E5E9F0"
+    },
+    "markdownText": {
+      "dark": "nord4",
+      "light": "nord0"
+    },
+    "markdownHeading": {
+      "dark": "nord8",
+      "light": "nord10"
+    },
+    "markdownLink": {
+      "dark": "nord9",
+      "light": "nord9"
+    },
+    "markdownLinkText": {
+      "dark": "nord7",
+      "light": "nord7"
+    },
+    "markdownCode": {
+      "dark": "nord14",
+      "light": "nord14"
+    },
+    "markdownBlockQuote": {
+      "dark": "nord3",
+      "light": "nord3"
+    },
+    "markdownEmph": {
+      "dark": "nord12",
+      "light": "nord12"
+    },
+    "markdownStrong": {
+      "dark": "nord13",
+      "light": "nord13"
+    },
+    "markdownHorizontalRule": {
+      "dark": "nord3",
+      "light": "nord3"
+    },
+    "markdownListItem": {
+      "dark": "nord8",
+      "light": "nord10"
+    },
+    "markdownListEnumeration": {
+      "dark": "nord7",
+      "light": "nord7"
+    },
+    "markdownImage": {
+      "dark": "nord9",
+      "light": "nord9"
+    },
+    "markdownImageText": {
+      "dark": "nord7",
+      "light": "nord7"
+    },
+    "markdownCodeBlock": {
+      "dark": "nord4",
+      "light": "nord0"
+    },
+    "syntaxComment": {
+      "dark": "nord3",
+      "light": "nord3"
+    },
+    "syntaxKeyword": {
+      "dark": "nord9",
+      "light": "nord9"
+    },
+    "syntaxFunction": {
+      "dark": "nord8",
+      "light": "nord8"
+    },
+    "syntaxVariable": {
+      "dark": "nord7",
+      "light": "nord7"
+    },
+    "syntaxString": {
+      "dark": "nord14",
+      "light": "nord14"
+    },
+    "syntaxNumber": {
+      "dark": "nord15",
+      "light": "nord15"
+    },
+    "syntaxType": {
+      "dark": "nord7",
+      "light": "nord7"
+    },
+    "syntaxOperator": {
+      "dark": "nord9",
+      "light": "nord9"
+    },
+    "syntaxPunctuation": {
+      "dark": "nord4",
+      "light": "nord0"
+    }
+  }
+}
+```

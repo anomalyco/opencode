@@ -1,0 +1,921 @@
+---
+title: پیکربندی
+description: استفاده از فایل پیکربندی JSON در OpenCode.
+---
+
+می‌توانید OpenCode را با استفاده از یک فایل پیکربندی JSON تنظیم کنید.
+
+---
+
+## قالب
+
+OpenCode از هر دو قالب **JSON** و **JSONC** (یعنی JSON همراه با کامنت) پشتیبانی می‌کند.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "anthropic/claude-sonnet-4-5",
+  "autoupdate": true,
+  "server": {
+    "port": 4096,
+  },
+}
+```
+
+---
+
+## مکان‌ها
+
+می‌توانید پیکربندی خود را در چند مکان مختلف قرار دهید و هر کدام ترتیب اولویت متفاوتی دارند.
+
+:::note
+فایل‌های پیکربندی **با یکدیگر ادغام می‌شوند** و جایگزین یکدیگر نمی‌شوند.
+:::
+
+فایل‌های پیکربندی با یکدیگر ادغام می‌شوند و جایگزین نمی‌شوند. تنظیمات مکان‌های پیکربندی زیر با هم ترکیب می‌شوند. پیکربندی‌های بعدی فقط برای کلیدهای متناقض، پیکربندی‌های قبلی را بازنویسی می‌کنند. تنظیمات غیرمتناقض از همهٔ پیکربندی‌ها حفظ می‌شوند.
+
+برای مثال، اگر پیکربندی سراسری شما `autoupdate: true` را تنظیم کند و پیکربندی پروژهٔ شما `model: "anthropic/claude-sonnet-4-5"` را تنظیم کند، پیکربندی نهایی شامل هر دو تنظیم خواهد بود.
+
+---
+
+### ترتیب اولویت
+
+منابع پیکربندی به این ترتیب بارگذاری می‌شوند (منابع بعدی منابع قبلی را بازنویسی می‌کنند):
+
+1. **پیکربندی راه دور** (از `.well-known/opencode`) - پیش‌فرض‌های سازمانی
+2. **پیکربندی سراسری** (`~/.config/opencode/opencode.json`) - ترجیحات کاربر
+3. **پیکربندی سفارشی** (متغیر محیطی `OPENCODE_CONFIG`) - بازنویسی‌های سفارشی
+4. **پیکربندی پروژه** (`opencode.json` در پروژه) - تنظیمات مختص پروژه
+5. **دایرکتوری‌های `.opencode`** - عامل‌ها، فرمان‌ها، افزونه‌ها
+6. **پیکربندی درون‌خطی** (متغیر محیطی `OPENCODE_CONFIG_CONTENT`) - بازنویسی‌های زمان اجرا
+7. **فایل‌های پیکربندی مدیریت‌شده** (`/Library/Application Support/opencode/` در macOS) - تحت کنترل مدیر
+8. **ترجیحات مدیریت‌شدهٔ macOS** (`.mobileconfig` از طریق MDM) - بالاترین اولویت، غیرقابل بازنویسی توسط کاربر
+
+این یعنی پیکربندی‌های پروژه می‌توانند پیش‌فرض‌های سراسری را بازنویسی کنند و پیکربندی‌های سراسری می‌توانند پیش‌فرض‌های سازمانی راه دور را بازنویسی کنند. تنظیمات مدیریت‌شده همه چیز را بازنویسی می‌کنند.
+
+:::note
+دایرکتوری‌های `.opencode` و `~/.config/opencode` برای زیردایرکتوری‌ها از **نام‌های جمع** استفاده می‌کنند: `agents/`، `commands/`، `modes/`، `plugins/`، `skills/`، `tools/` و `themes/`. نام‌های مفرد (مثل `agent/`) نیز برای سازگاری با نسخه‌های قبلی پشتیبانی می‌شوند.
+:::
+
+---
+
+### راه دور
+
+سازمان‌ها می‌توانند پیکربندی پیش‌فرض را از طریق نقطهٔ پایانی `.well-known/opencode` ارائه دهند. این پیکربندی به‌صورت خودکار هنگامی که با یک ارائه‌دهنده که از آن پشتیبانی می‌کند احراز هویت می‌کنید، دریافت می‌شود.
+
+پیکربندی راه دور ابتدا بارگذاری می‌شود و به‌عنوان لایهٔ پایه عمل می‌کند. تمام منابع پیکربندی دیگر (سراسری، پروژه) می‌توانند این پیش‌فرض‌ها را بازنویسی کنند.
+
+برای مثال، اگر سازمان شما سرورهای MCP را که به‌صورت پیش‌فرض غیرفعال هستند ارائه دهد:
+
+```json title="Remote config from .well-known/opencode"
+{
+  "mcp": {
+    "jira": {
+      "type": "remote",
+      "url": "https://jira.example.com/mcp",
+      "enabled": false
+    }
+  }
+}
+```
+
+می‌توانید سرورهای مشخصی را در پیکربندی محلی خود فعال کنید:
+
+```json title="opencode.json"
+{
+  "mcp": {
+    "jira": {
+      "type": "remote",
+      "url": "https://jira.example.com/mcp",
+      "enabled": true
+    }
+  }
+}
+```
+
+---
+
+### سراسری
+
+پیکربندی سراسری OpenCode خود را در `~/.config/opencode/opencode.json` قرار دهید. از پیکربندی سراسری برای ترجیحات سرور/زمان‌اجرا در سطح کاربر مانند ارائه‌دهنده‌ها، مدل‌ها و مجوزها استفاده کنید.
+
+برای تنظیمات مختص TUI، از `~/.config/opencode/tui.json` استفاده کنید.
+
+پیکربندی سراسری پیش‌فرض‌های سازمانی راه دور را بازنویسی می‌کند.
+
+---
+
+### به ازای هر پروژه
+
+`opencode.json` را در ریشهٔ پروژهٔ خود اضافه کنید. پیکربندی پروژه در میان فایل‌های پیکربندی استاندارد بالاترین اولویت را دارد - هم پیکربندی‌های سراسری و هم راه دور را بازنویسی می‌کند.
+
+برای تنظیمات TUI مختص پروژه، یک `tui.json` در کنار آن اضافه کنید.
+
+:::tip
+پیکربندی مختص پروژه را در ریشهٔ پروژهٔ خود قرار دهید.
+:::
+
+هنگامی که OpenCode راه‌اندازی می‌شود، ابتدا به‌دنبال یک فایل پیکربندی در دایرکتوری فعلی می‌گردد، سپس تا نزدیک‌ترین دایرکتوری Git بالا می‌رود.
+
+این فایل برای ثبت در Git نیز امن است و از همان طرحوارهٔ پیکربندی سراسری استفاده می‌کند.
+
+---
+
+### مسیر سفارشی
+
+با استفاده از متغیر محیطی `OPENCODE_CONFIG` یک مسیر فایل پیکربندی سفارشی مشخص کنید.
+
+```bash
+export OPENCODE_CONFIG=/path/to/my/custom-config.json
+opencode run "Hello world"
+```
+
+پیکربندی سفارشی در ترتیب اولویت، بین پیکربندی‌های سراسری و پروژه بارگذاری می‌شود.
+
+---
+
+### دایرکتوری سفارشی
+
+با استفاده از متغیر محیطی `OPENCODE_CONFIG_DIR` یک دایرکتوری پیکربندی سفارشی مشخص کنید. این دایرکتوری برای یافتن عامل‌ها، فرمان‌ها، حالت‌ها و افزونه‌ها درست مانند دایرکتوری استاندارد `.opencode` جست‌وجو می‌شود و باید از همان ساختار پیروی کند.
+
+```bash
+export OPENCODE_CONFIG_DIR=/path/to/my/config-directory
+opencode run "Hello world"
+```
+
+دایرکتوری سفارشی پس از پیکربندی سراسری و دایرکتوری‌های `.opencode` بارگذاری می‌شود، بنابراین **می‌تواند** تنظیمات آن‌ها را بازنویسی کند.
+
+---
+
+### تنظیمات مدیریت‌شده
+
+سازمان‌ها می‌توانند پیکربندی‌ای را اعمال کنند که کاربران نتوانند آن را بازنویسی کنند. تنظیمات مدیریت‌شده در بالاترین سطح اولویت بارگذاری می‌شوند.
+
+#### مبتنی بر فایل
+
+یک فایل `opencode.json` یا `opencode.jsonc` را در دایرکتوری پیکربندی مدیریت‌شدهٔ سیستم قرار دهید:
+
+| پلتفرم  | مسیر                                     |
+| ------- | ---------------------------------------- |
+| macOS   | `/Library/Application Support/opencode/` |
+| Linux   | `/etc/opencode/`                         |
+| Windows | `%ProgramData%\opencode`                 |
+
+نوشتن در این دایرکتوری‌ها به دسترسی مدیر/root نیاز دارد، بنابراین کاربران نمی‌توانند آن‌ها را تغییر دهند.
+
+#### ترجیحات مدیریت‌شدهٔ macOS
+
+در macOS، OpenCode ترجیحات مدیریت‌شده را از دامنهٔ ترجیحات `ai.opencode.managed` می‌خواند. یک `.mobileconfig` را از طریق MDM (مانند Jamf، Kandji، FleetDM) مستقر کنید و تنظیمات به‌صورت خودکار اعمال می‌شوند.
+
+OpenCode این مسیرها را بررسی می‌کند:
+
+1. `/Library/Managed Preferences/<user>/ai.opencode.managed.plist`
+2. `/Library/Managed Preferences/ai.opencode.managed.plist`
+
+کلیدهای plist مستقیماً به فیلدهای `opencode.json` نگاشت می‌شوند. کلیدهای فراداده MDM (مانند `PayloadUUID`، `PayloadType` و غیره) به‌صورت خودکار حذف می‌شوند.
+
+**ساخت یک `.mobileconfig`**
+
+از PayloadType مقدار `ai.opencode.managed` استفاده کنید. کلیدهای پیکربندی OpenCode مستقیماً در dict مربوط به payload قرار می‌گیرند:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>PayloadContent</key>
+  <array>
+    <dict>
+      <key>PayloadType</key>
+      <string>ai.opencode.managed</string>
+      <key>PayloadIdentifier</key>
+      <string>com.example.opencode.config</string>
+      <key>PayloadUUID</key>
+      <string>GENERATE-YOUR-OWN-UUID</string>
+      <key>PayloadVersion</key>
+      <integer>1</integer>
+      <key>share</key>
+      <string>disabled</string>
+      <key>server</key>
+      <dict>
+        <key>hostname</key>
+        <string>127.0.0.1</string>
+      </dict>
+      <key>permission</key>
+      <dict>
+        <key>*</key>
+        <string>ask</string>
+        <key>bash</key>
+        <dict>
+          <key>*</key>
+          <string>ask</string>
+          <key>rm -rf *</key>
+          <string>deny</string>
+        </dict>
+      </dict>
+    </dict>
+  </array>
+  <key>PayloadType</key>
+  <string>Configuration</string>
+  <key>PayloadIdentifier</key>
+  <string>com.example.opencode</string>
+  <key>PayloadUUID</key>
+  <string>GENERATE-YOUR-OWN-UUID</string>
+  <key>PayloadVersion</key>
+  <integer>1</integer>
+</dict>
+</plist>
+```
+
+UUIDهای یکتا را با `uuidgen` تولید کنید. تنظیمات را متناسب با الزامات سازمان خود سفارشی کنید.
+
+**استقرار از طریق MDM**
+
+- **Jamf Pro:** Computers > Configuration Profiles > Upload > دامنه را به دستگاه‌های هدف یا گروه‌های هوشمند محدود کنید
+- **FleetDM:** فایل `.mobileconfig` را به مخزن gitops خود زیر `mdm.macos_settings.custom_settings` اضافه کنید و `fleetctl apply` را اجرا کنید
+
+**تأیید روی یک دستگاه**
+
+برای آزمایش، روی `.mobileconfig` دوبار کلیک کنید تا به‌صورت محلی نصب شود (در System Settings > Privacy & Security > Profiles نمایش داده می‌شود)، سپس اجرا کنید:
+
+```bash
+opencode debug config
+```
+
+تمام کلیدهای ترجیحات مدیریت‌شده در پیکربندی نهایی‌شده ظاهر می‌شوند و نمی‌توانند توسط پیکربندی کاربر یا پروژه بازنویسی شوند.
+
+---
+
+## طرحواره
+
+طرحوارهٔ پیکربندی سرور/زمان‌اجرا در [**`opencode.ai/config.json`**](https://opencode.ai/config.json) تعریف شده است.
+
+پیکربندی TUI از [**`opencode.ai/tui.json`**](https://opencode.ai/tui.json) استفاده می‌کند.
+
+ویرایشگر شما باید بتواند بر اساس این طرحواره اعتبارسنجی و تکمیل خودکار انجام دهد.
+
+---
+
+### TUI
+
+برای تنظیمات مختص TUI از یک فایل اختصاصی `tui.json` (یا `tui.jsonc`) استفاده کنید.
+
+```json title="tui.json"
+{
+  "$schema": "https://opencode.ai/tui.json",
+  "scroll_speed": 3,
+  "scroll_acceleration": {
+    "enabled": true
+  },
+  "diff_style": "auto",
+  "mouse": true,
+  "attention": {
+    "enabled": true,
+    "notifications": true,
+    "sound": true,
+    "volume": 0.4
+  }
+}
+```
+
+برای اشاره به یک فایل پیکربندی TUI سفارشی از `OPENCODE_TUI_CONFIG` استفاده کنید.
+
+برای روشن کردن اعلان‌ها و صداهای دسکتاپ TUI، `attention.enabled` را تنظیم کنید. به [توجه TUI](/docs/tui#attention) مراجعه کنید.
+
+کلیدهای قدیمی `theme`، `keybinds` و `tui` در `opencode.json` منسوخ شده‌اند و در صورت امکان به‌صورت خودکار مهاجرت می‌شوند.
+
+---
+
+### سرور
+
+می‌توانید تنظیمات سرور را برای فرمان‌های `opencode serve` و `opencode web` از طریق گزینهٔ `server` تنظیم کنید.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "server": {
+    "port": 4096,
+    "hostname": "0.0.0.0",
+    "mdns": true,
+    "mdnsDomain": "myproject.local",
+    "cors": ["http://localhost:5173"]
+  }
+}
+```
+
+گزینه‌های موجود:
+
+- `port` - پورتی که روی آن گوش داده می‌شود.
+- `hostname` - نام میزبانی که روی آن گوش داده می‌شود. هنگامی که `mdns` فعال باشد و نام میزبانی تنظیم نشده باشد، مقدار پیش‌فرض `0.0.0.0` است.
+- `mdns` - فعال کردن کشف سرویس mDNS. این به دستگاه‌های دیگر روی شبکه اجازه می‌دهد سرور OpenCode شما را کشف کنند.
+- `mdnsDomain` - نام دامنهٔ سفارشی برای سرویس mDNS. مقدار پیش‌فرض `opencode.local` است. برای اجرای چند نمونه روی یک شبکه مفید است.
+- `cors` - مبداهای اضافی برای مجاز کردن CORS هنگام استفاده از سرور HTTP از یک کلاینت مبتنی بر مرورگر. مقادیر باید مبداهای کامل باشند (طرح + میزبان + پورت اختیاری)، مانند `https://app.example.com`.
+
+[درباره سرور اینجا بیشتر بدانید](/docs/server).
+
+---
+
+### پوسته (Shell)
+
+می‌توانید پوستهٔ مورد استفاده برای ترمینال تعاملی را با استفاده از گزینهٔ `shell` تنظیم کنید. پوسته‌های سازگار برای فراخوانی ابزارهای عامل نیز استفاده می‌شوند.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "shell": "pwsh"
+}
+```
+
+اگر مشخص نشود، OpenCode به‌صورت خودکار یک پیش‌فرض مناسب بر اساس سیستم‌عامل شما کشف و استفاده می‌کند (مثلاً `pwsh` یا `cmd.exe` در Windows، یا `/bin/zsh` یا `/bin/bash` در macOS/Linux). می‌توانید یک مسیر مطلق یا یک نام کوتاه ارائه دهید.
+
+---
+
+### ابزارها
+
+می‌توانید ابزارهایی را که یک LLM می‌تواند استفاده کند از طریق گزینهٔ `tools` مدیریت کنید.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "tools": {
+    "write": false,
+    "bash": false
+  }
+}
+```
+
+[درباره ابزارها اینجا بیشتر بدانید](/docs/tools).
+
+---
+
+### مدل‌ها
+
+می‌توانید ارائه‌دهنده‌ها و مدل‌هایی را که می‌خواهید استفاده کنید در پیکربندی OpenCode خود از طریق گزینه‌های `provider`، `model` و `small_model` تنظیم کنید.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {},
+  "model": "anthropic/claude-sonnet-4-5",
+  "small_model": "anthropic/claude-haiku-4-5"
+}
+```
+
+گزینهٔ `small_model` یک مدل جداگانه برای کارهای سبک مانند تولید عنوان را پیکربندی می‌کند. به‌صورت پیش‌فرض، OpenCode تلاش می‌کند در صورت موجود بودن از مدل ارزان‌تری از ارائه‌دهندهٔ شما استفاده کند، در غیر این صورت به مدل اصلی شما بازمی‌گردد.
+
+گزینه‌های ارائه‌دهنده می‌توانند شامل `timeout`، `chunkTimeout` و `setCacheKey` باشند:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "anthropic": {
+      "options": {
+        "timeout": 600000,
+        "chunkTimeout": 30000,
+        "setCacheKey": true
+      }
+    }
+  }
+}
+```
+
+- `timeout` - مهلت درخواست بر حسب میلی‌ثانیه (پیش‌فرض: 300000). برای غیرفعال کردن آن را روی `false` تنظیم کنید.
+- `chunkTimeout` - مهلت بر حسب میلی‌ثانیه بین تکه‌های پاسخ جریانی. اگر هیچ تکه‌ای به‌موقع نرسد، درخواست لغو می‌شود.
+- `setCacheKey` - اطمینان حاصل می‌کند که همیشه یک کلید کش برای ارائه‌دهندهٔ تعیین‌شده تنظیم می‌شود.
+
+همچنین می‌توانید [مدل‌های محلی](/docs/models#local) را پیکربندی کنید. [بیشتر بدانید](/docs/models).
+
+---
+
+### سیاست‌ها
+
+از گزینهٔ `experimental.policies` برای مجاز کردن یا رد کردن اقدامات OpenCode روی منابع پیکربندی‌شده استفاده کنید. در حال حاضر، سیاست‌ها می‌توانند کنترل کنند که OpenCode از کدام ارائه‌دهنده‌ها می‌تواند استفاده کند.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {
+    "policies": [
+      {
+        "effect": "deny",
+        "action": "provider.use",
+        "resource": "openai"
+      }
+    ]
+  }
+}
+```
+
+[درباره سیاست‌ها اینجا بیشتر بدانید](/docs/policies).
+
+---
+
+### پیوست‌های تصویری
+
+OpenCode پیوست‌های تصویری را پیش از ارسال به مدل، نرمال‌سازی می‌کند. به‌صورت پیش‌فرض، تصاویری که از `2000x2000` پیکسل یا `5242880` بایت base64 فراتر روند، تغییر اندازه داده می‌شوند.
+
+محدودیت‌های پیوست تصویری را با گزینهٔ `attachment.image` پیکربندی کنید:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "attachment": {
+    "image": {
+      "auto_resize": true,
+      "max_width": 2000,
+      "max_height": 2000,
+      "max_base64_bytes": 5242880
+    }
+  }
+}
+```
+
+- `auto_resize` - تصاویری را که از محدودیت‌های پیکربندی‌شده فراتر می‌روند پیش از درخواست‌های ارائه‌دهنده تغییر اندازه می‌دهد. برای رد کردن تصاویر بیش از حد بزرگ به‌جای آن، روی `false` تنظیم کنید.
+- `max_width` - حداکثر عرض تصویر بر حسب پیکسل پیش از تغییر اندازه یا رد کردن.
+- `max_height` - حداکثر ارتفاع تصویر بر حسب پیکسل پیش از تغییر اندازه یا رد کردن.
+- `max_base64_bytes` - حداکثر اندازهٔ بار رمزگذاری‌شدهٔ تصویر. این اندازهٔ بار base64 است، نه اندازهٔ فایل اصلی.
+
+اگر یک تصویر پس از تغییر اندازه همچنان جا نشود، OpenCode تصاویر بیش از حد بزرگ نتیجهٔ ابزار را حذف می‌کند یا تصاویر بیش از حد بزرگ ارائه‌شده توسط کاربر را با یک خطای اندازهٔ تصویر ناموفق می‌کند.
+
+---
+
+#### گزینه‌های مختص ارائه‌دهنده
+
+برخی ارائه‌دهنده‌ها فراتر از تنظیمات عمومی `timeout` و `apiKey` از گزینه‌های پیکربندی اضافی پشتیبانی می‌کنند.
+
+##### Amazon Bedrock
+
+‏Amazon Bedrock از پیکربندی مختص AWS پشتیبانی می‌کند:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "amazon-bedrock": {
+      "options": {
+        "region": "us-east-1",
+        "profile": "my-aws-profile",
+        "endpoint": "https://bedrock-runtime.us-east-1.vpce-xxxxx.amazonaws.com"
+      }
+    }
+  }
+}
+```
+
+- `region` - منطقهٔ AWS برای Bedrock (پیش‌فرض: متغیر محیطی `AWS_REGION` یا `us-east-1`)
+- `profile` - پروفایل نام‌گذاری‌شدهٔ AWS از `~/.aws/credentials` (پیش‌فرض: متغیر محیطی `AWS_PROFILE`)
+- `endpoint` - آدرس URL نقطهٔ پایانی سفارشی برای نقاط پایانی VPC. این یک نام مستعار برای گزینهٔ عمومی `baseURL` با استفاده از اصطلاحات مختص AWS است. اگر هر دو مشخص شوند، `endpoint` اولویت دارد.
+
+:::note
+توکن‌های Bearer (یعنی `AWS_BEARER_TOKEN_BEDROCK` یا `/connect`) بر احراز هویت مبتنی بر پروفایل اولویت دارند. برای جزئیات به [اولویت احراز هویت](/docs/providers#authentication-precedence) مراجعه کنید.
+:::
+
+[درباره پیکربندی Amazon Bedrock بیشتر بدانید](/docs/providers#amazon-bedrock).
+
+---
+
+### پوسته‌ها (Themes)
+
+پوستهٔ رابط کاربری خود را در `tui.json` تنظیم کنید.
+
+```json title="tui.json"
+{
+  "$schema": "https://opencode.ai/tui.json",
+  "theme": "tokyonight"
+}
+```
+
+[اینجا بیشتر بدانید](/docs/themes).
+
+---
+
+### عامل‌ها
+
+می‌توانید عامل‌های تخصصی را برای کارهای مشخص از طریق گزینهٔ `agent` پیکربندی کنید.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "code-reviewer": {
+      "description": "Reviews code for best practices and potential issues",
+      "model": "anthropic/claude-sonnet-4-5",
+      "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
+      "tools": {
+        // غیرفعال کردن ابزارهای تغییر فایل برای عامل فقط‌مرور
+        "write": false,
+        "edit": false,
+      },
+    },
+  },
+}
+```
+
+همچنین می‌توانید عامل‌ها را با استفاده از فایل‌های markdown در `~/.config/opencode/agents/` یا `.opencode/agents/` تعریف کنید. [اینجا بیشتر بدانید](/docs/agents).
+
+---
+
+### عامل پیش‌فرض
+
+می‌توانید عامل پیش‌فرض را با استفاده از گزینهٔ `default_agent` تنظیم کنید. این تعیین می‌کند که وقتی هیچ عاملی صریحاً مشخص نشده باشد، از کدام عامل استفاده شود.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "default_agent": "plan"
+}
+```
+
+عامل پیش‌فرض باید یک عامل اصلی باشد (نه یک زیرعامل). این می‌تواند یک عامل داخلی مانند `"build"` یا `"plan"` باشد، یا یک [عامل سفارشی](/docs/agents) که خودتان تعریف کرده‌اید. اگر عامل مشخص‌شده وجود نداشته باشد یا یک زیرعامل باشد، OpenCode با یک هشدار به `"build"` بازمی‌گردد.
+
+این تنظیم در تمام رابط‌ها اعمال می‌شود: TUI، CLI (`opencode run`)، اپلیکیشن دسکتاپ و GitHub Action.
+
+---
+
+### اشتراک‌گذاری
+
+می‌توانید ویژگی [اشتراک‌گذاری](/docs/share) را از طریق گزینهٔ `share` پیکربندی کنید.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "share": "manual"
+}
+```
+
+این مقادیر را می‌پذیرد:
+
+- `"manual"` - اجازهٔ اشتراک‌گذاری دستی از طریق فرمان‌ها (پیش‌فرض)
+- `"auto"` - اشتراک‌گذاری خودکار مکالمه‌های جدید
+- `"disabled"` - غیرفعال کردن کامل اشتراک‌گذاری
+
+به‌صورت پیش‌فرض، اشتراک‌گذاری روی حالت دستی تنظیم شده است که در آن باید مکالمه‌ها را صریحاً با استفاده از فرمان `/share` به اشتراک بگذارید.
+
+---
+
+### فرمان‌ها
+
+می‌توانید فرمان‌های سفارشی را برای کارهای تکراری از طریق گزینهٔ `command` پیکربندی کنید.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "command": {
+    "test": {
+      "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes.",
+      "description": "Run tests with coverage",
+      "agent": "build",
+      "model": "anthropic/claude-haiku-4-5",
+    },
+    "component": {
+      "template": "Create a new React component named $ARGUMENTS with TypeScript support.\nInclude proper typing and basic structure.",
+      "description": "Create a new component",
+    },
+  },
+}
+```
+
+همچنین می‌توانید فرمان‌ها را با استفاده از فایل‌های markdown در `~/.config/opencode/commands/` یا `.opencode/commands/` تعریف کنید. [اینجا بیشتر بدانید](/docs/commands).
+
+---
+
+### میان‌برهای صفحه‌کلید
+
+میان‌برهای صفحه‌کلید TUI را در `tui.json` با `keybinds` سفارشی کنید.
+
+```json title="tui.json"
+{
+  "$schema": "https://opencode.ai/tui.json",
+  "keybinds": {
+    "command_list": "ctrl+p"
+  }
+}
+```
+
+‏`keybinds` با پیش‌فرض‌های داخلی ادغام می‌شود، بنابراین فقط باید میان‌برهایی را که می‌خواهید تغییر دهید پیکربندی کنید.
+
+[اینجا بیشتر بدانید](/docs/keybinds).
+
+---
+
+### عکس فوری (Snapshot)
+
+OpenCode از عکس‌های فوری برای ردیابی تغییرات فایل در طول عملیات عامل استفاده می‌کند که به شما امکان می‌دهد تغییرات را در یک جلسه لغو و بازگردانی کنید. عکس‌های فوری به‌صورت پیش‌فرض فعال هستند.
+
+برای مخازن بزرگ یا پروژه‌هایی با زیرماژول‌های فراوان، سیستم عکس فوری می‌تواند باعث نمایه‌سازی کند و مصرف قابل توجه فضای دیسک شود، زیرا تمام تغییرات را با استفاده از یک مخزن git داخلی ردیابی می‌کند. می‌توانید عکس‌های فوری را با استفاده از گزینهٔ `snapshot` غیرفعال کنید.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "snapshot": false
+}
+```
+
+توجه داشته باشید که غیرفعال کردن عکس‌های فوری به این معناست که تغییرات ایجادشده توسط عامل را نمی‌توان از طریق رابط کاربری بازگرداند.
+
+---
+
+### به‌روزرسانی خودکار
+
+OpenCode هنگام راه‌اندازی، هر به‌روزرسانی جدیدی را به‌صورت خودکار دانلود می‌کند. می‌توانید این را با گزینهٔ `autoupdate` غیرفعال کنید.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "autoupdate": false
+}
+```
+
+اگر به‌روزرسانی نمی‌خواهید اما می‌خواهید هنگام در دسترس بودن نسخهٔ جدید مطلع شوید، `autoupdate` را روی `"notify"` تنظیم کنید.
+توجه کنید که این فقط در صورتی کار می‌کند که با یک مدیر بسته مانند Homebrew نصب نشده باشد.
+
+---
+
+### قالب‌بندها (Formatters)
+
+می‌توانید قالب‌بندهای کد را از طریق گزینهٔ `formatter` فعال و پیکربندی کنید. آن را حذف کنید تا قالب‌بندها غیرفعال بمانند.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": true
+}
+```
+
+از یک شیء استفاده کنید تا قالب‌بندهای داخلی فعال بمانند در حالی که بازنویسی‌ها یا قالب‌بندهای سفارشی را پیکربندی می‌کنید.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {
+    "prettier": {
+      "disabled": true
+    },
+    "custom-prettier": {
+      "command": ["npx", "prettier", "--write", "$FILE"],
+      "environment": {
+        "NODE_ENV": "development"
+      },
+      "extensions": [".js", ".ts", ".jsx", ".tsx"]
+    }
+  }
+}
+```
+
+[درباره قالب‌بندها اینجا بیشتر بدانید](/docs/formatters).
+
+---
+
+### سرورهای LSP
+
+می‌توانید سرورهای LSP را از طریق گزینهٔ `lsp` فعال و پیکربندی کنید. آن را حذف کنید تا LSP غیرفعال بماند.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": true
+}
+```
+
+از یک شیء استفاده کنید تا سرورهای داخلی فعال بمانند در حالی که بازنویسی‌ها یا سرورهای LSP سفارشی را پیکربندی می‌کنید.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {
+    "typescript": {
+      "disabled": true
+    }
+  }
+}
+```
+
+[درباره سرورهای LSP اینجا بیشتر بدانید](/docs/lsp).
+
+---
+
+### مجوزها
+
+به‌صورت پیش‌فرض، opencode **همهٔ عملیات** را بدون نیاز به تأیید صریح **مجاز می‌داند**. می‌توانید این را با استفاده از گزینهٔ `permission` تغییر دهید.
+
+برای مثال، برای اطمینان از اینکه ابزارهای `edit` و `bash` به تأیید کاربر نیاز دارند:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "ask",
+    "bash": "ask"
+  }
+}
+```
+
+[درباره مجوزها اینجا بیشتر بدانید](/docs/permissions).
+
+---
+
+### فشرده‌سازی (Compaction)
+
+می‌توانید رفتار فشرده‌سازی زمینه را از طریق گزینهٔ `compaction` کنترل کنید.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "compaction": {
+    "auto": true,
+    "prune": false,
+    "reserved": 10000
+  }
+}
+```
+
+- `auto` - هنگامی که زمینه پر می‌شود، جلسه را به‌صورت خودکار فشرده می‌کند (پیش‌فرض: `true`).
+- `prune` - خروجی‌های قدیمی ابزار را برای صرفه‌جویی در توکن‌ها حذف می‌کند (پیش‌فرض: `false`). برای فعال کردن هرس روی `true` تنظیم کنید.
+- `reserved` - بافر توکن برای فشرده‌سازی. پنجره‌ای کافی باقی می‌گذارد تا از سرریز در طول فشرده‌سازی جلوگیری شود.
+
+---
+
+### ناظر (Watcher)
+
+می‌توانید الگوهای نادیده‌گیری ناظر فایل را از طریق گزینهٔ `watcher` پیکربندی کنید.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "watcher": {
+    "ignore": ["node_modules/**", "dist/**", ".git/**"]
+  }
+}
+```
+
+الگوها از نحو glob پیروی می‌کنند. از این برای حذف دایرکتوری‌های پرسروصدا از پایش فایل استفاده کنید.
+
+---
+
+### سرورهای MCP
+
+می‌توانید سرورهای MCP را که می‌خواهید استفاده کنید از طریق گزینهٔ `mcp` پیکربندی کنید.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {}
+}
+```
+
+[اینجا بیشتر بدانید](/docs/mcp-servers).
+
+---
+
+### افزونه‌ها
+
+[افزونه‌ها](/docs/plugins) قابلیت OpenCode را با ابزارها، قلاب‌ها و یکپارچه‌سازی‌های سفارشی گسترش می‌دهند.
+
+فایل‌های افزونه را در `.opencode/plugins/` یا `~/.config/opencode/plugins/` قرار دهید. همچنین می‌توانید افزونه‌ها را از npm از طریق گزینهٔ `plugin` بارگذاری کنید.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["opencode-helicone-session", "@my-org/custom-plugin"]
+}
+```
+
+[اینجا بیشتر بدانید](/docs/plugins).
+
+---
+
+### دستورالعمل‌ها
+
+می‌توانید دستورالعمل‌های مدلی را که استفاده می‌کنید از طریق گزینهٔ `instructions` پیکربندی کنید.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["CONTRIBUTING.md", "docs/guidelines.md", ".cursor/rules/*.md"]
+}
+```
+
+این یک آرایه از مسیرها و الگوهای glob به فایل‌های دستورالعمل می‌گیرد. [درباره قواعد اینجا بیشتر بدانید](/docs/rules).
+
+---
+
+### ارائه‌دهنده‌های غیرفعال
+
+می‌توانید ارائه‌دهنده‌هایی را که به‌صورت خودکار بارگذاری می‌شوند از طریق گزینهٔ `disabled_providers` غیرفعال کنید. این زمانی مفید است که می‌خواهید از بارگذاری برخی ارائه‌دهنده‌ها جلوگیری کنید، حتی اگر اعتبارنامه‌های آن‌ها در دسترس باشد.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "disabled_providers": ["openai", "gemini"]
+}
+```
+
+:::note
+‏`disabled_providers` بر `enabled_providers` اولویت دارد.
+:::
+
+گزینهٔ `disabled_providers` یک آرایه از شناسه‌های ارائه‌دهنده را می‌پذیرد. هنگامی که یک ارائه‌دهنده غیرفعال می‌شود:
+
+- حتی اگر متغیرهای محیطی تنظیم شده باشند، بارگذاری نمی‌شود.
+- حتی اگر کلیدهای API از طریق فرمان `/connect` پیکربندی شده باشند، بارگذاری نمی‌شود.
+- مدل‌های آن ارائه‌دهنده در فهرست انتخاب مدل ظاهر نمی‌شوند.
+
+---
+
+### ارائه‌دهنده‌های فعال
+
+می‌توانید یک فهرست مجاز از ارائه‌دهنده‌ها را از طریق گزینهٔ `enabled_providers` مشخص کنید. هنگامی که تنظیم شود، فقط ارائه‌دهنده‌های مشخص‌شده فعال می‌شوند و بقیه نادیده گرفته می‌شوند.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "enabled_providers": ["anthropic", "openai"]
+}
+```
+
+این زمانی مفید است که می‌خواهید OpenCode را به استفاده از ارائه‌دهنده‌های مشخص محدود کنید به‌جای اینکه آن‌ها را یکی‌یکی غیرفعال کنید.
+
+:::note
+‏`disabled_providers` بر `enabled_providers` اولویت دارد.
+:::
+
+اگر یک ارائه‌دهنده در هر دوی `enabled_providers` و `disabled_providers` ظاهر شود، `disabled_providers` برای سازگاری با نسخه‌های قبلی اولویت دارد.
+
+---
+
+### تجربی
+
+کلید `experimental` شامل گزینه‌هایی است که در حال توسعهٔ فعال هستند.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {}
+}
+```
+
+:::caution
+گزینه‌های تجربی پایدار نیستند. ممکن است بدون اطلاع قبلی تغییر کنند یا حذف شوند.
+:::
+
+---
+
+## متغیرها
+
+می‌توانید در فایل‌های پیکربندی خود از جایگزینی متغیر برای ارجاع به متغیرهای محیطی و محتوای فایل‌ها استفاده کنید.
+
+---
+
+### متغیرهای محیطی
+
+از `{env:VARIABLE_NAME}` برای جایگزینی متغیرهای محیطی استفاده کنید:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "{env:OPENCODE_MODEL}",
+  "provider": {
+    "anthropic": {
+      "models": {},
+      "options": {
+        "apiKey": "{env:ANTHROPIC_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+اگر متغیر محیطی تنظیم نشده باشد، با یک رشتهٔ خالی جایگزین می‌شود.
+
+---
+
+### فایل‌ها
+
+از `{file:path/to/file}` برای جایگزینی محتوای یک فایل استفاده کنید:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["./custom-instructions.md"],
+  "provider": {
+    "openai": {
+      "options": {
+        "apiKey": "{file:~/.secrets/openai-key}"
+      }
+    }
+  }
+}
+```
+
+مسیرهای فایل می‌توانند:
+
+- نسبت به دایرکتوری فایل پیکربندی باشند
+- یا مسیرهای مطلقی که با `/` یا `~` شروع می‌شوند
+
+این‌ها برای موارد زیر مفید هستند:
+
+- نگه‌داری داده‌های حساس مانند کلیدهای API در فایل‌های جداگانه.
+- گنجاندن فایل‌های دستورالعمل بزرگ بدون شلوغ کردن پیکربندی شما.
+- اشتراک‌گذاری قطعه‌های پیکربندی مشترک در چند فایل پیکربندی.

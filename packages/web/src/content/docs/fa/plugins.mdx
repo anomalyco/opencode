@@ -1,0 +1,388 @@
+---
+title: افزونه‌ها
+description: افزونه‌های خود را برای گسترش OpenCode بنویسید.
+---
+
+افزونه‌ها به شما امکان می‌دهند با اتصال به رویدادهای گوناگون و سفارشی‌سازی رفتار، OpenCode را گسترش دهید. می‌توانید افزونه‌هایی برای افزودن ویژگی‌های جدید، یکپارچه‌سازی با سرویس‌های خارجی، یا تغییر رفتار پیش‌فرض OpenCode بسازید.
+
+برای دیدن نمونه‌ها، [افزونه‌های](/docs/ecosystem#plugins) ساخته‌شده توسط جامعه را بررسی کنید.
+
+---
+
+## استفاده از یک افزونه
+
+دو روش برای بارگذاری افزونه‌ها وجود دارد.
+
+---
+
+### از فایل‌های محلی
+
+فایل‌های JavaScript یا TypeScript را در دایرکتوری افزونه‌ها قرار دهید.
+
+- `.opencode/plugins/` - افزونه‌های در سطح پروژه
+- `~/.config/opencode/plugins/` - افزونه‌های سراسری
+
+فایل‌های موجود در این دایرکتوری‌ها هنگام راه‌اندازی به‌صورت خودکار بارگذاری می‌شوند.
+
+---
+
+### از npm
+
+بسته‌های npm را در فایل پیکربندی خود مشخص کنید.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["opencode-helicone-session", "opencode-wakatime", "@my-org/custom-plugin"]
+}
+```
+
+هم بسته‌های npm معمولی و هم بسته‌های دارای دامنه (scoped) پشتیبانی می‌شوند.
+
+افزونه‌های در دسترس را در [اکوسیستم](/docs/ecosystem#plugins) مرور کنید.
+
+---
+
+### نحوه نصب افزونه‌ها
+
+**افزونه‌های npm** هنگام راه‌اندازی به‌صورت خودکار با استفاده از Bun نصب می‌شوند. بسته‌ها و وابستگی‌هایشان در `~/.cache/opencode/node_modules/` کش می‌شوند.
+
+**افزونه‌های محلی** مستقیماً از دایرکتوری افزونه‌ها بارگذاری می‌شوند. برای استفاده از بسته‌های خارجی، باید یک `package.json` در دایرکتوری پیکربندی خود ایجاد کنید (به [وابستگی‌ها](#dependencies) مراجعه کنید)، یا افزونه را در npm منتشر کرده و [آن را به پیکربندی خود اضافه کنید](/docs/config#plugins).
+
+---
+
+### ترتیب بارگذاری
+
+افزونه‌ها از همه منابع بارگذاری می‌شوند و همه هوک‌ها به‌ترتیب اجرا می‌شوند. ترتیب بارگذاری چنین است:
+
+1. پیکربندی سراسری (`~/.config/opencode/opencode.json`)
+2. پیکربندی پروژه (`opencode.json`)
+3. دایرکتوری افزونه‌های سراسری (`~/.config/opencode/plugins/`)
+4. دایرکتوری افزونه‌های پروژه (`.opencode/plugins/`)
+
+بسته‌های npm تکراری با نام و نسخه یکسان یک‌بار بارگذاری می‌شوند. با این حال، یک افزونه محلی و یک افزونه npm با نام‌های مشابه هر دو جداگانه بارگذاری می‌شوند.
+
+---
+
+## ساخت یک افزونه
+
+افزونه یک **ماژول JavaScript/TypeScript** است که یک یا چند تابع افزونه را صادر می‌کند. هر تابع یک شیء بافت (context) دریافت می‌کند و یک شیء هوک‌ها بازمی‌گرداند.
+
+---
+
+### وابستگی‌ها
+
+افزونه‌های محلی و ابزارهای سفارشی می‌توانند از بسته‌های npm خارجی استفاده کنند. یک `package.json` با وابستگی‌های موردنیاز خود به دایرکتوری پیکربندی‌تان اضافه کنید.
+
+```json title=".opencode/package.json"
+{
+  "dependencies": {
+    "shescape": "^2.1.0"
+  }
+}
+```
+
+OpenCode هنگام راه‌اندازی دستور `bun install` را برای نصب این‌ها اجرا می‌کند. سپس افزونه‌ها و ابزارهای شما می‌توانند آن‌ها را وارد کنند.
+
+```ts title=".opencode/plugins/my-plugin.ts"
+import { escape } from "shescape"
+
+export const MyPlugin = async (ctx) => {
+  return {
+    "tool.execute.before": async (input, output) => {
+      if (input.tool === "bash") {
+        output.args.command = escape(output.args.command)
+      }
+    },
+  }
+}
+```
+
+---
+
+### ساختار پایه
+
+```js title=".opencode/plugins/example.js"
+export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
+  console.log("Plugin initialized!")
+
+  return {
+    // پیاده‌سازی هوک‌ها اینجا قرار می‌گیرد
+  }
+}
+```
+
+تابع افزونه موارد زیر را دریافت می‌کند:
+
+- `project`: اطلاعات پروژه کنونی.
+- `directory`: دایرکتوری کاری کنونی.
+- `worktree`: مسیر git worktree.
+- `client`: یک کلاینت SDK ‏opencode برای تعامل با هوش مصنوعی.
+- `$`: ‏[shell API](https://bun.com/docs/runtime/shell) بان (Bun) برای اجرای دستورها.
+
+---
+
+### پشتیبانی از TypeScript
+
+برای افزونه‌های TypeScript، می‌توانید نوع‌ها را از بسته افزونه وارد کنید:
+
+```ts title="my-plugin.ts" {1}
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree }) => {
+  return {
+    // پیاده‌سازی هوک‌های ایمن از نظر نوع
+  }
+}
+```
+
+---
+
+### رویدادها
+
+افزونه‌ها می‌توانند در رویدادها مشترک شوند، همان‌طور که در بخش نمونه‌ها در ادامه دیده می‌شود. در اینجا فهرستی از رویدادهای مختلف در دسترس آمده است.
+
+#### رویدادهای فرمان
+
+- `command.executed`
+
+#### رویدادهای فایل
+
+- `file.edited`
+- `file.watcher.updated`
+
+#### رویدادهای نصب
+
+- `installation.updated`
+
+#### رویدادهای LSP
+
+- `lsp.client.diagnostics`
+- `lsp.updated`
+
+#### رویدادهای پیام
+
+- `message.part.removed`
+- `message.part.updated`
+- `message.removed`
+- `message.updated`
+
+#### رویدادهای دسترسی
+
+- `permission.asked`
+- `permission.replied`
+
+#### رویدادهای سرور
+
+- `server.connected`
+
+#### رویدادهای نشست
+
+- `session.created`
+- `session.compacted`
+- `session.deleted`
+- `session.diff`
+- `session.error`
+- `session.idle`
+- `session.status`
+- `session.updated`
+
+#### رویدادهای Todo
+
+- `todo.updated`
+
+#### رویدادهای shell
+
+- `shell.env`
+
+#### رویدادهای ابزار
+
+- `tool.execute.after`
+- `tool.execute.before`
+
+#### رویدادهای TUI
+
+- `tui.prompt.append`
+- `tui.command.execute`
+- `tui.toast.show`
+
+---
+
+## نمونه‌ها
+
+در اینجا چند نمونه از افزونه‌هایی که می‌توانید برای گسترش opencode استفاده کنید آمده است.
+
+---
+
+### ارسال اعلان‌ها
+
+هنگام رخ دادن رویدادهای مشخص، اعلان ارسال کنید:
+
+```js title=".opencode/plugins/notification.js"
+export const NotificationPlugin = async ({ project, client, $, directory, worktree }) => {
+  return {
+    event: async ({ event }) => {
+      // ارسال اعلان هنگام پایان نشست
+      if (event.type === "session.idle") {
+        await $`osascript -e 'display notification "Session completed!" with title "opencode"'`
+      }
+    },
+  }
+}
+```
+
+ما از `osascript` برای اجرای AppleScript در macOS استفاده می‌کنیم. در اینجا از آن برای ارسال اعلان‌ها بهره می‌گیریم.
+
+:::note
+اگر از اپلیکیشن دسکتاپ OpenCode استفاده می‌کنید، می‌تواند هنگام آماده شدن یک پاسخ یا هنگام بروز خطا در یک نشست، به‌صورت خودکار اعلان‌های سیستمی ارسال کند.
+:::
+
+---
+
+### محافظت از .env
+
+از خواندن فایل‌های `.env` توسط opencode جلوگیری کنید:
+
+```javascript title=".opencode/plugins/env-protection.js"
+export const EnvProtection = async ({ project, client, $, directory, worktree }) => {
+  return {
+    "tool.execute.before": async (input, output) => {
+      if (input.tool === "read" && output.args.filePath.includes(".env")) {
+        throw new Error("Do not read .env files")
+      }
+    },
+  }
+}
+```
+
+---
+
+### تزریق متغیرهای محیطی
+
+متغیرهای محیطی را به تمام اجراهای shell (ابزارهای هوش مصنوعی و ترمینال‌های کاربر) تزریق کنید:
+
+```javascript title=".opencode/plugins/inject-env.js"
+export const InjectEnvPlugin = async () => {
+  return {
+    "shell.env": async (input, output) => {
+      output.env.MY_API_KEY = "secret"
+      output.env.PROJECT_ROOT = input.cwd
+    },
+  }
+}
+```
+
+---
+
+### ابزارهای سفارشی
+
+افزونه‌ها می‌توانند ابزارهای سفارشی هم به opencode اضافه کنند:
+
+```ts title=".opencode/plugins/custom-tools.ts"
+import { type Plugin, tool } from "@opencode-ai/plugin"
+
+export const CustomToolsPlugin: Plugin = async (ctx) => {
+  return {
+    tool: {
+      mytool: tool({
+        description: "This is a custom tool",
+        args: {
+          foo: tool.schema.string(),
+        },
+        async execute(args, context) {
+          const { directory, worktree } = context
+          return `Hello ${args.foo} from ${directory} (worktree: ${worktree})`
+        },
+      }),
+    },
+  }
+}
+```
+
+تابع کمکی `tool` یک ابزار سفارشی می‌سازد که opencode می‌تواند آن را فراخوانی کند. این تابع یک تابع طرح‌واره Zod می‌گیرد و یک تعریف ابزار با موارد زیر بازمی‌گرداند:
+
+- `description`: ابزار چه کاری انجام می‌دهد
+- `args`: طرح‌واره Zod برای آرگومان‌های ابزار
+- `execute`: تابعی که هنگام فراخوانی ابزار اجرا می‌شود
+
+ابزارهای سفارشی شما در کنار ابزارهای داخلی برای opencode در دسترس خواهند بود.
+
+:::note
+اگر یک ابزار افزونه از همان نام یک ابزار داخلی استفاده کند، ابزار افزونه اولویت دارد.
+:::
+
+---
+
+### ثبت گزارش
+
+برای ثبت گزارش ساخت‌یافته، به‌جای `console.log` از `client.app.log()` استفاده کنید:
+
+```ts title=".opencode/plugins/my-plugin.ts"
+export const MyPlugin = async ({ client }) => {
+  await client.app.log({
+    body: {
+      service: "my-plugin",
+      level: "info",
+      message: "Plugin initialized",
+      extra: { foo: "bar" },
+    },
+  })
+}
+```
+
+سطوح: `debug`، `info`، `warn`، `error`. برای جزئیات، [مستندات SDK](https://opencode.ai/docs/sdk) را ببینید.
+
+---
+
+### هوک‌های فشرده‌سازی
+
+بافتی را که هنگام فشرده‌سازی یک نشست گنجانده می‌شود، سفارشی کنید:
+
+```ts title=".opencode/plugins/compaction.ts"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const CompactionPlugin: Plugin = async (ctx) => {
+  return {
+    "experimental.session.compacting": async (input, output) => {
+      // تزریق بافت اضافی به prompt فشرده‌سازی
+      output.context.push(`
+## Custom Context
+
+Include any state that should persist across compaction:
+- Current task status
+- Important decisions made
+- Files being actively worked on
+`)
+    },
+  }
+}
+```
+
+هوک `experimental.session.compacting` پیش از آنکه LLM یک خلاصه ادامه تولید کند، فعال می‌شود. از آن برای تزریق بافت ویژه دامنه که prompt فشرده‌سازی پیش‌فرض از آن غافل می‌ماند، استفاده کنید.
+
+همچنین می‌توانید با تنظیم `output.prompt` کل prompt فشرده‌سازی را جایگزین کنید:
+
+```ts title=".opencode/plugins/custom-compaction.ts"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const CustomCompactionPlugin: Plugin = async (ctx) => {
+  return {
+    "experimental.session.compacting": async (input, output) => {
+      // جایگزینی کل prompt فشرده‌سازی
+      output.prompt = `
+You are generating a continuation prompt for a multi-agent swarm session.
+
+Summarize:
+1. The current task and its status
+2. Which files are being modified and by whom
+3. Any blockers or dependencies between agents
+4. The next steps to complete the work
+
+Format as a structured prompt that a new agent can use to resume work.
+`
+    },
+  }
+}
+```
+
+وقتی `output.prompt` تنظیم شود، به‌طور کامل جایگزین prompt فشرده‌سازی پیش‌فرض می‌شود. در این حالت آرایه `output.context` نادیده گرفته می‌شود.

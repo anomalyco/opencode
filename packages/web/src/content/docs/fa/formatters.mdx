@@ -1,0 +1,143 @@
+---
+title: قالب‌بندها
+description: OpenCode از قالب‌بندهای مخصوص هر زبان استفاده می‌کند.
+---
+
+OpenCode می‌تواند فایل‌ها را پس از نوشتن یا ویرایش با استفاده از قالب‌بندهای مخصوص هر زبان قالب‌بندی کند. قالب‌بندها به‌صورت پیش‌فرض غیرفعال‌اند؛ پیش از آنکه OpenCode آن‌ها را اجرا کند، در پیکربندی خود فعالشان کنید.
+
+---
+
+## مُضمَّن
+
+OpenCode با چندین قالب‌بند مُضمَّن برای زبان‌ها و چارچوب‌های محبوب عرضه می‌شود. در ادامه فهرستی از قالب‌بندها، پسوندهای فایل پشتیبانی‌شده و فرمان‌ها یا گزینه‌های پیکربندی موردنیاز آن‌ها آمده است.
+
+| قالب‌بند             | پسوندها                                                                                                  | الزامات                                                                                                |
+| -------------------- | -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| air                  | .R                                                                                                       | فرمان `air` در دسترس باشد                                                                              |
+| biome                | .js, .jsx, .ts, .tsx, .html, .css, .md, .json, .yaml، و [موارد دیگر](https://biomejs.dev/)               | فایل پیکربندی `biome.json(c)`                                                                          |
+| cargofmt             | .rs                                                                                                      | فرمان `cargo fmt` در دسترس باشد                                                                        |
+| clang-format         | .c, .cpp, .h, .hpp, .ino، و [موارد دیگر](https://clang.llvm.org/docs/ClangFormat.html)                   | فایل پیکربندی `.clang-format`                                                                          |
+| cljfmt               | .clj, .cljs, .cljc, .edn                                                                                 | فرمان `cljfmt` در دسترس باشد                                                                           |
+| dart                 | .dart                                                                                                    | فرمان `dart` در دسترس باشد                                                                             |
+| dfmt                 | .d                                                                                                       | فرمان `dfmt` در دسترس باشد                                                                             |
+| gleam                | .gleam                                                                                                   | فرمان `gleam` در دسترس باشد                                                                            |
+| gofmt                | .go                                                                                                      | فرمان `gofmt` در دسترس باشد                                                                            |
+| htmlbeautifier       | .erb, .html.erb                                                                                          | فرمان `htmlbeautifier` در دسترس باشد                                                                   |
+| ktlint               | .kt, .kts                                                                                                | فرمان `ktlint` در دسترس باشد                                                                           |
+| mix                  | .ex, .exs, .eex, .heex, .leex, .neex, .sface                                                             | فرمان `mix` در دسترس باشد                                                                              |
+| nixfmt               | .nix                                                                                                     | فرمان `nixfmt` در دسترس باشد                                                                           |
+| ocamlformat          | .ml, .mli                                                                                                | فرمان `ocamlformat` در دسترس باشد و فایل پیکربندی `.ocamlformat`                                       |
+| ormolu               | .hs                                                                                                      | فرمان `ormolu` در دسترس باشد                                                                           |
+| oxfmt (آزمایشی)      | .js, .jsx, .ts, .tsx                                                                                     | اعتماد `oxfmt` در `package.json` و یک [پرچم متغیر محیطی آزمایشی](/docs/cli/#experimental)              |
+| pint                 | .php                                                                                                     | اعتماد `laravel/pint` در `composer.json`                                                               |
+| prettier             | .js, .jsx, .ts, .tsx, .html, .css, .md, .json, .yaml، و [موارد دیگر](https://prettier.io/docs/en/index.html) | اعتماد `prettier` در `package.json`                                                                |
+| rubocop              | .rb, .rake, .gemspec, .ru                                                                                | فرمان `rubocop` در دسترس باشد                                                                          |
+| ruff                 | .py, .pyi                                                                                                | فرمان `ruff` به‌همراه پیکربندی در دسترس باشد                                                           |
+| rustfmt              | .rs                                                                                                      | فرمان `rustfmt` در دسترس باشد                                                                          |
+| shfmt                | .sh, .bash                                                                                               | فرمان `shfmt` در دسترس باشد                                                                            |
+| standardrb           | .rb, .rake, .gemspec, .ru                                                                                | فرمان `standardrb` در دسترس باشد                                                                       |
+| terraform            | .tf, .tfvars                                                                                             | فرمان `terraform` در دسترس باشد                                                                        |
+| uv                   | .py, .pyi                                                                                                | فرمان `uv` در دسترس باشد                                                                               |
+| zig                  | .zig, .zon                                                                                               | فرمان `zig` در دسترس باشد                                                                              |
+
+هنگامی که قالب‌بندها فعال باشند، اگر پروژه‌ی شما `prettier` را در `package.json` داشته باشد، OpenCode برای فایل‌های منطبق از `prettier` استفاده خواهد کرد.
+
+---
+
+## نحوه‌ی کار
+
+هنگامی که OpenCode فایلی را می‌نویسد یا ویرایش می‌کند و قالب‌بندها فعال باشند، این کارها را انجام می‌دهد:
+
+1. پسوند فایل را با همه‌ی قالب‌بندهای فعال بررسی می‌کند.
+2. فرمان قالب‌بند مناسب را روی فایل اجرا می‌کند.
+3. تغییرات قالب‌بندی را اعمال می‌کند.
+
+این فرایند برای قالب‌بندهای فعال در پس‌زمینه انجام می‌شود.
+
+---
+
+## پیکربندی
+
+می‌توانید قالب‌بندها را از طریق بخش `formatter` در پیکربندی OpenCode فعال و سفارشی کنید.
+
+برای فعال کردن همه‌ی قالب‌بندهای مُضمَّن، `formatter` را روی `true` تنظیم کنید.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": true
+}
+```
+
+برای فعال نگه داشتن قالب‌بندهای مُضمَّن در حین پیکربندی بازنویسی‌ها یا قالب‌بندهای سفارشی، از یک شیء استفاده کنید.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {}
+}
+```
+
+پیکربندی هر قالب‌بند از موارد زیر پشتیبانی می‌کند:
+
+| ویژگی         | نوع      | توضیح                                                                                       |
+| ------------- | -------- | ------------------------------------------------------------------------------------------- |
+| `disabled`    | boolean  | برای غیرفعال کردن قالب‌بند این را روی `true` تنظیم کنید                                     |
+| `command`     | string[] | فرمانی که برای قالب‌بندی اجرا می‌شود. برای قالب‌بندهای سفارشی لازم؛ برای مُضمَّن‌ها اختیاری. |
+| `environment` | object   | متغیرهای محیطی که هنگام اجرای قالب‌بند تنظیم می‌شوند                                        |
+| `extensions`  | string[] | پسوندهای فایلی که این قالب‌بند باید مدیریت کند                                              |
+
+بیایید چند نمونه را بررسی کنیم.
+
+---
+
+### غیرفعال کردن قالب‌بندها
+
+اگر `formatter` حذف شود، همه‌ی قالب‌بندها غیرفعال‌اند. برای غیرفعال کردن همه‌ی قالب‌بندها پس از آنکه پیکربندی دیگری آن‌ها را فعال کرده است، `formatter` را روی `false` تنظیم کنید:
+
+```json title="opencode.json" {3}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": false
+}
+```
+
+برای غیرفعال کردن یک قالب‌بند **مشخص**، `disabled` را روی `true` تنظیم کنید:
+
+```json title="opencode.json" {5}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {
+    "prettier": {
+      "disabled": true
+    }
+  }
+}
+```
+
+---
+
+### قالب‌بندهای سفارشی
+
+می‌توانید قالب‌بندهای مُضمَّن را با گزینه‌هایی مانند `environment` یا `extensions` پیکربندی کنید. برای افزودن یک قالب‌بند سفارشی، یک `command` و `extensions` تعیین کنید:
+
+```json title="opencode.json" {4-14}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {
+    "prettier": {
+      "command": ["npx", "prettier", "--write", "$FILE"],
+      "environment": {
+        "NODE_ENV": "development"
+      },
+      "extensions": [".js", ".ts", ".jsx", ".tsx"]
+    },
+    "custom-markdown-formatter": {
+      "command": ["deno", "fmt", "$FILE"],
+      "extensions": [".md"]
+    }
+  }
+}
+```
+
+**جانگهدار `$FILE`** در فرمان با مسیر فایلی که در حال قالب‌بندی است جایگزین خواهد شد.
