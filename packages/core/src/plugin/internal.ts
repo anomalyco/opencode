@@ -25,6 +25,7 @@ import { Npm } from "../npm"
 import { PluginV2 } from "../plugin"
 import { Reference } from "../reference"
 import { SkillV2 } from "../skill"
+import { State } from "../state"
 import { FetchHttpClient, HttpClient } from "effect/unstable/http"
 import { AgentPlugin } from "./agent"
 import { CommandPlugin } from "./command"
@@ -104,20 +105,22 @@ const layer = Layer.effectDiscard(
       return plugin.add(PluginV2.ID.make(loaded.id), loaded.effect)
     }
 
-    yield* Effect.gen(function* () {
-      yield* add(ConfigReferencePlugin.Plugin)
-      yield* add(AgentPlugin.Plugin)
-      yield* add(CommandPlugin.Plugin)
-      yield* add(SkillPlugin.Plugin)
-      yield* add(ModelsDevPlugin)
-      yield* add(ConfigAgentPlugin.Plugin)
-      yield* add(ConfigCommandPlugin.Plugin)
-      yield* add(ConfigSkillPlugin.Plugin)
-      for (const item of ProviderPlugins) yield* add(item)
-      yield* add(ConfigExternalPlugin.Plugin)
-      yield* add(ConfigProviderPlugin.Plugin)
-      yield* add(VariantPlugin.Plugin)
-    }).pipe(Effect.withSpan("PluginInternal.boot"), Effect.forkScoped({ startImmediately: true }))
+    yield* State.batch(
+      Effect.gen(function* () {
+        yield* add(ConfigReferencePlugin.Plugin)
+        yield* add(AgentPlugin.Plugin)
+        yield* add(CommandPlugin.Plugin)
+        yield* add(SkillPlugin.Plugin)
+        yield* add(ModelsDevPlugin)
+        yield* add(ConfigAgentPlugin.Plugin)
+        yield* add(ConfigCommandPlugin.Plugin)
+        yield* add(ConfigSkillPlugin.Plugin)
+        for (const item of ProviderPlugins) yield* add(item)
+        yield* add(ConfigExternalPlugin.Plugin)
+        yield* add(ConfigProviderPlugin.Plugin)
+        yield* add(VariantPlugin.Plugin)
+      }),
+    ).pipe(Effect.withSpan("PluginInternal.boot"), Effect.forkScoped({ startImmediately: true }))
   }),
 )
 

@@ -20,6 +20,7 @@ export class AppProcessError extends Schema.TaggedErrorClass<AppProcessError>()(
 }
 
 export interface RunOptions {
+  readonly combineOutput?: boolean
   readonly maxOutputBytes?: number
   readonly maxErrorBytes?: number
   readonly signal?: AbortSignal
@@ -37,8 +38,10 @@ export interface RunStreamOptions {
 export interface RunResult {
   readonly command: string
   readonly exitCode: number
+  readonly output?: Buffer
   readonly stdout: Buffer
   readonly stderr: Buffer
+  readonly outputTruncated?: boolean
   readonly stdoutTruncated: boolean
   readonly stderrTruncated: boolean
 }
@@ -143,6 +146,22 @@ export const layer = Layer.effect(
       const collect = Effect.scoped(
         Effect.gen(function* () {
           const handle = yield* spawner.spawn(command)
+          if (options?.combineOutput) {
+            const [output, exitCode] = yield* Effect.all(
+              [collectStream(handle.all, options.maxOutputBytes), handle.exitCode],
+              { concurrency: "unbounded" },
+            )
+            return {
+              command: description,
+              exitCode,
+              output: output.buffer,
+              stdout: Buffer.alloc(0),
+              stderr: Buffer.alloc(0),
+              outputTruncated: output.truncated,
+              stdoutTruncated: false,
+              stderrTruncated: false,
+            } satisfies RunResult
+          }
           const [stdout, stderr, exitCode] = yield* Effect.all(
             [
               collectStream(handle.stdout, options?.maxOutputBytes),

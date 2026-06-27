@@ -335,7 +335,8 @@ export const layer = Layer.effect(
           if (stream._tag === "Success" && !publisher.hasProviderError())
             yield* withPublication(publisher.failUnsettledTools("Provider did not return a tool result", true))
           if (stream._tag === "Failure") return yield* Effect.failCause(stream.cause)
-          if (settled._tag === "Failure") return yield* Effect.failCause(settled.cause)
+          if (settled._tag === "Failure" && Cause.hasInterrupts(settled.cause))
+            return yield* Effect.failCause(settled.cause)
           return { needsContinuation: !publisher.hasProviderError() && needsContinuation, step: currentStep }
         }),
       )
