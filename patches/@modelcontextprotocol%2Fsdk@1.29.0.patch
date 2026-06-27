@@ -113,10 +113,51 @@ index 6ac1da14dc7f6211ae70f7711c124b76098816d8..adb5b7bd45514a406a0f7e40b64631c1
       * After initialization has completed, this will be populated with the server's reported capabilities.
       */
 diff --git a/dist/cjs/client/streamableHttp.js b/dist/cjs/client/streamableHttp.js
-index a29a7d3a0f14d9cd800ef5b296485237350c666f..c362ae5fe6c62c8c8eae7e2e61de1eedff5443c9 100644
+index a29a7d3a0f14d9cd800ef5b296485237350c666f..804c2318767533890e78f67b0bd8eef739ea204a 100644
 --- a/dist/cjs/client/streamableHttp.js
 +++ b/dist/cjs/client/streamableHttp.js
-@@ -290,7 +290,38 @@ class StreamableHTTPClientTransport {
+@@ -36,6 +36,21 @@ class StreamableHTTPClientTransport {
+         this._fetchWithInit = (0, transport_js_1.createFetchWithInit)(opts?.fetch, opts?.requestInit);
+         this._sessionId = opts?.sessionId;
+         this._reconnectionOptions = opts?.reconnectionOptions ?? DEFAULT_STREAMABLE_HTTP_RECONNECTION_OPTIONS;
++        this._authInFlight = undefined;
++    }
++    async _sharedAuth(opts) {
++        // Single-flight (opencode #34074): concurrent auth/refresh attempts on
++        // this transport share ONE in-flight call. Without this, parallel
++        // tool-call 401s each call auth() and refresh with the same stored
++        // refresh token; an AS that rotates refresh tokens then rejects all but
++        // the first with invalid_grant, and the SDK wipes the stored
++        // credentials -> the session dies and the user must re-authenticate.
++        if (!this._authInFlight) {
++            this._authInFlight = Promise.resolve((0, auth_js_1.auth)(this._authProvider, opts)).finally(() => {
++                this._authInFlight = undefined;
++            });
++        }
++        return this._authInFlight;
+     }
+     async _authThenStart() {
+         if (!this._authProvider) {
+@@ -43,7 +58,7 @@ class StreamableHTTPClientTransport {
+         }
+         let result;
+         try {
+-            result = await (0, auth_js_1.auth)(this._authProvider, {
++            result = await this._sharedAuth({
+                 serverUrl: this._url,
+                 resourceMetadataUrl: this._resourceMetadataUrl,
+                 scope: this._scope,
+@@ -270,6 +285,9 @@ class StreamableHTTPClientTransport {
+         if (!this._authProvider) {
+             throw new auth_js_1.UnauthorizedError('No auth provider');
+         }
++        // NOT single-flighted: authorization-code exchange is a one-shot flow
++        // with its own `authorizationCode`. Coalescing it with an in-flight
++        // refresh would return that refresh's result and skip the code exchange.
+         const result = await (0, auth_js_1.auth)(this._authProvider, {
+             serverUrl: this._url,
+             authorizationCode,
+@@ -290,7 +308,38 @@ class StreamableHTTPClientTransport {
          this.onclose?.();
      }
      async send(message, options) {
@@ -131,7 +172,7 @@ index a29a7d3a0f14d9cd800ef5b296485237350c666f..c362ae5fe6c62c8c8eae7e2e61de1eed
 +            return true;
 +        this._sessionId = undefined;
 +        this._sessionRecovery = Promise.resolve().then(() => this.onsessionexpired?.());
-         try {
++        try {
 +            await this._sessionRecovery;
 +        }
 +        catch (error) {
@@ -144,8 +185,8 @@ index a29a7d3a0f14d9cd800ef5b296485237350c666f..c362ae5fe6c62c8c8eae7e2e61de1eed
 +        }
 +        return true;
 +    }
-+    async _send(message, options, isSessionRetry) {
-+        try {
++    async _send(message, options, isSessionRetry, authAttempted) {
+         try {
 +            if (this._sessionRecovery && !(0, types_js_1.isInitializeRequest)(message) && !(0, types_js_1.isInitializedNotification)(message)) {
 +                await this._sessionRecovery;
 +                if (options?.isRequestActive?.() === false) {
@@ -155,7 +196,7 @@ index a29a7d3a0f14d9cd800ef5b296485237350c666f..c362ae5fe6c62c8c8eae7e2e61de1eed
              const { resumptionToken, onresumptiontoken } = options || {};
              if (resumptionToken) {
                  // If we have at last event ID, we need to reconnect the SSE stream
-@@ -298,6 +329,7 @@ class StreamableHTTPClientTransport {
+@@ -298,6 +347,7 @@ class StreamableHTTPClientTransport {
                  return;
              }
              const headers = await this._commonHeaders();
@@ -163,7 +204,7 @@ index a29a7d3a0f14d9cd800ef5b296485237350c666f..c362ae5fe6c62c8c8eae7e2e61de1eed
              headers.set('content-type', 'application/json');
              headers.set('accept', 'application/json, text/event-stream');
              const init = {
-@@ -310,11 +342,20 @@ class StreamableHTTPClientTransport {
+@@ -310,20 +360,34 @@ class StreamableHTTPClientTransport {
              const response = await (this._fetch ?? fetch)(this._url, init);
              // Handle session ID received during initialization
              const sessionId = response.headers.get('mcp-session-id');
@@ -183,18 +224,49 @@ index a29a7d3a0f14d9cd800ef5b296485237350c666f..c362ae5fe6c62c8c8eae7e2e61de1eed
 +                    }
 +                }
                  if (response.status === 401 && this._authProvider) {
-                     // Prevent infinite recursion when server returns 401 after successful auth
-                     if (this._hasCompletedAuthFlow) {
-@@ -335,7 +376,7 @@ class StreamableHTTPClientTransport {
-                     // Mark that we completed auth flow
-                     this._hasCompletedAuthFlow = true;
+-                    // Prevent infinite recursion when server returns 401 after successful auth
+-                    if (this._hasCompletedAuthFlow) {
++                    // Per-request circuit breaker (opencode #34074): only give up
++                    // if THIS request already refreshed and retried. An
++                    // instance-level flag here would let a stale 401 from a sibling
++                    // parallel request (whose 401 lands just after another request's
++                    // refresh, before its retry resets the flag) trip the breaker
++                    // and kill the session.
++                    if (authAttempted) {
+                         throw new StreamableHTTPError(401, 'Server returned 401 after successful authentication');
+                     }
+                     const { resourceMetadataUrl, scope } = (0, auth_js_1.extractWWWAuthenticateParams)(response);
+                     this._resourceMetadataUrl = resourceMetadataUrl;
+                     this._scope = scope;
+-                    const result = await (0, auth_js_1.auth)(this._authProvider, {
++                    const result = await this._sharedAuth({
+                         serverUrl: this._url,
+                         resourceMetadataUrl: this._resourceMetadataUrl,
+                         scope: this._scope,
+@@ -332,10 +396,8 @@ class StreamableHTTPClientTransport {
+                     if (result !== 'AUTHORIZED') {
+                         throw new auth_js_1.UnauthorizedError();
+                     }
+-                    // Mark that we completed auth flow
+-                    this._hasCompletedAuthFlow = true;
                      // Purposely _not_ awaited, so we don't call onerror twice
 -                    return this.send(message);
-+                    return this._send(message, options, isSessionRetry);
++                    return this._send(message, options, isSessionRetry, true);
                  }
                  if (response.status === 403 && this._authProvider) {
                      const { resourceMetadataUrl, scope, error } = (0, auth_js_1.extractWWWAuthenticateParams)(response);
-@@ -362,7 +403,7 @@ class StreamableHTTPClientTransport {
+@@ -353,6 +415,10 @@ class StreamableHTTPClientTransport {
+                         }
+                         // Mark that upscoping was tried.
+                         this._lastUpscopingHeader = wwwAuthHeader ?? undefined;
++                        // NOT single-flighted: scope escalation needs a token with
++                        // the NEW WWW-Authenticate scope. Coalescing it into an
++                        // in-flight refresh would reuse a token still missing that
++                        // scope and re-trip the upscoping guard.
+                         const result = await (0, auth_js_1.auth)(this._authProvider, {
+                             serverUrl: this._url,
+                             resourceMetadataUrl: this._resourceMetadataUrl,
+@@ -362,7 +428,7 @@ class StreamableHTTPClientTransport {
                          if (result !== 'AUTHORIZED') {
                              throw new auth_js_1.UnauthorizedError();
                          }
@@ -462,7 +534,7 @@ index 49b12c6cd918c457420fef7ad5528a9443d1a191..2afe2e22e960f26c9d516ef135d89f8e
       * After initialization has completed, this will be populated with the server's reported capabilities.
       */
 diff --git a/dist/esm/client/streamableHttp.js b/dist/esm/client/streamableHttp.js
-index 624172aa24ae255a67c083f9c19053343e4a0581..ac75b14545fda44aff7ff4d97cc5da884fcc627a 100644
+index 624172aa24ae255a67c083f9c19053343e4a0581..2a70b2cfed06934bbb29654215aece1950c54262 100644
 --- a/dist/esm/client/streamableHttp.js
 +++ b/dist/esm/client/streamableHttp.js
 @@ -1,5 +1,5 @@
@@ -472,7 +544,48 @@ index 624172aa24ae255a67c083f9c19053343e4a0581..ac75b14545fda44aff7ff4d97cc5da88
  import { auth, extractWWWAuthenticateParams, UnauthorizedError } from './auth.js';
  import { EventSourceParserStream } from 'eventsource-parser/stream';
  // Default reconnection options for StreamableHTTP connections
-@@ -286,7 +286,38 @@ export class StreamableHTTPClientTransport {
+@@ -32,6 +32,21 @@ export class StreamableHTTPClientTransport {
+         this._fetchWithInit = createFetchWithInit(opts?.fetch, opts?.requestInit);
+         this._sessionId = opts?.sessionId;
+         this._reconnectionOptions = opts?.reconnectionOptions ?? DEFAULT_STREAMABLE_HTTP_RECONNECTION_OPTIONS;
++        this._authInFlight = undefined;
++    }
++    async _sharedAuth(opts) {
++        // Single-flight (opencode #34074): concurrent auth/refresh attempts on
++        // this transport share ONE in-flight call. Without this, parallel
++        // tool-call 401s each call auth() and refresh with the same stored
++        // refresh token; an AS that rotates refresh tokens then rejects all but
++        // the first with invalid_grant, and the SDK wipes the stored
++        // credentials -> the session dies and the user must re-authenticate.
++        if (!this._authInFlight) {
++            this._authInFlight = Promise.resolve(auth(this._authProvider, opts)).finally(() => {
++                this._authInFlight = undefined;
++            });
++        }
++        return this._authInFlight;
+     }
+     async _authThenStart() {
+         if (!this._authProvider) {
+@@ -39,7 +54,7 @@ export class StreamableHTTPClientTransport {
+         }
+         let result;
+         try {
+-            result = await auth(this._authProvider, {
++            result = await this._sharedAuth({
+                 serverUrl: this._url,
+                 resourceMetadataUrl: this._resourceMetadataUrl,
+                 scope: this._scope,
+@@ -266,6 +281,9 @@ export class StreamableHTTPClientTransport {
+         if (!this._authProvider) {
+             throw new UnauthorizedError('No auth provider');
+         }
++        // NOT single-flighted: authorization-code exchange is a one-shot flow
++        // with its own `authorizationCode`. Coalescing it with an in-flight
++        // refresh would return that refresh's result and skip the code exchange.
+         const result = await auth(this._authProvider, {
+             serverUrl: this._url,
+             authorizationCode,
+@@ -286,7 +304,38 @@ export class StreamableHTTPClientTransport {
          this.onclose?.();
      }
      async send(message, options) {
@@ -487,7 +600,7 @@ index 624172aa24ae255a67c083f9c19053343e4a0581..ac75b14545fda44aff7ff4d97cc5da88
 +            return true;
 +        this._sessionId = undefined;
 +        this._sessionRecovery = Promise.resolve().then(() => this.onsessionexpired?.());
-         try {
++        try {
 +            await this._sessionRecovery;
 +        }
 +        catch (error) {
@@ -500,8 +613,8 @@ index 624172aa24ae255a67c083f9c19053343e4a0581..ac75b14545fda44aff7ff4d97cc5da88
 +        }
 +        return true;
 +    }
-+    async _send(message, options, isSessionRetry) {
-+        try {
++    async _send(message, options, isSessionRetry, authAttempted) {
+         try {
 +            if (this._sessionRecovery && !isInitializeRequest(message) && !isInitializedNotification(message)) {
 +                await this._sessionRecovery;
 +                if (options?.isRequestActive?.() === false) {
@@ -511,7 +624,7 @@ index 624172aa24ae255a67c083f9c19053343e4a0581..ac75b14545fda44aff7ff4d97cc5da88
              const { resumptionToken, onresumptiontoken } = options || {};
              if (resumptionToken) {
                  // If we have at last event ID, we need to reconnect the SSE stream
-@@ -294,6 +325,7 @@ export class StreamableHTTPClientTransport {
+@@ -294,6 +343,7 @@ export class StreamableHTTPClientTransport {
                  return;
              }
              const headers = await this._commonHeaders();
@@ -519,7 +632,7 @@ index 624172aa24ae255a67c083f9c19053343e4a0581..ac75b14545fda44aff7ff4d97cc5da88
              headers.set('content-type', 'application/json');
              headers.set('accept', 'application/json, text/event-stream');
              const init = {
-@@ -306,11 +338,20 @@ export class StreamableHTTPClientTransport {
+@@ -306,20 +356,34 @@ export class StreamableHTTPClientTransport {
              const response = await (this._fetch ?? fetch)(this._url, init);
              // Handle session ID received during initialization
              const sessionId = response.headers.get('mcp-session-id');
@@ -539,18 +652,49 @@ index 624172aa24ae255a67c083f9c19053343e4a0581..ac75b14545fda44aff7ff4d97cc5da88
 +                    }
 +                }
                  if (response.status === 401 && this._authProvider) {
-                     // Prevent infinite recursion when server returns 401 after successful auth
-                     if (this._hasCompletedAuthFlow) {
-@@ -331,7 +372,7 @@ export class StreamableHTTPClientTransport {
-                     // Mark that we completed auth flow
-                     this._hasCompletedAuthFlow = true;
+-                    // Prevent infinite recursion when server returns 401 after successful auth
+-                    if (this._hasCompletedAuthFlow) {
++                    // Per-request circuit breaker (opencode #34074): only give up
++                    // if THIS request already refreshed and retried. An
++                    // instance-level flag here would let a stale 401 from a sibling
++                    // parallel request (whose 401 lands just after another request's
++                    // refresh, before its retry resets the flag) trip the breaker
++                    // and kill the session.
++                    if (authAttempted) {
+                         throw new StreamableHTTPError(401, 'Server returned 401 after successful authentication');
+                     }
+                     const { resourceMetadataUrl, scope } = extractWWWAuthenticateParams(response);
+                     this._resourceMetadataUrl = resourceMetadataUrl;
+                     this._scope = scope;
+-                    const result = await auth(this._authProvider, {
++                    const result = await this._sharedAuth({
+                         serverUrl: this._url,
+                         resourceMetadataUrl: this._resourceMetadataUrl,
+                         scope: this._scope,
+@@ -328,10 +392,8 @@ export class StreamableHTTPClientTransport {
+                     if (result !== 'AUTHORIZED') {
+                         throw new UnauthorizedError();
+                     }
+-                    // Mark that we completed auth flow
+-                    this._hasCompletedAuthFlow = true;
                      // Purposely _not_ awaited, so we don't call onerror twice
 -                    return this.send(message);
-+                    return this._send(message, options, isSessionRetry);
++                    return this._send(message, options, isSessionRetry, true);
                  }
                  if (response.status === 403 && this._authProvider) {
                      const { resourceMetadataUrl, scope, error } = extractWWWAuthenticateParams(response);
-@@ -358,7 +399,7 @@ export class StreamableHTTPClientTransport {
+@@ -349,6 +411,10 @@ export class StreamableHTTPClientTransport {
+                         }
+                         // Mark that upscoping was tried.
+                         this._lastUpscopingHeader = wwwAuthHeader ?? undefined;
++                        // NOT single-flighted: scope escalation needs a token with
++                        // the NEW WWW-Authenticate scope. Coalescing it into an
++                        // in-flight refresh would reuse a token still missing that
++                        // scope and re-trip the upscoping guard.
+                         const result = await auth(this._authProvider, {
+                             serverUrl: this._url,
+                             resourceMetadataUrl: this._resourceMetadataUrl,
+@@ -358,7 +424,7 @@ export class StreamableHTTPClientTransport {
                          if (result !== 'AUTHORIZED') {
                              throw new UnauthorizedError();
                          }
