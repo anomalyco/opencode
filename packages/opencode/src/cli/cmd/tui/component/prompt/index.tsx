@@ -43,6 +43,8 @@ import { DialogSkill } from "../dialog-skill"
 import { DialogWorkspaceCreate, restoreWorkspaceSession } from "../dialog-workspace-create"
 import { DialogWorkspaceUnavailable } from "../dialog-workspace-unavailable"
 import { useArgs } from "@tui/context/args"
+import { useTuiConfig } from "@tui/context/tui-config"
+import { Voice } from "@tui/voice"
 
 export type PromptProps = {
   sessionID?: string
@@ -118,6 +120,49 @@ export function Prompt(props: PromptProps) {
   const stash = usePromptStash()
   const command = useCommandDialog()
   const renderer = useRenderer()
+  const tuiConfig = useTuiConfig()
+  const voice = Voice.createVoiceController(() => tuiConfig.voice)
+
+  createEffect(() => {
+    const err = voice.error()
+    if (!err) return
+    toast.show({ variant: "error", message: err, duration: 5000 })
+  })
+
+  createEffect(() => {
+    const n = voice.notice()
+    if (!n) return
+    toast.show({ variant: "info", message: n, duration: 3000 })
+  })
+
+  onCleanup(() => {
+    void voice.cancel()
+  })
+
+  async function toggleVoice() {
+    if (!voice.isEnabled) return
+    if (voice.state() === "idle") {
+      await voice.start()
+      if (voice.state() === "recording") {
+        toast.show({ variant: "info", message: "Recording… press again to transcribe", duration: 2000 })
+      }
+      return
+    }
+    if (voice.state() === "recording") {
+      toast.show({ variant: "info", message: "Transcribing…", duration: 2000 })
+      const text = await voice.stop()
+      if (text) {
+        if (!input || input.isDestroyed) return
+        input.insertText(text)
+        setTimeout(() => {
+          if (!input || input.isDestroyed) return
+          input.getLayoutNode().markDirty()
+          input.gotoBufferEnd()
+          renderer.requestRender()
+        }, 0)
+      }
+    }
+  }
   const dimensions = useTerminalDimensions()
   const { theme, syntax } = useTheme()
   const kv = useKV()
@@ -308,6 +353,19 @@ export function Prompt(props: PromptProps) {
             })
           }
         },
+      },
+      {
+        title: "Voice input",
+        value: "prompt.voice",
+        keybind: "input_voice",
+        category: "Prompt",
+        hidden: !voice.isEnabled,
+        slash: {
+          name: "voice",
+          aliases: ["mic", "dictate"],
+        },
+        description: voice.state() === "recording" ? "Stop & transcribe" : "Start recording",
+        onSelect: () => toggleVoice(),
       },
       {
         title: "Interrupt session",
@@ -1106,6 +1164,11 @@ export function Prompt(props: PromptProps) {
                   setStore("extmarkToPartIndex", new Map())
                   return
                 }
+                if (keybind.match("input_voice", e) && voice.isEnabled) {
+                  e.preventDefault()
+                  void toggleVoice()
+                  return
+                }
                 if (keybind.match("app_exit", e)) {
                   if (store.prompt.input === "") {
                     await exit()
@@ -1292,6 +1355,23 @@ export function Prompt(props: PromptProps) {
               <Show when={hasRightContent()}>
                 <box flexDirection="row" gap={1} alignItems="center">
                   {props.right}
+                </box>
+              </Show>
+              <Show when={voice.state() !== "idle"}>
+                <box flexDirection="row" gap={1} alignItems="center">
+                  <Show
+                    when={voice.state() === "recording"}
+                    fallback={
+                      <text fg={theme.textMuted}>
+                        Transcribing… {voice.elapsed()}s
+                      </text>
+                    }
+                  >
+                    <text fg={theme.error}>●</text>
+                    <text fg={theme.text}>
+                      Rec {Math.floor(voice.elapsed() / 60)}:{String(voice.elapsed() % 60).padStart(2, "0")}
+                    </text>
+                  </Show>
                 </box>
               </Show>
             </box>
