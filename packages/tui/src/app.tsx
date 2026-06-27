@@ -50,6 +50,7 @@ import { DialogConsoleOrg } from "./component/dialog-console-org"
 import { ThemeProvider, useTheme } from "./context/theme"
 import { Home } from "./routes/home"
 import { Session } from "./routes/session"
+import { ShatterIntro } from "./component/shatter-intro"
 import { PromptHistoryProvider } from "./component/prompt/history"
 import { FrecencyProvider } from "./component/prompt/frecency"
 import { PromptStashProvider } from "./component/prompt/stash"
@@ -440,6 +441,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
   const [pasteSummaryEnabled, setPasteSummaryEnabled] = createSignal(
     kv.get("paste_summary_enabled", !sync.data.config.experimental?.disable_paste_summary),
   )
+  const [showIntro, setShowIntro] = createSignal(true)
 
   // Update terminal window title based on current route and session
   createEffect(() => {
@@ -1101,6 +1103,11 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       </Show>
       <Show when={!startup.skipInitialLoading}>
         <StartupLoading ready={ready} />
+      </Show>
+      <Show when={showIntro()}>
+        <box position="absolute" zIndex={6000} left={0} top={0} width={dimensions().width} height={dimensions().height}>
+          <ShatterIntro onDone={() => setShowIntro(false)} />
+        </box>
       </Show>
     </box>
   )
