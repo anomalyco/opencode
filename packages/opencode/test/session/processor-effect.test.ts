@@ -232,10 +232,7 @@ const fragmentFailureLLM = Layer.succeed(
 const fragmentFailureEnv = LayerNodeTree.compile(
   root,
   new Map(
-    [...replacements, LayerNode.replace(LLM.layer, fragmentFailureLLM)].map((item) => [
-      item.source,
-      item.replacement,
-    ]),
+    [...replacements, LayerNode.replace(LLM.layer, fragmentFailureLLM)].map((item) => [item.source, item.replacement]),
   ),
 )
 const itFragmentFailure = testEffect(fragmentFailureEnv)

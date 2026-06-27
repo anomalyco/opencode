@@ -111,7 +111,9 @@ describe("LocationServiceMap", () => {
               }
             }).pipe(
               Effect.scoped,
-              Effect.provide(LocationServiceMap.Service.get(Location.Ref.make({ directory: AbsolutePath.make(directory) }))),
+              Effect.provide(
+                LocationServiceMap.Service.get(Location.Ref.make({ directory: AbsolutePath.make(directory) })),
+              ),
             )
 
           const blockedState = yield* update(blocked.path)

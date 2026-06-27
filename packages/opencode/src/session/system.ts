@@ -134,7 +134,11 @@ export const defaultLayer = layer.pipe(
   Layer.provide(locationServiceMapLayer),
 )
 
-const locationServiceMapNode = LayerNode.make({ service: LocationServiceMap.Service, layer: locationServiceMapLayer, deps: [] })
+const locationServiceMapNode = LayerNode.make({
+  service: LocationServiceMap.Service,
+  layer: locationServiceMapLayer,
+  deps: [],
+})
 
 export const node = LayerNode.make({
   service: Service,

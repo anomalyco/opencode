@@ -45,7 +45,14 @@ function requestLayer(client: HttpClient.HttpClient) {
 function integrationLayer(client: HttpClient.HttpClient) {
   const replacement = LayerNode.replace(FetchHttpClient.layer, Layer.succeed(HttpClient.HttpClient, client))
   return LayerNodeTree.compile(
-    LayerNode.group([ShareNext.node, EventV2Bridge.node, Session.node, SessionProjector.node, AccountRepo.node, Database.node]),
+    LayerNode.group([
+      ShareNext.node,
+      EventV2Bridge.node,
+      Session.node,
+      SessionProjector.node,
+      AccountRepo.node,
+      Database.node,
+    ]),
     new Map([[replacement.source, replacement.replacement]]),
   )
 }

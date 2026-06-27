@@ -50,11 +50,7 @@ export function make<
   const T extends Tag | undefined = undefined,
 >(
   input: MakeInput<Implementation, Items, T>,
-): Node<
-  Layer.Success<Implementation>,
-  Layer.Error<Implementation> | Error<Items[number]>,
-  T
-> {
+): Node<Layer.Success<Implementation>, Layer.Error<Implementation> | Error<Items[number]>, T> {
   return {
     kind: "layer",
     name: input.service !== undefined ? input.service.key : input.name,
@@ -65,10 +61,7 @@ export function make<
   }
 }
 
-export function unbound<R, Shape, const T extends Tag>(
-  service: Context.Key<R, Shape>,
-  tag: T,
-): Node<R, never, T> {
+export function unbound<R, Shape, const T extends Tag>(service: Context.Key<R, Shape>, tag: T): Node<R, never, T> {
   return {
     kind: "unbound",
     name: service.key,
@@ -100,16 +93,12 @@ export interface Tags<Config extends TagConfig> {
   ) => <const Implementation extends Layer.Any, const Items extends NodeList>(
     input: DistributiveOmit<MakeInput<Implementation, Items, Tag<Name>>, "tag"> &
       CheckTags<Items, Name | Extract<Config[Name][number], string>>,
-  ) => Node<
-    Layer.Success<Implementation>,
-    Layer.Error<Implementation> | Error<Items[number]>,
-    Tag<Name>
-  >
+  ) => Node<Layer.Success<Implementation>, Layer.Error<Implementation> | Error<Items[number]>, Tag<Name>>
 }
 
-export function tags<
-  const Config extends { readonly [Name in keyof Config]: readonly (keyof Config & string)[] },
->(config: Config): Tags<Config> {
+export function tags<const Config extends { readonly [Name in keyof Config]: readonly (keyof Config & string)[] }>(
+  config: Config,
+): Tags<Config> {
   const names = Object.keys(config) as TagNames<Config>[]
   const values = Object.fromEntries(names.map((name) => [name, makeTag(name)])) as Tags<Config>["values"]
   return {

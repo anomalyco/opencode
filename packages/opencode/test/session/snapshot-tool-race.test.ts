@@ -92,9 +92,9 @@ const it = testEffect(
     root,
     new Map(
       [
-      LayerNode.replace(MCP.layer, mcp),
-      LayerNode.replace(LSP.layer, lsp),
-      LayerNode.replace(RuntimeFlags.defaultLayer, RuntimeFlags.layer({ experimentalEventSystem: true })),
+        LayerNode.replace(MCP.layer, mcp),
+        LayerNode.replace(LSP.layer, lsp),
+        LayerNode.replace(RuntimeFlags.defaultLayer, RuntimeFlags.layer({ experimentalEventSystem: true })),
       ].map((item) => [item.source, item.replacement]),
     ),
   ),
