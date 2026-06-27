@@ -17,11 +17,23 @@ import { EffectBridge } from "@/effect/bridge"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Database } from "@opencode-ai/core/database/database"
 import { Interrupt } from "../session/interrupt"
+import { EventV2Bridge } from "@/event-v2-bridge"
+import { EventV2 } from "@opencode-ai/core/event"
 
 export interface TaskPromptOps {
   cancel(sessionID: SessionID): Effect.Effect<void>
   resolvePromptParts(template: string): Effect.Effect<SessionPrompt.PromptInput["parts"]>
   prompt(input: SessionPrompt.PromptInput): Effect.Effect<SessionV1.WithParts>
+}
+
+export const TaskCompleted = Schema.Struct({
+  sessionID: SessionID,
+  parentSessionID: SessionID,
+  status: Schema.Literals(["ok", "error", "aborted"]),
+}).annotate({ identifier: "TaskCompleted" })
+
+export const Event = {
+  Completed: EventV2.define({ type: "task.completed", schema: TaskCompleted.fields }),
 }
 
 const id = "task"
@@ -114,6 +126,7 @@ export const TaskTool = Tool.define(
     const database = yield* Database.Service
     const interrupt = yield* Interrupt.Service
     const messaging = yield* Messaging.Service
+    const events = yield* EventV2Bridge.Service
 
     const run = Effect.fn("TaskTool.execute")(function* (
       params: Schema.Schema.Type<typeof Parameters>,
@@ -294,17 +307,50 @@ export const TaskTool = Tool.define(
               // A graceful cancel completes normally (status "completed") but has a terminal
               // record; a hard abort settles "cancelled". Both must render as aborted.
               const aborted = yield* interrupt.terminal(jobID)
-              if (Option.isSome(aborted))
+              if (Option.isSome(aborted)) {
+                yield* events.publish(Event.Completed, {
+                  sessionID: jobID,
+                  parentSessionID: ctx.sessionID,
+                  status: "aborted",
+                })
                 return yield* inject("aborted", result.info?.output ?? "", aborted.value.reason)
-              if (result.info?.status === "completed") return yield* inject("completed", result.info.output ?? "")
-              if (result.info?.status === "error") return yield* inject("error", result.info.error ?? "")
-              if (result.info?.status === "cancelled") return yield* inject("aborted", result.info.output ?? "", "Aborted")
+              }
+              if (result.info?.status === "completed") {
+                yield* events.publish(Event.Completed, {
+                  sessionID: jobID,
+                  parentSessionID: ctx.sessionID,
+                  status: "ok",
+                })
+                return yield* inject("completed", result.info.output ?? "")
+              }
+              if (result.info?.status === "error") {
+                yield* events.publish(Event.Completed, {
+                  sessionID: jobID,
+                  parentSessionID: ctx.sessionID,
+                  status: "error",
+                })
+                return yield* inject("error", result.info.error ?? "")
+              }
+              if (result.info?.status === "cancelled") {
+                yield* events.publish(Event.Completed, {
+                  sessionID: jobID,
+                  parentSessionID: ctx.sessionID,
+                  status: "aborted",
+                })
+                return yield* inject("aborted", result.info.output ?? "", "Aborted")
+              }
               return
             }),
           ),
           Effect.forkIn(scope, { startImmediately: true }),
         )
       })
+
+      // Tracks whether a notify() fiber was forked to own this run's terminal
+      // task.completed event. When true, the foreground release block must NOT
+      // also emit (avoids double-fire); when false on a parent-interrupt, the
+      // release block emits the terminal event itself (avoids zero-fire).
+      let notified = false
 
       // Clear any stale interrupt/terminal state from a prior run of this session
       // before starting (or extending) so a reused task_id doesn't inherit a
@@ -333,13 +379,14 @@ export const TaskTool = Tool.define(
         type: id,
         title: params.description,
         metadata,
-        onPromote: Effect.all([
-          ctx.metadata({
+        onPromote: Effect.gen(function* () {
+          notified = true
+          yield* ctx.metadata({
             title: params.description,
             metadata: { ...metadata, background: true, jobId: nextSession.id },
-          }),
-          notify(nextSession.id),
-        ]),
+          })
+          yield* notify(nextSession.id)
+        }),
         run: runTask().pipe(Effect.onInterrupt(() => ops.cancel(nextSession.id))),
       })
 
@@ -361,6 +408,7 @@ export const TaskTool = Tool.define(
       }
 
       if (runInBackground) {
+        notified = true
         yield* notify(SessionID.make(info.id))
         return backgroundResult()
       }
@@ -388,6 +436,7 @@ export const TaskTool = Tool.define(
             if (outcome.kind === "message") {
               // Child is parked awaiting the parent's reply and has been backgrounded;
               // fork notify so its eventual completion is still delivered to the parent.
+              notified = true
               yield* notify(nextSession.id)
               // Visible "✉ Message from subagent" marker in the PARENT (this) transcript.
               // The tool's renderMessage output (returned below) is what the MODEL sees as
@@ -408,42 +457,77 @@ export const TaskTool = Tool.define(
             if (outcome.kind === "promoted") return backgroundResult()
             const result = outcome.info
             if (result?.metadata?.background === true) return backgroundResult()
-            if (result?.status === "error") return yield* Effect.fail(new Error(result.error ?? "Task failed"))
-            if (result?.status === "cancelled") {
-              const aborted = yield* interrupt.terminal(nextSession.id)
-              return {
-                title: params.description,
-                metadata,
-                output: renderOutput({
-                  sessionID: nextSession.id,
-                  state: "aborted",
-                  summary: Option.isSome(aborted) ? `Aborted: ${aborted.value.reason}` : "Aborted",
-                  text: result?.output ?? "",
-                }),
-              }
+            if (result?.status === "error") {
+              yield* events.publish(Event.Completed, {
+                sessionID: nextSession.id,
+                parentSessionID: ctx.sessionID,
+                status: "error",
+              })
+              return yield* Effect.fail(new Error(result.error ?? "Task failed"))
             }
+          if (result?.status === "cancelled") {
             const aborted = yield* interrupt.terminal(nextSession.id)
-            if (Option.isSome(aborted))
-              return {
-                title: params.description,
-                metadata,
-                output: renderOutput({
-                  sessionID: nextSession.id,
-                  state: "aborted",
-                  summary: `Aborted: ${aborted.value.reason}`,
-                  text: result?.output ?? "",
-                }),
-              }
+            yield* events.publish(Event.Completed, {
+              sessionID: nextSession.id,
+              parentSessionID: ctx.sessionID,
+              status: "aborted",
+            })
             return {
               title: params.description,
               metadata,
-              output: renderOutput({ sessionID: nextSession.id, state: "completed", text: result?.output ?? "" }),
+              output: renderOutput({
+                sessionID: nextSession.id,
+                state: "aborted",
+                summary: Option.isSome(aborted) ? `Aborted: ${aborted.value.reason}` : "Aborted",
+                text: result?.output ?? "",
+              }),
             }
+          }
+          const aborted = yield* interrupt.terminal(nextSession.id)
+          if (Option.isSome(aborted)) {
+            yield* events.publish(Event.Completed, {
+              sessionID: nextSession.id,
+              parentSessionID: ctx.sessionID,
+              status: "aborted",
+            })
+            return {
+              title: params.description,
+              metadata,
+              output: renderOutput({
+                sessionID: nextSession.id,
+                state: "aborted",
+                summary: `Aborted: ${aborted.value.reason}`,
+                text: result?.output ?? "",
+              }),
+            }
+          }
+          yield* events.publish(Event.Completed, {
+            sessionID: nextSession.id,
+            parentSessionID: ctx.sessionID,
+            status: "ok",
+          })
+          return {
+            title: params.description,
+            metadata,
+            output: renderOutput({ sessionID: nextSession.id, state: "completed", text: result?.output ?? "" }),
+          }
           }),
         (_, exit) =>
           Effect.gen(function* () {
-            if (Exit.hasInterrupts(exit))
+            if (Exit.hasInterrupts(exit)) {
+              // Parent interrupted while waiting on a foreground child. notify was
+              // never forked (notified === false), so emit the terminal completion
+              // here — otherwise the dashboard never sees this node die (zero-fire).
+              // The promoted/message/background paths set notified=true and own
+              // their own completion, so skip to avoid double-fire.
+              if (!notified)
+                yield* events.publish(Event.Completed, {
+                  sessionID: nextSession.id,
+                  parentSessionID: ctx.sessionID,
+                  status: "aborted",
+                })
               yield* Effect.all([cancel, background.cancel(nextSession.id)], { discard: true })
+            }
           }).pipe(
             Effect.ensuring(
               Effect.sync(() => {

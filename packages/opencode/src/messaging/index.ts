@@ -17,6 +17,8 @@ export const DEDUP_WINDOW = 100
 export const TREE_MESSAGE_CAP = 2000
 export const S2S_HOURLY_OUTBOUND_CAP = 50
 
+export const PeerSent = MessagingEvent.PeerSent
+export const S2sDelivered = MessagingEvent.S2sDelivered
 export class RejectedError extends Schema.TaggedErrorClass<RejectedError>()("Messaging.RejectedError", {}) {
   override get message() {
     return "The parent agent is no longer available to reply"
@@ -322,6 +324,20 @@ export const layer = Layer.effect(
       v.outbound.set(input.from, used + 1)
       v.treeTotal.count++
       v.dedup.set(input.target, [...seen, hash].slice(-DEDUP_WINDOW))
+      if (input.source === "sibling-session")
+        yield* events.publish(S2sDelivered, {
+          target: input.target,
+          from: input.from,
+          fromName: input.fromName,
+          body: input.body,
+        })
+      else
+        yield* events.publish(PeerSent, {
+          from: input.from,
+          target: input.target,
+          fromSlug: input.fromSlug,
+          body: input.body,
+        })
       const w = v.waiters.get(input.target)
       if (w) {
         v.waiters.delete(input.target)
