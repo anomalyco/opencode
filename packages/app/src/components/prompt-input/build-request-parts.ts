@@ -52,6 +52,9 @@ const parseCommentMentions = (comment: string) => {
 const isFileAttachment = (part: Prompt[number]): part is FileAttachmentPart => part.type === "file"
 const isAgentAttachment = (part: Prompt[number]): part is AgentPart => part.type === "agent"
 
+export const attachmentRequestUrl = (attachment: ImageAttachmentPart) =>
+  attachment.sourcePath ? `file://${encodeFilePath(attachment.sourcePath)}` : attachment.dataUrl
+
 const toOptimisticPart = (part: PromptRequestPart, sessionID: string, messageID: string): Part => {
   if (part.type === "text") {
     return {
@@ -183,19 +186,31 @@ export function buildRequestParts(input: BuildRequestPartsInput) {
   })
 
   const images = input.images.map((attachment) => {
+    const id = Identifier.ascending("part")
+    const url = attachmentRequestUrl(attachment)
     return {
-      id: Identifier.ascending("part"),
-      type: "file",
-      mime: attachment.mime,
-      url: attachment.dataUrl,
-      filename: attachment.sourcePath ?? attachment.filename,
-    } satisfies PromptRequestPart
+      request: {
+        id,
+        type: "file",
+        mime: attachment.mime,
+        url,
+        filename: attachment.filename,
+      } satisfies PromptRequestPart,
+      optimistic: {
+        id,
+        type: "file",
+        mime: attachment.mime,
+        url: attachment.dataUrl,
+        filename: attachment.filename,
+      } satisfies PromptRequestPart,
+    }
   })
 
-  requestParts.push(...files, ...context, ...agents, ...images)
+  const optimisticRequestParts = [...requestParts, ...files, ...context, ...agents, ...images.map((part) => part.optimistic)]
+  requestParts.push(...files, ...context, ...agents, ...images.map((part) => part.request))
 
   return {
     requestParts,
-    optimisticParts: requestParts.map((part) => toOptimisticPart(part, input.sessionID, input.messageID)),
+    optimisticParts: optimisticRequestParts.map((part) => toOptimisticPart(part, input.sessionID, input.messageID)),
   }
 }

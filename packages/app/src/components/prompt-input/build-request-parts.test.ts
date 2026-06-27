@@ -75,7 +75,7 @@ describe("buildRequestParts", () => {
     expect(files.map((part) => (part.type === "file" ? part.filename : ""))).toEqual(["a.png", "b.pdf"])
   })
 
-  test("preserves an external attachment source path for the model", () => {
+  test("sends source-backed attachments as file URLs for the model", () => {
     const result = buildRequestParts({
       prompt: [],
       context: [],
@@ -95,9 +95,36 @@ describe("buildRequestParts", () => {
       sessionDirectory: "C:\\Repos\\sst\\opencode",
     })
 
-    expect(result.requestParts.find((part) => part.type === "file")?.filename).toBe(
-      "C:\\Users\\Luke\\AppData\\Roaming\\ai.opencode.desktop.beta\\opencode.global.dat",
-    )
+    const filePart = result.requestParts.find((part) => part.type === "file")
+
+    expect(filePart?.url).toBe("file:///C:/Users/Luke/AppData/Roaming/ai.opencode.desktop.beta/opencode.global.dat")
+    expect(filePart?.filename).toBe("opencode.global.dat")
+    expect(result.optimisticParts.find((part) => part.type === "file")?.url).toBe("data:text/plain;base64,AAA")
+  })
+
+  test("keeps clipboard-only attachments as data URLs", () => {
+    const result = buildRequestParts({
+      prompt: [],
+      context: [],
+      images: [
+        {
+          type: "image",
+          id: "img_clipboard",
+          filename: "clipboard.png",
+          mime: "image/png",
+          dataUrl: "data:image/png;base64,AAA",
+        },
+      ],
+      text: "inspect this",
+      messageID: "msg_clipboard",
+      sessionID: "ses_clipboard",
+      sessionDirectory: "/repo",
+    })
+
+    const filePart = result.requestParts.find((part) => part.type === "file")
+
+    expect(filePart?.url).toBe("data:image/png;base64,AAA")
+    expect(filePart?.filename).toBe("clipboard.png")
   })
 
   test("deduplicates context files when prompt already includes same path", () => {

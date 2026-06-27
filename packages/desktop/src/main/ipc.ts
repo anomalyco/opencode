@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process"
-import { stat } from "node:fs/promises"
-import { basename } from "node:path"
+import { randomUUID } from "node:crypto"
+import { mkdir, rm, stat, writeFile } from "node:fs/promises"
+import { basename, join } from "node:path"
 import { app, BrowserWindow, Notification, clipboard, dialog, ipcMain, shell } from "electron"
 import type { IpcMainEvent, IpcMainInvokeEvent } from "electron"
 import type { DesktopMenuAction } from "@opencode-ai/app/desktop-menu"
@@ -19,6 +20,10 @@ const pickerFilters = (ext?: string[]) => {
 }
 
 const pickedFiles = createPickedFileAuthorizations()
+const clipboardAttachmentDirectory = join(
+  app.getPath("temp"),
+  `opencode-clipboard-attachments-${process.pid}-${randomUUID()}`,
+)
 
 type Deps = {
   killSidecar: () => Promise<void> | void
@@ -42,6 +47,9 @@ type Deps = {
 export function registerIpcHandlers(deps: Deps) {
   const updaterSubscriptions = createUpdaterSubscriptions()
   app.once("will-quit", updaterSubscriptions.clear)
+  app.once("will-quit", () => {
+    void rm(clipboardAttachmentDirectory, { recursive: true, force: true })
+  })
 
   ipcMain.handle("kill-sidecar", () => deps.killSidecar())
   ipcMain.handle("await-initialization", () => deps.awaitInitialization())
@@ -176,12 +184,18 @@ export function registerIpcHandlers(deps: Deps) {
     })
   })
 
-  ipcMain.handle("read-clipboard-image", () => {
+  ipcMain.handle("read-clipboard-image", async () => {
     const image = clipboard.readImage()
     if (image.isEmpty()) return null
-    const buffer = image.toPNG().buffer
+    const png = image.toPNG()
+    const materializedPath = join(clipboardAttachmentDirectory, `pasted-image-${Date.now()}-${randomUUID()}.png`)
+    const path = await mkdir(clipboardAttachmentDirectory, { recursive: true, mode: 0o700 })
+      .then(() => writeFile(materializedPath, png, { mode: 0o600 }))
+      .then(() => materializedPath)
+      .catch(() => undefined)
+    const buffer = png.buffer.slice(png.byteOffset, png.byteOffset + png.byteLength)
     const size = image.getSize()
-    return { buffer, width: size.width, height: size.height }
+    return { buffer, width: size.width, height: size.height, path }
   })
 
   ipcMain.on("show-notification", (_event: IpcMainEvent, title: string, body?: string) => {

@@ -2,6 +2,7 @@ import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test"
 import type { Prompt } from "@/context/prompt"
 
 let createPromptSubmit: typeof import("./submit").createPromptSubmit
+let sendFollowupDraft: typeof import("./submit").sendFollowupDraft
 
 const createdClients: string[] = []
 const createdSessions: string[] = []
@@ -21,6 +22,8 @@ const promoted: Array<{ directory: string; sessionID: string }> = []
 const sentShell: string[] = []
 const syncedDirectories: string[] = []
 const promotedDrafts: Array<{ draftID: string; server: string; sessionId: string }> = []
+const commandRequests: Array<{ parts?: Array<{ url: string; filename: string }> }> = []
+const syncCommands: Array<{ name: string }> = []
 
 let params: { id?: string } = {}
 let search: { draftId?: string } = {}
@@ -65,7 +68,10 @@ const clientFor = (directory: string) => {
       },
       prompt: async () => ({ data: undefined }),
       promptAsync: async () => ({ data: undefined }),
-      command: async () => ({ data: undefined }),
+      command: async (input: { parts?: Array<{ url: string; filename: string }> }) => {
+        commandRequests.push(input)
+        return { data: undefined }
+      },
       abort: async () => ({ data: undefined }),
     },
     worktree: {
@@ -167,7 +173,7 @@ beforeAll(async () => {
 
   mock.module("@/context/sync", () => ({
     useSync: () => () => ({
-      data: { command: [] },
+      data: { command: syncCommands },
       session: {
         optimistic: {
           add: (value: {
@@ -230,6 +236,7 @@ beforeAll(async () => {
 
   const mod = await import("./submit")
   createPromptSubmit = mod.createPromptSubmit
+  sendFollowupDraft = mod.sendFollowupDraft
 })
 
 beforeEach(() => {
@@ -240,6 +247,8 @@ beforeEach(() => {
   optimisticSeeded.length = 0
   promoted.length = 0
   promotedDrafts.length = 0
+  commandRequests.length = 0
+  syncCommands.length = 0
   params = {}
   search = {}
   sentShell.length = 0
@@ -249,7 +258,92 @@ beforeEach(() => {
   for (const key of Object.keys(storedSessions)) delete storedSessions[key]
 })
 
+describe("sendFollowupDraft slash commands", () => {
+  test("sends source-backed attachments as file URLs", async () => {
+    await sendFollowupDraft({
+      client: clientFor("/repo/main") as Parameters<typeof sendFollowupDraft>[0]["client"],
+      serverSync: {
+        session: {
+          set: () => undefined,
+        },
+      } as Parameters<typeof sendFollowupDraft>[0]["serverSync"],
+      sync: {
+        data: { command: [{ name: "inspect" }] },
+      } as Parameters<typeof sendFollowupDraft>[0]["sync"],
+      draft: {
+        sessionID: "session-1",
+        sessionDirectory: "/repo/main",
+        prompt: [
+          { type: "text", content: "/inspect details", start: 0, end: 16 },
+          {
+            type: "image",
+            id: "img_external",
+            filename: "opencode.global.dat",
+            sourcePath: "C:\\Users\\Luke\\AppData\\Roaming\\ai.opencode.desktop.beta\\opencode.global.dat",
+            mime: "text/plain",
+            dataUrl: "data:text/plain;base64,AAA",
+          },
+        ],
+        context: [],
+        agent: "agent",
+        model: { providerID: "provider", modelID: "model" },
+      },
+    })
+
+    expect(commandRequests[0]?.parts?.[0]).toMatchObject({
+      filename: "opencode.global.dat",
+      url: "file:///C:/Users/Luke/AppData/Roaming/ai.opencode.desktop.beta/opencode.global.dat",
+    })
+  })
+})
+
 describe("prompt submit worktree selection", () => {
+  test("sends slash command source-backed attachments as file URLs", async () => {
+    params = { id: "session-1" }
+    syncCommands.push({ name: "inspect" })
+
+    const submit = createPromptSubmit({
+      prompt: {
+        ...prompt,
+        current: () => [{ type: "text", content: "/inspect details", start: 0, end: 16 }],
+        capture: () => ({
+          ...prompt,
+          current: () => [{ type: "text", content: "/inspect details", start: 0, end: 16 }],
+        }),
+      },
+      info: () => ({ id: "session-1" }),
+      imageAttachments: () => [
+        {
+          type: "image",
+          id: "img_external",
+          filename: "opencode.global.dat",
+          sourcePath: "C:\\Users\\Luke\\AppData\\Roaming\\ai.opencode.desktop.beta\\opencode.global.dat",
+          mime: "text/plain",
+          dataUrl: "data:text/plain;base64,AAA",
+        },
+      ],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "normal",
+      working: () => false,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+      onSubmit: () => undefined,
+    })
+
+    await submit.handleSubmit({ preventDefault: () => undefined } as unknown as Event)
+
+    expect(commandRequests[0]?.parts?.[0]).toMatchObject({
+      filename: "opencode.global.dat",
+      url: "file:///C:/Users/Luke/AppData/Roaming/ai.opencode.desktop.beta/opencode.global.dat",
+    })
+  })
+
   test("reads the latest worktree accessor value per submit", async () => {
     const submit = createPromptSubmit({
       prompt,

@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test"
+import type { ContentPart } from "@/context/prompt"
+import { createPromptAttachmentsCore } from "./attachments"
 import { attachmentMime, pickAttachmentFiles } from "./files"
 import { pasteMode } from "./paste"
 
@@ -85,6 +87,35 @@ describe("pickAttachmentFiles", () => {
     })
     await handled.promise
     expect(errors).toEqual([error])
+  })
+})
+
+describe("createPromptAttachmentsCore", () => {
+  test("adds a materialized source path for desktop clipboard images", async () => {
+    const parts: ContentPart[] = []
+    const file = new File([Uint8Array.of(137, 80, 78, 71)], "pasted-image.png", { type: "image/png" })
+    const editor = {} as HTMLDivElement
+    const materializedPath = "C:\\Users\\Luke\\AppData\\Local\\Temp\\opencode-clipboard-attachments\\pasted-image.png"
+    const attachments = createPromptAttachmentsCore({
+      capture: () => ({
+        current: () => parts,
+        cursor: () => 0,
+        set: (next) => {
+          parts.splice(0, parts.length, ...next)
+        },
+      }),
+      editor: () => editor,
+      readClipboardImage: async () => file,
+      getPathForFile: (selected) => (selected === file ? materializedPath : ""),
+    })
+
+    expect(await attachments.addClipboardAttachment(Promise.resolve(file))).toBe(true)
+    expect(parts[0]).toMatchObject({
+      type: "image",
+      filename: "pasted-image.png",
+      sourcePath: materializedPath,
+      dataUrl: "data:image/png;base64,iVBORw==",
+    })
   })
 })
 

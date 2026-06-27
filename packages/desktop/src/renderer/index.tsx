@@ -269,9 +269,11 @@ const createPlatform = (): Platform => {
       const image = await window.api.readClipboardImage().catch(() => null)
       if (!image) return null
       const blob = new Blob([image.buffer], { type: "image/png" })
-      return new File([blob], `pasted-image-${Date.now()}.png`, {
+      const file = new File([blob], image.path?.split(/[\\/]/).pop() || `pasted-image-${Date.now()}.png`, {
         type: "image/png",
       })
+      if (image.path) attachmentPaths.set(file, image.path)
+      return file
     },
   }
 }
