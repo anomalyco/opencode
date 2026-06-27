@@ -27,6 +27,21 @@ for (const channel of channels) {
   })
 }
 
+for (const channel of ["beta", "prod"] as const) {
+  test(`publishes ${channel} updates to the fork release feed`, async () => {
+    const previous = process.env.OPENCODE_CHANNEL
+    process.env.OPENCODE_CHANNEL = channel
+
+    const module = await import(`./electron-builder.config.ts?publish=${channel}`)
+    const config = module.default as Configuration
+
+    if (previous === undefined) delete process.env.OPENCODE_CHANNEL
+    else process.env.OPENCODE_CHANNEL = previous
+
+    expect(config.publish).toEqual({ provider: "github", owner: "1134189025", repo: "opencode", channel: "latest" })
+  })
+}
+
 test("keeps a hidden prod launcher for old Linux pins", async () => {
   const previous = process.env.OPENCODE_CHANNEL
   process.env.OPENCODE_CHANNEL = "prod"
@@ -37,8 +52,9 @@ test("keeps a hidden prod launcher for old Linux pins", async () => {
   if (previous === undefined) delete process.env.OPENCODE_CHANNEL
   else process.env.OPENCODE_CHANNEL = previous
 
-  expect(config.deb?.fpm?.[0]).toEndWith(`${legacyDesktopEntry}=/usr/share/applications/opencode-desktop.desktop`)
-  expect(config.rpm?.fpm?.[0]).toEndWith(`${legacyDesktopEntry}=/usr/share/applications/opencode-desktop.desktop`)
+  const legacyDesktopEntryFpm = `${legacyDesktopEntry}=/usr/share/applications/opencode-desktop.desktop`
+  expect(config.deb?.fpm?.[0]?.replaceAll("\\", "/")).toEndWith(legacyDesktopEntryFpm)
+  expect(config.rpm?.fpm?.[0]?.replaceAll("\\", "/")).toEndWith(legacyDesktopEntryFpm)
 
   const desktop = await Bun.file(legacyDesktopEntry).text()
   expect(desktop).toContain("Exec=/opt/OpenCode/ai.opencode.desktop %U")

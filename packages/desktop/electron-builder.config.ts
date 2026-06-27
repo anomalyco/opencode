@@ -14,6 +14,7 @@ const signScript = path.join(rootDir, "script", "sign-windows.ps1")
 // pins still resolve after the canonical app id changes back to ai.opencode.desktop.
 const legacyDesktopEntry = path.join(packageDir, "resources", "linux", "opencode-desktop.desktop")
 const legacyDesktopEntryFpm = `${legacyDesktopEntry}=/usr/share/applications/opencode-desktop.desktop`
+const githubReleasePublish = { provider: "github", owner: "1134189025", repo: "opencode", channel: "latest" } as const
 
 async function signWindows(configuration: { path: string }) {
   if (process.platform !== "win32") return
@@ -125,7 +126,7 @@ function getConfig() {
         appId,
         productName: "OpenCode Beta",
         protocols: { name: "OpenCode Beta", schemes: ["opencode"] },
-        publish: { provider: "github", owner: "anomalyco", repo: "opencode-beta", channel: "latest" },
+        publish: githubReleasePublish,
         rpm: { packageName: "opencode-beta" },
       }
     }
@@ -135,7 +136,7 @@ function getConfig() {
         appId,
         productName: "OpenCode",
         protocols: { name: "OpenCode", schemes: ["opencode"] },
-        publish: { provider: "github", owner: "anomalyco", repo: "opencode", channel: "latest" },
+        publish: githubReleasePublish,
         deb: { fpm: [legacyDesktopEntryFpm] },
         rpm: { packageName: "opencode", fpm: [legacyDesktopEntryFpm] },
       }
