@@ -52,7 +52,7 @@ export const Prompt = Schema.Struct({
 
 export const PermissionPromptMaxHeightDefault = 15
 export const PermissionPrompt = Schema.Struct({
-  max_height: Schema.optional(Schema.Int.pipe(Schema.between(10, 90))).annotate({
+  max_height: Schema.optional(Schema.Int.check(Schema.isBetween({ minimum: 10, maximum: 90 }))).annotate({
     description: `Max height of the permission prompt in rows (10-90, default: ${PermissionPromptMaxHeightDefault})`,
   }),
 }).annotate({ description: "Permission prompt panel settings" })
