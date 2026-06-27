@@ -7,11 +7,12 @@ export type WslMockScenario =
   | "addServer"
   | "onboarding"
   | "wslUnavailable"
+  | "wslRuntimeError"
   | "versionMismatch"
   | "failedServer"
   | "pendingRestart"
 
-export const ACTIVE_WSL_MOCK_SCENARIO: WslMockScenario = "addServer"
+export const ACTIVE_WSL_MOCK_SCENARIO: WslMockScenario = "wslRuntimeError"
 
 const desktopVersion = pkg.version
 const mockSidecarUrl = "http://127.0.0.1:4096"
@@ -250,6 +251,19 @@ export const wslMockScenarios = {
   wslUnavailable(): WslServersState {
     return {
       runtime: { available: false, version: null, error: "WSL is not installed. Run `wsl --install` to enable it." },
+      installed: [],
+      online: [],
+      distroProbes: {},
+      opencodeChecks: {},
+      pendingRestart: false,
+      job: null,
+      servers: [],
+    }
+  },
+
+  wslRuntimeError(): WslServersState {
+    return {
+      runtime: { available: false, version: null, error: "wsl.exe --version timed out after 20000ms" },
       installed: [],
       online: [],
       distroProbes: {},

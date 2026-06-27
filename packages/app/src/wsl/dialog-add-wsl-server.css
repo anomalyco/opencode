@@ -45,7 +45,7 @@
   width: 480px;
   max-width: calc(100vw - 32px);
   min-height: 264px;
-  height: 264px;
+  height: auto;
   background: var(--v2-background-bg-layer-01);
   box-shadow: var(--v2-elevation-overlay);
   border-radius: 10px;
@@ -123,6 +123,22 @@
   font-variant-numeric: tabular-nums;
   font-variation-settings: "slnt" 0;
   color: var(--v2-text-text-muted);
+}
+
+.settings-v2-wsl-unavailable-error {
+  width: 100%;
+  max-width: 360px;
+  margin: 4px 0 0;
+  font-style: normal;
+  font-weight: 440;
+  font-size: 12px;
+  line-height: 18px;
+  text-align: center;
+  letter-spacing: -0.04px;
+  font-variant-numeric: tabular-nums;
+  font-variation-settings: "slnt" 0;
+  color: var(--v2-text-text-faint);
+  overflow-wrap: anywhere;
 }
 
 .settings-v2-wsl-section-header {

@@ -20,6 +20,11 @@ function isHiddenDistro(name: string) {
   return /^docker-desktop(?:-data)?$/i.test(name)
 }
 
+function isWslRuntimeMissing(error: string | null | undefined) {
+  if (!error) return true
+  return /WSL is not installed|not been installed|wsl(?:\.exe)? --install/i.test(error)
+}
+
 interface DialogWslServerProps {
   onAdded?: (distro: string) => void | Promise<void>
 }
@@ -380,6 +385,8 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
             fallback={
               <DialogWslSetup
                 state={runtimeState()}
+                error={current()?.runtime?.error ?? null}
+                installable={isWslRuntimeMissing(current()?.runtime?.error)}
                 busy={busy()}
                 onInstall={() => void run(() => api.installWsl())}
               />
@@ -562,17 +569,26 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
   )
 }
 
-function DialogWslSetup(props: { state: string; busy: boolean; onInstall: () => void }) {
+function DialogWslSetup(props: {
+  state: string
+  error: string | null
+  installable: boolean
+  busy: boolean
+  onInstall: () => void
+}) {
   const language = useLanguage()
   const dialog = useDialog()
   const title = () =>
     props.state === "pendingRestart"
       ? language.t("wsl.onboarding.restartRequired")
-      : language.t("wsl.onboarding.wslNotInstalled.title")
-  const description = () =>
-    props.state === "pendingRestart"
-      ? language.t("wsl.onboarding.windowsRestartRequired")
-      : language.t("wsl.onboarding.wslNotInstalled.description")
+      : props.installable
+        ? language.t("wsl.onboarding.wslNotInstalled.title")
+        : language.t("wsl.onboarding.wslUnavailable.title")
+  const description = () => {
+    if (props.state === "pendingRestart") return language.t("wsl.onboarding.windowsRestartRequired")
+    if (!props.installable) return language.t("wsl.onboarding.wslUnavailable.description")
+    return language.t("wsl.onboarding.wslNotInstalled.description")
+  }
 
   return (
     <Dialog fit class="settings-v2-wsl-not-installed-dialog">
@@ -603,8 +619,11 @@ function DialogWslSetup(props: { state: string; busy: boolean; onInstall: () => 
           </svg>
           <h2 class="settings-v2-wsl-not-installed-title">{title()}</h2>
           <p class="settings-v2-wsl-not-installed-description">{description()}</p>
+          <Show when={!props.installable && props.error}>
+            <p class="settings-v2-wsl-unavailable-error">{props.error}</p>
+          </Show>
         </div>
-        <Show when={props.state === "unavailable"}>
+        <Show when={props.state === "unavailable" && props.installable}>
           <ButtonV2
             variant="neutral"
             disabled={props.busy}

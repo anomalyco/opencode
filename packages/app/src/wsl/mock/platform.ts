@@ -71,6 +71,10 @@ export function createWslMockPlatform(scenario: WslMockScenario = ACTIVE_WSL_MOC
           })
           return
         }
+        if (scenario === "wslRuntimeError") {
+          setState({ runtime: { available: false, version: null, error: "wsl.exe --version timed out after 20000ms" } })
+          return
+        }
         setState({ runtime: { available: true, version: "WSL version: 2.6.1.0", error: null } })
       })
     },

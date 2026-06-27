@@ -400,6 +400,8 @@ export const dict = {
   "wsl.onboarding.wslNotInstalled.title": "WSL not installed",
   "wsl.onboarding.wslNotInstalled.description":
     "WSL (Windows Subsystem for Linux) is required before OpenCode can add a WSL server",
+  "wsl.onboarding.wslUnavailable.title": "WSL unavailable",
+  "wsl.onboarding.wslUnavailable.description": "OpenCode could not verify WSL on this machine.",
   "wsl.onboarding.installWsl": "Install WSL",
   "wsl.onboarding.windowsRestartRequired": "Restart Windows to finish installing WSL, then reopen OpenCode.",
   "wsl.onboarding.next": "Next",
