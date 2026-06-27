@@ -8,6 +8,7 @@
 [data-component="dialog-v2"].settings-v2-wsl-dialog [data-slot="dialog-content"] {
   align-items: stretch;
   width: 100%;
+  overflow: hidden;
 }
 
 [data-component="dialog-v2"].settings-v2-wsl-dialog [data-slot="dialog-header"] {
@@ -379,6 +380,9 @@
 }
 
 .settings-v2-wsl-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   padding: 48px 24px;
   font-size: 13px;
   font-weight: 440;

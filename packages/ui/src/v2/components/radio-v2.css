@@ -45,6 +45,7 @@
 }
 
 [data-slot="radio-v2-item"] {
+  position: relative;
   display: flex;
   flex-direction: row;
   align-items: flex-start;

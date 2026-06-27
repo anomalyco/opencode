@@ -1,9 +1,9 @@
 import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { Spinner } from "@opencode-ai/ui/spinner"
 import { showToast } from "@opencode-ai/ui/toast"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { Dialog, DialogBody, DialogFooter, DialogHeader, DialogTitle } from "@opencode-ai/ui/v2/dialog-v2"
 import { DividerV2 } from "@opencode-ai/ui/v2/divider-v2"
+import { LoaderV2 } from "@opencode-ai/ui/v2/loader-v2"
 import { RadioGroupV2, RadioItemV2 } from "@opencode-ai/ui/v2/radio-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import fuzzysort from "fuzzysort"
@@ -165,6 +165,7 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
         disabled: true,
         action: null,
         loading: probingSelected,
+        width: null,
       }
     }
 
@@ -180,6 +181,7 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
         disabled: busy(),
         action: "install-opencode" as const,
         loading: installingOpencode,
+        width: update ? "138px" : "129px",
       }
     }
 
@@ -189,6 +191,7 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
       disabled: store.adding || (!!job && job.kind !== "probe-opencode" && job.kind !== "probe-distro"),
       action: "add" as const,
       loading: store.adding,
+      width: null,
     }
   })
 
@@ -372,7 +375,9 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
             when={!wslServers.isError}
             fallback={<div class="settings-v2-wsl-loading">{loadError()}</div>}
           >
-            <div class="settings-v2-wsl-loading">{language.t("wsl.onboarding.loading")}</div>
+            <div class="settings-v2-wsl-loading">
+              <LoaderV2 />
+            </div>
           </Show>
         </Dialog>
       }
@@ -393,7 +398,9 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
             }
           >
             <Dialog fit class="settings-v2-wsl-dialog">
-              <div class="settings-v2-wsl-loading">{language.t("wsl.onboarding.checkingRuntime")}</div>
+              <div class="settings-v2-wsl-loading">
+                <LoaderV2 />
+              </div>
             </Dialog>
           </Show>
         }
@@ -447,16 +454,14 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
                     {language.t("common.cancel")}
                   </ButtonV2>
                   <ButtonV2
-                    variant="contrast"
-                    disabled={busy() || !catalogTarget()}
+                    variant={installingCatalogDistro() ? "loading" : "contrast"}
+                    disabled={!installingCatalogDistro() && (busy() || !catalogTarget())}
+                    style={{ width: "99px" }}
                     onClick={installCatalogDistro}
                   >
-                    <Show when={installingCatalogDistro()}>
-                      <Spinner class="size-4 shrink-0" />
+                    <Show when={installingCatalogDistro()} fallback={language.t("wsl.onboarding.installDistro")}>
+                      <LoaderV2 />
                     </Show>
-                    {installingCatalogDistro()
-                      ? language.t("wsl.onboarding.installing")
-                      : language.t("wsl.onboarding.installDistro")}
                   </ButtonV2>
                 </DialogFooter>
               </>
@@ -552,14 +557,14 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
                 {language.t("common.cancel")}
               </ButtonV2>
               <ButtonV2
-                variant={primaryButton().variant}
-                disabled={primaryButton().disabled}
+                variant={primaryButton().loading ? "loading" : primaryButton().variant}
+                disabled={!primaryButton().loading && primaryButton().disabled}
+                style={primaryButton().width ? { width: primaryButton().width! } : undefined}
                 onClick={() => void runPrimary()}
               >
-                <Show when={primaryButton().loading}>
-                  <Spinner class="size-4 shrink-0" />
+                <Show when={primaryButton().loading} fallback={primaryButton().label}>
+                  <LoaderV2 />
                 </Show>
-                {primaryButton().label}
               </ButtonV2>
             </DialogFooter>
           </Show>
