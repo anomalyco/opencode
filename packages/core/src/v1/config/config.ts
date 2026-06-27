@@ -163,6 +163,14 @@ export const Info = Schema.Struct({
       }),
     }),
   ),
+  retry: Schema.optional(
+    Schema.Struct({
+      max_delay_ms: Schema.optional(PositiveInt).annotate({
+        description:
+          "Maximum retry delay in milliseconds when a provider returns retryable errors. When omitted, retries fall back to the runtime timer limit (2147483647 ms).",
+      }),
+    }),
+  ).annotate({ description: "Retry behavior configuration" }),
   experimental: Schema.optional(
     Schema.Struct({
       disable_paste_summary: Schema.optional(Schema.Boolean),

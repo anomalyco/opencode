@@ -28,11 +28,12 @@ export const RETRY_BACKOFF_FACTOR = 2
 export const RETRY_MAX_DELAY_NO_HEADERS = 30_000 // 30 seconds
 export const RETRY_MAX_DELAY = 2_147_483_647 // max 32-bit signed integer for setTimeout
 
-function cap(ms: number) {
-  return Math.min(ms, RETRY_MAX_DELAY)
+function cap(ms: number, maxDelayMs = RETRY_MAX_DELAY) {
+  return Math.min(ms, maxDelayMs)
 }
 
-export function delay(attempt: number, error?: SessionV1.APIError) {
+export function delay(attempt: number, error?: SessionV1.APIError, maxDelayMs?: number) {
+  const maxDelay = maxDelayMs ?? RETRY_MAX_DELAY
   if (error) {
     const headers = error.data.responseHeaders
     if (headers) {
@@ -40,7 +41,7 @@ export function delay(attempt: number, error?: SessionV1.APIError) {
       if (retryAfterMs) {
         const parsedMs = Number.parseFloat(retryAfterMs)
         if (!Number.isNaN(parsedMs)) {
-          return cap(parsedMs)
+          return cap(parsedMs, maxDelay)
         }
       }
 
@@ -49,20 +50,23 @@ export function delay(attempt: number, error?: SessionV1.APIError) {
         const parsedSeconds = Number.parseFloat(retryAfter)
         if (!Number.isNaN(parsedSeconds)) {
           // convert seconds to milliseconds
-          return cap(Math.ceil(parsedSeconds * 1000))
+          return cap(Math.ceil(parsedSeconds * 1000), maxDelay)
         }
         // Try parsing as HTTP date format
         const parsed = Date.parse(retryAfter) - Date.now()
         if (!Number.isNaN(parsed) && parsed > 0) {
-          return cap(Math.ceil(parsed))
+          return cap(Math.ceil(parsed), maxDelay)
         }
       }
 
-      return cap(RETRY_INITIAL_DELAY * Math.pow(RETRY_BACKOFF_FACTOR, attempt - 1))
+      return cap(RETRY_INITIAL_DELAY * Math.pow(RETRY_BACKOFF_FACTOR, attempt - 1), maxDelay)
     }
   }
 
-  return cap(Math.min(RETRY_INITIAL_DELAY * Math.pow(RETRY_BACKOFF_FACTOR, attempt - 1), RETRY_MAX_DELAY_NO_HEADERS))
+  return cap(
+    Math.min(RETRY_INITIAL_DELAY * Math.pow(RETRY_BACKOFF_FACTOR, attempt - 1), RETRY_MAX_DELAY_NO_HEADERS),
+    maxDelay,
+  )
 }
 
 export function retryable(error: Err, provider: string) {
@@ -177,6 +181,7 @@ export function policy(opts: {
   provider: string
   parse: (error: unknown) => Err
   set: (input: { attempt: number; message: string; action?: Retryable["action"]; next: number }) => Effect.Effect<void>
+  maxDelayMs?: number
 }) {
   return Schedule.fromStepWithMetadata(
     Effect.succeed((meta: Schedule.InputMetadata<unknown>) => {
@@ -184,7 +189,7 @@ export function policy(opts: {
       const retry = retryable(error, opts.provider)
       if (!retry) return Cause.done(meta.attempt)
       return Effect.gen(function* () {
-        const wait = delay(meta.attempt, SessionV1.APIError.isInstance(error) ? error : undefined)
+        const wait = delay(meta.attempt, SessionV1.APIError.isInstance(error) ? error : undefined, opts.maxDelayMs)
         const now = yield* Clock.currentTimeMillis
         yield* opts.set({
           attempt: meta.attempt,

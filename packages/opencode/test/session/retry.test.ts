@@ -87,6 +87,25 @@ describe("session.retry.delay", () => {
     expect(SessionRetry.delay(1, error)).toBe(SessionRetry.RETRY_MAX_DELAY)
   })
 
+  test("caps header delays to configured max delay", () => {
+    const error = apiError({ "retry-after-ms": "700000" })
+    expect(SessionRetry.delay(1, error, 60000)).toBe(60000)
+
+    const secondsError = apiError({ "retry-after": "120" })
+    expect(SessionRetry.delay(1, secondsError, 60000)).toBe(60000)
+  })
+
+  test("configured max delay also caps exponential fallback without headers", () => {
+    const error = apiError()
+    const delays = Array.from({ length: 10 }, (_, index) => SessionRetry.delay(index + 1, error, 5000))
+    expect(delays).toStrictEqual([2000, 4000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000])
+  })
+
+  test("configured max delay does not raise the default no-headers cap", () => {
+    const error = apiError()
+    expect(SessionRetry.delay(10, error, 60000)).toBe(30000)
+  })
+
   it.instance("policy updates retry status and increments attempts", () =>
     Effect.gen(function* () {
       const sessionID = SessionID.make("session-retry-test")

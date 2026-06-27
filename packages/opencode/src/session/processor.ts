@@ -628,7 +628,9 @@ export const layer = Layer.effect(
           messageID: input.assistantMessage.id,
         })
         ctx.needsCompaction = false
-        ctx.shouldBreak = (yield* config.get()).experimental?.continue_loop_on_deny !== true
+        const cfg = yield* config.get()
+        ctx.shouldBreak = cfg.experimental?.continue_loop_on_deny !== true
+        const retryMaxDelayMs = cfg.retry?.max_delay_ms
 
         return yield* Effect.gen(function* () {
           yield* Effect.gen(function* () {
@@ -659,6 +661,7 @@ export const layer = Layer.effect(
               SessionRetry.policy({
                 provider: input.model.providerID,
                 parse,
+                maxDelayMs: retryMaxDelayMs,
                 set: (info) => {
                   return status.set(ctx.sessionID, {
                     type: "retry",
