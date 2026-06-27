@@ -2,7 +2,8 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { showToast } from "@opencode-ai/ui/toast"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
-import { Dialog, DialogFooter } from "@opencode-ai/ui/v2/dialog-v2"
+import { Dialog, DialogFooter, DialogHeader, DialogTitle } from "@opencode-ai/ui/v2/dialog-v2"
+import { DividerV2 } from "@opencode-ai/ui/v2/divider-v2"
 import { RadioGroupV2, RadioItemV2 } from "@opencode-ai/ui/v2/radio-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import fuzzysort from "fuzzysort"
@@ -390,15 +391,15 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
           </Show>
         }
       >
-        <Dialog
-          title={
-            store.view === "main"
-              ? language.t("wsl.server.add")
-              : language.t("wsl.onboarding.installDistro")
-          }
-          fit
-          class="settings-v2-wsl-dialog"
-        >
+        <Dialog fit class="settings-v2-wsl-dialog">
+          <DialogHeader hideClose={true}>
+            <DialogTitle>
+              {store.view === "main"
+                ? language.t("wsl.server.add")
+                : language.t("wsl.onboarding.installDistro")}
+            </DialogTitle>
+          </DialogHeader>
+          <DividerV2 />
           <Show
             when={store.view === "main"}
             fallback={
