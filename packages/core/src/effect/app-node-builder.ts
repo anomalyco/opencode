@@ -21,4 +21,4 @@ export function build<A, E>(root: LayerNode.Node<A, E, any>, replacements?: read
   return LayerNode.compile(app, replacementMap)
 }
 
-export * as NodeBuild from "./app-node-builder"
+export * as AppNodeBuilder from "./app-node-builder"
