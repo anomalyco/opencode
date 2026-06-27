@@ -48,6 +48,24 @@ describe("HttpApiCodegen.generate", () => {
     )
   })
 
+  test("allows Promise outputs to use an authoritative imported wire type", () => {
+    const contract = compileContract(
+      api(HttpApiEndpoint.get("events", "/event", { success: HttpApiSchema.StreamSse({ data: Schema.Unknown }) })),
+    )
+    const output = emitPromise(contract, {
+      outputTypes: {
+        "session.events": {
+          name: "EventWire",
+          import: 'import type { EventWire } from "./event-wire"',
+        },
+      },
+    })
+    const types = output.files.find((file) => file.path === "types.ts")?.content
+
+    expect(types).toContain('import type { EventWire } from "./event-wire"')
+    expect(types).toContain("export type SessionEventsOutput = EventWire")
+  })
+
   test("emits an Effect client against an imported authoritative API", () => {
     const output = emitEffectImported(
       compileContract(
@@ -395,7 +413,9 @@ describe("HttpApiCodegen.generate", () => {
         api(
           HttpApiEndpoint.get("subscribe", "/event", {
             query: { after: Schema.optional(Schema.Number) },
-            success: HttpApiSchema.StreamSse({ data: Schema.Struct({ type: Schema.String }) }),
+            success: HttpApiSchema.StreamSse({
+              data: Schema.Struct({ type: Schema.String, count: Schema.NumberFromString }),
+            }),
           }),
         ),
       ),
@@ -416,7 +436,7 @@ describe("HttpApiCodegen.generate", () => {
           return new Response(
             new ReadableStream({
               start(controller) {
-                controller.enqueue(encoder.encode('data: {"type":"ready"}\r'))
+                controller.enqueue(encoder.encode('data: {"type":"ready","count":"1"}\r'))
                 controller.enqueue(encoder.encode("\n\r\n"))
                 controller.close()
               },
@@ -430,7 +450,7 @@ describe("HttpApiCodegen.generate", () => {
       expect(requests).toBe(0)
       const received = []
       for await (const event of events) received.push(event)
-      expect(received).toEqual([{ type: "ready" }])
+      expect(received).toEqual([{ type: "ready", count: "1" }])
       expect(requests).toBe(1)
       expect(url).toBe("https://example.com/event?after=2")
     } finally {

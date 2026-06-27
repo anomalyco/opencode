@@ -69,6 +69,7 @@ type Slot = {
 
 const resolveHttpApiStatus = SchemaAST.resolveAt<number>("httpApiStatus")
 const resolveHttpApiEncoding = SchemaAST.resolveAt<HttpApiSchema.Encoding>("~httpApiEncoding")
+const resolveContentSchema = SchemaAST.resolveAt<SchemaAST.AST>("contentSchema")
 const Manifest = Schema.fromJsonString(Schema.Array(Schema.String))
 const manifestName = ".httpapi-codegen.json"
 
@@ -125,9 +126,10 @@ export function compile<Id extends string, Groups extends HttpApiGroup.Any>(
         ...responseSchemas(success.schema, `${name}.success`),
         ...errorSchemas.map((item) => [`${name}.error`, item.schema] as const),
       ]
-      const effectPortable = [params, query, headers, ...payloads, success, ...errorSchemas].every(
-        (item) => item?.effectPortable !== false,
-      )
+      const effectPortable =
+        [params, query, headers, ...payloads, success, ...errorSchemas].every(
+          (item) => item?.effectPortable !== false,
+        ) && streamEffectPortable(success.schema)
       if (effectPortable) {
         for (const [path, schema] of schemaPaths) assertPortable(schema, path, portable)
       }
@@ -228,7 +230,12 @@ export function emitEffectImported(
   }
 }
 
-export function emitPromise(contract: Contract): Output {
+export function emitPromise(
+  contract: Contract,
+  options?: {
+    readonly outputTypes?: Readonly<Record<string, { readonly name: string; readonly import: string }>>
+  },
+): Output {
   const groups = contract.groups
   for (const group of groups) {
     for (const endpoint of group.endpoints) assertPromiseEndpoint(endpoint)
@@ -236,7 +243,7 @@ export function emitPromise(contract: Contract): Output {
   return {
     operations: operations(groups),
     files: [
-      { path: "types.ts", content: renderPromiseTypes(groups) },
+      { path: "types.ts", content: renderPromiseTypes(groups, options?.outputTypes) },
       {
         path: "client-error.ts",
         content: `export type ClientErrorReason = "Transport" | "UnexpectedStatus" | "UnsupportedContentType" | "MalformedResponse"\n\nexport class ClientError extends Error {\n  override readonly name = "ClientError"\n  constructor(readonly reason: ClientErrorReason, options?: ErrorOptions) {\n    super(reason, options)\n  }\n}\n`,
@@ -406,14 +413,17 @@ function renderImportedProjection(groups: ReadonlyArray<Group>, endpoints: Reado
   return { imports: [...new Set(imports)], source }
 }
 
-function renderPromiseTypes(groups: ReadonlyArray<Group>) {
+function renderPromiseTypes(
+  groups: ReadonlyArray<Group>,
+  outputTypes?: Readonly<Record<string, { readonly name: string; readonly import: string }>>,
+) {
   const types = new Map<SchemaAST.AST, string>()
-  const typeOf = (schema: Schema.Top) => {
-    const encoded = Schema.toEncoded(schema)
-    const cached = types.get(encoded.ast)
+  const typeOf = (schema: Schema.Top, decoded = false) => {
+    const projected = decoded ? Schema.toType(schema) : Schema.toEncoded(schema)
+    const cached = types.get(projected.ast)
     if (cached !== undefined) return cached
-    const type = structuralType(encoded)
-    types.set(encoded.ast, type)
+    const type = structuralType(projected)
+    types.set(projected.ast, type)
     return type
   }
   const errors = new Map(
@@ -447,17 +457,19 @@ function renderPromiseTypes(groups: ReadonlyArray<Group>) {
             const schema = schemas[field.source]
             if (schema === undefined)
               throw new GenerationError({ reason: `Missing input schema: ${prefix}.${field.name}` })
-            return `readonly ${JSON.stringify(field.name)}${field.optional ? "?" : ""}: (${typeOf(schema)})[${JSON.stringify(field.name)}]`
+            return `readonly ${JSON.stringify(field.name)}${field.optional ? "?" : ""}: (${typeOf(schema, field.source === "query")})[${JSON.stringify(field.name)}]`
           })
           .join("; ")
         const successSchema = endpoint.successes[0]
-        const success = typeOf(
-          isStreamSchema(successSchema) && successSchema._tag === "StreamSse"
-            ? successSchema.sseMode === "data"
-              ? streamDataSchema(successSchema)
-              : successSchema.events
-            : successSchema,
-        )
+        const success =
+          outputTypes?.[`${group.identifier}.${endpoint.operation.name}`]?.name ??
+          typeOf(
+            isStreamSchema(successSchema) && successSchema._tag === "StreamSse"
+              ? successSchema.sseMode === "data"
+                ? streamEncodedDataSchema(successSchema)
+                : successSchema.events
+              : successSchema,
+          )
         return [
           ...(endpoint.operation.inputMode === "none" ? [] : [`export type ${prefix}Input = { ${input} }`]),
           `export type ${prefix}Output = ${endpoint.unwrapData ? `(${success})["data"]` : success}`,
@@ -468,7 +480,8 @@ function renderPromiseTypes(groups: ReadonlyArray<Group>) {
   const json = operations.includes("JsonValue")
     ? "export type JsonValue = null | boolean | number | string | ReadonlyArray<JsonValue> | { readonly [key: string]: JsonValue }"
     : ""
-  return [json, ...errorTypes, operations].filter(Boolean).join("\n\n")
+  const imports = [...new Set(Object.values(outputTypes ?? {}).map((override) => override.import))]
+  return [...imports, json, ...errorTypes, operations].filter(Boolean).join("\n\n")
 }
 
 function renderPromiseClient(groups: ReadonlyArray<Group>) {
@@ -782,17 +795,6 @@ function responseSchemas(schema: Schema.Top, path: string): Array<readonly [stri
   if (!isStreamSchema(schema)) return [[path, schema]]
   if (schema._tag === "StreamUint8Array") return []
   const value = schema.sseMode === "data" ? streamDataSchema(schema) : schema.events
-  const rebuilt =
-    schema.sseMode === "data"
-      ? HttpApiSchema.StreamSse({ data: value, error: schema.error, contentType: schema.contentType })
-      : HttpApiSchema.StreamSse({
-          events: schema.events,
-          error: schema.error,
-          contentType: schema.contentType,
-        })
-  if (!sameEncoding(schema.events.ast, rebuilt.events.ast)) {
-    throw new GenerationError({ reason: `Unportable schema: ${path}.${schema.sseMode}` })
-  }
   return [
     [`${path}.${schema.sseMode}`, value],
     [`${path}.error`, schema.error],
@@ -964,11 +966,33 @@ function isStreamSchema(schema: Schema.Top): schema is HttpApiSchema.StreamSchem
 }
 
 function streamDataSchema(schema: Extract<HttpApiSchema.StreamSchema, { readonly _tag: "StreamSse" }>) {
-  const ast = Schema.toType(schema.events).ast
+  return Schema.make(streamDataAst(Schema.toType(schema.events).ast))
+}
+
+function streamEncodedDataSchema(schema: Extract<HttpApiSchema.StreamSchema, { readonly _tag: "StreamSse" }>) {
+  const data = streamDataAst(schema.events.ast)
+  const encodedAst = data.encoding?.at(-1)?.to
+  if (encodedAst === undefined) throw new GenerationError({ reason: "Invalid SSE data schema" })
+  const encoded = resolveContentSchema(encodedAst)
+  if (!SchemaAST.isAST(encoded)) throw new GenerationError({ reason: "Invalid SSE data schema" })
+  return Schema.make(encoded)
+}
+
+function streamDataAst(ast: SchemaAST.AST) {
   if (!SchemaAST.isObjects(ast)) throw new GenerationError({ reason: "Invalid SSE data schema" })
   const data = ast.propertySignatures.find((field) => field.name === "data")?.type
   if (data === undefined) throw new GenerationError({ reason: "Invalid SSE data schema" })
-  return Schema.make(data)
+  return data
+}
+
+function streamEffectPortable(schema: Schema.Top) {
+  if (!isStreamSchema(schema) || schema._tag === "StreamUint8Array" || schema.sseMode === "events") return true
+  const rebuilt = HttpApiSchema.StreamSse({
+    data: streamDataSchema(schema),
+    error: schema.error,
+    contentType: schema.contentType,
+  })
+  return sameEncoding(schema.events.ast, rebuilt.events.ast)
 }
 
 function renderGroup(group: Group, groupIndex: number) {

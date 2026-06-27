@@ -196,11 +196,12 @@ export async function handler(
           providerInfo.modifyHeaders(headers, providerInfo.apiKey, stickyId)
           Object.entries(providerInfo.headerModifier ?? {}).forEach(([k, v]) => {
             if (v === "$ip") return headers.set(k, ip)
-            if (v === "$caller") return headers.set(k, `caller:${ip}`)
+            if (v === "$caller") return headers.set(k, stickyId)
             if (v === "$session") return headers.set(k, sessionId)
             if (v === "$model") return headers.set(k, model)
             if (v === "$request") return headers.set(k, requestId)
             if (v === "$project") return headers.set(k, projectId)
+            if (v === "$workspace" && authInfo?.workspaceID) return headers.set(k, authInfo.workspaceID)
             headers.set(k, v)
           })
           headers.delete("host")
@@ -213,6 +214,16 @@ export async function handler(
         })(),
         body: reqBody,
       })
+
+      if (providerInfo.id.startsWith("console.")) {
+        const resEndpointId = res.headers.get("x-opencode-endpoint-id")
+        const resEndpointModelId = res.headers.get("x-opencode-upstream-model-id")
+        if (resEndpointId && resEndpointModelId)
+          logger.metric({
+            provider: resEndpointId,
+            "provider.model": resEndpointModelId,
+          })
+      }
 
       if (res.status !== 200) {
         logger.metric({

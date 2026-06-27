@@ -3,6 +3,7 @@ import type {
   SessionsListOutput,
   SessionsCreateInput,
   SessionsCreateOutput,
+  SessionsActiveOutput,
   SessionsGetInput,
   SessionsGetOutput,
   SessionsSwitchAgentInput,
@@ -23,6 +24,15 @@ import type {
   SessionsCommitOutput,
   SessionsContextInput,
   SessionsContextOutput,
+  SessionsHistoryInput,
+  SessionsHistoryOutput,
+  SessionsEventsInput,
+  SessionsEventsOutput,
+  SessionsInterruptInput,
+  SessionsInterruptOutput,
+  SessionsMessageInput,
+  SessionsMessageOutput,
+  EventsSubscribeOutput,
 } from "./types"
 import { ClientError } from "./client-error"
 
@@ -192,6 +202,17 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ).then((value) => value.data),
+      active: (requestOptions?: RequestOptions) =>
+        request<{ readonly data: SessionsActiveOutput }>(
+          {
+            method: "GET",
+            path: `/api/session/active`,
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
       get: (input: SessionsGetInput, requestOptions?: RequestOptions) =>
         request<{ readonly data: SessionsGetOutput }>(
           {
@@ -306,6 +327,59 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ).then((value) => value.data),
+      history: (input: SessionsHistoryInput, requestOptions?: RequestOptions) =>
+        request<SessionsHistoryOutput>(
+          {
+            method: "GET",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/history`,
+            query: { limit: input.limit, after: input.after },
+            successStatus: 200,
+            declaredStatuses: [404, 400, 401],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      events: (input: SessionsEventsInput, requestOptions?: RequestOptions): AsyncIterable<SessionsEventsOutput> =>
+        sse<SessionsEventsOutput>(
+          {
+            method: "GET",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/event`,
+            query: { after: input.after },
+            successStatus: 200,
+            declaredStatuses: [404, 400, 401],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      interrupt: (input: SessionsInterruptInput, requestOptions?: RequestOptions) =>
+        request<SessionsInterruptOutput>(
+          {
+            method: "POST",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/interrupt`,
+            successStatus: 204,
+            declaredStatuses: [404, 400, 401],
+            empty: true,
+          },
+          requestOptions,
+        ),
+      message: (input: SessionsMessageInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: SessionsMessageOutput }>(
+          {
+            method: "GET",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/message/${encodeURIComponent(input.messageID)}`,
+            successStatus: 200,
+            declaredStatuses: [404, 400, 401],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+    },
+    events: {
+      subscribe: (requestOptions?: RequestOptions): AsyncIterable<EventsSubscribeOutput> =>
+        sse<EventsSubscribeOutput>(
+          { method: "GET", path: `/api/event`, successStatus: 200, declaredStatuses: [401, 400], empty: false },
+          requestOptions,
+        ),
     },
   }
 }

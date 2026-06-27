@@ -20,7 +20,7 @@ import { Workspace } from "@opencode-ai/schema/workspace"
 import { Api } from "@opencode-ai/server/api"
 import { compile, emitPromise } from "@opencode-ai/httpapi-codegen"
 import { HttpApi } from "effect/unstable/httpapi"
-import { SessionGroup } from "../src/contract"
+import { EventGroup, SessionGroup } from "../src/contract"
 
 test("Core and Server reuse the authoritative Schema and Protocol values", () => {
   expect(AgentV2.ID).toBe(Agent.ID)
@@ -32,6 +32,7 @@ test("Core and Server reuse the authoritative Schema and Protocol values", () =>
   expect(CorePrompt).toBe(Prompt)
   expect(Api.groups["server.session"].identifier).toBe("server.session")
   expect(SessionGroup.identifier).toBe(Api.groups["server.session"].identifier)
+  expect(EventGroup.identifier).toBe(Api.groups["server.event"].identifier)
   expect(Session.ID.create()).toStartWith("ses_")
   expect(Project.ID.global).toBe("global")
   expect(Provider.ID.anthropic).toBe("anthropic")

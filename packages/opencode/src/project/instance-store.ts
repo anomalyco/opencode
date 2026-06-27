@@ -204,6 +204,10 @@ export const layer: Layer.Layer<Service, never, Project.Service | InstanceBootst
 
 export const defaultLayer = layer.pipe(Layer.provide(Project.defaultLayer))
 
-export const node = LayerNode.make(layer, [Project.node, InstanceBootstrapGraph.node])
+export const node = LayerNode.make({
+  service: Service,
+  layer: layer,
+  deps: [Project.node, InstanceBootstrapGraph.node],
+})
 
 export * as InstanceStore from "./instance-store"

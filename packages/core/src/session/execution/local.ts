@@ -1,5 +1,6 @@
 import { Cause, Effect, Layer } from "effect"
-import { LocationServiceMap } from "../../location-layer"
+import { LocationServiceMap } from "../../location-service-map"
+import { makeGlobalNode } from "../../effect/node"
 import { SessionRunCoordinator } from "../run-coordinator"
 import { SessionRunner } from "../runner"
 import { SessionSchema } from "../schema"
@@ -11,7 +12,7 @@ export const layer = Layer.effect(
   SessionExecution.Service,
   Effect.gen(function* () {
     const store = yield* SessionStore.Service
-    const locations = yield* LocationServiceMap
+    const locations = yield* LocationServiceMap.Service
     const coordinator = yield* SessionRunCoordinator.make<SessionSchema.ID, SessionRunner.RunError>({
       drain: Effect.fnUntraced(function* (sessionID: SessionSchema.ID, force) {
         const session = yield* store.get(sessionID)
@@ -28,6 +29,7 @@ export const layer = Layer.effect(
     })
 
     return SessionExecution.Service.of({
+      active: coordinator.active,
       interrupt: coordinator.interrupt,
       resume: coordinator.run,
       wake: coordinator.wake,
@@ -36,3 +38,11 @@ export const layer = Layer.effect(
 )
 
 export const defaultLayer = layer.pipe(Layer.provide(SessionStore.defaultLayer))
+
+export const node = makeGlobalNode({
+  service: SessionExecution.Service,
+  layer,
+  deps: [SessionStore.node, LocationServiceMap.node],
+})
+
+export * as SessionExecutionLocal from "./local"

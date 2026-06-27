@@ -40,6 +40,22 @@ describe("AppProcess", () => {
     )
 
     it.effect(
+      "captures stdout and stderr in emission order",
+      Effect.gen(function* () {
+        const svc = yield* AppProcess.Service
+        const script = [
+          'process.stdout.write("out 1\\n")',
+          'setTimeout(() => process.stderr.write("err 1\\n"), 10)',
+          'setTimeout(() => process.stdout.write("out 2\\n"), 20)',
+        ].join(";")
+        const result = yield* svc.run(cmd("-e", script), { combineOutput: true })
+        expect(result.output?.toString("utf8")).toBe("out 1\nerr 1\nout 2\n")
+        expect(result.stdout.toString("utf8")).toBe("")
+        expect(result.stderr.toString("utf8")).toBe("")
+      }),
+    )
+
+    it.effect(
       "non-zero exit returns RunResult; caller can require success",
       Effect.gen(function* () {
         const svc = yield* AppProcess.Service

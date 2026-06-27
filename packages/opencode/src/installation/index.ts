@@ -332,6 +332,6 @@ export const latest = (...args: Parameters<Interface["latest"]>) => runPromise((
 export const method = () => runPromise((s) => s.method())
 export const upgrade = (...args: Parameters<Interface["upgrade"]>) => runPromise((s) => s.upgrade(...args))
 
-export const node = LayerNode.make(layer, [httpClient, AppProcess.node])
+export const node = LayerNode.make({ service: Service, layer: layer, deps: [httpClient, AppProcess.node] })
 
 export * as Installation from "."

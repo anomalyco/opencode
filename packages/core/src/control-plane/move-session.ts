@@ -6,9 +6,9 @@ import { Git } from "../git"
 import { Location } from "../location"
 import { ProjectV2 } from "../project"
 import { SessionV2 } from "../session"
-import { SessionExecution } from "../session/execution"
 import { SessionEvent } from "../session/event"
 import { SessionSchema } from "../session/schema"
+import { SessionStore } from "../session/store"
 import { AbsolutePath, RelativePath } from "../schema"
 import path from "path"
 
@@ -71,10 +71,11 @@ export const layer = Layer.effect(
     const git = yield* Git.Service
     const events = yield* EventV2.Service
     const project = yield* ProjectV2.Service
-    const session = yield* SessionV2.Service
+    const sessions = yield* SessionStore.Service
 
     const moveSession = Effect.fn("MoveSession.moveSession")(function* (input: Input) {
-      const current = yield* session.get(input.sessionID)
+      const current = yield* sessions.get(input.sessionID)
+      if (!current) return yield* new SessionV2.NotFoundError({ sessionID: input.sessionID })
       const directory = AbsolutePath.make(input.destination.directory)
       if (current.location.directory === directory) return
 
@@ -143,6 +144,5 @@ export const defaultLayer = layer.pipe(
   Layer.provide(Git.defaultLayer),
   Layer.provide(EventV2.defaultLayer),
   Layer.provide(ProjectV2.defaultLayer),
-  Layer.provide(SessionExecution.noopLayer),
-  Layer.provide(SessionV2.defaultLayer),
+  Layer.provide(SessionStore.defaultLayer),
 )

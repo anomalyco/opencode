@@ -7,8 +7,8 @@ import { WorkspaceID } from "./workspace-id"
 export const ConnectionStatus = Schema.Struct({
   workspaceID: WorkspaceID,
   status: Schema.Literals(["connected", "connecting", "disconnected", "error"]),
-})
-export type ConnectionStatus = typeof ConnectionStatus.Type
+}).annotate({ identifier: "WorkspaceEvent.ConnectionStatus" })
+export interface ConnectionStatus extends Schema.Schema.Type<typeof ConnectionStatus> {}
 
 export const Ready = Event.define({
   type: "workspace.ready",
