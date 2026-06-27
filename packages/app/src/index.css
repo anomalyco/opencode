@@ -124,25 +124,25 @@
     top: 100%;
     left: 0;
     width: 100%;
-    height: 12px;
+    height: 16px;
     pointer-events: none;
     background: linear-gradient(
       180deg,
       var(--v2-background-bg-base) 0%,
-      color-mix(in srgb, var(--v2-background-bg-base) 96.4148%, transparent) 16.11%,
-      color-mix(in srgb, var(--v2-background-bg-base) 91.509%, transparent) 30.26%,
-      color-mix(in srgb, var(--v2-background-bg-base) 85.4857%, transparent) 42.58%,
-      color-mix(in srgb, var(--v2-background-bg-base) 78.5481%, transparent) 53.21%,
-      color-mix(in srgb, var(--v2-background-bg-base) 70.8995%, transparent) 62.31%,
-      color-mix(in srgb, var(--v2-background-bg-base) 62.7429%, transparent) 70.01%,
-      color-mix(in srgb, var(--v2-background-bg-base) 54.2815%, transparent) 76.46%,
-      color-mix(in srgb, var(--v2-background-bg-base) 45.7185%, transparent) 81.8%,
-      color-mix(in srgb, var(--v2-background-bg-base) 37.2571%, transparent) 86.16%,
-      color-mix(in srgb, var(--v2-background-bg-base) 29.1005%, transparent) 89.7%,
-      color-mix(in srgb, var(--v2-background-bg-base) 21.4519%, transparent) 92.56%,
-      color-mix(in srgb, var(--v2-background-bg-base) 14.5143%, transparent) 94.87%,
-      color-mix(in srgb, var(--v2-background-bg-base) 8.49101%, transparent) 96.79%,
-      color-mix(in srgb, var(--v2-background-bg-base) 3.58519%, transparent) 98.45%,
+      color-mix(in srgb, var(--v2-background-bg-base) 92.0456%, transparent) 7.93%,
+      color-mix(in srgb, var(--v2-background-bg-base) 84.9947%, transparent) 14.14%,
+      color-mix(in srgb, var(--v2-background-bg-base) 78.6813%, transparent) 19%,
+      color-mix(in srgb, var(--v2-background-bg-base) 72.9394%, transparent) 22.85%,
+      color-mix(in srgb, var(--v2-background-bg-base) 67.6028%, transparent) 26.05%,
+      color-mix(in srgb, var(--v2-background-bg-base) 62.5055%, transparent) 28.95%,
+      color-mix(in srgb, var(--v2-background-bg-base) 57.4815%, transparent) 31.91%,
+      color-mix(in srgb, var(--v2-background-bg-base) 52.3647%, transparent) 35.27%,
+      color-mix(in srgb, var(--v2-background-bg-base) 46.989%, transparent) 39.4%,
+      color-mix(in srgb, var(--v2-background-bg-base) 41.1884%, transparent) 44.65%,
+      color-mix(in srgb, var(--v2-background-bg-base) 34.7969%, transparent) 51.36%,
+      color-mix(in srgb, var(--v2-background-bg-base) 27.6484%, transparent) 59.9%,
+      color-mix(in srgb, var(--v2-background-bg-base) 19.5767%, transparent) 70.62%,
+      color-mix(in srgb, var(--v2-background-bg-base) 10.416%, transparent) 83.87%,
       transparent 100%
     );
   }
