@@ -613,7 +613,6 @@
         "@opentui/solid": "catalog:",
         "@parcel/watcher": "2.5.1",
         "@pierre/diffs": "catalog:",
-        "@romanilyin/canonicalpath": "2026.6.19-1",
         "@silvia-odwyer/photon-node": "0.3.4",
         "@solid-primitives/event-bus": "1.1.2",
         "@solid-primitives/scheduled": "1.5.2",
@@ -783,6 +782,7 @@
       "dependencies": {
         "@opencode-ai/core": "workspace:*",
         "@opencode-ai/protocol": "workspace:*",
+        "@romanilyin/canonicalpath": "2026.6.19-1",
         "drizzle-orm": "catalog:",
         "effect": "catalog:",
       },

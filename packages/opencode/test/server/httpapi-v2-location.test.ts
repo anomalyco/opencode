@@ -105,6 +105,35 @@ describe("v2 location HttpApi", () => {
     }
   })
 
+  test("rejects foreign location directory query hints before v2 location lookup", async () => {
+    if (process.platform === "win32") return
+
+    const response = await request(
+      `/api/fs/find?location[directory]=${encodeURIComponent("C:\\Work\\Repo")}&query=package`,
+      process.cwd(),
+    )
+
+    expect(response.status).toBe(400)
+    expect(await response.json()).toMatchObject({
+      _tag: "InvalidRequestError",
+      kind: "Query",
+      field: "location[directory]",
+    })
+  })
+
+  test("rejects encoded foreign directory headers before v2 location lookup", async () => {
+    if (process.platform === "win32") return
+
+    const response = await request("/api/fs/find?query=package", encodeURIComponent("C:\\Work\\Repo"))
+
+    expect(response.status).toBe(400)
+    expect(await response.json()).toMatchObject({
+      _tag: "InvalidRequestError",
+      kind: "Header",
+      field: "location[directory]",
+    })
+  })
+
   test("streams native EventV2 payloads across locations", async () => {
     await using subscriber = await tmpdir({ git: true })
     await using publisher = await tmpdir({ git: true })
