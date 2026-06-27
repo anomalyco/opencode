@@ -108,6 +108,45 @@
     }
   }
 
+  .home-session-header-new::before {
+    content: "";
+    position: absolute;
+    top: -12px;
+    left: 0;
+    width: 100%;
+    height: 12px;
+    background: var(--v2-background-bg-base);
+  }
+
+  .home-session-header-new::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    left: 0;
+    width: 100%;
+    height: 12px;
+    pointer-events: none;
+    background: linear-gradient(
+      180deg,
+      var(--v2-background-bg-base) 0%,
+      color-mix(in srgb, var(--v2-background-bg-base) 96.4148%, transparent) 16.11%,
+      color-mix(in srgb, var(--v2-background-bg-base) 91.509%, transparent) 30.26%,
+      color-mix(in srgb, var(--v2-background-bg-base) 85.4857%, transparent) 42.58%,
+      color-mix(in srgb, var(--v2-background-bg-base) 78.5481%, transparent) 53.21%,
+      color-mix(in srgb, var(--v2-background-bg-base) 70.8995%, transparent) 62.31%,
+      color-mix(in srgb, var(--v2-background-bg-base) 62.7429%, transparent) 70.01%,
+      color-mix(in srgb, var(--v2-background-bg-base) 54.2815%, transparent) 76.46%,
+      color-mix(in srgb, var(--v2-background-bg-base) 45.7185%, transparent) 81.8%,
+      color-mix(in srgb, var(--v2-background-bg-base) 37.2571%, transparent) 86.16%,
+      color-mix(in srgb, var(--v2-background-bg-base) 29.1005%, transparent) 89.7%,
+      color-mix(in srgb, var(--v2-background-bg-base) 21.4519%, transparent) 92.56%,
+      color-mix(in srgb, var(--v2-background-bg-base) 14.5143%, transparent) 94.87%,
+      color-mix(in srgb, var(--v2-background-bg-base) 8.49101%, transparent) 96.79%,
+      color-mix(in srgb, var(--v2-background-bg-base) 3.58519%, transparent) 98.45%,
+      transparent 100%
+    );
+  }
+
   [data-slot="titlebar-update-loader"] {
     display: block;
     flex-shrink: 0;
