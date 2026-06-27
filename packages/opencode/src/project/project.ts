@@ -1,5 +1,5 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { and, eq, sql } from "drizzle-orm"
+import { and, eq, ne, sql } from "drizzle-orm"
 import { Database } from "@opencode-ai/core/database/database"
 import { ProjectDirectoryTable, ProjectTable } from "@opencode-ai/core/project/sql"
 import { ProjectDirectories } from "@opencode-ai/core/project/directories"
@@ -219,6 +219,13 @@ export const layer = Layer.effect(
       // Phase 2: upsert
       const projectID = ProjectV2.ID.make(data.id)
       yield* migrateProjectId(data.previous ? ProjectV2.ID.make(data.previous) : undefined, projectID)
+      const legacy = yield* db
+        .select({ id: ProjectTable.id })
+        .from(ProjectTable)
+        .where(and(eq(ProjectTable.worktree, AbsolutePath.make(worktree)), ne(ProjectTable.id, projectID)))
+        .all()
+        .pipe(Effect.orDie)
+      for (const item of legacy) yield* migrateProjectId(ProjectV2.ID.make(item.id), projectID)
       const row = yield* db.select().from(ProjectTable).where(eq(ProjectTable.id, projectID)).get().pipe(Effect.orDie)
       const existing = row
         ? fromRow(row)
