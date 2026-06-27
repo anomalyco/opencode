@@ -144,11 +144,18 @@ export const layer = Layer.effect(
     const isQuestionRejected = (cause: Cause.Cause<unknown>) =>
       cause.reasons.some((reason) => Cause.isDieReason(reason) && reason.defect instanceof QuestionV2.RejectedError)
 
+    type OverflowRecoveryError = ProviderErrorEvent | LLMError
+    type OverflowRecoveryGuard = {
+      readonly error: OverflowRecoveryError
+      readonly beforeTokens: number
+      readonly budget: number
+    }
+
     type TurnTransition =
       // Automatic compaction completed; rebuild the request from compacted history.
       | { readonly _tag: "ContinueAfterCompaction"; readonly step: number }
       // Overflow compaction completed; rebuild once through the path without overflow recovery.
-      | { readonly _tag: "ContinueAfterOverflowCompaction"; readonly step: number }
+      | { readonly _tag: "ContinueAfterOverflowCompaction"; readonly step: number; readonly guard: OverflowRecoveryGuard }
 
     class TurnTransitionError extends Error {
       constructor(readonly transition: TurnTransition) {
@@ -157,8 +164,8 @@ export const layer = Layer.effect(
     }
 
     const continueAfterCompaction = (step: number) => new TurnTransitionError({ _tag: "ContinueAfterCompaction", step })
-    const continueAfterOverflowCompaction = (step: number) =>
-      new TurnTransitionError({ _tag: "ContinueAfterOverflowCompaction", step })
+    const continueAfterOverflowCompaction = (step: number, guard: OverflowRecoveryGuard) =>
+      new TurnTransitionError({ _tag: "ContinueAfterOverflowCompaction", step, guard })
 
     const loadSystemContext = (agent: AgentV2.Selection) =>
       Effect.all([systemContext.load(), skillGuidance.load(agent), referenceGuidance.load()], {
@@ -170,6 +177,7 @@ export const layer = Layer.effect(
       promotion: SessionInput.Delivery | undefined,
       step: number,
       recoverOverflow?: typeof compaction.compactAfterOverflow,
+      overflowGuard?: OverflowRecoveryGuard,
     ) {
       const session = yield* getSession(sessionID)
       if (session.location.directory !== location.directory || session.location.workspaceID !== location.workspaceID)
@@ -207,22 +215,43 @@ export const layer = Layer.effect(
         tools: toolMaterialization?.definitions ?? [],
         toolChoice: isLastStep ? "none" : undefined,
       })
+      const makePublisher = Effect.fnUntraced(function* () {
+        const startSnapshot = yield* snapshots.capture()
+        const publisher = createLLMEventPublisher(events, {
+          sessionID: session.id,
+          agent: agent.id,
+          model: {
+            id: ModelV2.ID.make(model.id),
+            providerID: ProviderV2.ID.make(model.provider),
+            ...(session.model?.variant === undefined ? {} : { variant: session.model.variant }),
+          },
+          snapshot: startSnapshot,
+        })
+        const withPublication = Semaphore.makeUnsafe(1).withPermit
+        const publish = (event: LLMEvent, outputPaths: ReadonlyArray<string> = []) =>
+          withPublication(publisher.publish(event, outputPaths))
+        return { startSnapshot, publisher, withPublication, publish }
+      })
+      if (overflowGuard) {
+        const afterTokens = SessionCompaction.estimateRequest(request)
+        if (afterTokens >= overflowGuard.beforeTokens || afterTokens > overflowGuard.budget) {
+          const { publisher, withPublication, publish } = yield* makePublisher()
+          if (overflowGuard.error instanceof LLMError) {
+            yield* withPublication(publisher.failUnsettledTools("Provider did not return a tool result", true))
+            yield* withPublication(publisher.failAssistant(overflowGuard.error.reason.message))
+            yield* withPublication(publisher.flush())
+            return yield* Effect.fail(overflowGuard.error)
+          } else {
+            yield* publish(overflowGuard.error)
+            yield* withPublication(publisher.failUnsettledTools("Tool execution interrupted"))
+          }
+          yield* withPublication(publisher.flush())
+          return { needsContinuation: false, step: currentStep }
+        }
+      }
       if (yield* compaction.compactIfNeeded({ sessionID: session.id, entries, model, request }))
         return yield* Effect.die(continueAfterCompaction(currentStep))
-      const startSnapshot = yield* snapshots.capture()
-      const publisher = createLLMEventPublisher(events, {
-        sessionID: session.id,
-        agent: agent.id,
-        model: {
-          id: ModelV2.ID.make(model.id),
-          providerID: ProviderV2.ID.make(model.provider),
-          ...(session.model?.variant === undefined ? {} : { variant: session.model.variant }),
-        },
-        snapshot: startSnapshot,
-      })
-      const withPublication = Semaphore.makeUnsafe(1).withPermit
-      const publish = (event: LLMEvent, outputPaths: ReadonlyArray<string> = []) =>
-        withPublication(publisher.publish(event, outputPaths))
+      const { startSnapshot, publisher, withPublication, publish } = yield* makePublisher()
       let overflowFailure: ProviderErrorEvent | undefined
       const providerStream = llm.stream(request).pipe(
         Stream.runForEach((event) =>
@@ -277,10 +306,19 @@ export const layer = Layer.effect(
           if (
             recoverOverflow &&
             !publisher.hasAssistantStarted() &&
-            isContextOverflowFailure(overflowFailure ?? failure) &&
-            (yield* restore(recoverOverflow({ sessionID: session.id, entries, model, request })))
-          )
-            return yield* Effect.die(continueAfterOverflowCompaction(currentStep))
+            isContextOverflowFailure(overflowFailure ?? failure)
+          ) {
+            const recovery = yield* restore(recoverOverflow({ sessionID: session.id, entries, model, request }))
+            const overflowError = overflowFailure ?? failure
+            if (recovery.compacted && (overflowError instanceof LLMError || LLMEvent.is.providerError(overflowError)))
+              return yield* Effect.die(
+                continueAfterOverflowCompaction(currentStep, {
+                  error: overflowError,
+                  beforeTokens: recovery.beforeTokens,
+                  budget: recovery.budget,
+                }),
+              )
+          }
           if (overflowFailure) yield* publish(overflowFailure)
           const llmFailure = failure instanceof LLMError ? failure : undefined
           if (llmFailure && !publisher.hasProviderError()) {
@@ -346,16 +384,27 @@ export const layer = Layer.effect(
       promotion: SessionInput.Delivery | undefined,
       step: number,
     ) => Effect.Effect<{ readonly needsContinuation: boolean; readonly step: number }, RunError>
+    type RunTurnAfterOverflow = (
+      sessionID: SessionSchema.ID,
+      promotion: SessionInput.Delivery | undefined,
+      step: number,
+      overflowGuard: OverflowRecoveryGuard,
+    ) => Effect.Effect<{ readonly needsContinuation: boolean; readonly step: number }, RunError>
 
-    const runAfterOverflowCompaction: RunTurn = Effect.fnUntraced(function* (sessionID, promotion, step) {
-      return yield* runTurnAttempt(sessionID, promotion, step).pipe(
+    const runAfterOverflowCompaction: RunTurnAfterOverflow = Effect.fnUntraced(function* (
+      sessionID: SessionSchema.ID,
+      promotion: SessionInput.Delivery | undefined,
+      step: number,
+      overflowGuard: OverflowRecoveryGuard,
+    ) {
+      return yield* runTurnAttempt(sessionID, promotion, step, undefined, overflowGuard).pipe(
         Effect.catchDefect(
           Effect.fnUntraced(function* (defect) {
             if (!(defect instanceof TurnTransitionError)) return yield* Effect.die(defect)
             if (defect.transition._tag === "ContinueAfterOverflowCompaction")
               return yield* Effect.die("Post-compaction provider attempt cannot recover another overflow")
             yield* Effect.yieldNow
-            return yield* runAfterOverflowCompaction(sessionID, undefined, defect.transition.step)
+            return yield* runAfterOverflowCompaction(sessionID, undefined, defect.transition.step, overflowGuard)
           }),
         ),
       )
@@ -368,7 +417,12 @@ export const layer = Layer.effect(
             if (!(defect instanceof TurnTransitionError)) return yield* Effect.die(defect)
             yield* Effect.yieldNow
             if (defect.transition._tag === "ContinueAfterOverflowCompaction")
-              return yield* runAfterOverflowCompaction(sessionID, undefined, defect.transition.step)
+              return yield* runAfterOverflowCompaction(
+                sessionID,
+                undefined,
+                defect.transition.step,
+                defect.transition.guard,
+              )
             return yield* runTurn(sessionID, undefined, defect.transition.step)
           }),
         ),

@@ -77,6 +77,14 @@ type Input = {
 }
 
 const estimate = (value: unknown) => Token.estimate(JSON.stringify(value))
+export const estimateRequest = (request: LLMRequest) =>
+  estimate({ system: request.system, messages: request.messages, tools: request.tools })
+
+export type OverflowCompactionResult =
+  | { readonly compacted: false }
+  | { readonly compacted: true; readonly beforeTokens: number; readonly budget: number }
+
+const notCompacted: OverflowCompactionResult = { compacted: false }
 
 const truncate = (value: string) =>
   value.length <= TOOL_OUTPUT_MAX_CHARS ? value : `${value.slice(0, TOOL_OUTPUT_MAX_CHARS)}\n[truncated]`
@@ -174,19 +182,27 @@ export const buildPrompt = (input: { readonly previousSummary?: string; readonly
 
 export const make = (dependencies: Dependencies) => {
   const config = settings(dependencies.config)
+  const budget = (input: Input) => {
+    const context = input.model.route.defaults.limits?.context
+    if (context === undefined || context <= 0) return
+    const output = input.request.generation?.maxTokens ?? input.model.route.defaults.limits?.output ?? 0
+    return context - Math.max(output, config.buffer)
+  }
   const compactAfterOverflow = Effect.fn("SessionCompaction.compactAfterOverflow")(function* (input: Input) {
     const context = input.model.route.defaults.limits?.context
-    if (context === undefined || context <= 0) return false
+    const requestBudget = budget(input)
+    if (context === undefined || context <= 0 || requestBudget === undefined) return notCompacted
     const output = input.request.generation?.maxTokens ?? input.model.route.defaults.limits?.output ?? 0
+    const beforeTokens = estimateRequest(input.request)
     const selected = select(input.entries, config.tokens)
     const previousSummary = input.entries.find((entry) => entry.message.type === "compaction")?.message
-    if (!selected || (selected.head.length === 0 && previousSummary?.type !== "compaction")) return false
+    if (!selected || (selected.head.length === 0 && previousSummary?.type !== "compaction")) return notCompacted
     const summaryPrompt = buildPrompt({
       previousSummary: previousSummary?.type === "compaction" ? previousSummary.summary : undefined,
       context: [previousSummary?.type === "compaction" ? previousSummary.recent : "", selected.head].filter(Boolean),
     })
     const summaryOutput = Math.min(output || SUMMARY_OUTPUT_TOKENS, SUMMARY_OUTPUT_TOKENS)
-    if (Token.estimate(summaryPrompt) > context - summaryOutput) return false
+    if (Token.estimate(summaryPrompt) > context - summaryOutput) return notCompacted
     const messageID = SessionMessage.ID.create()
     yield* dependencies.events.publish(SessionEvent.Compaction.Started, {
       sessionID: input.sessionID,
@@ -216,7 +232,7 @@ export const make = (dependencies: Dependencies) => {
         Effect.catchTag("LLM.Error", () => Effect.succeed(false)),
       )
     const summary = chunks.join("")
-    if (!summarized || failed || !summary.trim()) return false
+    if (!summarized || failed || !summary.trim()) return notCompacted
     yield* dependencies.events.publish(SessionEvent.Compaction.Ended, {
       sessionID: input.sessionID,
       messageID,
@@ -225,19 +241,15 @@ export const make = (dependencies: Dependencies) => {
       text: summary,
       recent: selected.recent,
     })
-    return true
+    const result: OverflowCompactionResult = { compacted: true, beforeTokens, budget: requestBudget }
+    return result
   })
   const compactIfNeeded = Effect.fn("SessionCompaction.compactIfNeeded")(function* (input: Input) {
     if (!config.auto) return false
-    const context = input.model.route.defaults.limits?.context
-    if (context === undefined || context <= 0) return false
-    const output = input.request.generation?.maxTokens ?? input.model.route.defaults.limits?.output ?? 0
-    if (
-      estimate({ system: input.request.system, messages: input.request.messages, tools: input.request.tools }) <=
-      context - Math.max(output, config.buffer)
-    )
-      return false
-    return yield* compactAfterOverflow(input)
+    const requestBudget = budget(input)
+    if (requestBudget === undefined) return false
+    if (estimateRequest(input.request) <= requestBudget) return false
+    return (yield* compactAfterOverflow(input)).compacted
   })
   return {
     compactIfNeeded,

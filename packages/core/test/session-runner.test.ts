@@ -53,6 +53,7 @@ import { ReferenceGuidance } from "@opencode-ai/core/reference/guidance"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { Location } from "@opencode-ai/core/location"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { Token } from "@opencode-ai/core/util/token"
 import { Cause, DateTime, Deferred, Effect, Exit, Fiber, Layer, Schema, Stream } from "effect"
 import { asc, eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
@@ -106,6 +107,16 @@ const recoveryModel = Model.make({
   id: "recovery",
   provider: "fake",
   route: OpenAIChat.route.with({ limits: { context: 20_000, output: 1_000 } }),
+})
+const wideRecoveryModel = Model.make({
+  id: "wide-recovery",
+  provider: "fake",
+  route: OpenAIChat.route.with({ limits: { context: 100_000, output: 1_000 } }),
+})
+const narrowBudgetRecoveryModel = Model.make({
+  id: "narrow-budget-recovery",
+  provider: "fake",
+  route: OpenAIChat.route.with({ limits: { context: 50_000, output: 47_000 } }),
 })
 const authorizations: Tool.Context[] = []
 const executions: string[] = []
@@ -214,61 +225,74 @@ const skillGuidance = Layer.mock(SkillGuidance.Service, {
     ),
 })
 const referenceGuidance = Layer.mock(ReferenceGuidance.Service, { load: () => Effect.succeed(SystemContext.empty) })
-const config = Layer.succeed(
-  Config.Service,
-  Config.Service.of({
-    entries: () =>
-      Effect.succeed([
-        new Config.Document({
-          type: "document",
-          info: new Config.Info({
-            compaction: new ConfigCompaction.Info({
-              buffer: 3_000,
-              keep: new ConfigCompaction.Keep({ tokens: 1_000 }),
+const configLayer = (auto?: boolean) =>
+  Layer.succeed(
+    Config.Service,
+    Config.Service.of({
+      entries: () =>
+        Effect.succeed([
+          new Config.Document({
+            type: "document",
+            info: new Config.Info({
+              compaction: new ConfigCompaction.Info({
+                ...(auto === undefined ? {} : { auto }),
+                buffer: 3_000,
+                keep: new ConfigCompaction.Keep({ tokens: 1_000 }),
+              }),
             }),
           }),
-        }),
-      ]),
-  }),
-)
-const runner = SessionRunnerLLM.layer.pipe(
-  Layer.provide(Snapshot.noopLayer),
-  Layer.provide(Database.defaultLayer),
-  Layer.provide(SessionStore.defaultLayer),
-  Layer.provide(EventV2.defaultLayer),
-  Layer.provide(client),
-  Layer.provide(registry),
-  Layer.provide(models),
-  Layer.provide(systemContext),
-  Layer.provide(location),
-  Layer.provide(agents),
-  Layer.provide(skillGuidance),
-  Layer.provide(referenceGuidance),
-  Layer.provide(config),
-)
-const execution = Layer.effect(
-  SessionExecution.Service,
-  Effect.gen(function* () {
-    const sessionRunner = yield* SessionRunner.Service
-    const coordinator = yield* SessionRunCoordinator.make<SessionV2.ID, SessionRunner.RunError>({
-      drain: (sessionID, force) => sessionRunner.run({ sessionID, force }),
-    })
-    return SessionExecution.Service.of({
-      active: coordinator.active,
-      resume: coordinator.run,
-      wake: coordinator.wake,
-      interrupt: coordinator.interrupt,
-    })
-  }),
-).pipe(Layer.provide(runner))
-const sessions = SessionV2.layer.pipe(
-  Layer.provide(locationServiceMapLayer),
-  Layer.provide(EventV2.defaultLayer),
-  Layer.provide(Database.defaultLayer),
-  Layer.provide(SessionStore.defaultLayer),
-  Layer.provide(Project.defaultLayer),
-  Layer.provide(execution),
-)
+        ]),
+    }),
+  )
+const config = configLayer()
+const configNoAuto = configLayer(false)
+const runnerLayer = (config: typeof configNoAuto) =>
+  SessionRunnerLLM.layer.pipe(
+    Layer.provide(Snapshot.noopLayer),
+    Layer.provide(Database.defaultLayer),
+    Layer.provide(SessionStore.defaultLayer),
+    Layer.provide(EventV2.defaultLayer),
+    Layer.provide(client),
+    Layer.provide(registry),
+    Layer.provide(models),
+    Layer.provide(systemContext),
+    Layer.provide(location),
+    Layer.provide(agents),
+    Layer.provide(skillGuidance),
+    Layer.provide(referenceGuidance),
+    Layer.provide(config),
+  )
+const runner = runnerLayer(config)
+const runnerNoAuto = runnerLayer(configNoAuto)
+const executionLayer = (runner: typeof runnerNoAuto) =>
+  Layer.effect(
+    SessionExecution.Service,
+    Effect.gen(function* () {
+      const sessionRunner = yield* SessionRunner.Service
+      const coordinator = yield* SessionRunCoordinator.make<SessionV2.ID, SessionRunner.RunError>({
+        drain: (sessionID, force) => sessionRunner.run({ sessionID, force }),
+      })
+      return SessionExecution.Service.of({
+        active: coordinator.active,
+        resume: coordinator.run,
+        wake: coordinator.wake,
+        interrupt: coordinator.interrupt,
+      })
+    }),
+  ).pipe(Layer.provide(runner))
+const execution = executionLayer(runner)
+const executionNoAuto = executionLayer(runnerNoAuto)
+const sessionsLayer = (execution: typeof executionNoAuto) =>
+  SessionV2.layer.pipe(
+    Layer.provide(locationServiceMapLayer),
+    Layer.provide(EventV2.defaultLayer),
+    Layer.provide(Database.defaultLayer),
+    Layer.provide(SessionStore.defaultLayer),
+    Layer.provide(Project.defaultLayer),
+    Layer.provide(execution),
+  )
+const sessions = sessionsLayer(execution)
+const sessionsNoAuto = sessionsLayer(executionNoAuto)
 const it = testEffect(
   Layer.mergeAll(
     Database.defaultLayer,
@@ -290,6 +314,29 @@ const it = testEffect(
     runner,
     execution,
     sessions,
+  ),
+)
+const itNoAuto = testEffect(
+  Layer.mergeAll(
+    Database.defaultLayer,
+    EventV2.defaultLayer,
+    questions,
+    SessionProjector.defaultLayer,
+    SessionStore.defaultLayer,
+    client,
+    permission,
+    applications,
+    agents,
+    registry,
+    echo,
+    models,
+    systemContext,
+    location,
+    skillGuidance,
+    configNoAuto,
+    runnerNoAuto,
+    executionNoAuto,
+    sessionsNoAuto,
   ),
 )
 const sessionID = SessionV2.ID.make("ses_runner_test")
@@ -363,6 +410,19 @@ const setupOverflowRecovery = Effect.gen(function* () {
   requests.length = 0
   return session
 })
+const setupLargeOverflowRecovery = Effect.gen(function* () {
+  yield* setup
+  const session = yield* SessionV2.Service
+  response = fragmentFixture("text", "text-earlier", ["Earlier answer"]).completeEvents
+  yield* session.prompt({
+    sessionID,
+    prompt: Prompt.make({ text: "Earlier question ".repeat(5_000) }),
+    resume: false,
+  })
+  yield* session.resume(sessionID)
+  requests.length = 0
+  return session
+})
 
 const messageTexts = (request: LLMRequest, role: "user" | "system") =>
   request.messages.flatMap((message) =>
@@ -370,6 +430,8 @@ const messageTexts = (request: LLMRequest, role: "user" | "system") =>
   )
 const userTexts = (request: LLMRequest) => messageTexts(request, "user")
 const systemTexts = (request: LLMRequest) => messageTexts(request, "system")
+const estimateRequestTokens = (request: LLMRequest) =>
+  Token.estimate(JSON.stringify({ system: request.system, messages: request.messages, tools: request.tools }))
 
 const replaySessionProjection = (id: SessionV2.ID) =>
   Effect.gen(function* () {
@@ -1194,6 +1256,81 @@ describe("SessionRunnerLLM", () => {
       yield* session.resume(sessionID)
 
       expect(requests).toHaveLength(3)
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "compaction" },
+        { type: "assistant", finish: "error", error: { message: "prompt too long" } },
+      ])
+    }),
+  )
+
+  itNoAuto.effect("stops overflow recovery when compacted request remains over budget", () =>
+    Effect.gen(function* () {
+      const session = yield* setupLargeOverflowRecovery
+      currentModel = narrowBudgetRecoveryModel
+      const mediumSummary = `## Goal\n- ${"Recovered context ".repeat(750)}`
+      const summaryTokens = Token.estimate(JSON.stringify(mediumSummary))
+      expect(summaryTokens).toBeGreaterThan(3_000)
+      responses = [
+        [LLMEvent.providerError({ message: "prompt too long", classification: "context-overflow" })],
+        fragmentFixture("text", "text-summary", [mediumSummary]).completeEvents,
+        fragmentFixture("text", "text-final", ["Should not retry"]).completeEvents,
+      ]
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Continue" }), resume: false })
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(2)
+      expect(estimateRequestTokens(requests[0])).toBeGreaterThan(summaryTokens + 10_000)
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "compaction" },
+        { type: "assistant", finish: "error", error: { message: "prompt too long" } },
+      ])
+    }),
+  )
+
+  it.effect("stops overflow recovery when compaction does not reduce request tokens", () =>
+    Effect.gen(function* () {
+      const session = yield* setupOverflowRecovery
+      currentModel = wideRecoveryModel
+      const nonReducingSummary = `## Goal\n- ${"Recovered context ".repeat(5_000)}`
+      const summaryTokens = Token.estimate(JSON.stringify(nonReducingSummary))
+      expect(summaryTokens).toBeLessThan(97_000)
+      responses = [
+        [LLMEvent.providerError({ message: "prompt too long", classification: "context-overflow" })],
+        fragmentFixture("text", "text-summary", [nonReducingSummary]).completeEvents,
+        fragmentFixture("text", "text-final", ["Should not retry"]).completeEvents,
+      ]
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Continue" }), resume: false })
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(2)
+      expect(summaryTokens).toBeGreaterThan(estimateRequestTokens(requests[0]))
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "compaction" },
+        { type: "assistant", finish: "error", error: { message: "prompt too long" } },
+      ])
+    }),
+  )
+
+  itNoAuto.effect("fails raw overflow when budget guard stops recovery", () =>
+    Effect.gen(function* () {
+      const session = yield* setupLargeOverflowRecovery
+      currentModel = narrowBudgetRecoveryModel
+      const failure = new LLMError({
+        module: "test",
+        method: "stream",
+        reason: new InvalidRequestReason({
+          message: "prompt too long",
+          classification: "context-overflow",
+        }),
+      })
+      const mediumSummary = `## Goal\n- ${"Recovered context ".repeat(750)}`
+      responseStream = Stream.fail(failure)
+      responses = [fragmentFixture("text", "text-summary", [mediumSummary]).completeEvents]
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Continue" }), resume: false })
+
+      expect(yield* session.resume(sessionID).pipe(Effect.flip)).toBe(failure)
+      expect(requests).toHaveLength(2)
+      yield* replaySessionProjection(sessionID)
       expect(yield* session.context(sessionID)).toMatchObject([
         { type: "compaction" },
         { type: "assistant", finish: "error", error: { message: "prompt too long" } },
