@@ -929,6 +929,55 @@ it.instance(
 )
 
 it.instance(
+  "OPENCODE_CONFIG_CONTENT overrides cost for configured model",
+  Effect.gen(function* () {
+    yield* setProcessEnv(
+      "OPENCODE_CONFIG_CONTENT",
+      JSON.stringify({
+        $schema: "https://opencode.ai/config.json",
+        provider: {
+          "fictional-provider": {
+            npm: "@ai-sdk/openai-compatible",
+            env: [],
+            models: {
+              "fictional-model": {
+                cost: {
+                  input: 9.876543,
+                  output: 21.234567,
+                  cache_read: 3.210987,
+                  cache_write: 4.109876,
+                  context_over_200k: {
+                    input: 31.111111,
+                    output: 41.222222,
+                    cache_read: 5.333333,
+                    cache_write: 6.444444,
+                  },
+                },
+              },
+            },
+            options: { apiKey: "test-api-key" },
+          },
+        },
+      }),
+    )
+    const providers = yield* list
+    const model = providers[ProviderV2.ID.make("fictional-provider")].models["fictional-model"]
+    expect(model.cost.input).toBe(9.876543)
+    expect(model.cost.output).toBe(21.234567)
+    expect(model.cost.cache.read).toBe(3.210987)
+    expect(model.cost.cache.write).toBe(4.109876)
+    expect(model.cost.experimentalOver200K).toEqual({
+      input: 31.111111,
+      output: 41.222222,
+      cache: {
+        read: 5.333333,
+        write: 6.444444,
+      },
+    })
+  }),
+)
+
+it.instance(
   "completely new provider not in database can be configured",
   Effect.gen(function* () {
     const providers = yield* list
