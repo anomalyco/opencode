@@ -10,11 +10,6 @@ const ListQuery = Schema.Struct({
   path: RelativePath.pipe(Schema.optional),
 })
 
-const ReadQuery = Schema.Struct({
-  ...LocationQuery.fields,
-  path: RelativePath,
-})
-
 const FindQuery = Schema.Struct({
   ...LocationQuery.fields,
   query: FileSystem.FindInput.fields.query,
@@ -24,8 +19,8 @@ const FindQuery = Schema.Struct({
 
 export const FileSystemGroup = HttpApiGroup.make("server.fs")
   .add(
-    HttpApiEndpoint.get("fs.read", "/api/fs/read", {
-      query: ReadQuery,
+    HttpApiEndpoint.get("fs.read", "/api/fs/read/*", {
+      query: LocationQuery,
       success: Schema.Uint8Array.pipe(HttpApiSchema.asUint8Array()),
     })
       .annotateMerge(locationQueryOpenApi)

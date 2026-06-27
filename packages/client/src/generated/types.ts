@@ -86,10 +86,6 @@ export type PtyNotFoundError = { readonly _tag: "PtyNotFoundError"; readonly pty
 export const isPtyNotFoundError = (value: unknown): value is PtyNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "PtyNotFoundError"
 
-export type ForbiddenError = { readonly _tag: "ForbiddenError"; readonly message: string }
-export const isForbiddenError = (value: unknown): value is ForbiddenError =>
-  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ForbiddenError"
-
 export type QuestionNotFoundError = {
   readonly _tag: "QuestionNotFoundError"
   readonly requestID: string
@@ -2440,19 +2436,6 @@ export type PermissionsReplyInput = {
 
 export type PermissionsReplyOutput = void
 
-export type FilesReadInput = {
-  readonly location?: {
-    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-    readonly path: string
-  }["location"]
-  readonly path: {
-    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-    readonly path: string
-  }["path"]
-}
-
-export type FilesReadOutput = globalThis.Uint8Array
-
 export type FilesListInput = {
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
@@ -2700,23 +2683,6 @@ export type PtysRemoveInput = {
 }
 
 export type PtysRemoveOutput = void
-
-export type PtysConnectTokenInput = {
-  readonly ptyID: { readonly ptyID: string }["ptyID"]
-  readonly location?: {
-    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-  }["location"]
-  readonly "x-opencode-ticket": { readonly "x-opencode-ticket": "1" }["x-opencode-ticket"]
-}
-
-export type PtysConnectTokenOutput = {
-  readonly location: {
-    readonly directory: string
-    readonly workspaceID?: string
-    readonly project: { readonly id: string; readonly directory: string }
-  }
-  readonly data: { readonly ticket: string; readonly expires_in: number }
-}
 
 export type QuestionsListRequestsInput = {
   readonly location?: {

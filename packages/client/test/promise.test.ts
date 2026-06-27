@@ -34,7 +34,8 @@ test("exposes every standard HTTP API group", () => {
     "attemptComplete",
     "attemptCancel",
   ])
-  expect(Object.keys(client.ptys)).toEqual(["list", "create", "get", "update", "remove", "connectToken"])
+  expect(Object.keys(client.files)).toEqual(["list", "find"])
+  expect(Object.keys(client.ptys)).toEqual(["list", "create", "get", "update", "remove"])
 })
 
 test("sessions.get returns the wire projection", async () => {
@@ -80,35 +81,6 @@ test("events.subscribe terminates on malformed Promise SSE data", async () => {
     name: "ClientError",
     reason: "MalformedResponse",
   })
-})
-
-test("files.read and ptys.connectToken preserve exceptional transport inputs", async () => {
-  const requests: Request[] = []
-  const client = OpenCode.make({
-    baseUrl: "http://localhost:3000",
-    fetch: async (input, init) => {
-      const request = new Request(input, init)
-      requests.push(request)
-      if (request.url.includes("/api/fs/read")) return new Response(new Uint8Array([1, 2, 3]))
-      return Response.json({
-        location: { directory: "/tmp/project", project: { id: "project", directory: "/tmp/project" } },
-        data: { ticket: "ticket" },
-      })
-    },
-  })
-
-  const file = await client.files.read({ path: "src/index.ts", location: { directory: "/tmp/project" } })
-  await client.ptys.connectToken({
-    ptyID: "pty_test",
-    location: { directory: "/tmp/project" },
-    "x-opencode-ticket": "1",
-  })
-
-  expect(file).toEqual(new Uint8Array([1, 2, 3]))
-  expect(requests[0]?.url).toBe(
-    "http://localhost:3000/api/fs/read?location%5Bdirectory%5D=%2Ftmp%2Fproject&path=src%2Findex.ts",
-  )
-  expect(requests[1]?.headers.get("x-opencode-ticket")).toBe("1")
 })
 
 test("session methods use the public HTTP contract", async () => {

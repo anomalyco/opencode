@@ -255,13 +255,7 @@ export function emitPromise(
       },
       {
         path: "client.ts",
-        content: renderPromiseClient(groups)
-          .replace("readonly empty: boolean\n}", "readonly empty: boolean\n  readonly binary: boolean\n}")
-          .replace(
-            "return await json(response) as A",
-            'if (descriptor.binary) {\n      try {\n        return new Uint8Array(await response.arrayBuffer()) as A\n      } catch (cause) {\n        throw new ClientError("Transport", { cause })\n      }\n    }\n    return await json(response) as A',
-          )
-          .replace("let next: ReadableStreamReadResult<Uint8Array>", "let next"),
+        content: renderPromiseClient(groups).replace("let next: ReadableStreamReadResult<Uint8Array>", "let next"),
       },
       {
         path: "index.ts",
@@ -293,7 +287,7 @@ function assertPromiseEndpoint(endpoint: Endpoint) {
     }
   } else if (
     !HttpApiSchema.isNoContent(success.ast) &&
-    !["Json", "Uint8Array"].includes(resolveHttpApiEncoding(success.ast)?._tag ?? "Json")
+    (resolveHttpApiEncoding(success.ast)?._tag ?? "Json") !== "Json"
   ) {
     throw new GenerationError({ reason: `Unsupported Promise success encoding: ${name}` })
   }
@@ -524,7 +518,7 @@ function renderPromiseClient(groups: ReadonlyArray<Group>) {
         endpoint.payloads.length === 0 ? undefined : `body: ${part("payload")}`,
       ].filter((value): value is string => value !== undefined)
       const declaredStatuses = [...new Set(endpoint.errors.map((error) => error.status))]
-      const descriptor = `{ method: ${JSON.stringify(endpoint.endpoint.method)}, path: ${path}${parts.length === 0 ? "" : `, ${parts.join(", ")}`}, successStatus: ${resolveHttpApiStatus(endpoint.successes[0].ast) ?? 200}, declaredStatuses: [${declaredStatuses.join(", ")}], empty: ${endpoint.operation.success === "void"}, binary: ${resolveHttpApiEncoding(endpoint.successes[0].ast)?._tag === "Uint8Array"} }`
+      const descriptor = `{ method: ${JSON.stringify(endpoint.endpoint.method)}, path: ${path}${parts.length === 0 ? "" : `, ${parts.join(", ")}`}, successStatus: ${resolveHttpApiStatus(endpoint.successes[0].ast) ?? 200}, declaredStatuses: [${declaredStatuses.join(", ")}], empty: ${endpoint.operation.success === "void"} }`
       if (endpoint.operation.success === "stream") {
         const success = endpoint.successes[0]
         if (!isStreamSchema(success) || success._tag !== "StreamSse" || success.sseMode !== "data") {
@@ -590,6 +584,7 @@ function structuralType(schema: Schema.Top) {
 }
 
 function promisePath(path: string, input: ReadonlyArray<InputField>) {
+  if (path.includes("*")) throw new GenerationError({ reason: `Unsupported Promise path wildcard: ${path}` })
   const fields = new Set(input.filter((field) => field.source === "params").map((field) => field.name))
   const segments = path.split(/(:[A-Za-z_][A-Za-z0-9_]*)/g).filter(Boolean)
   const template = segments

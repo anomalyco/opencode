@@ -743,9 +743,9 @@ const scenarios: Scenario[] = [
       "status",
     ),
   http.protected
-    .get("/api/fs/read", "v2.fs.read")
+    .get("/api/fs/read/*", "v2.fs.read")
     .seeded((ctx) => ctx.file("hello.txt", "hello\n"))
-    .at((ctx) => ({ path: "/api/fs/read?path=hello.txt", headers: ctx.headers() }))
+    .at((ctx) => ({ path: "/api/fs/read/hello.txt", headers: ctx.headers() }))
     .status(
       200,
       (_ctx, result) =>
