@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { ServerDirectory } from "../../src/server/routes/instance/httpapi/middleware/server-directory"
+import { ServerDirectory } from "@opencode-ai/server/server-directory"
 
 function expectReason(input: string, reason: ServerDirectory.ParseReason, profile: ServerDirectory.Profile) {
   try {
