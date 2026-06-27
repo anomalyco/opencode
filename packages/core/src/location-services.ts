@@ -4,8 +4,8 @@ import { AISDK } from "./aisdk"
 import { Catalog } from "./catalog"
 import { CommandV2 } from "./command"
 import { Config } from "./config"
-import { LayerNode, LayerNodeTree } from "./effect/layer-node"
-import { Node } from "./effect/node"
+import { LayerNode } from "./effect/layer-node"
+import { Node } from "./effect/app-node"
 import { FileMutation } from "./file-mutation"
 import { FileSystem } from "./filesystem"
 import { FileSystemSearch } from "./filesystem/search"
@@ -88,11 +88,11 @@ export function buildLocationServiceMap(
     LocationServiceMap.Service,
     LayerMap.make(
       (ref: Location.Ref) => {
-        const location = LayerNodeTree.hoist(
-          LayerNodeTree.bind(locationServices, Location.node, Location.boundNode(ref)),
+        const location = LayerNode.hoist(
+          LayerNode.bind(locationServices, Location.node, Location.boundNode(ref)),
           Node.tags.values.global,
         )
-        return LayerNodeTree.compile(location.node, replacements).pipe(
+        return LayerNode.compile(location.node, replacements).pipe(
           Layer.fresh,
           Layer.tap(() =>
             Effect.logInfo("booting location services", {
@@ -100,7 +100,7 @@ export function buildLocationServiceMap(
               workspaceID: ref.workspaceID,
             }),
           ),
-          Layer.provide(LayerNodeTree.compile(location.hoisted, replacements)),
+          Layer.provide(LayerNode.compile(location.hoisted, replacements)),
         )
       },
       { idleTimeToLive: "60 minutes" },

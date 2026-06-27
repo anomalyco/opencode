@@ -9,7 +9,7 @@ import { Location } from "./location"
 import { AbsolutePath } from "./schema"
 import { SystemContext } from "./system-context/index"
 import { SystemContextRegistry } from "./system-context/registry"
-import { makeLocationNode } from "./effect/node"
+import { makeLocationNode } from "./effect/app-node"
 
 class File extends Schema.Class<File>("InstructionContext.File")({
   path: AbsolutePath,
