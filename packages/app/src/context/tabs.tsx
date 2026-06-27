@@ -173,10 +173,12 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
         })
       },
       updateDraft(draftID: string, draft: Partial<Omit<DraftTab, "type" | "draftID">>) {
-        setStore(
-          (tab) => tab.type === "draft" && tab.draftID === draftID,
-          produce((tab) => Object.assign(tab, draft)),
-        )
+        void startTransition(() => {
+          setStore(
+            (tab) => tab.type === "draft" && tab.draftID === draftID,
+            produce((tab) => Object.assign(tab, draft)),
+          )
+        })
       },
       promoteDraft(draftID: string, session: Omit<SessionTab, "type">) {
         // Keep the replacement and navigation atomic so /new-session never renders
