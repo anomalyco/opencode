@@ -1206,7 +1206,7 @@ function HomeSessionGroupHeader(props: {
   return (
     <div
       ref={props.headerRef}
-      class={`sticky top-3 flex h-7 min-w-0 items-center justify-between pl-3 ${props.onNewSession ? "home-session-header-new relative z-[5] bg-v2-background-bg-base" : "z-10"}`}
+      class={`sticky top-3 flex h-7 min-w-0 items-center justify-between pl-3 ${props.onNewSession ? "home-session-header-new relative z-[5] bg-v2-background-bg-base" : "pointer-events-none z-10"}`}
     >
       <div class={HOME_SECTION_LABEL} style={{ opacity: props.titleOpacity }}>
         {props.title}
