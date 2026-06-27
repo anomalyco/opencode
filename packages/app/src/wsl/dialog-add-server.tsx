@@ -327,6 +327,7 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
   }
 
   const installCatalogDistro = () => {
+    if (installingCatalogDistro()) return
     const name = catalogTarget()
     if (!name) return
     installDistro(name)
@@ -338,6 +339,7 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
   }
 
   const runPrimary = async () => {
+    if (primaryButton().loading) return
     const distro = selectedDistro()
     const action = primaryButton().action
     if (!distro || !action) return

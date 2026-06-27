@@ -24,7 +24,6 @@ import pkg from "../../package.json"
 import { initI18n, t } from "./i18n"
 import { initializationData, initializationReady } from "./initialization"
 import { resetZoom, setPinchZoomEnabled, webviewZoom, zoomIn, zoomOut } from "./webview-zoom"
-import { createWslMockPlatform, wslMockEnabled } from "@opencode-ai/app/wsl/mock"
 import { availableStartupServer, readyWslConnections } from "./wsl/connections"
 import "./styles.css"
 import { Splash } from "@opencode-ai/ui/logo"
@@ -131,8 +130,7 @@ const createPlatform = (): Platform => {
     }
   })()
 
-  const wslServersApi =
-    os === "windows" ? window.api.wslServers : wslMockEnabled() ? createWslMockPlatform() : undefined
+  const wslServersApi = os === "windows" ? window.api.wslServers : undefined
 
   return {
     platform: "desktop",

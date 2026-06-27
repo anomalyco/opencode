@@ -8,7 +8,6 @@
     "./desktop-menu": "./src/desktop-menu.ts",
     "./updater": "./src/updater.ts",
     "./wsl/types": "./src/wsl/types.ts",
-    "./wsl/mock": "./src/wsl/mock/index.ts",
     "./vite": "./vite.js",
     "./index.css": "./src/index.css"
   },
