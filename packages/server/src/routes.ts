@@ -1,5 +1,5 @@
 import { Database } from "@opencode-ai/core/database/database"
-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { LayerNode, LayerNodeTree } from "@opencode-ai/core/effect/layer-node"
 import { httpClient } from "@opencode-ai/core/effect/layer-node-platform"
 import { NodeBuild } from "@opencode-ai/core/effect/node-build"
 import { EventV2 } from "@opencode-ai/core/event"
@@ -7,6 +7,7 @@ import { Credential } from "@opencode-ai/core/credential"
 import { PermissionSaved } from "@opencode-ai/core/permission/saved"
 import { PtyTicket } from "@opencode-ai/core/pty/ticket"
 import { SessionV2 } from "@opencode-ai/core/session"
+import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
 import { SessionExecutionLocal } from "@opencode-ai/core/session/execution/local"
 import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
@@ -28,7 +29,6 @@ const applicationServices = LayerNode.group([
   httpClient,
   ToolOutputStore.cleanupNode,
   SessionV2.node,
-  SessionExecutionLocal.node,
   PermissionSaved.node,
   PtyTicket.node,
   Credential.node,
@@ -49,7 +49,9 @@ export function createEmbeddedRoutes() {
 }
 
 function makeRoutes<AuthError, AuthServices>(auth: Layer.Layer<ServerAuth.Config, AuthError, AuthServices>) {
-  const serviceLayer = NodeBuild.build(applicationServices)
+  const serviceLayer = NodeBuild.build(
+    LayerNodeTree.bind(applicationServices, SessionExecution.node, SessionExecutionLocal.node),
+  )
 
   return HttpApiBuilder.layer(Api, { openapiPath: "/openapi.json" }).pipe(
     Layer.provide(handlers),

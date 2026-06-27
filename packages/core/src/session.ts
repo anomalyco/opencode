@@ -27,7 +27,6 @@ import { fromRow } from "./session/info"
 import { SessionRunner } from "./session/runner/index"
 import { SessionStore } from "./session/store"
 import { SessionExecution } from "./session/execution"
-import { SessionExecutionLocal } from "./session/execution/local"
 import { makeGlobalNode } from "./effect/node"
 import { LocationServiceMap } from "./location-service-map"
 import { MessageDecodeError } from "./session/error"
@@ -456,7 +455,6 @@ export const layer = Layer.effect(
 )
 
 export const defaultLayer = layer.pipe(
-  Layer.provide(SessionExecution.noopLayer),
   Layer.provide(SessionStore.defaultLayer),
   Layer.provide(SessionProjector.defaultLayer),
   Layer.provide(EventV2.defaultLayer),
@@ -486,7 +484,7 @@ export const node = makeGlobalNode({
     Database.node,
     EventV2.node,
     ProjectV2.node,
-    SessionExecutionLocal.node,
+    SessionExecution.node,
     SessionStore.node,
     LocationServiceMap.node,
     SessionProjector.node,

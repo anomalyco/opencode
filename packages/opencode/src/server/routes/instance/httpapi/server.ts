@@ -63,6 +63,7 @@ import { PtyTicket } from "@opencode-ai/core/pty/ticket"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionV2 } from "@opencode-ai/core/session"
+import * as SessionExecutionLocal from "@opencode-ai/core/session/execution/local"
 import { lazy } from "@/util/lazy"
 import { CorsConfig, isAllowedCorsOrigin, type CorsOptions } from "@opencode-ai/server/cors"
 import { serveUIEffect } from "@/server/shared/ui"
@@ -285,14 +286,21 @@ export function createRoutes(
       MoveSession.defaultLayer,
       HttpServer.layerServices,
     ]),
+    Layer.provide(Layer.succeed(CorsConfig)(corsOptions)),
+    Layer.provideMerge(Observability.layer),
+
     Layer.provide(sessionLocationLayer),
     Layer.provide(locationLayer),
     Layer.provide(PtyEnvironment.layer),
-    Layer.provide(SessionV2.defaultLayer.pipe(Layer.provide(locationServiceMapLayer))),
-    Layer.provide(LayerNodeTree.compile(app)),
+    Layer.provide(
+      SessionV2.defaultLayer.pipe(
+        Layer.provide(SessionExecutionLocal.defaultLayer),
+        Layer.provide(locationServiceMapLayer),
+      ),
+    ),
     Layer.provide(locationServiceMapLayer),
-    Layer.provide(Layer.succeed(CorsConfig)(corsOptions)),
-    Layer.provideMerge(Observability.layer),
+
+    Layer.provide(LayerNodeTree.compile(app)),
   )
 }
 
