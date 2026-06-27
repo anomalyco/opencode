@@ -62,6 +62,7 @@ import {
 import { MessageTimeline } from "@/pages/session/timeline/message-timeline"
 import { createTimelineModel } from "@/pages/session/timeline/model"
 import { type DiffStyle, SessionReviewTab, type SessionReviewTabProps } from "@/pages/session/review-tab"
+import { shouldFillLoad, shouldScrollLoad } from "@/pages/session/session-fill"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { syncSessionModel } from "@/pages/session/session-model-helpers"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
@@ -1229,12 +1230,39 @@ export default function Page() {
 
       const el = scroller
       if (!el) return
-      if (el.scrollHeight > el.clientHeight + 1) return
-      if (!historyMore()) return
+      if (
+        !shouldFillLoad({
+          historyMore: historyMore(),
+          scrollHeight: el.scrollHeight,
+          clientHeight: el.clientHeight,
+          messageCount: messages().length,
+        })
+      )
+        return
 
       void loadOlder()
     })
   }
+
+  makeEventListener(
+    () => scroller,
+    "scroll",
+    () => {
+      const el = scroller
+      if (!el) return
+      if (!params.id) return
+      if (
+        !shouldScrollLoad({
+          scrollTop: el.scrollTop,
+          historyMore: historyMore(),
+          historyLoading: historyLoading(),
+        })
+      )
+        return
+      void loadOlder()
+    },
+    { passive: true },
+  )
 
   createEffect(
     on(
