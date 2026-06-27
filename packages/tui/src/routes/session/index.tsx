@@ -1376,6 +1376,10 @@ function UserMessage(props: {
   const metadataVisible = createMemo(() => queued() || ctx.showTimestamps())
 
   const compaction = createMemo(() => props.parts.find((x) => x.type === "compaction"))
+  const renderer = useRenderer()
+  const [collapsed, setCollapsed] = createSignal(false)
+  const firstLine = createMemo(() => text().split("\n")[0])
+  const multiLine = createMemo(() => text().includes("\n") || text().length > 120)
 
   return (
     <>
@@ -1395,46 +1399,60 @@ function UserMessage(props: {
             onMouseOut={() => {
               setHover(false)
             }}
-            onMouseUp={props.onMouseUp}
+            onMouseUp={() => {
+              if (renderer.getSelection()?.getSelectedText()) return
+              if (multiLine()) setCollapsed((x) => !x)
+              else props.onMouseUp()
+            }}
             paddingTop={1}
             paddingBottom={1}
             paddingLeft={2}
             backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
             flexShrink={0}
           >
-            <text fg={theme.text}>{text()}</text>
-            <Show when={files().length}>
-              <box flexDirection="row" paddingBottom={metadataVisible() ? 1 : 0} paddingTop={1} gap={1} flexWrap="wrap">
-                <For each={files()}>
-                  {(file) => {
-                    const directory = file.mime === "application/x-directory"
-                    return (
-                      <text fg={theme.text}>
-                        <span style={{ bg: theme.secondary, fg: theme.background }}>
-                          {directory ? " Directory " : " File "}
-                        </span>
-                        <span style={{ bg: theme.backgroundElement, fg: theme.textMuted }}> {file.filename} </span>
-                      </text>
-                    )
-                  }}
-                </For>
-              </box>
-            </Show>
-            <Show
-              when={queued()}
-              fallback={
-                <Show when={ctx.showTimestamps()}>
-                  <text fg={theme.textMuted}>
-                    <span style={{ fg: theme.textMuted }}>
-                      {Locale.todayTimeOrDateTime(props.message.time.created)}
-                    </span>
-                  </text>
-                </Show>
-              }
-            >
+            <Show when={collapsed()}>
               <text fg={theme.textMuted}>
-                <span style={{ bg: color(), fg: queuedFg(), bold: true }}> QUEUED </span>
+                {firstLine()}
+                <span style={{ fg: theme.textMuted }}> … [expand]</span>
               </text>
+            </Show>
+            <Show when={!collapsed()}>
+              <text fg={theme.text}>{text()}</text>
+            </Show>
+            <Show when={!collapsed()}>
+              <Show when={files().length}>
+                <box flexDirection="row" paddingBottom={metadataVisible() ? 1 : 0} paddingTop={1} gap={1} flexWrap="wrap">
+                  <For each={files()}>
+                    {(file) => {
+                      const directory = file.mime === "application/x-directory"
+                      return (
+                        <text fg={theme.text}>
+                          <span style={{ bg: theme.secondary, fg: theme.background }}>
+                            {directory ? " Directory " : " File "}
+                          </span>
+                          <span style={{ bg: theme.backgroundElement, fg: theme.textMuted }}> {file.filename} </span>
+                        </text>
+                      )
+                    }}
+                  </For>
+                </box>
+              </Show>
+              <Show
+                when={queued()}
+                fallback={
+                  <Show when={ctx.showTimestamps()}>
+                    <text fg={theme.textMuted}>
+                      <span style={{ fg: theme.textMuted }}>
+                        {Locale.todayTimeOrDateTime(props.message.time.created)}
+                      </span>
+                    </text>
+                  </Show>
+                }
+              >
+                <text fg={theme.textMuted}>
+                  <span style={{ bg: color(), fg: queuedFg(), bold: true }}> QUEUED </span>
+                </text>
+              </Show>
             </Show>
           </box>
         </box>
@@ -1474,66 +1492,83 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
 
   const childShortcut = useCommandShortcut("session.child.first")
   const backgroundShortcut = useCommandShortcut("session.background")
+  const [collapsed, setCollapsed] = createSignal(false)
+  const collapsible = createMemo(() => !!final())
+  const firstText = createMemo(() => {
+    const textPart = props.parts.find((x) => x.type === "text") as { text: string } | undefined
+    return textPart?.text?.split("\n")[0].slice(0, 120) ?? ""
+  })
 
   return (
     <>
-      <For each={props.parts}>
-        {(part, index) => {
-          const component = createMemo(() => PART_MAPPING[part.type as keyof typeof PART_MAPPING])
-          return (
-            <Show when={component()}>
-              <Dynamic
-                last={index() === props.parts.length - 1}
-                component={component()}
-                part={part as any}
-                message={props.message}
-              />
-            </Show>
-          )
-        }}
-      </For>
-      <Show when={props.parts.some((x) => x.type === "tool" && x.tool === "task")}>
-        <box paddingTop={1} paddingLeft={3}>
-          <text fg={theme.text}>
-            {childShortcut()}
-            <span style={{ fg: theme.textMuted }}> view subagents</span>
-            <Show
-              when={
-                sync.data.capabilities.experimentalBackgroundSubagents &&
-                props.parts.some(
-                  (x) =>
-                    x.type === "tool" &&
-                    x.tool === "task" &&
-                    x.state.status === "running" &&
-                    x.state.metadata?.background !== true,
-                )
-              }
-            >
-              <span style={{ fg: theme.textMuted }}> · </span>
-              {backgroundShortcut()}
-              <span style={{ fg: theme.textMuted }}> background</span>
-            </Show>
-          </text>
+      <Show when={collapsed()}>
+        <box paddingLeft={3} paddingTop={1} paddingBottom={1}>
+          <text fg={theme.textMuted}>{firstText()} …</text>
         </box>
       </Show>
-      <Show when={props.message.error && props.message.error.name !== "MessageAbortedError"}>
-        <box
-          ref={(el: BoxRenderable) => alwaysSeparate.add(el)}
-          border={["left"]}
-          paddingTop={1}
-          paddingBottom={1}
-          paddingLeft={2}
-          marginTop={1}
-          backgroundColor={theme.backgroundPanel}
-          customBorderChars={SplitBorder.customBorderChars}
-          borderColor={theme.error}
-        >
-          <text fg={theme.textMuted}>{props.message.error?.data.message}</text>
-        </box>
+      <Show when={!collapsed()}>
+        <For each={props.parts}>
+          {(part, index) => {
+            const component = createMemo(() => PART_MAPPING[part.type as keyof typeof PART_MAPPING])
+            return (
+              <Show when={component()}>
+                <Dynamic
+                  last={index() === props.parts.length - 1}
+                  component={component()}
+                  part={part as any}
+                  message={props.message}
+                />
+              </Show>
+            )
+          }}
+        </For>
+        <Show when={props.parts.some((x) => x.type === "tool" && x.tool === "task")}>
+          <box paddingTop={1} paddingLeft={3}>
+            <text fg={theme.text}>
+              {childShortcut()}
+              <span style={{ fg: theme.textMuted }}> view subagents</span>
+              <Show
+                when={
+                  sync.data.capabilities.experimentalBackgroundSubagents &&
+                  props.parts.some(
+                    (x) =>
+                      x.type === "tool" &&
+                      x.tool === "task" &&
+                      x.state.status === "running" &&
+                      x.state.metadata?.background !== true,
+                  )
+                }
+              >
+                <span style={{ fg: theme.textMuted }}> · </span>
+                {backgroundShortcut()}
+                <span style={{ fg: theme.textMuted }}> background</span>
+              </Show>
+            </text>
+          </box>
+        </Show>
+        <Show when={props.message.error && props.message.error.name !== "MessageAbortedError"}>
+          <box
+            ref={(el: BoxRenderable) => alwaysSeparate.add(el)}
+            border={["left"]}
+            paddingTop={1}
+            paddingBottom={1}
+            paddingLeft={2}
+            marginTop={1}
+            backgroundColor={theme.backgroundPanel}
+            customBorderChars={SplitBorder.customBorderChars}
+            borderColor={theme.error}
+          >
+            <text fg={theme.textMuted}>{props.message.error?.data.message}</text>
+          </box>
+        </Show>
       </Show>
       <Switch>
         <Match when={props.last || final() || props.message.error?.name === "MessageAbortedError"}>
-          <box ref={(el: BoxRenderable) => alwaysSeparate.add(el)} paddingLeft={3}>
+          <box
+            ref={(el: BoxRenderable) => alwaysSeparate.add(el)}
+            paddingLeft={3}
+            onMouseUp={collapsible() ? () => setCollapsed((x) => !x) : undefined}
+          >
             <text marginTop={1}>
               <span
                 style={{
