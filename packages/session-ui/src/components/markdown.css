@@ -49,12 +49,20 @@
     line-height: var(--line-height-large);
   }
 
-  h3,
+  h3 {
+    font-size: 13px;
+    color: var(--v2-text-text-base);
+    font-weight: var(--font-weight-medium);
+    margin-top: 0px;
+    margin-bottom: 24px;
+    line-height: var(--line-height-large);
+  }
+
   h4,
   h5,
   h6 {
     font-size: 13px;
-    color: var(--v2-text-text-base);
+    color: var(--v2-text-text-muted);
     font-weight: var(--font-weight-medium);
     margin-top: 0px;
     margin-bottom: 24px;
