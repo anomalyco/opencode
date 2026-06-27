@@ -19,6 +19,8 @@ import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { QuestionV2 } from "@opencode-ai/core/question"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
+import { locationServiceMapLayer } from "@opencode-ai/core/location-services"
+import { Snapshot } from "@opencode-ai/core/snapshot"
 import { ContextSnapshotDecodeError } from "@opencode-ai/core/session/error"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionInput } from "@opencode-ai/core/session/input"
@@ -230,6 +232,7 @@ const config = Layer.succeed(
   }),
 )
 const runner = SessionRunnerLLM.layer.pipe(
+  Layer.provide(Snapshot.noopLayer),
   Layer.provide(Database.defaultLayer),
   Layer.provide(SessionStore.defaultLayer),
   Layer.provide(EventV2.defaultLayer),
@@ -251,6 +254,7 @@ const execution = Layer.effect(
       drain: (sessionID, force) => sessionRunner.run({ sessionID, force }),
     })
     return SessionExecution.Service.of({
+      active: coordinator.active,
       resume: coordinator.run,
       wake: coordinator.wake,
       interrupt: coordinator.interrupt,
@@ -258,6 +262,7 @@ const execution = Layer.effect(
   }),
 ).pipe(Layer.provide(runner))
 const sessions = SessionV2.layer.pipe(
+  Layer.provide(locationServiceMapLayer),
   Layer.provide(EventV2.defaultLayer),
   Layer.provide(Database.defaultLayer),
   Layer.provide(SessionStore.defaultLayer),
@@ -2560,7 +2565,7 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
-  it.effect("propagates unexpected local tool defects operationally", () =>
+  it.effect("returns unexpected local tool defects to the model and continues", () =>
     Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
@@ -2574,11 +2579,20 @@ describe("SessionRunnerLLM", () => {
           LLMEvent.stepFinish({ index: 0, reason: "tool-calls" }),
           LLMEvent.finish({ reason: "tool-calls" }),
         ],
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.textStart({ id: "text-after-defect" }),
+          LLMEvent.textDelta({ id: "text-after-defect", text: "Recovered" }),
+          LLMEvent.textEnd({ id: "text-after-defect" }),
+          LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+          LLMEvent.finish({ reason: "stop" }),
+        ],
       ]
 
-      expect(yield* session.resume(sessionID).pipe(Effect.catchDefect(Effect.succeed))).toBe("unexpected tool defect")
+      yield* session.resume(sessionID)
 
-      expect(requests).toHaveLength(1)
+      expect(requests).toHaveLength(2)
+      expect(requests[1]?.messages.map((message) => message.role)).toEqual(["user", "assistant", "tool"])
       expect(yield* session.context(sessionID)).toMatchObject([
         { type: "user", text: "Call defect" },
         {
@@ -2594,6 +2608,7 @@ describe("SessionRunnerLLM", () => {
             },
           ],
         },
+        { type: "assistant", finish: "stop", content: [{ type: "text", text: "Recovered" }] },
       ])
     }),
   )

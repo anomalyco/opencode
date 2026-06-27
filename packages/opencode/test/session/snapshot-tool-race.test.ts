@@ -84,16 +84,19 @@ const root = LayerNode.group([
   SessionSummary.node,
   Database.node,
   CrossSpawnSpawner.node,
-  LayerNode.make(TestLLMServer.layer, []),
+  LayerNode.make({ service: TestLLMServer, layer: TestLLMServer.layer, deps: [] }),
 ])
 const it = testEffect(
-  LayerNode.buildLayer(root, {
-    replacements: [
-      LayerNode.replace(MCP.node, mcp),
-      LayerNode.replace(LSP.node, lsp),
-      LayerNode.replace(RuntimeFlags.node, RuntimeFlags.layer({ experimentalEventSystem: true })),
-    ],
-  }),
+  LayerNode.compile(
+    root,
+    new Map(
+      [
+        LayerNode.replace(MCP.layer, mcp),
+        LayerNode.replace(LSP.layer, lsp),
+        LayerNode.replace(RuntimeFlags.defaultLayer, RuntimeFlags.layer({ experimentalEventSystem: true })),
+      ].map((item) => [item.source, item.replacement]),
+    ),
+  ),
 )
 
 const providerCfg = (url: string) => ({

@@ -5,6 +5,7 @@ import { Context, Duration, Effect, Layer, Option, Schedule, Schema } from "effe
 import { Config } from "./config"
 import { FSUtil } from "./fs-util"
 import { Global } from "./global"
+import { makeGlobalNode, makeLocationNode } from "./effect/app-node"
 import { SessionSchema } from "./session/schema"
 import { Identifier } from "./util/identifier"
 import type { ToolOutput } from "@opencode-ai/llm"
@@ -193,6 +194,8 @@ export const layer = Layer.effect(
 
 export const defaultLayer = layer.pipe(Layer.provide(FSUtil.defaultLayer), Layer.provide(Global.defaultLayer))
 
+export const node = makeLocationNode({ service: Service, layer, deps: [FSUtil.node, Global.node, Config.node] })
+
 /** Runs retention scanning once globally rather than once per active Location. */
 export const cleanupLayer = Layer.effectDiscard(
   Effect.gen(function* () {
@@ -202,3 +205,5 @@ export const cleanupLayer = Layer.effectDiscard(
 )
 
 export const defaultCleanupLayer = Layer.merge(defaultLayer, cleanupLayer.pipe(Layer.provide(defaultLayer)))
+
+export const cleanupNode = makeGlobalNode({ name: "tool-output-cleanup", layer: defaultCleanupLayer, deps: [] })

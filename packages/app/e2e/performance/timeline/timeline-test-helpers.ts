@@ -13,7 +13,6 @@ export async function installTimelineSettings(page: Page) {
           editToolPartsExpanded: true,
           shellToolPartsExpanded: true,
           showReasoningSummaries: true,
-          showSessionProgressBar: true,
         },
       }),
     )

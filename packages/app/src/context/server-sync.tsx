@@ -1,4 +1,4 @@
-import type { Config, OpencodeClient, Path, Project, ProviderAuthResponse, Todo } from "@opencode-ai/sdk/v2/client"
+import type { Config, OpencodeClient, Path, Project, ProviderAuthResponse } from "@opencode-ai/sdk/v2/client"
 import { showToast } from "@/utils/toast"
 import { getFilename } from "@opencode-ai/core/util/path"
 import { type Accessor, batch, createMemo, getOwner, onCleanup, onMount, untrack } from "solid-js"
@@ -17,8 +17,7 @@ import {
   loadProvidersQuery,
 } from "./global-sync/bootstrap"
 import { createChildStoreManager } from "./global-sync/child-store"
-import { applyDirectoryEvent, applyGlobalEvent, cleanupDroppedSessionCaches } from "./global-sync/event-reducer"
-import { clearSessionPrefetchDirectory } from "./global-sync/session-prefetch"
+import { applyDirectoryEvent, applyGlobalEvent } from "./global-sync/event-reducer"
 import { estimateRootSessionTotal, loadRootSessionsWithFallback } from "./global-sync/session-load"
 import { trimSessions } from "./global-sync/session-trim"
 import type { ProjectMeta } from "./global-sync/types"
@@ -38,15 +37,13 @@ import { retry } from "@opencode-ai/core/util/retry"
 import type { ServerScope } from "@/utils/server-scope"
 import { persisted } from "@/utils/persist"
 import { toggleMcp } from "./global-sync/mcp"
+import { createServerSession } from "./server-session"
 
 type GlobalStore = {
   ready: boolean
   error?: InitError
   path: Path
   project: Project[]
-  session_todo: {
-    [sessionID: string]: Todo[]
-  }
   provider: NormalizedProviderListResponse
   provider_auth: ProviderAuthResponse
   config: Config
@@ -118,7 +115,6 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
       return !bootstrap.isPending
     },
     project: [],
-    session_todo: {},
     provider_auth: {},
     get path() {
       const EMPTY = { state: "", config: "", worktree: "", directory: "", home: "" }
@@ -188,20 +184,6 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
     return (setGlobalStore as (...args: unknown[]) => unknown)(...input)
   }) as typeof setGlobalStore
 
-  const setSessionTodo = (sessionID: string, todos: Todo[] | undefined) => {
-    if (!sessionID) return
-    if (!todos) {
-      setGlobalStore(
-        "session_todo",
-        produce((draft) => {
-          delete draft[sessionID]
-        }),
-      )
-      return
-    }
-    setGlobalStore("session_todo", sessionID, reconcile(todos, { key: "id" }))
-  }
-
   const paused = () => untrack(() => globalStore.reload) !== undefined
 
   const queue = createRefreshQueue({
@@ -210,6 +192,8 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
     bootstrap: () => queryClient.fetchQuery({ queryKey: [serverSDK.scope, "bootstrap"] }),
     bootstrapInstance,
   })
+
+  const session = createServerSession(serverSDK.client)
 
   const children = createChildStoreManager({
     owner,
@@ -239,7 +223,6 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
       sessionMeta.delete(key)
       sdkCache.delete(key)
       clearProviderRev(serverSDK.scope, key)
-      clearSessionPrefetchDirectory(serverSDK.scope, key)
     },
     translate: language.t,
     queryOptions: queryOptionsApi,
@@ -263,11 +246,10 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
     if (meta && meta.limit >= retainedLimit) {
       const next = trimSessions(store.session, {
         limit: retainedLimit,
-        permission: store.permission,
+        permission: session.data.permission,
       })
       if (next.length !== store.session.length) {
         setStore("session", reconcile(next, { key: "id" }))
-        cleanupDroppedSessionCaches(store, setStore, next, setSessionTodo)
       }
       children.unpin(key)
       return
@@ -290,11 +272,12 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
                 .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
               const limit = Math.max(store.limit, options?.limit ?? 0, sessionMeta.get(key)?.limit ?? 0)
               const childSessions = store.session.filter((s) => !!s.parentID)
-              const sessions = trimSessions([...nonArchived, ...childSessions], {
+              const next = trimSessions([...nonArchived, ...childSessions], {
                 limit,
-                permission: store.permission,
+                permission: session.data.permission,
               })
               batch(() => {
+                next.forEach(session.remember)
                 setStore(
                   "sessionTotal",
                   estimateRootSessionTotal({
@@ -303,8 +286,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
                     limited: x.limited,
                   }),
                 )
-                setStore("session", reconcile(sessions, { key: "id" }))
-                cleanupDroppedSessionCaches(store, setStore, sessions, setSessionTodo)
+                setStore("session", reconcile(next, { key: "id" }))
               })
               sessionMeta.set(key, { limit })
             })
@@ -358,6 +340,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
         loadSessions,
         translate: language.t,
         queryClient,
+        session,
       })
     })
 
@@ -374,6 +357,8 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
     const key = directoryKey(directory)
     const event = e.details
     const recent = bootingRoot || Date.now() - bootedAt < 1500
+
+    session.apply(event)
 
     if (directory === "global") {
       applyGlobalEvent({
@@ -404,8 +389,9 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
       store,
       setStore,
       push: queue.push,
-      setSessionTodo,
       retainedLimit: sessionMeta.get(key)?.limit,
+      sessionContent: false,
+      permission: session.data.permission,
       vcsCache: children.vcsCache.get(key),
       loadLsp: () => {
         void queryClient.fetchQuery(queryOptionsApi.lsp(key))
@@ -479,9 +465,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
     // bootstrap,
     updateConfig: updateConfigMutation.mutateAsync,
     project: projectApi,
-    todo: {
-      set: setSessionTodo,
-    },
+    session,
     mcp: {
       toggle: async (directory: string, name: string) => {
         const key = directoryKey(directory)

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "1.17.9",
+  "version": "1.17.11",
   "name": "@opencode-ai/core",
   "type": "module",
   "license": "MIT",
@@ -16,7 +16,8 @@
     "opencode": "./bin/opencode"
   },
   "exports": {
-    "./public": "./src/public/index.ts",
+    "./effect/layer-node": "./src/effect/layer-node.ts",
+    "./effect/app-node": "./src/effect/app-node.ts",
     "./session/runner": "./src/session/runner/index.ts",
     "./system-context": "./src/system-context/index.ts",
     "./*": "./src/*.ts"
@@ -103,6 +104,7 @@
     "ai-gateway-provider": "3.1.2",
     "bun-pty": "0.4.8",
     "cross-spawn": "catalog:",
+    "diff": "catalog:",
     "drizzle-orm": "catalog:",
     "effect": "catalog:",
     "fuzzysort": "3.1.0",
