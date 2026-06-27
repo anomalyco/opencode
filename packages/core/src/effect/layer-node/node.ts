@@ -124,4 +124,4 @@ export function replace<A, E, R, E2>(
   return { source, replacement }
 }
 
-export * as LayerNode from "./layer-node"
+export * as LayerNode from "./node"

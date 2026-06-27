@@ -17,7 +17,7 @@
   },
   "exports": {
     "./effect/layer-node": "./src/effect/layer-node/index.ts",
-    "./effect/node": "./src/effect/node.ts",
+    "./effect/app-node": "./src/effect/app-node.ts",
     "./session/runner": "./src/session/runner/index.ts",
     "./system-context": "./src/system-context/index.ts",
     "./*": "./src/*.ts"

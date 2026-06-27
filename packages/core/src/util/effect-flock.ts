@@ -6,7 +6,7 @@ import type { FileSystem, Scope } from "effect"
 import type { PlatformError } from "effect/PlatformError"
 import { FSUtil } from "../fs-util"
 import { Global } from "../global"
-import { makeGlobalNode } from "../effect/node"
+import { makeGlobalNode } from "../effect/app-node"
 import { Hash } from "./hash"
 
 export namespace EffectFlock {

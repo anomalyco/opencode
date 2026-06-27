@@ -1,6 +1,6 @@
 export * as BuiltInTools from "./builtins"
 
-import { makeLocationNode } from "../effect/node"
+import { makeLocationNode } from "../effect/app-node"
 import { Layer } from "effect"
 import { BashTool } from "./bash"
 import { ApplyPatchTool } from "./apply-patch"
@@ -28,7 +28,7 @@ import { QuestionV2 } from "../question"
 import { SkillV2 } from "../skill"
 import { SessionTodo } from "../session/todo"
 import { ToolRegistry } from "./registry"
-import { httpClient } from "../effect/layer-node-platform"
+import { httpClient } from "../effect/app-node-platform"
 
 /**
  * Composes only the shipped Location-scoped built-in tool transforms.
