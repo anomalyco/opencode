@@ -52,7 +52,7 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const skill = yield* Skill.Service
     const mcp = yield* MCP.Service
-    const locations = yield* LocationServiceMap
+    const locations = yield* LocationServiceMap.Service
 
     return Service.of({
       environment: Effect.fn("SystemPrompt.environment")(function* (model: Provider.Model) {
@@ -134,7 +134,7 @@ export const defaultLayer = layer.pipe(
   Layer.provide(locationServiceMapLayer),
 )
 
-const locationServiceMapNode = LayerNode.make({ service: LocationServiceMap, layer: locationServiceMapLayer, deps: [] })
+const locationServiceMapNode = LayerNode.make({ service: LocationServiceMap.Service, layer: locationServiceMapLayer, deps: [] })
 
 export const node = LayerNode.make({
   service: Service,

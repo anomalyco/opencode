@@ -37,7 +37,7 @@ import { ReadToolFileSystem } from "./tool/read-filesystem"
 import { ToolRegistry } from "./tool/registry"
 import { ToolOutputStore } from "./tool-output-store"
 
-export { LocationServiceMap, node } from "./location-service-map"
+export { LocationServiceMap } from "./location-service-map"
 
 export const locationServices = LayerNode.group([
   Location.node,
@@ -82,18 +82,17 @@ export type LocationServices = LayerNode.Output<typeof locationServices>
 export type LocationError = LayerNode.Error<typeof locationServices>
 
 export function buildLocationServiceMap(
-  location: LayerNode.Node<LocationServices, LocationError, any>,
   replacements?: ReadonlyMap<Layer.Any, Layer.Any>,
-): Layer.Layer<LocationServiceMap, LocationError> {
+): Layer.Layer<LocationServiceMap.Service> {
   return Layer.effect(
-    LocationServiceMap,
+    LocationServiceMap.Service,
     LayerMap.make(
       (ref: Location.Ref) => {
-        const layer = LayerNodeTree.compile(
-          LayerNodeTree.bind(location, Location.node, Location.boundNode(ref)),
-          replacements,
-        ) as Layer.Layer<LocationServices, LocationError>
-        return layer.pipe(
+        const location = LayerNodeTree.hoist(
+          LayerNodeTree.bind(locationServices, Location.node, Location.boundNode(ref)),
+          Node.tags.values.global,
+        )
+        return LayerNodeTree.compile(location.node, replacements).pipe(
           Layer.fresh,
           Layer.tap(() =>
             Effect.logInfo("booting location services", {
@@ -101,6 +100,7 @@ export function buildLocationServiceMap(
               workspaceID: ref.workspaceID,
             }),
           ),
+          Layer.provide(LayerNodeTree.compile(location.hoisted, replacements)),
         )
       },
       { idleTimeToLive: "60 minutes" },
@@ -109,12 +109,4 @@ export function buildLocationServiceMap(
 }
 
 // This is temporary for backwards compatibility
-const separatedLocationServices = LayerNodeTree.separate(locationServices, Node.tags)
-const hoistedLocationServices = LayerNodeTree.hoist(
-  separatedLocationServices.location,
-  Node.tags.values.global,
-)
-
-export const locationServiceMapLayer = buildLocationServiceMap(
-  hoistedLocationServices.node as LayerNode.Node<LocationServices, LocationError, any>,
-).pipe(Layer.provide(LayerNodeTree.compile(hoistedLocationServices.hoisted))) as Layer.Layer<LocationServiceMap>
+export const locationServiceMapLayer = buildLocationServiceMap()

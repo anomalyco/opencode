@@ -9,7 +9,7 @@ import { cmd } from "../cmd"
 
 const filesystem = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
-    Effect.provide(LocationServiceMap.get(Location.Ref.make({ directory: AbsolutePath.make(process.cwd()) }))),
+    Effect.provide(LocationServiceMap.Service.get(Location.Ref.make({ directory: AbsolutePath.make(process.cwd()) }))),
     Effect.provide(locationServiceMapLayer),
   )
 

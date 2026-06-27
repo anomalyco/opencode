@@ -60,7 +60,7 @@ describe("LocationServiceMap", () => {
       Effect.flatMap((dir) =>
         Effect.scoped(
           Effect.gen(function* () {
-            const locations = yield* LocationServiceMap
+            const locations = yield* LocationServiceMap.Service
             const directory = AbsolutePath.make(dir.path)
             const constructed = Location.Ref.make({ directory })
             const decoded = Schema.decodeUnknownSync(Location.Ref)({ directory })
@@ -111,7 +111,7 @@ describe("LocationServiceMap", () => {
               }
             }).pipe(
               Effect.scoped,
-              Effect.provide(LocationServiceMap.get(Location.Ref.make({ directory: AbsolutePath.make(directory) }))),
+              Effect.provide(LocationServiceMap.Service.get(Location.Ref.make({ directory: AbsolutePath.make(directory) }))),
             )
 
           const blockedState = yield* update(blocked.path)
@@ -191,7 +191,7 @@ describe("LocationServiceMap", () => {
                 location,
               }),
             ),
-          ).pipe(Effect.provide(LocationServiceMap.get(location)), Effect.flip)
+          ).pipe(Effect.provide(LocationServiceMap.Service.get(location)), Effect.flip)
 
           expect(failure).toMatchObject({
             _tag: "SessionRunnerModel.ModelUnavailableError",
@@ -231,7 +231,7 @@ describe("LocationServiceMap", () => {
           })
         }).pipe(
           Effect.scoped,
-          Effect.provide(LocationServiceMap.get(Location.Ref.make({ directory: AbsolutePath.make(dir.path) }))),
+          Effect.provide(LocationServiceMap.Service.get(Location.Ref.make({ directory: AbsolutePath.make(dir.path) }))),
         ),
       ),
     ),

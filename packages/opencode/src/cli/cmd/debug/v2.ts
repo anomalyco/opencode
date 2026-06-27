@@ -31,7 +31,7 @@ export const V2Command = effectCmd({
     }).pipe(
       Effect.withSpan("Cli.debug.v2"),
       Effect.provide(
-        LocationServiceMap.get(
+        LocationServiceMap.Service.get(
           Location.Ref.make({
             directory: AbsolutePath.make(process.cwd()),
           }),

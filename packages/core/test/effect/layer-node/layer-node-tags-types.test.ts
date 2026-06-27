@@ -1,7 +1,6 @@
 import { test } from "bun:test"
 import { Context, Effect, Layer } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { LayerNodeTree } from "@opencode-ai/core/effect/layer-node"
 
 class A extends Context.Service<A, {}>()("test/TagA") {}
 class B extends Context.Service<B, {}>()("test/TagB") {}
@@ -26,8 +25,7 @@ const cLayer = Layer.effect(
 const requestInput = LayerNode.unbound(A, tags.values.request)
 const globalInput = LayerNode.unbound(B, tags.values.global)
 const inputs = LayerNode.group([requestInput, globalInput])
-const separatedInputs = LayerNodeTree.separate(inputs, tags)
-void separatedInputs
+void inputs
 
 request({ service: B, layer: bLayer, deps: [globalA] })
 request({ service: C, layer: cLayer, deps: [globalA, requestB] })

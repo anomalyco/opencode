@@ -12,7 +12,7 @@ const tags = LayerNode.tags({ app: [] })
 const make = tags.make("app")
 const build = <A, E>(root: LayerNode.Node<A, E, any>, replacements?: readonly LayerNode.Replacement[]) =>
   LayerNodeTree.compile(
-    LayerNodeTree.separate(root, tags).app,
+    root,
     new Map(replacements?.map((item) => [item.source, item.replacement])),
   ) as Layer.Layer<A, E>
 const valueLayer = Layer.succeed(Value, Value.of({ value: "production" }))
@@ -67,7 +67,7 @@ describe("layer node", () => {
   test("requires unbound nodes to be bound before compilation", async () => {
     const unbound = LayerNode.unbound(Value, tags.values.app)
     const greeting = make({ service: Greeting, layer: greetingLayer, deps: [unbound] })
-    const tree = LayerNodeTree.separate(LayerNode.group([greeting]), tags).app
+    const tree = LayerNode.group([greeting])
     expect(() => LayerNodeTree.compile(tree)).toThrow("Unbound layer node: test/LayerNodeValue")
     const bound = LayerNodeTree.bind(tree, unbound, value)
     const layer = LayerNodeTree.compile(bound) as Layer.Layer<Greeting>

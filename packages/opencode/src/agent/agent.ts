@@ -93,7 +93,7 @@ export const layer = Layer.effect(
     const plugin = yield* Plugin.Service
     const skill = yield* Skill.Service
     const provider = yield* Provider.Service
-    const locations = yield* LocationServiceMap
+    const locations = yield* LocationServiceMap.Service
 
     const state = yield* InstanceState.make<State>(
       Effect.fn("Agent.state")(function* (ctx) {
@@ -447,7 +447,7 @@ export const defaultLayer = layer.pipe(
   Layer.provide(locationServiceMapLayer),
 )
 
-const locationServiceMapNode = LayerNode.make({ service: LocationServiceMap, layer: locationServiceMapLayer, deps: [] })
+const locationServiceMapNode = LayerNode.make({ service: LocationServiceMap.Service, layer: locationServiceMapLayer, deps: [] })
 
 export const node = LayerNode.make({
   service: Service,

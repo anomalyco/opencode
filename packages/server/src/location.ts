@@ -6,7 +6,7 @@ import { Effect, Layer } from "effect"
 import { HttpServerRequest } from "effect/unstable/http"
 import { HttpApiMiddleware } from "effect/unstable/httpapi"
 
-export type LocationServices = Layer.Success<ReturnType<(typeof LocationServiceMap)["get"]>>
+export type LocationServices = Layer.Success<ReturnType<(typeof LocationServiceMap.Service)["get"]>>
 
 export class LocationMiddleware extends HttpApiMiddleware.Service<LocationMiddleware, { provides: LocationServices }>()(
   "@opencode/HttpApiLocation",
@@ -49,7 +49,7 @@ function decode(input: string) {
 export const layer = Layer.effect(
   LocationMiddleware,
   Effect.gen(function* () {
-    const locations = yield* LocationServiceMap
+    const locations = yield* LocationServiceMap.Service
     return LocationMiddleware.of((effect) =>
       Effect.gen(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest

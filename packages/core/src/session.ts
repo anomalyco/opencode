@@ -29,7 +29,7 @@ import { SessionStore } from "./session/store"
 import { SessionExecution } from "./session/execution"
 import { SessionExecutionLocal } from "./session/execution/local"
 import { makeGlobalNode } from "./effect/node"
-import { LocationServiceMap, node as locationServiceMapNode } from "./location-service-map"
+import { LocationServiceMap } from "./location-service-map"
 import { MessageDecodeError } from "./session/error"
 import { SessionEvent } from "./session/event"
 import { SessionInput } from "./session/input"
@@ -191,7 +191,7 @@ export const layer = Layer.effect(
           const projects = yield* ProjectV2.Service
           const execution = yield* SessionExecution.Service
           const store = yield* SessionStore.Service
-          const locations = yield* LocationServiceMap
+          const locations = yield* LocationServiceMap.Service
           const decodeMessage = Schema.decodeUnknownEffect(SessionMessage.Message)
           const isDurableSessionEvent = Schema.is(SessionEvent.Durable)
           const decode = (row: typeof SessionMessageTable.$inferSelect) =>
@@ -488,7 +488,7 @@ export const node = makeGlobalNode({
     ProjectV2.node,
     SessionExecutionLocal.node,
     SessionStore.node,
-    locationServiceMapNode,
+    LocationServiceMap.node,
     SessionProjector.node,
   ],
 })

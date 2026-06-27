@@ -25,7 +25,7 @@ export const sessionLocationLayer = Layer.effect(
   SessionLocationMiddleware,
   Effect.gen(function* () {
     const { db } = yield* Database.Service
-    const locations = yield* LocationServiceMap
+    const locations = yield* LocationServiceMap.Service
 
     return SessionLocationMiddleware.of((effect) =>
       Effect.gen(function* () {

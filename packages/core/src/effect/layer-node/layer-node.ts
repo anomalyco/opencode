@@ -94,7 +94,6 @@ type CheckTags<Items extends NodeList, Names extends string> = [Exclude<Items[nu
   : { readonly "Invalid tag dependencies": Exclude<Items[number], NodeInTags<Names>> }
 
 export interface Tags<Config extends TagConfig> {
-  readonly names: readonly TagNames<Config>[]
   readonly values: { readonly [Name in TagNames<Config>]: Tag<Name> }
   readonly make: <Name extends TagNames<Config>>(
     name: Name,
@@ -114,7 +113,6 @@ export function tags<
   const names = Object.keys(config) as TagNames<Config>[]
   const values = Object.fromEntries(names.map((name) => [name, makeTag(name)])) as Tags<Config>["values"]
   return {
-    names,
     values,
     make: ((name: TagNames<Config>) => (input: DistributiveOmit<MakeInput<Layer.Any, NodeList, Tag>, "tag">) =>
       make({ ...input, tag: values[name] })) as Tags<Config>["make"],

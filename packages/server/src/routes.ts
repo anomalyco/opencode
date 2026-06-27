@@ -7,8 +7,8 @@ import { Credential } from "@opencode-ai/core/credential"
 import { PermissionSaved } from "@opencode-ai/core/permission/saved"
 import { PtyTicket } from "@opencode-ai/core/pty/ticket"
 import { SessionV2 } from "@opencode-ai/core/session"
+import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
 import { SessionExecutionLocal } from "@opencode-ai/core/session/execution/local"
-import { locationServices } from "@opencode-ai/core/location-layer"
 import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
 import { HttpRouter, HttpServer } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
@@ -33,6 +33,7 @@ const applicationServices = LayerNode.group([
   PtyTicket.node,
   Credential.node,
   PtyEnvironment.node,
+  LocationServiceMap.node,
 ])
 
 export function createRoutes(password?: string) {
@@ -48,8 +49,7 @@ export function createEmbeddedRoutes() {
 }
 
 function makeRoutes<AuthError, AuthServices>(auth: Layer.Layer<ServerAuth.Config, AuthError, AuthServices>) {
-  const group = LayerNode.group([locationServices, applicationServices])
-  const serviceLayer = NodeBuild.build(group)
+  const serviceLayer = NodeBuild.build(applicationServices)
 
   return HttpApiBuilder.layer(Api, { openapiPath: "/openapi.json" }).pipe(
     Layer.provide(handlers),

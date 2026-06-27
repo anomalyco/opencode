@@ -4,36 +4,12 @@ import { LayerNode } from "./layer-node"
 type AnyNode = LayerNode.Node<unknown, unknown, any>
 type RuntimeLayer = Layer.Layer<never, unknown, unknown>
 
-type Separated<N, Config extends LayerNode.TagConfig> = {
-  readonly [Name in keyof Config]: N extends LayerNode.Node<infer A, infer E, any>
-    ? LayerNode.Node<A, E>
-    : never
-}
-
-export function separate<const Root extends AnyNode, const Config extends LayerNode.TagConfig>(
-  root: Root,
-  tags: LayerNode.Tags<Config>,
-): Separated<Root, Config> {
-  const roots = new Map<LayerNode.Tag, AnyNode[]>()
-
-  for (const node of flatten(root)) {
-    if (!node.tag) throw new Error(`Node ${node.name} has no tag`)
-    const current = roots.get(node.tag) ?? []
-    roots.set(node.tag, current)
-    current.push(node)
-  }
-
-  return Object.fromEntries(
-    tags.names.map((name) => [name, LayerNode.group(roots.get(tags.values[name]) ?? [])]),
-  ) as Separated<Root, Config>
-}
-
 export function hoist<A, E, T extends LayerNode.Tag>(
   root: LayerNode.Node<A, E, any>,
   tag: T,
 ): {
   readonly node: LayerNode.Node<A, E>
-  readonly hoisted: LayerNode.Node<unknown, unknown>
+  readonly hoisted: LayerNode.Node<unknown, E>
 } {
   const visited = new Map<AnyNode, AnyNode>()
   const hoisted = new Map<string, AnyNode>()
@@ -83,7 +59,7 @@ export function hoist<A, E, T extends LayerNode.Tag>(
 
   return {
     node: visit(root) as LayerNode.Node<A, E>,
-    hoisted: LayerNode.group(Array.from(hoisted.values())),
+    hoisted: LayerNode.group(Array.from(hoisted.values())) as LayerNode.Node<unknown, E>,
   }
 }
 
