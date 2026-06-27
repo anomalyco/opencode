@@ -62,6 +62,9 @@ export const Info = Schema.Struct({
   scroll_speed: Schema.optional(ScrollSpeed).annotate({ description: "TUI scroll speed" }),
   scroll_acceleration: Schema.optional(ScrollAcceleration),
   diff_style: Schema.optional(DiffStyle),
+  permission_fullscreen_default: Schema.optional(Schema.Boolean).annotate({
+    description: "Open the permission prompt in fullscreen by default",
+  }),
   mouse: Schema.optional(Schema.Boolean).annotate({ description: "Enable or disable mouse capture (default: true)" }),
 })
 export type Info = Schema.Schema.Type<typeof Info>

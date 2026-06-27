@@ -536,7 +536,7 @@ function Prompt<const T extends Record<string, string>>(props: {
   const keys = Object.keys(props.options) as (keyof T)[]
   const [store, setStore] = createStore({
     selected: keys[0],
-    expanded: false,
+    expanded: !!(props.fullscreen && tuiConfig.permission_fullscreen_default),
   })
   const narrow = createMemo(() => dimensions().width < 80)
   const fullscreenHint = useCommandShortcut("permission.prompt.fullscreen")
