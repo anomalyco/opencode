@@ -718,6 +718,7 @@ export type QuestionInfo = {
   options: Array<QuestionOption>
   multiple?: boolean
   custom?: boolean
+  sensitive?: boolean
 }
 
 export type QuestionTool = {

@@ -515,7 +515,9 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
               <Mark multi={multi()} picked={on()} onClick={toggleCustomMark} />
               <span data-slot="question-option-main">
                 <span data-slot="option-label">{customLabel()}</span>
-                <span data-slot="option-description">{input() || customPlaceholder()}</span>
+                <span data-slot="option-description">
+                  {question()?.sensitive && input() ? "•".repeat(input().length) : (input() || customPlaceholder())}
+                </span>
               </span>
             </button>
           }
@@ -531,9 +533,9 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
                 e.preventDefault()
                 return
               }
-              if (e.target instanceof HTMLTextAreaElement) return
-              const input = e.currentTarget.querySelector('[data-slot="question-custom-input"]')
-              if (input instanceof HTMLTextAreaElement) input.focus()
+              if (e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLInputElement) return
+              const el = e.currentTarget.querySelector('[data-slot="question-custom-input"]')
+              if (el instanceof HTMLElement) el.focus()
             }}
             onSubmit={(e) => {
               e.preventDefault()
@@ -543,30 +545,59 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
             <Mark multi={multi()} picked={on()} onClick={toggleCustomMark} />
             <span data-slot="question-option-main">
               <span data-slot="option-label">{customLabel()}</span>
-              <textarea
-                ref={focusCustom}
-                data-slot="question-custom-input"
-                placeholder={customPlaceholder()}
-                value={input()}
-                rows={1}
-                disabled={sending()}
-                onKeyDown={(e) => {
-                  if (e.key === "Escape") {
+              <Show
+                when={question()?.sensitive}
+                fallback={
+                  <textarea
+                    ref={focusCustom}
+                    data-slot="question-custom-input"
+                    placeholder={customPlaceholder()}
+                    value={input()}
+                    rows={1}
+                    disabled={sending()}
+                    onKeyDown={(e) => {
+                      if (e.key === "Escape") {
+                        e.preventDefault()
+                        setStore("editing", false)
+                        focus(options().length)
+                        return
+                      }
+                      if ((e.metaKey || e.ctrlKey) && !e.altKey) return
+                      if (e.key !== "Enter" || e.shiftKey) return
+                      e.preventDefault()
+                      commitCustom()
+                    }}
+                    onInput={(e) => {
+                      customUpdate(e.currentTarget.value)
+                      resizeInput(e.currentTarget)
+                    }}
+                  />
+                }
+              >
+                <input
+                  type="password"
+                  ref={(el) => setTimeout(() => el.focus(), 0)}
+                  data-slot="question-custom-input"
+                  placeholder={customPlaceholder()}
+                  value={input()}
+                  disabled={sending()}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") {
+                      e.preventDefault()
+                      setStore("editing", false)
+                      focus(options().length)
+                      return
+                    }
+                    if ((e.metaKey || e.ctrlKey) && !e.altKey) return
+                    if (e.key !== "Enter") return
                     e.preventDefault()
-                    setStore("editing", false)
-                    focus(options().length)
-                    return
-                  }
-                  if ((e.metaKey || e.ctrlKey) && !e.altKey) return
-                  if (e.key !== "Enter" || e.shiftKey) return
-                  e.preventDefault()
-                  commitCustom()
-                }}
-                onInput={(e) => {
-                  customUpdate(e.currentTarget.value)
-                  resizeInput(e.currentTarget)
-                }}
-              />
+                    commitCustom()
+                  }}
+                  onInput={(e) => {
+                    customUpdate(e.currentTarget.value)
+                  }}
+                />
+              </Show>
             </span>
           </form>
         </Show>

@@ -30,6 +30,7 @@ const base = {
   header: Schema.String.annotate({ description: "Very short label (max 30 chars)" }),
   options: Schema.Array(Option).annotate({ description: "Available choices" }),
   multiple: Schema.Boolean.pipe(optional).annotate({ description: "Allow selecting multiple choices" }),
+  sensitive: Schema.Boolean.pipe(optional).annotate({ description: "Mask typed input — use for API keys, passwords, secrets" }),
 }
 
 export const Info = Schema.Struct({

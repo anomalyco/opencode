@@ -1,7 +1,7 @@
 import { createStore } from "solid-js/store"
-import { createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
 import { useRenderer } from "@opentui/solid"
-import type { TextareaRenderable } from "@opentui/core"
+import type { KeyEvent, TextareaRenderable } from "@opentui/core"
 import { selectedForeground, tint, useTheme } from "../../context/theme"
 import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
 import { useSDK } from "../../context/sdk"
@@ -28,6 +28,7 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
     custom: [] as string[],
     selected: 0,
     editing: false,
+    sensitiveChars: [] as string[][],
   })
 
   let textarea: TextareaRenderable | undefined
@@ -40,13 +41,36 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
   const input = createMemo(() => store.custom[store.tab] ?? "")
   const multi = createMemo(() => question()?.multiple === true)
   const customPicked = createMemo(() => {
+    if (question()?.sensitive) return (store.sensitiveChars[store.tab]?.length ?? 0) > 0
     const value = input()
     if (!value) return false
     return store.answers[store.tab]?.includes(value) ?? false
   })
 
+  function handleMaskedKey(e: KeyEvent) {
+    const isPrintable = e.sequence.length === 1 && !e.ctrl && !e.meta
+    if (isPrintable) {
+      const current = store.sensitiveChars[store.tab] ?? []
+      const next = [...current, e.sequence]
+      setStore("sensitiveChars", store.tab, next)
+      textarea?.setText("•".repeat(next.length))
+      e.preventDefault()
+      return
+    }
+    if (e.name === "backspace") {
+      const current = store.sensitiveChars[store.tab] ?? []
+      const next = current.slice(0, -1)
+      setStore("sensitiveChars", store.tab, next)
+      textarea?.setText("•".repeat(next.length))
+      e.preventDefault()
+    }
+  }
+
   function submit() {
-    const answers = questions().map((_, i) => store.answers[i] ?? [])
+    const answers = questions().map((q, i) => {
+      if (q.sensitive) return [(store.sensitiveChars[i] ?? []).join("")]
+      return store.answers[i] ?? []
+    })
     void sdk.client.question.reply({
       requestID: props.request.id,
       directory: props.directory,
@@ -62,10 +86,12 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
   }
 
   function pick(answer: string, custom: boolean = false) {
+    const q = question()
+    const realAnswer = q?.sensitive ? (store.sensitiveChars[store.tab] ?? []).join("") : answer
     const answers = [...store.answers]
-    answers[store.tab] = [answer]
+    answers[store.tab] = [realAnswer]
     setStore("answers", answers)
-    if (custom) {
+    if (custom && !q?.sensitive) {
       const inputs = [...store.custom]
       inputs[store.tab] = answer
       setStore("custom", inputs)
@@ -74,7 +100,7 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
       void sdk.client.question.reply({
         requestID: props.request.id,
         directory: props.directory,
-        answers: [[answer]],
+        answers: [[realAnswer]],
       })
       return
     }
@@ -128,6 +154,12 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
   onMount(() => {
     const popMode = modeStack.push(QUESTION_MODE)
     onCleanup(popMode)
+  })
+
+  createEffect(() => {
+    if (question()?.sensitive && !store.editing && !confirm()) {
+      setStore("editing", true)
+    }
   })
 
   useBindings(() => ({
@@ -433,20 +465,23 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
                             val.gotoLineEnd()
                           })
                         }}
-                        initialValue={input()}
-                        placeholder="Type your own answer"
+                        initialValue={question()?.sensitive ? "" : input()}
+                        placeholder={question()?.sensitive ? "Enter secret value" : "Type your own answer"}
                         placeholderColor={theme.textMuted}
                         minHeight={1}
                         maxHeight={6}
                         textColor={theme.text}
                         focusedTextColor={theme.text}
                         cursorColor={theme.primary}
+                        onKeyDown={question()?.sensitive ? handleMaskedKey : undefined}
                       />
                     </box>
                   </Show>
-                  <Show when={!store.editing && input()}>
+                  <Show when={!store.editing && (question()?.sensitive ? customPicked() : Boolean(input()))}>
                     <box paddingLeft={3}>
-                      <text fg={theme.textMuted}>{input()}</text>
+                      <text fg={theme.textMuted}>
+                        {question()?.sensitive ? "•".repeat(store.sensitiveChars[store.tab]?.length ?? 0) : input()}
+                      </text>
                     </box>
                   </Show>
                 </box>
@@ -461,8 +496,14 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
           </box>
           <For each={questions()}>
             {(q, index) => {
-              const value = () => store.answers[index()]?.join(", ") ?? ""
-              const answered = () => Boolean(value())
+              const value = () =>
+                q.sensitive
+                  ? "•".repeat(store.sensitiveChars[index()]?.length ?? 0)
+                  : (store.answers[index()]?.join(", ") ?? "")
+              const answered = () =>
+                q.sensitive
+                  ? (store.sensitiveChars[index()]?.length ?? 0) > 0
+                  : Boolean(store.answers[index()]?.length)
               return (
                 <box paddingLeft={1}>
                   <text>
