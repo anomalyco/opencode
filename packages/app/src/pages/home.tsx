@@ -1133,7 +1133,7 @@ function HomeSessionSearchResultRow(props: {
 function HomeSessionGroupHeader(props: { title: string; onNewSession?: () => void }) {
   const language = useLanguage()
   return (
-    <div class="flex h-7 min-w-0 items-center justify-between pl-[18px]">
+    <div class="flex h-7 min-w-0 items-center justify-between pl-3">
       <div class={HOME_SECTION_LABEL}>{props.title}</div>
       <Show when={props.onNewSession}>
         {(onNewSession) => (
