@@ -33,15 +33,15 @@ export function DialogPrompt(props: DialogPromptProps) {
   }
 
   function handleMaskedKey(e: KeyEvent) {
-    const isPrintable = e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey
+    const isPrintable = e.sequence.length === 1 && !e.ctrl && !e.meta
     if (isPrintable) {
-      const next = [...maskedChars(), e.key]
+      const next = [...maskedChars(), e.sequence]
       setMaskedChars(next)
       textarea.setText("•".repeat(next.length))
       e.preventDefault()
       return
     }
-    if (e.key === "Backspace") {
+    if (e.name === "backspace") {
       const next = maskedChars().slice(0, -1)
       setMaskedChars(next)
       textarea.setText("•".repeat(next.length))
