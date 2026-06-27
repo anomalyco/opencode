@@ -7,6 +7,7 @@ import { Location } from "@opencode-ai/core/location"
 import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
 import { Project } from "@opencode-ai/core/project"
 import { AbsolutePath } from "@opencode-ai/core/schema"
+import { tmpdir } from "../../fixture/tmpdir"
 
 class Value extends Context.Service<Value, { readonly value: string }>()("test/TagValue") {}
 class Result extends Context.Service<Result, { readonly value: string }>()("test/TagResult") {}
@@ -16,6 +17,7 @@ class Last extends Context.Service<Last, { readonly value: string }>()("test/Tag
 
 describe("node build", () => {
   test("shares top-level project with location services", async () => {
+    await using tmp = await tmpdir()
     let acquisitions = 0
     const projectLayer = Layer.effect(
       Project.Service,
@@ -31,7 +33,7 @@ describe("node build", () => {
     const layer = NodeBuild.build(LayerNode.group([Project.node, LocationServiceMap.node]), [
       LayerNode.replace(Project.layer, projectLayer),
     ])
-    const ref = Location.Ref.make({ directory: AbsolutePath.make("/tmp") })
+    const ref = Location.Ref.make({ directory: AbsolutePath.make(tmp.path) })
     const program = Effect.gen(function* () {
       yield* Project.Service
       const locations = yield* LocationServiceMap.Service

@@ -57,6 +57,7 @@ import { httpClient } from "@opencode-ai/core/effect/layer-node-platform"
 import { EventV2 } from "@opencode-ai/core/event"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { Npm } from "@opencode-ai/core/npm"
+import { PermissionSaved } from "@opencode-ai/core/permission/saved"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { ProjectCopy } from "@opencode-ai/core/project/copy"
 import { PtyTicket } from "@opencode-ai/core/pty/ticket"
@@ -228,6 +229,7 @@ const app = LayerNode.group([
   Discovery.node,
   Question.node,
   Permission.node,
+  PermissionSaved.node,
   Todo.node,
   Session.node,
   SessionProjector.node,
