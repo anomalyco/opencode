@@ -120,6 +120,7 @@ export default {
           \`time_created\` integer NOT NULL,
           \`time_updated\` integer NOT NULL,
           \`time_initialized\` integer,
+          \`time_archived\` integer,
           \`sandboxes\` text NOT NULL,
           \`commands\` text
         );

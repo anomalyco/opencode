@@ -1,5 +1,5 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { and, eq, sql } from "drizzle-orm"
+import { and, eq, isNull, sql } from "drizzle-orm"
 import { Database } from "@opencode-ai/core/database/database"
 import { ProjectDirectoryTable, ProjectTable } from "@opencode-ai/core/project/sql"
 import { ProjectDirectories } from "@opencode-ai/core/project/directories"
@@ -51,6 +51,7 @@ export function fromRow(row: Row): Info {
       created: row.time_created,
       updated: row.time_updated,
       initialized: row.time_initialized ?? undefined,
+      archived: row.time_archived ?? undefined,
     },
     sandboxes: row.sandboxes,
     commands: row.commands ?? undefined,
@@ -97,6 +98,9 @@ export interface Interface {
   readonly sandboxes: (id: ProjectV2.ID) => Effect.Effect<string[]>
   readonly addSandbox: (id: ProjectV2.ID, directory: string) => Effect.Effect<void>
   readonly removeSandbox: (id: ProjectV2.ID, directory: string) => Effect.Effect<void>
+  readonly archive: (id: ProjectV2.ID) => Effect.Effect<Info, NotFoundError>
+  readonly unarchive: (id: ProjectV2.ID) => Effect.Effect<Info, NotFoundError>
+  readonly listArchived: () => Effect.Effect<Info[]>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Project") {}
@@ -236,7 +240,11 @@ export const layer = Layer.effect(
         ...existing,
         worktree: projectID === ProjectV2.ID.global ? worktree : existing.worktree,
         vcs: data.vcs?.type ?? fakeVcs,
-        time: { ...existing.time, updated: Date.now() },
+        // fromDirectory always unarchives via onConflictDoUpdate below, so the
+        // emitted event payload must reflect the freshly-cleared state. Carrying
+        // existing.time.archived here would otherwise re-route a just-re-opened
+        // project back into the archived list.
+        time: { ...existing.time, updated: Date.now(), archived: undefined },
       }
       if (
         projectID !== ProjectV2.ID.global &&
@@ -281,6 +289,7 @@ export const layer = Layer.effect(
             icon_color: result.icon?.color,
             time_updated: result.time.updated,
             time_initialized: result.time.initialized,
+            time_archived: null,
             sandboxes: result.sandboxes.map((sandbox) => AbsolutePath.make(sandbox)),
             commands: result.commands,
           },
@@ -334,7 +343,21 @@ export const layer = Layer.effect(
     })
 
     const list = Effect.fn("Project.list")(function* () {
-      return (yield* db.select().from(ProjectTable).all().pipe(Effect.orDie)).map(fromRow)
+      return (yield* db
+        .select()
+        .from(ProjectTable)
+        .where(and(isNull(ProjectTable.time_archived), sql`${ProjectTable.id} != 'global'`))
+        .all()
+        .pipe(Effect.orDie)).map(fromRow)
+    })
+
+    const listArchived = Effect.fn("Project.listArchived")(function* () {
+      return (yield* db
+        .select()
+        .from(ProjectTable)
+        .where(and(sql`${ProjectTable.time_archived} IS NOT NULL`, sql`${ProjectTable.id} != 'global'`))
+        .all()
+        .pipe(Effect.orDie)).map(fromRow)
     })
 
     const get = Effect.fn("Project.get")(function* (id: ProjectV2.ID) {
@@ -358,6 +381,40 @@ export const layer = Layer.effect(
         .get()
         .pipe(Effect.orDie)
       if (!result) return yield* new NotFoundError({ projectID: input.projectID })
+      const data = fromRow(result)
+      yield* emitUpdated(data)
+      return data
+    })
+
+    const archive = Effect.fn("Project.archive")(function* (id: ProjectV2.ID) {
+      // The global project is an internal placeholder for non-git directories
+      // and must never be user-archiveable; surface it as not found so callers
+      // can no-op or show a clear error.
+      if (id === ProjectV2.ID.global) return yield* new NotFoundError({ projectID: id })
+      const result = yield* db
+        .update(ProjectTable)
+        .set({ time_archived: Date.now(), time_updated: Date.now() })
+        .where(eq(ProjectTable.id, id))
+        .returning()
+        .get()
+        .pipe(Effect.orDie)
+      if (!result) return yield* new NotFoundError({ projectID: id })
+      const data = fromRow(result)
+      yield* emitUpdated(data)
+      return data
+    })
+
+    const unarchive = Effect.fn("Project.unarchive")(function* (id: ProjectV2.ID) {
+      // Mirror the archive guard: the global project has no user-facing state.
+      if (id === ProjectV2.ID.global) return yield* new NotFoundError({ projectID: id })
+      const result = yield* db
+        .update(ProjectTable)
+        .set({ time_archived: null, time_updated: Date.now() })
+        .where(eq(ProjectTable.id, id))
+        .returning()
+        .get()
+        .pipe(Effect.orDie)
+      if (!result) return yield* new NotFoundError({ projectID: id })
       const data = fromRow(result)
       yield* emitUpdated(data)
       return data
@@ -459,6 +516,9 @@ export const layer = Layer.effect(
       sandboxes,
       addSandbox,
       removeSandbox,
+      archive,
+      unarchive,
+      listArchived,
     })
   }),
 )

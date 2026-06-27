@@ -109,7 +109,17 @@ export const layer = Layer.effect(
 
     const resolve = Effect.fn("Project.resolve")(function* (input: AbsolutePath) {
       const repo = yield* git.repo.discover(input)
-      if (!repo) return { id: ID.global, directory: AbsolutePath.make(path.parse(input).root), vcs: undefined }
+      if (!repo) {
+        // Non-git directories previously collapsed into a single "global" row,
+        // which made them indistinguishable server-side. Give each one a stable
+        // identity derived from its absolute path so the project table holds a
+        // per-directory row (the worktree stays the directory itself, not "/").
+        return {
+          id: ID.make(Hash.fast(`directory:${input}`)),
+          directory: AbsolutePath.make(input),
+          vcs: undefined,
+        }
+      }
 
       const previous = yield* cached(repo.commonDirectory)
       const id = (yield* remote(repo)) ?? previous ?? (yield* root(repo))

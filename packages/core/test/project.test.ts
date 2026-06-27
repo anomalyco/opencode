@@ -42,7 +42,7 @@ async function rootCommit(dir: string) {
 }
 
 describe("ProjectV2.resolve", () => {
-  it.live("returns global for non-git directory", () =>
+  it.live("returns a stable directory-derived id for non-git directory", () =>
     Effect.gen(function* () {
       const tmp = yield* Effect.acquireRelease(
         Effect.promise(() => tmpdir()),
@@ -52,8 +52,11 @@ describe("ProjectV2.resolve", () => {
 
       const result = yield* project.resolve(abs(tmp.path))
 
-      expect(result.id).toBe(ProjectV2.ID.make("global"))
-      expect(path.resolve(result.directory)).toBe(path.parse(tmp.path).root)
+      // Non-git directories now get a per-directory identity (a hash of the
+      // absolute path) so they can be archived/unarchived individually. The
+      // id is stable across resolves for the same path.
+      expect(result.id).not.toBe(ProjectV2.ID.make("global"))
+      expect(result.directory).toBe(yield* real(tmp.path))
       expect(result.previous).toBeUndefined()
       expect(result.vcs).toBeUndefined()
     }),

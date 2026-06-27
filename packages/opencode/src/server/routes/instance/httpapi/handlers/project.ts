@@ -49,15 +49,48 @@ export const projectHandlers = HttpApiBuilder.group(InstanceHttpApi, "project", 
       )
     })
 
+    const archive = Effect.fn("ProjectHttpApi.archive")(function* (ctx: { params: { projectID: ProjectV2.ID } }) {
+      return yield* svc.archive(ctx.params.projectID).pipe(
+        Effect.catchTag("Project.NotFoundError", (error) =>
+          Effect.fail(
+            new ProjectNotFoundError({
+              projectID: error.projectID,
+              message: `Project not found: ${error.projectID}`,
+            }),
+          ),
+        ),
+      )
+    })
+
+    const unarchive = Effect.fn("ProjectHttpApi.unarchive")(function* (ctx: { params: { projectID: ProjectV2.ID } }) {
+      return yield* svc.unarchive(ctx.params.projectID).pipe(
+        Effect.catchTag("Project.NotFoundError", (error) =>
+          Effect.fail(
+            new ProjectNotFoundError({
+              projectID: error.projectID,
+              message: `Project not found: ${error.projectID}`,
+            }),
+          ),
+        ),
+      )
+    })
+
     const directories = Effect.fn("ProjectHttpApi.directories")((ctx: { params: { projectID: ProjectV2.ID } }) =>
       project.directories({ projectID: ctx.params.projectID }),
     )
+
+    const archived = Effect.fn("ProjectHttpApi.archived")(function* () {
+      return yield* svc.listArchived()
+    })
 
     return handlers
       .handle("list", list)
       .handle("current", current)
       .handle("initGit", initGit)
       .handle("update", update)
+      .handle("archive", archive)
+      .handle("unarchive", unarchive)
       .handle("directories", directories)
+      .handle("archived", archived)
   }),
 )

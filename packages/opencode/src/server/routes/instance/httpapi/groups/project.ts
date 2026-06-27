@@ -62,6 +62,31 @@ export const ProjectApi = HttpApi.make("project")
             description: "Update project properties such as name, icon, and commands.",
           }),
         ),
+        HttpApiEndpoint.post("archive", `${root}/:projectID/archive`, {
+          params: { projectID: ProjectV2.ID },
+          query: WorkspaceRoutingQuery,
+          success: described(Project.Info, "Archived project information"),
+          error: [ProjectNotFoundError],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "project.archive",
+            summary: "Archive project",
+            description:
+              "Mark a project as archived so it no longer appears in the project list. The project row is preserved; re-opening the project directory unarchives it.",
+          }),
+        ),
+        HttpApiEndpoint.post("unarchive", `${root}/:projectID/unarchive`, {
+          params: { projectID: ProjectV2.ID },
+          query: WorkspaceRoutingQuery,
+          success: described(Project.Info, "Unarchived project information"),
+          error: [ProjectNotFoundError],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "project.unarchive",
+            summary: "Unarchive project",
+            description: "Clear the archived flag on a project so it appears in the project list again.",
+          }),
+        ),
         HttpApiEndpoint.get("directories", `${root}/:projectID/directories`, {
           params: { projectID: ProjectV2.ID },
           query: WorkspaceRoutingQuery,
@@ -71,6 +96,16 @@ export const ProjectApi = HttpApi.make("project")
             identifier: "project.directories",
             summary: "List project directories",
             description: "List known local absolute directories for a project.",
+          }),
+        ),
+        HttpApiEndpoint.get("archived", `${root}/archived`, {
+          query: WorkspaceRoutingQuery,
+          success: described(Schema.Array(Project.Info), "List of archived projects"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "project.archived",
+            summary: "List archived projects",
+            description: "Get a list of projects that have been archived and are hidden from the home view.",
           }),
         ),
       )

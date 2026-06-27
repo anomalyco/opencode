@@ -3176,6 +3176,7 @@ export type ProjectTime = {
   created: number
   updated: number
   initialized?: number
+  archived?: number
 }
 
 export type EventServerInstanceDisposed = {
@@ -8819,6 +8820,74 @@ export type ProjectUpdateResponses = {
 
 export type ProjectUpdateResponse = ProjectUpdateResponses[keyof ProjectUpdateResponses]
 
+export type ProjectArchiveData = {
+  body?: never
+  path: {
+    projectID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/project/{projectID}/archive"
+}
+
+export type ProjectArchiveErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * ProjectNotFoundError
+   */
+  404: ProjectNotFoundError
+}
+
+export type ProjectArchiveError = ProjectArchiveErrors[keyof ProjectArchiveErrors]
+
+export type ProjectArchiveResponses = {
+  /**
+   * Archived project information
+   */
+  200: Project
+}
+
+export type ProjectArchiveResponse = ProjectArchiveResponses[keyof ProjectArchiveResponses]
+
+export type ProjectUnarchiveData = {
+  body?: never
+  path: {
+    projectID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/project/{projectID}/unarchive"
+}
+
+export type ProjectUnarchiveErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * ProjectNotFoundError
+   */
+  404: ProjectNotFoundError
+}
+
+export type ProjectUnarchiveError = ProjectUnarchiveErrors[keyof ProjectUnarchiveErrors]
+
+export type ProjectUnarchiveResponses = {
+  /**
+   * Unarchived project information
+   */
+  200: Project
+}
+
+export type ProjectUnarchiveResponse = ProjectUnarchiveResponses[keyof ProjectUnarchiveResponses]
+
 export type ProjectDirectoriesData = {
   body?: never
   path: {
@@ -8848,6 +8917,34 @@ export type ProjectDirectoriesResponses = {
 }
 
 export type ProjectDirectoriesResponse = ProjectDirectoriesResponses[keyof ProjectDirectoriesResponses]
+
+export type ProjectArchivedData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/project/archived"
+}
+
+export type ProjectArchivedErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type ProjectArchivedError = ProjectArchivedErrors[keyof ProjectArchivedErrors]
+
+export type ProjectArchivedResponses = {
+  /**
+   * List of archived projects
+   */
+  200: Array<Project>
+}
+
+export type ProjectArchivedResponse = ProjectArchivedResponses[keyof ProjectArchivedResponses]
 
 export type ExperimentalProjectCopyGenerateNameData = {
   body?: {

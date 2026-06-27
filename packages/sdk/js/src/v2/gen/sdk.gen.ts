@@ -130,6 +130,10 @@ import type {
   PermissionRuleset,
   PermissionV2Reply,
   PermissionV2Source,
+  ProjectArchivedErrors,
+  ProjectArchivedResponses,
+  ProjectArchiveErrors,
+  ProjectArchiveResponses,
   ProjectCommands,
   ProjectCurrentErrors,
   ProjectCurrentResponses,
@@ -140,6 +144,8 @@ import type {
   ProjectInitGitResponses,
   ProjectListErrors,
   ProjectListResponses,
+  ProjectUnarchiveErrors,
+  ProjectUnarchiveResponses,
   ProjectUpdateErrors,
   ProjectUpdateResponses,
   PromptInput,
@@ -2662,6 +2668,70 @@ export class Project extends HeyApiClient {
   }
 
   /**
+   * Archive project
+   *
+   * Mark a project as archived so it no longer appears in the project list. The project row is preserved; re-opening the project directory unarchives it.
+   */
+  public archive<ThrowOnError extends boolean = false>(
+    parameters: {
+      projectID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "projectID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<ProjectArchiveResponses, ProjectArchiveErrors, ThrowOnError>({
+      url: "/project/{projectID}/archive",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Unarchive project
+   *
+   * Clear the archived flag on a project so it appears in the project list again.
+   */
+  public unarchive<ThrowOnError extends boolean = false>(
+    parameters: {
+      projectID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "projectID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<ProjectUnarchiveResponses, ProjectUnarchiveErrors, ThrowOnError>({
+      url: "/project/{projectID}/unarchive",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
    * List project directories
    *
    * List known local absolute directories for a project.
@@ -2688,6 +2758,36 @@ export class Project extends HeyApiClient {
     )
     return (options?.client ?? this.client).get<ProjectDirectoriesResponses, ProjectDirectoriesErrors, ThrowOnError>({
       url: "/project/{projectID}/directories",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * List archived projects
+   *
+   * Get a list of projects that have been archived and are hidden from the home view.
+   */
+  public archived<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<ProjectArchivedResponses, ProjectArchivedErrors, ThrowOnError>({
+      url: "/project/archived",
       ...options,
       ...params,
     })
