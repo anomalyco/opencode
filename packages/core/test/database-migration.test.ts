@@ -109,6 +109,37 @@ describe("DatabaseMigration", () => {
     ).rejects.toThrow("Database is not empty and has no session table")
   })
 
+  test("seeds unnamed Drizzle journal entries by migration order", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.transaction((tx) =>
+          Effect.forEach(migrations.slice(0, 3), (migration) => migration.up(tx), { discard: true }),
+        )
+        yield* db.run(sql`
+          CREATE TABLE "__drizzle_migrations" (
+            id SERIAL PRIMARY KEY,
+            hash text NOT NULL,
+            created_at numeric
+          )
+        `)
+        yield* Effect.forEach([1, 2, 3], (createdAt) =>
+          db.run(sql`INSERT INTO "__drizzle_migrations" (hash, created_at) VALUES ('', ${createdAt})`),
+        )
+
+        yield* DatabaseMigration.apply(db)
+
+        expect(yield* db.get(sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'workspace'`)).toEqual({
+          name: "workspace",
+        })
+        expect(yield* db.get(sql`SELECT count(*) as count FROM migration`)).toEqual({ count: migrations.length })
+        expect(yield* db.all(sql`SELECT id FROM migration ORDER BY id LIMIT 3`)).toEqual(
+          migrations.slice(0, 3).map((migration) => ({ id: migration.id })),
+        )
+      }),
+    )
+  })
+
   test("backfills existing Context Epoch rows to the build agent", async () => {
     await run(
       Effect.gen(function* () {

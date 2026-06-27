@@ -50,16 +50,33 @@ export function applyOnly(db: Database, input: Migration[]) {
     )
     if (completed.size === 0) {
       // Existing installs used Drizzle's migration journal. Seed the new
-      // journal once so TypeScript migrations don't replay old SQL.
+      // journal once so TypeScript migrations don't replay old SQL. Drizzle's
+      // SQLite journal used to store only id/hash/created_at, so fall back to
+      // the row count when migration names are not available.
       if (
         yield* db.get(sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = ${"__drizzle_migrations"}`)
       ) {
-        yield* db.run(sql`
-          INSERT OR IGNORE INTO ${sql.identifier("migration")} (id, time_completed)
-          SELECT name, ${Date.now()}
-          FROM ${sql.identifier("__drizzle_migrations")}
-          WHERE name IS NOT NULL
-        `)
+        const columns = new Set(
+          (yield* db.all<{ name: string }>(sql`PRAGMA table_info("__drizzle_migrations")`)).map((row) => row.name),
+        )
+        if (columns.has("name")) {
+          yield* db.run(sql`
+            INSERT OR IGNORE INTO ${sql.identifier("migration")} (id, time_completed)
+            SELECT name, ${Date.now()}
+            FROM ${sql.identifier("__drizzle_migrations")}
+            WHERE name IS NOT NULL
+          `)
+        } else {
+          const count =
+            (yield* db.get<{ count: number }>(
+              sql`SELECT COUNT(*) as count FROM ${sql.identifier("__drizzle_migrations")}`,
+            ))?.count ?? 0
+          yield* Effect.forEach(input.slice(0, count), (migration) =>
+            db.run(
+              sql`INSERT OR IGNORE INTO ${sql.identifier("migration")} (id, time_completed) VALUES (${migration.id}, ${Date.now()})`,
+            ),
+          )
+        }
         completed = new Set(
           (yield* db.all<{ id: string }>(sql`SELECT id FROM ${sql.identifier("migration")}`)).map((row) => row.id),
         )
