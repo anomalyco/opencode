@@ -1,4 +1,4 @@
-import { TextareaRenderable, TextAttributes } from "@opentui/core"
+import { TextareaRenderable, TextAttributes, type KeyEvent } from "@opentui/core"
 import { useTheme } from "../context/theme"
 import { useDialog, type DialogContext } from "./dialog"
 import { Show, createEffect, createSignal, onMount, type JSX } from "solid-js"
@@ -13,6 +13,7 @@ export type DialogPromptProps = {
   value?: string
   busy?: boolean
   busyText?: string
+  masked?: boolean
   onConfirm?: (value: string) => void
   onCancel?: () => void
 }
@@ -23,11 +24,29 @@ export function DialogPrompt(props: DialogPromptProps) {
   const tuiConfig = useTuiConfig()
   const submitShortcut = useCommandShortcut("dialog.prompt.submit")
   const [textareaTarget, setTextareaTarget] = createSignal<TextareaRenderable>()
+  const [maskedChars, setMaskedChars] = createSignal<string[]>([])
   let textarea: TextareaRenderable
 
   function confirm() {
     if (props.busy) return
-    props.onConfirm?.(textarea.plainText)
+    props.onConfirm?.(props.masked ? maskedChars().join("") : textarea.plainText)
+  }
+
+  function handleMaskedKey(e: KeyEvent) {
+    const isPrintable = e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey
+    if (isPrintable) {
+      const next = [...maskedChars(), e.key]
+      setMaskedChars(next)
+      textarea.setText("•".repeat(next.length))
+      e.preventDefault()
+      return
+    }
+    if (e.key === "Backspace") {
+      const next = maskedChars().slice(0, -1)
+      setMaskedChars(next)
+      textarea.setText("•".repeat(next.length))
+      e.preventDefault()
+    }
   }
 
   useBindings(() => ({
@@ -96,6 +115,7 @@ export function DialogPrompt(props: DialogPromptProps) {
           textColor={props.busy ? theme.textMuted : theme.text}
           focusedTextColor={props.busy ? theme.textMuted : theme.text}
           cursorColor={props.busy ? theme.backgroundElement : theme.text}
+          onKeyDown={props.masked ? handleMaskedKey : undefined}
         />
         <Show when={props.busy}>
           <Spinner color={theme.textMuted}>{props.busyText ?? "Working..."}</Spinner>

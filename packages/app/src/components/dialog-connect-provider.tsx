@@ -435,7 +435,7 @@ export function DialogConnectProvider(props: { provider: string; directory?: Acc
         providerID: props.provider,
         auth: {
           type: "api",
-          key: apiKey,
+          key: apiKey.trim(),
           ...(store.promptInputs ? { metadata: store.promptInputs } : {}),
         },
       })
@@ -467,7 +467,7 @@ export function DialogConnectProvider(props: { provider: string; directory?: Acc
         <form onSubmit={handleSubmit} class="flex flex-col items-start gap-4">
           <TextField
             autofocus
-            type="text"
+            sensitive
             label={language.t("provider.connect.apiKey.label", { provider: provider().name })}
             placeholder={language.t("provider.connect.apiKey.placeholder")}
             name="apiKey"

@@ -366,6 +366,7 @@ function ApiMethod(props: ApiMethodProps) {
     <DialogPrompt
       title={props.title}
       placeholder="API key"
+      masked
       description={
         {
           opencode: (
@@ -393,12 +394,13 @@ function ApiMethod(props: ApiMethodProps) {
         }[props.providerID] ?? undefined
       }
       onConfirm={async (value) => {
-        if (!value) return
+        const trimmed = value.trim()
+        if (!trimmed) return
         await sdk.client.auth.set({
           providerID: props.providerID,
           auth: {
             type: "api",
-            key: value,
+            key: trimmed,
             ...(props.metadata ? { metadata: props.metadata } : {}),
           },
         })

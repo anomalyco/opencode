@@ -29,6 +29,7 @@ export interface TextFieldProps
   copyable?: boolean
   copyKind?: "clipboard" | "link"
   multiline?: boolean
+  sensitive?: boolean
 }
 
 export function TextField(props: TextFieldProps) {
@@ -52,8 +53,11 @@ export function TextField(props: TextFieldProps) {
     "copyable",
     "copyKind",
     "multiline",
+    "sensitive",
+    "type",
   ])
   const [copied, setCopied] = createSignal(false)
+  const [revealed, setRevealed] = createSignal(false)
 
   const label = () => {
     if (copied()) return i18n.t("ui.textField.copied")
@@ -101,9 +105,34 @@ export function TextField(props: TextFieldProps) {
       <div data-slot="input-wrapper">
         <Show
           when={local.multiline}
-          fallback={<Kobalte.Input {...others} data-slot="input-input" class={local.class} />}
+          fallback={
+            <Kobalte.Input
+              {...others}
+              type={local.sensitive ? (revealed() ? "text" : "password") : local.type}
+              data-slot="input-input"
+              class={local.class}
+            />
+          }
         >
           <Kobalte.TextArea {...others} autoResize data-slot="input-input" class={local.class} />
+        </Show>
+        <Show when={local.sensitive}>
+          <Tooltip
+            value={revealed() ? "Hide" : "Reveal"}
+            placement="top"
+            gutter={4}
+            skipDelayDuration={0}
+          >
+            <IconButton
+              type="button"
+              icon={revealed() ? "eye-slash" : "eye"}
+              variant="ghost"
+              onClick={() => setRevealed((v) => !v)}
+              tabIndex={-1}
+              data-slot="input-sensitive-button"
+              aria-label={revealed() ? "Hide" : "Reveal"}
+            />
+          </Tooltip>
         </Show>
         <Show when={local.copyable}>
           <Tooltip value={label()} placement="top" gutter={4} forceOpen={copied()} skipDelayDuration={0}>
