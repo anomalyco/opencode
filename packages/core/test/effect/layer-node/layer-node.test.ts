@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Context, Effect, Layer } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { LayerNodeTree } from "@opencode-ai/core/effect/layer-node"
 
 class Value extends Context.Service<Value, { readonly value: string }>()("test/LayerNodeValue") {}
 class Greeting extends Context.Service<Greeting, { readonly value: string }>()("test/LayerNodeGreeting") {}
@@ -14,7 +13,7 @@ class App extends Context.Service<App, { readonly run: Effect.Effect<string[]> }
 const tags = LayerNode.tags({ app: [] })
 const make = tags.make("app")
 const build = <A, E>(root: LayerNode.Node<A, E, any>, replacements?: readonly LayerNode.Replacement[]) =>
-  LayerNodeTree.compile(root, new Map(replacements?.map((item) => [item.source, item.replacement]))) as Layer.Layer<
+  LayerNode.compile(root, new Map(replacements?.map((item) => [item.source, item.replacement]))) as Layer.Layer<
     A,
     E
   >
@@ -31,7 +30,7 @@ describe("layer node", () => {
     const value = LayerNode.make({ service: Value, layer: valueLayer, deps: [] })
     const greeting = LayerNode.make({ service: Greeting, layer: greetingLayer, deps: [value] })
     const program = Effect.map(Greeting, (item) => item.value).pipe(
-      Effect.provide(LayerNodeTree.compile(LayerNode.group([greeting]))),
+      Effect.provide(LayerNode.compile(LayerNode.group([greeting]))),
     )
     expect(await Effect.runPromise(program)).toBe("hello production")
   })
@@ -71,9 +70,9 @@ describe("layer node", () => {
     const unbound = LayerNode.unbound(Value, tags.values.app)
     const greeting = make({ service: Greeting, layer: greetingLayer, deps: [unbound] })
     const tree = LayerNode.group([greeting])
-    expect(() => LayerNodeTree.compile(tree)).toThrow("Unbound layer node: test/LayerNodeValue")
-    const bound = LayerNodeTree.bind(tree, unbound, value)
-    const layer = LayerNodeTree.compile(bound) as Layer.Layer<Greeting>
+    expect(() => LayerNode.compile(tree)).toThrow("Unbound layer node: test/LayerNodeValue")
+    const bound = LayerNode.bind(tree, unbound, value)
+    const layer = LayerNode.compile(bound) as Layer.Layer<Greeting>
     const program = Effect.map(Greeting, (item) => item.value).pipe(Effect.provide(layer))
     expect(await Effect.runPromise(program)).toBe("hello production")
   })
@@ -155,15 +154,15 @@ describe("layer node", () => {
       deps: [users],
     })
 
-    const result = LayerNodeTree.hoist(LayerNode.group([app]), tags.values.global)
+    const result = LayerNode.hoist(LayerNode.group([app]), tags.values.global)
     expect(result.node.dependencies[0]?.dependencies[0]?.dependencies[0]).toMatchObject({
       kind: "group",
       dependencies: [],
     })
     expect(result.hoisted.dependencies).toEqual([database])
 
-    const layer = LayerNodeTree.compile(result.node).pipe(
-      Layer.provide(LayerNodeTree.compile(result.hoisted)),
+    const layer = LayerNode.compile(result.node).pipe(
+      Layer.provide(LayerNode.compile(result.hoisted)),
     ) as unknown as Layer.Layer<App>
     const program = Effect.gen(function* () {
       return yield* (yield* App).run
@@ -197,7 +196,7 @@ describe("layer node", () => {
       deps: [second],
     })
 
-    expect(() => LayerNodeTree.hoist(LayerNode.group([left, right]), tags.values.global)).toThrow(
+    expect(() => LayerNode.hoist(LayerNode.group([left, right]), tags.values.global)).toThrow(
       "Tag global has conflicting implementations for test/GraphDatabase",
     )
   })
@@ -216,7 +215,7 @@ describe("layer node", () => {
       layer: Layer.effect(Users, Effect.as(Database, Users.of({ list: Effect.succeed([]) }))),
       deps: [LayerNode.group([database])],
     })
-    const result = LayerNodeTree.hoist(LayerNode.group([users]), tags.values.global)
+    const result = LayerNode.hoist(LayerNode.group([users]), tags.values.global)
 
     expect(result.node.dependencies[0]?.dependencies[0]?.dependencies[0]).toMatchObject({
       kind: "group",

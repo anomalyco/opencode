@@ -16,7 +16,7 @@
     "opencode": "./bin/opencode"
   },
   "exports": {
-    "./effect/layer-node": "./src/effect/layer-node/index.ts",
+    "./effect/layer-node": "./src/effect/layer-node.ts",
     "./effect/app-node": "./src/effect/app-node.ts",
     "./session/runner": "./src/session/runner/index.ts",
     "./system-context": "./src/system-context/index.ts",
