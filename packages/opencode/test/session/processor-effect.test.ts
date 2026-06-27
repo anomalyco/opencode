@@ -1,7 +1,6 @@
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Database } from "@opencode-ai/core/database/database"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { LayerNodeTree } from "@opencode-ai/core/effect/layer-node"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { expect } from "bun:test"
 import { tool } from "ai"
@@ -180,7 +179,7 @@ const replacements = [
   LayerNode.replace(SessionSummary.layer, summary),
   LayerNode.replace(RuntimeFlags.defaultLayer, RuntimeFlags.layer({ experimentalEventSystem: true })),
 ]
-const env = LayerNodeTree.compile(
+const env = LayerNode.compile(
   LayerNode.group([root, LayerNode.make({ service: TestLLMServer, layer: TestLLMServer.layer, deps: [] })]),
   new Map(replacements.map((item) => [item.source, item.replacement])),
 )
@@ -207,7 +206,7 @@ const providerErrorLLM = Layer.succeed(
       ),
   }),
 )
-const providerErrorEnv = LayerNodeTree.compile(
+const providerErrorEnv = LayerNode.compile(
   root,
   new Map(
     [...replacements, LayerNode.replace(LLM.layer, providerErrorLLM)].map((item) => [item.source, item.replacement]),
@@ -229,7 +228,7 @@ const fragmentFailureLLM = Layer.succeed(
       ),
   }),
 )
-const fragmentFailureEnv = LayerNodeTree.compile(
+const fragmentFailureEnv = LayerNode.compile(
   root,
   new Map(
     [...replacements, LayerNode.replace(LLM.layer, fragmentFailureLLM)].map((item) => [item.source, item.replacement]),

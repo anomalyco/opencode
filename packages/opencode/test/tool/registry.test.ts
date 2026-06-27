@@ -4,7 +4,6 @@ import fs from "fs/promises"
 import { fileURLToPath, pathToFileURL } from "url"
 import { Effect, Layer, Result, Schema } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { LayerNodeTree } from "@opencode-ai/core/effect/layer-node"
 import { ToolRegistry } from "@/tool/registry"
 import { Tool } from "@/tool/tool"
 import { disposeAllInstances, TestInstance } from "../fixture/fixture"
@@ -55,9 +54,9 @@ const replacements = [
   LayerNode.replace(RuntimeFlags.defaultLayer, RuntimeFlags.layer()),
 ]
 
-const it = testEffect(LayerNodeTree.compile(root, new Map(replacements.map((item) => [item.source, item.replacement]))))
+const it = testEffect(LayerNode.compile(root, new Map(replacements.map((item) => [item.source, item.replacement]))))
 const withBrokenPlugin = testEffect(
-  LayerNodeTree.compile(
+  LayerNode.compile(
     root,
     new Map(
       [...replacements, LayerNode.replace(Plugin.layer, brokenPluginLayer)].map((item) => [

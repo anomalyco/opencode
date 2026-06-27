@@ -24,8 +24,8 @@ import {
 import * as NodeChildProcess from "node:child_process"
 import { PassThrough } from "node:stream"
 import launch from "cross-spawn"
-import { makeGlobalNode } from "./effect/node"
-import { filesystem, path } from "./effect/layer-node-platform"
+import { makeGlobalNode } from "./effect/app-node"
+import { filesystem, path } from "./effect/app-node-platform"
 
 const toError = (err: unknown): Error => (err instanceof globalThis.Error ? err : new globalThis.Error(String(err)))
 

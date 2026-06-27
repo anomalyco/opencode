@@ -2,7 +2,7 @@ export * as SessionExecution from "./execution"
 
 import { Context, Effect, Layer } from "effect"
 import { LayerNode } from "../effect/layer-node"
-import { Node } from "../effect/node"
+import { Node } from "../effect/app-node"
 import { SessionRunner } from "./runner/index"
 import { SessionSchema } from "./schema"
 
