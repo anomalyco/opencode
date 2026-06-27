@@ -50,7 +50,7 @@ const sanitizeNode = (schema: unknown): unknown => {
     if (isRecord(result.items) && !hasSchemaIntent(result.items)) result.items = { ...result.items, type: "string" }
   }
 
-  if (typeof result.type === "string" && result.type !== "object" && !hasCombiner(result)) {
+  if (!result.type || (typeof result.type === "string" && result.type !== "object" && !hasCombiner(result))) {
     delete result.properties
     delete result.required
   }

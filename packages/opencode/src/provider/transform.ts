@@ -1525,8 +1525,11 @@ export function schema(model: Provider.Model, schema: JSONSchema7): JSONSchema7 
         }
       }
 
-      // Remove properties/required from non-object types (Gemini rejects these)
-      if (result.type && result.type !== "object" && !hasCombiner(result)) {
+      // Remove properties/required from non-object types (Gemini rejects these).
+      // Also handle the case where type was deleted after array expansion
+      // (e.g. ["object","null"] → anyOf), leaving orphaned required on a
+      // combiner or type-less schema.
+      if (!result.type || (result.type !== "object" && !hasCombiner(result))) {
         delete result.properties
         delete result.required
       }
