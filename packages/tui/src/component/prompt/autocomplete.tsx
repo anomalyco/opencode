@@ -493,8 +493,16 @@ export function Autocomplete(props: {
     const nonFileOptions: AutocompleteOption[] =
       store.visible === "@" ? [...referenceAliasesValue, ...agentsValue, ...mcpResources()] : [...commandsValue]
 
+    const refMatch = referenceMatch()
+    const bareSlash = refMatch && searchValue === refMatch.name + "/"
     if (!searchValue) {
       return [...nonFileOptions, ...fileOptions]
+    }
+    if (bareSlash) {
+      const aliasOption = referenceAliasesValue.filter(
+        (item) => item.display === `@${refMatch!.name}`
+      )
+      return [...aliasOption, ...fileOptions]
     }
 
     if (files.loading && prev && prev.length > 0) {
