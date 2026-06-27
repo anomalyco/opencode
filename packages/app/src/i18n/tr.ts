@@ -358,6 +358,11 @@ export const dict = {
   "dialog.project.edit.worktree.startup": "Çalışma alanı başlatma betiği",
   "dialog.project.edit.worktree.startup.description": "Yeni bir çalışma alanı (worktree) oluşturduktan sonra çalışır.",
   "dialog.project.edit.worktree.startup.placeholder": "örneğin bun install",
+  "dialog.project.archive.title": "Projeyi arşivle",
+  "dialog.project.archive.description":
+    "Bu işlem {{name}} projesini proje listenizden gizleyecektir. Proje ve oturumları veritabanında kalır. Proje dizinini tekrar açarak geri yükleyebilirsiniz.",
+  "dialog.project.archive.confirm": "Arşivle",
+  "dialog.project.archive.cancel": "İptal",
 
   "context.breakdown.title": "Bağlam Dökümü",
   "context.breakdown.note": 'Girdi tokenlerinin yaklaşık dökümü. "Diğer" araç tanımları ve ek yükleri içerir.',

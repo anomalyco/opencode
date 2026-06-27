@@ -1363,6 +1363,14 @@ export default function LegacyLayout(props: ParentProps) {
     })
   }
 
+  const showArchiveProjectDialog = (conn: ServerConnection.Any, project: LocalProject) => {
+    const run = ++dialogRun
+    void import("@/components/dialog-archive-project").then((x) => {
+      if (dialogDead || dialogRun !== run) return
+      dialog.show(() => <x.DialogArchiveProject server={conn} project={project} />)
+    })
+  }
+
   function chooseProject() {
     const conn = server.current
     if (!conn) return
@@ -1915,6 +1923,7 @@ export default function LegacyLayout(props: ParentProps) {
     openSidebar: () => layout.sidebar.open(),
     closeProject,
     showEditProjectDialog: (proj) => showEditProjectDialog(server.current!, proj),
+    showArchiveProjectDialog: (proj) => showArchiveProjectDialog(server.current!, proj),
     toggleProjectWorkspaces,
     workspacesEnabled: (project) => project.vcs === "git" && layout.sidebar.workspaces(project.worktree)(),
     workspaceIds,
@@ -2089,6 +2098,18 @@ export default function LegacyLayout(props: ParentProps) {
                           <DropdownMenu.ItemLabel>
                             {language.t("sidebar.project.clearNotifications")}
                           </DropdownMenu.ItemLabel>
+                        </DropdownMenu.Item>
+                        <DropdownMenu.Item
+                          data-action="project-archive-menu"
+                          data-project={slug()}
+                          disabled={!project.id}
+                          onSelect={() => {
+                            const conn = server.current
+                            if (!conn) return
+                            showArchiveProjectDialog(conn, project)
+                          }}
+                        >
+                          <DropdownMenu.ItemLabel>{language.t("common.archive")}</DropdownMenu.ItemLabel>
                         </DropdownMenu.Item>
                         <DropdownMenu.Separator />
                         <DropdownMenu.Item

@@ -353,6 +353,11 @@ export const dict = {
   "dialog.project.edit.worktree.startup": "Opstartsscript for arbejdsområde",
   "dialog.project.edit.worktree.startup.description": "Køres efter oprettelse af et nyt arbejdsområde (worktree).",
   "dialog.project.edit.worktree.startup.placeholder": "f.eks. bun install",
+  "dialog.project.archive.title": "Arkiver projekt",
+  "dialog.project.archive.description":
+    "Dette skjuler {{name}} fra din projektliste. Projektet og dets sessioner forbliver i databasen. Du kan gendanne det ved at åbne projektmappen igen.",
+  "dialog.project.archive.confirm": "Arkiver",
+  "dialog.project.archive.cancel": "Annuller",
   "context.breakdown.title": "Kontekstfordeling",
   "context.breakdown.note":
     'Omtrentlig fordeling af input-tokens. "Andre" inkluderer værktøjsdefinitioner og overhead.',

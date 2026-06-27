@@ -27,6 +27,7 @@ export type ProjectSidebarContext = {
   openSidebar: () => void
   closeProject: (directory: string) => void
   showEditProjectDialog: (project: LocalProject) => void
+  showArchiveProjectDialog: (project: LocalProject) => void
   toggleProjectWorkspaces: (project: LocalProject) => void
   workspacesEnabled: (project: LocalProject) => boolean
   workspaceIds: (project: LocalProject) => string[]
@@ -65,6 +66,7 @@ const ProjectTile = (props: {
   onProjectFocus: (worktree: string) => void
   navigateToProject: (directory: string) => void
   showEditProjectDialog: (project: LocalProject) => void
+  showArchiveProjectDialog: (project: LocalProject) => void
   toggleProjectWorkspaces: (project: LocalProject) => void
   workspacesEnabled: (project: LocalProject) => boolean
   closeProject: (directory: string) => void
@@ -170,6 +172,14 @@ const ProjectTile = (props: {
             onSelect={clear}
           >
             <ContextMenu.ItemLabel>{props.language.t("sidebar.project.clearNotifications")}</ContextMenu.ItemLabel>
+          </ContextMenu.Item>
+          <ContextMenu.Item
+            data-action="project-archive-menu"
+            data-project={base64Encode(props.project.worktree)}
+            disabled={!props.project.id}
+            onSelect={() => props.showArchiveProjectDialog(props.project)}
+          >
+            <ContextMenu.ItemLabel>{props.language.t("common.archive")}</ContextMenu.ItemLabel>
           </ContextMenu.Item>
           <ContextMenu.Separator />
           <ContextMenu.Item
@@ -331,6 +341,7 @@ export const SortableProject = (props: {
       onProjectFocus={props.ctx.onProjectFocus}
       navigateToProject={props.ctx.navigateToProject}
       showEditProjectDialog={props.ctx.showEditProjectDialog}
+      showArchiveProjectDialog={props.ctx.showArchiveProjectDialog}
       toggleProjectWorkspaces={props.ctx.toggleProjectWorkspaces}
       workspacesEnabled={props.ctx.workspacesEnabled}
       closeProject={props.ctx.closeProject}

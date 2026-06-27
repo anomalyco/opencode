@@ -88,20 +88,92 @@ const baseState = (input: Partial<State> = {}) =>
 describe("applyGlobalEvent", () => {
   test("upserts project.updated in sorted position", () => {
     const project = [{ id: "a" }, { id: "c" }] as Project[]
+    const archived: Project[] = []
     let refreshCount = 0
     applyGlobalEvent({
       event: { type: "project.updated", properties: { id: "b" } },
       project,
+      archivedProjects: archived,
       refresh: () => {
         refreshCount += 1
       },
       setGlobalProject(next) {
         if (typeof next === "function") next(project)
       },
+      setArchivedProject() {},
     })
 
     expect(project.map((x) => x.id)).toEqual(["a", "b", "c"])
     expect(refreshCount).toBe(0)
+  })
+
+  test("moves a project to archived list when time.archived is set", () => {
+    const project = [{ id: "a" }, { id: "b" }] as Project[]
+    const archived: Project[] = []
+    applyGlobalEvent({
+      event: {
+        type: "project.updated",
+        properties: { id: "b", time: { archived: 1, created: 0, updated: 0 } },
+      },
+      project,
+      archivedProjects: archived,
+      refresh: () => {},
+      setGlobalProject(next) {
+        if (typeof next === "function") next(project)
+      },
+      setArchivedProject(next) {
+        if (typeof next === "function") next(archived)
+      },
+    })
+
+    expect(project.map((x) => x.id)).toEqual(["a"])
+    expect(archived.map((x) => x.id)).toEqual(["b"])
+  })
+
+  test("ignores the global placeholder project even when time.archived is set", () => {
+    const project: Project[] = []
+    const archived: Project[] = []
+    let setArchivedCalls = 0
+    applyGlobalEvent({
+      event: {
+        type: "project.updated",
+        properties: { id: "global", time: { archived: 1, created: 0, updated: 0 } },
+      },
+      project,
+      archivedProjects: archived,
+      refresh: () => {},
+      setGlobalProject() {},
+      setArchivedProject() {
+        setArchivedCalls += 1
+      },
+    })
+
+    expect(project.map((x) => x.id)).toEqual([])
+    expect(archived.map((x) => x.id)).toEqual([])
+    expect(setArchivedCalls).toBe(0)
+  })
+
+  test("moves a project back to main list when archived flag clears", () => {
+    const project: Project[] = []
+    const archived = [{ id: "a", time: { archived: 1, created: 0, updated: 0 } }] as Project[]
+    applyGlobalEvent({
+      event: {
+        type: "project.updated",
+        properties: { id: "a", time: { created: 0, updated: 0 } },
+      },
+      project,
+      archivedProjects: archived,
+      refresh: () => {},
+      setGlobalProject(next) {
+        if (typeof next === "function") next(project)
+      },
+      setArchivedProject(next) {
+        if (typeof next === "function") next(archived)
+      },
+    })
+
+    expect(project.map((x) => x.id)).toEqual(["a"])
+    expect(archived.map((x) => x.id)).toEqual([])
   })
 
   test("handles global.disposed by triggering refresh", () => {
@@ -109,10 +181,12 @@ describe("applyGlobalEvent", () => {
     applyGlobalEvent({
       event: { type: "global.disposed" },
       project: [],
+      archivedProjects: [],
       refresh: () => {
         refreshCount += 1
       },
       setGlobalProject() {},
+      setArchivedProject() {},
     })
 
     expect(refreshCount).toBe(1)
@@ -123,10 +197,12 @@ describe("applyGlobalEvent", () => {
     applyGlobalEvent({
       event: { type: "server.connected" },
       project: [],
+      archivedProjects: [],
       refresh: () => {
         refreshCount += 1
       },
       setGlobalProject() {},
+      setArchivedProject() {},
     })
 
     expect(refreshCount).toBe(1)

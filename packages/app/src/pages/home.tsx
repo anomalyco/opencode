@@ -1,4 +1,4 @@
-import type { Session } from "@opencode-ai/sdk/v2/client"
+import type { Project, Session } from "@opencode-ai/sdk/v2/client"
 import {
   createEffect,
   createMemo,
@@ -165,6 +165,16 @@ export function NewHome() {
   })
   const focusedSync = () => focusedServerCtx()?.sync ?? sync()
   const projects = createMemo(() => focusedServerCtx()?.projects.list() ?? layout.projects.list())
+  const archivedProjects = createMemo(() => focusedSync().data.archivedProjects)
+  // The layout store keeps every project the user has opened, regardless of
+  // whether it has been archived. Hide archived projects from the main list
+  // (they surface in the dedicated "Archived projects" section below) so the
+  // two lists stay mutually exclusive and selection in one doesn't toggle the
+  // matching row in the other.
+  const activeProjects = createMemo(() => {
+    const archived = new Set(archivedProjects().map((p) => p.worktree))
+    return projects().filter((p) => !archived.has(p.worktree))
+  })
   const selectedProject = createMemo(() => projects().find((project) => project.worktree === selection().directory))
   const newSessionProject = createMemo(
     () =>
@@ -341,6 +351,43 @@ export function NewHome() {
     })
   }
 
+  function archiveProject(conn: ServerConnection.Any, project: LocalProject) {
+    void import("@/components/dialog-archive-project").then((x) => {
+      dialog.show(() => <x.DialogArchiveProject server={conn} project={project} />)
+    })
+  }
+
+  async function unarchiveProject(conn: ServerConnection.Any, project: LocalProject) {
+    const ctx = global.ensureServerCtx(conn)
+    let projectID = project.id
+    if (!projectID) {
+      const list = await ctx.sdk.client.project.list()
+      projectID = (list.data ?? []).find((p) => p.worktree === project.worktree)?.id
+    }
+    if (!projectID) {
+      showToast({
+        title: language.t("common.requestFailed"),
+        description: language.t("common.requestFailed"),
+      })
+      return
+    }
+    void ctx.sdk.client.project
+      .unarchive({
+        projectID,
+        directory: project.worktree,
+      })
+      .then(() => {
+        // The project.updated event moves the project from the archived list
+        // back to the main list, so no manual refetch is needed.
+      })
+      .catch((error) =>
+        showToast({
+          title: language.t("common.requestFailed"),
+          description: errorMessage(error, language.t("common.requestFailed")),
+        }),
+      )
+  }
+
   function unseenCount(conn: ServerConnection.Any, project: LocalProject) {
     const state = notification.ensureServerState(ServerConnection.key(conn))
     return directories(project).reduce((total, directory) => total + state.project.unseenCount(directory), 0)
@@ -410,13 +457,16 @@ export function NewHome() {
     <div class="rounded-[10px] shadow-[var(--v2-elevation-raised)] m-2 min-h-0 lg:overflow-hidden bg-v2-background-bg-base self-stretch flex-1">
       <div class="mx-auto grid h-full w-full max-w-[1080px] grid-rows-[auto_minmax(0,1fr)_auto] gap-4 px-3 pb-3 lg:grid-cols-[280px_minmax(0,720px)] lg:grid-rows-1 lg:gap-8 lg:px-6 lg:pb-16">
         <HomeProjectColumn
-          projects={projects()}
+          projects={activeProjects()}
+          archivedProjects={archivedProjects()}
           selected={selection()}
           focusServer={focusServer}
           selectProject={selectProject}
           openNewSession={openProjectNewSession}
           chooseProject={(conn) => void chooseProject(conn)}
           editProject={editProject}
+          archiveProject={archiveProject}
+          unarchiveProject={unarchiveProject}
           closeProject={(conn, directory) => {
             const next = closeHomeProject(
               selection(),
@@ -511,12 +561,15 @@ export function NewHome() {
 
 function HomeProjectColumn(props: {
   projects: LocalProject[]
+  archivedProjects: Project[]
   selected: HomeProjectSelection
   focusServer: (server: ServerConnection.Any) => void
   selectProject: (server: ServerConnection.Any, directory: string) => void
   openNewSession: (server: ServerConnection.Any, directory: string) => void
   chooseProject: (server: ServerConnection.Any) => void
   editProject: (server: ServerConnection.Any, project: LocalProject) => void
+  archiveProject: (server: ServerConnection.Any, project: LocalProject) => void
+  unarchiveProject: (server: ServerConnection.Any, project: LocalProject) => void
   closeProject: (server: ServerConnection.Any, directory: string) => void
   clearNotifications: (server: ServerConnection.Any, project: LocalProject) => void
   unseenCount: (server: ServerConnection.Any, project: LocalProject) => number
@@ -537,6 +590,10 @@ function HomeProjectColumn(props: {
     { initialValue: _state },
   )
 
+  const [archivedState, setArchivedState] = persisted(
+    Persist.global("home.archived", ["home.archived.v1"]),
+    createStore({ expanded: false }),
+  )
   return (
     <aside
       class="mt-6 flex min-w-0 flex-col gap-4 lg:mt-14 lg:pt-[52px]"
@@ -593,6 +650,20 @@ function HomeProjectColumn(props: {
           }}
         </For>
       </Show>
+      <HomeArchivedProjectSection
+        projects={props.archivedProjects}
+        expanded={archivedState.expanded}
+        onToggle={() => setArchivedState("expanded", !archivedState.expanded)}
+        language={props.language}
+        selectProject={props.selectProject}
+        openNewSession={props.openNewSession}
+        editProject={props.editProject}
+        unarchiveProject={props.unarchiveProject}
+        closeProject={props.closeProject}
+        clearNotifications={props.clearNotifications}
+        archiveProject={props.archiveProject}
+        unseenCount={props.unseenCount}
+      />
       <HomeUtilityNav
         class="mt-4 hidden lg:flex"
         openSettings={props.openSettings}
@@ -727,6 +798,8 @@ function HomeProjectList(props: {
   editProject: (server: ServerConnection.Any, project: LocalProject) => void
   closeProject: (server: ServerConnection.Any, directory: string) => void
   clearNotifications: (server: ServerConnection.Any, project: LocalProject) => void
+  archiveProject: (server: ServerConnection.Any, project: LocalProject) => void
+  unarchiveProject: (server: ServerConnection.Any, project: LocalProject) => void
   unseenCount: (server: ServerConnection.Any, project: LocalProject) => number
   language: ReturnType<typeof useLanguage>
 }) {
@@ -747,6 +820,8 @@ function HomeProjectList(props: {
             editProject={props.editProject}
             closeProject={props.closeProject}
             clearNotifications={props.clearNotifications}
+            archiveProject={props.archiveProject}
+            unarchiveProject={props.unarchiveProject}
             language={props.language}
           />
         )}
@@ -765,6 +840,8 @@ function HomeProjectRow(props: {
   editProject: (server: ServerConnection.Any, project: LocalProject) => void
   closeProject: (server: ServerConnection.Any, directory: string) => void
   clearNotifications: (server: ServerConnection.Any, project: LocalProject) => void
+  archiveProject: (server: ServerConnection.Any, project: LocalProject) => void
+  unarchiveProject: (server: ServerConnection.Any, project: LocalProject) => void
   language: ReturnType<typeof useLanguage>
 }) {
   const [state, setState] = createStore({ menuOpen: false })
@@ -814,6 +891,24 @@ function HomeProjectRow(props: {
               >
                 {props.language.t("sidebar.project.clearNotifications")}
               </MenuV2.Item>
+              <Show
+                when={props.project.time?.archived}
+                fallback={
+                  <MenuV2.Item
+                    data-action="home-project-archive"
+                    onSelect={() => props.archiveProject(props.server, props.project)}
+                  >
+                    {props.language.t("common.archive")}
+                  </MenuV2.Item>
+                }
+              >
+                <MenuV2.Item
+                  data-action="home-project-unarchive"
+                  onSelect={() => props.unarchiveProject(props.server, props.project)}
+                >
+                  {props.language.t("common.unarchive")}
+                </MenuV2.Item>
+              </Show>
               <MenuV2.Separator />
               <MenuV2.Item onSelect={() => props.closeProject(props.server, props.project.worktree)}>
                 {props.language.t("common.close")}
@@ -831,6 +926,88 @@ function HomeProjectRow(props: {
         />
       </div>
     </div>
+  )
+}
+
+function HomeArchivedProjectSection(props: {
+  projects: Project[]
+  expanded: boolean
+  onToggle: () => void
+  language: ReturnType<typeof useLanguage>
+  selectProject: (server: ServerConnection.Any, directory: string) => void
+  openNewSession: (server: ServerConnection.Any, directory: string) => void
+  editProject: (server: ServerConnection.Any, project: LocalProject) => void
+  unarchiveProject: (server: ServerConnection.Any, project: LocalProject) => void
+  closeProject: (server: ServerConnection.Any, directory: string) => void
+  clearNotifications: (server: ServerConnection.Any, project: LocalProject) => void
+  archiveProject: (server: ServerConnection.Any, project: LocalProject) => void
+  unseenCount: (server: ServerConnection.Any, project: LocalProject) => number
+}) {
+  const global = useGlobal()
+  const server = createMemo(() => global.servers.list()[0]!)
+  const localProjects = createMemo(() =>
+    props.projects.map((project) => ({ ...project, expanded: false } as LocalProject)),
+  )
+  return (
+    <Show when={props.projects.length > 0}>
+      <div class="mt-2 flex min-w-0 flex-col gap-1">
+        <button
+          type="button"
+          data-action="home-archived-toggle"
+          data-expanded={props.expanded ? "" : undefined}
+          class="flex h-7 min-w-0 items-center gap-1.5 pl-1.5 text-v2-text-text-muted hover:text-v2-text-text-base"
+          aria-expanded={props.expanded}
+          aria-label={
+            props.expanded
+              ? props.language.t("home.projects.archived.collapse")
+              : props.language.t("home.projects.archived.expand")
+          }
+          onClick={props.onToggle}
+        >
+          <IconV2
+            name="chevron-down"
+            size="small"
+            class="transition-transform duration-150 ease-in-out"
+            style={{ transform: `rotate(${props.expanded ? 0 : -90}deg)` }}
+          />
+          <span class={HOME_SECTION_LABEL}>
+            {props.language.t("home.projects.archived")}
+            <span class="ml-1 text-v2-text-text-faint">({props.projects.length})</span>
+          </span>
+        </button>
+        <Show when={props.expanded}>
+          <Show
+            when={localProjects().length > 0}
+            fallback={
+              <div class="pl-6 text-v2-text-text-faint [font-weight:440] text-12-regular">
+                {props.language.t("home.projects.archived.empty")}
+              </div>
+            }
+          >
+            <div class="flex min-w-0 flex-col gap-1">
+              <For each={localProjects()}>
+                {(project) => (
+                  <HomeProjectRow
+                    project={project}
+                    server={server()}
+                    selected={false}
+                    unseenCount={props.unseenCount(server(), project)}
+                    selectProject={props.selectProject}
+                    openNewSession={props.openNewSession}
+                    editProject={props.editProject}
+                    closeProject={props.closeProject}
+                    clearNotifications={props.clearNotifications}
+                    archiveProject={props.archiveProject}
+                    unarchiveProject={props.unarchiveProject}
+                    language={props.language}
+                  />
+                )}
+              </For>
+            </div>
+          </Show>
+        </Show>
+      </div>
+    </Show>
   )
 }
 

@@ -355,6 +355,11 @@ export const dict = {
   "dialog.project.edit.worktree.startup.description":
     "Запускается после создания нового рабочего пространства (worktree).",
   "dialog.project.edit.worktree.startup.placeholder": "например, bun install",
+  "dialog.project.archive.title": "Архивировать проект",
+  "dialog.project.archive.description":
+    "Это скроет {{name}} из списка ваших проектов. Проект и его сессии остаются в базе данных. Вы можете восстановить его, снова открыв каталог проекта.",
+  "dialog.project.archive.confirm": "Архивировать",
+  "dialog.project.archive.cancel": "Отмена",
   "context.breakdown.title": "Разбивка контекста",
   "context.breakdown.note":
     'Приблизительная разбивка входных токенов. "Другое" включает определения инструментов и накладные расходы.',

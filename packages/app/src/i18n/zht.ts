@@ -353,6 +353,11 @@ export const dict = {
   "dialog.project.edit.worktree.startup": "工作區啟動腳本",
   "dialog.project.edit.worktree.startup.description": "在建立新的工作區 (worktree) 後執行。",
   "dialog.project.edit.worktree.startup.placeholder": "例如 bun install",
+  "dialog.project.archive.title": "歸檔專案",
+  "dialog.project.archive.description":
+    "這將從專案列表中隱藏 {{name}}。專案及其工作階段仍保留在資料庫中。重新開啟專案目錄即可還原。",
+  "dialog.project.archive.confirm": "歸檔",
+  "dialog.project.archive.cancel": "取消",
   "context.breakdown.title": "上下文拆分",
   "context.breakdown.note": "輸入 token 的大致拆分。「其他」包含工具定義和額外開銷。",
   "context.breakdown.system": "系統",

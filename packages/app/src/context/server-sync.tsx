@@ -44,6 +44,7 @@ type GlobalStore = {
   error?: InitError
   path: Path
   project: Project[]
+  archivedProjects: Project[]
   provider: NormalizedProviderListResponse
   provider_auth: ProviderAuthResponse
   config: Config
@@ -115,6 +116,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
       return !bootstrap.isPending
     },
     project: [],
+    archivedProjects: [],
     provider_auth: {},
     get path() {
       const EMPTY = { state: "", config: "", worktree: "", directory: "", home: "" }
@@ -151,9 +153,17 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
     setGlobalStore("project", next)
   }
 
+  const setArchivedProjects = (next: Project[] | ((draft: Project[]) => Project[])) => {
+    setGlobalStore("archivedProjects", next)
+  }
+
   const setBootStore = ((...input: unknown[]) => {
     if (input[0] === "project" && Array.isArray(input[1])) {
       setProjects(input[1] as Project[])
+      return input[1]
+    }
+    if (input[0] === "archivedProjects" && Array.isArray(input[1])) {
+      setArchivedProjects(input[1] as Project[])
       return input[1]
     }
     return (setGlobalStore as (...args: unknown[]) => unknown)(...input)
@@ -364,11 +374,13 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
       applyGlobalEvent({
         event,
         project: globalStore.project,
+        archivedProjects: globalStore.archivedProjects,
         refresh: () => {
           if (recent) return
           bootstrap.refetch()
         },
         setGlobalProject: setProjects,
+        setArchivedProject: setArchivedProjects,
       })
       if (event.type === "server.connected" || event.type === "global.disposed") {
         if (recent) return

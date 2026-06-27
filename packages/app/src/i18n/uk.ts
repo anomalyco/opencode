@@ -367,6 +367,11 @@ export const dict = {
   "dialog.project.edit.worktree.startup": "Скрипт запуску робочої області",
   "dialog.project.edit.worktree.startup.description": "Виконується після створення нової робочої області (worktree).",
   "dialog.project.edit.worktree.startup.placeholder": "напр. bun install",
+  "dialog.project.archive.title": "Архівувати проєкт",
+  "dialog.project.archive.description":
+    "Це сховає {{name}} зі списку ваших проєктів. Проєкт і його сесії залишаються в базі даних. Ви можете відновити його, знову відкривши каталог проєкту.",
+  "dialog.project.archive.confirm": "Архівувати",
+  "dialog.project.archive.cancel": "Скасувати",
 
   "dialog.releaseNotes.action.getStarted": "Розпочати",
   "dialog.releaseNotes.action.next": "Далі",

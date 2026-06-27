@@ -36,7 +36,9 @@ const SESSION_CONTENT_EVENTS = new Set([
 export function applyGlobalEvent(input: {
   event: { type: string; properties?: unknown }
   project: Project[]
+  archivedProjects: Project[]
   setGlobalProject: (next: Project[] | ((draft: Project[]) => Project[])) => void
+  setArchivedProject: (next: Project[] | ((draft: Project[]) => Project[])) => void
   refresh: () => void
 }) {
   if (input.event.type === "global.disposed" || input.event.type === "server.connected") {
@@ -46,6 +48,54 @@ export function applyGlobalEvent(input: {
 
   if (input.event.type !== "project.updated") return
   const properties = input.event.properties as Project
+  // The "global" project is an internal placeholder for non-git directories
+  // and must never be routed into the archived list — otherwise the placeholder
+  // worktree "/" leaks into the user-facing archive section.
+  if (properties.id === "global") return
+  const archived = !!properties.time?.archived
+
+  // Route the project to the right list based on its archived state. This is
+  // the source of truth for which list a project belongs to after an update;
+  // the lists queried from the server remain aligned with this filter.
+  const removeFromMain = (id: string) => {
+    const found = Binary.search(input.project, id, (s) => s.id)
+    if (!found.found) return
+    input.setGlobalProject(
+      produce((draft) => {
+        draft.splice(found.index, 1)
+      }),
+    )
+  }
+  const removeFromArchived = (id: string) => {
+    const found = Binary.search(input.archivedProjects, id, (s) => s.id)
+    if (!found.found) return
+    input.setArchivedProject(
+      produce((draft) => {
+        draft.splice(found.index, 1)
+      }),
+    )
+  }
+
+  if (archived) {
+    removeFromMain(properties.id)
+    const result = Binary.search(input.archivedProjects, properties.id, (s) => s.id)
+    if (result.found) {
+      input.setArchivedProject(
+        produce((draft) => {
+          draft[result.index] = { ...draft[result.index], ...properties }
+        }),
+      )
+      return
+    }
+    input.setArchivedProject(
+      produce((draft) => {
+        draft.splice(result.index, 0, properties)
+      }),
+    )
+    return
+  }
+
+  removeFromArchived(properties.id)
   const result = Binary.search(input.project, properties.id, (s) => s.id)
   if (result.found) {
     input.setGlobalProject(

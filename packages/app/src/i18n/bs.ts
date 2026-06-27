@@ -354,6 +354,11 @@ export const dict = {
   "dialog.project.edit.worktree.startup": "Skripta za pokretanje radnog prostora",
   "dialog.project.edit.worktree.startup.description": "Pokreće se nakon kreiranja novog radnog prostora (worktree).",
   "dialog.project.edit.worktree.startup.placeholder": "npr. bun install",
+  "dialog.project.archive.title": "Arhiviraj projekat",
+  "dialog.project.archive.description":
+    "Ovo će sakriti {{name}} iz vaše liste projekata. Projekat i njegove sesije ostaju u bazi podataka. Možete ga vratiti ponovnim otvaranjem direktorija projekta.",
+  "dialog.project.archive.confirm": "Arhiviraj",
+  "dialog.project.archive.cancel": "Otkaži",
 
   "context.breakdown.title": "Razlaganje konteksta",
   "context.breakdown.note":

@@ -332,6 +332,11 @@ export const dict = {
   "dialog.project.edit.worktree.startup.description":
     "Wird nach dem Erstellen eines neuen Arbeitsbereichs (Worktree) ausgeführt.",
   "dialog.project.edit.worktree.startup.placeholder": "z. B. bun install",
+  "dialog.project.archive.title": "Projekt archivieren",
+  "dialog.project.archive.description":
+    "Dadurch wird {{name}} aus deiner Projektliste ausgeblendet. Das Projekt und seine Sitzungen bleiben in der Datenbank. Du kannst es wiederherstellen, indem du das Projektverzeichnis erneut öffnest.",
+  "dialog.project.archive.confirm": "Archivieren",
+  "dialog.project.archive.cancel": "Abbrechen",
   "context.breakdown.title": "Kontext-Aufschlüsselung",
   "context.breakdown.note":
     'Ungefähre Aufschlüsselung der Eingabe-Token. "Andere" beinhaltet Werkzeugdefinitionen und Overhead.',

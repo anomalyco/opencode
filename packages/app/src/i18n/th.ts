@@ -353,6 +353,11 @@ export const dict = {
   "dialog.project.edit.worktree.startup": "สคริปต์เริ่มต้นพื้นที่ทำงาน",
   "dialog.project.edit.worktree.startup.description": "ทำงานหลังจากสร้างพื้นที่ทำงานใหม่ (worktree)",
   "dialog.project.edit.worktree.startup.placeholder": "เช่น bun install",
+  "dialog.project.archive.title": "เก็บถาวรโปรเจกต์",
+  "dialog.project.archive.description":
+    "การดำเนินการนี้จะซ่อน {{name}} ออกจากรายการโปรเจกต์ของคุณ โปรเจกต์และเซสชันยังคงอยู่ในฐานข้อมูล คุณสามารถกู้คืนได้โดยเปิดไดเรกทอรีของโปรเจกต์อีกครั้ง",
+  "dialog.project.archive.confirm": "เก็บถาวร",
+  "dialog.project.archive.cancel": "ยกเลิก",
 
   "context.breakdown.title": "การแบ่งบริบท",
   "context.breakdown.note": 'การแบ่งโดยประมาณของโทเค็นนำเข้า "อื่น ๆ" รวมถึงคำนิยามเครื่องมือและโอเวอร์เฮด',

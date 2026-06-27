@@ -325,6 +325,11 @@ export const dict = {
   "dialog.project.edit.worktree.startup": "سكريبت بدء تشغيل مساحة العمل",
   "dialog.project.edit.worktree.startup.description": "يتم تشغيله بعد إنشاء مساحة عمل جديدة (شجرة عمل).",
   "dialog.project.edit.worktree.startup.placeholder": "مثال: bun install",
+  "dialog.project.archive.title": "أرشفة المشروع",
+  "dialog.project.archive.description":
+    "سيؤدي ذلك إلى إخفاء {{name}} من قائمة مشاريعك. يبقى المشروع وجلساته في قاعدة البيانات. يمكنك استعادته بفتح دليل المشروع مرة أخرى.",
+  "dialog.project.archive.confirm": "أرشفة",
+  "dialog.project.archive.cancel": "إلغاء",
   "context.breakdown.title": "تفصيل السياق",
   "context.breakdown.note": 'تفصيل تقريبي لرموز الإدخال. يشمل "أخرى" تعريفات الأدوات والنفقات العامة.',
   "context.breakdown.system": "النظام",

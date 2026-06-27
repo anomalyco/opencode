@@ -325,6 +325,11 @@ export const dict = {
   "dialog.project.edit.worktree.startup.description":
     "新しいワークスペース (ワークツリー) を作成した後に実行されます。",
   "dialog.project.edit.worktree.startup.placeholder": "例: bun install",
+  "dialog.project.archive.title": "プロジェクトをアーカイブ",
+  "dialog.project.archive.description":
+    "{{name}} をプロジェクト一覧から非表示にします。プロジェクトとセッションはデータベースに残ります。プロジェクトのディレクトリを再度開くと復元できます。",
+  "dialog.project.archive.confirm": "アーカイブ",
+  "dialog.project.archive.cancel": "キャンセル",
   "context.breakdown.title": "コンテキストの内訳",
   "context.breakdown.note": '入力トークンのおおよその内訳です。"その他"にはツールの定義やオーバーヘッドが含まれます。',
   "context.breakdown.system": "システム",

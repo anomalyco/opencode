@@ -326,6 +326,11 @@ export const dict = {
   "dialog.project.edit.worktree.startup": "Skrypt uruchamiania przestrzeni roboczej",
   "dialog.project.edit.worktree.startup.description": "Runs after creating a new workspace (worktree).",
   "dialog.project.edit.worktree.startup.placeholder": "np. bun install",
+  "dialog.project.archive.title": "Archiwizuj projekt",
+  "dialog.project.archive.description":
+    "Spowoduje to ukrycie {{name}} z listy projektów. Projekt i jego sesje pozostają w bazie danych. Możesz go przywrócić, ponownie otwierając katalog projektu.",
+  "dialog.project.archive.confirm": "Archiwizuj",
+  "dialog.project.archive.cancel": "Anuluj",
   "context.breakdown.title": "Podział kontekstu",
   "context.breakdown.note": 'Przybliżony podział tokenów wejściowych. "Inne" obejmuje definicje narzędzi i narzut.',
   "context.breakdown.system": "System",

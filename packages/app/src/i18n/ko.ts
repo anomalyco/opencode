@@ -324,6 +324,11 @@ export const dict = {
   "dialog.project.edit.worktree.startup": "작업 공간 시작 스크립트",
   "dialog.project.edit.worktree.startup.description": "새 작업 공간(작업 트리)을 만든 뒤 실행됩니다.",
   "dialog.project.edit.worktree.startup.placeholder": "예: bun install",
+  "dialog.project.archive.title": "프로젝트 보관",
+  "dialog.project.archive.description":
+    "프로젝트 목록에서 {{name}}이(가) 숨겨집니다. 프로젝트와 세션은 데이터베이스에 그대로 유지됩니다. 프로젝트 디렉터리를 다시 열면 복원할 수 있습니다.",
+  "dialog.project.archive.confirm": "보관",
+  "dialog.project.archive.cancel": "취소",
   "context.breakdown.title": "컨텍스트 분석",
   "context.breakdown.note": '입력 토큰의 대략적인 분석입니다. "기타"에는 도구 정의 및 오버헤드가 포함됩니다.',
   "context.breakdown.system": "시스템",

@@ -354,6 +354,11 @@ export const dict = {
   "dialog.project.edit.worktree.startup.description":
     "Se ejecuta después de crear un nuevo espacio de trabajo (árbol de trabajo).",
   "dialog.project.edit.worktree.startup.placeholder": "p. ej. bun install",
+  "dialog.project.archive.title": "Archivar proyecto",
+  "dialog.project.archive.description":
+    "Esto ocultará {{name}} de tu lista de proyectos. El proyecto y sus sesiones se mantienen en la base de datos. Puedes restaurarlo abriendo el directorio del proyecto de nuevo.",
+  "dialog.project.archive.confirm": "Archivar",
+  "dialog.project.archive.cancel": "Cancelar",
 
   "context.breakdown.title": "Desglose de Contexto",
   "context.breakdown.note":

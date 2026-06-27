@@ -26,6 +26,7 @@ type GlobalStore = {
   ready: boolean
   path: Path
   project: Project[]
+  archivedProjects: Project[]
   provider: NormalizedProviderListResponse
   provider_auth: ProviderAuthResponse
   config: Config
@@ -96,8 +97,32 @@ export const loadProjectsQuery = (scope: ServerScope, sdk: OpencodeClient) =>
           return (x.data ?? [])
             .filter((p) => !!p?.id)
             .filter((p) => !!p.worktree && !p.worktree.includes("opencode-test"))
+            .filter((p) => !p.time?.archived)
             .slice()
             .sort((a, b) => cmp(a.id, b.id))
+        }),
+      ),
+  })
+
+export const loadArchivedProjectsQuery = (scope: ServerScope, sdk: OpencodeClient) =>
+  queryOptions({
+    queryKey: [scope, "project", "archived"],
+    queryFn: () =>
+      retry(() =>
+        sdk.project.archived().then((x) => {
+          return (x.data ?? [])
+            .filter((p) => !!p?.id)
+            // The "global" project is an internal placeholder for non-git
+            // directories and must never appear in the user-facing list.
+            .filter((p) => p.id !== "global")
+            .filter((p) => !!p.worktree && !p.worktree.includes("opencode-test"))
+            .slice()
+            .sort((a, b) => {
+              const at = b.time?.archived ?? 0
+              const bt = a.time?.archived ?? 0
+              if (at !== bt) return at - bt
+              return cmp(a.id, b.id)
+            })
         }),
       ),
   })
@@ -119,6 +144,10 @@ export async function bootstrapGlobal(input: {
       input.queryClient
         .fetchQuery(loadProjectsQuery(input.scope, input.serverSDK))
         .then((data) => input.setGlobalStore("project", data)),
+    () =>
+      input.queryClient
+        .fetchQuery(loadArchivedProjectsQuery(input.scope, input.serverSDK))
+        .then((data) => input.setGlobalStore("archivedProjects", data)),
   ]
   await runAll(slow)
   // showErrors({
