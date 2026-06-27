@@ -638,7 +638,7 @@ function Prompt<const T extends Record<string, string>>(props: {
         ? { top: dimensions().height * -1 + 1, bottom: 1, left: 2, right: 2, position: "absolute" }
         : {
             top: 0,
-            maxHeight: 15,
+            maxHeight: tuiConfig.permission_prompt.max_height,
             bottom: 0,
             left: 0,
             right: 0,

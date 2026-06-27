@@ -50,6 +50,13 @@ export const Prompt = Schema.Struct({
   }),
 }).annotate({ description: "Prompt size settings" })
 
+export const PermissionPromptMaxHeightDefault = 15
+export const PermissionPrompt = Schema.Struct({
+  max_height: Schema.optional(PromptSize).annotate({
+    description: `Maximum height of the permission prompt panel when not expanded (default: ${PermissionPromptMaxHeightDefault})`,
+  }),
+}).annotate({ description: "Permission prompt panel settings" })
+
 export const Info = Schema.Struct({
   $schema: Schema.optional(Schema.String),
   theme: Schema.optional(Schema.String),
@@ -63,10 +70,11 @@ export const Info = Schema.Struct({
   scroll_acceleration: Schema.optional(ScrollAcceleration),
   diff_style: Schema.optional(DiffStyle),
   mouse: Schema.optional(Schema.Boolean).annotate({ description: "Enable or disable mouse capture (default: true)" }),
+  permission_prompt: Schema.optional(PermissionPrompt),
 })
 export type Info = Schema.Schema.Type<typeof Info>
 
-export type Resolved = Omit<Info, "attention" | "keybinds" | "leader_timeout" | "mouse"> & {
+export type Resolved = Omit<Info, "attention" | "keybinds" | "leader_timeout" | "mouse" | "permission_prompt"> & {
   attention: {
     enabled: boolean
     notifications: boolean
@@ -78,6 +86,9 @@ export type Resolved = Omit<Info, "attention" | "keybinds" | "leader_timeout" | 
   keybinds: TuiKeybind.BindingLookupView
   leader_timeout: number
   mouse: boolean
+  permission_prompt: {
+    max_height: number
+  }
 }
 
 export const ResolveOptions = Schema.Struct({
@@ -113,6 +124,9 @@ export function resolve(input: Info, options: ResolveOptions): Resolved {
     }),
     leader_timeout: input.leader_timeout ?? LeaderTimeoutDefault,
     mouse: input.mouse ?? true,
+    permission_prompt: {
+      max_height: input.permission_prompt?.max_height ?? PermissionPromptMaxHeightDefault,
+    },
   }
 }
 
