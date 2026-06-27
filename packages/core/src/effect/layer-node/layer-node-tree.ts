@@ -3,6 +3,52 @@ import { LayerNode } from "./layer-node"
 
 type AnyNode = LayerNode.Node<unknown, unknown, any>
 type RuntimeLayer = Layer.Layer<never, unknown, unknown>
+type Visit<Result> = (node: AnyNode, context: VisitContext<Result>) => Result
+
+type VisitContext<Result> = {
+  readonly cache: Map<AnyNode, Result>
+  readonly visit: (node: AnyNode) => Result
+}
+
+function walk<Result>(
+  root: AnyNode,
+  visit: Visit<Result>,
+  options: {
+    readonly cache?: Map<AnyNode, Result>
+    readonly resolve?: (node: AnyNode) => AnyNode
+    readonly detectCycles?: boolean
+  } = {},
+) {
+  const cache = options.cache ?? new Map<AnyNode, Result>()
+  const visiting = new Set<AnyNode>()
+  const stack: AnyNode[] = []
+
+  const recur = (node: AnyNode): Result => {
+    const target = options.resolve?.(node) ?? node
+    const cached = cache.get(target)
+    if (cached !== undefined || cache.has(target)) return cached!
+
+    if (options.detectCycles !== false && visiting.has(target)) {
+      const start = stack.indexOf(target)
+      throw new Error(
+        `Cycle detected in layer tree: ${[...stack.slice(start), target].map((item) => item.name).join(" -> ")}`,
+      )
+    }
+
+    visiting.add(target)
+    stack.push(target)
+    try {
+      const result = visit(target, { cache, visit: recur })
+      if (!cache.has(target)) cache.set(target, result)
+      return result
+    } finally {
+      stack.pop()
+      visiting.delete(target)
+    }
+  }
+
+  return recur(root)
+}
 
 export function hoist<A, E, T extends LayerNode.Tag>(
   root: LayerNode.Node<A, E, any>,
@@ -11,54 +57,28 @@ export function hoist<A, E, T extends LayerNode.Tag>(
   readonly node: LayerNode.Node<A, E>
   readonly hoisted: LayerNode.Node<unknown, E>
 } {
-  const visited = new Map<AnyNode, AnyNode>()
   const hoisted = new Map<string, AnyNode>()
-  const visiting = new Set<AnyNode>()
-  const stack: AnyNode[] = []
 
-  const visit = (node: AnyNode): AnyNode => {
+  const node = walk<AnyNode>(root, (node, context) => {
     if (node.kind === "group") {
-      return { ...node, dependencies: node.dependencies.map(visit) }
+      return { ...node, dependencies: node.dependencies.map(context.visit) }
     }
-
-    const existingNode = visited.get(node)
-    if (existingNode) return existingNode
-
     if (node.tag === tag) {
       const existing = hoisted.get(node.name)
       if (existing && existing !== node) {
         throw new Error(`Tag ${tag} has conflicting implementations for ${node.name}`)
       }
       hoisted.set(node.name, node)
-      const empty = LayerNode.group([])
-      visited.set(node, empty)
-      return empty
+      return LayerNode.group([])
     }
     if (node.kind === "unbound") {
       return node
     }
-
-    if (visiting.has(node)) {
-      const start = stack.indexOf(node)
-      throw new Error(
-        `Cycle detected in layer tree: ${[...stack.slice(start), node].map((item) => item.name).join(" -> ")}`,
-      )
-    }
-    visiting.add(node)
-    stack.push(node)
-    try {
-      const dependencies = node.dependencies.map(visit)
-      const clone = { ...node, dependencies }
-      visited.set(node, clone)
-      return clone
-    } finally {
-      stack.pop()
-      visiting.delete(node)
-    }
-  }
+    return { ...node, dependencies: node.dependencies.map(context.visit) }
+  })
 
   return {
-    node: visit(root) as LayerNode.Node<A, E>,
+    node: node as LayerNode.Node<A, E>,
     hoisted: LayerNode.group(Array.from(hoisted.values())) as LayerNode.Node<unknown, E>,
   }
 }
@@ -68,22 +88,30 @@ export function compile<A, E>(
   replacements?: ReadonlyMap<Layer.Any, Layer.Any>,
 ): Layer.Layer<A, E> {
   const cache = new Map<AnyNode, RuntimeLayer>()
-  const compileNode = (node: AnyNode): RuntimeLayer => {
-    if (node.kind === "unbound") throw new Error(`Unbound layer node: ${node.name}`)
-    const cached = cache.get(node)
-    if (cached) return cached
-    const dependencies = node.dependencies.flatMap(flatten).map(compileNode)
-    const implementation = (replacements?.get(node.implementation!) ?? node.implementation!) as RuntimeLayer
-    const layer =
-      dependencies.length === 0
-        ? implementation
-        : implementation.pipe(Layer.provide(dependencies as [RuntimeLayer, ...RuntimeLayer[]]))
-    cache.set(node, layer)
-    return layer
-  }
+  const compileNode = (node: AnyNode) =>
+    walk<RuntimeLayer>(
+      node,
+      (node, context) => {
+        if (node.kind === "unbound") throw new Error(`Unbound layer node: ${node.name}`)
+        const dependencies = node.dependencies.flatMap(flatten).map(context.visit)
+        const implementation = (replacements?.get(node.implementation!) ?? node.implementation!) as RuntimeLayer
+        return dependencies.length === 0
+          ? implementation
+          : implementation.pipe(Layer.provide(dependencies as [RuntimeLayer, ...RuntimeLayer[]]))
+      },
+      { cache },
+    )
   const layers = flatten(root).map((node) => compileNode(node))
   const layer = layers.reduce<RuntimeLayer>((result, layer) => layer.pipe(Layer.provideMerge(result)), Layer.empty)
   return layer as Layer.Layer<A, E>
+}
+
+export function hasUnbound(root: LayerNode.Node<unknown, unknown, any>, source: AnyNode): boolean {
+  if (source.kind !== "unbound") throw new Error(`Cannot check non-unbound layer node: ${source.name}`)
+  return walk<boolean>(root, (node, context) => {
+    if (node === source) return true
+    return node.dependencies.some(context.visit)
+  })
 }
 
 export function bind<A, E, T extends LayerNode.Tag | undefined>(
@@ -98,17 +126,18 @@ export function bind<A, E, T extends LayerNode.Tag | undefined>(
   if (source.tag !== replacement.tag) {
     throw new Error(`Cannot bind ${source.name} across tags`)
   }
-  const visited = new Map<AnyNode, AnyNode>()
-  const visit = (node: AnyNode): AnyNode => {
-    if (node === source) return replacement
-    const existing = visited.get(node)
-    if (existing) return existing
-    if (node.kind === "unbound") return node
-    const clone = { ...node, dependencies: node.dependencies.map(visit) }
-    visited.set(node, clone)
-    return clone
-  }
-  return visit(root) as LayerNode.Node<A, E, T>
+  return walk<AnyNode>(
+    root,
+    (target, context) => {
+      if (target.kind === "unbound") return target
+      const dependencies: AnyNode[] = []
+      const clone = { ...target, dependencies }
+      context.cache.set(target, clone)
+      dependencies.push(...target.dependencies.map(context.visit))
+      return clone
+    },
+    { detectCycles: false, resolve: (node) => (node === source ? replacement : node) },
+  ) as LayerNode.Node<A, E, T>
 }
 
 function flatten(node: AnyNode): readonly AnyNode[] {

@@ -7,6 +7,12 @@ import { makeGlobalNode } from "./node"
 export function build<A, E>(root: LayerNode.Node<A, E, any>, replacements?: readonly LayerNode.Replacement[]) {
   const replacementMap = new Map(replacements?.map((item) => [item.source, item.replacement]))
 
+  if (!LayerNodeTree.hasUnbound(root, LocationServiceMap.node)) {
+    // If the location service map is not needed, we shouldn't pull it
+    // in. Compile the graph normally
+    return LayerNodeTree.compile(root, replacementMap)
+  }
+
   const locationMap = buildLocationServiceMap(replacementMap)
   const locationMapNode = makeGlobalNode({ service: LocationServiceMap.Service, layer: locationMap, deps: [] })
 

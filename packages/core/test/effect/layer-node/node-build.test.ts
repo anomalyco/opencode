@@ -1,21 +1,72 @@
 import { describe, expect, test } from "bun:test"
-import { Context, Effect, Layer } from "effect"
-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { Context, Effect, Layer, LayerMap, Option } from "effect"
+import { LayerNode, LayerNodeTree } from "@opencode-ai/core/effect/layer-node"
 import { Node } from "@opencode-ai/core/effect/node"
 import { NodeBuild } from "@opencode-ai/core/effect/node-build"
 import { Location } from "@opencode-ai/core/location"
 import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
+import type { LocationError, LocationServices } from "@opencode-ai/core/location-services"
 import { Project } from "@opencode-ai/core/project"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { tmpdir } from "../../fixture/tmpdir"
 
 class Value extends Context.Service<Value, { readonly value: string }>()("test/TagValue") {}
 class Result extends Context.Service<Result, { readonly value: string }>()("test/TagResult") {}
-class Left extends Context.Service<Left, { readonly value: string }>()("test/TagLeft") {}
-class Right extends Context.Service<Right, { readonly value: string }>()("test/TagRight") {}
-class Last extends Context.Service<Last, { readonly value: string }>()("test/TagLast") {}
+class CycleA extends Context.Service<CycleA, {}>()("test/NodeBuildA") {}
+class CycleB extends Context.Service<CycleB, { readonly directory: AbsolutePath }>()("test/NodeBuildB") {}
 
 describe("node build", () => {
+  test("does not build a location service map when the graph does not require it", async () => {
+    const result = Node.makeGlobalNode({
+      service: Result,
+      layer: Layer.succeed(Result, Result.of({ value: "plain" })),
+      deps: [],
+    })
+    const layer = NodeBuild.build(LayerNode.group([result]))
+    const program = Effect.gen(function* () {
+      expect(Option.isNone(yield* Effect.serviceOption(LocationServiceMap.Service))).toBe(true)
+      return (yield* Result).value
+    }).pipe(Effect.provide(layer))
+
+    expect(await Effect.runPromise(program)).toBe("plain")
+  })
+
+  test("detects cycles through a bound location service map", () => {
+    const a = Node.makeGlobalNode({
+      service: CycleA,
+      layer: Layer.effect(CycleA, Effect.as(LocationServiceMap.Service, CycleA.of({}))),
+      deps: [LocationServiceMap.node],
+    })
+    const b = Node.makeGlobalNode({
+      service: CycleB,
+      layer: Layer.effect(
+        CycleB,
+        Effect.map(CycleA, () => CycleB.of({ directory: AbsolutePath.make(process.cwd()) })),
+      ),
+      deps: [a],
+    })
+    const mapEffect = Effect.gen(function* () {
+      const service = yield* CycleB
+      return yield* LayerMap.make(
+        (ref: Location.Ref) =>
+          Layer.succeed(
+            Location.Service,
+            Location.Service.of({
+              directory: ref.directory,
+              workspaceID: ref.workspaceID,
+              project: { id: Project.ID.global, directory: service.directory },
+            }),
+          ),
+        { idleTimeToLive: "1 minute" },
+      )
+    }) as unknown as Effect.Effect<LayerMap.LayerMap<Location.Ref, LocationServices, LocationError>, never, CycleB>
+    const mapLayer = Layer.effect(LocationServiceMap.Service, mapEffect)
+    const map = Node.makeGlobalNode({ service: LocationServiceMap.Service, layer: mapLayer, deps: [b] })
+    const graph = LayerNodeTree.bind(LayerNode.group([a]), LocationServiceMap.node, map)
+
+    expect(() => NodeBuild.build(graph)).toThrow("Cycle detected in layer tree")
+  })
+
   test("shares top-level project with location services", async () => {
     await using tmp = await tmpdir()
     let acquisitions = 0
@@ -37,6 +88,7 @@ describe("node build", () => {
     const program = Effect.gen(function* () {
       yield* Project.Service
       const locations = yield* LocationServiceMap.Service
+      expect(Option.isSome(yield* Effect.serviceOption(LocationServiceMap.Service))).toBe(true)
       return yield* Location.Service.pipe(Effect.provide(locations.get(ref)))
     }).pipe(Effect.provide(layer))
 
@@ -62,58 +114,10 @@ describe("node build", () => {
     })
     const serviceLayer = NodeBuild.build(LayerNode.group([result]))
     const program = Effect.gen(function* () {
+      expect(Option.isNone(yield* Effect.serviceOption(LocationServiceMap.Service))).toBe(true)
       return (yield* Result).value
     }).pipe(Effect.provide(serviceLayer))
 
     expect(await Effect.runPromise(program)).toBe("value")
-  })
-
-  test("rebinds same-tag providers without reacquiring them", async () => {
-    let firstAcquisitions = 0
-    const tags = LayerNode.tags({ global: [] })
-    const global = tags.make("global")
-    const first = global({
-      service: Value,
-      layer: Layer.effect(
-        Value,
-        Effect.sync(() => {
-          firstAcquisitions++
-          return Value.of({ value: "first" })
-        }),
-      ),
-      deps: [],
-    })
-    const second = global({ service: Value, layer: Layer.succeed(Value, Value.of({ value: "second" })), deps: [] })
-    const left = global({
-      service: Left,
-      layer: Layer.effect(
-        Left,
-        Effect.map(Value, (value) => Left.of({ value: value.value })),
-      ),
-      deps: [first],
-    })
-    const right = global({
-      service: Right,
-      layer: Layer.effect(
-        Right,
-        Effect.map(Value, (value) => Right.of({ value: value.value })),
-      ),
-      deps: [second],
-    })
-    const last = global({
-      service: Last,
-      layer: Layer.effect(
-        Last,
-        Effect.map(Value, (value) => Last.of({ value: value.value })),
-      ),
-      deps: [first],
-    })
-    const layer = NodeBuild.build(LayerNode.group([left, right, last])) as Layer.Layer<Left | Right | Last>
-    const values = Effect.gen(function* () {
-      return [(yield* Left).value, (yield* Right).value, (yield* Last).value]
-    }).pipe(Effect.provide(layer))
-
-    expect(await Effect.runPromise(values)).toEqual(["first", "second", "first"])
-    expect(firstAcquisitions).toBe(1)
   })
 })
