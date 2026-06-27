@@ -261,12 +261,12 @@ beforeEach(() => {
 describe("sendFollowupDraft slash commands", () => {
   test("sends source-backed attachments as file URLs", async () => {
     await sendFollowupDraft({
-      client: clientFor("/repo/main") as Parameters<typeof sendFollowupDraft>[0]["client"],
+      client: clientFor("/repo/main") as unknown as Parameters<typeof sendFollowupDraft>[0]["client"],
       serverSync: {
         session: {
           set: () => undefined,
         },
-      } as Parameters<typeof sendFollowupDraft>[0]["serverSync"],
+      } as unknown as Parameters<typeof sendFollowupDraft>[0]["serverSync"],
       sync: {
         data: { command: [{ name: "inspect" }] },
       } as Parameters<typeof sendFollowupDraft>[0]["sync"],
