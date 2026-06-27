@@ -13,6 +13,7 @@ import { TestInstance } from "../fixture/fixture"
 interface MockClientState {
   capabilities: { tools?: object; prompts?: object; resources?: object }
   capabilitiesShouldThrow: boolean
+  instructions?: string
   tools: Array<{ name: string; description?: string; inputSchema: object; outputSchema?: object }>
   listToolsCalls: number
   listPromptsCalls: number
@@ -188,6 +189,10 @@ void mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
       return this._state?.capabilities
     }
 
+    getInstructions() {
+      return this._state?.instructions
+    }
+
     async listTools(params?: { cursor?: string }) {
       if (this._state) this._state.listToolsCalls++
       if (this._state?.listToolsShouldFail) {
@@ -348,6 +353,60 @@ it.instance(
 )
 
 it.instance(
+  "instructions() returns connected server instructions with tool names",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "guide-server"
+        const serverState = getOrCreateClientState("guide-server")
+        serverState.instructions = "Use lookup before mutate."
+
+        yield* mcp.add("guide-server", {
+          type: "local",
+          command: ["echo", "test"],
+        })
+
+        expect(yield* mcp.instructions()).toContainEqual({
+          name: "guide-server",
+          instructions: "Use lookup before mutate.",
+          tools: ["guide-server_test_tool"],
+        })
+      }),
+    ),
+  { config: { mcp: {} } },
+)
+
+it.instance(
+  "instructions() omits empty and disconnected server instructions",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "temporary-server"
+        getOrCreateClientState("temporary-server").instructions = "Temporary guidance."
+
+        yield* mcp.add("temporary-server", {
+          type: "local",
+          command: ["echo", "test"],
+        })
+        yield* mcp.disconnect("temporary-server")
+
+        lastCreatedClientName = "blank-server"
+        getOrCreateClientState("blank-server").instructions = "   "
+
+        yield* mcp.add("blank-server", {
+          type: "local",
+          command: ["echo", "test"],
+        })
+
+        const instructions = yield* mcp.instructions()
+        expect(instructions.some((item) => item.name === "temporary-server")).toBe(false)
+        expect(instructions.some((item) => item.name === "blank-server")).toBe(false)
+      }),
+    ),
+  { config: { mcp: {} } },
+)
+
+it.instance(
   "follows cursors when listing tools, prompts, and resources",
   () =>
     MCP.Service.use((mcp: MCPNS.Interface) =>
@@ -382,7 +441,7 @@ it.instance(
           command: ["echo", "test"],
         })
 
-        expect(Object.keys(yield* mcp.tools())).toEqual(["mcp__paged-server__tool-one", "mcp__paged-server__tool-two"])
+        expect(Object.keys(yield* mcp.tools())).toEqual(["paged-server_tool-one", "paged-server_tool-two"])
         expect(Object.keys(yield* mcp.prompts())).toEqual(["paged-server:prompt-one", "paged-server:prompt-two"])
         expect(Object.keys(yield* mcp.resources())).toEqual(["paged-server:test://one", "paged-server:test://two"])
         expect(Object.keys(yield* mcp.resourceTemplates())).toEqual([
@@ -944,7 +1003,7 @@ it.instance(
 
         expect(statusName(result.status, "tools-only-server")).toBe("connected")
         expect(serverState.listToolsCalls).toBe(1)
-        expect(Object.keys(yield* mcp.tools())).toEqual(["mcp__tools-only-server__test_tool"])
+        expect(Object.keys(yield* mcp.tools())).toEqual(["tools-only-server_test_tool"])
         expect(yield* mcp.prompts()).toEqual({})
         expect(yield* mcp.resources()).toEqual({})
         expect(serverState.listPromptsCalls).toBe(0)
@@ -1137,7 +1196,7 @@ it.instance(
         const keys = Object.keys(tools)
 
         // Server name dots should be replaced with underscores
-        expect(keys.some((k) => k.startsWith("mcp__my_special-server__"))).toBe(true)
+        expect(keys.some((k) => k.startsWith("my_special-server_"))).toBe(true)
         // Tool name dots should be replaced with underscores
         expect(keys.some((k) => k.endsWith("tool_b"))).toBe(true)
         expect(keys.length).toBe(2)

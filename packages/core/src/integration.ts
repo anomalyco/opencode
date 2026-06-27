@@ -16,9 +16,7 @@ import {
 } from "effect"
 import { Integration } from "@opencode-ai/schema/integration"
 import { Credential } from "./credential"
-import { withStatics } from "./schema"
 import { State } from "./state"
-import { Identifier } from "./util/identifier"
 import { EventV2 } from "./event"
 import { IntegrationConnection } from "./integration/connection"
 
@@ -28,10 +26,7 @@ export type ID = Integration.ID
 export const MethodID = Integration.MethodID
 export type MethodID = Integration.MethodID
 
-export const AttemptID = Schema.String.pipe(
-  Schema.brand("Integration.AttemptID"),
-  withStatics((schema) => ({ create: () => schema.make("con_" + Identifier.ascending()) })),
-)
+export const AttemptID = Integration.AttemptID
 export type AttemptID = typeof AttemptID.Type
 
 export const When = Integration.When
@@ -58,12 +53,8 @@ export type EnvMethod = Integration.EnvMethod
 export const Method = Integration.Method
 export type Method = Integration.Method
 
-export class Info extends Schema.Class<Info>("Integration.Info")({
-  id: ID,
-  name: Schema.String,
-  methods: Schema.mutable(Schema.Array(Method)),
-  connections: Schema.mutable(Schema.Array(IntegrationConnection.Info)),
-}) {}
+export const Info = Integration.Info
+export type Info = Integration.Info
 
 export const Inputs = Integration.Inputs
 export type Inputs = Integration.Inputs
@@ -102,28 +93,10 @@ export interface EnvImplementation {
 
 export type Implementation = OAuthImplementation | KeyImplementation | EnvImplementation
 
-export class Attempt extends Schema.Class<Attempt>("Integration.Attempt")({
-  attemptID: AttemptID,
-  url: Schema.String,
-  instructions: Schema.String,
-  mode: Schema.Literals(["auto", "code"]),
-  time: Schema.Struct({
-    created: Schema.Number,
-    expires: Schema.Number,
-  }),
-}) {}
+export const Attempt = Integration.Attempt
+export type Attempt = Integration.Attempt
 
-const Time = Schema.Struct({
-  created: Schema.Number,
-  expires: Schema.Number,
-})
-
-export const AttemptStatus = Schema.Union([
-  Schema.Struct({ status: Schema.Literal("pending"), time: Time }),
-  Schema.Struct({ status: Schema.Literal("complete"), time: Time }),
-  Schema.Struct({ status: Schema.Literal("failed"), message: Schema.String, time: Time }),
-  Schema.Struct({ status: Schema.Literal("expired"), time: Time }),
-]).pipe(Schema.toTaggedUnion("status"))
+export const AttemptStatus = Integration.AttemptStatus
 export type AttemptStatus = typeof AttemptStatus.Type
 
 export class CodeRequiredError extends Schema.TaggedErrorClass<CodeRequiredError>()("Integration.CodeRequired", {
@@ -136,16 +109,7 @@ export class AuthorizationError extends Schema.TaggedErrorClass<AuthorizationErr
 
 export type Error = CodeRequiredError | AuthorizationError
 
-export const Event = {
-  Updated: EventV2.define({
-    type: "integration.updated",
-    schema: {},
-  }),
-  ConnectionUpdated: EventV2.define({
-    type: "integration.connection.updated",
-    schema: { integrationID: ID },
-  }),
-}
+export const Event = Integration.Event
 
 export const Ref = Integration.Ref
 export type Ref = Integration.Ref

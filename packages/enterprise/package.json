@@ -1,6 +1,6 @@
 {
   "name": "@opencode-ai/enterprise",
-  "version": "1.17.9",
+  "version": "1.17.11",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@opencode-ai/core": "workspace:*",
+    "@opencode-ai/session-ui": "workspace:*",
     "@opencode-ai/ui": "workspace:*",
     "aws4fetch": "^1.0.20",
     "@pierre/diffs": "catalog:",
