@@ -63,6 +63,9 @@ export const Info = Schema.Struct({
   scroll_acceleration: Schema.optional(ScrollAcceleration),
   diff_style: Schema.optional(DiffStyle),
   mouse: Schema.optional(Schema.Boolean).annotate({ description: "Enable or disable mouse capture (default: true)" }),
+  tool_output_expanded_default: Schema.optional(Schema.Boolean).annotate({
+    description: "Expand tool/command output by default instead of collapsing it",
+  }),
 })
 export type Info = Schema.Schema.Type<typeof Info>
 
