@@ -21,7 +21,7 @@ import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { SessionStatus } from "../../src/session/status"
 import { SessionSummary } from "../../src/session/summary"
 import { SessionV2 } from "@opencode-ai/core/session"
-import { locationServiceMapLayer } from "@opencode-ai/core/location-layer"
+import { locationServiceMapLayer } from "@opencode-ai/core/location-services"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 
 import type { Provider } from "@/provider/provider"

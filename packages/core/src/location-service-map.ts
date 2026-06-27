@@ -2,7 +2,7 @@ import { Context, Effect, Layer, LayerMap } from "effect"
 import { LayerNode } from "./effect/layer-node"
 import { Node } from "./effect/node"
 import { Location } from "./location"
-import type { LocationError, LocationServices } from "./location-layer"
+import type { LocationError, LocationServices } from "./location-services"
 
 export class Service extends Context.Service<
   Service,

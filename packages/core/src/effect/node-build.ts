@@ -1,5 +1,5 @@
 import { Layer } from "effect"
-import { buildLocationServiceMap } from "../location-layer"
+import { buildLocationServiceMap } from "../location-services"
 import { LocationServiceMap } from "../location-service-map"
 import { LayerNode, LayerNodeTree } from "./layer-node"
 import { makeGlobalNode } from "./node"
