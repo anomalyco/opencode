@@ -143,6 +143,7 @@ export type TuiInput = {
   headers?: RequestInit["headers"]
   events?: EventSource
   pluginHost: TuiPluginHost
+  stdin?: NodeJS.ReadStream
 }
 
 function errorMessage(error: unknown) {
@@ -197,6 +198,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
               consoleOptions: {
                 keyBindings: [{ name: "y", ctrl: true, action: "copy-selection" }],
               },
+              ...(input.stdin ? { stdin: input.stdin } : {}),
             }),
           catch: (error) => (error instanceof Error ? error : new Error(String(error))),
         }),

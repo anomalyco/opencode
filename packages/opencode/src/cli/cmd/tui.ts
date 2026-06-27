@@ -13,6 +13,7 @@ import type { EventSource } from "@opencode-ai/tui/context/sdk"
 import { writeHeapSnapshot } from "v8"
 import { validateSession } from "../tui/validate-session"
 import { win32InstallCtrlCGuard } from "@opencode-ai/tui/terminal-win32"
+import { INTERACTIVE_INPUT_ERROR, resolveInteractiveStdin } from "./run/runtime.stdin"
 
 declare global {
   const OPENCODE_WORKER_PATH: string
@@ -171,8 +172,21 @@ export const TuiThreadCommand = cmd({
     }
 
     const unguard = win32InstallCtrlCGuard()
+    let interactiveStdin: ReturnType<typeof resolveInteractiveStdin> | undefined
     try {
       const { TuiConfig } = await import("@/config/tui")
+      try {
+        interactiveStdin = resolveInteractiveStdin()
+      } catch (error) {
+        if (error instanceof Error && error.message === INTERACTIVE_INPUT_ERROR) {
+          UI.error(error.message)
+          process.exitCode = 1
+          return
+        }
+
+        throw error
+      }
+
       if (args.fork && !args.continue && !args.session) {
         UI.error("--fork requires --continue or --session")
         process.exitCode = 1
@@ -262,6 +276,7 @@ export const TuiThreadCommand = cmd({
             },
             config,
             pluginHost: createLegacyTuiPluginHost(),
+            stdin: interactiveStdin.stdin,
             directory: cwd,
             fetch: transport.fetch,
             events: transport.events,
@@ -279,6 +294,7 @@ export const TuiThreadCommand = cmd({
         await stop()
       }
     } finally {
+      interactiveStdin?.cleanup?.()
       try {
         unguard?.()
       } catch {}
