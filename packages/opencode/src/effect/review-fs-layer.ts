@@ -138,6 +138,10 @@ export const layer = Layer.effect(
 
 export const defaultLayer = layer
 
-export const node = LayerNode.make(layer, [FSUtil.node])
+export const node = LayerNode.make({
+  name: "ReviewFs",
+  layer,
+  deps: [FSUtil.node],
+})
 
 export * as ReviewFs from "./review-fs-layer"

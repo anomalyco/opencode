@@ -16,8 +16,8 @@ import { SessionID, MessageID } from "@/session/schema"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 
-// Mirrors HttpApiApp.createRoutes: buildLayer(app) + ReviewFs.defaultLayer on top.
-const httpAppLayer = LayerNode.buildLayer(LayerNode.group([FSUtil.node, ToolRegistry.node])).pipe(
+// Mirrors HttpApiApp.createRoutes: compile(app) + ReviewFs.defaultLayer on top.
+const httpAppLayer = LayerNode.compile(LayerNode.group([FSUtil.node, ToolRegistry.node])).pipe(
   Layer.provide(ReviewFs.defaultLayer),
   Layer.provide(Ripgrep.defaultLayer),
   Layer.provide(CrossSpawnSpawner.defaultLayer),
