@@ -455,7 +455,7 @@ export function NewHome() {
             onClose={closeSearch}
             onSelect={selectSearchSession}
           />
-          <ScrollView class="mt-3 min-h-0 flex-1">
+          <ScrollView class="mt-3 -mr-3 min-h-0 flex-1">
             <Show
               when={!sessionLoad.isLoading}
               fallback={
@@ -468,7 +468,7 @@ export function NewHome() {
                 when={groups().length > 0}
                 fallback={<HomeSessionsEmpty onNewSession={newSessionProject() ? openNewSession : undefined} />}
               >
-                <div class="pt-3 flex flex-col gap-6">
+                <div class="flex flex-col gap-6 pt-3 pr-3">
                   <For each={groups()}>
                     {(group, index) => (
                       <div class="flex min-w-0 flex-col gap-4">
