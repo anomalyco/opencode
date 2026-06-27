@@ -69,7 +69,8 @@ import { showToast } from "@/utils/toast"
 
 const HOME_SESSION_LIMIT = 64
 const HOME_SESSION_HEADER_STICKY_TOP = 12
-const HOME_SESSION_HEADER_FADE_DISTANCE = 48
+const HOME_SESSION_HEADER_TEXT_HEIGHT = 16
+const HOME_SESSION_HEADER_FADE_DISTANCE = 16
 const SHOW_HOME_SESSION_ARCHIVE = false
 const HOME_ROW_LAYOUT =
   "flex min-w-0 w-full shrink-0 cursor-default items-center rounded-[6px] bg-transparent text-left transition-[background-color,color,box-shadow] duration-[120ms] ease-in-out focus-visible:outline-none"
@@ -309,12 +310,13 @@ export function NewHome() {
 
     groups().forEach((group, index) => {
       const nextTop = headerTops.slice(index + 1).find((top) => top !== undefined)
+      const fadeEnd = HOME_SESSION_HEADER_STICKY_TOP + HOME_SESSION_HEADER_TEXT_HEIGHT
       const opacity =
         nextTop === undefined
           ? 1
           : Math.max(
               0,
-              Math.min(1, (nextTop - HOME_SESSION_HEADER_STICKY_TOP) / HOME_SESSION_HEADER_FADE_DISTANCE),
+              Math.min(1, (nextTop - fadeEnd) / HOME_SESSION_HEADER_FADE_DISTANCE),
             )
       setState("headerTitleOpacity", group.id, Math.round(opacity * 1000) / 1000)
     })
