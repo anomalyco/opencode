@@ -1,4 +1,9 @@
 import type {
+  HealthGetOutput,
+  LocationGetInput,
+  LocationGetOutput,
+  AgentsListInput,
+  AgentsListOutput,
   SessionsListInput,
   SessionsListOutput,
   SessionsCreateInput,
@@ -32,7 +37,85 @@ import type {
   SessionsInterruptOutput,
   SessionsMessageInput,
   SessionsMessageOutput,
+  MessagesListInput,
+  MessagesListOutput,
+  ModelsListInput,
+  ModelsListOutput,
+  ProvidersListInput,
+  ProvidersListOutput,
+  ProvidersGetInput,
+  ProvidersGetOutput,
+  IntegrationsListInput,
+  IntegrationsListOutput,
+  IntegrationsGetInput,
+  IntegrationsGetOutput,
+  IntegrationsConnectKeyInput,
+  IntegrationsConnectKeyOutput,
+  IntegrationsConnectOauthInput,
+  IntegrationsConnectOauthOutput,
+  IntegrationsAttemptStatusInput,
+  IntegrationsAttemptStatusOutput,
+  IntegrationsAttemptCompleteInput,
+  IntegrationsAttemptCompleteOutput,
+  IntegrationsAttemptCancelInput,
+  IntegrationsAttemptCancelOutput,
+  CredentialsUpdateInput,
+  CredentialsUpdateOutput,
+  CredentialsRemoveInput,
+  CredentialsRemoveOutput,
+  PermissionsListRequestsInput,
+  PermissionsListRequestsOutput,
+  PermissionsListSavedInput,
+  PermissionsListSavedOutput,
+  PermissionsRemoveSavedInput,
+  PermissionsRemoveSavedOutput,
+  PermissionsCreateInput,
+  PermissionsCreateOutput,
+  PermissionsListInput,
+  PermissionsListOutput,
+  PermissionsGetInput,
+  PermissionsGetOutput,
+  PermissionsReplyInput,
+  PermissionsReplyOutput,
+  FilesReadInput,
+  FilesReadOutput,
+  FilesListInput,
+  FilesListOutput,
+  FilesFindInput,
+  FilesFindOutput,
+  CommandsListInput,
+  CommandsListOutput,
+  SkillsListInput,
+  SkillsListOutput,
   EventsSubscribeOutput,
+  PtysListInput,
+  PtysListOutput,
+  PtysCreateInput,
+  PtysCreateOutput,
+  PtysGetInput,
+  PtysGetOutput,
+  PtysUpdateInput,
+  PtysUpdateOutput,
+  PtysRemoveInput,
+  PtysRemoveOutput,
+  PtysConnectTokenInput,
+  PtysConnectTokenOutput,
+  QuestionsListRequestsInput,
+  QuestionsListRequestsOutput,
+  QuestionsListInput,
+  QuestionsListOutput,
+  QuestionsReplyInput,
+  QuestionsReplyOutput,
+  QuestionsRejectInput,
+  QuestionsRejectOutput,
+  ReferencesListInput,
+  ReferencesListOutput,
+  ProjectCopiesCreateInput,
+  ProjectCopiesCreateOutput,
+  ProjectCopiesRemoveInput,
+  ProjectCopiesRemoveOutput,
+  ProjectCopiesRefreshInput,
+  ProjectCopiesRefreshOutput,
 } from "./types"
 import { ClientError } from "./client-error"
 
@@ -56,6 +139,7 @@ interface RequestDescriptor {
   readonly successStatus: number
   readonly declaredStatuses: ReadonlyArray<number>
   readonly empty: boolean
+  readonly binary: boolean
 }
 
 export function make(options: ClientOptions) {
@@ -106,6 +190,13 @@ export function make(options: ClientOptions) {
         await response.body?.cancel()
       } catch {}
       return undefined as A
+    }
+    if (descriptor.binary) {
+      try {
+        return new Uint8Array(await response.arrayBuffer()) as A
+      } catch (cause) {
+        throw new ClientError("Transport", { cause })
+      }
     }
     return (await json(response)) as A
   }
@@ -168,6 +259,50 @@ export function make(options: ClientOptions) {
   })
 
   return {
+    health: {
+      get: (requestOptions?: RequestOptions) =>
+        request<HealthGetOutput>(
+          {
+            method: "GET",
+            path: `/api/health`,
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+            binary: false,
+          },
+          requestOptions,
+        ),
+    },
+    location: {
+      get: (input?: LocationGetInput, requestOptions?: RequestOptions) =>
+        request<LocationGetOutput>(
+          {
+            method: "GET",
+            path: `/api/location`,
+            query: { location: input?.["location"] },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+            binary: false,
+          },
+          requestOptions,
+        ),
+    },
+    agents: {
+      list: (input?: AgentsListInput, requestOptions?: RequestOptions) =>
+        request<AgentsListOutput>(
+          {
+            method: "GET",
+            path: `/api/agent`,
+            query: { location: input?.["location"] },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+            binary: false,
+          },
+          requestOptions,
+        ),
+    },
     sessions: {
       list: (input?: SessionsListInput, requestOptions?: RequestOptions) =>
         request<SessionsListOutput>(
@@ -175,18 +310,19 @@ export function make(options: ClientOptions) {
             method: "GET",
             path: `/api/session`,
             query: {
-              workspace: input?.workspace,
-              limit: input?.limit,
-              order: input?.order,
-              search: input?.search,
-              directory: input?.directory,
-              project: input?.project,
-              subpath: input?.subpath,
-              cursor: input?.cursor,
+              workspace: input?.["workspace"],
+              limit: input?.["limit"],
+              order: input?.["order"],
+              search: input?.["search"],
+              directory: input?.["directory"],
+              project: input?.["project"],
+              subpath: input?.["subpath"],
+              cursor: input?.["cursor"],
             },
             successStatus: 200,
             declaredStatuses: [400, 401],
             empty: false,
+            binary: false,
           },
           requestOptions,
         ),
@@ -195,10 +331,16 @@ export function make(options: ClientOptions) {
           {
             method: "POST",
             path: `/api/session`,
-            body: { id: input?.id, agent: input?.agent, model: input?.model, location: input?.location },
+            body: {
+              id: input?.["id"],
+              agent: input?.["agent"],
+              model: input?.["model"],
+              location: input?.["location"],
+            },
             successStatus: 200,
             declaredStatuses: [401, 400],
             empty: false,
+            binary: false,
           },
           requestOptions,
         ).then((value) => value.data),
@@ -210,6 +352,7 @@ export function make(options: ClientOptions) {
             successStatus: 200,
             declaredStatuses: [401, 400],
             empty: false,
+            binary: false,
           },
           requestOptions,
         ).then((value) => value.data),
@@ -221,6 +364,7 @@ export function make(options: ClientOptions) {
             successStatus: 200,
             declaredStatuses: [404, 400, 401],
             empty: false,
+            binary: false,
           },
           requestOptions,
         ).then((value) => value.data),
@@ -229,10 +373,11 @@ export function make(options: ClientOptions) {
           {
             method: "POST",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/agent`,
-            body: { agent: input.agent },
+            body: { agent: input["agent"] },
             successStatus: 204,
             declaredStatuses: [404, 400, 401],
             empty: true,
+            binary: false,
           },
           requestOptions,
         ),
@@ -241,10 +386,11 @@ export function make(options: ClientOptions) {
           {
             method: "POST",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/model`,
-            body: { model: input.model },
+            body: { model: input["model"] },
             successStatus: 204,
             declaredStatuses: [404, 400, 401],
             empty: true,
+            binary: false,
           },
           requestOptions,
         ),
@@ -253,10 +399,11 @@ export function make(options: ClientOptions) {
           {
             method: "POST",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/prompt`,
-            body: { id: input.id, prompt: input.prompt, delivery: input.delivery, resume: input.resume },
+            body: { id: input["id"], prompt: input["prompt"], delivery: input["delivery"], resume: input["resume"] },
             successStatus: 200,
             declaredStatuses: [409, 404, 400, 401],
             empty: false,
+            binary: false,
           },
           requestOptions,
         ).then((value) => value.data),
@@ -268,6 +415,7 @@ export function make(options: ClientOptions) {
             successStatus: 204,
             declaredStatuses: [404, 503, 400, 401],
             empty: true,
+            binary: false,
           },
           requestOptions,
         ),
@@ -279,6 +427,7 @@ export function make(options: ClientOptions) {
             successStatus: 204,
             declaredStatuses: [404, 503, 400, 401],
             empty: true,
+            binary: false,
           },
           requestOptions,
         ),
@@ -287,10 +436,11 @@ export function make(options: ClientOptions) {
           {
             method: "POST",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/revert/stage`,
-            body: { messageID: input.messageID, files: input.files },
+            body: { messageID: input["messageID"], files: input["files"] },
             successStatus: 200,
             declaredStatuses: [404, 500, 400, 401],
             empty: false,
+            binary: false,
           },
           requestOptions,
         ).then((value) => value.data),
@@ -302,6 +452,7 @@ export function make(options: ClientOptions) {
             successStatus: 204,
             declaredStatuses: [404, 500, 400, 401],
             empty: true,
+            binary: false,
           },
           requestOptions,
         ),
@@ -313,6 +464,7 @@ export function make(options: ClientOptions) {
             successStatus: 204,
             declaredStatuses: [404, 400, 401],
             empty: true,
+            binary: false,
           },
           requestOptions,
         ),
@@ -324,6 +476,7 @@ export function make(options: ClientOptions) {
             successStatus: 200,
             declaredStatuses: [404, 500, 400, 401],
             empty: false,
+            binary: false,
           },
           requestOptions,
         ).then((value) => value.data),
@@ -332,10 +485,11 @@ export function make(options: ClientOptions) {
           {
             method: "GET",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/history`,
-            query: { limit: input.limit, after: input.after },
+            query: { limit: input["limit"], after: input["after"] },
             successStatus: 200,
             declaredStatuses: [404, 400, 401],
             empty: false,
+            binary: false,
           },
           requestOptions,
         ),
@@ -344,10 +498,11 @@ export function make(options: ClientOptions) {
           {
             method: "GET",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/event`,
-            query: { after: input.after },
+            query: { after: input["after"] },
             successStatus: 200,
             declaredStatuses: [404, 400, 401],
             empty: false,
+            binary: false,
           },
           requestOptions,
         ),
@@ -359,6 +514,7 @@ export function make(options: ClientOptions) {
             successStatus: 204,
             declaredStatuses: [404, 400, 401],
             empty: true,
+            binary: false,
           },
           requestOptions,
         ),
@@ -370,14 +526,573 @@ export function make(options: ClientOptions) {
             successStatus: 200,
             declaredStatuses: [404, 400, 401],
             empty: false,
+            binary: false,
           },
           requestOptions,
         ).then((value) => value.data),
     },
+    messages: {
+      list: (input: MessagesListInput, requestOptions?: RequestOptions) =>
+        request<MessagesListOutput>(
+          {
+            method: "GET",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/message`,
+            query: { limit: input["limit"], order: input["order"], cursor: input["cursor"] },
+            successStatus: 200,
+            declaredStatuses: [400, 404, 500, 401],
+            empty: false,
+            binary: false,
+          },
+          requestOptions,
+        ),
+    },
+    models: {
+      list: (input?: ModelsListInput, requestOptions?: RequestOptions) =>
+        request<ModelsListOutput>(
+          {
+            method: "GET",
+            path: `/api/model`,
+            query: { location: input?.["location"] },
+            successStatus: 200,
+            declaredStatuses: [503, 401, 400],
+            empty: false,
+            binary: false,
+          },
+          requestOptions,
+        ),
+    },
+    providers: {
+      list: (input?: ProvidersListInput, requestOptions?: RequestOptions) =>
+        request<ProvidersListOutput>(
+          {
+            method: "GET",
+            path: `/api/provider`,
+            query: { location: input?.["location"] },
+            successStatus: 200,
+            declaredStatuses: [503, 401, 400],
+            empty: false,
+            binary: false,
+          },
+          requestOptions,
+        ),
+      get: (input: ProvidersGetInput, requestOptions?: RequestOptions) =>
+        request<ProvidersGetOutput>(
+          {
+            method: "GET",
+            path: `/api/provider/${encodeURIComponent(input.providerID)}`,
+            query: { location: input["location"] },
+            successStatus: 200,
+            declaredStatuses: [404, 503, 401, 400],
+            empty: false,
+            binary: false,
+          },
+          requestOptions,
+        ),
+    },
+    integrations: {
+      list: (input?: IntegrationsListInput, requestOptions?: RequestOptions) =>
+        request<IntegrationsListOutput>(
+          {
+            method: "GET",
+            path: `/api/integration`,
+            query: { location: input?.["location"] },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+            binary: false,
+          },
+          requestOptions,
+        ),
+      get: (input: IntegrationsGetInput, requestOptions?: RequestOptions) =>
+        request<IntegrationsGetOutput>(
+          {
+            method: "GET",
+            path: `/api/integration/${encodeURIComponent(input.integrationID)}`,
+            query: { location: input["location"] },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+            binary: false,
+          },
+          requestOptions,
+        ),
+      connectKey: (input: IntegrationsConnectKeyInput, requestOptions?: RequestOptions) =>
+        request<IntegrationsConnectKeyOutput>(
+          {
+            method: "POST",
+            path: `/api/integration/${encodeURIComponent(input.integrationID)}/connect/key`,
+            query: { location: input["location"] },
+            body: { key: input["key"], label: input["label"] },
+            successStatus: 204,
+            declaredStatuses: [400, 401],
+            empty: true,
+            binary: false,
+          },
+          requestOptions,
+        ),
+      connectOauth: (input: IntegrationsConnectOauthInput, requestOptions?: RequestOptions) =>
+        request<IntegrationsConnectOauthOutput>(
+          {
+            method: "POST",
+            path: `/api/integration/${encodeURIComponent(input.integrationID)}/connect/oauth`,
+            query: { location: input["location"] },
+            body: { methodID: input["methodID"], inputs: input["inputs"], label: input["label"] },
+            successStatus: 200,
+            declaredStatuses: [400, 401],
+            empty: false,
+            binary: false,
+          },
+          requestOptions,
+        ),
+      attemptStatus: (input: IntegrationsAttemptStatusInput, requestOptions?: RequestOptions) =>
+        request<IntegrationsAttemptStatusOutput>(
+          {
+            method: "GET",
+            path: `/api/integration/attempt/${encodeURIComponent(input.attemptID)}`,
+            query: { location: input["location"] },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+            binary: false,
+          },
+          requestOptions,
+        ),
+      attemptComplete: (input: IntegrationsAttemptCompleteInput, requestOptions?: RequestOptions) =>
+        request<IntegrationsAttemptCompleteOutput>(
+          {
+            method: "POST",
+            path: `/api/integration/attempt/${encodeURIComponent(input.attemptID)}/complete`,
+            query: { location: input["location"] },
+            body: { code: input["code"] },
+            successStatus: 204,
+            declaredStatuses: [400, 401],
+            empty: true,
+            binary: false,
+          },
+          requestOptions,
+        ),
+      attemptCancel: (input: IntegrationsAttemptCancelInput, requestOptions?: RequestOptions) =>
+        request<IntegrationsAttemptCancelOutput>(
+          {
+            method: "DELETE",
+            path: `/api/integration/attempt/${encodeURIComponent(input.attemptID)}`,
+            query: { location: input["location"] },
+            successStatus: 204,
+            declaredStatuses: [401, 400],
+            empty: true,
+            binary: false,
+          },
+          requestOptions,
+        ),
+    },
+    credentials: {
+      update: (input: CredentialsUpdateInput, requestOptions?: RequestOptions) =>
+        request<CredentialsUpdateOutput>(
+          {
+            method: "PATCH",
+            path: `/api/credential/${encodeURIComponent(input.credentialID)}`,
+            query: { location: input["location"] },
+            body: { label: input["label"] },
+            successStatus: 204,
+            declaredStatuses: [401, 400],
+            empty: true,
+            binary: false,
+          },
+          requestOptions,
+        ),
+      remove: (input: CredentialsRemoveInput, requestOptions?: RequestOptions) =>
+        request<CredentialsRemoveOutput>(
+          {
+            method: "DELETE",
+            path: `/api/credential/${encodeURIComponent(input.credentialID)}`,
+            query: { location: input["location"] },
+            successStatus: 204,
+            declaredStatuses: [401, 400],
+            empty: true,
+            binary: false,
+          },
+          requestOptions,
+        ),
+    },
+    permissions: {
+      listRequests: (input?: PermissionsListRequestsInput, requestOptions?: RequestOptions) =>
+        request<PermissionsListRequestsOutput>(
+          {
+            method: "GET",
+            path: `/api/permission/request`,
+            query: { location: input?.["location"] },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+            binary: false,
+          },
+          requestOptions,
+        ),
+      listSaved: (input?: PermissionsListSavedInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: PermissionsListSavedOutput }>(
+          {
+            method: "GET",
+            path: `/api/permission/saved`,
+            query: { projectID: input?.["projectID"] },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+            binary: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      removeSaved: (input: PermissionsRemoveSavedInput, requestOptions?: RequestOptions) =>
+        request<PermissionsRemoveSavedOutput>(
+          {
+            method: "DELETE",
+            path: `/api/permission/saved/${encodeURIComponent(input.id)}`,
+            successStatus: 204,
+            declaredStatuses: [401, 400],
+            empty: true,
+            binary: false,
+          },
+          requestOptions,
+        ),
+      create: (input: PermissionsCreateInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: PermissionsCreateOutput }>(
+          {
+            method: "POST",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/permission`,
+            body: {
+              id: input["id"],
+              action: input["action"],
+              resources: input["resources"],
+              save: input["save"],
+              metadata: input["metadata"],
+              source: input["source"],
+              agent: input["agent"],
+            },
+            successStatus: 200,
+            declaredStatuses: [404, 400, 401],
+            empty: false,
+            binary: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      list: (input: PermissionsListInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: PermissionsListOutput }>(
+          {
+            method: "GET",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/permission`,
+            successStatus: 200,
+            declaredStatuses: [404, 400, 401],
+            empty: false,
+            binary: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      get: (input: PermissionsGetInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: PermissionsGetOutput }>(
+          {
+            method: "GET",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/permission/${encodeURIComponent(input.requestID)}`,
+            successStatus: 200,
+            declaredStatuses: [404, 400, 401],
+            empty: false,
+            binary: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      reply: (input: PermissionsReplyInput, requestOptions?: RequestOptions) =>
+        request<PermissionsReplyOutput>(
+          {
+            method: "POST",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/permission/${encodeURIComponent(input.requestID)}/reply`,
+            body: { reply: input["reply"], message: input["message"] },
+            successStatus: 204,
+            declaredStatuses: [404, 400, 401],
+            empty: true,
+            binary: false,
+          },
+          requestOptions,
+        ),
+    },
+    files: {
+      read: (input: FilesReadInput, requestOptions?: RequestOptions) =>
+        request<FilesReadOutput>(
+          {
+            method: "GET",
+            path: `/api/fs/read`,
+            query: { location: input["location"], path: input["path"] },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+            binary: true,
+          },
+          requestOptions,
+        ),
+      list: (input?: FilesListInput, requestOptions?: RequestOptions) =>
+        request<FilesListOutput>(
+          {
+            method: "GET",
+            path: `/api/fs/list`,
+            query: { location: input?.["location"], path: input?.["path"] },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+            binary: false,
+          },
+          requestOptions,
+        ),
+      find: (input: FilesFindInput, requestOptions?: RequestOptions) =>
+        request<FilesFindOutput>(
+          {
+            method: "GET",
+            path: `/api/fs/find`,
+            query: { location: input["location"], query: input["query"], type: input["type"], limit: input["limit"] },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+            binary: false,
+          },
+          requestOptions,
+        ),
+    },
+    commands: {
+      list: (input?: CommandsListInput, requestOptions?: RequestOptions) =>
+        request<CommandsListOutput>(
+          {
+            method: "GET",
+            path: `/api/command`,
+            query: { location: input?.["location"] },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+            binary: false,
+          },
+          requestOptions,
+        ),
+    },
+    skills: {
+      list: (input?: SkillsListInput, requestOptions?: RequestOptions) =>
+        request<SkillsListOutput>(
+          {
+            method: "GET",
+            path: `/api/skill`,
+            query: { location: input?.["location"] },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+            binary: false,
+          },
+          requestOptions,
+        ),
+    },
     events: {
       subscribe: (requestOptions?: RequestOptions): AsyncIterable<EventsSubscribeOutput> =>
         sse<EventsSubscribeOutput>(
-          { method: "GET", path: `/api/event`, successStatus: 200, declaredStatuses: [401, 400], empty: false },
+          {
+            method: "GET",
+            path: `/api/event`,
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+            binary: false,
+          },
+          requestOptions,
+        ),
+    },
+    ptys: {
+      list: (input?: PtysListInput, requestOptions?: RequestOptions) =>
+        request<PtysListOutput>(
+          {
+            method: "GET",
+            path: `/api/pty`,
+            query: { location: input?.["location"] },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+            binary: false,
+          },
+          requestOptions,
+        ),
+      create: (input?: PtysCreateInput, requestOptions?: RequestOptions) =>
+        request<PtysCreateOutput>(
+          {
+            method: "POST",
+            path: `/api/pty`,
+            query: { location: input?.["location"] },
+            body: {
+              command: input?.["command"],
+              args: input?.["args"],
+              cwd: input?.["cwd"],
+              title: input?.["title"],
+              env: input?.["env"],
+            },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+            binary: false,
+          },
+          requestOptions,
+        ),
+      get: (input: PtysGetInput, requestOptions?: RequestOptions) =>
+        request<PtysGetOutput>(
+          {
+            method: "GET",
+            path: `/api/pty/${encodeURIComponent(input.ptyID)}`,
+            query: { location: input["location"] },
+            successStatus: 200,
+            declaredStatuses: [404, 401, 400],
+            empty: false,
+            binary: false,
+          },
+          requestOptions,
+        ),
+      update: (input: PtysUpdateInput, requestOptions?: RequestOptions) =>
+        request<PtysUpdateOutput>(
+          {
+            method: "PUT",
+            path: `/api/pty/${encodeURIComponent(input.ptyID)}`,
+            query: { location: input["location"] },
+            body: { title: input["title"], size: input["size"] },
+            successStatus: 200,
+            declaredStatuses: [404, 401, 400],
+            empty: false,
+            binary: false,
+          },
+          requestOptions,
+        ),
+      remove: (input: PtysRemoveInput, requestOptions?: RequestOptions) =>
+        request<PtysRemoveOutput>(
+          {
+            method: "DELETE",
+            path: `/api/pty/${encodeURIComponent(input.ptyID)}`,
+            query: { location: input["location"] },
+            successStatus: 204,
+            declaredStatuses: [404, 401, 400],
+            empty: true,
+            binary: false,
+          },
+          requestOptions,
+        ),
+      connectToken: (input: PtysConnectTokenInput, requestOptions?: RequestOptions) =>
+        request<PtysConnectTokenOutput>(
+          {
+            method: "POST",
+            path: `/api/pty/${encodeURIComponent(input.ptyID)}/connect-token`,
+            query: { location: input["location"] },
+            headers: { "x-opencode-ticket": input["x-opencode-ticket"] },
+            successStatus: 200,
+            declaredStatuses: [403, 404, 401, 400],
+            empty: false,
+            binary: false,
+          },
+          requestOptions,
+        ),
+    },
+    questions: {
+      listRequests: (input?: QuestionsListRequestsInput, requestOptions?: RequestOptions) =>
+        request<QuestionsListRequestsOutput>(
+          {
+            method: "GET",
+            path: `/api/question/request`,
+            query: { location: input?.["location"] },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+            binary: false,
+          },
+          requestOptions,
+        ),
+      list: (input: QuestionsListInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: QuestionsListOutput }>(
+          {
+            method: "GET",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/question`,
+            successStatus: 200,
+            declaredStatuses: [404, 400, 401],
+            empty: false,
+            binary: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      reply: (input: QuestionsReplyInput, requestOptions?: RequestOptions) =>
+        request<QuestionsReplyOutput>(
+          {
+            method: "POST",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/question/${encodeURIComponent(input.requestID)}/reply`,
+            body: { answers: input["answers"] },
+            successStatus: 204,
+            declaredStatuses: [404, 400, 401],
+            empty: true,
+            binary: false,
+          },
+          requestOptions,
+        ),
+      reject: (input: QuestionsRejectInput, requestOptions?: RequestOptions) =>
+        request<QuestionsRejectOutput>(
+          {
+            method: "POST",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/question/${encodeURIComponent(input.requestID)}/reject`,
+            successStatus: 204,
+            declaredStatuses: [404, 400, 401],
+            empty: true,
+            binary: false,
+          },
+          requestOptions,
+        ),
+    },
+    references: {
+      list: (input?: ReferencesListInput, requestOptions?: RequestOptions) =>
+        request<ReferencesListOutput>(
+          {
+            method: "GET",
+            path: `/api/reference`,
+            query: { location: input?.["location"] },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+            binary: false,
+          },
+          requestOptions,
+        ),
+    },
+    projectCopies: {
+      create: (input: ProjectCopiesCreateInput, requestOptions?: RequestOptions) =>
+        request<ProjectCopiesCreateOutput>(
+          {
+            method: "POST",
+            path: `/experimental/project/${encodeURIComponent(input.projectID)}/copy`,
+            query: { location: input["location"] },
+            body: { strategy: input["strategy"], directory: input["directory"], name: input["name"] },
+            successStatus: 200,
+            declaredStatuses: [400, 401],
+            empty: false,
+            binary: false,
+          },
+          requestOptions,
+        ),
+      remove: (input: ProjectCopiesRemoveInput, requestOptions?: RequestOptions) =>
+        request<ProjectCopiesRemoveOutput>(
+          {
+            method: "DELETE",
+            path: `/experimental/project/${encodeURIComponent(input.projectID)}/copy`,
+            query: { location: input["location"] },
+            body: { directory: input["directory"], force: input["force"] },
+            successStatus: 204,
+            declaredStatuses: [400, 401],
+            empty: true,
+            binary: false,
+          },
+          requestOptions,
+        ),
+      refresh: (input: ProjectCopiesRefreshInput, requestOptions?: RequestOptions) =>
+        request<ProjectCopiesRefreshOutput>(
+          {
+            method: "POST",
+            path: `/experimental/project/${encodeURIComponent(input.projectID)}/copy/refresh`,
+            query: { location: input["location"] },
+            successStatus: 204,
+            declaredStatuses: [400, 401],
+            empty: true,
+            binary: false,
+          },
           requestOptions,
         ),
     },
