@@ -317,15 +317,23 @@ export function Autocomplete(props: {
     () => ({ query: search(), location: location() }),
     async (input) => {
       if (!store.visible || store.visible === "/") return []
-      if (referenceMatch()) return []
       const { lineRange, baseQuery } = extractLineRange(input.query ?? "")
+
+      const ref = referenceMatch()
+      let searchQuery = baseQuery
+      const searchDir = ref?.path ?? input.location?.directory
+      if (ref) {
+        const slash = baseQuery.indexOf("/")
+        if (slash === -1) return []
+        searchQuery = baseQuery.slice(slash + 1)
+      }
 
       // Get files from SDK
       const result = await sdk.client.v2.fs.find({
-        query: baseQuery,
+        query: searchQuery,
         limit: "20",
         location: {
-          directory: input.location?.directory,
+          directory: searchDir,
           workspace: input.location?.workspaceID ?? project.workspace.current(),
         },
       })
@@ -336,24 +344,23 @@ export function Autocomplete(props: {
       // score, filename bonus, etc. are already factored in).
       if (!result.error && result.data) {
         const width = props.anchor().width - 4
-        options.push(
-          ...result.data.data.map((item): AutocompleteOption => {
-            const { filename, part } = createFilePart(
-              item,
-              path.join(result.data.location.directory, item.path),
-              lineRange,
-            )
-            return {
-              display: Locale.truncateMiddle(filename, width),
-              value: filename,
-              isDirectory: item.type === "directory",
-              path: item.path,
-              onSelect: () => {
-                insertPart(filename, part)
-              },
-            }
-          }),
-        )
+        for (const item of result.data.data) {
+          const filePath = path.join(result.data.location.directory, item.path)
+          const { part } = createFilePart(item, filePath, lineRange)
+          const displayName = ref ? `${ref.name}/${item.path}` : part.filename
+          options.push({
+            display: Locale.truncateMiddle(displayName, width),
+            value: displayName,
+            isDirectory: item.type === "directory",
+            path: item.path,
+            onSelect: () => {
+              insertPart(displayName, {
+                ...part,
+                filename: displayName,
+              })
+            },
+          })
+        }
       }
 
       return options
@@ -475,15 +482,10 @@ export function Autocomplete(props: {
 
   const options = createMemo((prev: AutocompleteOption[] | undefined) => {
     const filesValue = files()
-    const referenceMatchValue = referenceMatch()
     const agentsValue = agents()
     const referenceAliasesValue = referenceAliases()
     const commandsValue = commands()
     const searchValue = search()
-
-    if (store.visible === "@" && referenceMatchValue) {
-      return referenceAliasesValue.filter((item) => item.display === `@${referenceMatchValue.name}`)
-    }
 
     // Files come from fff already fuzzy ranked and filtered
     // it shouldn't be additionally sorted by fuzzysort as it will loose the results
