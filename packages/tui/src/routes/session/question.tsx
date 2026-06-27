@@ -1,11 +1,12 @@
 import { createStore } from "solid-js/store"
-import { createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js"
 import { useRenderer } from "@opentui/solid"
 import type { TextareaRenderable } from "@opentui/core"
 import { selectedForeground, tint, useTheme } from "../../context/theme"
 import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
 import { useSDK } from "../../context/sdk"
 import { SplitBorder } from "../../ui/border"
+import { useDialog } from "../../ui/dialog"
 import { useTuiConfig } from "../../config"
 import { useBindings, useOpencodeModeStack } from "../../keymap"
 
@@ -125,7 +126,10 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
     pick(opt.label)
   }
 
-  onMount(() => {
+  const dialog = useDialog()
+
+  createEffect(() => {
+    if (dialog.stack.length > 0) return
     const popMode = modeStack.push(QUESTION_MODE)
     onCleanup(popMode)
   })
