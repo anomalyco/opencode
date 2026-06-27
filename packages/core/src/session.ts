@@ -27,6 +27,8 @@ import { fromRow } from "./session/info"
 import { SessionRunner } from "./session/runner/index"
 import { SessionStore } from "./session/store"
 import { SessionExecution } from "./session/execution"
+import { makeGlobalNode } from "./effect/node"
+import { LocationServiceMap } from "./location-service-map"
 import { MessageDecodeError } from "./session/error"
 import { SessionEvent } from "./session/event"
 import { SessionInput } from "./session/input"
@@ -179,19 +181,16 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Session") {}
 
-export const layer = Layer.unwrap(
-  Effect.promise(() => import("./location-layer")).pipe(
-    Effect.map(({ LocationServiceMap }) =>
-      Layer.effect(
-        Service,
-        Effect.gen(function* () {
+export const layer = Layer.effect(
+  Service,
+  Effect.gen(function* () {
           const database = yield* Database.Service
           const db = database.db
           const events = yield* EventV2.Service
           const projects = yield* ProjectV2.Service
           const execution = yield* SessionExecution.Service
           const store = yield* SessionStore.Service
-          const locations = yield* LocationServiceMap
+          const locations = yield* LocationServiceMap.Service
           const decodeMessage = Schema.decodeUnknownEffect(SessionMessage.Message)
           const isDurableSessionEvent = Schema.is(SessionEvent.Durable)
           const decode = (row: typeof SessionMessageTable.$inferSelect) =>
@@ -451,17 +450,11 @@ export const layer = Layer.unwrap(
             },
           })
 
-          return result
-        }),
-      ),
-    ),
-  ),
+    return result
+  }),
 )
 
 export const defaultLayer = layer.pipe(
-  Layer.provide(
-    Layer.unwrap(Effect.promise(() => import("./location-layer")).pipe(Effect.map((m) => m.LocationServiceMap.layer))),
-  ),
   Layer.provide(SessionStore.defaultLayer),
   Layer.provide(SessionProjector.defaultLayer),
   Layer.provide(EventV2.defaultLayer),
@@ -483,3 +476,17 @@ const resolvePrompt = (input: PromptInput.Prompt) =>
       }
     }),
   })
+
+export const node = makeGlobalNode({
+  service: Service,
+  layer: layer.pipe(Layer.orDie),
+  deps: [
+    Database.node,
+    EventV2.node,
+    ProjectV2.node,
+    SessionExecution.node,
+    SessionStore.node,
+    LocationServiceMap.node,
+    SessionProjector.node,
+  ],
+})

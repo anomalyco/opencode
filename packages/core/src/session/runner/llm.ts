@@ -36,6 +36,8 @@ import { createLLMEventPublisher } from "./publish-llm-event"
 import { toLLMMessages } from "./to-llm-message"
 import { MAX_STEPS_PROMPT } from "./max-steps"
 import { Snapshot } from "../../snapshot"
+import { makeLocationNode } from "../../effect/node"
+import { llmClient } from "../../effect/layer-node-platform"
 
 /**
  * Runs one durable coding-agent Session until it settles.
@@ -404,3 +406,23 @@ export const layer = Layer.effect(
 )
 
 export const defaultLayer = layer
+
+export const node = makeLocationNode({
+  service: Service,
+  layer,
+  deps: [
+    EventV2.node,
+    llmClient,
+    AgentV2.node,
+    ToolRegistry.node,
+    SessionRunnerModel.node,
+    SessionStore.node,
+    Location.node,
+    SystemContextRegistry.node,
+    SkillGuidance.node,
+    ReferenceGuidance.node,
+    Config.node,
+    Snapshot.node,
+    Database.node,
+  ],
+})

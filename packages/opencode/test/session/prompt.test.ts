@@ -56,7 +56,7 @@ import { reply, TestLLMServer } from "../lib/llm-server"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
-import { LocationServiceMap } from "@opencode-ai/core/location-layer"
+import { LocationServiceMap, locationServiceMapLayer } from "@opencode-ai/core/location-services"
 
 const summary = Layer.succeed(
   SessionSummary.Service,
@@ -230,7 +230,7 @@ function makePrompt(input?: { mcpInstructions?: MCP.ServerInstructions[]; proces
     Layer.provide(
       SystemPrompt.layer.pipe(
         Layer.provide(Skill.defaultLayer),
-        Layer.provide(LocationServiceMap.layer),
+        Layer.provide(locationServiceMapLayer),
         Layer.provide(deps),
       ),
     ),
@@ -697,7 +697,9 @@ noLLMServer.instance.skip(
       })
 
       const messages = yield* SessionV2.Service.use((session) => session.messages({ sessionID: chat.id })).pipe(
-        Effect.provide(SessionV2.defaultLayer.pipe(Layer.provide(SessionExecution.noopLayer))),
+        Effect.provide(SessionV2.defaultLayer),
+        Effect.provide(SessionExecution.noopLayer),
+        Effect.provide(locationServiceMapLayer),
       )
       const { db } = yield* Database.Service
       const row = yield* db
