@@ -576,8 +576,6 @@ function HomeProjectColumn(props: {
                 <HomeServerRow
                   server={item}
                   selected={props.selected.server === key && !props.selected.directory}
-                  healthy={healthy()}
-                  hasProjects={hasProjects()}
                   collapsed={collapsed()}
                   health={global.servers.health[key]}
                   controller={controller}
@@ -637,8 +635,6 @@ function HomeUtilityNav(props: {
 function HomeServerRow(props: {
   server: ServerConnection.Any
   selected: boolean
-  healthy: boolean
-  hasProjects: boolean
   collapsed: boolean
   health: ServerHealth | undefined
   controller: ReturnType<typeof useServerManagementController>
@@ -648,18 +644,20 @@ function HomeServerRow(props: {
   toggleCollapsed: () => void
   language: ReturnType<typeof useLanguage>
 }) {
+  const global = useGlobal()
   const [state, setState] = createStore({ menuOpen: false })
-  const canToggle = () => props.healthy && props.hasProjects
+  const healthy = () => !!props.health?.healthy
+  const canToggle = () => healthy() && global.ensureServerCtx(props.server).projects.list().length > 0
   return (
     <div class="group/server relative flex h-7 min-w-0 items-center rounded-[6px]">
       <button
         type="button"
         class={`${HOME_PROJECT_NAV_ROW} pr-16 disabled:opacity-60`}
         data-selected={props.selected ? "" : undefined}
-        disabled={!props.healthy}
+        disabled={!healthy()}
         onClick={() => props.focusServer(props.server)}
       >
-        <Show when={props.healthy}>
+        <Show when={healthy()}>
           <span
             data-action="home-server-collapse"
             class="inline-flex -ml-0.5 -mr-1.5 size-5 shrink-0 items-center justify-center rounded-[4px] text-v2-icon-icon-muted"
