@@ -382,7 +382,7 @@ export const RunCommand = effectCmd({
           const mime = !args.attach
             ? isDirectory
               ? "application/x-directory"
-              : "text/plain"
+              : detected
             : content && text !== undefined && Buffer.from(text, "utf8").equals(content)
               ? "text/plain"
               : detected
