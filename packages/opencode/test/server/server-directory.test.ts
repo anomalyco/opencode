@@ -36,9 +36,23 @@ describe("ServerDirectory", () => {
     )
   })
 
+  test("parses Windows-native paths under the Windows profile", () => {
+    expect(String(ServerDirectory.parse("C:/Work/Repo", { kind: "win32" }))).toBe("C:\\Work\\Repo")
+    expect(String(ServerDirectory.parse("C:\\Work\\Repo", { kind: "win32" }))).toBe("C:\\Work\\Repo")
+    expect(String(ServerDirectory.parse("\\\\server\\share\\repo", { kind: "win32" }))).toBe(
+      "\\\\server\\share\\repo",
+    )
+    expect(String(ServerDirectory.parse("relative\\repo", { kind: "win32" }))).toBe("relative\\repo")
+  })
+
+  test("rejects foreign POSIX-rooted syntax under the Windows profile", () => {
+    expectReason("/tmp/repo", "foreign", { kind: "win32" })
+    expectReason("file:///tmp/repo", "invalid", { kind: "win32" })
+    expectReason("C:Work\\Repo", "drive-relative", { kind: "win32" })
+  })
+
   test("reports exact parse reasons", () => {
     expectReason("", "empty", { kind: "posix" })
     expectReason("/tmp/\0repo", "nul", { kind: "posix" })
-    expectReason("C:Work\\Repo", "drive-relative", { kind: "win32" })
   })
 })
