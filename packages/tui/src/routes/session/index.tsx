@@ -50,6 +50,7 @@ import { TodoItem } from "../../component/todo-item"
 import { DialogMessage } from "./dialog-message"
 import type { PromptInfo } from "../../component/prompt/history"
 import { DialogConfirm } from "../../ui/dialog-confirm"
+import { DialogPrompt } from "../../ui/dialog-prompt"
 import { DialogTimeline } from "./dialog-timeline"
 import { DialogForkFromTimeline } from "./dialog-fork-from-timeline"
 import { DialogSessionRename } from "../../component/dialog-session-rename"
@@ -82,6 +83,12 @@ import { getRevertDiffFiles } from "../../util/revert-diff"
 import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut, useOpencodeKeymap } from "../../keymap"
 import { usePathFormatter } from "../../context/path-format"
 import { LocationProvider } from "../../context/location"
+import {
+  findSessionSearchMatches,
+  nextSessionSearchIndex,
+  sessionSearchPreview,
+  type SessionSearchMatch,
+} from "../../util/session-search"
 
 addDefaultParsers(parsers.parsers)
 
@@ -134,6 +141,9 @@ const sessionBindingCommands = [
   "session.messages_last_user",
   "session.message.next",
   "session.message.previous",
+  "session.search",
+  "session.search.next",
+  "session.search.previous",
   "messages.copy",
   "session.copy",
   "session.export",
@@ -413,6 +423,95 @@ export function Session() {
     dialog.clear()
   }
 
+  const [search, setSearch] = createSignal<{
+    query: string
+    matches: SessionSearchMatch[]
+    index: number
+  }>()
+
+  function scrollToMessageID(messageID: string) {
+    if (!scroll || scroll.isDestroyed) return false
+    const child = scroll.getChildren().find((child) => child.id === messageID)
+    if (!child) return false
+    scroll.scrollBy(child.y - scroll.y - 1)
+    return true
+  }
+
+  function firstSearchIndex(matches: SessionSearchMatch[]) {
+    if (!scroll || scroll.isDestroyed) return 0
+    const children = scroll.getChildren()
+    const positioned = matches.flatMap((match, index) => {
+      const child = children.find((child) => child.id === match.messageID)
+      return child ? [{ index, y: child.y }] : []
+    })
+    if (!positioned.length) return 0
+    return positioned.find((match) => match.y > scroll.y + 1)?.index ?? positioned[0].index
+  }
+
+  function showSearchMatch(query: string, matches: SessionSearchMatch[], index: number) {
+    const match = matches[index]
+    if (!match) return
+    toast.show({
+      variant: "info",
+      duration: 2500,
+      message: `Match ${index + 1}/${matches.length}: ${sessionSearchPreview(match.text, query)}`,
+    })
+  }
+
+  function runSearch(query: string, startIndex?: number) {
+    const matches = findSessionSearchMatches(messages(), sync.data.part, query)
+    if (!matches.length) {
+      setSearch()
+      toast.show({
+        variant: "warning",
+        duration: 2500,
+        message: `No matches for "${query}"`,
+      })
+      return
+    }
+
+    const index =
+      startIndex === undefined ? firstSearchIndex(matches) : Math.max(0, Math.min(startIndex, matches.length - 1))
+    setSearch({ query, matches, index })
+    scrollToMessageID(matches[index].messageID)
+    showSearchMatch(query, matches, index)
+  }
+
+  async function openSearch() {
+    const value = await DialogPrompt.show(dialog, "Search session", {
+      placeholder: "Find text",
+      value: search()?.query,
+    })
+    dialog.clear()
+    const query = value?.trim()
+    if (!query) return
+    runSearch(query)
+  }
+
+  function moveSearch(direction: "next" | "previous") {
+    const current = search()
+    if (!current) {
+      void openSearch()
+      return
+    }
+
+    const matches = findSessionSearchMatches(messages(), sync.data.part, current.query)
+    if (!matches.length) {
+      setSearch()
+      toast.show({
+        variant: "warning",
+        duration: 2500,
+        message: `No matches for "${current.query}"`,
+      })
+      return
+    }
+
+    const next = nextSessionSearchIndex(matches.length, current.index, direction)
+    setSearch({ query: current.query, matches, index: next })
+    scrollToMessageID(matches[next].messageID)
+    showSearchMatch(current.query, matches, next)
+  }
+
   function toBottom() {
     setTimeout(() => {
       if (!scroll || scroll.isDestroyed) return
@@ -527,6 +626,38 @@ export function Session() {
             setPrompt={(promptInfo) => prompt?.set(promptInfo)}
           />
         ))
+      },
+    },
+    {
+      title: "Search session",
+      value: "session.search",
+      category: "Session",
+      slash: {
+        name: "search",
+        aliases: ["find"],
+      },
+      run: () => {
+        void openSearch()
+      },
+    },
+    {
+      title: "Next search match",
+      value: "session.search.next",
+      category: "Session",
+      enabled: !!search()?.matches.length,
+      run: () => {
+        moveSearch("next")
+        dialog.clear()
+      },
+    },
+    {
+      title: "Previous search match",
+      value: "session.search.previous",
+      category: "Session",
+      enabled: !!search()?.matches.length,
+      run: () => {
+        moveSearch("previous")
+        dialog.clear()
       },
     },
     {
@@ -1681,7 +1812,13 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
   const { theme, syntax } = useTheme()
   return (
     <Show when={props.part.text.trim()}>
-      <box ref={(el: BoxRenderable) => alwaysSeparate.add(el)} paddingLeft={3} marginTop={1} flexShrink={0}>
+      <box
+        id={props.message.id}
+        ref={(el: BoxRenderable) => alwaysSeparate.add(el)}
+        paddingLeft={3}
+        marginTop={1}
+        flexShrink={0}
+      >
         <markdown
           syntaxStyle={syntax()}
           streaming={true}
