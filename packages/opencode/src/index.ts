@@ -29,6 +29,9 @@ import { DbCommand } from "./cli/cmd/db"
 import { errorMessage } from "./util/error"
 import { PluginCommand } from "./cli/cmd/plug"
 import { Heap } from "./cli/heap"
+import { provisionDefaults } from "./config/provision"
+
+provisionDefaults()
 
 const args = hideBin(process.argv)
 

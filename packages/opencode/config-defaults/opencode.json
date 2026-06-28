@@ -1,0 +1,25 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["AGENTS.md", "instructions/*.md"],
+  "skills": {
+    "paths": ["./skill"]
+  },
+  "default_agent": "autonomous",
+  "plugin": [
+    "./plugins/watchdog.ts",
+    "./plugins/autoverify.ts",
+    "./plugins/context7-enforcer.ts"
+  ],
+  "permission": {
+    "edit": "allow",
+    "bash": { "*": "allow" },
+    "read": "allow",
+    "write": "allow",
+    "glob": "allow",
+    "grep": "allow",
+    "websearch": "allow",
+    "webfetch": "allow"
+  },
+  "formatter": true,
+  "lsp": true
+}

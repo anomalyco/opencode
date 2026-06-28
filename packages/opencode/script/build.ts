@@ -14,6 +14,10 @@ process.chdir(dir)
 
 const generated = await import("./generate.ts")
 
+// Regenerate the embedded global-config defaults from config-defaults/ so the
+// binary always seeds the latest benign assets on first run.
+await import("./gen-default-config.ts")
+
 import { Script } from "@opencode-ai/script"
 import pkg from "../package.json"
 
