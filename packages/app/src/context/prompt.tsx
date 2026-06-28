@@ -6,7 +6,7 @@ import { createStore, type SetStoreFunction } from "solid-js/store"
 import type { FileSelection } from "@/context/file"
 import { Persist, persisted } from "@/utils/persist"
 import { useServerSDK } from "./server-sdk"
-import type { ServerScope } from "@/utils/server-scope"
+import { ScopedKey, type ServerScope } from "@/utils/server-scope"
 import { useSDK } from "./sdk"
 import { useTabs, type Tab } from "./tabs"
 import { ServerConnection } from "./server"
@@ -178,7 +178,7 @@ type PromptStore = {
   }
 }
 
-type Scope = { draftID: string } | { dir: string; id?: string }
+export type Scope = { draftID: string } | { dir: string; id?: string }
 
 export function selectPromptTab(tabs: Tab[], scope: Scope, server: ServerConnection.Key) {
   if ("draftID" in scope) return tabs.find((tab) => tab.type === "draft" && tab.draftID === scope.draftID)
@@ -189,9 +189,15 @@ export function selectPromptTab(tabs: Tab[], scope: Scope, server: ServerConnect
   )
 }
 
-function scopeKey(scope: Scope) {
+export function getPromptSessionCacheKey(serverScope: ServerScope, scope: Scope) {
   if ("draftID" in scope) return `draft:${scope.draftID}`
-  return `${scope.dir}:${scope.id ?? WORKSPACE_KEY}`
+  return ScopedKey.from(serverScope, scope.dir, scope.id ?? WORKSPACE_KEY)
+}
+
+export function createPromptRouteScope(input: { draftID?: string; dir?: string; id?: string }) {
+  if (input.draftID) return { draftID: input.draftID }
+  if (input.dir) return { dir: input.dir, id: input.id }
+  return undefined
 }
 
 type PromptCacheEntry = {
@@ -324,15 +330,13 @@ export const { use: usePrompt, provider: PromptProvider } = createSimpleContext(
     const owner = getOwner()
     const serverKey = () =>
       params.serverKey ? requireServerKey(params.serverKey) : ServerConnection.key(serverSDK().server)
-    const scope = () =>
-      search.draftId ? { draftID: search.draftId } : { dir: base64Encode(sdk().directory), id: params.id }
     const load = (scope: Scope) => {
       const current = settings.general.newLayoutDesigns() ? selectPromptTab(tabs.store, scope, serverKey()) : undefined
       if (current) {
         return createTabPromptState(tabs, current, serverSDK().scope, scope)
       }
 
-      const key = scopeKey(scope)
+      const key = getPromptSessionCacheKey(serverSDK().scope, scope)
       const existing = cache.get(key)
       if (existing) {
         cache.delete(key)
@@ -353,7 +357,17 @@ export const { use: usePrompt, provider: PromptProvider } = createSimpleContext(
       return entry.value
     }
 
-    const session = createMemo(() => load(scope()))
+    const fallback = createPromptState()
+    const session = createMemo(() => {
+      const directory = sdk().directory
+      const scope = createPromptRouteScope({
+        draftID: search.draftId,
+        dir: directory ? base64Encode(directory) : undefined,
+        id: params.id,
+      })
+      if (scope) return load(scope)
+      return fallback
+    })
     const pick = (scope?: Scope) => (scope ? load(scope) : session())
     const ready = createPromptReady(session)
 
