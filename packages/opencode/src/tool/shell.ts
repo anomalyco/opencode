@@ -1,4 +1,4 @@
-import { Effect, Stream } from "effect"
+import { Effect, Scope, Stream } from "effect"
 import os from "os"
 import { createWriteStream } from "node:fs"
 import * as Tool from "./tool"
@@ -21,10 +21,16 @@ import { ChildProcess } from "effect/unstable/process"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
 import { ShellPrompt, type Parameters } from "./shell/prompt"
 import { BashArity } from "@/permission/arity"
+import { BackgroundJob } from "@/background/job"
+import type { TaskPromptOps } from "./task"
 
 export { Parameters } from "./shell/prompt"
 
 const MAX_METADATA_LENGTH = 30_000
+const BACKGROUND_STARTED = [
+  "The command is running in the background. You will be notified automatically when it finishes.",
+  "Do not sleep or poll for progress. Continue with other work, or tell the user what was launched.",
+].join("\n")
 const CWD = new Set(["cd", "chdir", "popd", "pushd", "push-location", "set-location"])
 const FILES = new Set([
   ...CWD,
@@ -308,6 +314,26 @@ function cmd(shell: string, command: string, cwd: string, env: NodeJS.ProcessEnv
     detached: process.platform !== "win32",
   })
 }
+
+function renderBackgroundOutput(input: {
+  jobID: string
+  command: string
+  state: "running" | "completed" | "cancelled" | "error"
+  exit?: number | null
+  outputPath?: string
+  text: string
+}) {
+  return [
+    `<bash_background job_id="${input.jobID}" state="${input.state}">`,
+    `<command>${input.command}</command>`,
+    ...(input.exit === undefined ? [] : [`<exit_code>${input.exit}</exit_code>`]),
+    ...(input.outputPath ? [`<output_path>${input.outputPath}</output_path>`] : []),
+    "<result>",
+    input.text,
+    "</result>",
+    "</bash_background>",
+  ].join("\n")
+}
 const parser = lazy(async () => {
   const { Parser } = await import("web-tree-sitter")
   const { default: treeWasm } = await import("web-tree-sitter/tree-sitter.wasm" as string, {
@@ -344,6 +370,8 @@ export const ShellTool = Tool.define(
     const trunc = yield* Truncate.Service
     const plugin = yield* Plugin.Service
     const flags = yield* RuntimeFlags.Service
+    const background = yield* BackgroundJob.Service
+    const scope = yield* Scope.Scope
     const defaultTimeoutMs = flags.bashDefaultTimeoutMs ?? 2 * 60 * 1000
 
     const cygpath = Effect.fn("ShellTool.cygpath")(function* (shell: string, text: string) {
@@ -431,7 +459,8 @@ export const ShellTool = Tool.define(
         command: string
         cwd: string
         env: NodeJS.ProcessEnv
-        timeout: number
+        timeout?: number
+        description: string
       },
       ctx: Tool.Context,
     ) {
@@ -537,13 +566,19 @@ export const ShellTool = Tool.define(
             return Effect.sync(() => ctx.abort.removeEventListener("abort", handler))
           })
 
-          const timeout = Effect.sleep(`${input.timeout + 100} millis`)
+          const timeout =
+            input.timeout === undefined
+              ? undefined
+              : Effect.sleep(`${input.timeout + 100} millis`).pipe(
+                  Effect.map(() => ({ kind: "timeout" as const, code: null })),
+                )
 
-          const exit = yield* Effect.raceAll([
+          const racers = [
             handle.exitCode.pipe(Effect.map((code) => ({ kind: "exit" as const, code }))),
             abort.pipe(Effect.map(() => ({ kind: "abort" as const, code: null }))),
-            timeout.pipe(Effect.map(() => ({ kind: "timeout" as const, code: null }))),
-          ])
+            ...(timeout ? [timeout] : []),
+          ]
+          const exit = yield* Effect.raceAll(racers)
 
           if (exit.kind === "abort") {
             aborted = true
@@ -594,6 +629,112 @@ export const ShellTool = Tool.define(
       }
     })
 
+    const runBackground = Effect.fn("ShellTool.runBackground")(function* (
+      input: {
+        shell: string
+        command: string
+        cwd: string
+        env: NodeJS.ProcessEnv
+        timeout?: number
+        description: string
+      },
+      ctx: Tool.Context,
+    ) {
+      const outputPath = yield* trunc.write("")
+      const backgroundCtx: Tool.Context = {
+        ...ctx,
+        abort: AbortSignal.any([]),
+        metadata: () => Effect.void,
+      }
+      const info = yield* background.start({
+        type: "bash",
+        title: input.description,
+        metadata: {
+          background: true,
+          command: input.command,
+          cwd: input.cwd,
+          outputPath,
+          sessionID: ctx.sessionID,
+        },
+        run: run(input, backgroundCtx).pipe(
+          Effect.flatMap((result) =>
+            Effect.gen(function* () {
+              if (!result.metadata.outputPath) yield* fs.writeFileString(outputPath, result.output).pipe(Effect.orDie)
+              return JSON.stringify({
+                output: result.output,
+                exit: result.metadata.exit,
+                outputPath: result.metadata.outputPath ?? outputPath,
+              })
+            }),
+          ),
+        ),
+      })
+
+      yield* background
+        .wait({ id: info.id })
+        .pipe(
+          Effect.flatMap((result) =>
+            Effect.gen(function* () {
+              const final = result.info
+              const ops = ctx.extra?.promptOps as TaskPromptOps | undefined
+              if (!final || !ops) return
+              const parsed = final.output ? JSON.parse(final.output) : {}
+              yield* ops.prompt({
+                sessionID: ctx.sessionID,
+                agent: ctx.agent,
+                parts: [
+                  {
+                    type: "text",
+                    synthetic: true,
+                    text: renderBackgroundOutput({
+                      jobID: info.id,
+                      command: input.command,
+                      state: final.status,
+                      exit: typeof parsed.exit === "number" || parsed.exit === null ? parsed.exit : undefined,
+                      outputPath: typeof parsed.outputPath === "string" ? parsed.outputPath : outputPath,
+                      text: typeof parsed.output === "string" ? parsed.output : (final.error ?? ""),
+                    }),
+                  },
+                ],
+              })
+            }).pipe(Effect.ignore),
+          ),
+          Effect.forkIn(scope, { startImmediately: true }),
+        )
+
+      yield* ctx.metadata({
+        title: input.description,
+        metadata: {
+          background: true,
+          jobId: info.id,
+          outputPath,
+          description: input.description,
+          output: "",
+          exit: null,
+        },
+      })
+
+      return {
+        title: input.description,
+        metadata: {
+          background: true,
+          jobId: info.id,
+          outputPath,
+          description: input.description,
+          output: "",
+          exit: null,
+          truncated: false,
+        },
+        output: renderBackgroundOutput({
+          jobID: info.id,
+          command: input.command,
+          state: "running",
+          outputPath,
+          text: BACKGROUND_STARTED,
+        }),
+      }
+    })
+
     return () =>
       Effect.gen(function* () {
         const cfg = yield* config.get()
@@ -615,7 +756,6 @@ export const ShellTool = Tool.define(
               if (params.timeout !== undefined && params.timeout < 0) {
                 throw new Error(`Invalid timeout value: ${params.timeout}. Timeout must be a positive number.`)
               }
-              const timeout = params.timeout ?? defaultTimeoutMs
               const ps = Shell.ps(shell)
               yield* Effect.scoped(
                 Effect.gen(function* () {
@@ -628,16 +768,19 @@ export const ShellTool = Tool.define(
                 }),
               )
 
-              return yield* run(
-                {
-                  shell,
-                  command: params.command,
-                  cwd,
-                  env: yield* shellEnv(ctx, cwd),
-                  timeout,
-                },
-                ctx,
-              )
+              const input = {
+                shell,
+                command: params.command,
+                cwd,
+                env: yield* shellEnv(ctx, cwd),
+                timeout:
+                  params.run_in_background === true || params.background === true
+                    ? params.timeout
+                    : (params.timeout ?? defaultTimeoutMs),
+                description: params.command,
+              }
+              if (params.run_in_background === true || params.background === true) return yield* runBackground(input, ctx)
+              return yield* run(input, ctx)
             }),
         }
       })

@@ -20,9 +20,17 @@ exports[`tool parameters JSON Schema (wire shape) bash 1`] = `
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "properties": {
+    "background": {
+      "description": "Alias for run_in_background.",
+      "type": "boolean",
+    },
     "command": {
       "description": "The command to execute",
       "type": "string",
+    },
+    "run_in_background": {
+      "description": "Run the command asynchronously and return immediately with a background job id. You will be notified when it completes.",
+      "type": "boolean",
     },
     "timeout": {
       "description": "Optional timeout in milliseconds",

@@ -20,6 +20,8 @@ import { testEffect } from "../lib/effect"
 import { Tool } from "@/tool/tool"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { InstanceStore } from "@/project/instance-store"
+import { BackgroundJob } from "@/background/job"
+import { BashKillTool } from "@/tool/bash_kill"
 
 const shellLayer = Layer.mergeAll(
   CrossSpawnSpawner.defaultLayer,
@@ -29,6 +31,7 @@ const shellLayer = Layer.mergeAll(
   Config.defaultLayer,
   Agent.defaultLayer,
   RuntimeFlags.defaultLayer,
+  BackgroundJob.defaultLayer,
   testInstanceStoreLayer,
 )
 const it = testEffect(shellLayer)
@@ -43,6 +46,10 @@ const initShell = Effect.fn("ShellToolTest.init")(function* () {
 })
 
 const initBash = initShell
+const initBashKill = Effect.fn("ShellToolTest.initBashKill")(function* () {
+  const info = yield* BashKillTool
+  return yield* info.init()
+})
 
 const run = Effect.fn("ShellToolTest.run")(function* (
   args: Tool.InferParameters<typeof ShellTool>,
@@ -185,6 +192,48 @@ describe("tool.shell", () => {
         })
         expect(result.metadata.exit).toBe(0)
         expect(result.metadata.output).toContain("test")
+      }),
+    ),
+  )
+
+  it.live("runs command in background", () =>
+    runIn(
+      projectRoot,
+      Effect.gen(function* () {
+        const result = yield* run({
+          command: `${bin} -e ${evalarg('setTimeout(() => console.log("background done"), 50)')}`,
+          run_in_background: true,
+        })
+        const metadata = result.metadata as Record<string, unknown>
+        expect(metadata.background).toBe(true)
+        expect(metadata.jobId).toBeString()
+        expect(result.metadata.outputPath).toBeString()
+        expect(result.output).toContain("running in the background")
+        const jobs = yield* BackgroundJob.Service
+        const waited = yield* jobs.wait({ id: metadata.jobId as string, timeout: 1_000 })
+        expect(waited.info?.status).toBe("completed")
+        const saved = yield* (yield* FSUtil.Service).readFileString(result.metadata.outputPath!)
+        expect(saved).toContain("background done")
+      }),
+    ),
+  )
+
+  it.live("bash_kill does not cancel non-bash jobs", () =>
+    runIn(
+      projectRoot,
+      Effect.gen(function* () {
+        const background = yield* BackgroundJob.Service
+        const kill = yield* initBashKill()
+        const job = yield* background.start({
+          id: "job_nonbash",
+          type: "task",
+          run: Effect.never,
+        })
+        const result = yield* kill.execute({ job_id: job.id }, ctx)
+        const current = yield* background.get(job.id)
+        expect(result.output).toContain("No background bash job found")
+        expect(current?.status).toBe("running")
+        yield* background.cancel(job.id)
       }),
     ),
   )
