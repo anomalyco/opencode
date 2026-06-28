@@ -525,6 +525,7 @@ export const dict = {
   "session.review.mergeToMain.unclean.title": "主分支工作区不干净",
   "session.review.mergeToMain.unclean.description": "请先提交或暂存这些文件：{{files}}",
   "session.review.mergeToMain.starting": "已发起合并，请查看 agent 回复中的追踪会话。",
+  "session.review.mergeToMain.failed": "合并请求失败，请查看 agent 回复了解详情。",
   "session.review.change.one": "更改",
   "session.review.change.other": "更改",
   "session.review.loadingChanges": "正在加载更改...",

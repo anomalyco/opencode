@@ -48,6 +48,7 @@ import type {
   UserMessage,
 } from "@opencode-ai/sdk/v2"
 import { showToast } from "@/utils/toast"
+import { base64Encode } from "@opencode-ai/core/util/encode"
 import { getDirectory, getFilename } from "@opencode-ai/core/util/path"
 import { Popover as KobaltePopover } from "@kobalte/core/popover"
 import { normalize } from "@opencode-ai/session-ui/session-diff"
@@ -58,6 +59,7 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useLanguage } from "@/context/language"
 import { useSessionKey } from "@/pages/session/session-layout"
 import { useServerSDK } from "@/context/server-sdk"
+import { useServerSync } from "@/context/server-sync"
 import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
 import { useTabs } from "@/context/tabs"
@@ -271,6 +273,7 @@ export function MessageTimeline(props: {
 
   const navigate = useNavigate()
   const serverSDK = useServerSDK()
+  const serverSync = useServerSync()
   const sdk = useSDK()
   const sync = useSync()
   const settings = useSettings()
@@ -360,6 +363,42 @@ export function MessageTimeline(props: {
   }
 
   const sessionMessages = createMemo(() => (sessionID() ? (sync().data.message[sessionID()!] ?? []) : []))
+  // Auto-navigate to the merge session created by `worktree_merge_request`.
+  // The tool runs in this (worktree) session but creates a new session in the
+  // project's main checkout, returning its id/directory in the completed tool
+  // part's metadata. `mountedAt` skips merge parts that already existed when the
+  // view opened (so reopening an old session does not redirect), and
+  // `navigatedFor` dedupes the repeated `message.part.updated` pushes for one
+  // part.
+  const mountedAt = Date.now()
+  const [navigatedFor, setNavigatedFor] = createSignal<string | undefined>(undefined)
+  createEffect(() => {
+    const id = sessionID()
+    if (!id) return
+    for (const message of sessionMessages()) {
+      for (const part of getMsgParts(message.id)) {
+        if (part.type !== "tool" || part.tool !== "worktree_merge_request") continue
+        if (part.state.status !== "completed" && part.state.status !== "error") continue
+        if (part.state.time.start < mountedAt) continue
+        if (navigatedFor() === part.callID) continue
+
+        if (part.state.status === "error") {
+          setNavigatedFor(part.callID)
+          showToast({ title: language.t("session.review.mergeToMain.failed"), variant: "error" })
+          return
+        }
+        const targetSessionID = part.state.metadata?.targetSessionID
+        const targetDirectory = part.state.metadata?.targetDirectory
+        if (typeof targetSessionID !== "string" || typeof targetDirectory !== "string") continue
+        setNavigatedFor(part.callID)
+        // Warm the target directory's store so the merge session view does not
+        // flash empty while its DirectoryDataProvider boots.
+        serverSync.child(targetDirectory)
+        navigate(`/${base64Encode(targetDirectory)}/session/${targetSessionID}`)
+        return
+      }
+    }
+  })
   const info = createMemo(() => {
     const id = sessionID()
     if (!id) return

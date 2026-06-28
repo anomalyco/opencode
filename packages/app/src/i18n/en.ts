@@ -611,6 +611,7 @@ export const dict = {
   "session.review.mergeToMain.unclean.title": "Main checkout is not clean",
   "session.review.mergeToMain.unclean.description": "Please commit or stash these files first: {{files}}",
   "session.review.mergeToMain.starting": "Merge requested. See the agent's reply for the tracking session.",
+  "session.review.mergeToMain.failed": "The merge request failed. See the agent's reply for details.",
   "session.review.change.one": "Change",
   "session.review.change.other": "Changes",
   "session.review.loadingChanges": "Loading changes...",
