@@ -370,7 +370,11 @@ export const layer = Layer.effect(
       prompt: Effect.fn("V2Session.prompt")((input) =>
         Effect.uninterruptible(
           Effect.gen(function* () {
-            yield* result.get(input.sessionID)
+            const session = yield* result.get(input.sessionID)
+            // A staged revert must be committed before admitting new input so the prompt
+            // continues from the reverted boundary rather than stale post-boundary history.
+            if (session.revert)
+              yield* SessionRevert.commit(session).pipe(Effect.provideService(EventV2.Service, events))
             const prompt = resolvePrompt(input.prompt)
             const messageID = input.id ?? SessionMessage.ID.create()
             const delivery = input.delivery ?? "steer"
