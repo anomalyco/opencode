@@ -24,7 +24,7 @@ import {
   MessageDivider,
   Part as MessagePart,
   partDefaultOpen,
-} from "@opencode-ai/ui/message-part"
+} from "@opencode-ai/session-ui/message-part"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { useLanguage } from "@/context/language"
 import { useServerSDK } from "@/context/server-sdk"

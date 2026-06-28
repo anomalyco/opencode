@@ -2016,7 +2016,7 @@ export default function Page() {
           </Show>
         </div>
       </div>
-      {composerRegion("dock")}
+      {composerRegion()}
     </div>
   )
 
