@@ -1,0 +1,18 @@
+Search RAW conversation trajectory: prior user/assistant messages, tool inputs, tool errors.
+
+USE ONLY WHEN MEMORY SEARCH RETURNS NOTHING USEFUL.
+
+memory is your curated notebook - small, fast, semantically organized. ALWAYS try `memory` first.
+history is the unindexed firehose of your past sessions: bigger, noisier, slower, and the tool
+result cap will likely truncate `around` output forcing a follow-up Grep/Read. Reach for it as a
+last resort, e.g.:
+  - memory had no entry, but you suspect this came up in a prior session
+  - you need verbatim recall of something the memory summary glossed over
+  - debugging "did I already try X" across the project
+
+Two operations:
+  - search: BM25 over text/tool kinds (returns snippets + session_id + message_id)
+  - around: given a search hit's message_id (pass its session_id too when you have it), pull +/-N
+    surrounding messages from the raw store
+
+Default scope is current project; pass scope="global" to search every project on this machine.

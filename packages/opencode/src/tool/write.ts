@@ -14,6 +14,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { trimDiff } from "./edit"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import * as Bom from "@/util/bom"
+import { SessionCwd } from "./session-cwd"
 
 const MAX_PROJECT_DIAGNOSTICS_FILES = 5
 
@@ -40,7 +41,7 @@ export const WriteTool = Tool.define(
           const instance = yield* InstanceState.context
           const filepath = path.isAbsolute(params.filePath)
             ? params.filePath
-            : path.join(instance.directory, params.filePath)
+            : path.join(SessionCwd.get(ctx.sessionID, instance.directory), params.filePath)
           yield* assertExternalDirectoryEffect(ctx, filepath)
 
           const exists = yield* fs.existsSafe(filepath)

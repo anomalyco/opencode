@@ -9,6 +9,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import { Instruction } from "../session/instruction"
 import { isPdfAttachment, sniffAttachmentMime } from "@/util/media"
+import { SessionCwd } from "./session-cwd"
 
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
@@ -233,7 +234,7 @@ export const ReadTool = Tool.define<
       const instance = yield* InstanceState.context
       let filepath = params.filePath
       if (!path.isAbsolute(filepath)) {
-        filepath = path.resolve(instance.directory, filepath)
+        filepath = path.resolve(SessionCwd.get(ctx.sessionID, instance.directory), filepath)
       }
       if (process.platform === "win32") {
         filepath = FSUtil.normalizePath(filepath)

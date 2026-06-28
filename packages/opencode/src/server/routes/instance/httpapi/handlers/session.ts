@@ -14,6 +14,7 @@ import { SessionRunState } from "@/session/run-state"
 import { SessionStatus } from "@/session/status"
 import { SessionSummary } from "@/session/summary"
 import { Todo } from "@/session/todo"
+import { BackgroundJob } from "@/background/job"
 import { MessageID, PartID, SessionID } from "@/session/schema"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { Cause, Effect, Option, Schema, Scope } from "effect"
@@ -44,6 +45,22 @@ const tryParseJson = (text: string) =>
     catch: () => new HttpApiError.BadRequest({}),
   })
 
+// Map a background subagent job status to a todo status, mirroring MiMo's
+// taskToTodo (in_progress / completed / cancelled / pending).
+function backgroundJobStatusToTodo(status: BackgroundJob.Status): string {
+  switch (status) {
+    case "running":
+      return "in_progress"
+    case "completed":
+      return "completed"
+    case "error":
+    case "cancelled":
+      return "cancelled"
+    default:
+      return "pending"
+  }
+}
+
 export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", (handlers) =>
   Effect.gen(function* () {
     const session = yield* Session.Service
@@ -56,6 +73,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     const permissionSvc = yield* Permission.Service
     const statusSvc = yield* SessionStatus.Service
     const todoSvc = yield* Todo.Service
+    const backgroundSvc = yield* BackgroundJob.Service
     const summary = yield* SessionSummary.Service
     const events = yield* EventV2Bridge.Service
     const scope = yield* Scope.Scope
@@ -91,7 +109,24 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
 
     const todo = Effect.fn("SessionHttpApi.todo")(function* (ctx: { params: { sessionID: SessionID } }) {
       yield* requireSession(ctx.params.sessionID)
-      return yield* todoSvc.get(ctx.params.sessionID)
+      const stored = yield* todoSvc.get(ctx.params.sessionID)
+      // MiMo-style enrichment: surface this session's subagent task jobs as todos
+      // derived from their live status, appended to the LLM-maintained todowrite
+      // list. Unlike MiMo (which replaces the list), we merge so opencode's native
+      // todowrite todos are preserved.
+      const jobs = yield* backgroundSvc.list().pipe(Effect.catch(() => Effect.succeed([])))
+      const derived = jobs
+        .filter(
+          (job) =>
+            job.type === "task" &&
+            (job.metadata as { parentSessionId?: string } | undefined)?.parentSessionId === ctx.params.sessionID,
+        )
+        .map((job) => ({
+          content: job.title ?? job.id,
+          status: backgroundJobStatusToTodo(job.status),
+          priority: "medium",
+        }))
+      return [...stored, ...derived]
     })
 
     const diff = Effect.fn("SessionHttpApi.diff")(function* (ctx: {

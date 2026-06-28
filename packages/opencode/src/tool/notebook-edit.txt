@@ -1,0 +1,10 @@
+Replaces, inserts, or deletes a single cell in a Jupyter notebook (.ipynb file).
+
+Usage:
+- Prefer using your `read` tool on the notebook before editing so you know the cell ids and contents.
+- `notebookPath` should be an absolute path to a `.ipynb` file.
+- `cellId` is the `id` attribute shown in the `read` tool's `<cell id="...">` output. It is required for `replace` and `delete`. For older notebooks (nbformat_minor < 5) where cells have no real `id`, you can pass a positional reference like `#0`, `#1`, etc. (0-based index). On first edit, missing ids are auto-generated and the notebook is upgraded to nbformat_minor 5.
+- `editMode` defaults to `replace`. Use `insert` to add a new cell after the cell with the given `cellId` (or at the beginning of the notebook if `cellId` is omitted) — `cellType` is required when inserting. Use `delete` to remove the cell.
+- For `replace`, the cell type is preserved unless `cellType` is explicitly provided.
+- `newSource` is the cell's full new content (required for `replace` and `insert`, ignored for `delete`).
+- This tool understands the Jupyter notebook cell structure and modifies cells in place — prefer it over `write`/`edit` for `.ipynb` files so the surrounding JSON, outputs, and metadata stay intact.

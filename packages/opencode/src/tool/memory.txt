@@ -1,0 +1,38 @@
+Search session/project/global memory using BM25 over markdown bodies. Use this
+to recall content the agent persisted previously: project memory, session
+checkpoints, task narratives (under sessions/<sid>/tasks/), project notes,
+global preferences.
+
+Memory layout: <data>/memory/<scope>/<scope_id>/<key>.md
+Scopes: global | projects | sessions
+
+QUERY GUIDELINES:
+- Queries are OR'd and BM25-ranked: a document matches if it contains ANY query
+  word, ordered by relevance (how many / how rare the matched words are).
+  Low-relevance common-word-only matches are dropped by a score floor.
+- Prefer 1-3 distinctive terms (function name, task ID, exact phrase from a
+  directive, a rare word from the snippet you want). Long lists of generic
+  words ("config params database connection") just add noise and bury the real
+  hit - pick the rarest, most specific word.
+- "T5.3 closure" works. So does "permission deadlock". Avoid padding with
+  generic descriptors.
+- Punctuation (`.`, `-`, `/`, `:`) is stripped during tokenization. Both query
+  and indexed body see only alphanumeric runs, so `T5.3` matches `T5 3`. A
+  literal like `postgres://host:5433` is tokenized as `postgres`, `host`,
+  `5433` - search one of those, not the full URL.
+
+A HIT IS AUTHORITATIVE. If search returns a result, trust it - even when a
+different/sibling query you ran returned nothing.
+
+WHEN SEARCH RETURNS 0 (escalate, do not give up):
+1. Retry with fewer / rarer terms (see guidelines above).
+2. For a literal string the tokenizer splits (URL, port, path) - Grep the memory
+   dir directly.
+Widen scope progressively: session -> project -> global.
+
+Actions:
+- search: OR-joined BM25 query, optional scope/scope_id/type filters
+
+After search returns paths, use Read on the most relevant ones to load full
+content (snippets are truncated). Use Glob on `<data>/memory/**/*.md` to inspect
+the tree if you need to find files by name pattern instead of body.

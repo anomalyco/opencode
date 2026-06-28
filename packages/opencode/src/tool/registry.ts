@@ -6,6 +6,8 @@ import { Session } from "@/session/session"
 import { QuestionTool } from "./question"
 import { ShellTool } from "./shell"
 import { EditTool } from "./edit"
+import { MultiEditTool } from "./multiedit"
+import { NotebookEditTool } from "./notebook-edit"
 import { GlobTool } from "./glob"
 import { GrepTool } from "./grep"
 import { ReadTool } from "./read"
@@ -26,9 +28,13 @@ import { Plugin } from "../plugin"
 import { Provider } from "@/provider/provider"
 
 import { WebSearchTool } from "./websearch"
+import { CodeSearchTool } from "./codesearch"
+import { MemoryTool } from "./memory"
+import { HistoryTool } from "./history"
 import { LspTool } from "./lsp"
 import * as Truncate from "./truncate"
 import { ApplyPatchTool } from "./apply_patch"
+import { ChangeDirectoryTool } from "./change-directory"
 import { Glob } from "@opencode-ai/core/util/glob"
 import path from "path"
 import { pathToFileURL } from "url"
@@ -47,6 +53,8 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Agent } from "../agent/agent"
 import { Skill } from "../skill"
+import { Memory } from "@/memory"
+import { History } from "@/history"
 import { Permission } from "@/permission"
 import { BackgroundJob } from "@/background/job"
 import { RuntimeFlags } from "@/effect/runtime-flags"
@@ -98,12 +106,18 @@ export const layer = Layer.effect(
     const plan = yield* PlanExitTool
     const webfetch = yield* WebFetchTool
     const websearch = yield* WebSearchTool
+    const codesearch = yield* CodeSearchTool
+    const memorytool = yield* MemoryTool
+    const historytool = yield* HistoryTool
     const shell = yield* ShellTool
     const globtool = yield* GlobTool
     const writetool = yield* WriteTool
     const edit = yield* EditTool
+    const multiedit = yield* MultiEditTool
+    const notebookedit = yield* NotebookEditTool
     const greptool = yield* GrepTool
     const patchtool = yield* ApplyPatchTool
+    const changedirtool = yield* ChangeDirectoryTool
     const skilltool = yield* SkillTool
     const agent = yield* Agent.Service
 
@@ -202,13 +216,19 @@ export const layer = Layer.effect(
           glob: Tool.init(globtool),
           grep: Tool.init(greptool),
           edit: Tool.init(edit),
+          multiedit: Tool.init(multiedit),
+          notebookedit: Tool.init(notebookedit),
           write: Tool.init(writetool),
           task: Tool.init(task),
           fetch: Tool.init(webfetch),
           todo: Tool.init(todo),
           search: Tool.init(websearch),
+          code: Tool.init(codesearch),
+          memory: Tool.init(memorytool),
+          history: Tool.init(historytool),
           skill: Tool.init(skilltool),
           patch: Tool.init(patchtool),
+          changedir: Tool.init(changedirtool),
           question: Tool.init(question),
           lsp: Tool.init(lsptool),
           plan: Tool.init(plan),
@@ -224,13 +244,19 @@ export const layer = Layer.effect(
             tool.glob,
             tool.grep,
             tool.edit,
+            tool.multiedit,
+            tool.notebookedit,
             tool.write,
             tool.task,
             tool.fetch,
             tool.todo,
             tool.search,
+            tool.code,
+            tool.memory,
+            tool.history,
             tool.skill,
             tool.patch,
+            tool.changedir,
             ...(flags.experimentalLspTool ? [tool.lsp] : []),
             ...(flags.experimentalPlanMode && flags.client === "cli" ? [tool.plan] : []),
           ],
@@ -266,7 +292,7 @@ export const layer = Layer.effect(
 
     const tools: Interface["tools"] = Effect.fn("ToolRegistry.tools")(function* (input) {
       const filtered = (yield* all()).filter((tool) => {
-        if (tool.id === WebSearchTool.id) {
+        if (tool.id === WebSearchTool.id || tool.id === CodeSearchTool.id) {
           return webSearchEnabled(input.providerID, { exa: flags.enableExa, parallel: flags.enableParallel })
         }
 
@@ -336,7 +362,7 @@ export const defaultLayer = Layer.suspend(() =>
       Layer.provide(CrossSpawnSpawner.defaultLayer),
       Layer.provide(Truncate.defaultLayer),
     )
-    .pipe(Layer.provide(Database.defaultLayer), Layer.provide(RuntimeFlags.defaultLayer)),
+    .pipe(Layer.provide(Database.defaultLayer), Layer.provide(RuntimeFlags.defaultLayer), Layer.provide(Memory.defaultLayer), Layer.provide(History.defaultLayer)),
 )
 
 function isZodType(value: unknown): value is z.ZodType {
@@ -438,6 +464,8 @@ export const node = LayerNode.make({
     Truncate.node,
     RuntimeFlags.node,
     Database.node,
+    Memory.node,
+    History.node,
   ],
 })
 

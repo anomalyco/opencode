@@ -18,6 +18,7 @@ import { Snapshot } from "@/snapshot"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import * as Bom from "@/util/bom"
+import { SessionCwd } from "./session-cwd"
 
 function normalizeLineEndings(text: string): string {
   return text.replaceAll("\r\n", "\n")
@@ -79,7 +80,7 @@ export const EditTool = Tool.define(
           const instance = yield* InstanceState.context
           const filePath = path.isAbsolute(params.filePath)
             ? params.filePath
-            : path.join(instance.directory, params.filePath)
+            : path.join(SessionCwd.get(ctx.sessionID, instance.directory), params.filePath)
           yield* assertExternalDirectoryEffect(ctx, filePath)
 
           let diff = ""
