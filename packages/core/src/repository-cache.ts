@@ -5,7 +5,7 @@ import { Git } from "./git"
 import { Global } from "./global"
 import { Repository } from "./repository"
 import { AbsolutePath } from "./schema"
-import { makeGlobalNode } from "./effect/node"
+import { makeGlobalNode } from "./effect/app-node"
 import { EffectFlock } from "./util/effect-flock"
 
 export type Result = {

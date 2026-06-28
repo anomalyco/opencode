@@ -52,8 +52,7 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { MoveSession } from "@opencode-ai/core/control-plane/move-session"
 import { Database } from "@opencode-ai/core/database/database"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { LayerNodeTree } from "@opencode-ai/core/effect/layer-node"
-import { httpClient } from "@opencode-ai/core/effect/layer-node-platform"
+import { httpClient } from "@opencode-ai/core/effect/app-node-platform"
 import { EventV2 } from "@opencode-ai/core/event"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { Npm } from "@opencode-ai/core/npm"
@@ -302,7 +301,7 @@ export function createRoutes(
     ),
     Layer.provide(locationServiceMapLayer),
 
-    Layer.provide(LayerNodeTree.compile(app)),
+    Layer.provide(LayerNode.compile(app)),
   )
 }
 

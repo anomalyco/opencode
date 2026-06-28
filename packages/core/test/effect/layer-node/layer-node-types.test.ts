@@ -1,8 +1,7 @@
 import { test } from "bun:test"
 import { Context, Effect, Layer } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { LayerNodeTree } from "@opencode-ai/core/effect/layer-node"
-import { makeGlobalNode, makeLocationNode } from "@opencode-ai/core/effect/node"
+import { makeGlobalNode, makeLocationNode } from "@opencode-ai/core/effect/app-node"
 
 class A extends Context.Service<A, {}>()("test/LayerNodeA") {}
 class B extends Context.Service<B, {}>()("test/LayerNodeB") {}
@@ -16,7 +15,7 @@ class OtherError {
 
 const tags = LayerNode.tags({ app: [] })
 const make = tags.make("app")
-const build = <A, E>(root: LayerNode.Node<A, E, any>) => LayerNodeTree.compile(root) as Layer.Layer<A, E>
+const build = <A, E>(root: LayerNode.Node<A, E, any>) => LayerNode.compile(root) as Layer.Layer<A, E>
 const aLayer = Layer.succeed(A, A.of({}))
 const bLayer = Layer.effect(B, Effect.as(A, B.of({})))
 const cLayer = Layer.effect(

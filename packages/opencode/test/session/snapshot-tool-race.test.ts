@@ -14,7 +14,6 @@
 import { expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { LayerNodeTree } from "@opencode-ai/core/effect/layer-node"
 import fs from "fs/promises"
 import path from "path"
 import { Session } from "@/session/session"
@@ -88,7 +87,7 @@ const root = LayerNode.group([
   LayerNode.make({ service: TestLLMServer, layer: TestLLMServer.layer, deps: [] }),
 ])
 const it = testEffect(
-  LayerNodeTree.compile(
+  LayerNode.compile(
     root,
     new Map(
       [

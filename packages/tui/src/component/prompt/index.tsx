@@ -569,6 +569,7 @@ export function Prompt(props: PromptProps) {
       "prompt.stash",
       "prompt.stash.pop",
       "prompt.stash.list",
+      "prompt.skills",
       "session.interrupt",
       "workspace.set",
       "session.move",

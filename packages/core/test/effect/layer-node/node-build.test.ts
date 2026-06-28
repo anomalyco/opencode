@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { Context, Effect, Layer, LayerMap, Option } from "effect"
-import { LayerNode, LayerNodeTree } from "@opencode-ai/core/effect/layer-node"
-import { Node } from "@opencode-ai/core/effect/node"
-import { NodeBuild } from "@opencode-ai/core/effect/node-build"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { Node } from "@opencode-ai/core/effect/app-node"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Location } from "@opencode-ai/core/location"
 import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
 import type { LocationError, LocationServices } from "@opencode-ai/core/location-services"
@@ -22,7 +22,7 @@ describe("node build", () => {
       layer: Layer.succeed(Result, Result.of({ value: "plain" })),
       deps: [],
     })
-    const layer = NodeBuild.build(LayerNode.group([result]))
+    const layer = AppNodeBuilder.build(result)
     const program = Effect.gen(function* () {
       expect(Option.isNone(yield* Effect.serviceOption(LocationServiceMap.Service))).toBe(true)
       return (yield* Result).value
@@ -62,9 +62,9 @@ describe("node build", () => {
     }) as unknown as Effect.Effect<LayerMap.LayerMap<Location.Ref, LocationServices, LocationError>, never, CycleB>
     const mapLayer = Layer.effect(LocationServiceMap.Service, mapEffect)
     const map = Node.makeGlobalNode({ service: LocationServiceMap.Service, layer: mapLayer, deps: [b] })
-    const graph = LayerNodeTree.bind(LayerNode.group([a]), LocationServiceMap.node, map)
+    const graph = LayerNode.bind(LayerNode.group([a]), LocationServiceMap.node, map)
 
-    expect(() => NodeBuild.build(graph)).toThrow("Cycle detected in layer tree")
+    expect(() => AppNodeBuilder.build(graph)).toThrow("Cycle detected in layer tree")
   })
 
   test("shares top-level project with location services", async () => {
@@ -81,7 +81,7 @@ describe("node build", () => {
         })
       }),
     )
-    const layer = NodeBuild.build(LayerNode.group([Project.node, LocationServiceMap.node]), [
+    const layer = AppNodeBuilder.build(LayerNode.group([Project.node, LocationServiceMap.node]), [
       LayerNode.replace(Project.layer, projectLayer),
     ])
     const ref = Location.Ref.make({ directory: AbsolutePath.make(tmp.path) })
@@ -112,7 +112,7 @@ describe("node build", () => {
       ),
       deps: [value],
     })
-    const serviceLayer = NodeBuild.build(LayerNode.group([result]))
+    const serviceLayer = AppNodeBuilder.build(result)
     const program = Effect.gen(function* () {
       expect(Option.isNone(yield* Effect.serviceOption(LocationServiceMap.Service))).toBe(true)
       return (yield* Result).value

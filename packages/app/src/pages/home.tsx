@@ -302,6 +302,7 @@ export function NewHome() {
 
   function selectProject(conn: ServerConnection.Any, directory: string) {
     const key = ServerConnection.key(conn)
+    if (global.servers.health[key]?.healthy === false) return
     if (
       !global
         .ensureServerCtx(conn)
@@ -767,15 +768,18 @@ function HomeProjectRow(props: {
   clearNotifications: (server: ServerConnection.Any, project: LocalProject) => void
   language: ReturnType<typeof useLanguage>
 }) {
+  const global = useGlobal()
+  const serverUnreachable = () => global.servers.health[ServerConnection.key(props.server)]?.healthy === false
   const [state, setState] = createStore({ menuOpen: false })
   return (
     <div class="group/project relative flex h-7 min-w-0 items-center rounded-[6px]">
       <button
         type="button"
         data-component="home-project-row"
-        class={`${HOME_PROJECT_NAV_ROW} pr-16`}
+        class={`${HOME_PROJECT_NAV_ROW} pr-16 disabled:opacity-60`}
         data-selected={props.selected ? "" : undefined}
         aria-current={props.selected ? "page" : undefined}
+        disabled={serverUnreachable()}
         onClick={() => props.selectProject(props.server, props.project.worktree)}
       >
         <HomeProjectAvatar project={props.project} />
