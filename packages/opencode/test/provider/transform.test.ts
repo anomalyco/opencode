@@ -514,6 +514,54 @@ describe("ProviderTransform.options - gpt-5 reasoningEffort", () => {
   })
 })
 
+describe("ProviderTransform.options - gates thinking on capabilities.reasoning", () => {
+  const sessionID = "test-session-123"
+
+  const nonReasoningModel = (overrides: Record<string, any> = {}) =>
+    ({
+      id: "test/no-reasoning",
+      providerID: "test",
+      api: { id: "no-reasoning", url: "https://api.test.com", npm: "@ai-sdk/openai-compatible", ...overrides.api },
+      capabilities: { reasoning: false },
+      cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+      limit: { context: 128000, output: 4096 },
+      status: "active",
+      options: {},
+      headers: {},
+      ...overrides,
+    }) as any
+
+  test("zai/zhipuai non-reasoning model skips thinking", () => {
+    const result = ProviderTransform.options({
+      model: nonReasoningModel({ id: "zai/non-reasoning", providerID: "zai" }),
+      sessionID,
+      providerOptions: {},
+    })
+    expect(result.thinking).toBeUndefined()
+  })
+
+  test("minimax-m3 anthropic non-reasoning model skips thinking", () => {
+    const result = ProviderTransform.options({
+      model: nonReasoningModel({ api: { id: "minimax-m3", url: "...", npm: "@ai-sdk/anthropic" } }),
+      sessionID,
+      providerOptions: {},
+    })
+    expect(result.thinking).toBeUndefined()
+  })
+
+  test("gpt-5 non-reasoning model skips reasoning params but keeps textVerbosity", () => {
+    const result = ProviderTransform.options({
+      model: nonReasoningModel({ id: "azure/gpt-5.2", providerID: "azure", api: { id: "gpt-5.2", url: "...", npm: "@ai-sdk/azure" } }),
+      sessionID,
+      providerOptions: {},
+    })
+    expect(result.reasoningEffort).toBeUndefined()
+    expect(result.reasoningSummary).toBeUndefined()
+    expect(result.include).toBeUndefined()
+    expect(result.textVerbosity).toBe("low")
+  })
+})
+
 describe("ProviderTransform.options - gateway", () => {
   const sessionID = "test-session-123"
 

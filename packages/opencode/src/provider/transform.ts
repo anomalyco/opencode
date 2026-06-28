@@ -1097,19 +1097,21 @@ export function options(input: {
     result["usage"] = {
       include: true,
     }
-    if (input.model.api.id.includes("gemini-3")) {
+    if (input.model.api.id.includes("gemini-3") && input.model.capabilities.reasoning) {
       result["reasoning"] = { effort: "high" }
     }
   }
 
   if (
-    input.model.providerID === "baseten" ||
-    (input.model.providerID === "opencode" && ["kimi-k2-thinking", "glm-4.6"].includes(input.model.api.id))
+    input.model.capabilities.reasoning &&
+    (input.model.providerID === "baseten" ||
+    (input.model.providerID === "opencode" && ["kimi-k2-thinking", "glm-4.6"].includes(input.model.api.id)))
   ) {
     result["chat_template_args"] = { enable_thinking: true }
   }
 
   if (
+    input.model.capabilities.reasoning &&
     ["zai", "zhipuai"].some((id) => input.model.providerID.includes(id)) &&
     input.model.api.npm === "@ai-sdk/openai-compatible"
   ) {
@@ -1137,12 +1139,13 @@ export function options(input: {
   const modelId = input.model.api.id.toLowerCase()
 
   // MiniMax's Anthropic interface defaults thinking off, unlike Chat Completions.
-  if (modelId.includes("minimax-m3") && input.model.api.npm === "@ai-sdk/anthropic") {
+  if (input.model.capabilities.reasoning && modelId.includes("minimax-m3") && input.model.api.npm === "@ai-sdk/anthropic") {
     result["thinking"] = { type: "adaptive" }
   }
 
   // Enable thinking by default for kimi models using anthropic SDK
   if (
+    input.model.capabilities.reasoning &&
     (input.model.api.npm === "@ai-sdk/anthropic" || input.model.api.npm === "@ai-sdk/google-vertex/anthropic") &&
     (modelId.includes("k2p") || modelId.includes("kimi-k2.") || modelId.includes("kimi-k2p"))
   ) {
@@ -1166,13 +1169,13 @@ export function options(input: {
     result["enable_thinking"] = true
   }
 
-  if (input.model.api.npm === "@ai-sdk/azure" && input.model.api.id.includes("gpt-5.5")) {
+  if (input.model.capabilities.reasoning && input.model.api.npm === "@ai-sdk/azure" && input.model.api.id.includes("gpt-5.5")) {
     result["reasoningSummary"] = "auto"
     return result
   }
 
   if (input.model.api.id.includes("gpt-5") && !input.model.api.id.includes("gpt-5-chat")) {
-    if (!input.model.api.id.includes("gpt-5-pro")) {
+    if (input.model.capabilities.reasoning && !input.model.api.id.includes("gpt-5-pro")) {
       result["reasoningEffort"] = "medium"
       if (
         input.model.api.npm === "@ai-sdk/openai" ||
@@ -1200,8 +1203,10 @@ export function options(input: {
 
     if (input.model.providerID.startsWith("opencode")) {
       result["promptCacheKey"] = input.sessionID
-      result["include"] = INCLUDE_ENCRYPTED_REASONING
-      result["reasoningSummary"] = "auto"
+      if (input.model.capabilities.reasoning) {
+        result["include"] = INCLUDE_ENCRYPTED_REASONING
+        result["reasoningSummary"] = "auto"
+      }
     }
   }
 
