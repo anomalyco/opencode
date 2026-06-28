@@ -657,35 +657,33 @@ function HomeServerRow(props: {
         disabled={!healthy()}
         onClick={() => props.focusServer(props.server)}
       >
-        <Show when={healthy()}>
-          <span
-            data-action="home-server-collapse"
-            class="inline-flex -ml-0.5 -mr-1.5 size-5 shrink-0 items-center justify-center rounded-[4px] text-v2-icon-icon-muted"
-            classList={{
-              "hover:bg-v2-overlay-simple-overlay-hover": canToggle(),
-              "cursor-default opacity-40": !canToggle(),
-            }}
-            aria-label={
-              props.collapsed ? props.language.t("home.server.expand") : props.language.t("home.server.collapse")
-            }
-            aria-disabled={!canToggle()}
-            aria-expanded={canToggle() ? !props.collapsed : undefined}
-            onClick={(event) => {
-              event.preventDefault()
-              event.stopPropagation()
-              if (!canToggle()) return
-              props.toggleCollapsed()
-            }}
-            onPointerDown={(event) => event.preventDefault()}
-          >
-            <IconV2
-              name="chevron-down"
-              size="small"
-              class="transition-transform duration-150 ease-in-out"
-              style={{ transform: `rotate(${props.collapsed ? -90 : 0}deg)` }}
-            />
-          </span>
-        </Show>
+        <span
+          data-action="home-server-collapse"
+          class="inline-flex -ml-0.5 -mr-1.5 size-5 shrink-0 items-center justify-center rounded-[4px] text-v2-icon-icon-muted"
+          classList={{
+            "hover:bg-v2-overlay-simple-overlay-hover": canToggle(),
+            "cursor-default opacity-40": !canToggle(),
+          }}
+          aria-label={
+            props.collapsed ? props.language.t("home.server.expand") : props.language.t("home.server.collapse")
+          }
+          aria-disabled={!canToggle()}
+          aria-expanded={canToggle() ? !props.collapsed : undefined}
+          onClick={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            if (!canToggle()) return
+            props.toggleCollapsed()
+          }}
+          onPointerDown={(event) => event.preventDefault()}
+        >
+          <IconV2
+            name="chevron-down"
+            size="small"
+            class="transition-transform duration-150 ease-in-out"
+            style={{ transform: `rotate(${props.collapsed ? -90 : 0}deg)` }}
+          />
+        </span>
         <div class="flex size-4 shrink-0 items-center justify-center -mr-0.5">
           <ServerHealthIndicator health={props.health} />
         </div>
