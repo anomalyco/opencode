@@ -649,6 +649,7 @@ function HomeServerRow(props: {
   language: ReturnType<typeof useLanguage>
 }) {
   const [state, setState] = createStore({ menuOpen: false })
+  const canToggle = () => props.healthy && props.hasProjects
   return (
     <div class="group/server relative flex h-7 min-w-0 items-center rounded-[6px]">
       <button
@@ -658,17 +659,23 @@ function HomeServerRow(props: {
         disabled={!props.healthy}
         onClick={() => props.focusServer(props.server)}
       >
-        <Show when={props.healthy && props.hasProjects}>
+        <Show when={props.healthy}>
           <span
             data-action="home-server-collapse"
-            class="inline-flex -ml-0.5 -mr-1.5 size-5 shrink-0 items-center justify-center rounded-[4px] text-v2-icon-icon-muted hover:bg-v2-overlay-simple-overlay-hover"
+            class="inline-flex -ml-0.5 -mr-1.5 size-5 shrink-0 items-center justify-center rounded-[4px] text-v2-icon-icon-muted"
+            classList={{
+              "hover:bg-v2-overlay-simple-overlay-hover": canToggle(),
+              "cursor-default opacity-40": !canToggle(),
+            }}
             aria-label={
               props.collapsed ? props.language.t("home.server.expand") : props.language.t("home.server.collapse")
             }
-            aria-expanded={!props.collapsed}
+            aria-disabled={!canToggle()}
+            aria-expanded={canToggle() ? !props.collapsed : undefined}
             onClick={(event) => {
               event.preventDefault()
               event.stopPropagation()
+              if (!canToggle()) return
               props.toggleCollapsed()
             }}
             onPointerDown={(event) => event.preventDefault()}
