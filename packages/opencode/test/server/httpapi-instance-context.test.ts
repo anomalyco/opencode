@@ -231,14 +231,16 @@ describe("HttpApi instance context middleware", () => {
       if (process.platform === "win32") return
       yield* serveProbe()
 
-      const response = yield* HttpClient.get(`/probe?directory=${encodeURIComponent("\\\\server\\share\\repo")}`)
+      for (const directory of ["\\\\server\\share\\repo", "//server/share/repo"]) {
+        const response = yield* HttpClient.get(`/probe?directory=${encodeURIComponent(directory)}`)
 
-      expect(response.status).toBe(400)
-      expect(yield* response.json).toMatchObject({
-        _tag: "InvalidRequestError",
-        kind: "Query",
-        field: "directory",
-      })
+        expect(response.status).toBe(400)
+        expect(yield* response.json).toMatchObject({
+          _tag: "InvalidRequestError",
+          kind: "Query",
+          field: "directory",
+        })
+      }
     }),
   )
 
