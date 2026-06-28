@@ -12,6 +12,7 @@ describe("util/bash", () => {
 
   test("unquotes words, preserving embedded spaces", () => {
     expect(pathWords(`cat "/a b/c"`)).toContain("/a b/c")
+    expect(pathWords(String.raw`cat /tmp/a\ b`)).toContain("/tmp/a b")
   })
 
   test("splits compound commands structurally instead of by token", () => {
@@ -20,9 +21,29 @@ describe("util/bash", () => {
     )
   })
 
+  test("descends into arithmetic for loop bodies", () => {
+    expect(norm("for ((i=0;i<1;i++)); do rm -rf /tmp/x; done")).toEqual([
+      { tokens: ["rm", "-rf", "/tmp/x"], source: "rm -rf /tmp/x" },
+    ])
+  })
+
   test("descends into command substitutions", () => {
     expect(pathWords(`echo "$(rm -rf /tmp/z)"`)).toContain("/tmp/z")
     expect([...commands(parse(`echo "$(rm -rf /tmp/z)"`))].map((c) => c.name?.value)).toEqual(["echo", "rm"])
+  })
+
+  test("includes file redirect targets as path words", () => {
+    const words = pathWords("cat < /etc/passwd > /tmp/out <<< not-a-path")
+    expect(words).toEqual(expect.arrayContaining(["/etc/passwd", "/tmp/out"]))
+    expect(words).not.toContain("not-a-path")
+  })
+
+  test("descends into static shell wrapper commands", () => {
+    expect(norm(`sh -c 'rm -rf /tmp/x'`)).toEqual([
+      { tokens: ["sh", "-c", "'rm -rf /tmp/x'"], source: `sh -c 'rm -rf /tmp/x'` },
+      { tokens: ["rm", "-rf", "/tmp/x"], source: "rm -rf /tmp/x" },
+    ])
+    expect(pathWords(`env FOO=bar bash -lc 'cat /etc/hosts'`)).toContain("/etc/hosts")
   })
 
   test("excludes dynamic words so unresolved expansions are not treated as paths", () => {
@@ -40,14 +61,21 @@ describe("util/bash", () => {
 })
 
 describe("util/bash commandParts", () => {
-  test("keeps each command's source, including redirects and assignment prefixes", () => {
+  test("keeps each command's source, including redirects while dropping assignment prefixes", () => {
     expect(norm(`FOO=bar rm -rf /tmp/x`)).toEqual([
-      { tokens: ["rm", "-rf", "/tmp/x"], source: "FOO=bar rm -rf /tmp/x" },
+      { tokens: ["rm", "-rf", "/tmp/x"], source: "rm -rf /tmp/x" },
     ])
     expect(norm(`cat a.txt | grep foo > out.log`)).toEqual([
       { tokens: ["cat", "a.txt"], source: "cat a.txt" },
       { tokens: ["grep", "foo"], source: "grep foo > out.log" },
     ])
+  })
+
+  test("normalizes permission patterns with shell-dequoted tokens", () => {
+    expect(commandParts(`FOO=bar "git" "checkout" main > out.log`)[0]).toMatchObject({
+      source: `"git" "checkout" main > out.log`,
+      pattern: "git checkout main > out.log",
+    })
   })
 
   test("reconstructs nested source for commands inside substitutions", () => {
@@ -77,6 +105,13 @@ describe("util/bash argv", () => {
   test("respects quotes around arguments with spaces", () => {
     expect(argv(`mcp-server "/my dir/x"`)).toEqual(["mcp-server", "/my dir/x"])
     expect(argv(`uvx 'some thing'`)).toEqual(["uvx", "some thing"])
+  })
+
+  test("removes unquoted backslash escapes", () => {
+    expect(argv(String.raw`/Applications/Visual\ Studio\ Code.app/Contents/MacOS/Electron --wait`)).toEqual([
+      "/Applications/Visual Studio Code.app/Contents/MacOS/Electron",
+      "--wait",
+    ])
   })
 
   test("collapses runs of whitespace instead of emitting empty tokens", () => {

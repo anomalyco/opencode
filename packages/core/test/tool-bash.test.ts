@@ -343,6 +343,33 @@ describe("BashTool", () => {
     ),
   )
 
+  it.live("reports external redirect targets as advisory warnings without enforcing approval", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => Promise.all([tmpdir(), tmpdir()])),
+      ([active, outside]) => {
+        reset()
+        denyAction = "external_directory"
+        const target = path.join(outside.path, "out.txt")
+        return withTool(active.path, (registry) => settleTool(registry, call({ command: `printf hi > ${target}` }))).pipe(
+          Effect.andThen((settled) =>
+            Effect.sync(() => {
+              expect(assertions.map((item) => item.action)).toEqual(["bash"])
+              expect(runs).toHaveLength(1)
+              expect(settled.output?.content[1]).toMatchObject({
+                type: "text",
+                text: expect.stringContaining("Warnings:"),
+              })
+            }),
+          ),
+        )
+      },
+      ([active, outside]) =>
+        Effect.promise(() =>
+          Promise.all([active[Symbol.asyncDispose](), outside[Symbol.asyncDispose]()]).then(() => undefined),
+        ),
+    ),
+  )
+
   it.live("keeps non-zero exits useful", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),

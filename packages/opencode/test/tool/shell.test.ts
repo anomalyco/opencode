@@ -263,6 +263,80 @@ describe("tool.shell permissions", () => {
     }),
   )
 
+  each("normalizes bash permission patterns after assignment prefixes and quoted tokens", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      yield* runIn(
+        tmp,
+        Effect.gen(function* () {
+          const err = new Error("stop after permission")
+          const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
+          expect(
+            yield* fail(
+              {
+                command: `CI=true "echo" "hello"`,
+              },
+              capture(requests, err),
+            ),
+          ).toMatchObject({ message: err.message })
+          const bashReq = requests.find((r) => r.permission === "bash")
+          expect(bashReq).toBeDefined()
+          expect(bashReq!.patterns).toContain("echo hello")
+          expect(bashReq!.patterns).not.toContain(`CI=true "echo" "hello"`)
+          expect(bashReq!.always).toContain("echo *")
+        }),
+      )
+    }),
+  )
+
+  each("asks for commands inside arithmetic for loops", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      yield* runIn(
+        tmp,
+        Effect.gen(function* () {
+          const err = new Error("stop after permission")
+          const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
+          expect(
+            yield* fail(
+              {
+                command: "for ((i=0;i<1;i++)); do echo loop; done",
+              },
+              capture(requests, err),
+            ),
+          ).toMatchObject({ message: err.message })
+          const bashReq = requests.find((r) => r.permission === "bash")
+          expect(bashReq).toBeDefined()
+          expect(bashReq!.patterns).toContain("echo loop")
+        }),
+      )
+    }),
+  )
+
+  each("asks for static shell wrapper commands", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      yield* runIn(
+        tmp,
+        Effect.gen(function* () {
+          const err = new Error("stop after permission")
+          const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
+          expect(
+            yield* fail(
+              {
+                command: "sh -c 'echo inner'",
+              },
+              capture(requests, err),
+            ),
+          ).toMatchObject({ message: err.message })
+          const bashReq = requests.find((r) => r.permission === "bash")
+          expect(bashReq).toBeDefined()
+          expect(bashReq!.patterns).toEqual(expect.arrayContaining(["sh -c echo inner", "echo inner"]))
+        }),
+      )
+    }),
+  )
+
   for (const item of ps) {
     it.live(`parses PowerShell conditionals for permission prompts [${item.label}]`, () =>
       withShell(
@@ -340,6 +414,34 @@ describe("tool.shell permissions", () => {
       }),
     ),
   )
+
+  if (process.platform !== "win32") {
+    it.live("asks for external_directory permission for bash redirect targets", () =>
+      Effect.gen(function* () {
+        const active = yield* tmpdirScoped()
+        const outside = yield* tmpdirScoped()
+        yield* runIn(
+          active,
+          Effect.gen(function* () {
+            const err = new Error("stop after permission")
+            const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
+            const target = path.join(outside, "out.txt")
+            expect(
+              yield* fail(
+                {
+                  command: `echo hi > ${target}`,
+                },
+                capture(requests, err),
+              ),
+            ).toMatchObject({ message: err.message })
+            const extDirReq = requests.find((r) => r.permission === "external_directory")
+            expect(extDirReq).toBeDefined()
+            expect(extDirReq!.patterns).toContain(glob(path.join(outside, "*")))
+          }),
+        )
+      }),
+    )
+  }
 
   if (process.platform === "win32") {
     if (bash) {

@@ -21,7 +21,7 @@ import { ChildProcess } from "effect/unstable/process"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
 import { ShellPrompt, type Parameters } from "./shell/prompt"
 import { BashArity } from "@/permission/arity"
-import { commandParts } from "@opencode-ai/core/util/bash"
+import { commandParts, redirectWords } from "@opencode-ai/core/util/bash"
 
 export { Parameters } from "./shell/prompt"
 
@@ -69,6 +69,7 @@ const SWITCHES = new Set(["-confirm", "-debug", "-force", "-nonewline", "-recurs
 type Part = {
   type: string
   text: string
+  value?: string
 }
 
 type Scan = {
@@ -200,7 +201,7 @@ function pathArgs(list: Part[], ps: boolean, cmd = false) {
           !(cmd && item.text.startsWith("/")) &&
           !(list[0]?.text === "chmod" && item.text.startsWith("+")),
       )
-      .map((item) => item.text)
+      .map((item) => item.value ?? item.text)
   }
 
   const out: string[] = []
@@ -373,7 +374,8 @@ export const ShellTool = Tool.define(
     })
 
     const collect = Effect.fn("ShellTool.collect")(function* (
-      extracted: ReadonlyArray<{ parts: Part[]; source: string }>,
+      extracted: ReadonlyArray<{ parts: Part[]; source: string; pattern?: string }>,
+      redirects: readonly string[],
       cwd: string,
       ps: boolean,
       shell: string,
@@ -386,9 +388,20 @@ export const ShellTool = Tool.define(
       }
       const shellKind = ShellID.toKind(Shell.name(shell))
 
-      for (const { parts: command, source: pattern } of extracted) {
+      if (!ps && shellKind !== "cmd") {
+        for (const arg of redirects) {
+          const resolved = yield* argPath(arg, cwd, false, shell)
+          yield* Effect.logInfo("resolved redirect path", { arg, resolved })
+          if (!resolved || containsPath(resolved, instance)) continue
+          const dir = (yield* fs.isDir(resolved)) ? resolved : path.dirname(resolved)
+          scan.dirs.add(dir)
+        }
+      }
+
+      for (const { parts: command, source, pattern = source } of extracted) {
         const tokens = command.map((item) => item.text)
-        const cmd = ps || shellKind === "cmd" ? tokens[0]?.toLowerCase() : tokens[0]
+        const values = command.map((item) => item.value ?? item.text)
+        const cmd = ps || shellKind === "cmd" ? tokens[0]?.toLowerCase() : values[0]
 
         if (cmd && (FILES.has(cmd) || (shellKind === "cmd" && CMD_FILES.has(cmd)))) {
           for (const arg of pathArgs(command, ps, shellKind === "cmd")) {
@@ -402,7 +415,7 @@ export const ShellTool = Tool.define(
 
         if (tokens.length && (!cmd || !CWD.has(cmd))) {
           scan.patterns.add(pattern)
-          scan.always.add(BashArity.prefix(tokens).join(" ") + " *")
+          scan.always.add(BashArity.prefix(ps || shellKind === "cmd" ? tokens : values).join(" ") + " *")
         }
       }
 
@@ -615,7 +628,7 @@ export const ShellTool = Tool.define(
               const ps = Shell.ps(shell)
               yield* Effect.scoped(
                 Effect.gen(function* () {
-                  let extracted: ReadonlyArray<{ parts: Part[]; source: string }>
+                  let extracted: ReadonlyArray<{ parts: Part[]; source: string; pattern?: string }>
                   if (ps) {
                     const tree = yield* Effect.acquireRelease(parsePowerShell(params.command), (tree) =>
                       Effect.sync(() => tree.delete()),
@@ -624,7 +637,8 @@ export const ShellTool = Tool.define(
                   } else {
                     extracted = commandParts(params.command)
                   }
-                  const scan = yield* collect(extracted, cwd, ps, shell, instanceCtx)
+                  const redirects = ps ? [] : redirectWords(params.command)
+                  const scan = yield* collect(extracted, redirects, cwd, ps, shell, instanceCtx)
                   if (!containsPath(cwd, instanceCtx)) scan.dirs.add(cwd)
                   yield* ask(ctx, scan, params)
                 }),

@@ -63,7 +63,7 @@ const CORPUS = [
   `echo hello`,
   `git commit -m "msg"`,
   `cat 'a b.txt'`,
-  `FOO=bar rm -rf /tmp/x`,
+  `rm -rf /tmp/x`,
   `cat a.txt > out.log 2>&1`,
   `ls -la | grep foo | wc -l`,
   `a && b || c ; d`,
@@ -73,6 +73,7 @@ const CORPUS = [
   `(cd /tmp && make)`,
   `if [ -f x ]; then rm x; fi`,
   `for f in *.txt; do cat "$f"; done`,
+  `for ((i=0;i<1;i++)); do echo "$i"; done`,
   `case $x in a) ls;; esac`,
   `test -f foo && echo yes`,
   `[[ -d /tmp ]] && echo y`,
@@ -112,6 +113,13 @@ describe("shell parser parity (unbash vs tree-sitter-bash)", () => {
     // so the approved command/pattern is the one that actually runs.
     expect(tree("time ls")).toEqual([{ tokens: ["time", "ls"], source: "time ls" }])
     expect(unbash("time ls")).toEqual([{ tokens: ["ls"], source: "ls" }])
+  })
+
+  test("unbash drops assignment prefixes from permission patterns", () => {
+    expect(tree("FOO=bar rm -rf /tmp/x")).toEqual([
+      { tokens: ["rm", "-rf", "/tmp/x"], source: "FOO=bar rm -rf /tmp/x" },
+    ])
+    expect(unbash("FOO=bar rm -rf /tmp/x")).toEqual([{ tokens: ["rm", "-rf", "/tmp/x"], source: "rm -rf /tmp/x" }])
   })
 
   test("parses tolerantly without throwing on malformed input", () => {
