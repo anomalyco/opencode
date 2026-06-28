@@ -184,6 +184,10 @@ export const Info = Schema.Struct({
       }),
     }),
   ),
+  worktree_prompt: Schema.optional(Schema.String).annotate({
+    description:
+      "System prompt appended (not as a user message) when sending a new session into a freshly created git worktree",
+  }),
 }).annotate({ identifier: "Config" })
 
 export type Info = DeepMutable<Schema.Schema.Type<typeof Info>>

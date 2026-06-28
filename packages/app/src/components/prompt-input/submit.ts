@@ -28,6 +28,21 @@ type PendingPrompt = {
 
 const pending = new Map<string, PendingPrompt>()
 
+// Default system prompt appended (not as a user message) when sending a new session
+// into a freshly created git worktree. Overridable via config `worktree_prompt`.
+const DEFAULT_WORKTREE_PROMPT = [
+  "You are working in an isolated git worktree that was auto-created for this task with a placeholder branch name.",
+  "Before starting the work, assess the user's request and rename the current branch to a meaningful name.",
+  "Use the convention `<type>/<subject>`, where `<type>` is one of feat, fix, chore, docs, refactor, or test,",
+  "and `<subject>` is a short, kebab-case description of the work (for example `feat/dark-mode-toggle`).",
+  "Rename the branch with `git branch -m <type>/<subject>` (do not create a new worktree or switch branches).",
+  "",
+  "This environment may run in parallel with other agents working in separate worktrees on the same machine.",
+  "Assume shared resources can collide: do not hardcode fixed ports, lock files, or other fixed system resources.",
+  "Pick free/ephemeral ports and unique temporary paths, and clean up any processes you start.",
+  "Keep your changes scoped to this worktree and do not assume the main checkout is affected.",
+].join("\n")
+
 export type FollowupDraft = {
   sessionID: string
   sessionDirectory: string
@@ -36,6 +51,7 @@ export type FollowupDraft = {
   agent: string
   model: { providerID: string; modelID: string }
   variant?: string
+  system?: string
 }
 
 type FollowupSendInput = {
@@ -159,6 +175,7 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
       messageID,
       parts: requestParts,
       variant: input.draft.variant,
+      system: input.draft.system,
     })
     return true
   } catch (err) {
@@ -278,7 +295,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     })
   }
 
-  const handleSubmit = async (event: Event) => {
+  const handleSubmit = async (event: Event, options?: { worktree?: string }) => {
     event.preventDefault()
 
     const target = prompt.capture()
@@ -315,7 +332,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     const projectDirectory = sdk().directory
     const isNewSession = !params.id
     const shouldAutoAccept = isNewSession && input.autoAccept()
-    const worktreeSelection = input.newSessionWorktree?.() || "main"
+    const worktreeSelection = options?.worktree || input.newSessionWorktree?.() || "main"
 
     let sessionDirectory = projectDirectory
     let client = sdk().client
@@ -404,6 +421,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       agent,
       model,
       variant,
+      system: worktreeSelection === "create" ? sync.data.config.worktree_prompt || DEFAULT_WORKTREE_PROMPT : undefined,
     }
 
     const clearInput = () => {

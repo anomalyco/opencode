@@ -2022,6 +2022,7 @@ export type Config = {
     mcp_timeout?: number
     policies?: Array<ConfigV2ExperimentalPolicy>
   }
+  worktree_prompt?: string
 }
 
 export type Model = {
