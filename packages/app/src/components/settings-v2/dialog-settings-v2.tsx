@@ -10,6 +10,7 @@ import { SettingsProvidersV2 } from "./providers"
 import { SettingsModelsV2 } from "./models"
 import "./settings-v2.css"
 import { SettingsServersV2 } from "./servers"
+import { SettingsTasksV2 } from "./tasks"
 
 export const DialogSettings: Component<{
   sessionID?: string
@@ -45,6 +46,10 @@ export const DialogSettings: Component<{
                       <Icon name="server" />
                       {language.t("status.popover.tab.servers")}
                     </TabsV2.Trigger>
+                    <TabsV2.Trigger value="tasks">
+                      <Icon name="status" />
+                      {language.t("settings.tab.tasks")}
+                    </TabsV2.Trigger>
                     <TabsV2.Trigger value="providers">
                       <Icon name="providers" />
                       {language.t("settings.providers.title")}
@@ -71,6 +76,9 @@ export const DialogSettings: Component<{
         </TabsV2.Content>
         <TabsV2.Content value="servers" class="settings-v2-panel">
           <SettingsServersV2 />
+        </TabsV2.Content>
+        <TabsV2.Content value="tasks" class="settings-v2-panel">
+          <SettingsTasksV2 />
         </TabsV2.Content>
         <TabsV2.Content value="providers" class="settings-v2-panel">
           <SettingsProvidersV2 />

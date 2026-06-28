@@ -48,5 +48,54 @@ export const Commands = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCO
         register: Flag.boolean("register").pipe(Flag.withDefault(false)),
       },
     }),
+    Spec.make("task", {
+      description: "Manage background tasks",
+      commands: [
+        Spec.make("start", {
+          description: "Start a background task",
+          params: {
+            name: Flag.string("name").pipe(Flag.withDescription("Task name")),
+            command: Argument.string("command").pipe(Argument.withDescription("Shell command to run")),
+            cwd: Flag.string("cwd").pipe(Flag.withDescription("Working directory"), Flag.optional),
+            port: Flag.integer("port").pipe(Flag.withDescription("Optional listening port"), Flag.optional),
+          },
+        }),
+        Spec.make("stop", {
+          description: "Stop a background task",
+          params: {
+            taskId: Argument.string("taskId").pipe(Argument.withDescription("Task ID")),
+          },
+        }),
+        Spec.make("restart", {
+          description: "Restart a background task",
+          params: {
+            taskId: Argument.string("taskId").pipe(Argument.withDescription("Task ID")),
+          },
+        }),
+        Spec.make("kill", {
+          description: "Force kill a background task",
+          params: {
+            taskId: Argument.string("taskId").pipe(Argument.withDescription("Task ID")),
+          },
+        }),
+        Spec.make("list", {
+          description: "List all background tasks",
+        }),
+        Spec.make("logs", {
+          description: "Show logs for a background task",
+          params: {
+            taskId: Argument.string("taskId").pipe(Argument.withDescription("Task ID")),
+            lines: Flag.integer("lines").pipe(Flag.withDescription("Number of lines to read"), Flag.optional),
+            follow: Flag.boolean("follow").pipe(Flag.withAlias("f"), Flag.withDescription("Follow log stream"), Flag.withDefault(false)),
+          },
+        }),
+        Spec.make("delete", {
+          description: "Delete a background task's record and logs",
+          params: {
+            taskId: Argument.string("taskId").pipe(Argument.withDescription("Task ID")),
+          },
+        }),
+      ],
+    }),
   ],
 })

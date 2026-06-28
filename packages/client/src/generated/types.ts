@@ -66,6 +66,14 @@ export type UnknownError = {
 export const isUnknownError = (value: unknown): value is UnknownError =>
   typeof value === "object" && value !== null && "_tag" in value && value._tag === "UnknownError"
 
+export type TaskNotFoundError = {
+  readonly _tag: "TaskNotFoundError"
+  readonly taskID: string
+  readonly message: string
+}
+export const isTaskNotFoundError = (value: unknown): value is TaskNotFoundError =>
+  typeof value === "object" && value !== null && "_tag" in value && value._tag === "TaskNotFoundError"
+
 export type SessionsListInput = {
   readonly workspace?: {
     readonly workspace?: string | undefined
@@ -1672,3 +1680,249 @@ export type SessionsMessageOutput = {
 }["data"]
 
 export type EventsSubscribeOutput = OpenCodeEventEncoded
+
+export type TasksStartInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+  readonly name: {
+    readonly name: string
+    readonly command: string
+    readonly cwd?: string | undefined
+    readonly port?: number | undefined
+    readonly metadata?: { readonly [x: string]: unknown } | undefined
+  }["name"]
+  readonly command: {
+    readonly name: string
+    readonly command: string
+    readonly cwd?: string | undefined
+    readonly port?: number | undefined
+    readonly metadata?: { readonly [x: string]: unknown } | undefined
+  }["command"]
+  readonly cwd?: {
+    readonly name: string
+    readonly command: string
+    readonly cwd?: string | undefined
+    readonly port?: number | undefined
+    readonly metadata?: { readonly [x: string]: unknown } | undefined
+  }["cwd"]
+  readonly port?: {
+    readonly name: string
+    readonly command: string
+    readonly cwd?: string | undefined
+    readonly port?: number | undefined
+    readonly metadata?: { readonly [x: string]: unknown } | undefined
+  }["port"]
+  readonly metadata?: {
+    readonly name: string
+    readonly command: string
+    readonly cwd?: string | undefined
+    readonly port?: number | undefined
+    readonly metadata?: { readonly [x: string]: unknown } | undefined
+  }["metadata"]
+}
+
+export type TasksStartOutput = {
+  readonly location: {
+    readonly directory: string
+    readonly workspaceID?: string
+    readonly project: { readonly id: string; readonly directory: string }
+  }
+  readonly data: {
+    readonly id: string
+    readonly name: string
+    readonly command: string
+    readonly cwd: string
+    readonly status: "running" | "stopped" | "failed" | "completed"
+    readonly pid?: number | "Infinity" | "-Infinity" | "NaN"
+    readonly port?: number | "Infinity" | "-Infinity" | "NaN"
+    readonly exitCode?: number | "Infinity" | "-Infinity" | "NaN"
+    readonly error?: string
+    readonly startedAt: number | "Infinity" | "-Infinity" | "NaN"
+    readonly completedAt?: number | "Infinity" | "-Infinity" | "NaN"
+    readonly metadata?: { readonly [x: string]: JsonValue }
+  }
+}
+
+export type TasksStopInput = {
+  readonly taskID: { readonly taskID: string }["taskID"]
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
+
+export type TasksStopOutput = {
+  readonly location: {
+    readonly directory: string
+    readonly workspaceID?: string
+    readonly project: { readonly id: string; readonly directory: string }
+  }
+  readonly data: {
+    readonly id: string
+    readonly name: string
+    readonly command: string
+    readonly cwd: string
+    readonly status: "running" | "stopped" | "failed" | "completed"
+    readonly pid?: number | "Infinity" | "-Infinity" | "NaN"
+    readonly port?: number | "Infinity" | "-Infinity" | "NaN"
+    readonly exitCode?: number | "Infinity" | "-Infinity" | "NaN"
+    readonly error?: string
+    readonly startedAt: number | "Infinity" | "-Infinity" | "NaN"
+    readonly completedAt?: number | "Infinity" | "-Infinity" | "NaN"
+    readonly metadata?: { readonly [x: string]: JsonValue }
+  }
+}
+
+export type TasksRestartInput = {
+  readonly taskID: { readonly taskID: string }["taskID"]
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
+
+export type TasksRestartOutput = {
+  readonly location: {
+    readonly directory: string
+    readonly workspaceID?: string
+    readonly project: { readonly id: string; readonly directory: string }
+  }
+  readonly data: {
+    readonly id: string
+    readonly name: string
+    readonly command: string
+    readonly cwd: string
+    readonly status: "running" | "stopped" | "failed" | "completed"
+    readonly pid?: number | "Infinity" | "-Infinity" | "NaN"
+    readonly port?: number | "Infinity" | "-Infinity" | "NaN"
+    readonly exitCode?: number | "Infinity" | "-Infinity" | "NaN"
+    readonly error?: string
+    readonly startedAt: number | "Infinity" | "-Infinity" | "NaN"
+    readonly completedAt?: number | "Infinity" | "-Infinity" | "NaN"
+    readonly metadata?: { readonly [x: string]: JsonValue }
+  }
+}
+
+export type TasksKillInput = {
+  readonly taskID: { readonly taskID: string }["taskID"]
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
+
+export type TasksKillOutput = {
+  readonly location: {
+    readonly directory: string
+    readonly workspaceID?: string
+    readonly project: { readonly id: string; readonly directory: string }
+  }
+  readonly data: {
+    readonly id: string
+    readonly name: string
+    readonly command: string
+    readonly cwd: string
+    readonly status: "running" | "stopped" | "failed" | "completed"
+    readonly pid?: number | "Infinity" | "-Infinity" | "NaN"
+    readonly port?: number | "Infinity" | "-Infinity" | "NaN"
+    readonly exitCode?: number | "Infinity" | "-Infinity" | "NaN"
+    readonly error?: string
+    readonly startedAt: number | "Infinity" | "-Infinity" | "NaN"
+    readonly completedAt?: number | "Infinity" | "-Infinity" | "NaN"
+    readonly metadata?: { readonly [x: string]: JsonValue }
+  }
+}
+
+export type TasksListInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
+
+export type TasksListOutput = {
+  readonly location: {
+    readonly directory: string
+    readonly workspaceID?: string
+    readonly project: { readonly id: string; readonly directory: string }
+  }
+  readonly data: ReadonlyArray<{
+    readonly id: string
+    readonly name: string
+    readonly command: string
+    readonly cwd: string
+    readonly status: "running" | "stopped" | "failed" | "completed"
+    readonly pid?: number | "Infinity" | "-Infinity" | "NaN"
+    readonly port?: number | "Infinity" | "-Infinity" | "NaN"
+    readonly exitCode?: number | "Infinity" | "-Infinity" | "NaN"
+    readonly error?: string
+    readonly startedAt: number | "Infinity" | "-Infinity" | "NaN"
+    readonly completedAt?: number | "Infinity" | "-Infinity" | "NaN"
+    readonly metadata?: { readonly [x: string]: JsonValue }
+  }>
+}
+
+export type TasksGetInput = {
+  readonly taskID: { readonly taskID: string }["taskID"]
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
+
+export type TasksGetOutput = {
+  readonly location: {
+    readonly directory: string
+    readonly workspaceID?: string
+    readonly project: { readonly id: string; readonly directory: string }
+  }
+  readonly data: {
+    readonly id: string
+    readonly name: string
+    readonly command: string
+    readonly cwd: string
+    readonly status: "running" | "stopped" | "failed" | "completed"
+    readonly pid?: number | "Infinity" | "-Infinity" | "NaN"
+    readonly port?: number | "Infinity" | "-Infinity" | "NaN"
+    readonly exitCode?: number | "Infinity" | "-Infinity" | "NaN"
+    readonly error?: string
+    readonly startedAt: number | "Infinity" | "-Infinity" | "NaN"
+    readonly completedAt?: number | "Infinity" | "-Infinity" | "NaN"
+    readonly metadata?: { readonly [x: string]: JsonValue }
+  }
+}
+
+export type TasksDeleteInput = {
+  readonly taskID: { readonly taskID: string }["taskID"]
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
+
+export type TasksDeleteOutput = void
+
+export type TasksLogsInput = {
+  readonly taskID: { readonly taskID: string }["taskID"]
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+    readonly lines?: number | undefined
+  }["location"]
+  readonly lines?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+    readonly lines?: number | undefined
+  }["lines"]
+}
+
+export type TasksLogsOutput = {
+  readonly location: {
+    readonly directory: string
+    readonly workspaceID?: string
+    readonly project: { readonly id: string; readonly directory: string }
+  }
+  readonly data: string
+}
+
+export type TasksStreamLogsInput = {
+  readonly taskID: { readonly taskID: string }["taskID"]
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
+
+export type TasksStreamLogsOutput = string

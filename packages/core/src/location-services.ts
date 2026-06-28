@@ -39,6 +39,8 @@ import { ToolOutputStore } from "./tool-output-store"
 
 export { LocationServiceMap } from "./location-service-map"
 
+import { TaskService } from "./task"
+
 export const locationServices = LayerNode.group([
   Location.node,
   Policy.node,
@@ -76,6 +78,7 @@ export const locationServices = LayerNode.group([
   SessionRunnerModel.node,
   Snapshot.node,
   SessionRunnerLLM.node,
+  TaskService.contextSourceNode,
 ])
 
 export type LocationServices = LayerNode.Output<typeof locationServices>

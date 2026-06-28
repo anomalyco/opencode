@@ -109,3 +109,12 @@ export class PtyNotFoundError extends Schema.TaggedErrorClass<PtyNotFoundError>(
   },
   { httpApiStatus: 404 },
 ) {}
+
+export class TaskNotFoundError extends Schema.TaggedErrorClass<TaskNotFoundError>()(
+  "TaskNotFoundError",
+  {
+    taskID: Schema.String,
+    message: Schema.String,
+  },
+  { httpApiStatus: 404 },
+) {}

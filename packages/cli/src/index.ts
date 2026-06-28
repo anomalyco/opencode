@@ -22,6 +22,15 @@ const Handlers = Runtime.handlers(Commands, {
     password: () => import("./commands/handlers/service/password"),
   },
   serve: () => import("./commands/handlers/serve"),
+  task: {
+    start: () => import("./commands/handlers/task/start"),
+    stop: () => import("./commands/handlers/task/stop"),
+    restart: () => import("./commands/handlers/task/restart"),
+    kill: () => import("./commands/handlers/task/kill"),
+    list: () => import("./commands/handlers/task/list"),
+    logs: () => import("./commands/handlers/task/logs"),
+    delete: () => import("./commands/handlers/task/delete"),
+  },
 })
 
 Runtime.run(Commands, Handlers, { version: "local" }).pipe(

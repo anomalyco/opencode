@@ -33,6 +33,24 @@ import type {
   SessionsMessageInput,
   SessionsMessageOutput,
   EventsSubscribeOutput,
+  TasksStartInput,
+  TasksStartOutput,
+  TasksStopInput,
+  TasksStopOutput,
+  TasksRestartInput,
+  TasksRestartOutput,
+  TasksKillInput,
+  TasksKillOutput,
+  TasksListInput,
+  TasksListOutput,
+  TasksGetInput,
+  TasksGetOutput,
+  TasksDeleteInput,
+  TasksDeleteOutput,
+  TasksLogsInput,
+  TasksLogsOutput,
+  TasksStreamLogsInput,
+  TasksStreamLogsOutput,
 } from "./types"
 import { ClientError } from "./client-error"
 
@@ -378,6 +396,126 @@ export function make(options: ClientOptions) {
       subscribe: (requestOptions?: RequestOptions): AsyncIterable<EventsSubscribeOutput> =>
         sse<EventsSubscribeOutput>(
           { method: "GET", path: `/api/event`, successStatus: 200, declaredStatuses: [401, 400], empty: false },
+          requestOptions,
+        ),
+    },
+    tasks: {
+      start: (input: TasksStartInput, requestOptions?: RequestOptions) =>
+        request<TasksStartOutput>(
+          {
+            method: "POST",
+            path: `/api/task`,
+            query: { location: input.location },
+            body: {
+              name: input.name,
+              command: input.command,
+              cwd: input.cwd,
+              port: input.port,
+              metadata: input.metadata,
+            },
+            successStatus: 200,
+            declaredStatuses: [400, 401],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      stop: (input: TasksStopInput, requestOptions?: RequestOptions) =>
+        request<TasksStopOutput>(
+          {
+            method: "POST",
+            path: `/api/task/${encodeURIComponent(input.taskID)}/stop`,
+            query: { location: input.location },
+            successStatus: 200,
+            declaredStatuses: [404, 401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      restart: (input: TasksRestartInput, requestOptions?: RequestOptions) =>
+        request<TasksRestartOutput>(
+          {
+            method: "POST",
+            path: `/api/task/${encodeURIComponent(input.taskID)}/restart`,
+            query: { location: input.location },
+            successStatus: 200,
+            declaredStatuses: [404, 401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      kill: (input: TasksKillInput, requestOptions?: RequestOptions) =>
+        request<TasksKillOutput>(
+          {
+            method: "POST",
+            path: `/api/task/${encodeURIComponent(input.taskID)}/kill`,
+            query: { location: input.location },
+            successStatus: 200,
+            declaredStatuses: [404, 401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      list: (input?: TasksListInput, requestOptions?: RequestOptions) =>
+        request<TasksListOutput>(
+          {
+            method: "GET",
+            path: `/api/task`,
+            query: { location: input?.location },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      get: (input: TasksGetInput, requestOptions?: RequestOptions) =>
+        request<TasksGetOutput>(
+          {
+            method: "GET",
+            path: `/api/task/${encodeURIComponent(input.taskID)}`,
+            query: { location: input.location },
+            successStatus: 200,
+            declaredStatuses: [404, 401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      delete: (input: TasksDeleteInput, requestOptions?: RequestOptions) =>
+        request<TasksDeleteOutput>(
+          {
+            method: "DELETE",
+            path: `/api/task/${encodeURIComponent(input.taskID)}`,
+            query: { location: input.location },
+            successStatus: 204,
+            declaredStatuses: [404, 401, 400],
+            empty: true,
+          },
+          requestOptions,
+        ),
+      logs: (input: TasksLogsInput, requestOptions?: RequestOptions) =>
+        request<TasksLogsOutput>(
+          {
+            method: "GET",
+            path: `/api/task/${encodeURIComponent(input.taskID)}/logs`,
+            query: { location: input.location, lines: input.lines },
+            successStatus: 200,
+            declaredStatuses: [404, 401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      streamLogs: (
+        input: TasksStreamLogsInput,
+        requestOptions?: RequestOptions,
+      ): AsyncIterable<TasksStreamLogsOutput> =>
+        sse<TasksStreamLogsOutput>(
+          {
+            method: "GET",
+            path: `/api/task/${encodeURIComponent(input.taskID)}/logs/stream`,
+            query: { location: input.location },
+            successStatus: 200,
+            declaredStatuses: [404, 401, 400],
+            empty: false,
+          },
           requestOptions,
         ),
     },

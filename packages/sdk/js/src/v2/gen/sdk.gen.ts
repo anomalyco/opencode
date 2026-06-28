@@ -385,6 +385,24 @@ import type {
   V2SessionWaitResponses,
   V2SkillListErrors,
   V2SkillListResponses,
+  V2TaskDeleteErrors,
+  V2TaskDeleteResponses,
+  V2TaskGetErrors,
+  V2TaskGetResponses,
+  V2TaskKillErrors,
+  V2TaskKillResponses,
+  V2TaskListErrors,
+  V2TaskListResponses,
+  V2TaskLogsErrors,
+  V2TaskLogsResponses,
+  V2TaskRestartErrors,
+  V2TaskRestartResponses,
+  V2TaskStartErrors,
+  V2TaskStartResponses,
+  V2TaskStopErrors,
+  V2TaskStopResponses,
+  V2TaskStreamLogsErrors,
+  V2TaskStreamLogsResponses,
   VcsApplyErrors,
   VcsApplyResponses,
   VcsDiffErrors,
@@ -6546,6 +6564,311 @@ export class Skill extends HeyApiClient {
   }
 }
 
+export class Task extends HeyApiClient {
+  /**
+   * List background tasks
+   *
+   * Returns all tasks registered in the system.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      location?: {
+        directory?: string
+        workspace?: string
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "location" }] }])
+    return (options?.client ?? this.client).get<V2TaskListResponses, V2TaskListErrors, ThrowOnError>({
+      url: "/api/task",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Start a background task
+   *
+   * Spawns a shell command in the background, redirects output to a log, and tracks its PID and port.
+   */
+  public start<ThrowOnError extends boolean = false>(
+    parameters?: {
+      location?: {
+        directory?: string
+        workspace?: string
+      }
+      name?: string
+      command?: string
+      cwd?: string
+      port?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      metadata?: {
+        [key: string]: unknown
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "location" },
+            { in: "body", key: "name" },
+            { in: "body", key: "command" },
+            { in: "body", key: "cwd" },
+            { in: "body", key: "port" },
+            { in: "body", key: "metadata" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<V2TaskStartResponses, V2TaskStartErrors, ThrowOnError>({
+      url: "/api/task",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Stop a background task
+   *
+   * Gracefully terminates a background task by PID.
+   */
+  public stop<ThrowOnError extends boolean = false>(
+    parameters: {
+      taskID: string
+      location?: {
+        directory?: string
+        workspace?: string
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "taskID" },
+            { in: "query", key: "location" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<V2TaskStopResponses, V2TaskStopErrors, ThrowOnError>({
+      url: "/api/task/{taskID}/stop",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Restart a background task
+   *
+   * Stops the running task and launches it again with the same command and configuration.
+   */
+  public restart<ThrowOnError extends boolean = false>(
+    parameters: {
+      taskID: string
+      location?: {
+        directory?: string
+        workspace?: string
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "taskID" },
+            { in: "query", key: "location" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<V2TaskRestartResponses, V2TaskRestartErrors, ThrowOnError>({
+      url: "/api/task/{taskID}/restart",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Force kill a background task
+   *
+   * Sends SIGKILL (or taskkill /F on Windows) to terminate the background task immediately.
+   */
+  public kill<ThrowOnError extends boolean = false>(
+    parameters: {
+      taskID: string
+      location?: {
+        directory?: string
+        workspace?: string
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "taskID" },
+            { in: "query", key: "location" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<V2TaskKillResponses, V2TaskKillErrors, ThrowOnError>({
+      url: "/api/task/{taskID}/kill",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Delete a background task
+   *
+   * Deletes a stopped/completed background task's records and logs from the system.
+   */
+  public delete<ThrowOnError extends boolean = false>(
+    parameters: {
+      taskID: string
+      location?: {
+        directory?: string
+        workspace?: string
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "taskID" },
+            { in: "query", key: "location" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<V2TaskDeleteResponses, V2TaskDeleteErrors, ThrowOnError>({
+      url: "/api/task/{taskID}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get background task status
+   *
+   * Returns the details of a single background task by its ID.
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters: {
+      taskID: string
+      location?: {
+        directory?: string
+        workspace?: string
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "taskID" },
+            { in: "query", key: "location" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<V2TaskGetResponses, V2TaskGetErrors, ThrowOnError>({
+      url: "/api/task/{taskID}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get task logs
+   *
+   * Reads the log file for the specified background task.
+   */
+  public logs<ThrowOnError extends boolean = false>(
+    parameters: {
+      taskID: string
+      location?: {
+        directory?: string
+        workspace?: string
+      }
+      lines?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "taskID" },
+            { in: "query", key: "location" },
+            { in: "query", key: "lines" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<V2TaskLogsResponses, V2TaskLogsErrors, ThrowOnError>({
+      url: "/api/task/{taskID}/logs",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Stream task logs
+   *
+   * Establishes an SSE stream to receive real-time stdout/stderr lines from the task.
+   */
+  public streamLogs<ThrowOnError extends boolean = false>(
+    parameters: {
+      taskID: string
+      location?: {
+        directory?: string
+        workspace?: string
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "taskID" },
+            { in: "query", key: "location" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).sse.get<V2TaskStreamLogsResponses, V2TaskStreamLogsErrors, ThrowOnError>({
+      url: "/api/task/{taskID}/logs/stream",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Event2 extends HeyApiClient {
   /**
    * Subscribe to events
@@ -7046,6 +7369,11 @@ export class V2 extends HeyApiClient {
   private _skill?: Skill
   get skill(): Skill {
     return (this._skill ??= new Skill({ client: this.client }))
+  }
+
+  private _task?: Task
+  get task(): Task {
+    return (this._task ??= new Task({ client: this.client }))
   }
 
   private _event?: Event2

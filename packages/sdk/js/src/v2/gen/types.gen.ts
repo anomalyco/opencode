@@ -2782,6 +2782,12 @@ export type ProviderNotFoundError = {
   message: string
 }
 
+export type TaskNotFoundError = {
+  _tag: "TaskNotFoundError"
+  taskID: string
+  message: string
+}
+
 export type OutputFormat1 =
   | {
       type: "text"
@@ -5014,6 +5020,25 @@ export type SkillV2Info = {
   slash?: boolean
   location: string
   content: string
+}
+
+export type TaskStatus = "running" | "stopped" | "failed" | "completed"
+
+export type TaskInfo = {
+  id: string
+  name: string
+  command: string
+  cwd: string
+  status: TaskStatus
+  pid?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  port?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  exitCode?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  error?: string
+  startedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  completedAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  metadata?: {
+    [key: string]: unknown
+  }
 }
 
 export type ModelsDevRefreshed = {
@@ -12959,6 +12984,388 @@ export type V2SkillListResponses = {
 }
 
 export type V2SkillListResponse = V2SkillListResponses[keyof V2SkillListResponses]
+
+export type V2TaskListData = {
+  body?: never
+  path?: never
+  query?: {
+    location?: {
+      directory?: string
+      workspace?: string
+    }
+  }
+  url: "/api/task"
+}
+
+export type V2TaskListErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+}
+
+export type V2TaskListError = V2TaskListErrors[keyof V2TaskListErrors]
+
+export type V2TaskListResponses = {
+  /**
+   * Success
+   */
+  200: {
+    location: LocationInfo
+    data: Array<TaskInfo>
+  }
+}
+
+export type V2TaskListResponse = V2TaskListResponses[keyof V2TaskListResponses]
+
+export type V2TaskStartData = {
+  body: {
+    name: string
+    command: string
+    cwd?: string
+    port?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    metadata?: {
+      [key: string]: unknown
+    }
+  }
+  path?: never
+  query?: {
+    location?: {
+      directory?: string
+      workspace?: string
+    }
+  }
+  url: "/api/task"
+}
+
+export type V2TaskStartErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+}
+
+export type V2TaskStartError = V2TaskStartErrors[keyof V2TaskStartErrors]
+
+export type V2TaskStartResponses = {
+  /**
+   * Success
+   */
+  200: {
+    location: LocationInfo
+    data: TaskInfo
+  }
+}
+
+export type V2TaskStartResponse = V2TaskStartResponses[keyof V2TaskStartResponses]
+
+export type V2TaskStopData = {
+  body?: never
+  path: {
+    taskID: string
+  }
+  query?: {
+    location?: {
+      directory?: string
+      workspace?: string
+    }
+  }
+  url: "/api/task/{taskID}/stop"
+}
+
+export type V2TaskStopErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * TaskNotFoundError
+   */
+  404: TaskNotFoundError
+}
+
+export type V2TaskStopError = V2TaskStopErrors[keyof V2TaskStopErrors]
+
+export type V2TaskStopResponses = {
+  /**
+   * Success
+   */
+  200: {
+    location: LocationInfo
+    data: TaskInfo
+  }
+}
+
+export type V2TaskStopResponse = V2TaskStopResponses[keyof V2TaskStopResponses]
+
+export type V2TaskRestartData = {
+  body?: never
+  path: {
+    taskID: string
+  }
+  query?: {
+    location?: {
+      directory?: string
+      workspace?: string
+    }
+  }
+  url: "/api/task/{taskID}/restart"
+}
+
+export type V2TaskRestartErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * TaskNotFoundError
+   */
+  404: TaskNotFoundError
+}
+
+export type V2TaskRestartError = V2TaskRestartErrors[keyof V2TaskRestartErrors]
+
+export type V2TaskRestartResponses = {
+  /**
+   * Success
+   */
+  200: {
+    location: LocationInfo
+    data: TaskInfo
+  }
+}
+
+export type V2TaskRestartResponse = V2TaskRestartResponses[keyof V2TaskRestartResponses]
+
+export type V2TaskKillData = {
+  body?: never
+  path: {
+    taskID: string
+  }
+  query?: {
+    location?: {
+      directory?: string
+      workspace?: string
+    }
+  }
+  url: "/api/task/{taskID}/kill"
+}
+
+export type V2TaskKillErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * TaskNotFoundError
+   */
+  404: TaskNotFoundError
+}
+
+export type V2TaskKillError = V2TaskKillErrors[keyof V2TaskKillErrors]
+
+export type V2TaskKillResponses = {
+  /**
+   * Success
+   */
+  200: {
+    location: LocationInfo
+    data: TaskInfo
+  }
+}
+
+export type V2TaskKillResponse = V2TaskKillResponses[keyof V2TaskKillResponses]
+
+export type V2TaskDeleteData = {
+  body?: never
+  path: {
+    taskID: string
+  }
+  query?: {
+    location?: {
+      directory?: string
+      workspace?: string
+    }
+  }
+  url: "/api/task/{taskID}"
+}
+
+export type V2TaskDeleteErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * TaskNotFoundError
+   */
+  404: TaskNotFoundError
+}
+
+export type V2TaskDeleteError = V2TaskDeleteErrors[keyof V2TaskDeleteErrors]
+
+export type V2TaskDeleteResponses = {
+  /**
+   * <No Content>
+   */
+  204: void
+}
+
+export type V2TaskDeleteResponse = V2TaskDeleteResponses[keyof V2TaskDeleteResponses]
+
+export type V2TaskGetData = {
+  body?: never
+  path: {
+    taskID: string
+  }
+  query?: {
+    location?: {
+      directory?: string
+      workspace?: string
+    }
+  }
+  url: "/api/task/{taskID}"
+}
+
+export type V2TaskGetErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * TaskNotFoundError
+   */
+  404: TaskNotFoundError
+}
+
+export type V2TaskGetError = V2TaskGetErrors[keyof V2TaskGetErrors]
+
+export type V2TaskGetResponses = {
+  /**
+   * Success
+   */
+  200: {
+    location: LocationInfo
+    data: TaskInfo
+  }
+}
+
+export type V2TaskGetResponse = V2TaskGetResponses[keyof V2TaskGetResponses]
+
+export type V2TaskLogsData = {
+  body?: never
+  path: {
+    taskID: string
+  }
+  query?: {
+    location?: {
+      directory?: string
+      workspace?: string
+    }
+    lines?: string
+  }
+  url: "/api/task/{taskID}/logs"
+}
+
+export type V2TaskLogsErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * TaskNotFoundError
+   */
+  404: TaskNotFoundError
+}
+
+export type V2TaskLogsError = V2TaskLogsErrors[keyof V2TaskLogsErrors]
+
+export type V2TaskLogsResponses = {
+  /**
+   * Success
+   */
+  200: {
+    location: LocationInfo
+    data: string
+  }
+}
+
+export type V2TaskLogsResponse = V2TaskLogsResponses[keyof V2TaskLogsResponses]
+
+export type V2TaskStreamLogsData = {
+  body?: never
+  path: {
+    taskID: string
+  }
+  query?: {
+    location?: {
+      directory?: string
+      workspace?: string
+    }
+  }
+  url: "/api/task/{taskID}/logs/stream"
+}
+
+export type V2TaskStreamLogsErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * TaskNotFoundError
+   */
+  404: TaskNotFoundError
+}
+
+export type V2TaskStreamLogsError = V2TaskStreamLogsErrors[keyof V2TaskStreamLogsErrors]
+
+export type V2TaskStreamLogsResponses = {
+  /**
+   * Success
+   */
+  200: {
+    id: string
+    event: string
+    data: string
+  }
+}
+
+export type V2TaskStreamLogsResponse = V2TaskStreamLogsResponses[keyof V2TaskStreamLogsResponses]
 
 export type V2EventSubscribeData = {
   body?: never

@@ -23,6 +23,8 @@ import { PtyEnvironment } from "./pty-environment"
 import { layer as locationLayer } from "./location"
 import { sessionLocationLayer } from "./middleware/session-location"
 
+import { TaskService } from "@opencode-ai/core/task"
+
 const applicationServices = LayerNode.group([
   Database.node,
   EventV2.node,
@@ -34,6 +36,7 @@ const applicationServices = LayerNode.group([
   Credential.node,
   PtyEnvironment.node,
   LocationServiceMap.node,
+  TaskService.node,
 ])
 
 export function createRoutes(password?: string) {

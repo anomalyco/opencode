@@ -3,9 +3,10 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Switch } from "@opencode-ai/ui/switch"
 import { Tabs } from "@opencode-ai/ui/tabs"
+import { IconButton } from "@opencode-ai/ui/icon-button"
 import { showToast } from "@/utils/toast"
 import { useNavigate } from "@solidjs/router"
-import { type Accessor, createEffect, createMemo, For, type JSXElement, onCleanup, Show } from "solid-js"
+import { type Accessor, createEffect, createMemo, For, type JSXElement, onCleanup, Show, createResource } from "solid-js"
 import { createStore } from "solid-js/store"
 import { ServerHealthIndicator, ServerRow } from "@/components/server/server-row"
 import { useLanguage } from "@/context/language"
@@ -290,6 +291,28 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
   const pluginCount = createMemo(() => plugins().length)
   const pluginEmpty = createMemo(() => pluginEmptyMessage(language.t("dialog.plugins.empty"), "opencode.json"))
 
+  const sdk = () => {
+    const current = server.current
+    if (!current) return undefined
+    return global.ensureServerCtx(current).sdk
+  }
+  const [tasks, { refetch: refetchTasks }] = createResource(
+    () => (props.shown() && sdk() ? sdk() : undefined),
+    async (sdkInstance) => {
+      const res = await sdkInstance.client.tasks.list({
+        query: { location: { directory: sdkInstance.directory } },
+      })
+      return res.data?.data ?? []
+    },
+  )
+  const runningTasksCount = createMemo(() => (tasks() ?? []).filter((t) => t.status === "running").length)
+
+  createEffect(() => {
+    if (props.shown()) {
+      refetchTasks()
+    }
+  })
+
   return (
     <div class="flex items-center gap-1 w-[360px] rounded-xl shadow-[var(--shadow-lg-border-base)]">
       <Tabs
@@ -318,6 +341,10 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
           <Tabs.Trigger value="plugins" data-slot="tab" class="text-12-regular">
             {pluginCount() > 0 ? `${pluginCount()} ` : ""}
             {language.t("status.popover.tab.plugins")}
+          </Tabs.Trigger>
+          <Tabs.Trigger value="tasks" data-slot="tab" class="text-12-regular">
+            {runningTasksCount() > 0 ? `${runningTasksCount()} ` : ""}
+            Tasks
           </Tabs.Trigger>
         </Tabs.List>
 
@@ -490,6 +517,69 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
                     <div class="flex items-center gap-2 w-full px-2 py-1">
                       <div class="size-1.5 rounded-full shrink-0 bg-icon-success-base" />
                       <span class="text-14-regular text-text-base truncate">{plugin}</span>
+                    </div>
+                  )}
+                </For>
+              </Show>
+            </div>
+          </div>
+        </Tabs.Content>
+
+        <Tabs.Content value="tasks">
+          <div class="flex flex-col px-2 pb-2">
+            <div class="flex flex-col p-3 bg-background-base rounded-sm min-h-14 gap-2">
+              <Show
+                when={tasks() && tasks()!.length > 0}
+                fallback={
+                  <div class="text-14-regular text-text-base text-center my-auto">No background tasks</div>
+                }
+              >
+                <For each={tasks()}>
+                  {(task) => (
+                    <div class="flex items-center justify-between w-full px-2 py-1 text-xs">
+                      <div class="flex items-center gap-2 truncate">
+                        <div
+                          classList={{
+                            "size-1.5 rounded-full shrink-0": true,
+                            "bg-icon-success-base": task.status === "running",
+                            "bg-icon-critical-base": task.status === "failed",
+                            "bg-border-strong": task.status !== "running" && task.status !== "failed",
+                          }}
+                        />
+                        <span class="text-text-base truncate font-medium">{task.name}</span>
+                      </div>
+                      <div class="flex items-center gap-1.5 shrink-0">
+                        <Show when={task.status === "running"}>
+                          <IconButton
+                            icon="stop"
+                            variant="ghost"
+                            class="size-5 rounded text-icon-warning-base"
+                            onClick={async (e) => {
+                              e.stopPropagation()
+                              await sdk()?.client.tasks.stop({
+                                query: { location: { directory: sdk()!.directory } },
+                                path: { taskID: task.id },
+                              })
+                              refetchTasks()
+                            }}
+                          />
+                        </Show>
+                        <Show when={task.status !== "running"}>
+                          <IconButton
+                            icon="play"
+                            variant="ghost"
+                            class="size-5 rounded text-icon-success-base"
+                            onClick={async (e) => {
+                              e.stopPropagation()
+                              await sdk()?.client.tasks.start({
+                                query: { location: { directory: sdk()!.directory } },
+                                body: { name: task.name, command: task.command, cwd: task.cwd, port: task.port },
+                              })
+                              refetchTasks()
+                            }}
+                          />
+                        </Show>
+                      </div>
                     </div>
                   )}
                 </For>

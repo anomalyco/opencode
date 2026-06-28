@@ -5,7 +5,7 @@ import { Effect } from "effect"
 import { fileURLToPath } from "url"
 
 const contract = compile(ClientApi, {
-  groupNames: { "server.session": "sessions", "server.event": "events" },
+  groupNames: { "server.session": "sessions", "server.event": "events", "server.task": "tasks" },
 })
 
 await Effect.runPromise(

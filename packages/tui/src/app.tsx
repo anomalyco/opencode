@@ -41,6 +41,7 @@ import { DialogModel } from "./component/dialog-model"
 import { useConnected } from "./component/use-connected"
 import { DialogMcp } from "./component/dialog-mcp"
 import { DialogStatus } from "./component/dialog-status"
+import { DialogTask } from "./component/dialog-task"
 import { DialogThemeList } from "./component/dialog-theme-list"
 import { DialogHelp } from "./ui/dialog-help"
 import { DialogAgent } from "./component/dialog-agent"
@@ -114,6 +115,7 @@ const appBindingCommands = [
   "provider.connect",
   "console.org.switch",
   "opencode.status",
+  "task.list",
   "theme.switch",
   "theme.switch_mode",
   "theme.mode.lock",
@@ -758,6 +760,16 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         slashName: "status",
         run: () => {
           dialog.replace(() => <DialogStatus />)
+        },
+        category: "System",
+      },
+      {
+        name: "task.list",
+        title: "Manage background tasks",
+        slashName: "tasks",
+        slashAliases: ["task", "bg"],
+        run: () => {
+          dialog.replace(() => <DialogTask />)
         },
         category: "System",
       },

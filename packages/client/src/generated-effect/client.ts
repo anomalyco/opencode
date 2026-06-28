@@ -218,9 +218,116 @@ const Endpoint1_0 = (raw: RawClient["server.event"]) => () =>
 
 const adaptGroup1 = (raw: RawClient["server.event"]) => ({ subscribe: Endpoint1_0(raw) })
 
+type Endpoint2_0Request = Parameters<RawClient["server.task"]["task.start"]>[0]
+type Endpoint2_0Input = {
+  readonly location?: Endpoint2_0Request["query"]["location"]
+  readonly name: Endpoint2_0Request["payload"]["name"]
+  readonly command: Endpoint2_0Request["payload"]["command"]
+  readonly cwd?: Endpoint2_0Request["payload"]["cwd"]
+  readonly port?: Endpoint2_0Request["payload"]["port"]
+  readonly metadata?: Endpoint2_0Request["payload"]["metadata"]
+}
+const Endpoint2_0 = (raw: RawClient["server.task"]) => (input: Endpoint2_0Input) =>
+  raw["task.start"]({
+    query: { location: input.location },
+    payload: { name: input.name, command: input.command, cwd: input.cwd, port: input.port, metadata: input.metadata },
+  }).pipe(Effect.mapError(mapClientError))
+
+type Endpoint2_1Request = Parameters<RawClient["server.task"]["task.stop"]>[0]
+type Endpoint2_1Input = {
+  readonly taskID: Endpoint2_1Request["params"]["taskID"]
+  readonly location?: Endpoint2_1Request["query"]["location"]
+}
+const Endpoint2_1 = (raw: RawClient["server.task"]) => (input: Endpoint2_1Input) =>
+  raw["task.stop"]({ params: { taskID: input.taskID }, query: { location: input.location } }).pipe(
+    Effect.mapError(mapClientError),
+  )
+
+type Endpoint2_2Request = Parameters<RawClient["server.task"]["task.restart"]>[0]
+type Endpoint2_2Input = {
+  readonly taskID: Endpoint2_2Request["params"]["taskID"]
+  readonly location?: Endpoint2_2Request["query"]["location"]
+}
+const Endpoint2_2 = (raw: RawClient["server.task"]) => (input: Endpoint2_2Input) =>
+  raw["task.restart"]({ params: { taskID: input.taskID }, query: { location: input.location } }).pipe(
+    Effect.mapError(mapClientError),
+  )
+
+type Endpoint2_3Request = Parameters<RawClient["server.task"]["task.kill"]>[0]
+type Endpoint2_3Input = {
+  readonly taskID: Endpoint2_3Request["params"]["taskID"]
+  readonly location?: Endpoint2_3Request["query"]["location"]
+}
+const Endpoint2_3 = (raw: RawClient["server.task"]) => (input: Endpoint2_3Input) =>
+  raw["task.kill"]({ params: { taskID: input.taskID }, query: { location: input.location } }).pipe(
+    Effect.mapError(mapClientError),
+  )
+
+type Endpoint2_4Request = Parameters<RawClient["server.task"]["task.list"]>[0]
+type Endpoint2_4Input = { readonly location?: Endpoint2_4Request["query"]["location"] }
+const Endpoint2_4 = (raw: RawClient["server.task"]) => (input?: Endpoint2_4Input) =>
+  raw["task.list"]({ query: { location: input?.location } }).pipe(Effect.mapError(mapClientError))
+
+type Endpoint2_5Request = Parameters<RawClient["server.task"]["task.get"]>[0]
+type Endpoint2_5Input = {
+  readonly taskID: Endpoint2_5Request["params"]["taskID"]
+  readonly location?: Endpoint2_5Request["query"]["location"]
+}
+const Endpoint2_5 = (raw: RawClient["server.task"]) => (input: Endpoint2_5Input) =>
+  raw["task.get"]({ params: { taskID: input.taskID }, query: { location: input.location } }).pipe(
+    Effect.mapError(mapClientError),
+  )
+
+type Endpoint2_6Request = Parameters<RawClient["server.task"]["task.delete"]>[0]
+type Endpoint2_6Input = {
+  readonly taskID: Endpoint2_6Request["params"]["taskID"]
+  readonly location?: Endpoint2_6Request["query"]["location"]
+}
+const Endpoint2_6 = (raw: RawClient["server.task"]) => (input: Endpoint2_6Input) =>
+  raw["task.delete"]({ params: { taskID: input.taskID }, query: { location: input.location } }).pipe(
+    Effect.mapError(mapClientError),
+  )
+
+type Endpoint2_7Request = Parameters<RawClient["server.task"]["task.logs"]>[0]
+type Endpoint2_7Input = {
+  readonly taskID: Endpoint2_7Request["params"]["taskID"]
+  readonly location?: Endpoint2_7Request["query"]["location"]
+  readonly lines?: Endpoint2_7Request["query"]["lines"]
+}
+const Endpoint2_7 = (raw: RawClient["server.task"]) => (input: Endpoint2_7Input) =>
+  raw["task.logs"]({ params: { taskID: input.taskID }, query: { location: input.location, lines: input.lines } }).pipe(
+    Effect.mapError(mapClientError),
+  )
+
+type Endpoint2_8Request = Parameters<RawClient["server.task"]["task.streamLogs"]>[0]
+type Endpoint2_8Input = {
+  readonly taskID: Endpoint2_8Request["params"]["taskID"]
+  readonly location?: Endpoint2_8Request["query"]["location"]
+}
+const Endpoint2_8 = (raw: RawClient["server.task"]) => (input: Endpoint2_8Input) =>
+  Stream.unwrap(
+    raw["task.streamLogs"]({ params: { taskID: input.taskID }, query: { location: input.location } }).pipe(
+      Effect.mapError(mapClientError),
+      Effect.map((stream) => stream.pipe(Stream.mapError(mapClientError))),
+    ),
+  )
+
+const adaptGroup2 = (raw: RawClient["server.task"]) => ({
+  start: Endpoint2_0(raw),
+  stop: Endpoint2_1(raw),
+  restart: Endpoint2_2(raw),
+  kill: Endpoint2_3(raw),
+  list: Endpoint2_4(raw),
+  get: Endpoint2_5(raw),
+  delete: Endpoint2_6(raw),
+  logs: Endpoint2_7(raw),
+  streamLogs: Endpoint2_8(raw),
+})
+
 const adaptClient = (raw: RawClient) => ({
   sessions: adaptGroup0(raw["server.session"]),
   events: adaptGroup1(raw["server.event"]),
+  tasks: adaptGroup2(raw["server.task"]),
 })
 
 export const make = (options?: { readonly baseUrl?: URL | string }) =>
