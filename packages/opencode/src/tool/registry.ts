@@ -35,6 +35,10 @@ import { LspTool } from "./lsp"
 import * as Truncate from "./truncate"
 import { ApplyPatchTool } from "./apply_patch"
 import { ChangeDirectoryTool } from "./change-directory"
+import { FormatTool } from "./format"
+import { GitTool } from "./git"
+import { DiagnosticsTool } from "./diagnostics"
+import { Git } from "@/git"
 import { Glob } from "@opencode-ai/core/util/glob"
 import path from "path"
 import { pathToFileURL } from "url"
@@ -118,6 +122,9 @@ export const layer = Layer.effect(
     const greptool = yield* GrepTool
     const patchtool = yield* ApplyPatchTool
     const changedirtool = yield* ChangeDirectoryTool
+    const formattool = yield* FormatTool
+    const gittool = yield* GitTool
+    const diagnosticstool = yield* DiagnosticsTool
     const skilltool = yield* SkillTool
     const agent = yield* Agent.Service
 
@@ -229,6 +236,9 @@ export const layer = Layer.effect(
           skill: Tool.init(skilltool),
           patch: Tool.init(patchtool),
           changedir: Tool.init(changedirtool),
+          format: Tool.init(formattool),
+          git: Tool.init(gittool),
+          diagnostics: Tool.init(diagnosticstool),
           question: Tool.init(question),
           lsp: Tool.init(lsptool),
           plan: Tool.init(plan),
@@ -257,6 +267,9 @@ export const layer = Layer.effect(
             tool.skill,
             tool.patch,
             tool.changedir,
+            tool.format,
+            tool.git,
+            tool.diagnostics,
             ...(flags.experimentalLspTool ? [tool.lsp] : []),
             ...(flags.experimentalPlanMode && flags.client === "cli" ? [tool.plan] : []),
           ],
@@ -362,7 +375,7 @@ export const defaultLayer = Layer.suspend(() =>
       Layer.provide(CrossSpawnSpawner.defaultLayer),
       Layer.provide(Truncate.defaultLayer),
     )
-    .pipe(Layer.provide(Database.defaultLayer), Layer.provide(RuntimeFlags.defaultLayer), Layer.provide(Memory.defaultLayer), Layer.provide(History.defaultLayer)),
+    .pipe(Layer.provide(Database.defaultLayer), Layer.provide(RuntimeFlags.defaultLayer), Layer.provide(Memory.defaultLayer), Layer.provide(History.defaultLayer), Layer.provide(Git.defaultLayer)),
 )
 
 function isZodType(value: unknown): value is z.ZodType {
@@ -466,6 +479,7 @@ export const node = LayerNode.make({
     Database.node,
     Memory.node,
     History.node,
+    Git.node,
   ],
 })
 
