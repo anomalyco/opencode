@@ -799,7 +799,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     requestAnimationFrame(() => {
       const element = slashPopoverRef.querySelector(`[data-slash-id="${activeId}"]`)
-      element?.scrollIntoView({ block: "nearest" })
+      element?.scrollIntoView({ block: "nearest", behavior: "smooth" })
     })
   })
   const selectPopoverActive = () => {
