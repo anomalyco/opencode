@@ -1,7 +1,7 @@
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { useParams } from "@solidjs/router"
-import { batch, createEffect, createMemo } from "solid-js"
+import { batch, createEffect, createMemo, startTransition } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useModels } from "@/context/models"
 import { useProviders } from "@/hooks/use-providers"
@@ -294,19 +294,21 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         model.set({ providerID: entry.provider.id, modelID: entry.id })
       },
       set(item: ModelKey | undefined, options?: { recent?: boolean }) {
-        batch(() => {
-          setStore("last", {
-            type: "model",
-            agent: agent.current()?.name,
-            model: item ?? null,
-            variant: selected(),
+        startTransition(() =>
+          batch(() => {
+            setStore("last", {
+              type: "model",
+              agent: agent.current()?.name,
+              model: item ?? null,
+              variant: selected(),
+            })
+            write({ model: item })
+            if (!item) return
+            models.setVisibility(item, true)
+            if (!options?.recent) return
+            models.recent.push(item)
           })
-          write({ model: item })
-          if (!item) return
-          models.setVisibility(item, true)
-          if (!options?.recent) return
-          models.recent.push(item)
-        })
+        )
       },
       visible(item: ModelKey) {
         return models.visible(item)
@@ -335,19 +337,21 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           return Object.keys(item.variants)
         },
         set(value: string | undefined) {
-          batch(() => {
-            const model = current()
-            setStore("last", {
-              type: "variant",
-              agent: agent.current()?.name,
-              model: model ? { providerID: model.provider.id, modelID: model.id } : null,
-              variant: value ?? null,
+          startTransition(() =>
+            batch(() => {
+              const model = current()
+              setStore("last", {
+                type: "variant",
+                agent: agent.current()?.name,
+                model: model ? { providerID: model.provider.id, modelID: model.id } : null,
+                variant: value ?? null,
+              })
+              write({ variant: value ?? null })
+              if (model) {
+                models.variant.set({ providerID: model.provider.id, modelID: model.id }, value ?? undefined)
+              }
             })
-            write({ variant: value ?? null })
-            if (model) {
-              models.variant.set({ providerID: model.provider.id, modelID: model.id }, value ?? undefined)
-            }
-          })
+          )
         },
         cycle() {
           const items = this.list()
