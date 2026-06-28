@@ -61,6 +61,19 @@ export function createPromptAttachmentsCore(input: PromptAttachmentsCoreInput) {
     if (!target) return false
     const mime = await attachmentMime(file)
     if (!mime) {
+      // File extension/mime is not natively supported (e.g. docx, pptx).
+      // Instead of rejecting with a toast, insert the file's absolute path
+      // (when running in Electron/desktop) so the agent can read it on demand.
+      // In browser-only mode we have no access to the absolute path, so we
+      // fall back to the previous warn-toast behavior.
+      const absolutePath = input.getPathForFile?.(file)
+      if (absolutePath) {
+        target.prompt.set(
+          [...target.prompt.current(), { type: "file", path: absolutePath, content: "@" + absolutePath, start: 0, end: 0 }],
+          target.cursor,
+        )
+        return true
+      }
       if (toast) input.warn?.()
       return false
     }
