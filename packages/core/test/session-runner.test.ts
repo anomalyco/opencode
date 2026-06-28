@@ -615,6 +615,30 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("hides worktree_merge_request from a main-checkout session", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const applicationTools = yield* ApplicationTools.Service
+      const session = yield* SessionV2.Service
+      // Register a tool under the worktree_merge_request name. The runner hides
+      // it for sessions whose directory is the project's main checkout (here the
+      // test Location is `/project`, a non-worktree directory).
+      yield* applicationTools.register({
+        worktree_merge_request: Tool.make({
+          description: "Merge this worktree",
+          input: Schema.Struct({ summary: Schema.String }),
+          output: Schema.Struct({ ok: Schema.Boolean }),
+          execute: () => Effect.succeed({ ok: true }),
+        }),
+      })
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Hello" }) })
+
+      const names = requests[0]?.tools.map((tool) => tool.name) ?? []
+      expect(names).toContain("echo")
+      expect(names).not.toContain("worktree_merge_request")
+    }),
+  )
+
   it.effect("starts a real runner turn after default prompt recording", () =>
     Effect.gen(function* () {
       yield* setup

@@ -14,6 +14,7 @@ import { Database } from "@opencode-ai/core/database/database"
 import { TodoWriteTool } from "./todo"
 import { WebFetchTool } from "./webfetch"
 import { WriteTool } from "./write"
+import { WorktreeMergeRequestTool } from "./worktree-merge-request"
 import { InvalidTool } from "./invalid"
 import { SkillTool } from "./skill"
 import * as Tool from "./tool"
@@ -24,6 +25,7 @@ import { Schema } from "effect"
 import z from "zod"
 import { Plugin } from "../plugin"
 import { Provider } from "@/provider/provider"
+import { Git } from "@/git"
 
 import { WebSearchTool } from "./websearch"
 import { LspTool } from "./lsp"
@@ -105,6 +107,7 @@ export const layer = Layer.effect(
     const greptool = yield* GrepTool
     const patchtool = yield* ApplyPatchTool
     const skilltool = yield* SkillTool
+    const worktreemerge = yield* WorktreeMergeRequestTool
     const agent = yield* Agent.Service
 
     const state = yield* InstanceState.make<State>(
@@ -212,6 +215,7 @@ export const layer = Layer.effect(
           question: Tool.init(question),
           lsp: Tool.init(lsptool),
           plan: Tool.init(plan),
+          worktreeMerge: Tool.init(worktreemerge),
         })
 
         return {
@@ -231,6 +235,7 @@ export const layer = Layer.effect(
             tool.search,
             tool.skill,
             tool.patch,
+            tool.worktreeMerge,
             ...(flags.experimentalLspTool ? [tool.lsp] : []),
             ...(flags.experimentalPlanMode && flags.client === "cli" ? [tool.plan] : []),
           ],
@@ -265,10 +270,18 @@ export const layer = Layer.effect(
     })
 
     const tools: Interface["tools"] = Effect.fn("ToolRegistry.tools")(function* (input) {
+      // A worktree session runs in a linked worktree whose working directory
+      // differs from the project's main checkout. worktree_merge_request only
+      // makes sense there, so it is hidden from main-checkout sessions.
+      const instance = yield* InstanceState.context
+      const isWorktreeSession = instance.project.worktree !== "/" && instance.directory !== instance.project.worktree
+
       const filtered = (yield* all()).filter((tool) => {
         if (tool.id === WebSearchTool.id) {
           return webSearchEnabled(input.providerID, { exa: flags.enableExa, parallel: flags.enableParallel })
         }
+
+        if (tool.id === WorktreeMergeRequestTool.id) return isWorktreeSession
 
         const usePatch =
           input.modelID.includes("gpt-") && !input.modelID.includes("oss") && !input.modelID.includes("gpt-4")
@@ -327,6 +340,7 @@ export const defaultLayer = Layer.suspend(() =>
       Layer.provide(Session.defaultLayer),
       Layer.provide(BackgroundJob.defaultLayer),
       Layer.provide(Provider.defaultLayer),
+      Layer.provide(Git.defaultLayer),
       Layer.provide(LSP.defaultLayer),
       Layer.provide(Instruction.defaultLayer),
       Layer.provide(FSUtil.defaultLayer),
@@ -428,6 +442,7 @@ export const node = LayerNode.make({
     Session.node,
     BackgroundJob.node,
     Provider.node,
+    Git.node,
     LSP.node,
     Instruction.node,
     FSUtil.node,

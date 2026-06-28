@@ -135,7 +135,12 @@ function TimelineThinkingRow(props: { reasoningHeading?: string; showReasoningSu
   )
 }
 
-function TimelineDiffSummaryRow(props: { diffs: SummaryDiff[] }) {
+function TimelineDiffSummaryRow(props: {
+  diffs: SummaryDiff[]
+  inWorktree?: boolean
+  mergeBusy?: boolean
+  onMergeToMain?: () => void
+}) {
   const language = useLanguage()
   const maxFiles = 10
   const [state, setState] = createStore({
@@ -163,6 +168,18 @@ function TimelineDiffSummaryRow(props: { diffs: SummaryDiff[] }) {
           <span data-slot="session-turn-diffs-toggle" onClick={() => setState("showAll", !showAll())}>
             {showAll() ? language.t("ui.sessionTurn.diffs.showLess") : language.t("ui.sessionTurn.diffs.showAll")}
           </span>
+        </Show>
+        <Show when={props.inWorktree}>
+          <Button
+            size="small"
+            icon="branch"
+            variant="secondary"
+            class="ml-auto shrink-0"
+            disabled={props.mergeBusy}
+            onClick={() => props.onMergeToMain?.()}
+          >
+            {language.t("session.review.mergeToMain")}
+          </Button>
         </Show>
       </div>
       <div data-component="session-turn-diffs-content">
@@ -274,6 +291,74 @@ export function MessageTimeline(props: {
     if (!id) return idle
     return sync().data.session_status[id] ?? idle
   })
+  // True when the current session runs in a git worktree (not the project's main checkout),
+  // which is the only case where merging back into main is meaningful.
+  const inWorktree = createMemo(() => {
+    const project = sync().project
+    return !!project && sync().directory !== project.worktree
+  })
+
+  const [mergeBusy, setMergeBusy] = createSignal(false)
+  const handleMergeToMain = async () => {
+    if (mergeBusy()) return
+    const id = sessionID()
+    const project = sync().project
+    if (!id || !project) return
+    const mainCheckout = project.worktree
+
+    setMergeBusy(true)
+    try {
+      // Preflight: refuse to merge if the main checkout has uncommitted changes,
+      // since the squash merge will check out the default branch and commit there.
+      const mainClient = sdk.createClient({ directory: mainCheckout, throwOnError: true })
+      const dirty = await mainClient.vcs
+        .status()
+        .then((x) => x.data ?? [])
+        .catch(() => [] as { file: string }[])
+      if (dirty.length > 0) {
+        showToast({
+          title: language.t("session.review.mergeToMain.unclean.title"),
+          description: language.t("session.review.mergeToMain.unclean.description", {
+            files: dirty
+              .slice(0, 8)
+              .map((f) => f.file)
+              .join(", "),
+          }),
+          variant: "error",
+        })
+        return
+      }
+
+      await sdk.client.session.promptAsync({
+        sessionID: id,
+        parts: [
+          {
+            type: "text",
+            text: [
+              "Please merge this worktree's changes back into the project's default branch.",
+              "1. Commit any uncommitted changes in this worktree with a clear message (do NOT push).",
+              "2. Then call the `worktree_merge_request` tool with a `summary` of what this worktree",
+              "   accomplished and a recommended `squashCommitMessage`.",
+              "Do not perform the squash merge yourself; the tool starts a dedicated session in the main checkout.",
+            ].join("\n"),
+          },
+        ],
+      })
+      showToast({
+        title: language.t("session.review.mergeToMain.starting"),
+        variant: "success",
+      })
+    } catch (err) {
+      showToast({
+        title: language.t("common.requestFailed"),
+        description: errorMessage(err),
+        variant: "error",
+      })
+    } finally {
+      setMergeBusy(false)
+    }
+  }
+
   const sessionMessages = createMemo(() => (sessionID() ? (sync().data.message[sessionID()!] ?? []) : []))
   const info = createMemo(() => {
     const id = sessionID()
@@ -1134,7 +1219,12 @@ export function MessageTimeline(props: {
         return (
           <TimelineRowFrame row={diffSummaryRow}>
             <div data-slot="session-turn-message-container" class="w-full px-4 md:px-5">
-              <TimelineDiffSummaryRow diffs={diffSummaryRow().diffs} />
+              <TimelineDiffSummaryRow
+                diffs={diffSummaryRow().diffs}
+                inWorktree={inWorktree()}
+                mergeBusy={mergeBusy()}
+                onMergeToMain={handleMergeToMain}
+              />
             </div>
           </TimelineRowFrame>
         )

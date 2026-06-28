@@ -9,6 +9,7 @@ import {
   type ProviderErrorEvent,
 } from "@opencode-ai/llm"
 import { Cause, DateTime, Effect, FiberSet, Layer, Option, Semaphore, Stream } from "effect"
+import path from "path"
 import { AgentV2 } from "../../agent"
 import { Config } from "../../config"
 import { Database } from "../../database/database"
@@ -22,6 +23,7 @@ import { SystemContextRegistry } from "../../system-context/registry"
 import { SkillGuidance } from "../../skill/guidance"
 import { ReferenceGuidance } from "../../reference/guidance"
 import { ToolRegistry } from "../../tool/registry"
+import { WorktreeMergeRequestTool } from "../../tool/worktree-merge-request"
 import { ToolOutputStore } from "../../tool-output-store"
 import { SessionContextEpoch } from "../context-epoch"
 import { SessionCompaction } from "../compaction"
@@ -88,6 +90,16 @@ import { llmClient } from "../../effect/app-node-platform"
  * provider turn. Registry definitions are advertised, local tool calls are settled durably, and an
  * explicit loop starts the next provider turn after local settlement. Configured agent step limits bound the loop.
  */
+
+// A worktree session runs in a linked worktree whose working directory differs
+// from the project's main checkout. `store` is the shared git directory
+// (`--git-common-dir`), which for a linked worktree resolves to
+// `<mainCheckout>/.git`.
+function isWorktreeSession(store: string | undefined, directory: string) {
+  if (!store) return false
+  const mainCheckout = path.basename(store) === ".git" ? path.dirname(store) : store
+  return mainCheckout !== directory
+}
 
 export const layer = Layer.effect(
   Service,
@@ -196,6 +208,16 @@ export const layer = Layer.effect(
       const context = entries.map((entry) => entry.message)
       const isLastStep = agent.info?.steps !== undefined && currentStep >= agent.info.steps
       const toolMaterialization = isLastStep ? undefined : yield* tools.materialize(agent.info?.permissions)
+      // worktree_merge_request only makes sense inside a linked worktree, whose
+      // working directory differs from the project's main checkout. Hide it from
+      // main-checkout sessions. The main checkout is derived from the shared git
+      // store (`--git-common-dir`), which for a linked worktree resolves to
+      // `<mainCheckout>/.git`; `location.vcs.store` already holds that path
+      // (resolved once at Location construction, no per-turn subprocess).
+      const allDefinitions = toolMaterialization?.definitions ?? []
+      const definitions = isWorktreeSession(location.vcs?.store, session.location.directory)
+        ? allDefinitions
+        : allDefinitions.filter((tool) => tool.name !== WorktreeMergeRequestTool.name)
       const promptCacheKey = /^ses_[0-9a-f]{64}$/.test(session.id) ? session.id.slice(4) : session.id
       const request = LLM.request({
         model,
@@ -204,7 +226,7 @@ export const layer = Layer.effect(
           .filter((part): part is string => part !== undefined && part.length > 0)
           .map(SystemPart.make),
         messages: [...toLLMMessages(context, model), ...(isLastStep ? [Message.assistant(MAX_STEPS_PROMPT)] : [])],
-        tools: toolMaterialization?.definitions ?? [],
+        tools: definitions,
         toolChoice: isLastStep ? "none" : undefined,
       })
       if (yield* compaction.compactIfNeeded({ sessionID: session.id, entries, model, request }))
