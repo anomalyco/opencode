@@ -102,23 +102,22 @@ export const layer = Layer.effectDiscard(
                 })
                 .pipe(
                   Effect.map((result) =>
-                    result.map(
-                      (match) =>
-                        new FileSystem.Match({
-                          ...match,
-                          entry: new FileSystem.Entry({
-                            ...match.entry,
-                            path: RelativePath.make(
-                              path.relative(
-                                location.directory,
-                                path.resolve(
-                                  info?.type === "Directory" ? target : path.dirname(target),
-                                  match.entry.path,
-                                ),
+                    result.map((match) =>
+                      FileSystem.Match.make({
+                        ...match,
+                        entry: FileSystem.Entry.make({
+                          ...match.entry,
+                          path: RelativePath.make(
+                            path.relative(
+                              location.directory,
+                              path.resolve(
+                                info?.type === "Directory" ? target : path.dirname(target),
+                                match.entry.path,
                               ),
                             ),
-                          }),
+                          ),
                         }),
+                      }),
                     ),
                   ),
                 )

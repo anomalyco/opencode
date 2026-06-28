@@ -224,6 +224,27 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  it.effect("preserves structured tool errors for the model", () =>
+    Effect.gen(function* () {
+      const error = { error: { type: "unknown", message: "Tool execution interrupted" } }
+      const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "bash", input: {} })]),
+            Message.tool({ id: "call_1", name: "bash", resultType: "error", result: error }),
+          ],
+        }),
+      )
+
+      expect(prepared.body.messages.at(-1)).toEqual({
+        role: "tool",
+        tool_call_id: "call_1",
+        content: ProviderShared.encodeJson(error),
+      })
+    }),
+  )
+
   it.effect("continues image tool results as vision input without base64 text", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
@@ -521,9 +542,9 @@ describe("OpenAI Chat route", () => {
         { type: "step-start", index: 0 },
         { type: "reasoning-start", id: "reasoning-0" },
         { type: "reasoning-delta", id: "reasoning-0", text: "thinking" },
+        { type: "reasoning-end", id: "reasoning-0" },
         { type: "text-start", id: "text-0" },
         { type: "text-delta", id: "text-0", text: "Hello" },
-        { type: "reasoning-end", id: "reasoning-0" },
         { type: "text-end", id: "text-0" },
         { type: "step-finish", index: 0, reason: "stop" },
         { type: "finish", reason: "stop" },

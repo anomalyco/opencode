@@ -10,6 +10,8 @@ import { Collapsible } from "@opencode-ai/ui/collapsible"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
+import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
+import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { type Session } from "@opencode-ai/sdk/v2/client"
@@ -214,9 +216,10 @@ const WorkspaceActions = (props: {
     </DropdownMenu>
     <Show when={!props.touch()}>
       <Tooltip value={props.language.t("command.session.new")} placement="top">
-        <IconButton
-          icon="new-session"
+        <IconButtonV2
+          icon={<IconV2 name="edit" size="small" />}
           variant="ghost"
+          size="small"
           class="size-6 rounded-md opacity-0 pointer-events-none group-hover/workspace:opacity-100 group-hover/workspace:pointer-events-auto group-focus-within/workspace:opacity-100 group-focus-within/workspace:pointer-events-auto"
           data-action="workspace-new-session"
           data-workspace={base64Encode(props.directory)}
