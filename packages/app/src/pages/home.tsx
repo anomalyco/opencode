@@ -568,6 +568,8 @@ function HomeProjectColumn(props: {
             const key = ServerConnection.key(item)
             const healthy = () => !!global.servers.health[key]?.healthy
             const serverCtx = global.ensureServerCtx(item)
+            const projects = () => serverCtx.projects.list()
+            const hasProjects = () => projects().length > 0
             const collapsed = () => !!state().collapsed[key]
             return (
               <div class="flex max-h-[min(572px,calc(100vh_-_300px))] min-w-0 flex-col gap-1 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -575,6 +577,7 @@ function HomeProjectColumn(props: {
                   server={item}
                   selected={props.selected.server === key && !props.selected.directory}
                   healthy={healthy()}
+                  hasProjects={hasProjects()}
                   collapsed={collapsed()}
                   health={global.servers.health[key]}
                   controller={controller}
@@ -584,9 +587,9 @@ function HomeProjectColumn(props: {
                   toggleCollapsed={() => setState("collapsed", key, !state().collapsed[key])}
                   language={props.language}
                 />
-                <Show when={healthy() && !collapsed()}>
+                <Show when={healthy() && hasProjects() && !collapsed()}>
                   <div class="mx-3 h-px bg-v2-border-border-base" />
-                  <HomeProjectList {...props} server={item} projects={serverCtx.projects.list()} />
+                  <HomeProjectList {...props} server={item} projects={projects()} />
                 </Show>
               </div>
             )
@@ -635,6 +638,7 @@ function HomeServerRow(props: {
   server: ServerConnection.Any
   selected: boolean
   healthy: boolean
+  hasProjects: boolean
   collapsed: boolean
   health: ServerHealth | undefined
   controller: ReturnType<typeof useServerManagementController>
@@ -654,7 +658,7 @@ function HomeServerRow(props: {
         disabled={!props.healthy}
         onClick={() => props.focusServer(props.server)}
       >
-        <Show when={props.healthy}>
+        <Show when={props.healthy && props.hasProjects}>
           <span
             data-action="home-server-collapse"
             class="inline-flex -ml-0.5 -mr-1.5 size-5 shrink-0 items-center justify-center rounded-[4px] text-v2-icon-icon-muted hover:bg-v2-overlay-simple-overlay-hover"
