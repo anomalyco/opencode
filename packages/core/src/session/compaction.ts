@@ -1,11 +1,16 @@
 export * as SessionCompaction from "./compaction"
 
-import { LLM, LLMError, LLMEvent, Message, type LLMRequest, type Model } from "@opencode-ai/llm"
-import { DateTime, Effect, Stream } from "effect"
+import { LLM, LLMClient, LLMError, LLMEvent, Message, type LLMRequest, type Model } from "@opencode-ai/llm"
+import { Context, DateTime, Effect, Layer, Stream } from "effect"
 import type { Config } from "../config"
+import { Config as ConfigV2 } from "../config"
 import type { EventV2 } from "../event"
+import { EventV2 as EventV2Service } from "../event"
+import { makeLocationNode } from "../effect/app-node"
+import { llmClient } from "../effect/app-node-platform"
 import { SessionEvent } from "./event"
 import { SessionMessage } from "./message"
+import { SessionRunnerModel } from "./runner/model"
 import { SessionSchema } from "./schema"
 import { Token } from "../util/token"
 
@@ -50,11 +55,6 @@ Rules:
 - Preserve exact file paths, commands, error strings, and identifiers when known.
 - Do not mention the summary process or that context was compacted.`
 
-type Entry = {
-  readonly seq: number
-  readonly message: SessionMessage.Message
-}
-
 type Settings = {
   readonly auto: boolean
   readonly buffer: number
@@ -71,10 +71,25 @@ type Dependencies = {
 
 type Input = {
   readonly sessionID: SessionSchema.ID
-  readonly entries: readonly Entry[]
+  readonly messages: readonly SessionMessage.Message[]
   readonly model: Model
   readonly request: LLMRequest
 }
+
+type ManualInput = {
+  readonly sessionID: SessionSchema.ID
+  readonly messages: readonly SessionMessage.Message[]
+  readonly model: Model
+}
+
+export interface Interface {
+  readonly manual: (input: {
+    readonly session: SessionSchema.Info
+    readonly messages: readonly SessionMessage.Message[]
+  }) => Effect.Effect<boolean, SessionRunnerModel.Error>
+}
+
+export class Service extends Context.Service<Service, Interface>()("@opencode/v2/SessionCompaction") {}
 
 const estimate = (value: unknown) => Token.estimate(JSON.stringify(value))
 
@@ -131,14 +146,14 @@ const settings = (documents: readonly Config.Entry[]) => {
 }
 
 const select = (
-  entries: readonly Entry[],
+  messages: readonly SessionMessage.Message[],
   tokens: number,
 ): { readonly head: string; readonly recent: string } | undefined => {
-  const conversation = entries
-    .filter((entry) => entry.message.type !== "compaction")
-    .map((entry) => serialize(entry.message))
+  const conversation = messages
+    .filter((message) => message.type !== "compaction")
+    .map(serialize)
     .filter(Boolean)
-  if (conversation.length === 0) return
+  if (conversation.length === 0) return undefined
   let total = 0
   let split = conversation.length
   let splitPrefix = ""
@@ -174,17 +189,19 @@ export const buildPrompt = (input: { readonly previousSummary?: string; readonly
 
 export const make = (dependencies: Dependencies) => {
   const config = settings(dependencies.config)
-  const compactAfterOverflow = Effect.fn("SessionCompaction.compactAfterOverflow")(function* (input: Input) {
+  const compact = Effect.fn("SessionCompaction.compact")(function* (input: {
+    readonly sessionID: SessionSchema.ID
+    readonly model: Model
+    readonly reason: SessionMessage.Compaction["reason"]
+    readonly previousSummary?: string
+    readonly context: readonly string[]
+    readonly recent: string
+    readonly output?: number
+  }) {
     const context = input.model.route.defaults.limits?.context
     if (context === undefined || context <= 0) return false
-    const output = input.request.generation?.maxTokens ?? input.model.route.defaults.limits?.output ?? 0
-    const selected = select(input.entries, config.tokens)
-    const previousSummary = input.entries.find((entry) => entry.message.type === "compaction")?.message
-    if (!selected || (selected.head.length === 0 && previousSummary?.type !== "compaction")) return false
-    const summaryPrompt = buildPrompt({
-      previousSummary: previousSummary?.type === "compaction" ? previousSummary.summary : undefined,
-      context: [previousSummary?.type === "compaction" ? previousSummary.recent : "", selected.head].filter(Boolean),
-    })
+    const output = input.output ?? input.model.route.defaults.limits?.output ?? 0
+    const summaryPrompt = buildPrompt({ previousSummary: input.previousSummary, context: input.context })
     const summaryOutput = Math.min(output || SUMMARY_OUTPUT_TOKENS, SUMMARY_OUTPUT_TOKENS)
     if (Token.estimate(summaryPrompt) > context - summaryOutput) return false
     const messageID = SessionMessage.ID.create()
@@ -192,7 +209,7 @@ export const make = (dependencies: Dependencies) => {
       sessionID: input.sessionID,
       messageID,
       timestamp: yield* DateTime.now,
-      reason: "auto",
+      reason: input.reason,
     })
 
     const chunks: string[] = []
@@ -221,11 +238,50 @@ export const make = (dependencies: Dependencies) => {
       sessionID: input.sessionID,
       messageID,
       timestamp: yield* DateTime.now,
-      reason: "auto",
+      reason: input.reason,
       text: summary,
-      recent: selected.recent,
+      recent: input.recent,
     })
     return true
+  })
+  const compactAfterOverflow = Effect.fn("SessionCompaction.compactAfterOverflow")(function* (input: Input) {
+    return yield* compactSelected({
+      sessionID: input.sessionID,
+      messages: input.messages,
+      model: input.model,
+      reason: "auto",
+      force: false,
+      output: input.request.generation?.maxTokens ?? input.model.route.defaults.limits?.output ?? 0,
+    })
+  })
+  const compactSelected = Effect.fn("SessionCompaction.compactSelected")(function* (
+    input: ManualInput & {
+      readonly reason: SessionMessage.Compaction["reason"]
+      readonly force: boolean
+      readonly output?: number
+    },
+  ) {
+    const selected = select(input.messages, config.tokens)
+    if (!selected) return false
+    const previousSummary = input.messages.find((message) => message.type === "compaction")
+    const hasHead = selected.head.length > 0
+    if (!hasHead && previousSummary?.type !== "compaction" && !input.force) return false
+    const forcedShortContext = input.force && !hasHead
+    const previousRecent = previousSummary?.type === "compaction" ? previousSummary.recent : ""
+    return yield* compact({
+      sessionID: input.sessionID,
+      model: input.model,
+      reason: input.reason,
+      previousSummary: previousSummary?.type === "compaction" ? previousSummary.summary : undefined,
+      context: (forcedShortContext ? [previousRecent, selected.recent] : [previousRecent, selected.head]).filter(
+        Boolean,
+      ),
+      recent: forcedShortContext ? "" : selected.recent,
+      output: input.output,
+    })
+  })
+  const compactManual = Effect.fn("SessionCompaction.compactManual")(function* (input: ManualInput) {
+    return yield* compactSelected({ ...input, reason: "manual", force: true })
   })
   const compactIfNeeded = Effect.fn("SessionCompaction.compactIfNeeded")(function* (input: Input) {
     if (!config.auto) return false
@@ -242,5 +298,33 @@ export const make = (dependencies: Dependencies) => {
   return {
     compactIfNeeded,
     compactAfterOverflow,
+    compactManual,
   }
 }
+
+export const layer = Layer.effect(
+  Service,
+  Effect.gen(function* () {
+    const events = yield* EventV2Service.Service
+    const llm = yield* LLMClient.Service
+    const config = yield* ConfigV2.Service
+    const models = yield* SessionRunnerModel.Service
+
+    return Service.of({
+      manual: Effect.fn("SessionCompaction.manual")(function* (input) {
+        const compaction = make({ events, llm, config: yield* config.entries() })
+        return yield* compaction.compactManual({
+          sessionID: input.session.id,
+          messages: input.messages,
+          model: yield* models.resolve(input.session),
+        })
+      }),
+    })
+  }),
+)
+
+export const node = makeLocationNode({
+  service: Service,
+  layer,
+  deps: [EventV2Service.node, llmClient, ConfigV2.node, SessionRunnerModel.node],
+})

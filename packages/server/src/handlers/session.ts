@@ -208,6 +208,25 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                 }),
               ),
             ),
+            Effect.catchTag(
+              "Session.BusyError",
+              (error) =>
+                new SessionBusyError({
+                  sessionID: error.sessionID,
+                  message: `Session is busy: ${error.sessionID}`,
+                }),
+            ),
+            Effect.catchTag("Session.MessageDecodeError", (error) => {
+              const ref = `err_${crypto.randomUUID().slice(0, 8)}`
+              return Effect.logError("failed to decode session message during compaction").pipe(
+                Effect.annotateLogs({ ref, sessionID: error.sessionID, messageID: error.messageID }),
+                Effect.andThen(
+                  Effect.fail(
+                    new UnknownError({ message: "Unexpected server error. Check server logs for details.", ref }),
+                  ),
+                ),
+              )
+            }),
           )
           return HttpApiSchema.NoContent.make()
         }),

@@ -2729,17 +2729,17 @@ export type ServiceUnavailableError = {
   service?: string
 }
 
+export type UnknownError1 = {
+  _tag: "UnknownError"
+  message: string
+  ref?: string
+}
+
 export type MessageNotFoundError = {
   _tag: "MessageNotFoundError"
   sessionID: string
   messageID: string
   message: string
-}
-
-export type UnknownError1 = {
-  _tag: "UnknownError"
-  message: string
-  ref?: string
 }
 
 export type SessionDurableEvent =
@@ -11708,6 +11708,14 @@ export type V2SessionCompactErrors = {
    * SessionNotFoundError
    */
   404: SessionNotFoundError
+  /**
+   * SessionBusyError
+   */
+  409: SessionBusyError
+  /**
+   * UnknownError
+   */
+  500: UnknownError1
   /**
    * ServiceUnavailableError
    */

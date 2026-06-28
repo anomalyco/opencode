@@ -243,7 +243,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
       HttpApiEndpoint.post("session.compact", "/api/session/:sessionID/compact", {
         params: { sessionID: Session.ID },
         success: HttpApiSchema.NoContent,
-        error: [SessionNotFoundError, ServiceUnavailableError],
+        error: [SessionNotFoundError, SessionBusyError, ServiceUnavailableError, UnknownError],
       })
         .middleware(sessionLocationMiddleware)
         .annotateMerge(

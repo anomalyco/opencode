@@ -207,7 +207,7 @@ export const layer = Layer.effect(
         tools: toolMaterialization?.definitions ?? [],
         toolChoice: isLastStep ? "none" : undefined,
       })
-      if (yield* compaction.compactIfNeeded({ sessionID: session.id, entries, model, request }))
+      if (yield* compaction.compactIfNeeded({ sessionID: session.id, messages: context, model, request }))
         return yield* Effect.die(continueAfterCompaction(currentStep))
       const startSnapshot = yield* snapshots.capture()
       const publisher = createLLMEventPublisher(events, {
@@ -220,9 +220,9 @@ export const layer = Layer.effect(
         },
         snapshot: startSnapshot,
       })
-      const withPublication = Semaphore.makeUnsafe(1).withPermit
+      const publication = Semaphore.makeUnsafe(1)
       const publish = (event: LLMEvent, outputPaths: ReadonlyArray<string> = []) =>
-        withPublication(publisher.publish(event, outputPaths))
+        publication.withPermit(publisher.publish(event, outputPaths))
       let overflowFailure: ProviderErrorEvent | undefined
       const providerStream = llm.stream(request).pipe(
         Stream.runForEach((event) =>
@@ -237,7 +237,9 @@ export const layer = Layer.effect(
             yield* publish(event)
             if (event.type !== "tool-call" || event.providerExecuted) return
             if (!toolMaterialization) {
-              yield* withPublication(publisher.failUnsettledTools("Tools are disabled after the maximum agent steps"))
+              yield* publication.withPermit(
+                publisher.failUnsettledTools("Tools are disabled after the maximum agent steps"),
+              )
               return
             }
             needsContinuation = true
@@ -266,7 +268,7 @@ export const layer = Layer.effect(
             ).pipe(FiberSet.run(toolFibers))
           }),
         ),
-        Effect.ensuring(withPublication(publisher.flush())),
+        Effect.ensuring(publication.withPermit(publisher.flush())),
       )
 
       return yield* Effect.uninterruptibleMask((restore) =>
@@ -278,14 +280,14 @@ export const layer = Layer.effect(
             recoverOverflow &&
             !publisher.hasAssistantStarted() &&
             isContextOverflowFailure(overflowFailure ?? failure) &&
-            (yield* restore(recoverOverflow({ sessionID: session.id, entries, model, request })))
+            (yield* restore(recoverOverflow({ sessionID: session.id, messages: context, model, request })))
           )
             return yield* Effect.die(continueAfterOverflowCompaction(currentStep))
           if (overflowFailure) yield* publish(overflowFailure)
           const llmFailure = failure instanceof LLMError ? failure : undefined
           if (llmFailure && !publisher.hasProviderError()) {
-            yield* withPublication(publisher.failUnsettledTools("Provider did not return a tool result", true))
-            yield* withPublication(publisher.failAssistant(llmFailure.reason.message))
+            yield* publication.withPermit(publisher.failUnsettledTools("Provider did not return a tool result", true))
+            yield* publication.withPermit(publisher.failAssistant(llmFailure.reason.message))
           }
           if (stream._tag === "Failure" && Cause.hasInterrupts(stream.cause)) yield* FiberSet.clear(toolFibers)
           const settled = yield* restore(awaitToolFibers(toolFibers)).pipe(Effect.exit)
@@ -293,19 +295,19 @@ export const layer = Layer.effect(
           const toolsInterrupted = settled._tag === "Failure" && Cause.hasInterrupts(settled.cause)
           if (settled._tag === "Failure" && isQuestionRejected(settled.cause)) {
             yield* FiberSet.clear(toolFibers)
-            yield* withPublication(publisher.failUnsettledTools("Tool execution interrupted"))
-            yield* withPublication(publisher.failAssistant("Provider turn interrupted"))
+            yield* publication.withPermit(publisher.failUnsettledTools("Tool execution interrupted"))
+            yield* publication.withPermit(publisher.failAssistant("Provider turn interrupted"))
             return yield* Effect.interrupt
           }
           if (streamInterrupted || toolsInterrupted) {
             yield* FiberSet.clear(toolFibers)
-            yield* withPublication(publisher.failUnsettledTools("Tool execution interrupted"))
-            yield* withPublication(publisher.failAssistant("Provider turn interrupted"))
+            yield* publication.withPermit(publisher.failUnsettledTools("Tool execution interrupted"))
+            yield* publication.withPermit(publisher.failAssistant("Provider turn interrupted"))
           }
           if (settled._tag === "Failure" && !Cause.hasInterrupts(settled.cause)) {
             const failure = Cause.squash(settled.cause)
             const message = failure instanceof Error ? failure.message : String(failure)
-            yield* withPublication(publisher.failUnsettledTools(`Tool execution failed: ${message}`))
+            yield* publication.withPermit(publisher.failUnsettledTools(`Tool execution failed: ${message}`))
           }
           const stepSettlement = publisher.stepSettlement()
           if (stepSettlement && !streamInterrupted && !toolsInterrupted && !publisher.hasProviderError()) {
@@ -316,7 +318,7 @@ export const layer = Layer.effect(
                     .files({ from: startSnapshot, to: endSnapshot })
                     .pipe(Effect.catch(() => Effect.succeed(undefined)))
                 : undefined
-            yield* withPublication(
+            yield* publication.withPermit(
               events.publish(SessionEvent.Step.Ended, {
                 sessionID: session.id,
                 timestamp: yield* DateTime.now,
@@ -330,9 +332,9 @@ export const layer = Layer.effect(
             )
           }
           if (publisher.hasProviderError())
-            yield* withPublication(publisher.failUnsettledTools("Tool execution interrupted"))
+            yield* publication.withPermit(publisher.failUnsettledTools("Tool execution interrupted"))
           if (stream._tag === "Success" && !publisher.hasProviderError())
-            yield* withPublication(publisher.failUnsettledTools("Provider did not return a tool result", true))
+            yield* publication.withPermit(publisher.failUnsettledTools("Provider did not return a tool result", true))
           if (stream._tag === "Failure") return yield* Effect.failCause(stream.cause)
           if (settled._tag === "Failure" && Cause.hasInterrupts(settled.cause))
             return yield* Effect.failCause(settled.cause)
