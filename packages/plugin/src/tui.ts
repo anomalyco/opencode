@@ -223,6 +223,13 @@ export type TuiPromptProps = {
   }
 }
 
+export type TuiSidebarSectionProps = {
+  title: string
+  collapsible?: boolean
+  collapsedSummary?: JSX.Element
+  children: JSX.Element
+}
+
 export type TuiToast = {
   variant?: "info" | "success" | "warning" | "error"
   title?: string
@@ -602,6 +609,7 @@ export type TuiPluginApi = {
     DialogConfirm: (props: TuiDialogConfirmProps) => JSX.Element
     DialogPrompt: (props: TuiDialogPromptProps) => JSX.Element
     DialogSelect: <Value = unknown>(props: TuiDialogSelectProps<Value>) => JSX.Element
+    SidebarSection: (props: TuiSidebarSectionProps) => JSX.Element
     Slot: <Name extends string>(props: TuiSlotProps<Name>) => JSX.Element | null
     Prompt: (props: TuiPromptProps) => JSX.Element
     toast: (input: TuiToast) => void

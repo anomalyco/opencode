@@ -13,6 +13,7 @@ import { DialogConfirm } from "../ui/dialog-confirm"
 import { DialogPrompt } from "../ui/dialog-prompt"
 import { DialogSelect, type DialogSelectOption as SelectOption } from "../ui/dialog-select"
 import { Prompt } from "../component/prompt"
+import { SidebarSection } from "../component/sidebar-section"
 import type { useToast } from "../ui/toast"
 import * as Keymap from "../keymap"
 import { createCommandShim } from "./command-shim"
@@ -235,6 +236,9 @@ export function createTuiApiAdapters(input: Input): Omit<TuiPluginApi, "lifecycl
             current={props.current}
           />
         )
+      },
+      SidebarSection(props) {
+        return <SidebarSection {...props} />
       },
       Slot<Name extends string>(props: TuiSlotProps<Name>) {
         return <input.Slot {...props} />
