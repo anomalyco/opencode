@@ -708,6 +708,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
 
             return models
           } catch (e) {
+            console.error("gitlab: model discovery failed:", e instanceof Error ? e.message : String(e))
             return {}
           }
         },
@@ -1563,15 +1564,15 @@ export const layer = Layer.effect(
         const gitlab = ProviderV2.ID.make("gitlab")
         if (discoveryLoaders[gitlab] && providers[gitlab] && isProviderAllowed(gitlab)) {
           yield* Effect.promise(async () => {
-            try {
               const discovered = await discoveryLoaders[gitlab]()
               for (const [modelID, model] of Object.entries(discovered)) {
                 if (!providers[gitlab].models[modelID]) {
                   providers[gitlab].models[modelID] = model
                 }
               }
-            } catch (e) {}
-          })
+            }).pipe(
+              Effect.catchAll((error) => Effect.logWarning("gitlab model discovery failed", { error })),
+            )
         }
 
         for (const [id, provider] of Object.entries(providers)) {
