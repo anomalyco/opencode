@@ -59,7 +59,7 @@ function hasWindowsDriveRoot(value: string) {
 }
 
 function hasWindowsUncRoot(value: string) {
-  return /^\\\\/.test(value)
+  return /^\\\\/.test(value) || /^\/\/(?:[^/]|$)/.test(value)
 }
 
 function foreignPathError(raw: string) {
