@@ -160,6 +160,10 @@ export const DiffInput = Schema.Struct({
 })
 export type DiffInput = Schema.Schema.Type<typeof DiffInput>
 
-export const node = LayerNode.make(layer, [Session.node, Snapshot.node, EventV2Bridge.node, Config.node])
+export const node = LayerNode.make({
+  service: Service,
+  layer: layer,
+  deps: [Session.node, Snapshot.node, EventV2Bridge.node, Config.node],
+})
 
 export * as SessionSummary from "./summary"

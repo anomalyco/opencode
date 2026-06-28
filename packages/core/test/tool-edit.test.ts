@@ -125,11 +125,16 @@ describe("EditTool", () => {
                   value: "Edited file successfully: hello.txt\nReplacements: 1\n```diff\n-before\n+after\n```",
                 })
                 expect(settled.output?.structured).toEqual({
-                  operation: "write",
-                  target: yield* Effect.promise(() => fs.realpath(target)),
-                  resource: "hello.txt",
-                  existed: true,
                   replacements: 1,
+                  files: [
+                    {
+                      file: "hello.txt",
+                      status: "modified",
+                      additions: 1,
+                      deletions: 1,
+                      patch: expect.stringContaining("-before\n+after"),
+                    },
+                  ],
                 })
                 expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("after\nrest\n")
                 expect(assertions).toMatchObject([{ sessionID, action: "edit", resources: ["hello.txt"], save: ["*"] }])
@@ -404,7 +409,7 @@ test("keeps the locked edit schema, semantics docstring, and deferred TODOs visi
 
   expect(Object.keys(schema.properties ?? {}).sort()).toEqual(["newString", "oldString", "path", "replaceAll"])
   expect(source).toContain(
-    "Named project references\n * are read-oriented and deliberately are not accepted by mutation tools.",
+    "absolute external paths retain mutation capability through a separate\n * external_directory approval before edit approval.",
   )
   for (const todo of [
     "Port V1 fuzzy correction strategies only after exact-edit behavior is established: line-trimmed matching, block-anchor fallback, indentation correction, and similarity-threshold review.",

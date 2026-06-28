@@ -2,7 +2,7 @@ import { For, Show, createMemo, onCleanup, onMount, type Component } from "solid
 import { createStore } from "solid-js/store"
 import { useMutation } from "@tanstack/solid-query"
 import { Button } from "@opencode-ai/ui/button"
-import { DockPrompt } from "@opencode-ai/ui/dock-prompt"
+import { DockPrompt } from "@opencode-ai/session-ui/dock-prompt"
 import { Icon } from "@opencode-ai/ui/icon"
 import { showToast } from "@/utils/toast"
 import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
@@ -432,21 +432,23 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
       header={
         <>
           <div data-slot="question-header-title">{summary()}</div>
-          <div data-slot="question-progress">
-            <For each={questions()}>
-              {(_, i) => (
-                <button
-                  type="button"
-                  data-slot="question-progress-segment"
-                  data-active={i() === store.tab}
-                  data-answered={answered(i())}
-                  disabled={sending()}
-                  onClick={() => jump(i())}
-                  aria-label={`${language.t("ui.tool.questions")} ${i() + 1}`}
-                />
-              )}
-            </For>
-          </div>
+          <Show when={total() > 1}>
+            <div data-slot="question-progress">
+              <For each={questions()}>
+                {(_, i) => (
+                  <button
+                    type="button"
+                    data-slot="question-progress-segment"
+                    data-active={i() === store.tab}
+                    data-answered={answered(i())}
+                    disabled={sending()}
+                    onClick={() => jump(i())}
+                    aria-label={`${language.t("ui.tool.questions")} ${i() + 1}`}
+                  />
+                )}
+              </For>
+            </div>
+          </Show>
         </>
       }
       footer={
