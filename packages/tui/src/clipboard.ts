@@ -71,7 +71,7 @@ export async function read() {
     // This must come before the clipboardy fallback because clipboardy
     // uses xsel on Linux, which is not available on Wayland systems.
     if (process.env.WAYLAND_DISPLAY) {
-      const waylandText = await command("wl-paste", ["-n", "--no-newline"]).catch(() => Buffer.alloc(0))
+      const waylandText = await command("wl-paste", ["-n"]).catch(() => Buffer.alloc(0))
       if (waylandText.length) return { data: waylandText.toString(), mime: "text/plain" }
     }
   }
