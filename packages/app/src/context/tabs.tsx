@@ -163,27 +163,29 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       },
       newDraft(draft: Omit<DraftTab, "type" | "draftID">, prompt?: string) {
         const draftID = uuid()
-        setStore(
-          produce((tabs) => {
-            tabs.push({ type: "draft", draftID, ...draft })
-          }),
-        )
-        navigate(prompt ? `${draftHref(draftID)}&prompt=${encodeURIComponent(prompt)}` : draftHref(draftID))
+        void startTransition(() => {
+          setStore(
+            produce((tabs) => {
+              tabs.push({ type: "draft", draftID, ...draft })
+            }),
+          )
+          navigate(prompt ? `${draftHref(draftID)}&prompt=${encodeURIComponent(prompt)}` : draftHref(draftID))
+        })
       },
       updateDraft(draftID: string, draft: Partial<Omit<DraftTab, "type" | "draftID">>) {
-        setStore(
-          (tab) => tab.type === "draft" && tab.draftID === draftID,
-          produce((tab) => Object.assign(tab, draft)),
-        )
+        void startTransition(() => {
+          setStore(
+            (tab) => tab.type === "draft" && tab.draftID === draftID,
+            produce((tab) => Object.assign(tab, draft)),
+          )
+        })
       },
       promoteDraft(draftID: string, session: Omit<SessionTab, "type">) {
-        // We're viewing this draft when /new-session?draftId=… points at it. Promoting
-        // replaces the draft tab with a session tab, so the draft route would stop resolving
-        // and fall back home. Navigate to the new session first so we leave /new-session
-        // before the draft is removed from the store.
+        // Keep the replacement and navigation atomic so /new-session never renders
+        // after its backing draft tab has been removed from the store.
         const active = location.pathname === "/new-session" && location.query.draftId === draftID
         const next = { type: "session" as const, ...session }
-        startTransition(() => {
+        void startTransition(() => {
           setStore(
             produce((tabs) => {
               const index = tabs.findIndex((tab) => tab.type === "draft" && tab.draftID === draftID)

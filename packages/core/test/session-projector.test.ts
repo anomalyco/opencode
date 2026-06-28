@@ -1,7 +1,10 @@
 import { describe, expect } from "bun:test"
-import { DateTime, Effect, Layer, Schema } from "effect"
+import { DateTime, Effect, Schema } from "effect"
 import { asc, eq } from "drizzle-orm"
 import { Database } from "@opencode-ai/core/database/database"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { makeGlobalNode } from "@opencode-ai/core/effect/app-node"
 import { EventV2 } from "@opencode-ai/core/event"
 import { EventTable } from "@opencode-ai/core/event/sql"
 import { ModelV2 } from "@opencode-ai/core/model"
@@ -10,7 +13,6 @@ import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
-import { LocationServiceMap } from "@opencode-ai/core/location-layer"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { Prompt } from "@opencode-ai/core/session/prompt"
@@ -18,12 +20,18 @@ import { SessionMessageUpdater } from "@opencode-ai/core/session/message-updater
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionInput } from "@opencode-ai/core/session/input"
-import { SessionStore } from "@opencode-ai/core/session/store"
 import { SessionInputTable, SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { testEffect } from "./lib/effect"
 import { Snapshot } from "@opencode-ai/core/snapshot"
 
-const it = testEffect(Layer.mergeAll(Database.defaultLayer, EventV2.defaultLayer, SessionProjector.defaultLayer))
+const it = testEffect(AppNodeBuilder.build(LayerNode.group([Database.node, EventV2.node, SessionProjector.node])))
+const sessionsLayer = AppNodeBuilder.build(
+  LayerNode.bind(
+    SessionV2.node,
+    SessionExecution.node,
+    makeGlobalNode({ service: SessionExecution.Service, layer: SessionExecution.noopLayer, deps: [] }),
+  ),
+)
 const sessionID = SessionV2.ID.make("ses_projector_test")
 const created = DateTime.makeUnsafe(0)
 const model = { id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") }
@@ -161,18 +169,7 @@ describe("SessionProjector", () => {
       expect(
         (yield* sessions.context(sessionID)).map((message) => (message.type === "user" ? message.text : message.type)),
       ).toEqual(["first", "second"])
-    }).pipe(
-      Effect.provide(
-        SessionV2.layer.pipe(
-          Layer.provide(LocationServiceMap.layer),
-          Layer.provide(EventV2.defaultLayer),
-          Layer.provide(Database.defaultLayer),
-          Layer.provide(Project.defaultLayer),
-          Layer.provide(SessionStore.defaultLayer),
-          Layer.provide(SessionExecution.noopLayer),
-        ),
-      ),
-    ),
+    }).pipe(Effect.provide(sessionsLayer)),
   )
 
   it.effect("marks an inbox row promoted with the Prompted event sequence", () =>

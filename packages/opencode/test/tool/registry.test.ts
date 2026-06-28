@@ -54,11 +54,17 @@ const replacements = [
   LayerNode.replace(RuntimeFlags.defaultLayer, RuntimeFlags.layer()),
 ]
 
-const it = testEffect(LayerNode.buildLayer(root, { replacements }))
+const it = testEffect(LayerNode.compile(root, new Map(replacements.map((item) => [item.source, item.replacement]))))
 const withBrokenPlugin = testEffect(
-  LayerNode.buildLayer(root, {
-    replacements: [...replacements, LayerNode.replace(Plugin.layer, brokenPluginLayer)],
-  }),
+  LayerNode.compile(
+    root,
+    new Map(
+      [...replacements, LayerNode.replace(Plugin.layer, brokenPluginLayer)].map((item) => [
+        item.source,
+        item.replacement,
+      ]),
+    ),
+  ),
 )
 
 afterEach(async () => {

@@ -215,6 +215,16 @@ export async function handler(
         body: reqBody,
       })
 
+      if (providerInfo.id.startsWith("console.")) {
+        const resEndpointId = res.headers.get("x-opencode-endpoint-id")
+        const resEndpointModelId = res.headers.get("x-opencode-upstream-model-id")
+        if (resEndpointId && resEndpointModelId)
+          logger.metric({
+            provider: resEndpointId,
+            "provider.model": resEndpointModelId,
+          })
+      }
+
       if (res.status !== 200) {
         logger.metric({
           "llm.error.code": res.status,

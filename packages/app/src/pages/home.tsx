@@ -68,6 +68,7 @@ import { archiveHomeSession } from "./home-session-archive"
 import { showToast } from "@/utils/toast"
 
 const HOME_SESSION_LIMIT = 64
+const SHOW_HOME_SESSION_ARCHIVE = false
 const HOME_ROW_LAYOUT =
   "flex min-w-0 w-full shrink-0 cursor-default items-center rounded-[6px] bg-transparent text-left transition-[background-color,color,box-shadow] duration-[120ms] ease-in-out focus-visible:outline-none"
 const HOME_ROW_BASE = `${HOME_ROW_LAYOUT} border-0`
@@ -341,15 +342,15 @@ export function NewHome() {
   }
 
   function unseenCount(conn: ServerConnection.Any, project: LocalProject) {
-    if (ServerConnection.key(conn) !== server.key) return 0
-    return directories(project).reduce((total, directory) => total + notification.project.unseenCount(directory), 0)
+    const state = notification.ensureServerState(ServerConnection.key(conn))
+    return directories(project).reduce((total, directory) => total + state.project.unseenCount(directory), 0)
   }
 
   function clearNotifications(conn: ServerConnection.Any, project: LocalProject) {
-    if (ServerConnection.key(conn) !== server.key) return
+    const state = notification.ensureServerState(ServerConnection.key(conn))
     directories(project)
-      .filter((directory) => notification.project.unseenCount(directory) > 0)
-      .forEach((directory) => notification.project.markViewed(directory))
+      .filter((directory) => state.project.unseenCount(directory) > 0)
+      .forEach((directory) => state.project.markViewed(directory))
   }
 
   function openSession(session: Session) {
@@ -407,7 +408,7 @@ export function NewHome() {
 
   return (
     <div class="rounded-[10px] shadow-[var(--v2-elevation-raised)] m-2 min-h-0 lg:overflow-hidden bg-v2-background-bg-base self-stretch flex-1">
-      <div class="mx-auto grid h-full w-full max-w-[1080px] grid-rows-[auto_minmax(0,1fr)_auto] gap-4 px-3 pb-3 lg:grid-cols-[280px_minmax(0,720px)] lg:grid-rows-1 lg:gap-8 lg:px-6 lg:pb-16">
+      <div class="mx-auto grid h-full w-full max-w-[1080px] grid-rows-[auto_minmax(0,1fr)_auto] gap-4 px-3 lg:grid-cols-[280px_minmax(0,720px)] lg:grid-rows-1 lg:gap-8 lg:px-6">
         <HomeProjectColumn
           projects={projects()}
           selected={selection()}
@@ -454,7 +455,7 @@ export function NewHome() {
             onClose={closeSearch}
             onSelect={selectSearchSession}
           />
-          <ScrollView class="mt-3 min-h-0 flex-1">
+          <ScrollView class="mt-3 -mr-3 min-h-0 flex-1">
             <Show
               when={!sessionLoad.isLoading}
               fallback={
@@ -467,7 +468,7 @@ export function NewHome() {
                 when={groups().length > 0}
                 fallback={<HomeSessionsEmpty onNewSession={newSessionProject() ? openNewSession : undefined} />}
               >
-                <div class="pt-3 flex flex-col gap-6">
+                <div class="flex flex-col gap-6 pt-3 pr-3 pb-16">
                   <For each={groups()}>
                     {(group, index) => (
                       <div class="flex min-w-0 flex-col gap-4">
@@ -964,7 +965,7 @@ function HomeSessionSearch(props: {
             style={{
               top: "-6px",
               left: "-6px",
-              width: "calc(100% + 14px)",
+              width: "calc(100% + 12px)",
             }}
           >
             <div class="flex flex-col pt-9">
@@ -1132,7 +1133,7 @@ function HomeSessionSearchResultRow(props: {
 function HomeSessionGroupHeader(props: { title: string; onNewSession?: () => void }) {
   const language = useLanguage()
   return (
-    <div class="flex h-7 min-w-0 items-center justify-between pl-[18px]">
+    <div class="flex h-7 min-w-0 items-center justify-between pl-3">
       <div class={HOME_SECTION_LABEL}>{props.title}</div>
       <Show when={props.onNewSession}>
         {(onNewSession) => (
@@ -1189,22 +1190,24 @@ function HomeSessionRow(props: {
           </span>
         </Show>
       </button>
-      <div class="hover-reveal absolute right-1.5 top-1/2 flex -translate-y-1/2 items-center gap-1 group-hover/session:opacity-100 focus-within:opacity-100">
-        <TooltipV2 class="flex shrink-0 items-center" placement="bottom" value={language.t("common.archive")}>
-          <IconButtonV2
-            data-action="home-session-archive"
-            variant="ghost-muted"
-            size="large"
-            icon={<IconV2 name="archive" />}
-            aria-label={language.t("common.archive")}
-            onClick={(event) => {
-              event.preventDefault()
-              event.stopPropagation()
-              void props.archiveSession(props.record.session)
-            }}
-          />
-        </TooltipV2>
-      </div>
+      <Show when={SHOW_HOME_SESSION_ARCHIVE}>
+        <div class="hover-reveal absolute right-1.5 top-1/2 flex -translate-y-1/2 items-center gap-1 group-hover/session:opacity-100 focus-within:opacity-100">
+          <TooltipV2 class="flex shrink-0 items-center" placement="bottom" value={language.t("common.archive")}>
+            <IconButtonV2
+              data-action="home-session-archive"
+              variant="ghost-muted"
+              size="large"
+              icon={<IconV2 name="archive" />}
+              aria-label={language.t("common.archive")}
+              onClick={(event) => {
+                event.preventDefault()
+                event.stopPropagation()
+                void props.archiveSession(props.record.session)
+              }}
+            />
+          </TooltipV2>
+        </div>
+      </Show>
     </div>
   )
 }

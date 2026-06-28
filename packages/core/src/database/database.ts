@@ -8,7 +8,7 @@ import { Flag } from "../flag/flag"
 import { isAbsolute, join } from "path"
 import { DatabaseMigration } from "./migration"
 import { InstallationChannel } from "../installation/version"
-import { LayerNode } from "../effect/layer-node"
+import { makeGlobalNode } from "../effect/app-node"
 
 const makeDatabase = EffectDrizzleSqlite.makeWithDefaults()
 type DatabaseShape = Effect.Success<typeof makeDatabase>
@@ -60,4 +60,4 @@ export const defaultLayer = Layer.unwrap(
   }),
 ).pipe(Layer.provide(Global.defaultLayer))
 
-export const node = LayerNode.make({ service: Service, layer: layerFromPath(path()), deps: [] })
+export const node = makeGlobalNode({ service: Service, layer: layerFromPath(path()), deps: [] })
