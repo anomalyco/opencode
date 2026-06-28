@@ -35,10 +35,29 @@ export function makeShellCommand(command: string, cwd: string): ChildProcess.Com
   // then `kill -0 ""` fails and an UNguarded watchdog would fall straight through to
   // `kill -- -$$` and reap the job the instant it starts. Only arm when the parent is
   // actually alive; otherwise just run the command (accept no orphan protection).
-  const guarded =
+  //
+  // The caller's `command` may be MULTI-LINE (a model arming `monitor` with a `while`
+  // loop, or a `python3 -c "..."` heredoc). Shell.args wraps whatever we pass as
+  // `eval ${JSON.stringify(...)}` inside `zsh -lc`/`bash -lc`; a real newline survives
+  // JSON.stringify as a literal `\n` escape, which inside the eval's double-quoted arg is
+  // backslash-n (NOT a newline) and eval re-parses it as an escaped `n` — fusing adjacent
+  // lines into garbage (e.g. `done` -> `don`) so the command dies instantly with a parse
+  // error (the "monitor exited the moment I armed a multi-line command" bug). Transport the
+  // command base64-encoded HERE (Node's toString("base64") is unwrapped -> a single line of
+  // [A-Za-z0-9+/=], which has no newline and no shell metacharacter, so it passes through
+  // the eval+JSON layer verbatim) and decode it in the child. Decode by PIPING into a fresh
+  // shell rather than `eval "$(...)"`: the outer eval's double-quoted arg would expand a
+  // `$(...)` (or `$`/backtick) BEFORE eval runs, re-injecting the raw newlines and corrupting
+  // them again — the pipe form has nothing for that pass to expand. The inner shell inherits
+  // this login shell's already-sourced env (PATH/aliases), so it needs no `-l`.
+  const payload =
     process.platform === "win32"
       ? command
-      : `if kill -0 "$OPENCODE_PARENT_PID" 2>/dev/null; then ( while kill -0 "$OPENCODE_PARENT_PID" 2>/dev/null; do sleep 2; done; kill -- -$$ 2>/dev/null ) </dev/null >/dev/null 2>&1 & fi; ${command}`
+      : `printf %s '${Buffer.from(command, "utf8").toString("base64")}' | base64 -d | ${shell}`
+  const guarded =
+    process.platform === "win32"
+      ? payload
+      : `if kill -0 "$OPENCODE_PARENT_PID" 2>/dev/null; then ( while kill -0 "$OPENCODE_PARENT_PID" 2>/dev/null; do sleep 2; done; kill -- -$$ 2>/dev/null ) </dev/null >/dev/null 2>&1 & fi; ${payload}`
   const args = Shell.args(shell, guarded, cwd)
   return ChildProcess.make(shell, args, {
     cwd,

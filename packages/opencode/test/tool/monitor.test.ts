@@ -137,6 +137,69 @@ describe("MonitorTool", () => {
     }),
   )
 
+  // Regression: a MULTI-LINE command must run intact. Shell.args wraps the command as
+  // `eval ${JSON.stringify(...)}` inside `zsh -lc`; before base64 transport a real newline
+  // survived as a literal `\n` escape that eval re-parsed as an escaped `n`, fusing lines
+  // (`done` -> `don`) so the command died with a parse error the instant it armed — the
+  // "monitor exits the moment I give it a while-loop / python -c heredoc" bug. This arms the
+  // exact failing shape (a while loop containing a multi-line `python3 -c "..."`) and asserts
+  // BOTH sentinels actually print. A corrupted command never emits them (only an exit note),
+  // so the wait below would time out instead.
+  it.instance("runs a multi-line command without newline corruption (base64 transport)", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed
+      const monitor = yield* runMonitor
+      const promptCalls: Array<{ text: string }> = []
+
+      const ops = {
+        prompt: (input: any) =>
+          Effect.sync(() => {
+            promptCalls.push(input.parts[0])
+          }),
+      }
+
+      const command = [
+        "while true; do",
+        '  echo "shell-sentinel"',
+        '  python3 -c "',
+        "import sys",
+        "print('py-sentinel')",
+        '"',
+        "  break",
+        "done",
+      ].join("\n")
+
+      const result = yield* monitor.execute(
+        { command, description: "multiline" },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps: ops },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+      expect(result.output).toContain("Monitor armed")
+
+      yield* Effect.gen(function* () {
+        while (
+          !(
+            promptCalls.some((p) => p.text.includes("shell-sentinel")) &&
+            promptCalls.some((p) => p.text.includes("py-sentinel"))
+          )
+        ) {
+          yield* Effect.sleep("100 millis")
+        }
+      }).pipe(Effect.timeout("8 seconds"))
+
+      expect(promptCalls.some((p) => p.text.includes("monitor_output") && p.text.includes("shell-sentinel"))).toBe(true)
+      expect(promptCalls.some((p) => p.text.includes("py-sentinel"))).toBe(true)
+    }),
+  )
+
   // Regression for the re-arm deadlock. The trigger is SELF-CANCEL: the model is
   // woken by monitor A's output and, from inside that wake turn, re-arms the
   // monitor — which cancels A's job. With forkIn(jobScope), A's emit fiber (the
