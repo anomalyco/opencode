@@ -323,13 +323,8 @@ function makeHttp(input?: PromptTestInput) {
   const root = LayerNode.group([promptRoot, testLLMServerNode])
   return LayerNode.compile(root, promptReplacements(input))
 }
-}
 
-function makeHttpNoLLMServer(input?: {
-  mcpInstructions?: MCP.ServerInstructions[]
-  processor?: "blocking" | "failing"
-  plugin?: Layer.Layer<Plugin.Service>
-}) {
+function makeHttpNoLLMServer(input?: PromptTestInput) {
   return makePrompt(input)
 }
 

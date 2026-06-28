@@ -236,6 +236,7 @@ const compactionTestNode = LayerNode.group([
   SessionCompaction.node,
   SessionNs.node,
   SessionProjector.node,
+  SessionStatus.node,
   Database.node,
   EventV2Bridge.node,
   CrossSpawnSpawner.node,
@@ -249,7 +250,14 @@ const env = AppNodeBuilder.build(compactionTestNode, [
 const it = testEffect(env)
 
 const compactionEnv = AppNodeBuilder.build(
-  LayerNode.group([SessionNs.node, SessionProjector.node, Database.node, EventV2Bridge.node, CrossSpawnSpawner.node]),
+  LayerNode.group([
+    SessionNs.node,
+    SessionProjector.node,
+    SessionStatus.node,
+    Database.node,
+    EventV2Bridge.node,
+    CrossSpawnSpawner.node,
+  ]),
 )
 const itCompaction = testEffect(compactionEnv)
 
