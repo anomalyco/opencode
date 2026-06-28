@@ -44,11 +44,13 @@ export const PromptPopover: Component<PromptPopoverProps> = (props) => {
         ref={(el) => {
           if (props.popover === "slash") props.setSlashPopoverRef(el)
         }}
-        class="absolute inset-x-0 -top-2 z-[70] -translate-y-full origin-bottom-left max-h-80 min-h-10
-                 overflow-auto no-scrollbar flex flex-col p-2 rounded-[10px]"
+        class="absolute inset-x-0 -top-2 -translate-y-full origin-bottom-left max-h-80 min-h-10
+                 overflow-auto no-scrollbar flex flex-col p-2"
         classList={{
-          "bg-v2-background-bg-base shadow-[var(--v2-elevation-raised)]": props.newLayoutDesigns,
-          "bg-surface-raised-stronger-non-alpha shadow-[var(--shadow-lg-border-base)]": !props.newLayoutDesigns,
+          "z-[70] rounded-[10px] bg-v2-background-bg-base shadow-[var(--v2-elevation-raised)]":
+            props.newLayoutDesigns,
+          "rounded-[12px] bg-surface-raised-stronger-non-alpha shadow-[var(--shadow-lg-border-base)]":
+            !props.newLayoutDesigns,
         }}
         onMouseDown={(e) => e.preventDefault()}
       >
@@ -177,8 +179,8 @@ export const PromptPopover: Component<PromptPopoverProps> = (props) => {
                     <button
                       data-slash-id={cmd.id}
                       classList={{
-                        "w-full flex items-center justify-between gap-4 scroll-my-2 px-2 py-1": true,
-                        "rounded-[4px]": props.newLayoutDesigns,
+                        "w-full flex items-center justify-between gap-4 px-2 py-1": true,
+                        "rounded-[4px] scroll-my-2": props.newLayoutDesigns,
                         "rounded-md": !props.newLayoutDesigns,
                         "bg-v2-overlay-simple-overlay-hover": props.newLayoutDesigns && props.slashActive === cmd.id,
                         "bg-surface-raised-base-hover": !props.newLayoutDesigns && props.slashActive === cmd.id,
