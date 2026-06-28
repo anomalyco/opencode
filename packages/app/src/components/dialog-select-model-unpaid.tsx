@@ -10,24 +10,27 @@ import { useLocal } from "@/context/local"
 import { popularProviders, useProviders } from "@/hooks/use-providers"
 import { ModelTooltip } from "./model-tooltip"
 import { useLanguage } from "@/context/language"
+import { decode64 } from "@/utils/base64"
 
 type ModelState = ReturnType<typeof useLocal>["model"]
 
 export const DialogSelectModelUnpaid: Component<{ model?: ModelState }> = (props) => {
-  const model = props.model ?? useLocal().model
+  const local = useLocal()
+  const model = props.model ?? local.model
   const dialog = useDialog()
-  const providers = useProviders()
+  const directory = () => decode64(local.slug())
+  const providers = useProviders(directory)
   const language = useLanguage()
 
   const connect = (provider: string) => {
     void import("./dialog-connect-provider").then((x) => {
-      dialog.show(() => <x.DialogConnectProvider provider={provider} />)
+      dialog.show(() => <x.DialogConnectProvider provider={provider} directory={directory} />)
     })
   }
 
   const all = () => {
     void import("./dialog-select-provider").then((x) => {
-      dialog.show(() => <x.DialogSelectProvider />)
+      dialog.show(() => <x.DialogSelectProvider directory={directory} />)
     })
   }
 

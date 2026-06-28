@@ -21,7 +21,7 @@ import { GeminiToolSchema } from "./utils/gemini-tool-schema"
 import { Lifecycle } from "./utils/lifecycle"
 
 const ADAPTER = "gemini"
-const IMAGE_MIMES = new Set<string>(ProviderShared.IMAGE_MIMES)
+const MEDIA_MIMES = new Set<string>(ProviderShared.MEDIA_MIMES)
 export const DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 
 // =============================================================================
@@ -182,7 +182,7 @@ const lowerToolConfig = (toolChoice: NonNullable<LLMRequest["toolChoice"]>) =>
 
 const lowerUserPart = Effect.fn("Gemini.lowerUserPart")(function* (part: TextPart | MediaPart) {
   if (part.type === "text") return { text: part.text }
-  const media = yield* ProviderShared.validateMedia("Gemini", part, IMAGE_MIMES)
+  const media = yield* ProviderShared.validateMedia("Gemini", part, MEDIA_MIMES)
   return { inlineData: { mimeType: media.mime, data: media.base64 } }
 })
 
@@ -275,7 +275,7 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
       })
       for (const item of content) {
         if (item.type === "text") continue
-        const media = yield* ProviderShared.validateToolFile("Gemini", item, IMAGE_MIMES)
+        const media = yield* ProviderShared.validateToolFile("Gemini", item, MEDIA_MIMES)
         parts.push({ inlineData: { mimeType: media.mime, data: media.base64 } })
       }
     }
@@ -407,21 +407,35 @@ const step = (state: ParserState, event: GeminiEvent) => {
     if ("thoughtSignature" in part && part.thoughtSignature && "thought" in part && part.thought)
       reasoningSignature = part.thoughtSignature
     if ("text" in part && part.text.length > 0) {
-      lifecycle = part.thought
-        ? Lifecycle.reasoningDelta(
-            lifecycle,
-            events,
-            "reasoning-0",
-            part.text,
-            part.thoughtSignature ? googleMetadata({ thoughtSignature: part.thoughtSignature }) : undefined,
-          )
-        : Lifecycle.textDelta(lifecycle, events, "text-0", part.text)
+      if (part.thought) {
+        lifecycle = Lifecycle.reasoningDelta(
+          lifecycle,
+          events,
+          "reasoning-0",
+          part.text,
+          part.thoughtSignature ? googleMetadata({ thoughtSignature: part.thoughtSignature }) : undefined,
+        )
+        continue
+      }
+      lifecycle = Lifecycle.reasoningEnd(
+        lifecycle,
+        events,
+        "reasoning-0",
+        reasoningSignature ? googleMetadata({ thoughtSignature: reasoningSignature }) : undefined,
+      )
+      lifecycle = Lifecycle.textDelta(lifecycle, events, "text-0", part.text)
       continue
     }
 
     if ("functionCall" in part) {
       const input = part.functionCall.args
       const id = `tool_${nextToolCallId++}`
+      lifecycle = Lifecycle.reasoningEnd(
+        lifecycle,
+        events,
+        "reasoning-0",
+        reasoningSignature ? googleMetadata({ thoughtSignature: reasoningSignature }) : undefined,
+      )
       lifecycle = Lifecycle.stepStart(lifecycle, events)
       events.push(
         LLMEvent.toolCall({

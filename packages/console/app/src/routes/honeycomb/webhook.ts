@@ -3,7 +3,7 @@ import { z } from "zod"
 import { Resource } from "@opencode-ai/console-resource"
 import { safeEqual } from "@opencode-ai/console-core/util/crypto.js"
 
-const DISCORD_ALERT_ROLE_ID = "1501447160175136838"
+const DISCORD_ALERT_ROLE_ID = "1511795723262365887"
 
 const basePayload = z.object({
   name: z.string().optional(),
