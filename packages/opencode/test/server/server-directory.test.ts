@@ -27,6 +27,7 @@ describe("ServerDirectory", () => {
     expectReason("C:\\Work\\Repo", "foreign", { kind: "posix" })
     expectReason("C:/Work/Repo", "foreign", { kind: "posix" })
     expectReason("\\\\server\\share\\repo", "foreign", { kind: "posix" })
+    expectReason("//server/share/repo", "foreign", { kind: "posix" })
   })
 
   test("keeps WSL mount paths server-native", () => {
