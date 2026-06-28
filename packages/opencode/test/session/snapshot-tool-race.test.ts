@@ -87,13 +87,16 @@ const root = LayerNode.group([
   LayerNode.make({ service: TestLLMServer, layer: TestLLMServer.layer, deps: [] }),
 ])
 const it = testEffect(
-  LayerNode.buildLayer(root, {
-    replacements: [
-      LayerNode.replace(MCP.layer, mcp),
-      LayerNode.replace(LSP.layer, lsp),
-      LayerNode.replace(RuntimeFlags.defaultLayer, RuntimeFlags.layer({ experimentalEventSystem: true })),
-    ],
-  }),
+  LayerNode.compile(
+    root,
+    new Map(
+      [
+        LayerNode.replace(MCP.layer, mcp),
+        LayerNode.replace(LSP.layer, lsp),
+        LayerNode.replace(RuntimeFlags.defaultLayer, RuntimeFlags.layer({ experimentalEventSystem: true })),
+      ].map((item) => [item.source, item.replacement]),
+    ),
+  ),
 )
 
 const providerCfg = (url: string) => ({

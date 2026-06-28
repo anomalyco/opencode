@@ -179,9 +179,9 @@ const replacements = [
   LayerNode.replace(SessionSummary.layer, summary),
   LayerNode.replace(RuntimeFlags.defaultLayer, RuntimeFlags.layer({ experimentalEventSystem: true })),
 ]
-const env = LayerNode.buildLayer(
+const env = LayerNode.compile(
   LayerNode.group([root, LayerNode.make({ service: TestLLMServer, layer: TestLLMServer.layer, deps: [] })]),
-  { replacements },
+  new Map(replacements.map((item) => [item.source, item.replacement])),
 )
 
 const it = testEffect(env)
@@ -206,9 +206,12 @@ const providerErrorLLM = Layer.succeed(
       ),
   }),
 )
-const providerErrorEnv = LayerNode.buildLayer(root, {
-  replacements: [...replacements, LayerNode.replace(LLM.layer, providerErrorLLM)],
-})
+const providerErrorEnv = LayerNode.compile(
+  root,
+  new Map(
+    [...replacements, LayerNode.replace(LLM.layer, providerErrorLLM)].map((item) => [item.source, item.replacement]),
+  ),
+)
 const itProviderError = testEffect(providerErrorEnv)
 
 const fragmentFailureLLM = Layer.succeed(
@@ -225,9 +228,12 @@ const fragmentFailureLLM = Layer.succeed(
       ),
   }),
 )
-const fragmentFailureEnv = LayerNode.buildLayer(root, {
-  replacements: [...replacements, LayerNode.replace(LLM.layer, fragmentFailureLLM)],
-})
+const fragmentFailureEnv = LayerNode.compile(
+  root,
+  new Map(
+    [...replacements, LayerNode.replace(LLM.layer, fragmentFailureLLM)].map((item) => [item.source, item.replacement]),
+  ),
+)
 const itFragmentFailure = testEffect(fragmentFailureEnv)
 
 const boot = Effect.fn("test.boot")(function* () {

@@ -1,5 +1,6 @@
 export * as SessionRunnerModel from "./model"
 
+import { makeLocationNode } from "../../effect/app-node"
 import { type Model } from "@opencode-ai/llm"
 import * as AnthropicMessages from "@opencode-ai/llm/protocols/anthropic-messages"
 import * as OpenAICompatibleChat from "@opencode-ai/llm/protocols/openai-compatible-chat"
@@ -132,7 +133,7 @@ export const fromCatalogModel = (
   credential?: Credential.Value,
 ): Effect.Effect<Model, UnsupportedApiError> => {
   const resolved =
-    credential?.metadata === undefined
+    credential?.type !== "key" || credential.metadata === undefined
       ? model
       : produce(model, (draft) => {
           Object.assign(draft.request.body, credential.metadata)
@@ -213,3 +214,5 @@ export const locationLayer = Layer.effect(
     })
   }),
 )
+
+export const node = makeLocationNode({ service: Service, layer: locationLayer, deps: [Catalog.node, Integration.node] })

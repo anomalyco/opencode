@@ -1,4 +1,4 @@
-import { Duration, Effect, Schema, Stream } from "effect"
+import { Duration, Effect, Schema, Semaphore, Stream } from "effect"
 import type { Scope } from "effect"
 import type { IntegrationOAuthMethodRegistration } from "@opencode-ai/plugin/v2/effect/integration"
 import { define } from "@opencode-ai/plugin/v2/effect/plugin"
@@ -79,6 +79,7 @@ export const OpencodePlugin = define<HttpClient.HttpClient | EventV2.Service | S
   effect: Effect.fn(function* (ctx) {
     const events = yield* EventV2.Service
     const http = yield* HttpClient.HttpClient
+    const loading = Semaphore.makeUnsafe(1)
     let connected = false
     let providers: typeof ConfigV1.Info.Type.provider | undefined
 
@@ -105,7 +106,7 @@ export const OpencodePlugin = define<HttpClient.HttpClient | EventV2.Service | S
       draft.method.update({ integrationID: "opencode", method: { type: "key", label: "API key (service account)" } })
     })
 
-    yield* load()
+    connected = (yield* ctx.integration.connection.active("opencode")) !== undefined
     yield* ctx.catalog.transform((catalog) => {
       for (const [providerID, item] of Object.entries(providers ?? {})) {
         catalog.provider.update(providerID, (provider) => {
@@ -176,11 +177,13 @@ export const OpencodePlugin = define<HttpClient.HttpClient | EventV2.Service | S
       }
     })
 
+    const refresh = () => loading.withPermit(load().pipe(Effect.andThen(ctx.catalog.reload())))
     yield* events.subscribe(Integration.Event.ConnectionUpdated).pipe(
       Stream.filter((event) => event.data.integrationID === Integration.ID.make("opencode")),
-      Stream.runForEach(() => load().pipe(Effect.andThen(ctx.catalog.reload()))),
+      Stream.runForEach(refresh),
       Effect.forkScoped({ startImmediately: true }),
     )
+    yield* refresh().pipe(Effect.forkScoped)
   }),
 })
 

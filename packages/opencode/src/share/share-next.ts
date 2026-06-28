@@ -1,5 +1,5 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { httpClient } from "@opencode-ai/core/effect/layer-node-platform"
+import { httpClient } from "@opencode-ai/core/effect/app-node-platform"
 import type * as SDK from "@opencode-ai/sdk/v2"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { Effect, Exit, Layer, Option, Schema, Scope, Context, Stream } from "effect"

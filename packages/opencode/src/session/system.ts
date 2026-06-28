@@ -18,7 +18,7 @@ import { Permission } from "@/permission"
 import { Skill } from "@/skill"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Location } from "@opencode-ai/core/location"
-import { LocationServiceMap } from "@opencode-ai/core/location-layer"
+import { LocationServiceMap, locationServiceMapLayer } from "@opencode-ai/core/location-services"
 import { Reference } from "@opencode-ai/core/reference"
 import { MCP } from "@/mcp"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
@@ -52,7 +52,7 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const skill = yield* Skill.Service
     const mcp = yield* MCP.Service
-    const locations = yield* LocationServiceMap
+    const locations = yield* LocationServiceMap.Service
 
     return Service.of({
       environment: Effect.fn("SystemPrompt.environment")(function* (model: Provider.Model) {
@@ -131,10 +131,14 @@ export const layer = Layer.effect(
 export const defaultLayer = layer.pipe(
   Layer.provide(Skill.defaultLayer),
   Layer.provide(MCP.defaultLayer),
-  Layer.provide(LocationServiceMap.layer),
+  Layer.provide(locationServiceMapLayer),
 )
 
-const locationServiceMapNode = LayerNode.make({ service: Service, layer: LocationServiceMap.layer, deps: [] })
+const locationServiceMapNode = LayerNode.make({
+  service: LocationServiceMap.Service,
+  layer: locationServiceMapLayer,
+  deps: [],
+})
 
 export const node = LayerNode.make({
   service: Service,

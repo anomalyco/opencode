@@ -1,5 +1,6 @@
 export * as Config from "./config"
 
+import { makeLocationNode } from "./effect/app-node"
 import path from "path"
 import { type ParseError, parse } from "jsonc-parser"
 import { Context, Effect, Layer, Option, Schema } from "effect"
@@ -218,3 +219,9 @@ export const layer = Layer.effect(
 )
 
 export const locationLayer = layer.pipe(Layer.provideMerge(Policy.locationLayer))
+
+export const node = makeLocationNode({
+  service: Service,
+  layer,
+  deps: [FSUtil.node, Global.node, Location.node, Policy.node],
+})

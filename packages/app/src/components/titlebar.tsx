@@ -99,6 +99,8 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
 
   const path = () => `${location.pathname}${location.search}${location.hash}`
   const creating = createMemo(() => {
+    const route = layout.route()
+    if (route.type === "draft" || route.type === "dir-new-sesssion") return true
     if (!params.dir) return false
     if (params.id) return false
     const parts = location.pathname.replace(/\/+$/, "").split("/")
@@ -466,7 +468,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                   }}
                   onReorder={(keys) => tabsStoreActions.reorder(keys)}
                 />
-                <Show when={!(creating() && params.dir)}>
+                <Show when={!creating()}>
                   <TooltipV2
                     placement="bottom"
                     value={
