@@ -819,6 +819,31 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("uses the selected model family prompt when the agent system override is empty", () =>
+    Effect.gen(function* () {
+      yield* setup
+      currentModel = Model.make({ id: "gpt-5", provider: "openai", route: OpenAIChat.route })
+      const agent = yield* AgentV2.Service
+      yield* agent.transform((editor) =>
+        editor.update(AgentV2.ID.make("build"), (agent) => {
+          agent.system = ""
+          agent.mode = "primary"
+        }),
+      )
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "First" }), resume: false })
+
+      requests.length = 0
+      response = fragmentFixture("text", "text-empty-agent-system", ["Done"]).completeEvents
+      yield* session.resume(sessionID)
+
+      expect(requests.at(-1)?.system.map((part) => part.text)).toEqual([
+        expect.stringContaining("You are OpenCode, You and the user share the same workspace"),
+        "Initial context",
+      ])
+    }),
+  )
+
   it.effect("includes the effective default agent system before durable context", () =>
     Effect.gen(function* () {
       yield* setup
