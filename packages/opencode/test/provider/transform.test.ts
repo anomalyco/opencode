@@ -408,6 +408,43 @@ describe("ProviderTransform.options - gpt-5 textVerbosity", () => {
     expect(result.tools.lookup.strict).toBe(false)
   })
 
+  test("collapses multiple system entries into one message", async () => {
+    const model = createGpt5Model("gpt-5.4")
+    const result = await Effect.runPromise(
+      LLMRequestPrep.prepare({
+        user: {
+          id: "msg_user-test",
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: "test",
+          model: { providerID: "azure", modelID: "gpt-5.4" },
+        } as any,
+        sessionID,
+        model,
+        agent: { name: "test", mode: "primary", options: {}, permission: [] } as any,
+        system: [],
+        messages: [{ role: "user", content: "Hello" }],
+        tools: {},
+        provider: { id: "azure", options: {} } as any,
+        auth: undefined,
+        plugin: {
+          trigger: (_name, _input, output: any) => {
+            output.system.push("extra instructions")
+            return Effect.succeed(output)
+          },
+          list: () => Effect.succeed([]),
+          init: () => Effect.void,
+        } as any,
+        flags: { outputTokenMax: 32_000, client: "test" } as any,
+        isWorkflow: false,
+      }),
+    )
+    const systemMessages = result.messages.filter((m: any) => m.role === "system")
+    expect(systemMessages).toHaveLength(1)
+    expect(systemMessages[0].content).toContain("extra instructions")
+  })
+
   test("gpt-5.1 should have textVerbosity set to low", () => {
     const model = createGpt5Model("gpt-5.1")
     const result = ProviderTransform.options({ model, sessionID, providerOptions: {} })

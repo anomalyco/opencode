@@ -71,7 +71,7 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
     { sessionID: input.sessionID, model: input.model },
     { system },
   )
-  if (system.length > 2 && system[0] === header) {
+  if (system.length > 1 && system[0] === header) {
     const rest = system.slice(1)
     system.length = 0
     system.push(header, rest.join("\n"))
