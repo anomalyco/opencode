@@ -847,6 +847,59 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("appends the per-request prompt system after the agent prompt and durable baseline", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const agent = yield* AgentV2.Service
+      yield* agent.transform((editor) =>
+        editor.update(AgentV2.ID.make("build"), (agent) => {
+          agent.system = "Build agent instructions"
+          agent.mode = "primary"
+        }),
+      )
+      const session = yield* SessionV2.Service
+      yield* session.prompt({
+        sessionID,
+        prompt: Prompt.make({ text: "First", system: "Per-request override" }),
+        resume: false,
+      })
+
+      requests.length = 0
+      response = fragmentFixture("text", "text-system", ["Done"]).completeEvents
+      yield* session.resume(sessionID)
+
+      expect(requests.at(-1)?.system.map((part) => part.text)).toEqual([
+        "Build agent instructions",
+        "Initial context",
+        "Per-request override",
+      ])
+    }),
+  )
+
+  it.effect("omits the per-request system part when the prompt has no system string", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const agent = yield* AgentV2.Service
+      yield* agent.transform((editor) =>
+        editor.update(AgentV2.ID.make("build"), (agent) => {
+          agent.system = "Build agent instructions"
+          agent.mode = "primary"
+        }),
+      )
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "First" }), resume: false })
+
+      requests.length = 0
+      response = fragmentFixture("text", "text-no-system", ["Done"]).completeEvents
+      yield* session.resume(sessionID)
+
+      expect(requests.at(-1)?.system.map((part) => part.text)).toEqual([
+        "Build agent instructions",
+        "Initial context",
+      ])
+    }),
+  )
+
   it.effect("uses an explicitly selected non-build agent system", () =>
     Effect.gen(function* () {
       yield* setup

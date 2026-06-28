@@ -174,6 +174,33 @@ describe("SessionV2.prompt", () => {
     }),
   )
 
+  it.effect("preserves an optional per-request system string through admission and projection", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const { db } = yield* Database.Service
+      const session = yield* SessionV2.Service
+      const events = yield* EventV2.Service
+
+      const message = yield* session.prompt({
+        sessionID,
+        prompt: Prompt.make({ text: "Fix the failing tests", system: "Per-request override" }),
+        resume: false,
+      })
+
+      expect(message.prompt.system).toBe("Per-request override")
+      expect(yield* admitted(message.id)).toMatchObject({
+        id: message.id,
+        prompt: { text: "Fix the failing tests", system: "Per-request override" },
+      })
+
+      yield* SessionInput.promoteSteers(db, events, sessionID, Number.MAX_SAFE_INTEGER)
+
+      expect(yield* session.messages({ sessionID })).toMatchObject([
+        { id: message.id, type: "user", text: "Fix the failing tests", system: "Per-request override" },
+      ])
+    }),
+  )
+
   it.effect("resolves attachment MIME before admission", () =>
     Effect.gen(function* () {
       yield* setup

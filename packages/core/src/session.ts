@@ -492,6 +492,7 @@ const resolvePrompt = (input: PromptInput.Prompt) =>
   Prompt.make({
     text: input.text,
     agents: input.agents,
+    system: input.system,
     files: input.files?.map((file) => {
       const dataMime = file.uri.match(/^data:([^;,]+)[;,]/i)?.[1]
       const target = URL.canParse(file.uri) ? new URL(file.uri).pathname : (file.name ?? file.uri)
