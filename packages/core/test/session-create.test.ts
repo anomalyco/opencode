@@ -56,6 +56,14 @@ const it = testEffect(
 const location = Location.Ref.make({ directory: AbsolutePath.make("/project") })
 const id = SessionV2.ID.create()
 
+const assertCreateInputTypes = (session: SessionV2.Interface) => {
+  // @ts-expect-error location or parentID is required.
+  session.create({})
+  // @ts-expect-error child sessions inherit their parent's location.
+  session.create({ parentID: SessionV2.ID.create(), location })
+}
+void assertCreateInputTypes
+
 describe("SessionV2.create", () => {
   it.effect("creates a fresh projected session when the ID is omitted", () =>
     Effect.gen(function* () {
@@ -99,6 +107,27 @@ describe("SessionV2.create", () => {
           model,
         }),
       ).toMatchObject({ location: { directory: location.directory, workspaceID }, agent: "build", model })
+    }),
+  )
+
+  it.effect("inherits location from an existing parent when omitted", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionV2.Service
+      const parent = yield* session.create({ location })
+      const child = yield* session.create({ parentID: parent.id, title: "child" })
+
+      expect(child).toMatchObject({ parentID: parent.id, location })
+    }),
+  )
+
+  it.effect("rejects child creation when the parent does not exist", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionV2.Service
+      const missing = SessionV2.ID.create()
+
+      expect(yield* Effect.flip(session.create({ parentID: missing, title: "child" }))).toEqual(
+        new SessionV2.NotFoundError({ sessionID: missing }),
+      )
     }),
   )
 

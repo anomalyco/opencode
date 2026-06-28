@@ -39,6 +39,7 @@ const execution = Layer.succeed(
       Effect.sync(() => {
         wakeCalls.push(sessionID)
       }),
+    awaitIdle: () => Effect.void,
   }),
 )
 const sessions = SessionV2.layer.pipe(

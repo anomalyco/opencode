@@ -76,12 +76,14 @@ const ListAllInput = Schema.Struct(ListInputBase)
 export const ListInput = Schema.Union([ListDirectoryInput, ListProjectInput, ListAllInput])
 export type ListInput = typeof ListInput.Type
 
-type CreateInput = {
+type CreateBaseInput = {
   id?: SessionSchema.ID
+  title?: string
   agent?: AgentV2.ID
   model?: ModelV2.Ref
-  location: Location.Ref
 }
+type CreateInput = CreateBaseInput &
+  ({ location: Location.Ref; parentID?: never } | { parentID: SessionSchema.ID; location?: never })
 
 type CompactInput = {
   sessionID: SessionSchema.ID
@@ -95,7 +97,7 @@ export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("Ses
 export class OperationUnavailableError extends Schema.TaggedErrorClass<OperationUnavailableError>()(
   "Session.OperationUnavailableError",
   {
-    operation: Schema.Literals(["move", "shell", "skill", "switchAgent", "compact", "wait"]),
+    operation: Schema.Literals(["move", "shell", "skill", "switchAgent", "compact"]),
   },
 ) {}
 
@@ -115,7 +117,7 @@ export type Error = NotFoundError | MessageDecodeError | OperationUnavailableErr
 
 export interface Interface {
   readonly list: (input?: ListInput) => Effect.Effect<SessionSchema.Info[]>
-  readonly create: (input: CreateInput) => Effect.Effect<SessionSchema.Info>
+  readonly create: (input: CreateInput) => Effect.Effect<SessionSchema.Info, NotFoundError>
   readonly get: (sessionID: SessionSchema.ID) => Effect.Effect<SessionSchema.Info, NotFoundError>
   readonly messages: (input: {
     sessionID: SessionSchema.ID
@@ -168,7 +170,7 @@ export interface Interface {
     resume?: boolean
   }) => Effect.Effect<void, OperationUnavailableError>
   readonly compact: (input: CompactInput) => Effect.Effect<void, NotFoundError | OperationUnavailableError>
-  readonly wait: (id: SessionSchema.ID) => Effect.Effect<void, NotFoundError | OperationUnavailableError>
+  readonly wait: (id: SessionSchema.ID) => Effect.Effect<void, NotFoundError>
   readonly active: Effect.Effect<ReadonlySet<SessionSchema.ID>>
   readonly resume: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError | SessionRunner.RunError>
   readonly interrupt: (sessionID: SessionSchema.ID) => Effect.Effect<void>
@@ -213,7 +215,12 @@ export const layer = Layer.effect(
         const sessionID = input.id ?? SessionSchema.ID.create()
         const recorded = yield* store.get(sessionID)
         if (recorded) return recorded
-        const project = yield* projects.resolve(input.location.directory)
+        const parent = input.parentID ? yield* store.get(input.parentID) : undefined
+        if (input.parentID && parent === undefined) return yield* new NotFoundError({ sessionID: input.parentID })
+        const location = parent?.location ?? input.location
+        if (location === undefined)
+          return yield* Effect.die(new Error("V2Session.create requires either location or an existing parentID"))
+        const project = yield* projects.resolve(location.directory)
         yield* db
           .insert(ProjectTable)
           .values({ id: project.id, worktree: project.directory, vcs: project.vcs?.type, sandboxes: [] })
@@ -226,10 +233,11 @@ export const layer = Layer.effect(
           slug: Slug.create(),
           version: InstallationVersion,
           projectID: project.id,
-          directory: input.location.directory,
-          path: path.relative(project.directory, input.location.directory).replaceAll("\\", "/"),
-          workspaceID: input.location.workspaceID ? WorkspaceV2.ID.make(input.location.workspaceID) : undefined,
-          title: `New session - ${new Date(now).toISOString()}`,
+          parentID: input.parentID,
+          directory: location.directory,
+          path: path.relative(project.directory, location.directory).replaceAll("\\", "/"),
+          workspaceID: location.workspaceID ? WorkspaceV2.ID.make(location.workspaceID) : undefined,
+          title: input.title ?? `New session - ${new Date(now).toISOString()}`,
           agent: input.agent,
           model: input.model
             ? {
@@ -242,24 +250,22 @@ export const layer = Layer.effect(
           tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
           time: { created: now, updated: now },
         })
-        const projected = yield* events
-          .publish(SessionV1.Event.Created, { sessionID, info }, { location: input.location })
-          .pipe(
-            Effect.as({ type: "created" } as const),
-            Effect.catchDefect((defect) => {
-              if (!(defect instanceof SessionProjector.SessionAlreadyProjected)) {
-                return Effect.die(defect)
-              }
-              // Concurrent creation lost the projection race. The existing Session identity wins.
-              return store
-                .get(sessionID)
-                .pipe(
-                  Effect.flatMap((session) =>
-                    session ? Effect.succeed({ type: "existing", session } as const) : Effect.die(defect),
-                  ),
-                )
-            }),
-          )
+        const projected = yield* events.publish(SessionV1.Event.Created, { sessionID, info }, { location }).pipe(
+          Effect.as({ type: "created" } as const),
+          Effect.catchDefect((defect) => {
+            if (!(defect instanceof SessionProjector.SessionAlreadyProjected)) {
+              return Effect.die(defect)
+            }
+            // Concurrent creation lost the projection race. The existing Session identity wins.
+            return store
+              .get(sessionID)
+              .pipe(
+                Effect.flatMap((session) =>
+                  session ? Effect.succeed({ type: "existing", session } as const) : Effect.die(defect),
+                ),
+              )
+          }),
+        )
         if (projected.type === "existing") return projected.session
         // TODO: Restore recorded sessions onto replacement synchronized workspaces in a future API slice.
         return yield* result.get(sessionID).pipe(Effect.orDie)
@@ -432,7 +438,7 @@ export const layer = Layer.effect(
       }),
       wait: Effect.fn("V2Session.wait")(function* (sessionID) {
         yield* result.get(sessionID)
-        return yield* new OperationUnavailableError({ operation: "wait" })
+        yield* execution.awaitIdle(sessionID)
       }),
       active: execution.active,
       resume: Effect.fn("V2Session.resume")(function* (sessionID) {
@@ -456,7 +462,7 @@ export const layer = Layer.effect(
         clear: Effect.fn("V2Session.revert.clear")(function* (sessionID) {
           const session = yield* result.get(sessionID)
           if ((yield* execution.active).has(sessionID)) return yield* new BusyError({ sessionID })
-          yield* SessionRevert.clear(session).pipe(
+          return yield* SessionRevert.clear(session).pipe(
             Effect.provideService(EventV2.Service, events),
             Effect.provide(locations.get(session.location)),
           )
@@ -464,7 +470,7 @@ export const layer = Layer.effect(
         commit: Effect.fn("V2Session.revert.commit")(function* (sessionID) {
           const session = yield* result.get(sessionID)
           if ((yield* execution.active).has(sessionID)) return yield* new BusyError({ sessionID })
-          yield* SessionRevert.commit(session).pipe(Effect.provideService(EventV2.Service, events))
+          return yield* SessionRevert.commit(session).pipe(Effect.provideService(EventV2.Service, events))
         }),
       },
     })

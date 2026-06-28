@@ -258,6 +258,7 @@ const execution = Layer.effect(
       resume: coordinator.run,
       wake: coordinator.wake,
       interrupt: coordinator.interrupt,
+      awaitIdle: coordinator.awaitIdle,
     })
   }),
 ).pipe(Layer.provide(runner))
@@ -380,7 +381,10 @@ const recordedEventTypes = (id: SessionV2.ID) =>
       .where(eq(EventTable.aggregate_id, id))
       .orderBy(asc(EventTable.seq))
       .all()
-      .pipe(Effect.orDie, Effect.map((rows) => rows.map((row) => row.type)))
+      .pipe(
+        Effect.orDie,
+        Effect.map((rows) => rows.map((row) => row.type)),
+      )
   })
 
 const replaySessionProjection = (id: SessionV2.ID) =>
