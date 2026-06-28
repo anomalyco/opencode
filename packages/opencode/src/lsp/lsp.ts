@@ -126,6 +126,14 @@ export interface Interface {
   readonly definition: (input: LocInput) => Effect.Effect<any[]>
   readonly references: (input: LocInput) => Effect.Effect<any[]>
   readonly implementation: (input: LocInput) => Effect.Effect<any[]>
+  readonly rename: (input: LocInput & { newName: string }) => Effect.Effect<any>
+  readonly codeAction: (input: {
+    file: string
+    line?: number
+    character?: number
+    endLine?: number
+    endCharacter?: number
+  }) => Effect.Effect<any[]>
   readonly documentSymbol: (uri: string) => Effect.Effect<(DocumentSymbol | Symbol)[]>
   readonly workspaceSymbol: (query: string) => Effect.Effect<Symbol[]>
   readonly prepareCallHierarchy: (input: LocInput) => Effect.Effect<any[]>
@@ -422,6 +430,45 @@ export const layer = Layer.effect(
       return results.flat().filter(Boolean)
     })
 
+    const rename = Effect.fn("LSP.rename")(function* (input: LocInput & { newName: string }) {
+      const results = yield* run(input.file, (client) =>
+        client.connection
+          .sendRequest("textDocument/rename", {
+            textDocument: { uri: pathToFileURL(input.file).href },
+            position: { line: input.line, character: input.character },
+            newName: input.newName,
+          })
+          .catch(() => null),
+      )
+      return results.find(Boolean) ?? null
+    })
+
+    const codeAction = Effect.fn("LSP.codeAction")(function* (input: {
+      file: string
+      line?: number
+      character?: number
+      endLine?: number
+      endCharacter?: number
+    }) {
+      const startLine = input.line ?? 0
+      const startChar = input.character ?? 0
+      const endLine = input.endLine ?? startLine
+      const endChar = input.endCharacter ?? startChar
+      const results = yield* run(input.file, (client) =>
+        client.connection
+          .sendRequest("textDocument/codeAction", {
+            textDocument: { uri: pathToFileURL(input.file).href },
+            range: {
+              start: { line: startLine, character: startChar },
+              end: { line: endLine, character: endChar },
+            },
+            context: { diagnostics: [] },
+          })
+          .catch(() => []),
+      )
+      return results.flat().filter(Boolean)
+    })
+
     const documentSymbol = Effect.fn("LSP.documentSymbol")(function* (uri: string) {
       const file = fileURLToPath(uri)
       const results = yield* run(file, (client) =>
@@ -487,6 +534,8 @@ export const layer = Layer.effect(
       definition,
       references,
       implementation,
+      rename,
+      codeAction,
       documentSymbol,
       workspaceSymbol,
       prepareCallHierarchy,

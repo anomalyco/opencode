@@ -21,6 +21,7 @@ import { Plugin } from "../../src/plugin"
 import { Provider as ProviderSvc } from "@/provider/provider"
 import { Env } from "../../src/env"
 import { Git } from "../../src/git"
+import { AppProcess } from "@opencode-ai/core/process"
 import { Image } from "../../src/image/image"
 
 import { Question } from "../../src/question"
@@ -150,6 +151,8 @@ const lsp = Layer.succeed(
     definition: () => Effect.succeed([]),
     references: () => Effect.succeed([]),
     implementation: () => Effect.succeed([]),
+    rename: () => Effect.succeed(null),
+    codeAction: () => Effect.succeed([]),
     documentSymbol: () => Effect.succeed([]),
     workspaceSymbol: () => Effect.succeed([]),
     prepareCallHierarchy: () => Effect.succeed([]),
@@ -197,6 +200,7 @@ function makePrompt(input?: { mcpInstructions?: MCP.ServerInstructions[]; proces
     Layer.provide(FetchHttpClient.layer),
     Layer.provide(CrossSpawnSpawner.defaultLayer),
     Layer.provide(Git.defaultLayer),
+    Layer.provide(AppProcess.defaultLayer),
     Layer.provide(Ripgrep.defaultLayer),
     Layer.provide(Format.defaultLayer),
     Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),

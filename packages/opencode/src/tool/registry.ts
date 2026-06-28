@@ -38,7 +38,20 @@ import { ChangeDirectoryTool } from "./change-directory"
 import { FormatTool } from "./format"
 import { GitTool } from "./git"
 import { DiagnosticsTool } from "./diagnostics"
+import { GitCommitTool } from "./git-commit"
+import { PatchApplyTool } from "./patch-apply"
+import { TodoScanTool } from "./todo-scan"
+import { TreeTool } from "./tree"
+import { MemoryWriteTool } from "./memory-write"
+import { JsonQueryTool } from "./json-query"
+import { BulkEditTool } from "./bulk-edit"
+import { TestTool } from "./test"
+import { DepsAddTool, DepsOutdatedTool } from "./deps"
+import { RenameSymbolTool } from "./rename-symbol"
+import { CodeActionsTool } from "./code-actions"
+import { ProcessStartTool, ProcessLogsTool, ProcessStopTool } from "./process"
 import { Git } from "@/git"
+import { AppProcess } from "@opencode-ai/core/process"
 import { Glob } from "@opencode-ai/core/util/glob"
 import path from "path"
 import { pathToFileURL } from "url"
@@ -125,6 +138,21 @@ export const layer = Layer.effect(
     const formattool = yield* FormatTool
     const gittool = yield* GitTool
     const diagnosticstool = yield* DiagnosticsTool
+    const gitcommittool = yield* GitCommitTool
+    const patchapplytool = yield* PatchApplyTool
+    const todoscantool = yield* TodoScanTool
+    const treetool = yield* TreeTool
+    const memorywritetool = yield* MemoryWriteTool
+    const jsonquerytool = yield* JsonQueryTool
+    const bulkedittool = yield* BulkEditTool
+    const testtool = yield* TestTool
+    const depsaddtool = yield* DepsAddTool
+    const depsoutdatedtool = yield* DepsOutdatedTool
+    const renamesymboltool = yield* RenameSymbolTool
+    const codeactionstool = yield* CodeActionsTool
+    const processstarttool = yield* ProcessStartTool
+    const processlogstool = yield* ProcessLogsTool
+    const processstoptool = yield* ProcessStopTool
     const skilltool = yield* SkillTool
     const agent = yield* Agent.Service
 
@@ -239,6 +267,21 @@ export const layer = Layer.effect(
           format: Tool.init(formattool),
           git: Tool.init(gittool),
           diagnostics: Tool.init(diagnosticstool),
+          gitcommit: Tool.init(gitcommittool),
+          patchapply: Tool.init(patchapplytool),
+          todoscan: Tool.init(todoscantool),
+          tree: Tool.init(treetool),
+          memorywrite: Tool.init(memorywritetool),
+          jsonquery: Tool.init(jsonquerytool),
+          bulkedit: Tool.init(bulkedittool),
+          test: Tool.init(testtool),
+          depsadd: Tool.init(depsaddtool),
+          depsoutdated: Tool.init(depsoutdatedtool),
+          renamesymbol: Tool.init(renamesymboltool),
+          codeactions: Tool.init(codeactionstool),
+          processstart: Tool.init(processstarttool),
+          processlogs: Tool.init(processlogstool),
+          processstop: Tool.init(processstoptool),
           question: Tool.init(question),
           lsp: Tool.init(lsptool),
           plan: Tool.init(plan),
@@ -270,6 +313,21 @@ export const layer = Layer.effect(
             tool.format,
             tool.git,
             tool.diagnostics,
+            tool.gitcommit,
+            tool.patchapply,
+            tool.todoscan,
+            tool.tree,
+            tool.memorywrite,
+            tool.jsonquery,
+            tool.bulkedit,
+            tool.test,
+            tool.depsadd,
+            tool.depsoutdated,
+            tool.renamesymbol,
+            tool.codeactions,
+            tool.processstart,
+            tool.processlogs,
+            tool.processstop,
             ...(flags.experimentalLspTool ? [tool.lsp] : []),
             ...(flags.experimentalPlanMode && flags.client === "cli" ? [tool.plan] : []),
           ],
@@ -375,7 +433,7 @@ export const defaultLayer = Layer.suspend(() =>
       Layer.provide(CrossSpawnSpawner.defaultLayer),
       Layer.provide(Truncate.defaultLayer),
     )
-    .pipe(Layer.provide(Database.defaultLayer), Layer.provide(RuntimeFlags.defaultLayer), Layer.provide(Memory.defaultLayer), Layer.provide(History.defaultLayer), Layer.provide(Git.defaultLayer)),
+    .pipe(Layer.provide(Database.defaultLayer), Layer.provide(RuntimeFlags.defaultLayer), Layer.provide(Memory.defaultLayer), Layer.provide(History.defaultLayer), Layer.provide(Git.defaultLayer), Layer.provide(AppProcess.defaultLayer)),
 )
 
 function isZodType(value: unknown): value is z.ZodType {
@@ -480,6 +538,7 @@ export const node = LayerNode.make({
     Memory.node,
     History.node,
     Git.node,
+    AppProcess.node,
   ],
 })
 
