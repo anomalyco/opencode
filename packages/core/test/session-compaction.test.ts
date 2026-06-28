@@ -8,16 +8,19 @@ import { SessionCompaction } from "@opencode-ai/core/session/compaction"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
-import { SessionTable, SessionMessageTable } from "@opencode-ai/core/session/sql"
+import { SessionTable } from "@opencode-ai/core/session/sql"
+import { SessionStore } from "@opencode-ai/core/session/store"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
-import { DateTime, Effect, Layer, Schema, Stream } from "effect"
+import { DateTime, Effect, Layer, Stream } from "effect"
 import { asc, eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
 
-const it = testEffect(Layer.mergeAll(Database.defaultLayer, EventV2.defaultLayer, SessionProjector.defaultLayer))
+const it = testEffect(
+  Layer.mergeAll(Database.defaultLayer, EventV2.defaultLayer, SessionProjector.defaultLayer, SessionStore.defaultLayer),
+)
 const model = Model.make({
   id: "summary-model",
   provider: "test",
@@ -45,6 +48,7 @@ it.effect("manual compaction summarizes short context instead of no-op", () =>
     const requests: LLMRequest[] = []
     const db = (yield* Database.Service).db
     const events = yield* EventV2.Service
+    const store = yield* SessionStore.Service
     const sessionID = SessionV2.ID.make("ses_manual_compaction")
     const userMessage = {
       id: SessionMessage.ID.create(),
@@ -86,19 +90,9 @@ it.effect("manual compaction summarizes short context instead of no-op", () =>
 
     expect(requests).toHaveLength(1)
     expect(JSON.stringify(requests[0]?.messages)).toContain("Manual compaction should include this short conversation.")
-    expect(
-      yield* db
-        .select()
-        .from(SessionMessageTable)
-        .where(eq(SessionMessageTable.type, "compaction"))
-        .get()
-        .pipe(Effect.orDie)
-        .pipe(
-          Effect.map((row) =>
-            row ? Schema.decodeUnknownSync(SessionMessage.Message)({ ...row.data, id: row.id, type: row.type }) : row,
-          ),
-        ),
-    ).toMatchObject({ type: "compaction", reason: "manual", summary: "manual summary", recent: "" })
+    expect(yield* store.context(sessionID)).toMatchObject([
+      { type: "compaction", reason: "manual", summary: "manual summary", recent: "" },
+    ])
     expect(
       yield* db
         .select({ type: EventTable.type })

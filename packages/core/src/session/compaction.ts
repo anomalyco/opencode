@@ -261,6 +261,8 @@ export const make = (dependencies: Dependencies) => {
       readonly output?: number
     },
   ) {
+    const context = input.model.route.defaults.limits?.context
+    if (context === undefined || context <= 0) return false
     const selected = select(input.messages, config.tokens)
     if (!selected) return false
     const previousSummary = input.messages.find((message) => message.type === "compaction")
@@ -309,10 +311,10 @@ export const layer = Layer.effect(
     const llm = yield* LLMClient.Service
     const config = yield* ConfigV2.Service
     const models = yield* SessionRunnerModel.Service
+    const compaction = make({ events, llm, config: yield* config.entries() })
 
     return Service.of({
       manual: Effect.fn("SessionCompaction.manual")(function* (input) {
-        const compaction = make({ events, llm, config: yield* config.entries() })
         return yield* compaction.compactManual({
           sessionID: input.session.id,
           messages: input.messages,
