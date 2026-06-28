@@ -688,9 +688,15 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
     }
   }
   if (glm52 && model.api.npm === "@ai-sdk/openai-compatible") {
+    // GLM-5.2's native top tier is `max`, but `max` is not a member of the
+    // OpenAI `reasoning_effort` enum (none/minimal/low/medium/high/xhigh).
+    // OpenAI-compatible upstreams that follow the OpenAI spec (e.g. hyper,
+    // Cloudflare AI Gateway, OpenRouter passthrough) reject `reasoning_effort:
+    // "max"` with a 400. Expose `xhigh` instead and let the gateway translate
+    // it to GLM's native `max`, mirroring the OpenRouter branch above.
     return {
       high: { reasoningEffort: "high" },
-      max: { reasoningEffort: "max" },
+      xhigh: { reasoningEffort: "xhigh" },
     }
   }
   if (glm52 && model.api.npm === "@ai-sdk/anthropic") {

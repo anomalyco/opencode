@@ -2914,7 +2914,7 @@ describe("ProviderTransform.variants", () => {
     })
     expect(ProviderTransform.variants(model)).toEqual({
       high: { reasoningEffort: "high" },
-      max: { reasoningEffort: "max" },
+      xhigh: { reasoningEffort: "xhigh" },
     })
   })
 
@@ -2930,7 +2930,7 @@ describe("ProviderTransform.variants", () => {
       })
       expect(ProviderTransform.variants(model)).toEqual({
         high: { reasoningEffort: "high" },
-        max: { reasoningEffort: "max" },
+        xhigh: { reasoningEffort: "xhigh" },
       })
     }
   })
@@ -2946,7 +2946,7 @@ describe("ProviderTransform.variants", () => {
     })
     expect(ProviderTransform.variants(model)).toEqual({
       high: { reasoningEffort: "high" },
-      max: { reasoningEffort: "max" },
+      xhigh: { reasoningEffort: "xhigh" },
     })
   })
 
