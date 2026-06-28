@@ -67,7 +67,7 @@ export const layer = Layer.effectDiscard(
         [name]: Tool.withPermission(
           Tool.make({
             description:
-              "Apply one patch containing add, update, and delete file operations. All targets are resolved and approved before target contents are read. Operations apply sequentially; if a later operation fails, earlier operations remain applied and the failure reports them explicitly. Moves and atomic rollback are not supported yet.",
+              "Apply one patch containing add, update, and delete file operations. All targets are resolved and approved before target contents are read. Operations apply sequentially; if a later operation fails, earlier operations are rolled back (best-effort) and the failure reports which operation failed. Moves and atomic rollback are not supported yet.",
             input: Input,
             output: Output,
             toModelOutput: ({ output }) => [{ type: "text", text: toModelOutput(output) }],
@@ -77,7 +77,7 @@ export const layer = Layer.effectDiscard(
                 const prefix =
                   applied.length === 0
                     ? `Unable to apply patch at ${path}`
-                    : `Patch partially applied before failing at ${path}. Applied: ${applied.map((item) => item.resource).join(", ")}`
+                    : `Patch failed at ${path}. Rolled back ${applied.length} earlier change(s): ${applied.map((item) => item.resource).join(", ")}`
                 return new ToolFailure({ message: prefix })
               }
               return Effect.gen(function* () {
@@ -121,6 +121,7 @@ export const layer = Layer.effectDiscard(
                 })
 
                 const prepared: Prepared[] = []
+                const originals = new Map<string, Uint8Array>()
                 for (const { hunk, target } of targets) {
                   yield* Effect.gen(function* () {
                     if (hunk.type === "add") {
@@ -135,6 +136,7 @@ export const layer = Layer.effectDiscard(
                     }
                     if ((yield* fs.stat(target.canonical)).type !== "File") yield* fail(hunk.path)
                     const source = yield* fs.readFile(target.canonical)
+                    originals.set(target.canonical, source)
                     const original = new TextDecoder("utf-8", { ignoreBOM: true }).decode(source)
                     const before = original.replace(/^\uFEFF/, "")
                     if (hunk.type === "delete") {
@@ -182,6 +184,26 @@ export const layer = Layer.effectDiscard(
                       applied.push({ type: change.type, resource: result.resource, target: result.target })
                     }).pipe(Effect.mapError(() => fail(change.path))),
                   { discard: true },
+                ).pipe(
+                  Effect.catchAll((error) =>
+                    Effect.forEach(
+                      applied,
+                      (item) =>
+                        Effect.gen(function* () {
+                          if (item.type === "add") {
+                            yield* files.remove({ target: { canonical: item.target, resource: item.resource } })
+                            return
+                          }
+                          const original = originals.get(item.target)
+                          if (original)
+                            yield* files.write({
+                              target: { canonical: item.target, resource: item.resource },
+                              content: original,
+                            })
+                        }).pipe(Effect.catchAll(() => Effect.void)),
+                      { discard: true },
+                    ).pipe(Effect.andThen(Effect.fail(error))),
+                  ),
                 )
                 return { applied, files: patchFiles }
               }).pipe(Effect.mapError((error) => (error instanceof ToolFailure ? error : fail("patch"))))

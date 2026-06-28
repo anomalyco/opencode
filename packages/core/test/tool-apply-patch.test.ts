@@ -360,6 +360,33 @@ describe("ApplyPatchTool", () => {
     ),
   )
 
+  it.live("rolls back an earlier add when a later add fails because the target appeared", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        const created = path.join(tmp.path, "created.txt")
+        const appeared = path.join(tmp.path, "appeared.txt")
+        afterEditApproval = () => Effect.promise(() => fs.writeFile(appeared, "winner\n")).pipe(Effect.orDie)
+        return withTool(tmp.path, (registry) =>
+          Effect.gen(function* () {
+            expect(
+              yield* executeTool(
+                registry,
+                call(
+                  "*** Begin Patch\n*** Add File: created.txt\n+created\n*** Add File: appeared.txt\n+replacement\n*** End Patch",
+                ),
+              ),
+            ).toEqual({ type: "error", value: "Patch failed at appeared.txt. Rolled back 1 earlier change(s): created.txt" })
+            expect(yield* exists(created)).toBe(false)
+            expect(yield* Effect.promise(() => fs.readFile(appeared, "utf8"))).toBe("winner\n")
+          }),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
   it.live("preserves a later commit defect after earlier sequential applications", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
