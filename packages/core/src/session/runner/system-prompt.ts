@@ -13,14 +13,18 @@ import PROMPT_TRINITY from "./prompt/trinity.txt"
 
 export function provider(model: Model) {
   const id = model.id.toLowerCase()
-  if (id.includes("gpt-4") || id.includes("o1") || id.includes("o3")) return PROMPT_BEAST
+  if (id.includes("gpt-4") || id.includes("o1") || id.includes("o3")) return normalize(PROMPT_BEAST)
   if (id.includes("gpt")) {
-    if (id.includes("codex")) return PROMPT_CODEX
-    return PROMPT_GPT
+    if (id.includes("codex")) return normalize(PROMPT_CODEX)
+    return normalize(PROMPT_GPT)
   }
-  if (id.includes("gemini-")) return PROMPT_GEMINI
-  if (id.includes("claude")) return PROMPT_ANTHROPIC
-  if (id.includes("trinity")) return PROMPT_TRINITY
-  if (id.includes("kimi")) return PROMPT_KIMI
-  return PROMPT_DEFAULT
+  if (id.includes("gemini-")) return normalize(PROMPT_GEMINI)
+  if (id.includes("claude")) return normalize(PROMPT_ANTHROPIC)
+  if (id.includes("trinity")) return normalize(PROMPT_TRINITY)
+  if (id.includes("kimi")) return normalize(PROMPT_KIMI)
+  return normalize(PROMPT_DEFAULT)
+}
+
+function normalize(prompt: string) {
+  return prompt.replaceAll("\r\n", "\n")
 }
