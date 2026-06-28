@@ -741,6 +741,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     filterKeys: ["trigger", "title"],
     onSelect: handleSlashSelect,
   })
+  const [slashScrollTarget, setSlashScrollTarget] = createSignal("")
 
   const createPill = (part: FileAttachmentPart | AgentPart) => {
     const pill = document.createElement("span")
@@ -793,12 +794,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   // Auto-scroll active command into view when navigating with keyboard
   createEffect(() => {
-    const activeId = slashActive()
+    const activeId = slashScrollTarget()
     if (!activeId || !slashPopoverRef) return
 
     requestAnimationFrame(() => {
       const element = slashPopoverRef.querySelector(`[data-slash-id="${activeId}"]`)
-      element?.scrollIntoView({ block: "nearest", behavior: "smooth" })
+      element?.scrollIntoView({ block: "nearest" })
     })
   })
   const selectPopoverActive = () => {
@@ -1287,6 +1288,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         }
         if (store.popover === "slash") {
           slashOnKeyDown(event)
+          if (event.key === "ArrowUp" || event.key === "ArrowDown" || ctrlNav) {
+            setSlashScrollTarget(slashActive() ?? "")
+          }
         }
         event.preventDefault()
         return
@@ -1406,6 +1410,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         setSlashActive={setSlashActive}
         onSlashSelect={handleSlashSelect}
         commandKeybind={command.keybind}
+        commandKeybindParts={command.keybindParts}
+        newLayoutDesigns={props.controls.newLayoutDesigns}
         t={(key) => language.t(key as Parameters<typeof language.t>[0])}
       />
       <Switch>
