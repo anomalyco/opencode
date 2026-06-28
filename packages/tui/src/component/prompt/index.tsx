@@ -12,6 +12,7 @@ import type { CommandContext } from "@opentui/keymap"
 import { createEffect, createMemo, onMount, createSignal, onCleanup, on, Show, Switch, Match } from "solid-js"
 import "opentui-spinner/solid"
 import path from "path"
+import { existsSync } from "fs"
 import { fileURLToPath } from "url"
 import { useLocal } from "../../context/local"
 import { Flag } from "@opencode-ai/core/flag/flag"
@@ -371,7 +372,20 @@ export function Prompt(props: PromptProps) {
           ctx.event.preventDefault()
           ctx.event.stopPropagation()
           const content = await clipboard.read?.()
-          if (content?.mime.startsWith("image/")) {
+          if (!content) {
+            // Surface the failure rather than swallowing it — users previously
+            // could not tell why Ctrl+V did nothing on Windows hosts where
+            // `Get-Clipboard` or `clipboardy` fail silently.
+            toast.show({
+              variant: "error",
+              title: "Paste failed",
+              message:
+                "Clipboard is empty or unreadable. On Windows, verify PowerShell can run Get-Clipboard / Clipboard::GetText.",
+              duration: 6000,
+            })
+            return
+          }
+          if (content.mime.startsWith("image/")) {
             await pasteAttachment({
               filename: "clipboard",
               mime: content.mime,
@@ -379,7 +393,7 @@ export function Prompt(props: PromptProps) {
             })
             return
           }
-          if (content?.mime === "text/plain") {
+          if (content.mime === "text/plain") {
             await pasteInputText(content.data)
           }
         },
@@ -1194,6 +1208,19 @@ export function Prompt(props: PromptProps) {
           mime: attachment.mime,
           content: Buffer.from(attachment.content).toString("base64"),
         })
+        return
+      }
+      // File exists on disk but its extension/mime is not natively supported
+      // (e.g. docx, pptx, directories). Insert the absolute path as text so the
+      // agent can read it on demand, instead of letting it get folded into a
+      // [Pasted ~N lines] summary or dropped silently.
+      if (attachment === undefined && existsSync(filepath)) {
+        input.insertText(filepath)
+        setTimeout(() => {
+          if (!input || input.isDestroyed) return
+          input.getLayoutNode().markDirty()
+          renderer.requestRender()
+        }, 0)
         return
       }
     }
