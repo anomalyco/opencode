@@ -122,6 +122,7 @@ describe("AgentV2", () => {
         "summary",
         "title",
       ])
+      expect((yield* agent.get(AgentV2.defaultID))?.system).toBeUndefined()
       for (const item of agents) {
         expect(item.permissions.some((rule) => rule.action === "bash" && rule.effect !== "deny")).toBe(false)
       }
