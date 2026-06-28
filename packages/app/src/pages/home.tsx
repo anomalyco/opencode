@@ -408,7 +408,7 @@ export function NewHome() {
 
   return (
     <div class="rounded-[10px] shadow-[var(--v2-elevation-raised)] m-2 min-h-0 lg:overflow-hidden bg-v2-background-bg-base self-stretch flex-1">
-      <div class="mx-auto grid h-full w-full max-w-[1080px] grid-rows-[auto_minmax(0,1fr)_auto] gap-4 px-3 pb-3 lg:grid-cols-[280px_minmax(0,720px)] lg:grid-rows-1 lg:gap-8 lg:px-6 lg:pb-16">
+      <div class="mx-auto grid h-full w-full max-w-[1080px] grid-rows-[auto_minmax(0,1fr)_auto] gap-4 px-3 lg:grid-cols-[280px_minmax(0,720px)] lg:grid-rows-1 lg:gap-8 lg:px-6">
         <HomeProjectColumn
           projects={projects()}
           selected={selection()}
@@ -468,7 +468,7 @@ export function NewHome() {
                 when={groups().length > 0}
                 fallback={<HomeSessionsEmpty onNewSession={newSessionProject() ? openNewSession : undefined} />}
               >
-                <div class="flex flex-col gap-6 pt-3 pr-3">
+                <div class="flex flex-col gap-6 pt-3 pr-3 pb-16">
                   <For each={groups()}>
                     {(group, index) => (
                       <div class="flex min-w-0 flex-col gap-4">
@@ -965,7 +965,7 @@ function HomeSessionSearch(props: {
             style={{
               top: "-6px",
               left: "-6px",
-              width: "calc(100% + 14px)",
+              width: "calc(100% + 12px)",
             }}
           >
             <div class="flex flex-col pt-9">

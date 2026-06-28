@@ -1,6 +1,6 @@
 export * as FileSystemSearch from "./search"
 
-import { makeLocationNode } from "../effect/node"
+import { makeLocationNode } from "../effect/app-node"
 import path from "path"
 import { Context, Effect, Layer, Scope } from "effect"
 import { Fff } from "#fff"

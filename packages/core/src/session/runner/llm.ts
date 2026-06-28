@@ -36,8 +36,8 @@ import { createLLMEventPublisher } from "./publish-llm-event"
 import { toLLMMessages } from "./to-llm-message"
 import { MAX_STEPS_PROMPT } from "./max-steps"
 import { Snapshot } from "../../snapshot"
-import { makeLocationNode } from "../../effect/node"
-import { llmClient } from "../../effect/layer-node-platform"
+import { makeLocationNode } from "../../effect/app-node"
+import { llmClient } from "../../effect/app-node-platform"
 
 /**
  * Runs one durable coding-agent Session until it settles.
