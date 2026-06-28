@@ -306,6 +306,11 @@ export const dict = {
 
   "dialog.directory.search.placeholder": "Поиск папок",
   "dialog.directory.empty": "Папки не найдены",
+  "dialog.directory.action.selectFile": "Выбрать файл",
+  "dialog.directory.action.selectFolder": "Выбрать папку",
+  "dialog.directory.root": "Корень",
+  "dialog.directory.parent": "Родительская папка",
+  "dialog.directory.readError": "Не удалось прочитать эту папку",
 
   "dialog.server.title": "Серверы",
   "dialog.server.description": "Переключите сервер OpenCode к которому подключается приложение.",
@@ -659,9 +664,6 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Разворачивать элементы инструмента edit",
   "settings.general.row.editToolPartsExpanded.description":
     "Показывать элементы инструментов edit, write и patch в ленте развернутыми по умолчанию",
-  "settings.general.row.showSessionProgressBar.title": "Показывать индикатор прогресса сессии",
-  "settings.general.row.showSessionProgressBar.description":
-    "Показывать анимированный индикатор прогресса вверху сессии, когда агент работает",
   "settings.general.row.wayland.title": "Использовать нативный Wayland",
   "settings.general.row.wayland.description": "Отключить X11 fallback на Wayland. Требуется перезапуск.",
   "settings.general.row.wayland.tooltip":

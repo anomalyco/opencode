@@ -313,6 +313,11 @@ export const dict = {
 
   "dialog.directory.search.placeholder": "Пошук папок",
   "dialog.directory.empty": "Папок не знайдено",
+  "dialog.directory.action.selectFile": "Вибрати файл",
+  "dialog.directory.action.selectFolder": "Вибрати папку",
+  "dialog.directory.root": "Корінь",
+  "dialog.directory.parent": "Батьківська папка",
+  "dialog.directory.readError": "Не вдалося прочитати цю папку",
 
   "app.server.unreachable": "Не вдалося досягти {{server}}",
   "app.server.retrying": "Автоматичне повторення...",
@@ -776,9 +781,6 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Розгортати частини інструменту редагування",
   "settings.general.row.editToolPartsExpanded.description":
     "Показувати частини інструментів редагування, запису та патчів розгорнутими за замовчуванням на часовій шкалі",
-  "settings.general.row.showSessionProgressBar.title": "Показувати індикатор прогресу сесії",
-  "settings.general.row.showSessionProgressBar.description":
-    "Відображати анімований індикатор прогресу вгорі сесії, коли агент працює",
 
   "settings.general.row.wayland.title": "Використовувати нативний Wayland",
   "settings.general.row.wayland.description": "Вимкнути резервний X11 на Wayland. Потребує перезапуску.",
