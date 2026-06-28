@@ -17,7 +17,7 @@ import { useLocal } from "../../context/local"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { tint, useTheme } from "../../context/theme"
 import { EmptyBorder, SplitBorder } from "../../ui/border"
-import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
+import { useTuiPaths, useTuiStdin, useTuiTerminalEnvironment } from "../../context/runtime"
 import { useClipboard } from "../../context/clipboard"
 import { Spinner } from "../spinner"
 import { useSDK } from "../../context/sdk"
@@ -147,6 +147,7 @@ export function Prompt(props: PromptProps) {
   const args = useArgs()
   const paths = useTuiPaths()
   const terminalEnvironment = useTuiTerminalEnvironment()
+  const stdin = useTuiStdin()
   const clipboard = useClipboard()
   const sdk = useSDK()
   const editor = useEditorContext()
@@ -437,6 +438,7 @@ export function Prompt(props: PromptProps) {
           const content = await openEditor({
             renderer,
             value,
+            stdin,
             cwd:
               (project.instance.path().worktree === "/" ? undefined : project.instance.path().worktree) ||
               project.instance.directory() ||

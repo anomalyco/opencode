@@ -171,7 +171,7 @@ export const TuiThreadCommand = cmd({
       return
     }
 
-    const unguard = win32InstallCtrlCGuard()
+    let unguard: (() => void) | undefined
     let interactiveStdin: ReturnType<typeof resolveInteractiveStdin> | undefined
     try {
       const { TuiConfig } = await import("@/config/tui")
@@ -179,13 +179,15 @@ export const TuiThreadCommand = cmd({
         interactiveStdin = resolveInteractiveStdin()
       } catch (error) {
         if (error instanceof Error && error.message === INTERACTIVE_INPUT_ERROR) {
-          UI.error(error.message)
+          UI.error(`TUI ${error.message}`)
           process.exitCode = 1
           return
         }
 
         throw error
       }
+
+      unguard = win32InstallCtrlCGuard(interactiveStdin.stdin)
 
       if (args.fork && !args.continue && !args.session) {
         UI.error("--fork requires --continue or --session")

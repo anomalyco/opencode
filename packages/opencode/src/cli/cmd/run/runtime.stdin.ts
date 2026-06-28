@@ -1,7 +1,7 @@
 import fs from "fs"
-import * as tty from "node:tty"
+import { ReadStream } from "node:tty"
 
-export const INTERACTIVE_INPUT_ERROR = "--mini requires a controlling terminal for input"
+export const INTERACTIVE_INPUT_ERROR = "requires a controlling terminal for input"
 
 type InteractiveStdin = {
   stdin: NodeJS.ReadStream
@@ -9,7 +9,7 @@ type InteractiveStdin = {
 }
 
 function openTerminalStdin(path: string): NodeJS.ReadStream {
-  return new tty.ReadStream(fs.openSync(path, "r"))
+  return new ReadStream(fs.openSync(path, "r"))
 }
 
 export function resolveInteractiveStdin(

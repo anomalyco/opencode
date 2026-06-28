@@ -262,7 +262,7 @@ export const RunCommand = effectCmd({
       }
       const dieInteractive = (error: unknown): never => {
         if (error instanceof Error && error.message === INTERACTIVE_INPUT_ERROR) {
-          die(error.message)
+          die(`--mini ${error.message}`)
         }
 
         throw error
