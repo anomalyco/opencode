@@ -20,104 +20,103 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/FileSystem/Search") {}
 
-export const ripgrepLayer = Layer.effect(
-  Service,
-  Effect.gen(function* () {
-    const fs = yield* FSUtil.Service
-    const location = yield* Location.Service
-    const ripgrep = yield* Ripgrep.Service
-    const scope = yield* Scope.Scope
-    const state = {
-      files: [] as string[],
-      directories: [] as string[],
-    }
-    const directories = new Set<string>()
-    yield* ripgrep
-      .find({
-        cwd: location.directory,
-        pattern: "*",
-        limit: location.vcs ? Number.MAX_SAFE_INTEGER : 100_000,
-        onEntry: (entry) =>
-          Effect.sync(() => {
-            state.files.push(entry.path)
-            const parts = entry.path.split("/")
-            parts.slice(0, -1).forEach((_, index) => directories.add(parts.slice(0, index + 1).join("/") + path.sep))
-            state.directories = Array.from(directories)
-          }),
-      })
-      .pipe(Effect.orDie, Effect.asVoid, Effect.forkIn(scope))
-    return Service.of({
-      glob: (input) =>
-        Effect.gen(function* () {
-          const target = path.resolve(location.directory, input.path ?? ".")
-          const info = yield* fs.stat(target).pipe(Effect.orDie)
-          const cwd = info.type === "File" ? path.dirname(target) : target
-          return yield* ripgrep
-            .glob({
-              cwd,
-              pattern: input.pattern,
-              limit: input.limit ?? Number.MAX_SAFE_INTEGER,
-            })
-            .pipe(
-              Effect.map((result) =>
-                result.map((entry) =>
-                  FileSystem.Entry.make({
-                    ...entry,
-                    path: RelativePath.make(path.relative(location.directory, path.resolve(cwd, entry.path))),
-                  }),
-                ),
-              ),
-              Effect.orDie,
-            )
-        }),
-      grep: (input) =>
-        Effect.gen(function* () {
-          const target = path.resolve(location.directory, input.path ?? ".")
-          const info = yield* fs.stat(target).pipe(Effect.orDie)
-          const cwd = info.type === "File" ? path.dirname(target) : target
-          return yield* ripgrep
-            .grep({
-              cwd,
-              pattern: input.pattern,
-              file: info.type === "File" ? path.basename(target) : undefined,
-              include: input.include,
-              limit: input.limit ?? Number.MAX_SAFE_INTEGER,
-            })
-            .pipe(
-              Effect.map((result) =>
-                result.map((match) =>
-                  FileSystem.Match.make({
-                    ...match,
-                    entry: FileSystem.Entry.make({
-                      ...match.entry,
-                      path: RelativePath.make(path.relative(location.directory, path.resolve(cwd, match.entry.path))),
-                    }),
-                  }),
-                ),
-              ),
-              Effect.orDie,
-            )
-        }),
-      find: (input) =>
-        Effect.gen(function* () {
-          const items =
-            input.type === "file"
-              ? state.files
-              : input.type === "directory"
-                ? state.directories
-                : [...state.files, ...state.directories]
-          return fuzzysort.go(input.query, items, { limit: input.limit ?? 50 }).map((item) => {
-            const relative = item.target
-            const type = relative.endsWith(path.sep) ? ("directory" as const) : ("file" as const)
-            return FileSystem.Entry.make({
-              path: RelativePath.make(relative),
-              type,
-            })
-          })
+const makeRipgrepService = Effect.gen(function* () {
+  const fs = yield* FSUtil.Service
+  const location = yield* Location.Service
+  const ripgrep = yield* Ripgrep.Service
+  const scope = yield* Scope.Scope
+  const state = {
+    files: [] as string[],
+    directories: [] as string[],
+  }
+  const directories = new Set<string>()
+  yield* ripgrep
+    .find({
+      cwd: location.directory,
+      pattern: "*",
+      limit: location.vcs ? Number.MAX_SAFE_INTEGER : 100_000,
+      onEntry: (entry) =>
+        Effect.sync(() => {
+          state.files.push(entry.path)
+          const parts = entry.path.split("/")
+          parts.slice(0, -1).forEach((_, index) => directories.add(parts.slice(0, index + 1).join("/") + path.sep))
+          state.directories = Array.from(directories)
         }),
     })
-  }),
-)
+    .pipe(Effect.orDie, Effect.asVoid, Effect.forkIn(scope))
+  return Service.of({
+    glob: (input) =>
+      Effect.gen(function* () {
+        const target = path.resolve(location.directory, input.path ?? ".")
+        const info = yield* fs.stat(target).pipe(Effect.orDie)
+        const cwd = info.type === "File" ? path.dirname(target) : target
+        return yield* ripgrep
+          .glob({
+            cwd,
+            pattern: input.pattern,
+            limit: input.limit ?? Number.MAX_SAFE_INTEGER,
+          })
+          .pipe(
+            Effect.map((result) =>
+              result.map((entry) =>
+                FileSystem.Entry.make({
+                  ...entry,
+                  path: RelativePath.make(path.relative(location.directory, path.resolve(cwd, entry.path))),
+                }),
+              ),
+            ),
+            Effect.orDie,
+          )
+      }),
+    grep: (input) =>
+      Effect.gen(function* () {
+        const target = path.resolve(location.directory, input.path ?? ".")
+        const info = yield* fs.stat(target).pipe(Effect.orDie)
+        const cwd = info.type === "File" ? path.dirname(target) : target
+        return yield* ripgrep
+          .grep({
+            cwd,
+            pattern: input.pattern,
+            file: info.type === "File" ? path.basename(target) : undefined,
+            include: input.include,
+            limit: input.limit ?? Number.MAX_SAFE_INTEGER,
+          })
+          .pipe(
+            Effect.map((result) =>
+              result.map((match) =>
+                FileSystem.Match.make({
+                  ...match,
+                  entry: FileSystem.Entry.make({
+                    ...match.entry,
+                    path: RelativePath.make(path.relative(location.directory, path.resolve(cwd, match.entry.path))),
+                  }),
+                }),
+              ),
+            ),
+            Effect.orDie,
+          )
+      }),
+    find: (input) =>
+      Effect.gen(function* () {
+        const items =
+          input.type === "file"
+            ? state.files
+            : input.type === "directory"
+              ? state.directories
+              : [...state.files, ...state.directories]
+        return fuzzysort.go(input.query, items, { limit: input.limit ?? 50 }).map((item) => {
+          const relative = item.target
+          const type = relative.endsWith(path.sep) ? ("directory" as const) : ("file" as const)
+          return FileSystem.Entry.make({
+            path: RelativePath.make(relative),
+            type,
+          })
+        })
+      }),
+  })
+})
+
+export const ripgrepLayer = Layer.effect(Service, makeRipgrepService)
 
 export const fffLayer = Layer.effect(
   Service,
@@ -134,12 +133,8 @@ export const fffLayer = Layer.effect(
       Effect.catch((error) => Effect.logWarning("failed to initialize fff", { error }).pipe(Effect.as(undefined))),
     )
     if (!result?.ok) {
-      if (result) yield* Effect.logWarning("failed to initialize fff", { error: result.error })
-      return Service.of({
-        find: () => Effect.succeed([]),
-        glob: () => Effect.succeed([]),
-        grep: () => Effect.succeed([]),
-      })
+      if (result) yield* Effect.logWarning("failed to initialize fff, falling back to ripgrep", { error: result.error })
+      return yield* makeRipgrepService
     }
     yield* Effect.addFinalizer(() => Effect.sync(() => result.value.destroy()).pipe(Effect.ignore))
     return Service.of({
