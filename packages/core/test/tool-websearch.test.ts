@@ -1,10 +1,15 @@
 import { beforeEach, describe, expect, test } from "bun:test"
 import { Effect, Layer, Schema } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/unstable/http"
+import { makeLocationNode } from "@opencode-ai/core/effect/app-node"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { LayerNodePlatform } from "@opencode-ai/core/effect/app-node-platform"
 import { PermissionV2 } from "@opencode-ai/core/permission"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { WebSearchTool } from "@opencode-ai/core/tool/websearch"
+import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
 import { testEffect } from "./lib/effect"
 import { toolIdentity, executeTool, settleTool, toolDefinitions } from "./lib/tool"
 
@@ -99,7 +104,6 @@ const permission = Layer.succeed(
     list: () => Effect.die("unused"),
   }),
 )
-const registry = ToolRegistry.defaultLayer.pipe(Layer.provide(permission))
 const websearchConfig = Layer.succeed(
   WebSearchTool.ConfigService,
   WebSearchTool.ConfigService.of({
@@ -120,13 +124,23 @@ const websearchConfig = Layer.succeed(
     },
   }),
 )
-const websearch = WebSearchTool.layer.pipe(
-  Layer.provide(registry),
-  Layer.provide(permission),
-  Layer.provide(http),
-  Layer.provide(websearchConfig),
+const websearchConfigNode = makeLocationNode({
+  service: WebSearchTool.ConfigService,
+  layer: websearchConfig,
+  deps: [],
+})
+const toolNode = makeLocationNode({
+  name: "test/websearch-tool",
+  layer: WebSearchTool.layer,
+  deps: [ToolRegistry.node, PermissionV2.node, LayerNodePlatform.httpClient, websearchConfigNode],
+})
+const it = testEffect(
+  AppNodeBuilder.build(LayerNode.group([ToolRegistry.node, ToolRegistry.toolsNode, websearchConfigNode, toolNode]), [
+    [PermissionV2.node, permission],
+    [LayerNodePlatform.httpClient, http],
+    [ToolOutputStore.node, ToolOutputStore.nodeWithoutConfig],
+  ]),
 )
-const it = testEffect(Layer.mergeAll(registry, permission, http, websearchConfig, websearch))
 
 describe("WebSearchTool registration", () => {
   it.effect("registers websearch, asserts query permission, and calls Exa", () =>

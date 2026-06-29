@@ -69,8 +69,8 @@ void invalidNodeReplacement
 // @ts-expect-error Replacement cannot introduce a new error
 LayerNode.compile(a, [[a, Layer.effect(A, Effect.fail(new OtherError()))]])
 
-// @ts-expect-error Node replacement cannot introduce a new error
 const invalidNodeErrorReplacement = () =>
+  // @ts-expect-error Node replacement cannot introduce a new error
   LayerNode.compile(a, [[a, make({ service: A, layer: Layer.effect(A, Effect.fail(new OtherError())), deps: [] })]])
 void invalidNodeErrorReplacement
 
