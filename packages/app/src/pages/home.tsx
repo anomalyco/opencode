@@ -599,7 +599,7 @@ function HomeProjectColumn(props: {
         </Show>
       </ScrollView>
       <HomeUtilityNav
-        class="mb-4 mt-4 hidden shrink-0 lg:flex"
+        class="mb-8 mt-4 hidden shrink-0 lg:flex"
         openSettings={props.openSettings}
         openHelp={props.openHelp}
         language={props.language}
