@@ -3,6 +3,7 @@ import { Effect } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Database } from "@opencode-ai/core/database/database"
+import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { Session as SessionNs } from "@/session/session"
 import { disposeAllInstances, provideInstance, TestInstance } from "../fixture/fixture"
 import { mkdir } from "fs/promises"
@@ -14,7 +15,7 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 
 const layer = (experimentalWorkspaces: boolean) =>
   AppNodeBuilder.build(
-    LayerNode.group([Database.node, SessionNs.node]),
+    LayerNode.group([Database.node, SessionNs.node, SessionProjector.node]),
     [[RuntimeFlags.node, RuntimeFlags.layer({ experimentalWorkspaces })]],
   )
 const it = testEffect(layer(false))
