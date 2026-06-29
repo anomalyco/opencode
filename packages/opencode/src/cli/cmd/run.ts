@@ -337,7 +337,7 @@ export const RunCommand = effectCmd({
             process.exit(1)
           }
 
-          const mime = (await Filesystem.isDir(resolvedPath)) ? "application/x-directory" : "text/plain"
+          const mime = (await Filesystem.isDir(resolvedPath)) ? "application/x-directory" : await Filesystem.mimeType(resolvedPath)
 
           files.push({
             type: "file",
