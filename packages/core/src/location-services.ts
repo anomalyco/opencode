@@ -82,17 +82,16 @@ export type LocationServices = LayerNode.Output<typeof locationServices>
 export type LocationError = LayerNode.Error<typeof locationServices>
 
 export function buildLocationServiceMap(
-  replacements?: ReadonlyMap<Layer.Any, Layer.Any>,
+  replacements: LayerNode.Replacements = [],
 ): Layer.Layer<LocationServiceMap.Service> {
   return Layer.effect(
     LocationServiceMap.Service,
     LayerMap.make(
       (ref: Location.Ref) => {
-        const location = LayerNode.hoist(
-          LayerNode.bind(locationServices, Location.node, Location.boundNode(ref)),
-          Node.tags.values.global,
-        )
-        return LayerNode.compile(location.node, replacements).pipe(
+        const allReplacements = replacements.concat([[Location.node, Location.boundNode(ref)]])
+        const location = LayerNode.hoist(locationServices, Node.tags.values.global, allReplacements)
+
+        return LayerNode.compile(location.node).pipe(
           Layer.fresh,
           Layer.tap(() =>
             Effect.logInfo("booting location services", {
@@ -100,7 +99,7 @@ export function buildLocationServiceMap(
               workspaceID: ref.workspaceID,
             }),
           ),
-          Layer.provide(LayerNode.compile(location.hoisted, replacements)),
+          Layer.provide(LayerNode.compile(location.hoisted)),
         )
       },
       { idleTimeToLive: "60 minutes" },
