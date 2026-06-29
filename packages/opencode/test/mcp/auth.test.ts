@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
 import { setTimeout as sleep } from "node:timers/promises"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Effect, Layer } from "effect"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
@@ -41,14 +42,14 @@ function authFile() {
             : fs.writeJson(file, value, mode),
       })
     }),
-  ).pipe(Layer.provide(FSUtil.defaultLayer))
+  ).pipe(Layer.provide(LayerNode.compile(FSUtil.node)))
 
   return { layer, raw: () => raw }
 }
 
 function authService(layer: Layer.Layer<FSUtil.Service>) {
   return McpAuth.Service.use((auth) => Effect.succeed(auth)).pipe(
-    Effect.provide(McpAuth.layer.pipe(Layer.provide(EffectFlock.defaultLayer), Layer.provide(layer))),
+    Effect.provide(LayerNode.compile(McpAuth.node, [[FSUtil.node, layer]])),
   )
 }
 
