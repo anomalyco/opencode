@@ -5,6 +5,7 @@ import { WorkspaceContext } from "@/control-plane/workspace-context"
 import { InstanceRef } from "@/effect/instance-ref"
 import { disposeInstance as runDisposers } from "@/effect/instance-registry"
 import { FSUtil } from "@opencode-ai/core/fs-util"
+import { Flag } from "@opencode-ai/core/flag/flag"
 import { Context, Deferred, Duration, Effect, Exit, Layer, Scope } from "effect"
 import { type InstanceContext } from "./instance-context"
 import { InstanceBootstrap } from "./bootstrap-service"
@@ -24,6 +25,10 @@ export interface Interface {
   readonly disposeDirectory: (directory: string) => Effect.Effect<void>
   readonly disposeAll: () => Effect.Effect<void>
   readonly provide: <A, E, R>(input: LoadInput, effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
+  /** Mark an instance as in-use (pins it against idle eviction) and refresh its lastUsed. */
+  readonly acquire: (directory: string) => Effect.Effect<void>
+  /** Release an in-use mark and refresh lastUsed. Pair with acquire via ensuring. */
+  readonly release: (directory: string) => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/InstanceStore") {}
@@ -32,7 +37,23 @@ export const use = serviceUse(Service)
 
 interface Entry {
   readonly deferred: Deferred.Deferred<InstanceContext>
+  /** Epoch ms of the last time this instance was loaded/acquired/released. */
+  lastUsed: number
+  /** Count of in-flight requests holding this instance (pins it against eviction). */
+  active: number
 }
+
+// Idle-instance eviction (opt-in). Without it, the per-directory instance cache grows
+// unbounded for long-running `serve` processes that see many distinct directories (e.g.
+// one directory per session): every instance keeps file watchers, LSP/MCP subprocesses,
+// plugins and bus subscriptions alive forever. Resolved from Flag inside the layer so the
+// defaults stay 0 (disabled) and tests can set the env at runtime.
+//   OPENCODE_INSTANCE_IDLE_TTL_MS  dispose instances idle (active==0) longer than this
+//   OPENCODE_INSTANCE_MAX          LRU cap on live instances (idle ones evicted oldest-first)
+//   OPENCODE_INSTANCE_SWEEP_MS     sweep interval (defaults to a third of the TTL)
+const sweepInterval = (idleTtlMs: number) =>
+  Flag.OPENCODE_INSTANCE_SWEEP_MS ||
+  Math.max(1000, Math.min(idleTtlMs > 0 ? Math.floor(idleTtlMs / 3) : 15000, 30000))
 
 export const layer: Layer.Layer<Service, never, Project.Service | InstanceBootstrap.Service> = Layer.effect(
   Service,
@@ -110,9 +131,12 @@ export const layer: Layer.Layer<Service, never, Project.Service | InstanceBootst
       return Effect.uninterruptibleMask((restore) =>
         Effect.gen(function* () {
           const existing = cache.get(directory)
-          if (existing) return yield* restore(Deferred.await(existing.deferred))
+          if (existing) {
+            existing.lastUsed = Date.now()
+            return yield* restore(Deferred.await(existing.deferred))
+          }
 
-          const entry: Entry = { deferred: Deferred.makeUnsafe<InstanceContext>() }
+          const entry: Entry = { deferred: Deferred.makeUnsafe<InstanceContext>(), lastUsed: Date.now(), active: 0 }
           cache.set(directory, entry)
           yield* Effect.gen(function* () {
             yield* Effect.logInfo("creating instance", { directory: directory })
@@ -128,7 +152,7 @@ export const layer: Layer.Layer<Service, never, Project.Service | InstanceBootst
       return Effect.uninterruptibleMask((restore) =>
         Effect.gen(function* () {
           const previous = cache.get(directory)
-          const entry: Entry = { deferred: Deferred.makeUnsafe<InstanceContext>() }
+          const entry: Entry = { deferred: Deferred.makeUnsafe<InstanceContext>(), lastUsed: Date.now(), active: 0 }
           cache.set(directory, entry)
           yield* Effect.gen(function* () {
             yield* Effect.logInfo("reloading instance", { directory: directory })
@@ -186,6 +210,71 @@ export const layer: Layer.Layer<Service, never, Project.Service | InstanceBootst
       return yield* cachedDisposeAll
     })
 
+    const acquire = (input: string) =>
+      Effect.sync(() => {
+        const entry = cache.get(FSUtil.resolve(input))
+        if (entry) {
+          entry.active++
+          entry.lastUsed = Date.now()
+        }
+      })
+
+    const release = (input: string) =>
+      Effect.sync(() => {
+        const entry = cache.get(FSUtil.resolve(input))
+        if (entry) {
+          entry.active = Math.max(0, entry.active - 1)
+          entry.lastUsed = Date.now()
+        }
+      })
+
+    // Dispose one cached entry from the sweeper (mirrors disposeDirectory but for a known entry).
+    const evictEntry = Effect.fnUntraced(function* (directory: string, entry: Entry) {
+      const exit = yield* Deferred.await(entry.deferred).pipe(Effect.exit)
+      if (Exit.isFailure(exit)) {
+        yield* removeEntry(directory, entry)
+        return
+      }
+      yield* disposeEntry(directory, entry, exit.value).pipe(Effect.asVoid)
+    })
+
+    const idleTtlMs = Flag.OPENCODE_INSTANCE_IDLE_TTL_MS
+    const maxInstances = Flag.OPENCODE_INSTANCE_MAX
+
+    const sweepOnce = Effect.fnUntraced(function* () {
+      const now = Date.now()
+      if (idleTtlMs > 0) {
+        for (const [directory, entry] of [...cache.entries()]) {
+          if (entry.active > 0) continue
+          if (now - entry.lastUsed < idleTtlMs) continue
+          yield* Effect.logInfo("evicting idle instance", { directory, idleMs: now - entry.lastUsed })
+          yield* evictEntry(directory, entry)
+        }
+      }
+      if (maxInstances > 0 && cache.size > maxInstances) {
+        const victims = [...cache.entries()]
+          .filter(([, entry]) => entry.active <= 0)
+          .sort((a, b) => a[1].lastUsed - b[1].lastUsed)
+          .slice(0, cache.size - maxInstances)
+        for (const [directory, entry] of victims) {
+          yield* Effect.logInfo("evicting LRU instance over cap", { directory, size: cache.size, max: maxInstances })
+          yield* evictEntry(directory, entry)
+        }
+      }
+    })
+
+    if (idleTtlMs > 0 || maxInstances > 0) {
+      const sweepMs = sweepInterval(idleTtlMs)
+      yield* Effect.logInfo("instance eviction enabled", { idleTtlMs, maxInstances, sweepMs })
+      yield* sweepOnce()
+        .pipe(
+          Effect.catchCause((cause) => Effect.logWarning("instance sweep failed", { cause })),
+          Effect.delay(Duration.millis(sweepMs)),
+          Effect.forever,
+        )
+        .pipe(Effect.forkIn(scope, { startImmediately: true }))
+    }
+
     const provide = <A, E, R>(input: LoadInput, effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
       load(input).pipe(Effect.flatMap((ctx) => effect.pipe(Effect.provideService(InstanceRef, ctx))))
 
@@ -198,6 +287,8 @@ export const layer: Layer.Layer<Service, never, Project.Service | InstanceBootst
       disposeDirectory,
       disposeAll,
       provide,
+      acquire,
+      release,
     })
   }),
 )

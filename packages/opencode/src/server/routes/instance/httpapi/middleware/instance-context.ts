@@ -26,10 +26,15 @@ function provideInstanceContext<E>(
 ): Effect.Effect<HttpServerResponse.HttpServerResponse, E, WorkspaceRouteContext> {
   return Effect.gen(function* () {
     const route = yield* WorkspaceRouteContext
-    const ctx = yield* store.load({ directory: decode(route.directory) })
+    const directory = decode(route.directory)
+    const ctx = yield* store.load({ directory })
+    // Pin the instance for the duration of the request so the idle-eviction sweeper
+    // never disposes an instance with in-flight work; release refreshes lastUsed.
+    yield* store.acquire(directory)
     return yield* effect.pipe(
       Effect.provideService(InstanceRef, ctx),
       Effect.provideService(WorkspaceRef, route.workspaceID),
+      Effect.ensuring(store.release(directory)),
     )
   })
 }
