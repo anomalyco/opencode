@@ -203,6 +203,7 @@ export const connect = Effect.fnUntraced(function* (
   return yield* new ConnectError({ server, message: error instanceof Error ? error.message : String(error) })
 })
 
+// SDK close stops the MCP process, but not child processes it spawned.
 const cleanupStdioDescendants = (transport: Transport) =>
   Effect.gen(function* () {
     if (!(transport instanceof StdioClientTransport)) return
