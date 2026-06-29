@@ -2,7 +2,7 @@ export * as SystemContextRegistry from "./registry"
 
 import { Context, Effect, Layer, Ref, Scope } from "effect"
 import { SystemContext } from "./index"
-import { makeLocationNode } from "../effect/node"
+import { makeLocationNode } from "../effect/app-node"
 
 export interface Entry {
   readonly key: SystemContext.Key

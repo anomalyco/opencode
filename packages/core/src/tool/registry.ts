@@ -11,7 +11,7 @@ import { Wildcard } from "../util/wildcard"
 import { ApplicationTools } from "./application-tools"
 import { definition, permission, settle, validateName, type AnyTool, type RegistrationError } from "./tool"
 import { Tools } from "./tools"
-import { makeLocationNode } from "../effect/node"
+import { makeLocationNode } from "../effect/app-node"
 
 export type ExecuteInput = {
   readonly sessionID: SessionSchema.ID

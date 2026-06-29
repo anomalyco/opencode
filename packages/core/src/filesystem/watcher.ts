@@ -3,7 +3,7 @@ export * as Watcher from "./watcher"
 // @ts-ignore
 import { createWrapper } from "@parcel/watcher/wrapper"
 import type ParcelWatcher from "@parcel/watcher"
-import { makeLocationNode } from "../effect/node"
+import { makeLocationNode } from "../effect/app-node"
 import { Cause, Context, Effect, Layer } from "effect"
 import { FileSystemWatcher } from "@opencode-ai/schema/filesystem-watcher"
 import path from "path"

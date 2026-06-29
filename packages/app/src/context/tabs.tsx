@@ -138,12 +138,14 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
         const next = { type: "session" as const, ...tab }
         const existing = store.find((item) => tabKey(item) === tabKey(next))
         if (existing) return existing
-        setStore(
-          produce((tabs) => {
-            if (tabs.some((item) => tabKey(item) === tabKey(next))) return
-            tabs.push(next)
-          }),
-        )
+        void startTransition(() => {
+          setStore(
+            produce((tabs) => {
+              if (tabs.some((item) => tabKey(item) === tabKey(next))) return
+              tabs.push(next)
+            }),
+          )
+        })
         return next
       },
       reorder(keys: string[]) {
@@ -173,10 +175,12 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
         })
       },
       updateDraft(draftID: string, draft: Partial<Omit<DraftTab, "type" | "draftID">>) {
-        setStore(
-          (tab) => tab.type === "draft" && tab.draftID === draftID,
-          produce((tab) => Object.assign(tab, draft)),
-        )
+        void startTransition(() => {
+          setStore(
+            (tab) => tab.type === "draft" && tab.draftID === draftID,
+            produce((tab) => Object.assign(tab, draft)),
+          )
+        })
       },
       promoteDraft(draftID: string, session: Omit<SessionTab, "type">) {
         // Keep the replacement and navigation atomic so /new-session never renders

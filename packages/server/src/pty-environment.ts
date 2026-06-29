@@ -1,7 +1,7 @@
 export * as PtyEnvironment from "./pty-environment"
 
 import { Context, Effect, Layer } from "effect"
-import { makeGlobalNode } from "@opencode-ai/core/effect/node"
+import { makeGlobalNode } from "@opencode-ai/core/effect/app-node"
 
 export interface Interface {
   readonly get: (input: { directory: string; cwd: string }) => Effect.Effect<Record<string, string>>

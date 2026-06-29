@@ -1,6 +1,6 @@
 export * as ReferenceGuidance from "./guidance"
 
-import { makeLocationNode } from "../effect/node"
+import { makeLocationNode } from "../effect/app-node"
 import { Context, Effect, Layer, Schema } from "effect"
 import { Reference } from "../reference"
 import { SystemContext } from "../system-context/index"
