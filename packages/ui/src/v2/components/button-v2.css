@@ -113,6 +113,26 @@
   cursor: not-allowed;
 }
 
+/* Outline */
+[data-component="button-v2"][data-variant="outline"] {
+  background-color: transparent;
+  color: var(--v2-text-text-base);
+  box-shadow: inset 0 0 0 1px var(--v2-border-border-muted);
+}
+
+[data-component="button-v2"][data-variant="outline"]:is(:hover, [data-state="hover"]):not(:disabled) {
+  background-color: var(--v2-overlay-simple-overlay-hover);
+}
+
+[data-component="button-v2"][data-variant="outline"]:is(:active, [data-state="pressed"]):not(:disabled) {
+  background-color: var(--v2-overlay-simple-overlay-pressed);
+}
+
+[data-component="button-v2"][data-variant="outline"]:is(:disabled, [data-state="disabled"]) {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* Contrast */
 [data-component="button-v2"][data-variant="contrast"] {
   background-image:
