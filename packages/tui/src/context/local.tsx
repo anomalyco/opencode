@@ -263,8 +263,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           }
           const provider = sync.data.provider.find((item) => item.id === value.providerID)
           const info = provider?.models[value.modelID]
+          const name = provider?.name ?? value.providerID
+          const label = value.providerID === "openrouter" ? (() => { const sub = value.modelID.split("/")[0]; return sub ? `${name} · ${sub}` : name })() : name
           return {
-            provider: provider?.name ?? value.providerID,
+            provider: label,
             model: info?.name ?? value.modelID,
             reasoning: info?.capabilities?.reasoning ?? false,
           }

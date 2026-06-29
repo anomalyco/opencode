@@ -926,6 +926,15 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
           dialog.clear()
         },
       },
+      {
+        name: "app.toggle.show_provider",
+        title: kv.get("show_provider", true) ? "Hide provider in messages" : "Show provider in messages",
+        category: "System",
+        run: () => {
+          kv.set("show_provider", !kv.get("show_provider", true))
+          dialog.clear()
+        },
+      },
     ].map((command) => ({
       namespace: "palette",
       ...command,

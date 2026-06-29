@@ -1457,8 +1457,18 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
   const local = useLocal()
   const { theme } = useTheme()
   const sync = useSync()
+  const kv = useKV()
   const messages = createMemo(() => sync.data.message[props.message.sessionID] ?? [])
   const model = createMemo(() => Model.name(ctx.providers(), props.message.providerID, props.message.modelID))
+  const provider = createMemo(() => {
+    const p = ctx.providers().get(props.message.providerID)
+    const name = p?.name ?? props.message.providerID
+    if (props.message.providerID === "openrouter") {
+      const sub = props.message.modelID.split("/")[0]
+      if (sub) return `${name} · ${sub}`
+    }
+    return name
+  })
 
   const final = createMemo(() => {
     return props.message.finish && !["tool-calls", "unknown"].includes(props.message.finish)
@@ -1547,6 +1557,9 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
               </span>{" "}
               <span style={{ fg: theme.text }}>{Locale.titlecase(props.message.mode)}</span>
               <span style={{ fg: theme.textMuted }}> · {model()}</span>
+              <Show when={kv.get("show_provider", true)}>
+                <span style={{ fg: theme.textMuted }}> · {provider()}</span>
+              </Show>
               <Show when={duration()}>
                 <span style={{ fg: theme.textMuted }}> · {Locale.duration(duration())}</span>
               </Show>
