@@ -24,7 +24,7 @@ import { LayerNodePlatform } from "@opencode-ai/core/effect/app-node-platform"
 
 const encoder = new TextEncoder()
 
-const projectTestNode = LayerNode.group([Project.node, Database.node])
+const projectTestNode = LayerNode.group([Project.node, Database.node, CrossSpawnSpawner.node])
 const it = testEffect(AppNodeBuilder.build(projectTestNode))
 
 function remoteProjectID(remote: string) {
