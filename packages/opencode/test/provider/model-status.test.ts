@@ -58,4 +58,16 @@ describe("provider model status schemas", () => {
       }).status,
     ).toBe("active")
   })
+
+  const modalities = ["text", "audio", "image", "video", "pdf", "embedding"] as const
+
+  for (const modality of modalities) {
+    test(`accepts ${modality} modality in configured provider models`, () => {
+      expect(
+        Schema.decodeUnknownSync(ConfigProviderV1.Model)({
+          modalities: { output: [modality] },
+        }).modalities?.output,
+      ).toEqual([modality])
+    })
+  }
 })

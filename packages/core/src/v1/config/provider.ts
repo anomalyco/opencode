@@ -47,9 +47,9 @@ export const Model = Schema.Struct({
   ),
   modalities: Schema.optional(
     Schema.Struct({
-      input: Schema.optional(Schema.mutable(Schema.Array(Schema.Literals(["text", "audio", "image", "video", "pdf"])))),
+      input: Schema.optional(Schema.mutable(Schema.Array(Schema.Literals(["text", "audio", "image", "video", "pdf", "embedding"])))),
       output: Schema.optional(
-        Schema.mutable(Schema.Array(Schema.Literals(["text", "audio", "image", "video", "pdf"]))),
+        Schema.mutable(Schema.Array(Schema.Literals(["text", "audio", "image", "video", "pdf", "embedding"]))),
       ),
     }),
   ),
