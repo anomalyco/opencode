@@ -352,6 +352,13 @@ export const layer = Layer.effect(
         stripMedia: true,
         toolOutputMaxChars: TOOL_OUTPUT_MAX_CHARS,
       })
+      let compactMessages = [
+        ...modelMessages,
+        {
+          role: "user" as const,
+          content: [{ type: "text" as const, text: nextPrompt }],
+        },
+      ]
       const ctx = yield* InstanceState.context
       const msg: SessionV1.Assistant = {
         id: MessageID.ascending(),
@@ -380,6 +387,32 @@ export const layer = Layer.effect(
         },
       }
       yield* session.updateMessage(msg)
+      const compactLimit = usable({ cfg, model, outputTokenMax: flags.outputTokenMax })
+      let compactSize = Token.estimate(JSON.stringify(compactMessages))
+      let dropped = 0
+      while (compactLimit > 0 && compactSize >= compactLimit && compactMessages.length > 1) {
+        compactMessages = compactMessages.slice(1)
+        compactSize = Token.estimate(JSON.stringify(compactMessages))
+        dropped++
+      }
+      if (dropped > 0) {
+        yield* Effect.logWarning("dropped oldest messages from compaction request", {
+          "session.id": input.sessionID,
+          messageID: msg.id,
+          dropped,
+          compactSize,
+          compactLimit,
+        })
+      }
+      if (compactLimit > 0 && compactSize >= compactLimit) {
+        msg.error = new SessionV1.ContextOverflowError({
+          message: "Conversation history too large to compact - compaction request exceeds model context limit",
+        }).toObject()
+        msg.finish = "error"
+        msg.time.completed = Date.now()
+        yield* session.updateMessage(msg)
+        return "stop"
+      }
       const processor = yield* processors.create({
         assistantMessage: msg,
         sessionID: input.sessionID,
@@ -391,13 +424,7 @@ export const layer = Layer.effect(
         sessionID: input.sessionID,
         tools: {},
         system: [],
-        messages: [
-          ...modelMessages,
-          {
-            role: "user",
-            content: [{ type: "text", text: nextPrompt }],
-          },
-        ],
+        messages: compactMessages,
         model,
       })
 
