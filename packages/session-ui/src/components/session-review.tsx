@@ -24,7 +24,7 @@ import { cloneSelectedLineRange, previewSelectedLines } from "../pierre/selectio
 import { createLineCommentController } from "./line-comment-annotations"
 import type { LineCommentEditorProps } from "./line-comment"
 import type { PreparedDiff } from "./session-diff"
-import { createPreparedDiff } from "../diff/resource"
+import { createPreparedDiff } from "@opencode-ai/ui/diff/resource"
 
 const MAX_DIFF_CHANGED_LINES = 500
 
