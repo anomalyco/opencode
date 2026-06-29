@@ -90,10 +90,10 @@ const call = (input: typeof ShellTool.Input.Type, id = "call-shell") => ({
 
 const isWindows = process.platform === "win32"
 const cwdCommand = isWindows ? "(Get-Location).Path; Start-Sleep -Milliseconds 100" : "pwd"
-const helloCommand = isWindows ? "Write-Output -NoNewline hello; Start-Sleep -Milliseconds 100" : "printf hello"
+const helloCommand = isWindows ? "[Console]::Out.Write('hello'); Start-Sleep -Milliseconds 100" : "printf hello"
 const idleCommand = isWindows ? "Start-Sleep -Seconds 60" : "sleep 60"
 const bodyExitCommand = isWindows
-  ? "Write-Output -NoNewline body; Start-Sleep -Milliseconds 100; exit 7"
+  ? "[Console]::Out.Write('body'); Start-Sleep -Milliseconds 100; exit 7"
   : "printf body && exit 7"
 const overflowCommand = (bytes: number) =>
   isWindows
