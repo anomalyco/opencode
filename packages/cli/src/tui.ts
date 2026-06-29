@@ -3,6 +3,7 @@ import { TuiConfig } from "@opencode-ai/tui/config"
 import { Effect } from "effect"
 import { Global } from "@opencode-ai/core/global"
 import { loadBuiltinPlugins } from "@opencode-ai/tui/builtins"
+import { OpenCode } from "@opencode-ai/client"
 import { createOpencodeClient } from "@opencode-ai/sdk/v2/client"
 
 type Transport = { url: string; headers: RequestInit["headers"] }
@@ -12,23 +13,23 @@ export function runTui(transport: Transport, reload?: () => Promise<Transport>) 
   let disposeSlots: (() => void) | undefined
   return Effect.gen(function* () {
     const options = { baseUrl: transport.url, headers: transport.headers }
-    const client = createOpencodeClient(options)
-    const directory = yield* Effect.tryPromise(() =>
-      client.v2.fs.list({ location: { directory: process.cwd() } }, { throwOnError: true }),
-    ).pipe(
-      Effect.map((response) => response.data.location.directory),
+    const api = OpenCode.make(options)
+    const directory = yield* Effect.tryPromise(() => api.files.list({ location: { directory: process.cwd() } })).pipe(
+      Effect.map((response) => response.location.directory),
       Effect.catch(() =>
-        Effect.tryPromise(() => client.v2.location.get(undefined, { throwOnError: true })).pipe(
-          Effect.map((response) => response.data.directory),
-        ),
+        Effect.tryPromise(() => api.location.get()).pipe(Effect.map((response) => response.directory)),
       ),
     )
     return yield* run({
       client: createOpencodeClient({ ...options, directory }),
+      api,
       reload: reload
         ? async () => {
             const next = await reload()
-            return createOpencodeClient({ baseUrl: next.url, headers: next.headers, directory })
+            return {
+              client: createOpencodeClient({ baseUrl: next.url, headers: next.headers, directory }),
+              api: OpenCode.make({ baseUrl: next.url, headers: next.headers }),
+            }
           }
         : undefined,
       args: {},

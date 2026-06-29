@@ -8,6 +8,7 @@ import { errorMessage } from "@opencode-ai/tui/util/error"
 import { withTimeout } from "@/util/timeout"
 import { withNetworkOptions, resolveNetworkOptionsNoConfig } from "@/cli/network"
 import { Filesystem } from "@/util/filesystem"
+import { OpenCode } from "@opencode-ai/client"
 import { createOpencodeClient } from "@opencode-ai/sdk/v2"
 import { writeHeapSnapshot } from "v8"
 import { validateSession } from "../tui/validate-session"
@@ -205,6 +206,7 @@ export const TuiThreadCommand = cmd({
         await Effect.runPromise(
           run({
             client: createOpencodeClient({ baseUrl: url, directory: cwd }),
+            api: OpenCode.make({ baseUrl: url }),
             async onSnapshot() {
               const tui = writeHeapSnapshot("tui.heapsnapshot")
               const server = await client.call("snapshot", undefined)

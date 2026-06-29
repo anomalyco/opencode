@@ -1,3 +1,4 @@
+import { OpenCode } from "@opencode-ai/client"
 import { createOpencodeClient } from "@opencode-ai/sdk/v2"
 import type { V2Event } from "@opencode-ai/sdk/v2"
 
@@ -116,4 +117,8 @@ export function createFetch(override?: FetchHandler, events?: ReturnType<typeof 
 
 export function createClient(fetch: typeof globalThis.fetch) {
   return createOpencodeClient({ baseUrl: "http://test", fetch })
+}
+
+export function createApi(fetch: typeof globalThis.fetch) {
+  return OpenCode.make({ baseUrl: "http://test", fetch })
 }

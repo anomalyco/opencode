@@ -1,3 +1,4 @@
+import type { OpenCodeClient } from "@opencode-ai/client"
 import type { OpencodeClient, V2Event } from "@opencode-ai/sdk/v2"
 import { createGlobalEmitter } from "@solid-primitives/event-bus"
 import { onCleanup, onMount } from "solid-js"
@@ -11,9 +12,14 @@ const connectTimeout = 2_000
 
 export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
   name: "SDK",
-  init: (props: { client: OpencodeClient; reload?: () => Promise<OpencodeClient> }) => {
+  init: (props: {
+    client: OpencodeClient
+    api: OpenCodeClient
+    reload?: () => Promise<{ client: OpencodeClient; api: OpenCodeClient }>
+  }) => {
     const abort = new AbortController()
     let client = props.client
+    let api = props.api
     const events = createGlobalEmitter<SDKEventMap>()
     const [connection, setConnection] = createStore<{
       status: SDKConnectionStatus
@@ -40,7 +46,10 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
         while (!abort.signal.aborted && !controller.signal.aborted) {
           const connection = new AbortController()
           const cancel = () => connection.abort(controller.signal.reason)
-          const timeout = setTimeout(() => connection.abort(new Error("Timed out connecting to server")), connectTimeout)
+          const timeout = setTimeout(
+            () => connection.abort(new Error("Timed out connecting to server")),
+            connectTimeout,
+          )
           controller.signal.addEventListener("abort", cancel, { once: true })
           const error = await (async () => {
             const response = await current.v2.event.subscribe({
@@ -91,7 +100,8 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
           pending = Promise.resolve()
             .then(props.reload)
             .then(async (next) => {
-              client = next
+              client = next.client
+              api = next.api
               if (!abort.signal.aborted) await start()
             })
             .finally(() => {
@@ -111,6 +121,9 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
     return {
       get client() {
         return client
+      },
+      get api() {
+        return api
       },
       event: {
         on: events.on,

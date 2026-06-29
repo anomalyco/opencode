@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@effect/platform-node": "catalog:",
+    "@opencode-ai/client": "workspace:*",
     "@opencode-ai/core": "workspace:*",
     "@opencode-ai/sdk": "workspace:*",
     "@opencode-ai/server": "workspace:*",

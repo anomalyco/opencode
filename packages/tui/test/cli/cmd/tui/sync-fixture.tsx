@@ -7,7 +7,7 @@ import { ProjectProvider, useProject } from "../../../../src/context/project"
 import { SDKProvider } from "../../../../src/context/sdk"
 import { SyncProvider, useSync } from "../../../../src/context/sync"
 import { ExitProvider } from "../../../../src/context/exit"
-import { createClient, createEventStream, createFetch, type FetchHandler } from "../../../fixture/tui-sdk"
+import { createApi, createClient, createEventStream, createFetch, type FetchHandler } from "../../../fixture/tui-sdk"
 import { TestTuiContexts } from "../../../fixture/tui-environment"
 export { createEventStream, createFetch, directory, json, worktree } from "../../../fixture/tui-sdk"
 
@@ -47,7 +47,7 @@ export async function mount(override?: FetchHandler, state?: string) {
     <TestTuiContexts paths={state ? { state } : undefined}>
       <ArgsProvider>
         <KVProvider>
-          <SDKProvider client={createClient(calls.fetch)}>
+          <SDKProvider client={createClient(calls.fetch)} api={createApi(calls.fetch)}>
             <ProjectProvider>
               <ExitProvider exit={() => {}}>
                 <SyncProvider>

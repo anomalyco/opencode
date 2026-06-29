@@ -47,6 +47,7 @@
     "./component/spinner": "./src/component/spinner.tsx"
   },
   "dependencies": {
+    "@opencode-ai/client": "workspace:*",
     "@opencode-ai/core": "workspace:*",
     "@opencode-ai/plugin": "workspace:*",
     "@opencode-ai/sdk": "workspace:*",

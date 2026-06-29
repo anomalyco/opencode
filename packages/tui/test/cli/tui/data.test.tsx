@@ -6,7 +6,7 @@ import { onMount } from "solid-js"
 import { ProjectProvider } from "../../../src/context/project"
 import { SDKProvider } from "../../../src/context/sdk"
 import { DataProvider, useData } from "../../../src/context/data"
-import { createClient, createEventStream, createFetch, directory, json } from "../../fixture/tui-sdk"
+import { createApi, createClient, createEventStream, createFetch, directory, json } from "../../fixture/tui-sdk"
 import { TestTuiContexts } from "../../fixture/tui-environment"
 
 async function wait(fn: () => boolean, timeout = 2000) {
@@ -69,7 +69,7 @@ test("refreshes resources into reactive getters", async () => {
 
   const app = await testRender(() => (
     <TestTuiContexts>
-      <SDKProvider client={createClient(calls.fetch)}>
+      <SDKProvider client={createClient(calls.fetch)} api={createApi(calls.fetch)}>
         <ProjectProvider>
           <DataProvider>
             <Probe />
@@ -139,7 +139,7 @@ test("reconnects the event stream and bootstraps fresh data", async () => {
 
   const app = await testRender(() => (
     <TestTuiContexts>
-      <SDKProvider client={createClient(calls.fetch)}>
+      <SDKProvider client={createClient(calls.fetch)} api={createApi(calls.fetch)}>
         <ProjectProvider>
           <DataProvider>
             <Probe />
@@ -172,8 +172,7 @@ test("reconnects the event stream and bootstraps fresh data", async () => {
 test("tracks session status from active sessions and execution events", async () => {
   const events = createEventStream()
   const calls = createFetch((url) => {
-    if (url.pathname === "/api/session/active")
-      return json({ data: { "session-active": { type: "running" } } })
+    if (url.pathname === "/api/session/active") return json({ data: { "session-active": { type: "running" } } })
   }, events)
   let data!: ReturnType<typeof useData>
 
@@ -184,7 +183,7 @@ test("tracks session status from active sessions and execution events", async ()
 
   const app = await testRender(() => (
     <TestTuiContexts>
-      <SDKProvider client={createClient(calls.fetch)}>
+      <SDKProvider client={createClient(calls.fetch)} api={createApi(calls.fetch)}>
         <ProjectProvider>
           <DataProvider>
             <Probe />
@@ -296,7 +295,7 @@ test("refreshes integrations after integration updates", async () => {
 
   const app = await testRender(() => (
     <TestTuiContexts>
-      <SDKProvider client={createClient(calls.fetch)}>
+      <SDKProvider client={createClient(calls.fetch)} api={createApi(calls.fetch)}>
         <ProjectProvider>
           <DataProvider>
             <Probe />
@@ -337,7 +336,7 @@ test("refreshes effective catalog data after catalog updates", async () => {
 
   const app = await testRender(() => (
     <TestTuiContexts>
-      <SDKProvider client={createClient(calls.fetch)}>
+      <SDKProvider client={createClient(calls.fetch)} api={createApi(calls.fetch)}>
         <ProjectProvider>
           <DataProvider>
             <box />
@@ -382,7 +381,7 @@ test("refreshes references after updates", async () => {
 
   const app = await testRender(() => (
     <TestTuiContexts>
-      <SDKProvider client={createClient(calls.fetch)}>
+      <SDKProvider client={createClient(calls.fetch)} api={createApi(calls.fetch)}>
         <ProjectProvider>
           <DataProvider>
             <Probe />
@@ -415,7 +414,7 @@ test("adds and dismisses permission requests from live events", async () => {
 
   const app = await testRender(() => (
     <TestTuiContexts>
-      <SDKProvider client={createClient(calls.fetch)}>
+      <SDKProvider client={createClient(calls.fetch)} api={createApi(calls.fetch)}>
         <ProjectProvider>
           <DataProvider>
             <Probe />
@@ -480,7 +479,7 @@ test("adds and dismisses question requests from live events", async () => {
 
   const app = await testRender(() => (
     <TestTuiContexts>
-      <SDKProvider client={createClient(calls.fetch)}>
+      <SDKProvider client={createClient(calls.fetch)} api={createApi(calls.fetch)}>
         <ProjectProvider>
           <DataProvider>
             <Probe />
@@ -548,7 +547,7 @@ test("settles pending tools when a live failure arrives", async () => {
 
   const app = await testRender(() => (
     <TestTuiContexts>
-      <SDKProvider client={createClient(calls.fetch)}>
+      <SDKProvider client={createClient(calls.fetch)} api={createApi(calls.fetch)}>
         <ProjectProvider>
           <DataProvider>
             <Probe />
@@ -677,7 +676,7 @@ test("renders admitted prompts only after they become model-visible", async () =
 
   const app = await testRender(() => (
     <TestTuiContexts>
-      <SDKProvider client={createClient(calls.fetch)}>
+      <SDKProvider client={createClient(calls.fetch)} api={createApi(calls.fetch)}>
         <ProjectProvider>
           <DataProvider>
             <Probe />
@@ -750,7 +749,7 @@ test("projects live context updates with their message ID", async () => {
 
   const app = await testRender(() => (
     <TestTuiContexts>
-      <SDKProvider client={createClient(calls.fetch)}>
+      <SDKProvider client={createClient(calls.fetch)} api={createApi(calls.fetch)}>
         <ProjectProvider>
           <DataProvider>
             <Probe />
