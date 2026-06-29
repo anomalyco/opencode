@@ -11,6 +11,8 @@ import {
   CallToolResultSchema,
   ListRootsRequestSchema,
   ListToolsResultSchema,
+  type LoggingMessageNotification,
+  LoggingMessageNotificationSchema,
   ToolListChangedNotificationSchema,
   ToolSchema,
 } from "@modelcontextprotocol/sdk/types.js"
@@ -54,6 +56,12 @@ export interface CallToolResult {
   readonly content: ReadonlyArray<CallToolContent>
 }
 
+export interface LogMessage {
+  readonly level: LoggingMessageNotification["params"]["level"]
+  readonly logger: LoggingMessageNotification["params"]["logger"]
+  readonly data: LoggingMessageNotification["params"]["data"]
+}
+
 /** Handle over a connected MCP server that keeps the SDK `Client` out of the rest of core. */
 export interface Connection {
   /** Server-supplied usage instructions from the initialize result, if any. */
@@ -66,6 +74,8 @@ export interface Connection {
     readonly args?: Record<string, unknown>
   }) => Effect.Effect<CallToolResult, Error>
   readonly onClose: (callback: () => void) => void
+  /** Registers a callback fired when the server emits an MCP logging notification. */
+  readonly onLog: (callback: (message: LogMessage) => void) => void
   /** Registers a callback fired when the server announces its tool list changed; no-op if unsupported. */
   readonly onToolsChanged: (callback: () => void) => void
 }
@@ -185,6 +195,9 @@ export const connect = Effect.fnUntraced(function* (
         ),
       onClose: (callback) => {
         client.onclose = callback
+      },
+      onLog: (callback) => {
+        client.setNotificationHandler(LoggingMessageNotificationSchema, (notification) => callback(notification.params))
       },
       onToolsChanged: (callback) => {
         if (!client.getServerCapabilities()?.tools?.listChanged) return

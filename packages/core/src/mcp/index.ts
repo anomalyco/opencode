@@ -251,6 +251,7 @@ export const layer = Layer.effect(
         entry.status = { status: "failed", error: "Connection closed" }
         fork(events.publish(McpEvent.ToolsChanged, { server: name }).pipe(Effect.ignore))
       })
+      connection.onLog((message) => fork(serverLog(name, message).pipe(Effect.ignore)))
       connection.onToolsChanged(() => {
         fork(
           refreshTools(name, entry, connection).pipe(
@@ -259,6 +260,24 @@ export const layer = Layer.effect(
           ),
         )
       })
+    }
+
+    const serverLog = (server: ServerName, message: MCPClient.LogMessage) => {
+      const fields = { server, logger: message.logger, level: message.level, data: message.data }
+      switch (message.level) {
+        case "debug":
+          return Effect.logDebug("MCP server log", fields)
+        case "info":
+        case "notice":
+          return Effect.logInfo("MCP server log", fields)
+        case "warning":
+          return Effect.logWarning("MCP server log", fields)
+        case "error":
+        case "critical":
+        case "alert":
+        case "emergency":
+          return Effect.logError("MCP server log", fields)
+      }
     }
 
     const startServer = (name: ServerName, entry: ServerEntry) =>
