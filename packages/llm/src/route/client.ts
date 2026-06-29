@@ -374,17 +374,12 @@ const streamRequestWith = (runtime: TransportRuntime) => (request: LLMRequest) =
 
 const generateWith = (stream: Interface["stream"]) =>
   Effect.fn("LLM.generate")(function* (request: LLMRequest) {
-    return new LLMResponse(
-      yield* stream(request).pipe(
-        Stream.runFold(
-          () => ({ events: [] as LLMEvent[], usage: undefined as LLMResponse["usage"] }),
-          (acc, event) => {
-            acc.events.push(event)
-            if ("usage" in event && event.usage !== undefined) acc.usage = event.usage
-            return acc
-          },
-        ),
-      ),
+    const state = yield* stream(request).pipe(Stream.runFold(LLMResponse.empty, LLMResponse.reduce))
+    const response = LLMResponse.complete(state)
+    if (response) return response
+    return yield* ProviderShared.eventError(
+      `${request.model.provider}/${request.model.route.id}`,
+      "Provider stream ended without a terminal finish event",
     )
   })
 

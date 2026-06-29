@@ -115,6 +115,7 @@ describe("llm route", () => {
 
       expect(events.map((event) => event.type)).toEqual(["text-delta", "finish"])
       expect(response.events.map((event) => event.type)).toEqual(["text-delta", "finish"])
+      expect(response.message.content).toEqual([{ type: "text", text: 'echo:{"body":"hello"}' }])
     }),
   )
 
