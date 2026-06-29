@@ -563,9 +563,13 @@ function HomeProjectColumn(props: {
       <ScrollView data-slot="home-projects-scroll" class="min-h-0 min-w-0 shrink">
         <Show
           when={global.servers.list().length > 1}
-          fallback={<HomeProjectList {...props} server={global.servers.list()[0]!} />}
+          fallback={
+            <div class="pr-3">
+              <HomeProjectList {...props} server={global.servers.list()[0]!} />
+            </div>
+          }
         >
-          <div class="flex min-w-0 flex-col gap-1">
+          <div class="flex min-w-0 flex-col gap-1 pr-3">
             <For each={global.servers.list()}>
               {(item) => {
                 const key = ServerConnection.key(item)
