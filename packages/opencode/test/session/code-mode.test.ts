@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { Parameters, define, formatValue, toolResultValue } from "@/session/code-mode"
+import { Parameters, define, describe as describeTools, formatValue, groupByServer, toolResultValue } from "@/session/code-mode"
 import { Agent } from "@/agent/agent"
 import { Tool } from "@/tool/tool"
 import * as Truncate from "@/tool/truncate"
@@ -21,14 +21,15 @@ const ctx: Tool.Context = {
 
 // Build a real MCP-derived AI SDK tool over a fake transport, so the proxy exercises
 // the same `convertTool` execution path that `mcp.tools()` produces at runtime.
-function mcpTool(name: string, handler: (args: Record<string, unknown>) => unknown): AITool {
+function mcpTool(
+  name: string,
+  handler: (args: Record<string, unknown>) => unknown,
+  inputSchema: Record<string, unknown> = { type: "object", properties: {} },
+): AITool {
   const client = {
     callTool: async (params: { arguments?: Record<string, unknown> }) => handler(params.arguments ?? {}),
   }
-  return McpCatalog.convertTool(
-    { name, description: name, inputSchema: { type: "object", properties: {} } } as any,
-    client as any,
-  )
+  return McpCatalog.convertTool({ name, description: name, inputSchema } as any, client as any)
 }
 
 // Truncate echoes its input so assertions read the exact program output. Agent.get is
@@ -40,8 +41,11 @@ const layer = Layer.mergeAll(
   Layer.succeed(Agent.Service, Agent.Service.of({ get: () => Effect.succeed({ name: "build" } as any) } as any)),
 )
 
-function build(mcpTools: Record<string, AITool>) {
-  return Effect.runPromise(define(mcpTools).pipe(Effect.flatMap(Tool.init), Effect.provide(layer)))
+// Derive sanitized server namespaces from the catalog keys, mirroring how
+// session/tools.ts passes `Object.keys(mcp.clients()).map(sanitize)`.
+function build(mcpTools: Record<string, AITool>, servers?: string[]) {
+  const names = servers ?? [...new Set(Object.keys(mcpTools).map((key) => key.split("_")[0]!))]
+  return Effect.runPromise(define(mcpTools, names).pipe(Effect.flatMap(Tool.init), Effect.provide(layer)))
 }
 
 describe("code mode execute", () => {
@@ -51,9 +55,32 @@ describe("code mode execute", () => {
     await expect(Effect.runPromise(decode({}))).rejects.toThrow()
   })
 
-  test("lists available tools in the description", async () => {
-    const tool = await build({ beta_b: mcpTool("b", () => "b"), alpha_a: mcpTool("a", () => "a") })
-    expect(tool.description).toContain("Available tools: alpha_a, beta_b")
+  test("describes tools grouped into per-server namespaces with signatures", () => {
+    const description = describeTools(
+      groupByServer(
+        {
+          github_create_issue: mcpTool("create_issue", () => "", {
+            type: "object",
+            properties: { title: { type: "string" }, body: { type: "string" } },
+            required: ["title"],
+          }),
+          linear_search: mcpTool("search", () => ""),
+        },
+        ["github", "linear"],
+      ),
+    )
+
+    expect(description).toContain("await tools.<server>.<tool>(input)")
+    expect(description).toContain("// github")
+    expect(description).toContain("tools.github.create_issue({ title: string; body?: string })")
+    expect(description).toContain("// linear")
+    expect(description).toContain("tools.linear.search")
+  })
+
+  test("groups multi-underscore server names by longest matching prefix", () => {
+    const groups = groupByServer({ my_server_do_thing: mcpTool("do_thing", () => "") }, ["my_server"])
+    expect([...groups.keys()]).toEqual(["my_server"])
+    expect(groups.get("my_server")![0]).toMatchObject({ local: "do_thing", key: "my_server_do_thing" })
   })
 
   test("runs plain JavaScript and returns the value as text", async () => {
@@ -63,7 +90,7 @@ describe("code mode execute", () => {
     expect(output.metadata.toolCalls).toEqual([])
   })
 
-  test("calls an MCP tool and flows its text result back into the program", async () => {
+  test("calls a namespaced MCP tool and flows its text result back into the program", async () => {
     const seen: Record<string, unknown>[] = []
     const tool = await build({
       greeter_hello: mcpTool("hello", (args) => {
@@ -73,7 +100,7 @@ describe("code mode execute", () => {
     })
 
     const output = await Effect.runPromise(
-      tool.execute({ code: "const r = await tools.greeter_hello({ name: 'world' }); return r.toUpperCase()" }, ctx),
+      tool.execute({ code: "const r = await tools.greeter.hello({ name: 'world' }); return r.toUpperCase()" }, ctx),
     )
 
     expect(seen).toEqual([{ name: "world" }])
@@ -93,8 +120,8 @@ describe("code mode execute", () => {
       tool.execute(
         {
           code: `
-            const first = await tools.math_add({ a: 1, b: 2 })
-            const second = await tools.math_add({ a: first.sum, b: 10 })
+            const first = await tools.math.add({ a: 1, b: 2 })
+            const second = await tools.math.add({ a: first.sum, b: 10 })
             return { total: second.sum }
           `,
         },
@@ -114,7 +141,7 @@ describe("code mode execute", () => {
 
     const output = await Effect.runPromise(
       tool.execute(
-        { code: "const [a, b] = await Promise.all([tools.echo_one({}), tools.echo_two({})]); return a + b" },
+        { code: "const [a, b] = await Promise.all([tools.echo.one({}), tools.echo.two({})]); return a + b" },
         ctx,
       ),
     )
@@ -132,9 +159,9 @@ describe("code mode execute", () => {
 
   test("reports an unknown tool with the available names", async () => {
     const tool = await build({ known_tool: mcpTool("tool", () => "ok") })
-    const output = await Effect.runPromise(tool.execute({ code: "return await tools.missing({})" }, ctx))
+    const output = await Effect.runPromise(tool.execute({ code: "return await tools.known.missing({})" }, ctx))
     expect(output.metadata.error).toBe(true)
-    expect(output.output).toContain("Unknown tool 'missing'")
+    expect(output.output).toContain("Unknown tool 'tools.known.missing'")
     expect(output.output).toContain("known_tool")
   })
 
@@ -144,7 +171,7 @@ describe("code mode execute", () => {
     })
     const output = await Effect.runPromise(
       tool.execute(
-        { code: "try { await tools.bad_tool({}) } catch (e) { return 'caught: ' + e.message }" },
+        { code: "try { await tools.bad.tool({}) } catch (e) { return 'caught: ' + e.message }" },
         ctx,
       ),
     )
@@ -158,7 +185,7 @@ describe("code mode execute", () => {
     const tool = await build({ a_tool: mcpTool("a", ok), b_tool: mcpTool("b", ok) })
 
     await Effect.runPromise(
-      tool.execute({ code: "await tools.a_tool({}); await tools.b_tool({}); return 'done'" }, permissionCtx),
+      tool.execute({ code: "await tools.a.tool({}); await tools.b.tool({}); return 'done'" }, permissionCtx),
     )
 
     expect(asked.map((req: any) => req.permission)).toEqual(["a_tool", "b_tool"])

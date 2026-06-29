@@ -22,6 +22,7 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { isRecord } from "@/util/record"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { McpCatalog } from "@/mcp/catalog"
 import * as CodeModeTool from "./code-mode"
 
 const MCP_RESOURCE_TOOLS = {
@@ -93,9 +94,16 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   // When code mode is enabled and MCP tools are present, expose them through the
   // single code-mode `execute` tool instead of registering each MCP tool directly
   // (see the early return below). Code mode is experimental and off by default.
+  // Sanitized client names give code mode the per-server namespaces; tool keys are
+  // `sanitize(server)_sanitize(tool)`, so the names match the catalog key prefixes.
   const codeModeTool =
     flags.experimentalCodeMode && Object.keys(mcpTools).length > 0
-      ? yield* Tool.init(yield* CodeModeTool.define(mcpTools))
+      ? yield* Tool.init(
+          yield* CodeModeTool.define(
+            mcpTools,
+            Object.keys(yield* mcp.clients()).map(McpCatalog.sanitize),
+          ),
+        )
       : undefined
   const registryTools = yield* registry.tools({
     modelID: ModelV2.ID.make(input.model.api.id),
