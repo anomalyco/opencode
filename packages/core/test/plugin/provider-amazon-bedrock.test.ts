@@ -83,7 +83,7 @@ describe("AmazonBedrockPlugin", () => {
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
       yield* catalog.transform((catalog) => {
-        const bedrock = new ProviderV2.Info({
+        const bedrock = ProviderV2.Info.make({
           ...ProviderV2.Info.empty(ProviderV2.ID.amazonBedrock),
           api: { type: "aisdk", package: "@ai-sdk/amazon-bedrock" },
           request: {
@@ -114,7 +114,7 @@ describe("AmazonBedrockPlugin", () => {
         const aisdk = yield* AISDK.Service
         yield* addPlugin()
         const result = yield* aisdk.runSDK({
-          model: new ModelV2.Info({
+          model: ModelV2.Info.make({
             ...ModelV2.Info.empty(ProviderV2.ID.amazonBedrock, ModelV2.ID.make("anthropic.claude-sonnet-4-5")),
             api: { id: ModelV2.ID.make("anthropic.claude-sonnet-4-5"), type: "aisdk", package: "test-provider" },
           }),
@@ -139,7 +139,7 @@ describe("AmazonBedrockPlugin", () => {
         const aisdk = yield* AISDK.Service
         yield* addPlugin()
         const result = yield* aisdk.runSDK({
-          model: new ModelV2.Info({
+          model: ModelV2.Info.make({
             ...ModelV2.Info.empty(ProviderV2.ID.amazonBedrock, ModelV2.ID.make("anthropic.claude-sonnet-4-5")),
             api: { id: ModelV2.ID.make("anthropic.claude-sonnet-4-5"), type: "aisdk", package: "test-provider" },
           }),
@@ -173,7 +173,7 @@ describe("AmazonBedrockPlugin", () => {
           const aisdk = yield* AISDK.Service
           yield* addPlugin()
           const result = yield* aisdk.runSDK({
-            model: new ModelV2.Info({
+            model: ModelV2.Info.make({
               ...ModelV2.Info.empty(ProviderV2.ID.amazonBedrock, ModelV2.ID.make("anthropic.claude-sonnet-4-5")),
               api: {
                 id: ModelV2.ID.make("anthropic.claude-sonnet-4-5"),
@@ -197,7 +197,7 @@ describe("AmazonBedrockPlugin", () => {
         const aisdk = yield* AISDK.Service
         yield* addPlugin()
         const result = yield* aisdk.runSDK({
-          model: new ModelV2.Info({
+          model: ModelV2.Info.make({
             ...ModelV2.Info.empty(ProviderV2.ID.amazonBedrock, ModelV2.ID.make("anthropic.claude-sonnet-4-5")),
             api: { id: ModelV2.ID.make("anthropic.claude-sonnet-4-5"), type: "aisdk", package: "test-provider" },
           }),
@@ -216,7 +216,7 @@ describe("AmazonBedrockPlugin", () => {
         const aisdk = yield* AISDK.Service
         yield* addPlugin()
         const result = yield* aisdk.runSDK({
-          model: new ModelV2.Info({
+          model: ModelV2.Info.make({
             ...ModelV2.Info.empty(ProviderV2.ID.amazonBedrock, ModelV2.ID.make("anthropic.claude-sonnet-4-5")),
             api: { id: ModelV2.ID.make("anthropic.claude-sonnet-4-5"), type: "aisdk", package: "test-provider" },
           }),
@@ -235,7 +235,7 @@ describe("AmazonBedrockPlugin", () => {
         const aisdk = yield* AISDK.Service
         yield* addPlugin()
         const result = yield* aisdk.runSDK({
-          model: new ModelV2.Info({
+          model: ModelV2.Info.make({
             ...ModelV2.Info.empty(ProviderV2.ID.amazonBedrock, ModelV2.ID.make("anthropic.claude-sonnet-4-5")),
             api: { id: ModelV2.ID.make("anthropic.claude-sonnet-4-5"), type: "aisdk", package: "test-provider" },
           }),
@@ -255,7 +255,7 @@ describe("AmazonBedrockPlugin", () => {
         const headers: Array<string | null> = []
         yield* addPlugin()
         const result = yield* aisdk.runSDK({
-          model: new ModelV2.Info({
+          model: ModelV2.Info.make({
             ...ModelV2.Info.empty(ProviderV2.ID.amazonBedrock, ModelV2.ID.make("anthropic.claude-sonnet-4-5")),
             api: { id: ModelV2.ID.make("anthropic.claude-sonnet-4-5"), type: "aisdk", package: "test-provider" },
           }),
@@ -284,7 +284,7 @@ describe("AmazonBedrockPlugin", () => {
         const headers: Array<string | null> = []
         yield* addPlugin()
         const result = yield* aisdk.runSDK({
-          model: new ModelV2.Info({
+          model: ModelV2.Info.make({
             ...ModelV2.Info.empty(ProviderV2.ID.amazonBedrock, ModelV2.ID.make("anthropic.claude-sonnet-4-5")),
             api: { id: ModelV2.ID.make("anthropic.claude-sonnet-4-5"), type: "aisdk", package: "test-provider" },
           }),
@@ -312,7 +312,7 @@ describe("AmazonBedrockPlugin", () => {
         const aisdk = yield* AISDK.Service
         yield* addPlugin()
         const result = yield* aisdk.runSDK({
-          model: new ModelV2.Info({
+          model: ModelV2.Info.make({
             ...ModelV2.Info.empty(ProviderV2.ID.amazonBedrock, ModelV2.ID.make("openai.gpt-5.5")),
             api: {
               id: ModelV2.ID.make("openai.gpt-5.5"),
@@ -343,7 +343,7 @@ describe("AmazonBedrockPlugin", () => {
       const calls: string[] = []
       yield* addPlugin()
       yield* aisdk.runLanguage({
-        model: new ModelV2.Info({
+        model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.amazonBedrock, ModelV2.ID.make("openai.gpt-5.5")),
           api: {
             id: ModelV2.ID.make("openai.gpt-5.5"),
@@ -355,7 +355,7 @@ describe("AmazonBedrockPlugin", () => {
         options: { baseURL: "https://bedrock-mantle.us-east-2.api.aws/openai/v1", region: "us-east-2" },
       })
       yield* aisdk.runLanguage({
-        model: new ModelV2.Info({
+        model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.amazonBedrock, ModelV2.ID.make("openai.gpt-oss-safeguard-120b")),
           api: {
             id: ModelV2.ID.make("openai.gpt-oss-safeguard-120b"),
@@ -376,7 +376,7 @@ describe("AmazonBedrockPlugin", () => {
       const aisdk = yield* AISDK.Service
       yield* addPlugin()
       const result = yield* aisdk.runSDK({
-        model: new ModelV2.Info({
+        model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.amazonBedrock, ModelV2.ID.make("anthropic.claude-sonnet-4-5")),
           api: {
             id: ModelV2.ID.make("anthropic.claude-sonnet-4-5"),
@@ -407,7 +407,7 @@ describe("AmazonBedrockPlugin", () => {
           const headers: Array<string | null> = []
           yield* addPlugin()
           const result = yield* aisdk.runSDK({
-            model: new ModelV2.Info({
+            model: ModelV2.Info.make({
               ...ModelV2.Info.empty(ProviderV2.ID.amazonBedrock, ModelV2.ID.make("anthropic.claude-sonnet-4-5")),
               api: {
                 id: ModelV2.ID.make("anthropic.claude-sonnet-4-5"),
@@ -442,7 +442,7 @@ describe("AmazonBedrockPlugin", () => {
       const calls: string[] = []
       yield* addPlugin()
       yield* aisdk.runLanguage({
-        model: new ModelV2.Info({
+        model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.amazonBedrock, ModelV2.ID.make("anthropic.claude-sonnet-4-5")),
           api: { id: ModelV2.ID.make("anthropic.claude-sonnet-4-5"), type: "aisdk", package: "test-provider" },
         }),
@@ -450,7 +450,7 @@ describe("AmazonBedrockPlugin", () => {
         options: {},
       })
       yield* aisdk.runLanguage({
-        model: new ModelV2.Info({
+        model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.amazonBedrock, ModelV2.ID.make("anthropic.claude-sonnet-4-5")),
           api: { id: ModelV2.ID.make("anthropic.claude-sonnet-4-5"), type: "aisdk", package: "test-provider" },
         }),
@@ -458,7 +458,7 @@ describe("AmazonBedrockPlugin", () => {
         options: { region: "eu-west-1" },
       })
       yield* aisdk.runLanguage({
-        model: new ModelV2.Info({
+        model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.amazonBedrock, ModelV2.ID.make("global.anthropic.claude-sonnet-4-5")),
           api: {
             id: ModelV2.ID.make("global.anthropic.claude-sonnet-4-5"),
@@ -470,7 +470,7 @@ describe("AmazonBedrockPlugin", () => {
         options: { region: "eu-west-1" },
       })
       yield* aisdk.runLanguage({
-        model: new ModelV2.Info({
+        model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.amazonBedrock, ModelV2.ID.make("anthropic.claude-sonnet-4-5")),
           api: { id: ModelV2.ID.make("anthropic.claude-sonnet-4-5"), type: "aisdk", package: "test-provider" },
         }),
@@ -478,7 +478,7 @@ describe("AmazonBedrockPlugin", () => {
         options: { region: "ap-northeast-1" },
       })
       yield* aisdk.runLanguage({
-        model: new ModelV2.Info({
+        model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.amazonBedrock, ModelV2.ID.make("anthropic.claude-sonnet-4-5")),
           api: { id: ModelV2.ID.make("anthropic.claude-sonnet-4-5"), type: "aisdk", package: "test-provider" },
         }),
@@ -503,7 +503,7 @@ describe("AmazonBedrockPlugin", () => {
         const calls: string[] = []
         yield* addPlugin()
         yield* aisdk.runLanguage({
-          model: new ModelV2.Info({
+          model: ModelV2.Info.make({
             ...ModelV2.Info.empty(ProviderV2.ID.amazonBedrock, ModelV2.ID.make("anthropic.claude-sonnet-4-5")),
             api: { id: ModelV2.ID.make("anthropic.claude-sonnet-4-5"), type: "aisdk", package: "test-provider" },
           }),
@@ -589,7 +589,7 @@ describe("AmazonBedrockPlugin", () => {
       yield* addPlugin()
       for (const item of cases) {
         yield* aisdk.runLanguage({
-          model: new ModelV2.Info({
+          model: ModelV2.Info.make({
             ...ModelV2.Info.empty(ProviderV2.ID.amazonBedrock, ModelV2.ID.make(item.modelID)),
             api: { id: ModelV2.ID.make(item.modelID), type: "aisdk", package: "test-provider" },
           }),
@@ -608,7 +608,7 @@ describe("AmazonBedrockPlugin", () => {
       const calls: string[] = []
       yield* addPlugin()
       const result = yield* aisdk.runLanguage({
-        model: new ModelV2.Info({
+        model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.openai, ModelV2.ID.make("anthropic.claude-sonnet-4-5")),
           api: { id: ModelV2.ID.make("anthropic.claude-sonnet-4-5"), type: "aisdk", package: "test-provider" },
         }),

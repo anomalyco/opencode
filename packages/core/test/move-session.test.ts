@@ -3,56 +3,34 @@ import { $ } from "bun"
 import fs from "fs/promises"
 import path from "path"
 import { eq } from "drizzle-orm"
-import { Effect, Layer } from "effect"
+import { Effect } from "effect"
 import { MoveSession } from "@opencode-ai/core/control-plane/move-session"
 import { Database } from "@opencode-ai/core/database/database"
-import { FSUtil } from "@opencode-ai/core/fs-util"
-import { Git } from "@opencode-ai/core/git"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventV2 } from "@opencode-ai/core/event"
 import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { ProjectDirectories } from "@opencode-ai/core/project/directories"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
-import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
-const project = Project.layer.pipe(
-  Layer.provide(Database.defaultLayer),
-  Layer.provide(FSUtil.defaultLayer),
-  Layer.provide(Git.defaultLayer),
-  Layer.provide(ProjectDirectories.defaultLayer),
-)
-const sessions = SessionV2.layer.pipe(
-  Layer.provide(Database.defaultLayer),
-  Layer.provide(EventV2.defaultLayer),
-  Layer.provide(project),
-  Layer.provide(SessionStore.defaultLayer),
-  Layer.provide(SessionExecution.noopLayer),
-)
-const layer = MoveSession.layer.pipe(
-  Layer.provide(Database.defaultLayer),
-  Layer.provide(FSUtil.defaultLayer),
-  Layer.provide(Git.defaultLayer),
-  Layer.provide(EventV2.defaultLayer),
-  Layer.provide(project),
-  Layer.provide(sessions),
-)
 const it = testEffect(
-  Layer.mergeAll(
-    layer,
-    Database.defaultLayer,
-    EventV2.defaultLayer,
-    ProjectDirectories.defaultLayer,
-    project,
-    SessionProjector.defaultLayer,
-    SessionStore.defaultLayer,
-    SessionExecution.noopLayer,
-    sessions,
+  AppNodeBuilder.build(
+    LayerNode.group([
+      MoveSession.node,
+      Database.node,
+      EventV2.node,
+      ProjectDirectories.node,
+      Project.node,
+      SessionProjector.node,
+      SessionStore.node,
+    ]),
   ),
 )
 

@@ -2,6 +2,8 @@ import { describe, expect } from "bun:test"
 import { Deferred, Effect, Fiber, Layer } from "effect"
 import { AgentV2 } from "@opencode-ai/core/agent"
 import { Database } from "@opencode-ai/core/database/database"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventV2 } from "@opencode-ai/core/event"
 import { Location } from "@opencode-ai/core/location"
 import { PermissionV2 } from "@opencode-ai/core/permission"
@@ -12,7 +14,6 @@ import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { SessionTable } from "@opencode-ai/core/session/sql"
-import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { eq } from "drizzle-orm"
 import { location } from "./fixture/location"
@@ -22,23 +23,19 @@ const current = Layer.succeed(
   Location.Service,
   Location.Service.of(location({ directory: AbsolutePath.make("/project") })),
 )
-const sessions = SessionV2.layer.pipe(
-  Layer.provide(EventV2.defaultLayer),
-  Layer.provide(Database.defaultLayer),
-  Layer.provide(SessionStore.defaultLayer),
-  Layer.provide(Project.defaultLayer),
-  Layer.provide(SessionExecution.noopLayer),
+const it = testEffect(
+  AppNodeBuilder.build(
+    LayerNode.group([
+      Database.node,
+      EventV2.node,
+      SessionStore.node,
+      PermissionSaved.node,
+      AgentV2.node,
+      PermissionV2.node,
+    ]),
+    [[Location.node, current]],
+  ),
 )
-const layer = PermissionV2.locationLayer.pipe(
-  Layer.provideMerge(Database.defaultLayer),
-  Layer.provideMerge(SessionStore.defaultLayer),
-  Layer.provideMerge(EventV2.defaultLayer),
-  Layer.provideMerge(current),
-  Layer.provideMerge(sessions),
-  Layer.provideMerge(SessionExecution.noopLayer),
-  Layer.provideMerge(PermissionSaved.defaultLayer),
-)
-const it = testEffect(layer)
 
 function setup(rules: PermissionV2.Ruleset = []) {
   return Effect.gen(function* () {

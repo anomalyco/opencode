@@ -227,6 +227,11 @@ export function formatKeybind(config: string, t?: (key: KeyLabel) => string): st
   return IS_MAC ? parts.join("") : parts.join("+")
 }
 
+// KeybindV2 takes an array instead of a string
+export function formatKeybindKeys(config: string, t?: (key: KeyLabel) => string): string[] {
+  return formatKeybindParts(config, t)
+}
+
 function isEditableTarget(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) return false
   if (target.isContentEditable) return true

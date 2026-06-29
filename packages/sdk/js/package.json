@@ -1,10 +1,11 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode-ai/sdk",
-  "version": "1.17.9",
+  "version": "1.17.11",
   "type": "module",
   "license": "MIT",
   "scripts": {
+    "test": "bun test",
     "typecheck": "tsgo --noEmit",
     "build": "bun ./script/build.ts"
   },

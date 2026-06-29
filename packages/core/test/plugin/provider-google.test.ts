@@ -25,7 +25,7 @@ describe("GooglePlugin", () => {
       const aisdk = yield* AISDK.Service
       yield* addPlugin()
       const result = yield* aisdk.runSDK({
-        model: new ModelV2.Info({
+        model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.make("custom-google"), ModelV2.ID.make("gemini")),
           api: { id: ModelV2.ID.make("gemini"), type: "aisdk", package: "@ai-sdk/google" },
         }),
@@ -43,7 +43,7 @@ describe("GooglePlugin", () => {
       const aisdk = yield* AISDK.Service
       yield* addPlugin()
       const result = yield* aisdk.runSDK({
-        model: new ModelV2.Info({
+        model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.make("google"), ModelV2.ID.make("gemini")),
           api: { id: ModelV2.ID.make("gemini"), type: "aisdk", package: "@ai-sdk/google" },
         }),
@@ -60,7 +60,7 @@ describe("GooglePlugin", () => {
       const aisdk = yield* AISDK.Service
       yield* addPlugin()
       const sdkEvent = yield* aisdk.runSDK({
-        model: new ModelV2.Info({
+        model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.make("custom-google"), ModelV2.ID.make("alias")),
           api: { id: ModelV2.ID.make("gemini-api"), type: "aisdk", package: "@ai-sdk/google" },
         }),

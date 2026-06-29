@@ -39,7 +39,7 @@ describe("PerplexityPlugin", () => {
       const aisdk = yield* AISDK.Service
       yield* addPlugin()
       const result = yield* aisdk.runSDK({
-        model: new ModelV2.Info({
+        model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.make("perplexity"), ModelV2.ID.make("sonar")),
           api: { id: ModelV2.ID.make("sonar"), type: "aisdk", package: "test-provider" },
         }),
@@ -56,7 +56,7 @@ describe("PerplexityPlugin", () => {
       const aisdk = yield* AISDK.Service
       yield* addPlugin()
       const result = yield* aisdk.runSDK({
-        model: new ModelV2.Info({
+        model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.make("perplexity"), ModelV2.ID.make("sonar")),
           api: { id: ModelV2.ID.make("sonar"), type: "aisdk", package: "test-provider" },
         }),
@@ -73,7 +73,7 @@ describe("PerplexityPlugin", () => {
       const aisdk = yield* AISDK.Service
       yield* addPlugin()
       const result = yield* aisdk.runSDK({
-        model: new ModelV2.Info({
+        model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.make("perplexity"), ModelV2.ID.make("sonar")),
           api: { id: ModelV2.ID.make("sonar"), type: "aisdk", package: "test-provider" },
         }),
@@ -90,7 +90,7 @@ describe("PerplexityPlugin", () => {
       const aisdk = yield* AISDK.Service
       yield* addPlugin()
       const result = yield* aisdk.runSDK({
-        model: new ModelV2.Info({
+        model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.make("custom-perplexity"), ModelV2.ID.make("sonar")),
           api: { id: ModelV2.ID.make("sonar"), type: "aisdk", package: "test-provider" },
         }),
@@ -108,7 +108,7 @@ describe("PerplexityPlugin", () => {
       const calls: string[] = []
       yield* addPlugin()
       const result = yield* aisdk.runLanguage({
-        model: new ModelV2.Info({
+        model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.make("perplexity"), ModelV2.ID.make("alias")),
           api: { id: ModelV2.ID.make("sonar"), type: "aisdk", package: "test-provider" },
         }),
