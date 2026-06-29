@@ -1,5 +1,5 @@
-import { Match, Show, Switch, createMemo } from "solid-js"
-import { Tooltip, type TooltipProps } from "@opencode-ai/ui/tooltip"
+import { Match, Show, Switch, createMemo, type ComponentProps, type JSX } from "solid-js"
+import { Tooltip as KobalteTooltip } from "@kobalte/core/tooltip"
 import { ProgressCircle } from "@opencode-ai/ui/progress-circle"
 import { ProgressCircleV2 } from "@opencode-ai/ui/v2/progress-circle-v2"
 import { Button } from "@opencode-ai/ui/button"
@@ -18,7 +18,45 @@ import { createSessionTabs } from "@/pages/session/helpers"
 interface SessionContextUsageProps {
   variant?: "button" | "indicator"
   buttonAppearance?: "default" | "v2"
-  placement?: TooltipProps["placement"]
+  placement?: ComponentProps<typeof KobalteTooltip>["placement"]
+}
+
+function ContextUsageTooltip(props: {
+  value: JSX.Element
+  placement?: ComponentProps<typeof KobalteTooltip>["placement"]
+  children: JSX.Element
+}) {
+  return (
+    <KobalteTooltip
+      gutter={4}
+      openDelay={0}
+      closeDelay={0}
+      ignoreSafeArea
+      placement={props.placement}
+      shift={-8}
+    >
+      <KobalteTooltip.Trigger as="div" class="flex">
+        {props.children}
+      </KobalteTooltip.Trigger>
+      <KobalteTooltip.Portal>
+        <KobalteTooltip.Content
+          class="box-border inline-flex w-[120px] flex-col gap-2 rounded-[4px] bg-v2-background-bg-layer-01 px-1.5 py-[5px] font-['Inter'] text-[11px] font-[530] not-italic leading-3 tracking-[0.05px] text-v2-text-text-base shadow-[var(--v2-elevation-floating)] [font-feature-settings:'tnum'_on,'lnum'_on] [font-variation-settings:'slnt'_0] animate-[tooltipV2In_120ms_ease-out] select-none pointer-events-none"
+          style={{ "transform-origin": "var(--kb-tooltip-content-transform-origin)" }}
+        >
+          {props.value}
+        </KobalteTooltip.Content>
+      </KobalteTooltip.Portal>
+    </KobalteTooltip>
+  )
+}
+
+function ContextTooltipRow(props: { name: JSX.Element; value: JSX.Element }) {
+  return (
+    <div class="flex items-center gap-4">
+      <span class="text-v2-text-text-muted">{props.name}</span>
+      <span class="ml-auto text-v2-text-text-base">{props.value}</span>
+    </div>
+  )
 }
 
 function openSessionContext(args: {
@@ -91,35 +129,19 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
   )
 
   const tooltipValue = () => (
-    <div>
-      <Show when={tokens()}>
-        {(value) => (
-          <div class="flex items-center gap-2">
-            <span class="text-text-invert-strong">
-              {getSessionTokenTotal(value())?.toLocaleString(language.intl())}
-            </span>
-            <span class="text-text-invert-base">{language.t("context.usage.tokens")}</span>
-          </div>
-        )}
-      </Show>
-      <Show when={context()}>
-        {(ctx) => (
-          <div class="flex items-center gap-2">
-            <span class="text-text-invert-strong">{ctx().usage ?? 0}%</span>
-            <span class="text-text-invert-base">{language.t("context.usage.usage")}</span>
-          </div>
-        )}
-      </Show>
-      <div class="flex items-center gap-2">
-        <span class="text-text-invert-strong">{cost()}</span>
-        <span class="text-text-invert-base">{language.t("context.usage.cost")}</span>
-      </div>
-    </div>
+    <>
+      <ContextTooltipRow name={language.t("context.usage.cost")} value={cost()} />
+      <ContextTooltipRow name={language.t("context.usage.usage")} value={`${context()?.usage ?? 0}%`} />
+      <ContextTooltipRow
+        name={language.t("context.usage.tokens")}
+        value={getSessionTokenTotal(tokens())?.toLocaleString(language.intl()) ?? "0"}
+      />
+    </>
   )
 
   return (
     <Show when={params.id}>
-      <Tooltip value={tooltipValue()} placement={props.placement ?? "top"}>
+      <ContextUsageTooltip value={tooltipValue()} placement={props.placement ?? "top"}>
         <Switch>
           <Match when={variant() === "indicator"}>{circle()}</Match>
           <Match when={buttonAppearance() === "v2"}>
@@ -144,7 +166,7 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
             </Button>
           </Match>
         </Switch>
-      </Tooltip>
+      </ContextUsageTooltip>
     </Show>
   )
 }
