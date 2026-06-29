@@ -1,6 +1,6 @@
 import { createStore } from "solid-js/store"
 import { createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
-import { useRenderer } from "@opentui/solid"
+import { useKeyboard, useRenderer } from "@opentui/solid"
 import type { TextareaRenderable } from "@opentui/core"
 import { selectedForeground, tint, useTheme } from "../../context/theme"
 import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
@@ -22,6 +22,7 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
   const single = createMemo(() => questions().length === 1 && questions()[0]?.multiple !== true)
   const tabs = createMemo(() => (single() ? 1 : questions().length + 1)) // questions + confirm tab (no confirm for single select)
   const [tabHover, setTabHover] = createSignal<number | "confirm" | null>(null)
+  const [pending, setPending] = createSignal<string | null>(null)
   const [store, setStore] = createStore({
     tab: 0,
     answers: [] as QuestionAnswer[],
@@ -285,6 +286,17 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
     }
   })
 
+  useKeyboard((evt) => {
+    if (store.editing || confirm() || !other()) return
+    if (evt.ctrl || evt.meta || evt.option) return
+    if (evt.name === "space" || (evt.name.length === 1 && !"hjkl".includes(evt.name))) {
+      evt.preventDefault()
+      evt.stopPropagation()
+      setPending(evt.sequence)
+      setStore("editing", true)
+    }
+  })
+
   return (
     <box
       backgroundColor={theme.backgroundPanel}
@@ -431,6 +443,11 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
                           queueMicrotask(() => {
                             val.focus()
                             val.gotoLineEnd()
+                            const ch = pending()
+                            if (ch) {
+                              val.insertText(ch)
+                              setPending(null)
+                            }
                           })
                         }}
                         initialValue={input()}
