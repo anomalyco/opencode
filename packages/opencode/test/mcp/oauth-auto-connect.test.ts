@@ -263,7 +263,7 @@ mcpTest.instance(
 
       expect(yield* mcp.finishAuth(name, "invalid-code")).toEqual({
         status: "failed",
-        error: "OAuth completion failed",
+        error: "OAuth completion failed: Token exchange failed",
       })
       const entry = yield* auth.get(name)
       expect(entry?.tokens?.accessToken).toBe("working-token")

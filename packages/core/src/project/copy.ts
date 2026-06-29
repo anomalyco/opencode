@@ -5,7 +5,7 @@ import path from "path"
 import { AbsolutePath } from "../schema"
 import { FSUtil } from "../fs-util"
 import { Git } from "../git"
-import { LayerNode } from "../effect/layer-node"
+import { makeLocationNode } from "../effect/app-node"
 import { Project } from "../project"
 import { ProjectDirectories } from "./directories"
 import { makeGitWorktreeStrategy } from "./copy-strategies"
@@ -279,8 +279,14 @@ export const layer = Layer.effect(
 )
 
 export const locationLayer = layer
-export const node = LayerNode.make({
+export const node = makeLocationNode({
   service: Service,
   layer: layer,
   deps: [FSUtil.node, Git.node, ProjectDirectories.node, EventV2.node, Database.node],
+})
+
+export const refreshNode = makeLocationNode({
+  name: "project-copy-refresh",
+  layer: Layer.effectDiscard(refreshAfterBoot),
+  deps: [node, Location.node],
 })

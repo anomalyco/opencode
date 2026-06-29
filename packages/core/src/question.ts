@@ -1,5 +1,6 @@
 export * as QuestionV2 from "./question"
 
+import { makeLocationNode } from "./effect/app-node"
 import { Context, Deferred, Effect, Layer, Schema } from "effect"
 import { Question } from "@opencode-ai/schema/question"
 import { EventV2 } from "./event"
@@ -148,3 +149,5 @@ export const layer = Layer.effect(
 )
 
 export const locationLayer = layer
+
+export const node = makeLocationNode({ service: Service, layer, deps: [EventV2.node] })

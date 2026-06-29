@@ -1,12 +1,15 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { PtyID } from "@opencode-ai/core/pty/schema"
 import { PtyTicket } from "@opencode-ai/core/pty/ticket"
 import { WorkspaceV2 } from "@opencode-ai/core/workspace"
 import { testEffect } from "../lib/effect"
 
-const it = testEffect(PtyTicket.layer)
-const itExpiring = testEffect(Layer.effect(PtyTicket.Service, PtyTicket.make(5)))
+const it = testEffect(LayerNode.compile(PtyTicket.node))
+const itExpiring = testEffect(
+  LayerNode.compile(PtyTicket.node, [[PtyTicket.node, Layer.effect(PtyTicket.Service, PtyTicket.make(5))]]),
+)
 
 describe("PTY websocket tickets", () => {
   it.live("consumes tickets once", () =>

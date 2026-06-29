@@ -1,5 +1,6 @@
 export * as Integration from "./integration"
 
+import { makeLocationNode } from "./effect/app-node"
 import {
   Cause,
   Clock,
@@ -515,3 +516,5 @@ export const locationLayer = Layer.effect(
     })
   }),
 )
+
+export const node = makeLocationNode({ service: Service, layer: locationLayer, deps: [Credential.node, EventV2.node] })

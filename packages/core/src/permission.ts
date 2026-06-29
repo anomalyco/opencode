@@ -1,5 +1,6 @@
 export * as PermissionV2 from "./permission"
 
+import { makeLocationNode } from "./effect/app-node"
 import { Context, Deferred, Effect as EffectRuntime, Layer, Schema } from "effect"
 import { Permission } from "@opencode-ai/schema/permission"
 import { EventV2 } from "./event"
@@ -300,3 +301,9 @@ export const layer = Layer.effect(
 )
 
 export const locationLayer = layer.pipe(Layer.provideMerge(AgentV2.locationLayer))
+
+export const node = makeLocationNode({
+  service: Service,
+  layer,
+  deps: [EventV2.node, Location.node, AgentV2.node, SessionStore.node, PermissionSaved.node],
+})

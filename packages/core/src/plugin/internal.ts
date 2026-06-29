@@ -1,5 +1,7 @@
 export * as PluginInternal from "./internal"
 
+import { makeLocationNode } from "../effect/app-node"
+import { httpClient } from "../effect/app-node-platform"
 import type { PluginContext } from "@opencode-ai/plugin/v2/effect"
 import { Effect, Layer, Scope } from "effect"
 import { AgentV2 } from "../agent"
@@ -23,6 +25,7 @@ import { Npm } from "../npm"
 import { PluginV2 } from "../plugin"
 import { Reference } from "../reference"
 import { SkillV2 } from "../skill"
+import { State } from "../state"
 import { FetchHttpClient, HttpClient } from "effect/unstable/http"
 import { AgentPlugin } from "./agent"
 import { CommandPlugin } from "./command"
@@ -57,7 +60,7 @@ export function define<R>(plugin: Plugin<R>) {
   return plugin
 }
 
-export const locationLayer = Layer.effectDiscard(
+const layer = Layer.effectDiscard(
   Effect.gen(function* () {
     const catalog = yield* Catalog.Service
     const commands = yield* CommandV2.Service
@@ -102,24 +105,51 @@ export const locationLayer = Layer.effectDiscard(
       return plugin.add(PluginV2.ID.make(loaded.id), loaded.effect)
     }
 
-    yield* Effect.gen(function* () {
-      yield* add(ConfigReferencePlugin.Plugin)
-      yield* add(AgentPlugin.Plugin)
-      yield* add(CommandPlugin.Plugin)
-      yield* add(SkillPlugin.Plugin)
-      yield* add(ModelsDevPlugin)
-      yield* add(ConfigAgentPlugin.Plugin)
-      yield* add(ConfigCommandPlugin.Plugin)
-      yield* add(ConfigSkillPlugin.Plugin)
-      for (const item of ProviderPlugins) yield* add(item)
-      yield* add(ConfigExternalPlugin.Plugin)
-      yield* add(ConfigProviderPlugin.Plugin)
-      yield* add(VariantPlugin.Plugin)
-    }).pipe(Effect.withSpan("PluginInternal.boot"), Effect.forkScoped({ startImmediately: true }))
+    yield* State.batch(
+      Effect.gen(function* () {
+        yield* add(ConfigReferencePlugin.Plugin)
+        yield* add(AgentPlugin.Plugin)
+        yield* add(CommandPlugin.Plugin)
+        yield* add(SkillPlugin.Plugin)
+        yield* add(ModelsDevPlugin)
+        yield* add(ConfigAgentPlugin.Plugin)
+        yield* add(ConfigCommandPlugin.Plugin)
+        yield* add(ConfigSkillPlugin.Plugin)
+        for (const item of ProviderPlugins) yield* add(item)
+        yield* add(ConfigExternalPlugin.Plugin)
+        yield* add(ConfigProviderPlugin.Plugin)
+        yield* add(VariantPlugin.Plugin)
+      }),
+    ).pipe(Effect.withSpan("PluginInternal.boot"), Effect.forkScoped({ startImmediately: true }))
   }),
-).pipe(
+)
+
+export const locationLayer = layer.pipe(
   Layer.provideMerge(PluginV2.locationLayer),
   Layer.provideMerge(Config.locationLayer),
   Layer.provideMerge(FileSystem.locationLayer),
   Layer.provideMerge(FetchHttpClient.layer),
 )
+
+export const node = makeLocationNode({
+  name: "plugin-internal",
+  layer,
+  deps: [
+    Catalog.node,
+    CommandV2.node,
+    PluginV2.node,
+    Integration.node,
+    AgentV2.node,
+    Config.node,
+    Location.node,
+    ModelsDev.node,
+    Npm.node,
+    EventV2.node,
+    FSUtil.node,
+    FileSystem.node,
+    Global.node,
+    httpClient,
+    SkillV2.node,
+    Reference.node,
+  ],
+})

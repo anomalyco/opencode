@@ -1,5 +1,6 @@
 export * as Catalog from "./catalog"
 
+import { makeLocationNode } from "./effect/app-node"
 import { Array, Context, Effect, Layer, Option, Order, pipe, Schema } from "effect"
 import { Catalog } from "@opencode-ai/schema/catalog"
 import { ModelV2 } from "./model"
@@ -296,3 +297,5 @@ export const locationLayer = layer.pipe(
   Layer.provideMerge(Integration.locationLayer),
   Layer.provideMerge(Policy.locationLayer),
 )
+
+export const node = makeLocationNode({ service: Service, layer, deps: [EventV2.node, Policy.node, Integration.node] })
