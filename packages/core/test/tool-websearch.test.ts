@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, test } from "bun:test"
 import { Effect, Layer, Schema } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/unstable/http"
-import { makeLocationNode } from "@opencode-ai/core/effect/app-node"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { LayerNodePlatform } from "@opencode-ai/core/effect/app-node-platform"
@@ -124,20 +123,11 @@ const websearchConfig = Layer.succeed(
     },
   }),
 )
-const websearchConfigNode = makeLocationNode({
-  service: WebSearchTool.ConfigService,
-  layer: websearchConfig,
-  deps: [],
-})
-const toolNode = makeLocationNode({
-  name: "test/websearch-tool",
-  layer: WebSearchTool.layer,
-  deps: [ToolRegistry.node, PermissionV2.node, LayerNodePlatform.httpClient, websearchConfigNode],
-})
 const it = testEffect(
-  AppNodeBuilder.build(LayerNode.group([ToolRegistry.node, ToolRegistry.toolsNode, websearchConfigNode, toolNode]), [
+  AppNodeBuilder.build(LayerNode.group([ToolRegistry.node, ToolRegistry.toolsNode, WebSearchTool.configNode, WebSearchTool.node]), [
     [PermissionV2.node, permission],
     [LayerNodePlatform.httpClient, http],
+    [WebSearchTool.configNode, websearchConfig],
     [ToolOutputStore.node, ToolOutputStore.nodeWithoutConfig],
   ]),
 )

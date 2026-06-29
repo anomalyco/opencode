@@ -1,7 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
-import { makeLocationNode } from "@opencode-ai/core/effect/app-node"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventV2 } from "@opencode-ai/core/event"
@@ -36,14 +35,16 @@ const permission = Layer.succeed(
     list: () => Effect.die("unused"),
   }),
 )
-const toolNode = makeLocationNode({
-  name: "test/todowrite-tool",
-  layer: TodoWriteTool.layer,
-  deps: [ToolRegistry.node, PermissionV2.node, SessionTodo.node],
-})
 const it = testEffect(
   AppNodeBuilder.build(
-    LayerNode.group([Database.node, EventV2.node, SessionTodo.node, ToolRegistry.node, ToolRegistry.toolsNode, toolNode]),
+    LayerNode.group([
+      Database.node,
+      EventV2.node,
+      SessionTodo.node,
+      ToolRegistry.node,
+      ToolRegistry.toolsNode,
+      TodoWriteTool.node,
+    ]),
     [
       [PermissionV2.node, permission],
       [ToolOutputStore.node, ToolOutputStore.nodeWithoutConfig],

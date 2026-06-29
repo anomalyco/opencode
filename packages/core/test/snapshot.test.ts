@@ -3,12 +3,9 @@ import { describe, expect } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { Effect, Layer } from "effect"
-import { Config } from "@opencode-ai/core/config"
-import { FSUtil } from "@opencode-ai/core/fs-util"
-import { Git } from "@opencode-ai/core/git"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Global } from "@opencode-ai/core/global"
 import { Location } from "@opencode-ai/core/location"
-import { Project } from "@opencode-ai/core/project"
 import { AbsolutePath, RelativePath } from "@opencode-ai/core/schema"
 import { Snapshot } from "@opencode-ai/core/snapshot"
 import { Hash } from "@opencode-ai/core/util/hash"
@@ -117,11 +114,7 @@ describe("Snapshot", () => {
           const projectID = yield* Effect.gen(function* () {
             return (yield* Location.Service).project.id
           }).pipe(
-            Effect.provide(
-              Location.layer(Location.Ref.make({ directory: AbsolutePath.make(project) })).pipe(
-                Layer.provide(Project.defaultLayer),
-              ),
-            ),
+            Effect.provide(AppNodeBuilder.build(Location.boundNode(Location.Ref.make({ directory: AbsolutePath.make(project) })))),
           )
           expect(
             yield* Effect.promise(() => fs.stat(path.join(tmp.path, "snapshot", projectID, Hash.fast(project)))),
@@ -172,15 +165,12 @@ describe("Snapshot", () => {
 })
 
 function snapshotLayer(data: string, directory: string) {
-  const location = Location.layer(Location.Ref.make({ directory: AbsolutePath.make(directory) })).pipe(
-    Layer.provide(Project.defaultLayer),
-  )
-  return Snapshot.layer.pipe(
-    Layer.provide(location),
-    Layer.provide(Config.locationLayer.pipe(Layer.provide(location))),
-    Layer.provide(FSUtil.defaultLayer),
-    Layer.provide(Git.defaultLayer),
-    Layer.provide(Global.layerWith({ data, config: path.join(data, "config") })),
+  return AppNodeBuilder.build(
+    Snapshot.node,
+    [
+      [Location.node, Location.boundNode(Location.Ref.make({ directory: AbsolutePath.make(directory) }))],
+      [Global.node, Global.layerWith({ data, config: path.join(data, "config") })],
+    ],
   )
 }
 

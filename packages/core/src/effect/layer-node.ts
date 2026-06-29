@@ -272,7 +272,48 @@ export function compile<A, E, const Items extends Replacements = readonly []>(
 }
 
 function replacementMapFrom(replacements?: Replacements) {
-  return new Map(replacements?.map(([source, replacement]) => [source.name, replacementNode(source, replacement)]))
+  return replacements?.reduce((map, [source, replacement]) => {
+    const normalized = rewriteReplacementDependencies(replacementNode(source, replacement), map)
+    const current = new Map([[source.name, normalized]])
+    for (const [name, node] of map) map.set(name, rewriteReplacementDependencies(node, current))
+    map.set(source.name, normalized)
+    return map
+  }, new Map<string, AnyNode>()) ?? new Map<string, AnyNode>()
+}
+
+function rewriteReplacementDependencies(root: AnyNode, replacements: ReadonlyMap<string, AnyNode>) {
+  if (replacements.size === 0) return root
+  const cache = new Map<AnyNode, AnyNode>()
+  const visiting = new Set<AnyNode>()
+  const stack: AnyNode[] = []
+
+  const recur = (node: AnyNode, isRoot = false): AnyNode => {
+    const target = isRoot ? node : (replacements.get(node.name) ?? node)
+    const cached = cache.get(target)
+    if (cached !== undefined || cache.has(target)) return cached!
+    if (visiting.has(target)) {
+      const start = stack.indexOf(target)
+      throw new Error(
+        `Cycle detected in layer tree: ${[...stack.slice(start), target].map((item) => item.name).join(" -> ")}`,
+      )
+    }
+
+    visiting.add(target)
+    stack.push(target)
+    try {
+      const dependencies = target.dependencies.map((dependency) => recur(dependency))
+      const result = dependencies.every((dependency, index) => dependency === target.dependencies[index])
+        ? target
+        : { ...target, dependencies }
+      cache.set(target, result)
+      return result
+    } finally {
+      stack.pop()
+      visiting.delete(target)
+    }
+  }
+
+  return recur(root, true)
 }
 
 export function hasUnbound(root: Node<unknown, unknown, any>, source: AnyNode): boolean {

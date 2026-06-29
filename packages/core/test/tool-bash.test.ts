@@ -6,6 +6,8 @@ import { Effect, Layer } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Config } from "@opencode-ai/core/config"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Location } from "@opencode-ai/core/location"
 import { LocationMutation } from "@opencode-ai/core/location-mutation"
 import { PermissionV2 } from "@opencode-ai/core/permission"
@@ -14,6 +16,7 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { BashTool } from "@opencode-ai/core/tool/bash"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
+import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
 import { location } from "./fixture/location"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
@@ -99,24 +102,23 @@ const withTool = <A, E, R>(
   body: (registry: ToolRegistry.Interface) => Effect.Effect<A, E, R>,
   processLayer: Layer.Layer<AppProcess.Service> = appProcess,
 ) => {
-  const filesystem = FSUtil.defaultLayer
   const activeLocation = Layer.succeed(
     Location.Service,
     Location.Service.of(location({ directory: AbsolutePath.make(directory) })),
   )
-  const mutation = LocationMutation.layer.pipe(Layer.provide(filesystem), Layer.provide(activeLocation))
-  const registry = ToolRegistry.defaultLayer.pipe(Layer.provide(permission))
-  const bash = BashTool.layer.pipe(
-    Layer.provide(registry),
-    Layer.provide(permission),
-    Layer.provide(mutation),
-    Layer.provide(filesystem),
-    Layer.provide(processLayer),
-    Layer.provide(config),
-  )
   return Effect.gen(function* () {
     return yield* body(yield* ToolRegistry.Service)
-  }).pipe(Effect.provide(Layer.mergeAll(registry, bash)))
+  }).pipe(
+    Effect.provide(
+      AppNodeBuilder.build(LayerNode.group([ToolRegistry.node, ToolRegistry.toolsNode, LocationMutation.node, BashTool.node]), [
+        [Location.node, activeLocation],
+        [PermissionV2.node, permission],
+        [AppProcess.node, processLayer],
+        [Config.node, config],
+        [ToolOutputStore.node, ToolOutputStore.nodeWithoutConfig],
+      ]),
+    ),
+  )
 }
 
 const call = (input: typeof BashTool.Input.Type, id = "call-bash") => ({
@@ -231,7 +233,7 @@ describe("BashTool", () => {
           return withTool(
             tmp.path,
             (registry) => settleTool(registry, call({ command: "printf core-bash" })),
-            AppProcess.defaultLayer,
+            LayerNode.compile(AppProcess.node),
           ).pipe(
             Effect.andThen((settled) =>
               Effect.sync(() => {
