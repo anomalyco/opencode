@@ -1083,6 +1083,7 @@ export const layer = Layer.effect(
         const ctx = yield* InstanceState.context
         let structured: unknown
         let step = 0
+        let previousResponseId: string | undefined
         const session = yield* sessions.get(sessionID).pipe(Effect.orDie)
 
         while (true) {
@@ -1215,6 +1216,7 @@ export const layer = Layer.effect(
               assistantMessage: msg,
               sessionID,
               model,
+              previousResponseId,
             })
             .pipe(Effect.onInterrupt(() => finalizeInterruptedAssistant))
 
@@ -1331,6 +1333,7 @@ export const layer = Layer.effect(
             Effect.onInterrupt(() => finalizeInterruptedAssistant),
           )
           if (outcome === "break") break
+          previousResponseId = handle.responseId
           continue
         }
 

@@ -33,6 +33,7 @@ type PrepareInput = {
   readonly plugin: Plugin.Interface
   readonly flags: RuntimeFlags.Info
   readonly isWorkflow: boolean
+  readonly previousResponseId?: string
 }
 
 export type Prepared = {
@@ -89,6 +90,15 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
         providerOptions: input.provider.options,
       })
   const options = mergeOptions(mergeOptions(mergeOptions(base, input.model.options), input.agent.options), variant)
+  const providerStore = input.provider.options?.store
+  if (options.store === true || providerStore === true) {
+    if (providerStore === true && options.store !== true) options.store = true
+    if (Array.isArray(options.include)) {
+      options.include = options.include.filter((v) => v !== "reasoning.encrypted_content")
+      if (options.include.length === 0) delete options.include
+    }
+    if (input.previousResponseId) options.previousResponseId = input.previousResponseId
+  }
   if (
     input.model.api.npm === "@ai-sdk/azure" &&
     (input.provider.options.useCompletionUrls || input.model.options.useCompletionUrls || options.useCompletionUrls)

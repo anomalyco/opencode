@@ -31,6 +31,7 @@ export type Result = "compact" | "stop" | "continue"
 
 export interface Handle {
   readonly message: SessionV1.Assistant
+  readonly responseId: string | undefined
   readonly updateToolCall: (
     toolCallID: string,
     update: (part: SessionV1.ToolPart) => SessionV1.ToolPart,
@@ -51,6 +52,7 @@ type Input = {
   assistantMessage: SessionV1.Assistant
   sessionID: SessionID
   model: Provider.Model
+  previousResponseId?: string
 }
 
 export interface Interface {
@@ -72,6 +74,7 @@ interface ProcessorContext extends Input {
   needsCompaction: boolean
   currentText: SessionV1.TextPart | undefined
   reasoningMap: Record<string, SessionV1.ReasoningPart>
+  responseId: string | undefined
 }
 
 type StreamEvent = LLMEvent
@@ -111,6 +114,7 @@ export const layer = Layer.effect(
         needsCompaction: false,
         currentText: undefined,
         reasoningMap: {},
+        responseId: input.previousResponseId,
       }
       let aborted = false
 
@@ -441,6 +445,9 @@ export const layer = Layer.effect(
             ctx.assistantMessage.finish = value.reason
             ctx.assistantMessage.cost += usage.cost
             ctx.assistantMessage.tokens = usage.tokens
+            if (value.providerMetadata?.openai?.responseId) {
+              ctx.responseId = value.providerMetadata.openai.responseId
+            }
             yield* session.updatePart({
               id: PartID.ascending(),
               reason: value.reason,
@@ -635,7 +642,10 @@ export const layer = Layer.effect(
             ctx.currentText = undefined
             ctx.reasoningMap = {}
             yield* status.set(ctx.sessionID, { type: "busy" })
-            const stream = llm.stream(streamInput)
+            const streamInputWithPrev = ctx.responseId
+              ? { ...streamInput, previousResponseId: ctx.responseId }
+              : streamInput
+            const stream = llm.stream(streamInputWithPrev)
 
             yield* stream.pipe(
               Stream.tap((event) => handleEvent(event)),
@@ -683,6 +693,9 @@ export const layer = Layer.effect(
       return {
         get message() {
           return ctx.assistantMessage
+        },
+        get responseId() {
+          return ctx.responseId
         },
         updateToolCall,
         completeToolCall,
