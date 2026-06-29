@@ -15,6 +15,7 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session as SessionNs } from "@/session/session"
 import { SessionID } from "@/session/schema"
 import { SessionTable } from "@opencode-ai/core/session/sql"
+import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { EventSequenceTable } from "@opencode-ai/core/event/sql"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, provideTmpdirInstance, requireInstance, TestInstance } from "../fixture/fixture"
@@ -41,7 +42,14 @@ const originalEnv = {
 
 const workspaceLayer = (experimentalWorkspaces: boolean) =>
   AppNodeBuilder.build(
-    LayerNode.group([Workspace.node, SessionNs.node, Database.node, InstanceStore.node, Ripgrep.node]),
+    LayerNode.group([
+      Workspace.node,
+      SessionNs.node,
+      SessionProjector.node,
+      Database.node,
+      InstanceStore.node,
+      Ripgrep.node,
+    ]),
     [
       [RuntimeFlags.node, RuntimeFlags.layer({ experimentalWorkspaces })],
       [InstanceBootstrap.node, Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void }))],
