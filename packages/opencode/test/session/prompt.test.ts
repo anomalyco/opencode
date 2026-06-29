@@ -1548,6 +1548,38 @@ unixNoLLMServer(
 )
 
 unixNoLLMServer(
+  "shell preserves the selected model variant",
+  () =>
+    Effect.gen(function* () {
+      const { prompt, run, sessions, chat } = yield* boot()
+      yield* prompt.shell({
+        sessionID: chat.id,
+        agent: "build",
+        model: ref,
+        variant: "high",
+        command: "printf variant",
+      })
+
+      const messages = yield* sessions.messages({ sessionID: chat.id })
+      const user = messages.find((message) => message.info.role === "user")
+      if (!user || user.info.role !== "user") throw new Error("expected shell user message")
+
+      expect(user.info.model).toMatchObject({
+        providerID: ref.providerID,
+        modelID: ref.modelID,
+        variant: "high",
+      })
+      expect((yield* sessions.get(chat.id)).model).toMatchObject({
+        providerID: ref.providerID,
+        id: ref.modelID,
+        variant: "high",
+      })
+      yield* run.assertNotBusy(chat.id)
+    }),
+  { config: cfg },
+)
+
+unixNoLLMServer(
   "shell uses configured shell over env shell",
   () =>
     withSh(() =>

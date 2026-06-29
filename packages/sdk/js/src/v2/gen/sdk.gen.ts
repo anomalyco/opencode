@@ -4221,6 +4221,7 @@ export class Session2 extends HeyApiClient {
         providerID: string
         modelID: string
       }
+      variant?: string
       command?: string
     },
     options?: Options<never, ThrowOnError>,
@@ -4236,6 +4237,7 @@ export class Session2 extends HeyApiClient {
             { in: "body", key: "messageID" },
             { in: "body", key: "agent" },
             { in: "body", key: "model" },
+            { in: "body", key: "variant" },
             { in: "body", key: "command" },
           ],
         },

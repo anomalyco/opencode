@@ -1248,6 +1248,7 @@ function createLayer(input: StreamInput) {
                                 sessionID: input.sessionID,
                                 agent,
                                 model: next.model,
+                                variant: next.variant,
                                 command: next.prompt.text,
                               },
                               { signal: turn.signal, throwOnError: true },

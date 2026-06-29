@@ -467,13 +467,32 @@ export const layer = Layer.effect(
               throw error
             }
             const model = input.model ?? agent.model ?? (yield* currentModel(input.sessionID))
+            const variant = input.variant
             const userMsg: SessionV1.User = {
               id: input.messageID ?? MessageID.ascending(),
               sessionID: input.sessionID,
               time: { created: Date.now() },
               role: "user",
               agent: input.agent,
-              model: { providerID: model.providerID, modelID: model.modelID },
+              model: { providerID: model.providerID, modelID: model.modelID, variant },
+            }
+            const current = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
+            if (
+              current.agent !== userMsg.agent ||
+              current.model?.providerID !== userMsg.model.providerID ||
+              current.model?.id !== userMsg.model.modelID ||
+              (current.model?.variant === "default" ? undefined : current.model?.variant) !== userMsg.model.variant
+            ) {
+              yield* sessions.setAgentModel({
+                sessionID: input.sessionID,
+                agent: userMsg.agent,
+                model: {
+                  id: userMsg.model.modelID,
+                  providerID: userMsg.model.providerID,
+                  variant: userMsg.model.variant ?? "default",
+                },
+                time: userMsg.time.created,
+              })
             }
             yield* sessions.updateMessage(userMsg)
             const userPart: SessionV1.Part = {
@@ -1562,6 +1581,7 @@ export const ShellInput = Schema.Struct({
   messageID: Schema.optional(MessageID),
   agent: Schema.String,
   model: Schema.optional(ModelRef),
+  variant: Schema.optional(Schema.String),
   command: Schema.String,
 })
 export type ShellInput = Schema.Schema.Type<typeof ShellInput>
