@@ -42,9 +42,9 @@ const layer = Layer.mergeAll(
 )
 
 // Derive sanitized server namespaces from the catalog keys, mirroring how
-// session/tools.ts passes `Object.keys(mcp.clients()).map(sanitize)`.
-function build(mcpTools: Record<string, AITool>, servers?: string[]) {
-  const names = servers ?? [...new Set(Object.keys(mcpTools).map((key) => key.split("_")[0]!))]
+// session/tools.ts passes namespaces built from `mcp.clients()` + `mcp.instructions()`.
+function build(mcpTools: Record<string, AITool>, namespaces?: Array<{ name: string; description?: string }>) {
+  const names = namespaces ?? [...new Set(Object.keys(mcpTools).map((key) => key.split("_")[0]!))].map((name) => ({ name }))
   return Effect.runPromise(define(mcpTools, names).pipe(Effect.flatMap(Tool.init), Effect.provide(layer)))
 }
 
@@ -55,26 +55,58 @@ describe("code mode execute", () => {
     await expect(Effect.runPromise(decode({}))).rejects.toThrow()
   })
 
-  test("describes tools grouped into per-server namespaces with signatures", () => {
+  test("describes namespaces only (not per-tool signatures) and the discovery API", () => {
+    const groups = groupByServer(
+      {
+        github_create_issue: mcpTool("create_issue", () => ""),
+        github_list_issues: mcpTool("list_issues", () => ""),
+        linear_search: mcpTool("search", () => ""),
+      },
+      ["github", "linear"],
+    )
     const description = describeTools(
-      groupByServer(
-        {
-          github_create_issue: mcpTool("create_issue", () => "", {
-            type: "object",
-            properties: { title: { type: "string" }, body: { type: "string" } },
-            required: ["title"],
-          }),
-          linear_search: mcpTool("search", () => ""),
-        },
-        ["github", "linear"],
-      ),
+      groups,
+      new Map([
+        ["github", "GitHub repository automation.\nmore detail here"],
+        ["linear", undefined],
+      ]),
     )
 
-    expect(description).toContain("await tools.<server>.<tool>(input)")
-    expect(description).toContain("// github")
-    expect(description).toContain("tools.github.create_issue({ title: string; body?: string })")
-    expect(description).toContain("// linear")
-    expect(description).toContain("tools.linear.search")
+    expect(description).toContain("tools.search(query")
+    expect(description).toContain("tools.describe(path)")
+    expect(description).toContain("- github (2 tools) — GitHub repository automation.")
+    expect(description).toContain("- linear (1 tool)")
+    // The full catalog must NOT be inlined in the prompt.
+    expect(description).not.toContain("create_issue")
+  })
+
+  test("tools.search and tools.describe expose the catalog on demand", async () => {
+    const tool = await build({
+      github_create_issue: mcpTool("create_issue", () => "", {
+        type: "object",
+        properties: { title: { type: "string" }, body: { type: "string" } },
+        required: ["title"],
+      }),
+      github_list_issues: mcpTool("list_issues", () => ""),
+      linear_search: mcpTool("search", () => ""),
+    })
+
+    const searched = await Effect.runPromise(
+      tool.execute({ code: "return await tools.search('issue', { namespace: 'github' })" }, ctx),
+    )
+    const search = JSON.parse(searched.output)
+    expect(search.total).toBe(2)
+    expect(search.items.map((i: any) => i.path).sort()).toEqual(["github.create_issue", "github.list_issues"])
+
+    const described = await Effect.runPromise(
+      tool.execute({ code: "return await tools.describe('github.create_issue')" }, ctx),
+    )
+    const desc = JSON.parse(described.output)
+    expect(desc.path).toBe("github.create_issue")
+    expect(desc.signature).toBe("tools.github.create_issue({ title: string; body?: string })")
+
+    const missing = await Effect.runPromise(tool.execute({ code: "return await tools.describe('github.nope')" }, ctx))
+    expect(JSON.parse(missing.output).error.code).toBe("tool_not_found")
   })
 
   test("groups multi-underscore server names by longest matching prefix", () => {
@@ -157,12 +189,12 @@ describe("code mode execute", () => {
     expect(output.metadata.error).toBe(true)
   })
 
-  test("reports an unknown tool with the available names", async () => {
+  test("reports an unknown tool and points to discovery", async () => {
     const tool = await build({ known_tool: mcpTool("tool", () => "ok") })
     const output = await Effect.runPromise(tool.execute({ code: "return await tools.known.missing({})" }, ctx))
     expect(output.metadata.error).toBe(true)
     expect(output.output).toContain("Unknown tool 'tools.known.missing'")
-    expect(output.output).toContain("known_tool")
+    expect(output.output).toContain("tools.search")
   })
 
   test("propagates an MCP tool error into the program", async () => {
