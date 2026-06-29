@@ -2017,6 +2017,22 @@ export type ModelsListOutput = {
   }>
 }
 
+export type GenerateTextInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+  readonly prompt: {
+    readonly prompt: string
+    readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null
+  }["prompt"]
+  readonly model?: {
+    readonly prompt: string
+    readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null
+  }["model"]
+}
+
+export type GenerateTextOutput = { readonly data: { readonly text: string } }["data"]
+
 export type ProvidersListInput = {
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined

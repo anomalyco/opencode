@@ -11,6 +11,7 @@ test("exposes every standard HTTP API group", () => {
     "sessions",
     "messages",
     "models",
+    "generate",
     "providers",
     "integrations",
     "credentials",

@@ -43,6 +43,8 @@ import type {
   MessagesListOutput,
   ModelsListInput,
   ModelsListOutput,
+  GenerateTextInput,
+  GenerateTextOutput,
   ProvidersListInput,
   ProvidersListOutput,
   ProvidersGetInput,
@@ -534,6 +536,21 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
+    },
+    generate: {
+      text: (input: GenerateTextInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: GenerateTextOutput }>(
+          {
+            method: "POST",
+            path: `/api/generate`,
+            query: { location: input["location"] },
+            body: { prompt: input["prompt"], model: input["model"] },
+            successStatus: 200,
+            declaredStatuses: [400, 503, 401],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
     },
     providers: {
       list: (input?: ProvidersListInput, requestOptions?: RequestOptions) =>

@@ -101,7 +101,7 @@ const withDefaults = (model: ModelV2.Info, route: AnyRoute) => {
   })
 }
 
-const withVariant = (
+export const withVariant = (
   model: ModelV2.Info,
   variantID: ModelV2.VariantID | undefined,
 ): Effect.Effect<ModelV2.Info, VariantUnavailableError> => {
