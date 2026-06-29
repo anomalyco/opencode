@@ -38,15 +38,15 @@ export const { use: useProject, provider: ProjectProvider } = createSimpleContex
     async function sync() {
       const workspace = store.workspace.current
       const location = { workspace }
-      const [instancePath, current] = await Promise.all([
+      const [instancePath, project] = await Promise.all([
         sdk.client.path.get({ workspace }),
-        sdk.api.location.get({ location }),
+        sdk.api.project.current({ location }),
       ])
-      const directories = await sdk.api.projects.directories({ projectID: current.project.id, location })
+      const directories = await sdk.api.project.directories({ projectID: project.id, location })
       batch(() => {
         setStore("instance", "path", reconcile(instancePath.data || defaultPath))
-        setStore("project", "id", current.project.id)
-        setStore("project", "worktree", current.project.directory)
+        setStore("project", "id", project.id)
+        setStore("project", "worktree", project.directory)
         setStore("project", "mainDir", directories.findLast((item) => item.strategy === undefined)?.directory)
       })
     }

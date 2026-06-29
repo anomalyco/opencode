@@ -15,7 +15,7 @@ test("exposes every standard HTTP API group", () => {
     "providers",
     "integrations",
     "credentials",
-    "projects",
+    "project",
     "permissions",
     "files",
     "commands",
@@ -39,7 +39,7 @@ test("exposes every standard HTTP API group", () => {
   ])
   expect(Object.keys(client.files)).toEqual(["list", "find"])
   expect(Object.keys(client.ptys)).toEqual(["list", "create", "get", "update", "remove"])
-  expect(Object.keys(client.projects)).toEqual(["current", "directories"])
+  expect(Object.keys(client.project)).toEqual(["current", "directories"])
 })
 
 test("project methods use the public HTTP contract", async () => {
@@ -54,8 +54,8 @@ test("project methods use the public HTTP contract", async () => {
     },
   })
 
-  const current = await client.projects.current({ location: { workspace: "wrk_test" } })
-  const directories = await client.projects.directories({
+  const current = await client.project.current({ location: { workspace: "wrk_test" } })
+  const directories = await client.project.directories({
     projectID: current.id,
     location: { directory: current.directory },
   })

@@ -17,11 +17,11 @@ import { useCommandShortcut } from "../keymap"
 import { useProject } from "../context/project"
 import { Spinner } from "./spinner"
 import { DialogWorkspaceFileChanges } from "./dialog-workspace-file-changes"
-import type { ProjectsDirectoriesOutput } from "@opencode-ai/client"
+import type { ProjectDirectoriesOutput } from "@opencode-ai/client"
 import { useRoute } from "../context/route"
 
 export type MoveSessionSelection = { type: "directory"; directory: string; subdirectory: boolean } | { type: "new" }
-type ProjectDirectory = ProjectsDirectoriesOutput[number]
+type ProjectDirectory = ProjectDirectoriesOutput[number]
 
 type DialogMoveSessionProps = {
   projectID: string
@@ -62,9 +62,9 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
   const [loadedProject] = createResource(
     () => (projectContext.project() === undefined ? props.projectID : undefined),
     (projectID) =>
-      sdk.api.location
-        .get({ location: { directory: projectContext.instance.directory() || paths.cwd } })
-        .then((location) => (location.project.id === projectID ? location.project.directory : undefined))
+      sdk.api.project
+        .current({ location: { directory: projectContext.instance.directory() || paths.cwd } })
+        .then((project) => (project.id === projectID ? project.directory : undefined))
         .catch(() => undefined),
   )
   const currentCheckout = createMemo(() => {
@@ -81,7 +81,7 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
           projectID,
           location,
         })
-        const directories = await sdk.api.projects.directories({
+        const directories = await sdk.api.project.directories({
           projectID,
           location,
         })

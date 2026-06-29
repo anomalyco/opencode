@@ -801,7 +801,7 @@ const adaptClient = (raw: RawClient) => ({
   providers: adaptGroup7(raw["server.provider"]),
   integrations: adaptGroup8(raw["server.integration"]),
   credentials: adaptGroup9(raw["server.credential"]),
-  projects: adaptGroup10(raw["server.project"]),
+  project: adaptGroup10(raw["server.project"]),
   permissions: adaptGroup11(raw["server.permission"]),
   files: adaptGroup12(raw["server.fs"]),
   commands: adaptGroup13(raw["server.command"]),

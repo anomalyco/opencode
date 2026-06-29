@@ -67,10 +67,10 @@ import type {
   CredentialsUpdateOutput,
   CredentialsRemoveInput,
   CredentialsRemoveOutput,
-  ProjectsCurrentInput,
-  ProjectsCurrentOutput,
-  ProjectsDirectoriesInput,
-  ProjectsDirectoriesOutput,
+  ProjectCurrentInput,
+  ProjectCurrentOutput,
+  ProjectDirectoriesInput,
+  ProjectDirectoriesOutput,
   PermissionsListRequestsInput,
   PermissionsListRequestsOutput,
   PermissionsListSavedInput,
@@ -708,9 +708,9 @@ export function make(options: ClientOptions) {
           requestOptions,
         ),
     },
-    projects: {
-      current: (input?: ProjectsCurrentInput, requestOptions?: RequestOptions) =>
-        request<ProjectsCurrentOutput>(
+    project: {
+      current: (input?: ProjectCurrentInput, requestOptions?: RequestOptions) =>
+        request<ProjectCurrentOutput>(
           {
             method: "GET",
             path: `/api/project/current`,
@@ -721,8 +721,8 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
-      directories: (input: ProjectsDirectoriesInput, requestOptions?: RequestOptions) =>
-        request<ProjectsDirectoriesOutput>(
+      directories: (input: ProjectDirectoriesInput, requestOptions?: RequestOptions) =>
+        request<ProjectDirectoriesOutput>(
           {
             method: "GET",
             path: `/api/project/${encodeURIComponent(input.projectID)}/directories`,
