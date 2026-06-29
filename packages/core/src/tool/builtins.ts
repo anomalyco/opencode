@@ -1,7 +1,7 @@
 export * as BuiltInTools from "./builtins"
 
 import { makeLocationNode } from "../effect/app-node"
-import { Layer } from "effect"
+import { Context, Layer } from "effect"
 import { ApplyPatchTool } from "./apply-patch"
 import { EditTool } from "./edit"
 import { GlobTool } from "./glob"
@@ -27,6 +27,8 @@ import { SessionTodo } from "../session/todo"
 import { ToolRegistry } from "./registry"
 import { httpClient } from "../effect/app-node-platform"
 
+export class Service extends Context.Service<Service, Record<string, never>>()("@opencode/v2/BuiltInTools") {}
+
 /**
  * Composes only the shipped Location-scoped built-in tool transforms.
  * Each tool retains its implementation and focused tests independently. Dynamic
@@ -40,7 +42,7 @@ import { httpClient } from "../effect/app-node-platform"
  * repo_clone, repo_overview, plan_exit, and Rune/code mode. Keep MCP and plugin
  * transforms separate from this static built-in list.
  */
-export const locationLayer = Layer.mergeAll(
+const registrations = Layer.mergeAll(
   ApplyPatchTool.layer,
   EditTool.layer,
   GlobTool.layer,
@@ -54,8 +56,10 @@ export const locationLayer = Layer.mergeAll(
   WriteTool.layer,
 )
 
+export const locationLayer = Layer.succeed(Service, Service.of({})).pipe(Layer.provideMerge(registrations))
+
 export const node = makeLocationNode({
-  name: "built-in-tools",
+  service: Service,
   layer: locationLayer,
   deps: [
     ToolRegistry.toolsNode,
