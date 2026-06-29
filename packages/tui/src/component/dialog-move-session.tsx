@@ -58,8 +58,9 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
 
   // A failed current-checkout lookup only affects which row is highlighted, so
   // swallow it and let the directory list render without a current marker.
+  // Once the current project is known, a mismatch is a guaranteed miss.
   const [loadedProject] = createResource(
-    () => (projectContext.project() ? undefined : props.projectID),
+    () => (projectContext.project() === undefined ? props.projectID : undefined),
     (projectID) =>
       sdk.api.location
         .get({ location: { directory: projectContext.instance.directory() || paths.cwd } })

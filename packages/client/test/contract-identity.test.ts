@@ -28,6 +28,7 @@ test("Core and Server reuse the authoritative Schema and Protocol values", () =>
   expect(ModelV2.Ref).toBe(Model.Ref)
   expect(SessionV2.Info).toBe(Session.Info)
   expect(ProjectV2.Current).toBe(Project.Current)
+  expect(ProjectV2.Directory).toBe(Project.Directory)
   expect(ProjectV2.Directories).toBe(Project.Directories)
   expect(CoreSessionInput.Admitted).toBe(SessionInput.Admitted)
   expect(CoreSessionMessage.Message).toBe(SessionMessage.Message)

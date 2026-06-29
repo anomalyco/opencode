@@ -20,6 +20,9 @@ export type Vcs = ProjectSchema.Vcs
 export const Current = ProjectSchema.Current
 export type Current = ProjectSchema.Current
 
+export const Directory = ProjectSchema.Directory
+export type Directory = ProjectSchema.Directory
+
 export class Info extends Schema.Class<Info>("Project.Info")({
   id: ID,
 }) {}

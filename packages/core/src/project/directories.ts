@@ -8,8 +8,9 @@ import { AbsolutePath } from "../schema"
 import { ProjectSchema } from "./schema"
 import { ProjectDirectoryTable } from "./sql"
 import type { EffectDrizzleSqlite } from "@opencode-ai/effect-drizzle-sqlite"
+import type { Project } from "../project"
 
-export interface Directory extends Schema.Schema.Type<typeof ProjectSchema.Directory> {}
+export type Directory = Project.Directory
 
 export const CreateInput = Schema.Struct({
   projectID: ProjectSchema.ID,
