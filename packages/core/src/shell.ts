@@ -31,7 +31,7 @@ type Active = {
   // Resolves with the terminal Info once the command exits, times out, or is killed. A wait
   // started after termination resolves immediately from the already-completed deferred.
   done: Deferred.Deferred<Info, NotFoundError>
-  timeoutFiber?: Fiber.Fiber<void, never>
+  timeoutFiber?: Fiber.Fiber<void>
 }
 
 /**
@@ -181,7 +181,7 @@ export const layer = Layer.effect(
       // Spawn via AppProcess and stream combined output to the file. The handle is scope-bound, so
       // the managing fiber keeps its scope open until the command terminates (it awaits `done` at the
       // end). `create` returns once `ready` resolves with the registered session.
-      const ready = Deferred.makeUnsafe<Active, never>()
+      const ready = Deferred.makeUnsafe<Active>()
       runFork(
         Effect.scoped(
           Effect.gen(function* () {
@@ -205,14 +205,7 @@ export const layer = Layer.effect(
             sessions.set(id, session)
 
             const stream = createWriteStream(file)
-            yield* Effect.promise(
-              () =>
-                new Promise<void>((resolve) => {
-                  stream.once("open", () => resolve())
-                  stream.once("error", () => resolve())
-                }),
-            )
-
+            const outputDone = Deferred.makeUnsafe<void>()
             const pump = handle.all.pipe(
               Stream.runForEach((chunk: Uint8Array) =>
                 Effect.sync(() => {
@@ -221,9 +214,27 @@ export const layer = Layer.effect(
                 }),
               ),
             )
-            runFork(pump.pipe(Effect.catch(() => Effect.void)))
+            runFork(
+              Effect.gen(function* () {
+                yield* pump.pipe(Effect.catch(() => Effect.void))
+                yield* Effect.promise(
+                  () =>
+                    new Promise<void>((resolve) => {
+                      stream.end(() => resolve())
+                    }),
+                )
+                yield* Deferred.succeed(outputDone, undefined)
+              }).pipe(Effect.catch(() => Deferred.succeed(outputDone, undefined))),
+            )
+            yield* Effect.promise(
+              () =>
+                new Promise<void>((resolve) => {
+                  stream.once("open", () => resolve())
+                  stream.once("error", () => resolve())
+                }),
+            )
 
-            const finish = (status: Info["status"], exit?: number) =>
+            const finish = (status: Info["status"], exit?: number, beforeWait = Effect.void) =>
               Effect.gen(function* () {
                 if (session.info.status !== "running") return
                 session.info = produce(session.info, (draft) => {
@@ -231,7 +242,8 @@ export const layer = Layer.effect(
                   if (exit !== undefined) draft.exit = exit
                   draft.time.completed = Date.now()
                 })
-                stream.end()
+                yield* beforeWait
+                yield* Deferred.await(outputDone)
                 // Resolve waiters with the terminal Info before any retention eviction, so an evicted
                 // session still reports success rather than the removal NotFoundError. This runs before
                 // the timeout-fiber interrupt below, which on the timeout path would otherwise cancel
@@ -257,10 +269,7 @@ export const layer = Layer.effect(
               session.timeoutFiber = runFork(
                 Effect.sleep(Duration.millis(input.timeout)).pipe(
                   Effect.flatMap(() =>
-                    Effect.gen(function* () {
-                      yield* finish("timeout")
-                      yield* handle.kill().pipe(Effect.catch(() => Effect.void))
-                    }),
+                    finish("timeout", undefined, handle.kill().pipe(Effect.catch(() => Effect.void))),
                   ),
                   Effect.catch(() => Effect.void),
                 ),
