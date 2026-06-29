@@ -17,18 +17,18 @@ import { useCommandShortcut } from "../keymap"
 import { useProject } from "../context/project"
 import { Spinner } from "./spinner"
 import { DialogWorkspaceFileChanges } from "./dialog-workspace-file-changes"
-import type { ProjectDirectories } from "@opencode-ai/sdk/v2"
+import type { ProjectsDirectoriesOutput } from "@opencode-ai/client"
 import { useRoute } from "../context/route"
 
 export type MoveSessionSelection = { type: "directory"; directory: string; subdirectory: boolean } | { type: "new" }
-type ProjectDirectory = ProjectDirectories[number]
+type ProjectDirectory = ProjectsDirectoriesOutput[number]
 
 type DialogMoveSessionProps = {
   projectID: string
   current?: MoveSessionSelection
   onSelect: (selection: MoveSessionSelection) => void
   onCurrentChange?: (selection: MoveSessionSelection) => void
-  initialDirectories?: ProjectDirectory[]
+  initialDirectories?: ReadonlyArray<ProjectDirectory>
   initialRemoving?: string
 }
 
@@ -61,9 +61,9 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
   const [loadedProject] = createResource(
     () => (projectContext.project() === props.projectID ? undefined : props.projectID),
     (projectID) =>
-      sdk.client.project
-        .current({}, { throwOnError: true })
-        .then((result) => (result.data?.id === projectID ? result.data.worktree : undefined))
+      sdk.api.projects
+        .current({ location: { directory: projectContext.instance.directory() || paths.cwd } })
+        .then((project) => (project.id === projectID ? project.directory : undefined))
         .catch(() => undefined),
   )
   const currentCheckout = createMemo(() => {
@@ -73,15 +73,18 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
 
   const [directories, { refetch }] = createResource(
     () => (props.initialRemoving ? undefined : props.projectID),
-    async (projectID, info): Promise<ProjectDirectory[] | undefined> => {
+    async (projectID, info): Promise<ReadonlyArray<ProjectDirectory> | undefined> => {
       try {
         await sdk.api.projectCopies.refresh({
           projectID,
           location: { directory: projectContext.instance.directory() || paths.cwd },
         })
-        const directories = await sdk.client.project.directories({ projectID }, { throwOnError: true })
+        const directories = await sdk.api.projects.directories({
+          projectID,
+          location: { directory: projectContext.instance.directory() || paths.cwd },
+        })
         setLoadError(undefined)
-        return directories.data ?? []
+        return directories
       } catch (error) {
         setLoadError(error)
         // An initial load with no data surfaces the inline error view below. A

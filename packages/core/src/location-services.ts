@@ -20,6 +20,7 @@ import { PermissionV2 } from "./permission"
 import { PluginV2 } from "./plugin"
 import { PluginInternal } from "./plugin/internal"
 import { Policy } from "./policy"
+import { Project } from "./project"
 import { ProjectCopy } from "./project/copy"
 import { Pty } from "./pty"
 import { QuestionV2 } from "./question"
@@ -43,6 +44,7 @@ import { ToolOutputStore } from "./tool-output-store"
 export { LocationServiceMap } from "./location-service-map"
 
 export const locationServices = LayerNode.group([
+  Project.node,
   Location.node,
   Policy.node,
   Config.node,

@@ -15,12 +15,14 @@ test("exposes every standard HTTP API group", () => {
     "providers",
     "integrations",
     "credentials",
+    "projects",
     "permissions",
     "files",
     "commands",
     "skills",
     "events",
     "ptys",
+    "server.shell",
     "questions",
     "references",
     "projectCopies",
@@ -37,6 +39,33 @@ test("exposes every standard HTTP API group", () => {
   ])
   expect(Object.keys(client.files)).toEqual(["list", "find"])
   expect(Object.keys(client.ptys)).toEqual(["list", "create", "get", "update", "remove"])
+  expect(Object.keys(client.projects)).toEqual(["current", "directories"])
+})
+
+test("project methods use the public HTTP contract", async () => {
+  const requests: string[] = []
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async (input) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url
+      requests.push(url)
+      if (url.includes("/directories")) return Response.json([])
+      return Response.json({ id: "proj_test", directory: "/tmp/project" })
+    },
+  })
+
+  const current = await client.projects.current({ location: { workspace: "wrk_test" } })
+  const directories = await client.projects.directories({
+    projectID: current.id,
+    location: { directory: current.directory },
+  })
+
+  expect(current).toEqual({ id: "proj_test", directory: "/tmp/project" })
+  expect(directories).toEqual([])
+  expect(requests).toEqual([
+    "http://localhost:3000/api/project/current?location%5Bworkspace%5D=wrk_test",
+    "http://localhost:3000/api/project/proj_test/directories?location%5Bdirectory%5D=%2Ftmp%2Fproject",
+  ])
 })
 
 test("sessions.get returns the wire projection", async () => {
