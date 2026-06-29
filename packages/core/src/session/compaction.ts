@@ -69,24 +69,27 @@ type Dependencies = {
   readonly config: readonly Config.Entry[]
 }
 
-type Input = {
+export type AutoInput = {
   readonly sessionID: SessionSchema.ID
   readonly messages: readonly SessionMessage.Message[]
-  readonly model: Model
   readonly request: LLMRequest
 }
 
-type ManualInput = {
+type CompactInput = {
   readonly sessionID: SessionSchema.ID
   readonly messages: readonly SessionMessage.Message[]
   readonly model: Model
 }
 
+export type ManualInput = {
+  readonly session: SessionSchema.Info
+  readonly messages: readonly SessionMessage.Message[]
+}
+
 export interface Interface {
-  readonly manual: (input: {
-    readonly session: SessionSchema.Info
-    readonly messages: readonly SessionMessage.Message[]
-  }) => Effect.Effect<boolean, SessionRunnerModel.Error>
+  readonly compactIfNeeded: (input: AutoInput) => Effect.Effect<boolean>
+  readonly compactAfterOverflow: (input: AutoInput) => Effect.Effect<boolean>
+  readonly compactManual: (input: ManualInput) => Effect.Effect<boolean, SessionRunnerModel.Error>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/SessionCompaction") {}
@@ -187,7 +190,7 @@ export const buildPrompt = (input: { readonly previousSummary?: string; readonly
     ...input.context,
   ].join("\n\n")
 
-export const make = (dependencies: Dependencies) => {
+const make = (dependencies: Dependencies) => {
   const config = settings(dependencies.config)
   const compact = Effect.fn("SessionCompaction.compact")(function* (input: {
     readonly sessionID: SessionSchema.ID
@@ -244,18 +247,18 @@ export const make = (dependencies: Dependencies) => {
     })
     return true
   })
-  const compactAfterOverflow = Effect.fn("SessionCompaction.compactAfterOverflow")(function* (input: Input) {
+  const compactAfterOverflow = Effect.fn("SessionCompaction.compactAfterOverflow")(function* (input: AutoInput) {
     return yield* compactSelected({
       sessionID: input.sessionID,
       messages: input.messages,
-      model: input.model,
+      model: input.request.model,
       reason: "auto",
       force: false,
-      output: input.request.generation?.maxTokens ?? input.model.route.defaults.limits?.output ?? 0,
+      output: input.request.generation?.maxTokens ?? input.request.model.route.defaults.limits?.output ?? 0,
     })
   })
   const compactSelected = Effect.fn("SessionCompaction.compactSelected")(function* (
-    input: ManualInput & {
+    input: CompactInput & {
       readonly reason: SessionMessage.Compaction["reason"]
       readonly force: boolean
       readonly output?: number
@@ -282,14 +285,14 @@ export const make = (dependencies: Dependencies) => {
       output: input.output,
     })
   })
-  const compactManual = Effect.fn("SessionCompaction.compactManual")(function* (input: ManualInput) {
+  const compactManual = Effect.fn("SessionCompaction.compactManual")(function* (input: CompactInput) {
     return yield* compactSelected({ ...input, reason: "manual", force: true })
   })
-  const compactIfNeeded = Effect.fn("SessionCompaction.compactIfNeeded")(function* (input: Input) {
+  const compactIfNeeded = Effect.fn("SessionCompaction.compactIfNeeded")(function* (input: AutoInput) {
     if (!config.auto) return false
-    const context = input.model.route.defaults.limits?.context
+    const context = input.request.model.route.defaults.limits?.context
     if (context === undefined || context <= 0) return false
-    const output = input.request.generation?.maxTokens ?? input.model.route.defaults.limits?.output ?? 0
+    const output = input.request.generation?.maxTokens ?? input.request.model.route.defaults.limits?.output ?? 0
     if (
       estimate({ system: input.request.system, messages: input.request.messages, tools: input.request.tools }) <=
       context - Math.max(output, config.buffer)
@@ -314,7 +317,9 @@ export const layer = Layer.effect(
     const compaction = make({ events, llm, config: yield* config.entries() })
 
     return Service.of({
-      manual: Effect.fn("SessionCompaction.manual")(function* (input) {
+      compactIfNeeded: compaction.compactIfNeeded,
+      compactAfterOverflow: compaction.compactAfterOverflow,
+      compactManual: Effect.fn("SessionCompaction.compactManual")(function* (input) {
         return yield* compaction.compactManual({
           sessionID: input.session.id,
           messages: input.messages,

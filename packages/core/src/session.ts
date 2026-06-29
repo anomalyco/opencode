@@ -441,7 +441,7 @@ export const layer = Layer.effect(
         const context = yield* store.context(input.sessionID)
         return yield* Effect.gen(function* () {
           const compaction = yield* SessionCompaction.Service
-          if (!(yield* compaction.manual({ session, messages: context }))) {
+          if (!(yield* compaction.compactManual({ session, messages: context }))) {
             return yield* new OperationUnavailableError({ operation: "compact" })
           }
           return undefined

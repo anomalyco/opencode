@@ -36,18 +36,15 @@ const projects = Layer.succeed(
   }),
 )
 let requests: LLMRequest[] = []
-const client = Layer.succeed(
-  LLMClient.Service,
-  LLMClient.Service.of({
-    prepare: () => Effect.die("unused"),
-    stream: (request: LLMRequest) => {
-      requests.push(request)
-      return Stream.make(LLMEvent.textDelta({ id: "summary", text: "manual session summary" }))
-    },
-    generate: () => Effect.die("unused"),
-  }),
-)
-const config = Layer.succeed(Config.Service, Config.Service.of({ entries: () => Effect.succeed([]) }))
+const client = Layer.mock(LLMClient.Service)({
+  prepare: () => Effect.die("unused"),
+  stream: (request: LLMRequest) => {
+    requests.push(request)
+    return Stream.make(LLMEvent.textDelta({ id: "summary", text: "manual session summary" }))
+  },
+  generate: () => Effect.die("unused"),
+})
+const config = Layer.mock(Config.Service)({ entries: () => Effect.succeed([]) })
 const models = SessionRunnerModel.layerWith(() => Effect.succeed(model))
 const locations = Layer.effect(
   LocationServiceMap.Service,

@@ -10,7 +10,6 @@ import {
 } from "@opencode-ai/llm"
 import { Cause, DateTime, Effect, FiberSet, Layer, Option, Semaphore, Stream } from "effect"
 import { AgentV2 } from "../../agent"
-import { Config } from "../../config"
 import { Database } from "../../database/database"
 import { EventV2 } from "../../event"
 import { Location } from "../../location"
@@ -102,10 +101,9 @@ export const layer = Layer.effect(
     const systemContext = yield* SystemContextRegistry.Service
     const skillGuidance = yield* SkillGuidance.Service
     const referenceGuidance = yield* ReferenceGuidance.Service
-    const config = yield* Config.Service
     const snapshots = yield* Snapshot.Service
     const db = (yield* Database.Service).db
-    const compaction = SessionCompaction.make({ events, llm, config: yield* config.entries() })
+    const compaction = yield* SessionCompaction.Service
     const getSession = Effect.fn("SessionRunner.getSession")(function* (sessionID: SessionSchema.ID) {
       const session = yield* store.get(sessionID)
       if (!session) return yield* Effect.die(`Session not found: ${sessionID}`)
@@ -207,7 +205,7 @@ export const layer = Layer.effect(
         tools: toolMaterialization?.definitions ?? [],
         toolChoice: isLastStep ? "none" : undefined,
       })
-      if (yield* compaction.compactIfNeeded({ sessionID: session.id, messages: context, model, request }))
+      if (yield* compaction.compactIfNeeded({ sessionID: session.id, messages: context, request }))
         return yield* Effect.die(continueAfterCompaction(currentStep))
       const startSnapshot = yield* snapshots.capture()
       const publisher = createLLMEventPublisher(events, {
@@ -280,7 +278,7 @@ export const layer = Layer.effect(
             recoverOverflow &&
             !publisher.hasAssistantStarted() &&
             isContextOverflowFailure(overflowFailure ?? failure) &&
-            (yield* restore(recoverOverflow({ sessionID: session.id, messages: context, model, request })))
+            (yield* restore(recoverOverflow({ sessionID: session.id, messages: context, request })))
           )
             return yield* Effect.die(continueAfterOverflowCompaction(currentStep))
           if (overflowFailure) yield* publish(overflowFailure)
@@ -423,7 +421,7 @@ export const node = makeLocationNode({
     SystemContextRegistry.node,
     SkillGuidance.node,
     ReferenceGuidance.node,
-    Config.node,
+    SessionCompaction.node,
     Snapshot.node,
     Database.node,
   ],
