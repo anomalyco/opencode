@@ -34,10 +34,24 @@ jobs:
 
             const now = Date.now();
             const twoHours = 2 * 60 * 60 * 1000;
+            const orgMemberAssociations = new Set(['OWNER', 'MEMBER']);
 
             for (const item of items) {
               const isPR = !!item.pull_request;
               const kind = isPR ? 'PR' : 'issue';
+
+              if (orgMemberAssociations.has(item.author_association)) {
+                core.info(`Skipping ${kind} #${item.number}; author association is ${item.author_association}`);
+                try {
+                  await github.rest.issues.removeLabel({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: item.number,
+                    name: 'needs:compliance',
+                  });
+                } catch (e) {}
+                continue;
+              }
 
               const { data: comments } = await github.rest.issues.listComments({
                 owner: context.repo.owner,

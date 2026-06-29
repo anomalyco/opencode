@@ -138,12 +138,14 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
         const next = { type: "session" as const, ...tab }
         const existing = store.find((item) => tabKey(item) === tabKey(next))
         if (existing) return existing
-        setStore(
-          produce((tabs) => {
-            if (tabs.some((item) => tabKey(item) === tabKey(next))) return
-            tabs.push(next)
-          }),
-        )
+        void startTransition(() => {
+          setStore(
+            produce((tabs) => {
+              if (tabs.some((item) => tabKey(item) === tabKey(next))) return
+              tabs.push(next)
+            }),
+          )
+        })
         return next
       },
       reorder(keys: string[]) {
