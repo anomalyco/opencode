@@ -162,7 +162,7 @@ export function DialogArchivedSessions(props: { directory?: string }) {
                           if (
                             !window.confirm(
                               language.t("dialog.archivedSessions.delete.confirm", {
-                                name: sessionTitle(session.title),
+                                name: sessionTitle(session.title) || session.id,
                               }),
                             )
                           )

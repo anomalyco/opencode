@@ -77,7 +77,7 @@ export function SessionSidePanel(props: {
   const reviewTab = createMemo(() => isDesktop())
   const panelWidth = createMemo(() => {
     if (!open()) return "0px"
-    if (reviewOpen()) return "auto"
+    if (reviewOpen()) return `${layout.session.width()}px`
     return `${layout.fileTree.width()}px`
   })
   const treeWidth = createMemo(() => (fileOpen() ? `${layout.fileTree.width()}px` : "0px"))
@@ -226,10 +226,24 @@ export function SessionSidePanel(props: {
           "transition-[width] duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] motion-reduce:transition-none":
             !props.size.active() && !props.reviewSnap,
           "rounded-[10px] shadow-[var(--v2-elevation-raised)] overflow-hidden": settings.general.newLayoutDesigns(),
-          "flex-1": reviewOpen(),
         }}
         style={{ width: panelWidth() }}
       >
+        <Show when={reviewOpen()}>
+          <div onPointerDown={() => props.size.start()}>
+            <ResizeHandle
+              direction="horizontal"
+              edge="start"
+              size={layout.session.width()}
+              min={320}
+              max={typeof window === "undefined" ? 560 : Math.min(560, window.innerWidth * 0.34)}
+              onResize={(width) => {
+                props.size.touch()
+                layout.session.resize(width)
+              }}
+            />
+          </div>
+        </Show>
         <Show when={open()}>
           <div
             class="size-full flex"

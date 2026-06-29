@@ -33,13 +33,14 @@ export const SidebarContent = (props: {
   renderPanel: () => JSX.Element
 }): JSX.Element => {
   const expanded = createMemo(() => !!props.mobile || props.opened())
+  const showPanel = createMemo(() => !!props.mobile)
   const placement = () => (props.mobile ? "bottom" : "right")
   let panel: HTMLDivElement | undefined
 
   createEffect(() => {
     const el = panel
     if (!el) return
-    if (expanded()) {
+    if (showPanel()) {
       el.removeAttribute("inert")
       return
     }
@@ -50,7 +51,12 @@ export const SidebarContent = (props: {
     <div class="flex h-full w-full min-w-0 overflow-hidden">
       <div
         data-component="sidebar-rail"
-        class="w-16 shrink-0 bg-background-base flex flex-col items-center overflow-hidden"
+        classList={{
+          "shrink-0 bg-background-base flex flex-col overflow-hidden transition-[width] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none":
+            true,
+          "w-16 items-center": !!props.mobile,
+          "w-[244px] items-stretch": !props.mobile,
+        }}
         onMouseMove={props.aimMove}
       >
         <div class="flex-1 min-h-0 w-full">
@@ -62,7 +68,13 @@ export const SidebarContent = (props: {
           >
             <DragDropSensors />
             <ConstrainDragXAxis />
-            <div class="h-full w-full flex flex-col items-center gap-3 px-3 py-3 overflow-y-auto no-scrollbar">
+            <div
+              classList={{
+                "h-full w-full flex flex-col gap-3 px-3 py-3 overflow-y-auto no-scrollbar": true,
+                "items-center": !!props.mobile,
+                "items-stretch": !props.mobile,
+              }}
+            >
               <SortableProvider ids={props.projects().map((p) => p.worktree)}>
                 <For each={props.projects()}>{(project) => props.renderProject(project)}</For>
               </SortableProvider>
@@ -89,7 +101,13 @@ export const SidebarContent = (props: {
             <DragOverlay>{props.renderProjectOverlay()}</DragOverlay>
           </DragDropProvider>
         </div>
-        <div class="shrink-0 w-full pt-3 pb-6 flex flex-col items-center gap-2">
+        <div
+          classList={{
+            "shrink-0 w-full pt-3 pb-6 flex flex-col gap-2": true,
+            "items-center": !!props.mobile,
+            "items-stretch px-3": !props.mobile,
+          }}
+        >
           <TooltipKeybind placement={placement()} title={props.settingsLabel()} keybind={props.settingsKeybind() ?? ""}>
             <IconButton
               icon="settings-gear"
@@ -115,8 +133,13 @@ export const SidebarContent = (props: {
         ref={(el) => {
           panel = el
         }}
-        classList={{ "flex-1 flex h-full min-h-0 min-w-0 overflow-hidden": true, "pointer-events-none": !expanded() }}
-        aria-hidden={!expanded()}
+        classList={{
+          "flex-1 h-full min-h-0 min-w-0 overflow-hidden": true,
+          flex: showPanel(),
+          hidden: !showPanel(),
+          "pointer-events-none": !showPanel(),
+        }}
+        aria-hidden={!showPanel()}
       >
         {props.renderPanel()}
       </div>

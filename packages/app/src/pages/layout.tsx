@@ -1723,12 +1723,13 @@ export default function LegacyLayout(props: ParentProps) {
   createEffect(() => {
     document.documentElement.style.setProperty(
       "--dialog-left-margin",
-      `${layout.sidebar.opened() ? layout.sidebar.width() : 48}px`,
+      `${side()}px`,
     )
   })
 
-  const side = createMemo(() => Math.max(layout.sidebar.width(), 244))
-  const panel = createMemo(() => Math.max(side() - 64, 0))
+  const minSidebarWidth = 244
+  const maxSidebarWidth = 300
+  const side = createMemo(() => Math.min(Math.max(layout.sidebar.width(), minSidebarWidth), maxSidebarWidth))
 
   const loadedSessionDirs = new Set<string>()
 
@@ -1921,6 +1922,7 @@ export default function LegacyLayout(props: ParentProps) {
       setState("hoverProject", hoverOpen ? worktree : undefined)
     },
     navigateToProject,
+    navigateToNewSession: (directory) => navigateWithSidebarReset(`/${base64Encode(directory)}/session`),
     openSidebar: () => layout.sidebar.open(),
     closeProject,
     showEditProjectDialog: (proj) => showEditProjectDialog(server.current!, proj),
@@ -1936,6 +1938,7 @@ export default function LegacyLayout(props: ParentProps) {
       renameSession,
       archiveSession,
     },
+    workspaceCtx: workspaceSidebarCtx,
   }
 
   const SidebarPanel = (panelProps: {
@@ -1996,7 +1999,7 @@ export default function LegacyLayout(props: ParentProps) {
           "max-w-full overflow-hidden": panelProps.mobile,
         }}
         style={{
-          width: panelProps.mobile ? undefined : `${panel()}px`,
+          width: panelProps.mobile ? undefined : `${side()}px`,
         }}
       >
         <Show
@@ -2302,31 +2305,29 @@ export default function LegacyLayout(props: ParentProps) {
               <div class="@container w-full h-full contain-strict">{sidebarContent()}</div>
             </nav>
 
-            <Show when={layout.sidebar.opened()}>
-              <div
-                class="hidden xl:block absolute inset-y-0 z-30 w-0 overflow-visible"
-                style={{ left: `${side()}px` }}
-                onPointerDown={() => setState("sizing", true)}
-              >
-                <ResizeHandle
-                  direction="horizontal"
-                  size={layout.sidebar.width()}
-                  min={244}
-                  max={typeof window === "undefined" ? 1000 : window.innerWidth * 0.3 + 64}
-                  onResize={(w) => {
-                    setState("sizing", true)
-                    if (sizet !== undefined) clearTimeout(sizet)
-                    sizet = window.setTimeout(() => setState("sizing", false), 120)
-                    layout.sidebar.resize(w)
-                  }}
-                />
-              </div>
-            </Show>
-
             <div
               class="hidden xl:block pointer-events-none absolute top-0 right-0 z-0 border-t border-border-weaker-base"
-              style={{ left: "calc(4rem + 12px)" }}
+              style={{ left: `${side()}px` }}
             />
+
+            <div
+              class="hidden xl:block absolute inset-y-0 z-30 w-0 overflow-visible"
+              style={{ left: `${side()}px` }}
+              onPointerDown={() => setState("sizing", true)}
+            >
+              <ResizeHandle
+                direction="horizontal"
+                size={side()}
+                min={minSidebarWidth}
+                max={maxSidebarWidth}
+                onResize={(width) => {
+                  setState("sizing", true)
+                  if (sizet !== undefined) clearTimeout(sizet)
+                  sizet = window.setTimeout(() => setState("sizing", false), 120)
+                  layout.sidebar.resize(width)
+                }}
+              />
+            </div>
 
             <div class="xl:hidden">
               <div
@@ -2362,7 +2363,7 @@ export default function LegacyLayout(props: ParentProps) {
                   !state.sizing,
               }}
               style={{
-                "--main-left": layout.sidebar.opened() ? `${side()}px` : "4rem",
+                "--main-left": `${side()}px`,
               }}
             >
               <main
@@ -2376,43 +2377,6 @@ export default function LegacyLayout(props: ParentProps) {
               </main>
             </div>
 
-            <div
-              classList={{
-                "hidden xl:flex absolute inset-y-0 left-16 z-30": true,
-                "opacity-100 translate-x-0 pointer-events-auto": state.peeked && !layout.sidebar.opened(),
-                "opacity-0 -translate-x-2 pointer-events-none": !state.peeked || layout.sidebar.opened(),
-                "transition-[opacity,transform] motion-reduce:transition-none": true,
-                "duration-180 ease-out": state.peeked && !layout.sidebar.opened(),
-                "duration-120 ease-in": !state.peeked || layout.sidebar.opened(),
-              }}
-              onMouseMove={disarm}
-              onMouseEnter={() => {
-                disarm()
-                aim.reset()
-              }}
-              onPointerDown={disarm}
-              onMouseLeave={() => {
-                arm()
-              }}
-            >
-              <Show when={peekProject()}>
-                <SidebarPanel project={peekProject} merged={false} />
-              </Show>
-            </div>
-
-            <div
-              classList={{
-                "hidden xl:block pointer-events-none absolute inset-y-0 right-0 z-25 overflow-hidden": true,
-                "opacity-100 translate-x-0": state.peeked && !layout.sidebar.opened(),
-                "opacity-0 -translate-x-2": !state.peeked || layout.sidebar.opened(),
-                "transition-[opacity,transform] motion-reduce:transition-none": true,
-                "duration-180 ease-out": state.peeked && !layout.sidebar.opened(),
-                "duration-120 ease-in": !state.peeked || layout.sidebar.opened(),
-              }}
-              style={{ left: `calc(4rem + ${panel()}px)` }}
-            >
-              <div class="h-full w-px" style={{ "box-shadow": "var(--shadow-sidebar-overlay)" }} />
-            </div>
           </div>
         </div>
         {import.meta.env.DEV && import.meta.env.VITE_DISABLE_DEBUG_BAR !== "1" && <DebugBar />}

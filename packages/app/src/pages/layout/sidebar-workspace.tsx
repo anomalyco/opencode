@@ -192,6 +192,17 @@ const WorkspaceActions = (props: {
           }}
         >
           <DropdownMenu.Item
+            data-action="workspace-new-session-menu"
+            data-workspace={base64Encode(props.directory)}
+            onSelect={() => {
+              props.clearHoverProjectSoon()
+              props.navigateToNewSession()
+            }}
+          >
+            <DropdownMenu.ItemLabel>{props.language.t("command.session.new")}</DropdownMenu.ItemLabel>
+          </DropdownMenu.Item>
+          <DropdownMenu.Separator />
+          <DropdownMenu.Item
             disabled={props.local()}
             onSelect={() => {
               props.setPendingRename(true)
@@ -450,6 +461,7 @@ export const LocalWorkspace = (props: {
   project: LocalProject
   sortNow: Accessor<number>
   mobile?: boolean
+  embedded?: boolean
 }): JSX.Element => {
   const serverSync = useServerSync()
   const queryOptions = useQueryOptions()
@@ -472,7 +484,11 @@ export const LocalWorkspace = (props: {
   return (
     <div
       ref={(el) => props.ctx.setScrollContainerRef(el, props.mobile)}
-      class="size-full flex flex-col py-2 overflow-y-auto no-scrollbar [overflow-anchor:none]"
+      classList={{
+        "flex flex-col py-2 no-scrollbar [overflow-anchor:none]": true,
+        "size-full overflow-y-auto": !props.embedded,
+        "w-full": props.embedded,
+      }}
     >
       <WorkspaceSessionList
         slug={slug}

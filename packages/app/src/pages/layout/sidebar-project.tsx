@@ -5,6 +5,9 @@ import { Button } from "@opencode-ai/ui/button"
 import { ContextMenu } from "@opencode-ai/ui/context-menu"
 import { HoverCard } from "@opencode-ai/ui/hover-card"
 import { Icon } from "@opencode-ai/ui/icon"
+import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
+import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
+import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { createSortable } from "@thisbeyond/solid-dnd"
 import { useLayout, type LocalProject } from "@/context/layout"
 import { useServerSync } from "@/context/server-sync"
@@ -12,6 +15,7 @@ import { useLanguage } from "@/context/language"
 import { useNotification } from "@/context/notification"
 import { ProjectIcon, SessionItem, type SessionItemProps } from "./sidebar-items"
 import { displayName, sortedRootSessions } from "./helpers"
+import { LocalWorkspace, SortableWorkspace, type WorkspaceSidebarContext } from "./sidebar-workspace"
 
 export type ProjectSidebarContext = {
   currentDir: Accessor<string>
@@ -24,6 +28,7 @@ export type ProjectSidebarContext = {
   onProjectFocus: (worktree: string) => void
   onHoverOpenChanged: (worktree: string, hovered: boolean) => void
   navigateToProject: (directory: string) => void
+  navigateToNewSession: (directory: string) => void
   openSidebar: () => void
   closeProject: (directory: string) => void
   showEditProjectDialog: (project: LocalProject) => void
@@ -32,6 +37,7 @@ export type ProjectSidebarContext = {
   workspaceIds: (project: LocalProject) => string[]
   workspaceLabel: (directory: string, branch?: string, projectId?: string) => string
   sessionProps: Omit<SessionItemProps, "session" | "list" | "slug" | "mobile" | "dense">
+  workspaceCtx: WorkspaceSidebarContext
 }
 
 export const ProjectDragOverlay = (props: {
@@ -64,6 +70,7 @@ const ProjectTile = (props: {
   onProjectMouseLeave: (worktree: string) => void
   onProjectFocus: (worktree: string) => void
   navigateToProject: (directory: string) => void
+  navigateToNewSession: (directory: string) => void
   showEditProjectDialog: (project: LocalProject) => void
   toggleProjectWorkspaces: (project: LocalProject) => void
   workspacesEnabled: (project: LocalProject) => boolean
@@ -78,6 +85,7 @@ const ProjectTile = (props: {
   const unseenCount = createMemo(() =>
     props.dirs().reduce((total, directory) => total + notification.project.unseenCount(directory), 0),
   )
+  const name = createMemo(() => displayName(props.project))
 
   const clear = () =>
     props
@@ -97,15 +105,19 @@ const ProjectTile = (props: {
       <ContextMenu.Trigger
         as="button"
         type="button"
-        aria-label={displayName(props.project)}
+        aria-label={name()}
         data-action="project-switch"
         data-project={base64Encode(props.project.worktree)}
         classList={{
-          "flex items-center justify-center size-10 p-1 rounded-lg overflow-hidden transition-colors cursor-default": true,
-          "bg-transparent border-2 border-icon-strong-base hover:bg-surface-base-hover": props.selected(),
+          "flex items-center transition-colors cursor-default": true,
+          "justify-center size-10 p-1 rounded-lg overflow-hidden": props.overlay(),
+          "w-full min-w-0 h-8 gap-2 rounded-md px-2 text-left": !props.overlay(),
+          "bg-transparent border-2 border-icon-strong-base hover:bg-surface-base-hover": props.overlay() && props.selected(),
           "bg-transparent border border-transparent hover:bg-surface-base-hover hover:border-border-weak-base":
-            !props.selected() && !props.active(),
-          "bg-surface-base-hover border border-border-weak-base": !props.selected() && props.active(),
+            props.overlay() && !props.selected() && !props.active(),
+          "bg-surface-base-hover border border-border-weak-base": props.overlay() && !props.selected() && props.active(),
+          "bg-surface-base-active text-text-strong": !props.overlay() && props.selected(),
+          "bg-transparent text-text-base hover:bg-surface-base-hover": !props.overlay() && !props.selected(),
         }}
         onPointerDown={(event) => {
           if (event.button === 0 && !event.ctrlKey) {
@@ -136,18 +148,49 @@ const ProjectTile = (props: {
         }}
         onClick={() => {
           props.setOpen(false)
-          if (props.selected()) {
-            layout.sidebar.toggle()
-            return
-          }
+          if (props.selected()) return
           props.navigateToProject(props.project.worktree)
         }}
         onBlur={() => props.setOpen(false)}
       >
-        <ProjectIcon project={props.project} notify working={props.isWorking()} />
+        <Show
+          when={!props.overlay()}
+          fallback={<ProjectIcon project={props.project} notify working={props.isWorking()} />}
+        >
+          <Icon name="folder" size="small" class="shrink-0 text-icon-base" />
+          <span class="min-w-0 flex-1 truncate text-14-regular">{name()}</span>
+          <div class="shrink-0 flex items-center gap-0.5">
+            <Show when={props.selected()}>
+              <Tooltip value={props.language.t("command.session.new")} placement="top">
+                <IconButtonV2
+                  icon={<IconV2 name="edit" size="small" />}
+                  variant="ghost"
+                  size="small"
+                  class="size-6 rounded-md opacity-0 pointer-events-none group-hover/project:opacity-100 group-hover/project:pointer-events-auto group-focus-within/project:opacity-100 group-focus-within/project:pointer-events-auto"
+                  data-action="project-new-session"
+                  data-project={base64Encode(props.project.worktree)}
+                  aria-label={props.language.t("command.session.new")}
+                  onClick={(event) => {
+                    event.preventDefault()
+                    event.stopPropagation()
+                    props.navigateToNewSession(props.project.worktree)
+                  }}
+                />
+              </Tooltip>
+            </Show>
+          </div>
+        </Show>
       </ContextMenu.Trigger>
       <ContextMenu.Portal>
         <ContextMenu.Content>
+          <ContextMenu.Item
+            data-action="project-new-session-menu"
+            data-project={base64Encode(props.project.worktree)}
+            onSelect={() => props.navigateToNewSession(props.project.worktree)}
+          >
+            <ContextMenu.ItemLabel>{props.language.t("command.session.new")}</ContextMenu.ItemLabel>
+          </ContextMenu.Item>
+          <ContextMenu.Separator />
           <ContextMenu.Item onSelect={() => props.showEditProjectDialog(props.project)}>
             <ContextMenu.ItemLabel>{props.language.t("common.edit")}</ContextMenu.ItemLabel>
           </ContextMenu.Item>
@@ -287,8 +330,8 @@ export const SortableProject = (props: {
   })
 
   const isHoverProject = () => props.ctx.hoverProject() === props.project.worktree
-  const preview = createMemo(() => !props.mobile && props.ctx.sidebarOpened())
-  const overlay = createMemo(() => !props.mobile && !props.ctx.sidebarOpened())
+  const preview = createMemo(() => !!props.mobile && props.ctx.sidebarOpened())
+  const overlay = createMemo(() => !!props.mobile && !props.ctx.sidebarOpened())
   const active = createMemo(() => state.menu || (preview() ? isHoverProject() : overlay() && isHoverProject()))
 
   const hoverOpen = () => isHoverProject() && preview() && !selected() && !state.menu
@@ -316,29 +359,81 @@ export const SortableProject = (props: {
     return sortedRootSessions(data, props.sortNow())
   }
   const tile = () => (
-    <ProjectTile
-      project={props.project}
-      mobile={props.mobile}
-      sidebarHovering={props.ctx.sidebarHovering}
-      selected={selected}
-      active={active}
-      isWorking={isWorking}
-      overlay={overlay}
-      suppressHover={() => state.suppressHover}
-      dirs={dirs}
-      onProjectMouseEnter={props.ctx.onProjectMouseEnter}
-      onProjectMouseLeave={props.ctx.onProjectMouseLeave}
-      onProjectFocus={props.ctx.onProjectFocus}
-      navigateToProject={props.ctx.navigateToProject}
-      showEditProjectDialog={props.ctx.showEditProjectDialog}
-      toggleProjectWorkspaces={props.ctx.toggleProjectWorkspaces}
-      workspacesEnabled={props.ctx.workspacesEnabled}
-      closeProject={props.ctx.closeProject}
-      setMenu={(value) => setState("menu", value)}
-      setOpen={(value) => props.ctx.onHoverOpenChanged(props.project.worktree, value)}
-      setSuppressHover={(value) => setState("suppressHover", value)}
-      language={language}
-    />
+    <div class="w-full min-w-0">
+      <ProjectTile
+        project={props.project}
+        mobile={props.mobile}
+        sidebarHovering={props.ctx.sidebarHovering}
+        selected={selected}
+        active={active}
+        isWorking={isWorking}
+        overlay={overlay}
+        suppressHover={() => state.suppressHover}
+        dirs={dirs}
+        onProjectMouseEnter={props.ctx.onProjectMouseEnter}
+        onProjectMouseLeave={props.ctx.onProjectMouseLeave}
+        onProjectFocus={props.ctx.onProjectFocus}
+        navigateToProject={props.ctx.navigateToProject}
+        navigateToNewSession={props.ctx.navigateToNewSession}
+        showEditProjectDialog={props.ctx.showEditProjectDialog}
+        toggleProjectWorkspaces={props.ctx.toggleProjectWorkspaces}
+        workspacesEnabled={props.ctx.workspacesEnabled}
+        closeProject={props.ctx.closeProject}
+        setMenu={(value) => setState("menu", value)}
+        setOpen={(value) => props.ctx.onHoverOpenChanged(props.project.worktree, value)}
+        setSuppressHover={(value) => setState("suppressHover", value)}
+        language={language}
+      />
+      <Show when={!overlay()}>
+        <Show
+          when={selected()}
+          fallback={
+            <For each={projectSessions().slice(0, 2)}>
+              {(session) => (
+                <div class="pl-7 pr-1">
+                  <SessionItem
+                    {...props.ctx.sessionProps}
+                    session={session}
+                    list={projectSessions()}
+                    slug={base64Encode(props.project.worktree)}
+                    dense
+                    showTooltip
+                    mobile={props.mobile}
+                  />
+                </div>
+              )}
+            </For>
+          }
+        >
+          <div class="pl-7 pr-1 pt-1">
+            <Show
+              when={workspaceEnabled()}
+              fallback={
+                <LocalWorkspace
+                  ctx={props.ctx.workspaceCtx}
+                  project={props.project}
+                  sortNow={props.sortNow}
+                  mobile={props.mobile}
+                  embedded
+                />
+              }
+            >
+              <For each={dirs()}>
+                {(directory) => (
+                  <SortableWorkspace
+                    ctx={props.ctx.workspaceCtx}
+                    directory={directory}
+                    project={props.project}
+                    sortNow={props.sortNow}
+                    mobile={props.mobile}
+                  />
+                )}
+              </For>
+            </Show>
+          </div>
+        </Show>
+      </Show>
+    </div>
   )
 
   return (
