@@ -21,8 +21,8 @@ function resolveModelID(modelID: string, region: string | undefined) {
   const resolvedRegion = region ?? "us-east-1"
   const regionPrefix = resolvedRegion.split("-")[0]
   if (regionPrefix === "us") {
-    const requiresPrefix = ["nova-micro", "nova-lite", "nova-pro", "nova-premier", "nova-2", "claude"].some((item) =>
-      modelID.includes(item),
+    const requiresPrefix = ["nova-micro", "nova-lite", "nova-pro", "nova-premier", "nova-2", "claude", "deepseek.r1"].some(
+      (item) => modelID.includes(item),
     )
     if (requiresPrefix && !resolvedRegion.startsWith("us-gov")) return `${regionPrefix}.${modelID}`
     return modelID

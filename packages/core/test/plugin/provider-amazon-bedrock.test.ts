@@ -527,7 +527,7 @@ describe("AmazonBedrockPlugin", () => {
         { region: "us-east-1", modelID: "amazon.nova-premier-v1:0", expected: "us.amazon.nova-premier-v1:0" },
         { region: "us-east-1", modelID: "amazon.nova-2-lite-v1:0", expected: "us.amazon.nova-2-lite-v1:0" },
         { region: "us-east-1", modelID: "anthropic.claude-sonnet-4-5", expected: "us.anthropic.claude-sonnet-4-5" },
-        { region: "us-east-1", modelID: "deepseek.r1-v1:0", expected: "deepseek.r1-v1:0" },
+        { region: "us-east-1", modelID: "deepseek.r1-v1:0", expected: "us.deepseek.r1-v1:0" },
         { region: "us-east-1", modelID: "us.deepseek.r1-v1:0", expected: "us.deepseek.r1-v1:0" },
         { region: "us-east-1", modelID: "deepseek.v3.2", expected: "deepseek.v3.2" },
         {
