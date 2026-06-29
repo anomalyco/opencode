@@ -34,6 +34,8 @@ import { usePromptHistory, type PromptInfo } from "../../prompt/history"
 import { computePromptTraits } from "../../prompt/traits"
 import { expandPastedTextPlaceholders, expandTrackedPastedText } from "../../prompt/part"
 import { usePromptStash } from "../../prompt/stash"
+import { promptEscapeAction } from "./escape"
+import { shouldFlushPromptQueueOnStatus, type PromptQueueFlushState } from "./queue"
 import { DialogStash } from "../dialog-stash"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
 import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
@@ -230,6 +232,17 @@ export function Prompt(props: PromptProps) {
   let promptPartTypeId = 0
   const event = useEvent()
 
+  function syncInputText() {
+    if (!input || input.isDestroyed || input.plainText === store.prompt.input) return
+    setStore("prompt", "input", input.plainText)
+    syncExtmarksWithPromptParts()
+  }
+
+  function currentInputText() {
+    if (!input || input.isDestroyed) return store.prompt.input
+    return input.plainText
+  }
+
   event.on("tui.prompt.append", (evt, { workspace }) => {
     if (workspace !== project.workspace.current()) return
     if (!input || input.isDestroyed) return
@@ -282,6 +295,7 @@ export function Prompt(props: PromptProps) {
     extmarkToPartIndex: Map<number, number>
     interrupt: number
     placeholder: number
+    queue: QueuedPrompt[]
   }>({
     placeholder: randomIndex(list().length),
     prompt: {
@@ -291,6 +305,31 @@ export function Prompt(props: PromptProps) {
     mode: "normal",
     extmarkToPartIndex: new Map(),
     interrupt: 0,
+    queue: [],
+  })
+
+  type QueuedPrompt = {
+    sessionID: string
+    inputText: string
+    parts: PromptInfo["parts"]
+    agentName: string
+    model: NonNullable<ReturnType<typeof local.model.current>>
+    variant: ReturnType<typeof local.model.variant.current>
+  }
+
+  const queuedForSession = createMemo(() => store.queue.filter((item) => item.sessionID === (props.sessionID ?? "")))
+  const queueFlushState: PromptQueueFlushState = { armed: status().type !== "idle" }
+
+  createEffect(() => {
+    if (
+      shouldFlushPromptQueueOnStatus(queueFlushState, {
+        sessionID: props.sessionID,
+        statusType: status().type,
+        queueLength: queuedForSession().length,
+      })
+    ) {
+      flushQueue()
+    }
   })
 
   createEffect(
@@ -298,6 +337,7 @@ export function Prompt(props: PromptProps) {
       () => props.sessionID,
       () => {
         setStore("placeholder", randomIndex(list().length))
+        if (store.queue.length > 0) setStore("queue", [])
       },
       { defer: true },
     ),
@@ -393,25 +433,29 @@ export function Prompt(props: PromptProps) {
         run: () => {
           if (auto()?.visible) return
           if (!input.focused) return
-          // TODO: this should be its own command
           if (store.mode === "shell") {
             setStore("mode", "normal")
             return
           }
+          if (
+            promptEscapeAction({
+              autocompleteVisible: Boolean(auto()?.visible),
+              disabled: Boolean(props.disabled),
+              focused: input.focused,
+              mode: store.mode,
+              promptInput: currentInputText(),
+              sessionBusy: status().type !== "idle",
+              workspaceCreating: workspace.creating() || move.creating(),
+            }) === "interrupt-submit"
+          ) {
+            enqueueCurrentInput()
+          }
           if (!props.sessionID) return
 
-          setStore("interrupt", store.interrupt + 1)
-
-          setTimeout(() => {
-            setStore("interrupt", 0)
-          }, 5000)
-
-          if (store.interrupt >= 2) {
-            void sdk.client.session.abort({
-              sessionID: props.sessionID,
-            })
-            setStore("interrupt", 0)
-          }
+          void sdk.client.session.abort({
+            sessionID: props.sessionID,
+          })
+          setStore("interrupt", 0)
           dialog.clear()
         },
       },
@@ -728,6 +772,22 @@ export function Prompt(props: PromptProps) {
     )
   }
 
+  function expandedCurrentPromptInput() {
+    return expandTrackedPastedText(
+      store.prompt.input,
+      input.extmarks.getAllForTypeId(promptPartTypeId).flatMap((extmark) => {
+        const partIndex = store.extmarkToPartIndex.get(extmark.id)
+        const part = partIndex === undefined ? undefined : store.prompt.parts[partIndex]
+        if (part?.type !== "text") return []
+        return [{ start: extmark.start, end: extmark.end, text: part.text }]
+      }),
+    )
+  }
+
+  function currentNonTextParts() {
+    return store.prompt.parts.filter((part) => part.type !== "text")
+  }
+
   const stashCommands = createMemo(() =>
     [
       {
@@ -945,10 +1005,7 @@ export function Prompt(props: PromptProps) {
     // IME: double-defer may fire before onContentChange flushes the last
     // composed character (e.g. Korean hangul) to the store, so read
     // plainText directly and sync before any downstream reads.
-    if (input && !input.isDestroyed && input.plainText !== store.prompt.input) {
-      setStore("prompt", "input", input.plainText)
-      syncExtmarksWithPromptParts()
-    }
+    syncInputText()
     if (props.disabled) return false
     if (workspace.creating() || move.creating()) return false
     if (auto()?.visible) return false
@@ -982,6 +1039,12 @@ export function Prompt(props: PromptProps) {
     }
 
     const variant = local.model.variant.current()
+    if (props.sessionID && store.mode === "normal" && status().type !== "idle") {
+      if (!enqueueCurrentInput()) return false
+      props.onSubmit?.()
+      return true
+    }
+
     let sessionID = props.sessionID
     let finishMoveProgress = false
     if (sessionID == null) {
@@ -1018,18 +1081,10 @@ export function Prompt(props: PromptProps) {
       sessionID = res.data.id
     }
 
-    const inputText = expandTrackedPastedText(
-      store.prompt.input,
-      input.extmarks.getAllForTypeId(promptPartTypeId).flatMap((extmark) => {
-        const partIndex = store.extmarkToPartIndex.get(extmark.id)
-        const part = partIndex === undefined ? undefined : store.prompt.parts[partIndex]
-        if (part?.type !== "text") return []
-        return [{ start: extmark.start, end: extmark.end, text: part.text }]
-      }),
-    )
+    const inputText = expandedCurrentPromptInput()
 
     // Filter out text parts (pasted content) since they're now expanded inline
-    const nonTextParts = store.prompt.parts.filter((part) => part.type !== "text")
+    const nonTextParts = currentNonTextParts()
 
     // Capture mode before it gets reset
     const currentMode = store.mode
@@ -1139,6 +1194,120 @@ export function Prompt(props: PromptProps) {
     input.clear()
     if (finishMoveProgress) move.finishSubmit()
     return true
+  }
+
+  function createQueuedPrompt(sessionID: string): QueuedPrompt | undefined {
+    syncInputText()
+    if (store.mode !== "normal") return
+    if (!store.prompt.input.trim()) return
+
+    const agent = local.agent.current()
+    const model = local.model.current()
+    if (!agent || !model) return
+
+    return {
+      sessionID,
+      inputText: expandedCurrentPromptInput(),
+      parts: structuredClone(currentNonTextParts()),
+      agentName: agent.name,
+      model: { ...model },
+      variant: local.model.variant.current(),
+    }
+  }
+
+  function enqueueCurrentInput() {
+    const sessionID = props.sessionID
+    if (!sessionID) return false
+
+    const queued = createQueuedPrompt(sessionID)
+    if (!queued) return false
+
+    history.append({
+      ...unwrap(store.prompt),
+      mode: store.mode,
+    })
+    setStore("queue", (queue) => [...queue, queued])
+    input.extmarks.clear()
+    input.clear()
+    setStore("prompt", { input: "", parts: [] })
+    setStore("extmarkToPartIndex", new Map())
+    return true
+  }
+
+  function sendQueuedPrompt(item: QueuedPrompt) {
+    if (
+      item.inputText.startsWith("/") &&
+      sync.data.command.some((x) => x.name === item.inputText.split("\n")[0].split(" ")[0].slice(1))
+    ) {
+      const firstLineEnd = item.inputText.indexOf("\n")
+      const firstLine = firstLineEnd === -1 ? item.inputText : item.inputText.slice(0, firstLineEnd)
+      const [command, ...firstLineArgs] = firstLine.split(" ")
+      const restOfInput = firstLineEnd === -1 ? "" : item.inputText.slice(firstLineEnd + 1)
+      const args = firstLineArgs.join(" ") + (restOfInput ? "\n" + restOfInput : "")
+
+      void sdk.client.session
+        .command({
+          sessionID: item.sessionID,
+          command: command.slice(1),
+          arguments: args,
+          agent: item.agentName,
+          model: `${item.model.providerID}/${item.model.modelID}`,
+          variant: item.variant,
+          parts: item.parts.filter((part) => part.type === "file"),
+        })
+        .catch((error) => {
+          toast.show({
+            title: "Failed to send queued command",
+            message: errorMessage(error),
+            variant: "error",
+          })
+        })
+      return
+    }
+
+    void sdk.client.session
+      .prompt(
+        {
+          sessionID: item.sessionID,
+          ...item.model,
+          agent: item.agentName,
+          model: item.model,
+          variant: item.variant,
+          parts: [
+            {
+              type: "text",
+              text: item.inputText,
+            },
+            ...item.parts,
+          ],
+        },
+        { throwOnError: true },
+      )
+      .catch((error) => {
+        toast.show({
+          title: "Failed to send queued prompt",
+          message: errorMessage(error),
+          variant: "error",
+        })
+      })
+  }
+
+  function flushQueue() {
+    if (submitting) return
+    const sessionID = props.sessionID
+    if (!sessionID || status().type !== "idle") return
+
+    const index = store.queue.findIndex((item) => item.sessionID === sessionID)
+    if (index === -1) return
+
+    const item = store.queue[index]
+    submitting = true
+    try {
+      setStore("queue", (queue) => queue.filter((_, i) => i !== index))
+      sendQueuedPrompt(item)
+    } finally {
+      submitting = false
+    }
   }
 
   function pasteText(text: string, virtualText: string) {
@@ -1574,11 +1743,12 @@ export function Prompt(props: PromptProps) {
                     })()}
                   </box>
                 </box>
-                <text fg={store.interrupt > 0 ? theme.primary : theme.text}>
+                <text fg={theme.text}>
                   esc{" "}
-                  <span style={{ fg: store.interrupt > 0 ? theme.primary : theme.textMuted }}>
-                    {store.interrupt > 0 ? "again to interrupt" : "interrupt"}
-                  </span>
+                  <span style={{ fg: theme.textMuted }}>interrupt</span>
+                  <Show when={queuedForSession().length > 0}>
+                    <span style={{ fg: theme.textMuted }}> · {queuedForSession().length} queued</span>
+                  </Show>
                 </text>
               </box>
             </Match>
