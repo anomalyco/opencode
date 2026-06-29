@@ -1,6 +1,7 @@
 import { describe, expect } from "bun:test"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { EventV2 } from "@opencode-ai/core/event"
+import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { Deferred, Effect, Exit, Layer } from "effect"
 import { Session as SessionNs } from "@/session/session"
 import { MessageV2 } from "../../src/session/message-v2"
@@ -17,10 +18,13 @@ import { InstanceStore } from "@/project/instance-store"
 import { InstanceBootstrap } from "@/project/bootstrap"
 
 const it = testEffect(
-  AppNodeBuilder.build(LayerNode.group([SessionNs.node, EventV2Bridge.node, CrossSpawnSpawner.node, InstanceStore.node]), [
-    [RuntimeFlags.node, RuntimeFlags.layer({ experimentalWorkspaces: false })],
-    [InstanceBootstrap.node, Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void }))],
-  ]),
+  AppNodeBuilder.build(
+    LayerNode.group([SessionNs.node, EventV2Bridge.node, SessionProjector.node, CrossSpawnSpawner.node, InstanceStore.node]),
+    [
+      [RuntimeFlags.node, RuntimeFlags.layer({ experimentalWorkspaces: false })],
+      [InstanceBootstrap.node, Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void }))],
+    ],
+  ),
 )
 
 const awaitDeferred = <T>(deferred: Deferred.Deferred<T>, message: string) =>
