@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, spyOn } from "bun:test"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Effect, Layer } from "effect"
 import fs from "fs/promises"
 import path from "path"
@@ -20,7 +21,7 @@ afterEach(async () => {
   await disposeAllInstances()
 })
 
-const it = testEffect(Layer.mergeAll(CrossSpawnSpawner.defaultLayer, FSUtil.defaultLayer, testInstanceStoreLayer))
+const it = testEffect(Layer.mergeAll(LayerNode.compile(LayerNode.group([CrossSpawnSpawner.node, FSUtil.node])), testInstanceStoreLayer))
 
 function withTmp<T, A, E, R>(
   init: (dir: string) => Promise<T>,

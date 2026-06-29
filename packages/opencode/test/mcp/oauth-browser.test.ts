@@ -1,5 +1,6 @@
 import { expect, mock, beforeEach } from "bun:test"
 import { EventEmitter } from "events"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Deferred, Effect, Layer, Option } from "effect"
 import { awaitWithTimeout, testEffect } from "../lib/effect"
 import type { MCP as MCPNS } from "../../src/mcp/index"
@@ -122,13 +123,7 @@ const { McpOAuthCallback } = await import("../../src/mcp/oauth-callback")
 const { FSUtil } = await import("@opencode-ai/core/fs-util")
 const { CrossSpawnSpawner } = await import("@opencode-ai/core/cross-spawn-spawner")
 const mcpTest = testEffect(
-  MCP.layer.pipe(
-    Layer.provide(McpAuth.defaultLayer),
-    Layer.provideMerge(EventV2Bridge.defaultLayer),
-    Layer.provide(Config.defaultLayer),
-    Layer.provide(CrossSpawnSpawner.defaultLayer),
-    Layer.provide(FSUtil.defaultLayer),
-  ),
+  LayerNode.compile(LayerNode.group([MCP.node, McpAuth.node, EventV2Bridge.node, Config.node, CrossSpawnSpawner.node, FSUtil.node])),
 )
 const service = MCP.Service as unknown as Effect.Effect<MCPNS.Interface, never, never>
 
