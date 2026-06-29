@@ -138,6 +138,9 @@ export const validateName = (name: string) =>
 
 export const sanitizeName = (name: string) => name.replace(/[^a-zA-Z0-9_-]/g, "_")
 
+export const registrationEntries = (tools: Readonly<Record<string, AnyTool>>) =>
+  Object.entries(tools).map(([name, tool]) => [sanitizeName(name), tool] as const)
+
 export const withPermission = <Input extends SchemaType<any>, Output extends SchemaType<any>>(
   tool: Definition<Input, Output>,
   permission: string,
