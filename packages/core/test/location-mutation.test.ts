@@ -2,7 +2,6 @@ import fs from "fs/promises"
 import path from "path"
 import { describe, expect, test } from "bun:test"
 import { Effect, Layer, Schema } from "effect"
-import { makeLocationNode } from "@opencode-ai/core/effect/app-node"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Location } from "@opencode-ai/core/location"
 import { LocationMutation } from "@opencode-ai/core/location-mutation"
@@ -13,20 +12,12 @@ import { it } from "./lib/effect"
 
 function provide(directory: string) {
   return Effect.provide(
-    LayerNode.compile(
-      LayerNode.bind(
-        LocationMutation.node,
+    LayerNode.compile(LocationMutation.node, [
+      [
         Location.node,
-        makeLocationNode({
-          service: Location.Service,
-          layer: Layer.succeed(
-            Location.Service,
-            Location.Service.of(location({ directory: AbsolutePath.make(directory) })),
-          ),
-          deps: [],
-        }),
-      ),
-    ),
+        Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(directory) }))),
+      ],
+    ]),
   )
 }
 
