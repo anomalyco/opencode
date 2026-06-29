@@ -1,7 +1,7 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { path } from "@opencode-ai/core/effect/app-node-platform"
 import { Global } from "@opencode-ai/core/global"
-import { InstanceLayer } from "@/project/instance-layer"
+import { InstanceBootstrap } from "@/project/bootstrap"
 import { InstanceStore } from "@/project/instance-store"
 import { Project } from "@/project/project"
 import { Database } from "@opencode-ai/core/database/database"
@@ -625,7 +625,9 @@ export const appLayer = layer.pipe(
   Layer.provide(NodePath.layer),
 )
 
-export const defaultLayer = appLayer.pipe(Layer.provide(InstanceLayer.layer))
+export const defaultLayer = appLayer.pipe(
+  Layer.provide(LayerNode.compile(InstanceStore.node, [[InstanceStore.bootstrapNode, InstanceBootstrap.node]])),
+)
 
 export const node = LayerNode.make({
   service: Service,
