@@ -631,7 +631,7 @@ describe("SessionRunnerLLM", () => {
           execute: () => Effect.succeed({ ok: true }),
         }),
       })
-      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Hello" }) })
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Hello" }) })
 
       const names = requests[0]?.tools.map((tool) => tool.name) ?? []
       expect(names).toContain("echo")

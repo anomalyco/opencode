@@ -421,7 +421,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       agent,
       model,
       variant,
-      system: worktreeSelection === "create" ? sync.data.config.worktree_prompt || DEFAULT_WORKTREE_PROMPT : undefined,
+      system: worktreeSelection === "create" ? sync().data.config.worktree_prompt || DEFAULT_WORKTREE_PROMPT : undefined,
     }
 
     const clearInput = () => {

@@ -1,5 +1,4 @@
 import { Layer } from "effect"
-import { worktreeMergeToolLayer } from "./worktree-merge-tool"
 import { MessageHandler } from "./handlers/message"
 import { ModelHandler } from "./handlers/model"
 import { ProviderHandler } from "./handlers/provider"
@@ -38,8 +37,4 @@ export const handlers = Layer.mergeAll(
   QuestionHandler,
   ReferenceHandler,
   ProjectCopyHandler,
-  // Registers the process-global `worktree_merge_request` tool into the shared
-  // ApplicationTools registry. Its `SessionV2.Service` and `ApplicationTools.Service`
-  // dependencies are satisfied by the application service layer provided in routes.ts.
-  worktreeMergeToolLayer,
 )

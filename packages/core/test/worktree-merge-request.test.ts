@@ -1,7 +1,6 @@
 import { describe, expect } from "bun:test"
 import { $ } from "bun"
 import fs from "fs/promises"
-import path from "path"
 import { DateTime, Effect, Exit } from "effect"
 import { Git } from "@opencode-ai/core/git"
 import { Location } from "@opencode-ai/core/location"
@@ -74,14 +73,14 @@ describe("WorktreeMergeRequestTool", () => {
       )
 
       const git = yield* Git.Service
-      const repo = { directory: mainCheckout, store: AbsolutePath.make(path.join(mainCheckout, ".git")) }
       // Create a worktree on branch `opencode/feature`, matching how the web app
       // creates worktrees (a real branch, not detached HEAD).
       yield* Effect.promise(() =>
         $`git worktree add -b opencode/feature ${worktree} HEAD`.cwd(mainCheckout).quiet().then(() => undefined),
       )
       const realWorktree = AbsolutePath.make(yield* Effect.promise(() => fs.realpath(worktree)))
-      expect(yield* git.branch(realWorktree)).toBe("opencode/feature")
+      const worktreeRepo = yield* git.repo.discover(realWorktree)
+      expect(yield* git.history.branch(worktreeRepo!)).toBe("opencode/feature")
 
       const now = yield* DateTime.now
       const worktreeSessionID = SessionSchema.ID.create()

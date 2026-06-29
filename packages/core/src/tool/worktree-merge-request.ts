@@ -126,11 +126,11 @@ export const make = (deps: { session: SessionV2.Interface; git: Git.Interface })
           .pipe(Effect.mapError(() => new ToolFailure({ message: "Could not load the current session." })))
         const worktreeDirectory = current.location.directory
 
-        const repo = yield* deps.git.find(worktreeDirectory)
+        const repo = yield* deps.git.repo.discover(AbsolutePath.make(worktreeDirectory))
         if (!repo) {
           return yield* new ToolFailure({ message: "worktree_merge_request requires a git project." })
         }
-        const mainCheckout = mainCheckoutFromStore(repo.store)
+        const mainCheckout = mainCheckoutFromStore(repo.commonDirectory)
         if (mainCheckout === worktreeDirectory) {
           return yield* new ToolFailure({
             message:
@@ -138,7 +138,7 @@ export const make = (deps: { session: SessionV2.Interface; git: Git.Interface })
           })
         }
 
-        const branch = yield* deps.git.branch(worktreeDirectory)
+        const branch = yield* deps.git.history.branch(repo)
         if (!branch) {
           return yield* new ToolFailure({
             message:

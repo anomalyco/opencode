@@ -313,7 +313,7 @@ export function MessageTimeline(props: {
     try {
       // Preflight: refuse to merge if the main checkout has uncommitted changes,
       // since the squash merge will check out the default branch and commit there.
-      const mainClient = sdk.createClient({ directory: mainCheckout, throwOnError: true })
+      const mainClient = sdk().createClient({ directory: mainCheckout, throwOnError: true })
       const dirty = await mainClient.vcs
         .status()
         .then((x) => x.data ?? [])
@@ -332,7 +332,7 @@ export function MessageTimeline(props: {
         return
       }
 
-      await sdk.client.session.promptAsync({
+      await sdk().client.session.promptAsync({
         sessionID: id,
         parts: [
           {
@@ -393,7 +393,7 @@ export function MessageTimeline(props: {
         setNavigatedFor(part.callID)
         // Warm the target directory's store so the merge session view does not
         // flash empty while its DirectoryDataProvider boots.
-        serverSync.child(targetDirectory)
+        serverSync().child(targetDirectory)
         navigate(`/${base64Encode(targetDirectory)}/session/${targetSessionID}`)
         return
       }
