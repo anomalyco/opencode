@@ -1023,7 +1023,7 @@ function HomeSessionSearch(props: {
 
   return (
     <div class="w-full">
-      <div ref={root} data-component="home-session-search" class="relative z-10 w-full">
+      <div ref={root} data-component="home-session-search" class="relative z-30 w-full">
         <Show when={props.open}>
           <div
             data-component="home-session-search-panel"
