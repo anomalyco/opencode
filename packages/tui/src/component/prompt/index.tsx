@@ -35,6 +35,7 @@ import { computePromptTraits } from "../../prompt/traits"
 import { expandPastedTextPlaceholders, expandTrackedPastedText } from "../../prompt/part"
 import { usePromptStash } from "../../prompt/stash"
 import { DialogStash } from "../dialog-stash"
+import { DialogPromptHistory } from "../dialog-prompt-history"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
 import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import type { AssistantMessage, FilePart, UserMessage } from "@opencode-ai/sdk/v2"
@@ -919,6 +920,41 @@ export function Prompt(props: PromptProps) {
         },
       ],
       bindings: tuiConfig.keybinds.get("prompt.history.next"),
+    }
+  })
+
+  useBindings(() => {
+    return {
+      target: inputTarget,
+      enabled: (() => {
+        cursorVersion()
+        return inputTarget() !== undefined && !props.disabled && !auto()?.visible && input !== undefined
+      })(),
+      commands: [
+        {
+          name: "prompt.history.search",
+          title: "Search prompt history",
+          category: "Prompt",
+          run() {
+            const entries = history.list()
+            if (!entries.length) return false
+            const snapshot = entries.map((entry) => structuredClone(unwrap(entry)))
+            dialog.replace(() => (
+              <DialogPromptHistory
+                entries={snapshot}
+                onSelect={(entry) => {
+                  input.setText(entry.input)
+                  setStore("prompt", { input: entry.input, parts: entry.parts })
+                  setStore("mode", entry.mode ?? "normal")
+                  restoreExtmarksFromParts(entry.parts)
+                  input.gotoBufferEnd()
+                }}
+              />
+            ))
+          },
+        },
+      ],
+      bindings: tuiConfig.keybinds.get("prompt.history.search"),
     }
   })
 
