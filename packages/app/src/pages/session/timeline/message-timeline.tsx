@@ -960,6 +960,7 @@ export function MessageTimeline(props: {
                 message={message()}
                 showAssistantCopyPartID={assistantCopyPartID(row().userMessageID)}
                 turnDurationMs={turnDurationMs(row().userMessageID)}
+                useV2Actions={settings.general.newLayoutDesigns()}
                 defaultOpen={defaultOpen()}
                 toolOpen={toolOpen[part().id] ?? defaultOpen()}
                 onToolOpenChange={(open) => setToolOpen(part().id, open)}
@@ -1067,6 +1068,7 @@ export function MessageTimeline(props: {
                       message={message()}
                       parts={getMsgParts(userMessageRow().userMessageID)}
                       actions={props.actions}
+                      useV2Actions={settings.general.newLayoutDesigns()}
                     />
                   </div>
                 </div>
