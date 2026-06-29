@@ -626,7 +626,7 @@
         "npm-package-arg": "13.0.2",
         "open": "10.1.2",
         "opencode-gitlab-auth": "2.1.0",
-        "opencode-kiro": "0.3.4",
+        "opencode-kiro": "0.3.5",
         "opencode-poe-auth": "0.0.1",
         "opentui-spinner": "catalog:",
         "partial-json": "0.1.7",
@@ -4172,7 +4172,7 @@
 
     "kind-of": ["kind-of@6.0.3", "", {}, "sha512-dcS1ul+9tmeD95T+x28/ehLgd9mENa3LsvDTtzm3vyBEO7RPptvAD+t44WVXaUjTBRcrpFeFlC8WCruUR456hw=="],
 
-    "kiro-acp-ai-provider": ["kiro-acp-ai-provider@2.1.0", "", { "peerDependencies": { "@ai-sdk/provider": ">=3.0.0" } }, "sha512-8Y6IaypunarJX9C1iSH6O76LzWb4xUlA6xbHHQcv4VYmEzC8MFzw8h5a/VvLoS145eLhIxpzK/a8gROeeWOmTg=="],
+    "kiro-acp-ai-provider": ["kiro-acp-ai-provider@2.1.1", "", { "peerDependencies": { "@ai-sdk/provider": ">=3.0.0" } }, "sha512-dRnTCB3Wh1wwbvDl+3N+ESJVleChhHXJKgUof09KWlbGKiaQCKQShHTXvnnwT3lD+8Pff+4eId0gA/k5vzdtFw=="],
 
     "kleur": ["kleur@4.1.5", "", {}, "sha512-o+NO+8WrRiQEE4/7nwRJhN1HWpVmJm511pBHUxPLtp0BUISzlBplORYSmTclCnJvQq2tKu/sgl3xVpkc7ZWuQQ=="],
 
@@ -4586,7 +4586,7 @@
 
     "opencode-gitlab-auth": ["opencode-gitlab-auth@2.1.0", "", { "dependencies": { "@fastify/rate-limit": "^10.2.0", "@opencode-ai/plugin": "*", "fastify": "^5.2.0", "open": "^10.0.0" } }, "sha512-ZCDYaY0V8Se6hOH2tqZqqcskrd0xLTgfiGhU0J1igkUP52oFtN9eSwxOPLT0ctvNXUq8b+zOmJ4sskAQoC/IUA=="],
 
-    "opencode-kiro": ["opencode-kiro@0.3.4", "", { "dependencies": { "kiro-acp-ai-provider": "2.1.0" }, "peerDependencies": { "@opencode-ai/plugin": "*" } }, "sha512-qKQG4/xzgs/GdaRqGpjdDpNul2JMn0zV92xTNFOXQ8khWt5PP1u0mqqDemRNQNsEMsmiwtyzhd2sU2nFtjjAgw=="],
+    "opencode-kiro": ["opencode-kiro@0.3.5", "", { "dependencies": { "kiro-acp-ai-provider": "2.1.1" }, "peerDependencies": { "@opencode-ai/plugin": "*" } }, "sha512-cSgBE19F12Pc/mB+PMqlQVg0GNvh06/+2izgyIFSo9LR9wpAPu+3a+i3W0eLK6xHubbMWocTb2aT4XdF3NTyJw=="],
 
     "opencode-poe-auth": ["opencode-poe-auth@0.0.1", "", { "dependencies": { "open": "^10.0.0", "poe-oauth": "*" }, "peerDependencies": { "@opencode-ai/plugin": "*" } }, "sha512-cXqTlS6AXHzo1oBdosnxbT47ZJEZ9WXn050X8Re6wZ1vaNnTpB/l2fMQt90evT7RBK0fB8UjXQUDMKyd7bbiqg=="],
 
