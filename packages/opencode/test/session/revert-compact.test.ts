@@ -2,9 +2,8 @@ import { describe, expect } from "bun:test"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import fs from "fs/promises"
 import path from "path"
-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { Effect } from "effect"
+import { Effect, Layer } from "effect"
 import { Session } from "@/session/session"
 
 import { SessionRevert } from "../../src/session/revert"
@@ -17,7 +16,7 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 
 const it = testEffect(
-  LayerNode.compile(LayerNode.group([Session.node, SessionRevert.node, Snapshot.node, CrossSpawnSpawner.node])),
+  Layer.mergeAll(Session.defaultLayer, SessionRevert.defaultLayer, Snapshot.defaultLayer, CrossSpawnSpawner.defaultLayer),
 )
 
 const user = Effect.fn("test.user")(function* (sessionID: SessionID, agent = "default") {
