@@ -1,6 +1,9 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
+import { makeLocationNode } from "@opencode-ai/core/effect/app-node"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventV2 } from "@opencode-ai/core/event"
 import { PermissionV2 } from "@opencode-ai/core/permission"
 import { Project } from "@opencode-ai/core/project"
@@ -11,6 +14,7 @@ import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionTodo } from "@opencode-ai/core/session/todo"
 import { TodoWriteTool } from "@opencode-ai/core/tool/todowrite"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
+import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
 import { testEffect } from "./lib/effect"
 import { toolIdentity, executeTool, settleTool, toolDefinitions } from "./lib/tool"
 
@@ -32,14 +36,19 @@ const permission = Layer.succeed(
     list: () => Effect.die("unused"),
   }),
 )
-const registry = ToolRegistry.defaultLayer.pipe(Layer.provide(permission))
-const tool = TodoWriteTool.layer.pipe(
-  Layer.provide(registry),
-  Layer.provide(permission),
-  Layer.provide(SessionTodo.defaultLayer),
-)
+const toolNode = makeLocationNode({
+  name: "test/todowrite-tool",
+  layer: TodoWriteTool.layer,
+  deps: [ToolRegistry.node, PermissionV2.node, SessionTodo.node],
+})
 const it = testEffect(
-  Layer.mergeAll(Database.defaultLayer, EventV2.defaultLayer, SessionTodo.defaultLayer, permission, registry, tool),
+  AppNodeBuilder.build(
+    LayerNode.group([Database.node, EventV2.node, SessionTodo.node, ToolRegistry.node, ToolRegistry.toolsNode, toolNode]),
+    [
+      [PermissionV2.node, permission],
+      [ToolOutputStore.node, ToolOutputStore.nodeWithoutConfig],
+    ],
+  ),
 )
 
 const setup = Effect.gen(function* () {

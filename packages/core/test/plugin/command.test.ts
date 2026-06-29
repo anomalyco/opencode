@@ -1,6 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { CommandV2 } from "@opencode-ai/core/command"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Location } from "@opencode-ai/core/location"
 import { CommandPlugin } from "@opencode-ai/core/plugin/command"
 import { AbsolutePath } from "@opencode-ai/core/schema"
@@ -10,12 +11,9 @@ import { host } from "./host"
 
 const directory = AbsolutePath.make("/repo/packages/app")
 const project = AbsolutePath.make("/repo")
+const locationLayer = Layer.succeed(Location.Service, Location.Service.of(location({ directory }, { projectDirectory: project })))
 const it = testEffect(
-  CommandV2.locationLayer.pipe(
-    Layer.provide(
-      Layer.succeed(Location.Service, Location.Service.of(location({ directory }, { projectDirectory: project }))),
-    ),
-  ),
+  AppNodeBuilder.build(CommandV2.node, [[Location.node, locationLayer]]),
 )
 
 describe("CommandPlugin.Plugin", () => {

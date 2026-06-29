@@ -4,6 +4,8 @@ import { Effect, Layer, Stream } from "effect"
 import { AgentV2 } from "@opencode-ai/core/agent"
 import { asc, eq } from "drizzle-orm"
 import { Database } from "@opencode-ai/core/database/database"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventV2 } from "@opencode-ai/core/event"
 import { EventTable } from "@opencode-ai/core/event/sql"
 import { Location } from "@opencode-ai/core/location"
@@ -13,7 +15,6 @@ import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
-import { locationServiceMapLayer } from "@opencode-ai/core/location-services"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Prompt } from "@opencode-ai/core/session/prompt"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
@@ -34,24 +35,11 @@ const projects = Layer.succeed(
     commit: () => Effect.void,
   }),
 )
-const sessions = SessionV2.layer.pipe(
-  Layer.provide(locationServiceMapLayer),
-  Layer.provide(EventV2.defaultLayer),
-  Layer.provide(Database.defaultLayer),
-  Layer.provide(SessionStore.defaultLayer),
-  Layer.provide(projects),
-  Layer.provide(SessionExecution.noopLayer),
-)
 const it = testEffect(
-  Layer.mergeAll(
-    Database.defaultLayer,
-    EventV2.defaultLayer,
-    projects,
-    SessionProjector.defaultLayer,
-    SessionStore.defaultLayer,
-    SessionExecution.noopLayer,
-    sessions,
-  ),
+  AppNodeBuilder.build(LayerNode.group([Database.node, EventV2.node, SessionProjector.node, SessionStore.node, SessionV2.node]), [
+    [ProjectV2.node, projects],
+    [SessionExecution.node, SessionExecution.noopLayer],
+  ]),
 )
 const location = Location.Ref.make({ directory: AbsolutePath.make("/project") })
 const id = SessionV2.ID.create()
@@ -248,9 +236,10 @@ describe("SessionV2.create", () => {
         (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
       )
       const targetDatabase = Database.layerFromPath(path.join(tmp.path, "target.sqlite"))
-      const targetEvents = EventV2.layer.pipe(Layer.provide(targetDatabase))
-      const targetProjector = SessionProjector.layer.pipe(Layer.provide(targetEvents), Layer.provide(targetDatabase))
-      const targetStore = SessionStore.layer.pipe(Layer.provide(targetDatabase))
+      const targetLayer = AppNodeBuilder.build(
+        LayerNode.group([Database.node, EventV2.node, SessionProjector.node, SessionStore.node]),
+        [[Database.node, targetDatabase]],
+      )
 
       yield* Effect.gen(function* () {
         const db = (yield* Database.Service).db
@@ -298,7 +287,7 @@ describe("SessionV2.create", () => {
           [1, EventV2.versionedType(SessionEvent.PromptAdmitted.type, 1)],
           [2, EventV2.versionedType(SessionEvent.Prompted.type, 1)],
         ])
-      }).pipe(Effect.provide(Layer.fresh(Layer.mergeAll(targetDatabase, targetEvents, targetProjector, targetStore))))
+      }).pipe(Effect.provide(Layer.fresh(targetLayer)))
     }),
   )
 
