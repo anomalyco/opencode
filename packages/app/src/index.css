@@ -108,7 +108,7 @@
     }
   }
 
-  .home-session-header-new::before {
+  .home-session-group-header::before {
     content: "";
     position: absolute;
     top: -12px;
@@ -118,7 +118,7 @@
     background: var(--v2-background-bg-base);
   }
 
-  .home-session-header-new::after {
+  .home-session-group-header::after {
     content: "";
     position: absolute;
     top: 100%;
