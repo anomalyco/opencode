@@ -1,6 +1,7 @@
 import { NodeHttpServer, NodeServices } from "@effect/platform-node"
 import { describe, expect } from "bun:test"
 import { Effect, Fiber, Layer, Schema } from "effect"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { HttpClient, HttpClientRequest, HttpRouter } from "effect/unstable/http"
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup } from "effect/unstable/httpapi"
 import * as Socket from "effect/unstable/socket/Socket"
@@ -12,7 +13,8 @@ import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import type { WorkspaceAdapter } from "../../src/control-plane/types"
 import { Workspace } from "../../src/control-plane/workspace"
 import { InstanceRef, WorkspaceRef } from "../../src/effect/instance-ref"
-import { InstanceLayer } from "../../src/project/instance-layer"
+import { InstanceBootstrap } from "../../src/project/bootstrap"
+import { InstanceStore } from "../../src/project/instance-store"
 import { Project } from "../../src/project/project"
 import { Session } from "../../src/session/session"
 import { disposeMiddleware, markInstanceForDisposal } from "../../src/server/routes/instance/httpapi/lifecycle"
@@ -51,7 +53,7 @@ const it = testEffect(
     testStateLayer,
     NodeHttpServer.layerTest,
     NodeServices.layer,
-    InstanceLayer.layer,
+    LayerNode.compile(InstanceStore.node, [[InstanceStore.bootstrapNode, InstanceBootstrap.node]]),
     Project.defaultLayer,
     workspaceLayer,
   ).pipe(Layer.provide(Ripgrep.defaultLayer)),

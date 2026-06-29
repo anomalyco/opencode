@@ -3,6 +3,7 @@ import { mkdir } from "node:fs/promises"
 import path from "node:path"
 import { Effect, Layer, Stream } from "effect"
 import { Flag } from "@opencode-ai/core/flag/flag"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { registerAdapter } from "../../src/control-plane/adapters"
 import { WorkspaceV2 } from "@opencode-ai/core/workspace"
 import type { WorkspaceAdapter } from "../../src/control-plane/types"
@@ -24,15 +25,14 @@ import { httpApiLayer, requestInDirectory } from "./httpapi-layer"
 
 const originalWorkspaces = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
 const workspaceLayer = Workspace.defaultLayer.pipe(
-  Layer.provide(InstanceStore.defaultLayer),
-  Layer.provide(InstanceBootstrap.defaultLayer),
+  Layer.provide(LayerNode.compile(InstanceStore.node, [[InstanceStore.bootstrapNode, InstanceBootstrap.node]])),
 )
 const it = testEffect(
   Layer.mergeAll(
     Project.defaultLayer,
     Session.defaultLayer,
     workspaceLayer,
-    InstanceStore.defaultLayer.pipe(Layer.provide(InstanceBootstrap.defaultLayer)),
+    LayerNode.compile(InstanceStore.node, [[InstanceStore.bootstrapNode, InstanceBootstrap.node]]),
     Database.defaultLayer,
     httpApiLayer,
   ).pipe(Layer.provide(Ripgrep.defaultLayer)),

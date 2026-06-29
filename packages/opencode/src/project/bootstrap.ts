@@ -1,4 +1,4 @@
-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { makeGlobalNode } from "@opencode-ai/core/effect/app-node"
 import { Plugin } from "../plugin"
 import { Format } from "../format"
 import { LSP } from "@/lsp/lsp"
@@ -62,7 +62,7 @@ export const defaultLayer: Layer.Layer<Service> = layer.pipe(
   ]),
 )
 
-export const node = LayerNode.make({
+export const node = makeGlobalNode({
   service: Service,
   layer: layer,
   deps: [Config.node, Format.node, LSP.node, Plugin.node, Project.node, ShareNext.node, Snapshot.node, Vcs.node],

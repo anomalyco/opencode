@@ -17,7 +17,7 @@ const noopBootstrap = Layer.succeed(
 
 const it = testEffect(
   LayerNode.compile(LayerNode.group([InstanceStore.node, CrossSpawnSpawner.node]), [
-    [InstanceBootstrap.node, noopBootstrap],
+    [InstanceStore.bootstrapNode, noopBootstrap],
   ]),
 )
 

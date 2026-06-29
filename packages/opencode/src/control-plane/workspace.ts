@@ -601,7 +601,11 @@ export const layer = Layer.effect(
                   }),
                 fallback: "",
                 response: "text",
-              }).pipe(Effect.provide(InstanceStore.defaultLayer.pipe(Layer.provide(InstanceBootstrap.defaultLayer))))
+              }).pipe(
+                Effect.provide(
+                  LayerNode.compile(InstanceStore.node, [[InstanceStore.bootstrapNode, InstanceBootstrap.node]]),
+                ),
+              )
             : ""
 
         if (sourcePatch) {
@@ -617,7 +621,9 @@ export const layer = Layer.effect(
                 body: HttpBody.jsonUnsafe({ patch: sourcePatch }),
               }),
             fallback: { applied: false },
-          }).pipe(Effect.provide(InstanceStore.defaultLayer.pipe(Layer.provide(InstanceBootstrap.defaultLayer))))
+          }).pipe(
+            Effect.provide(LayerNode.compile(InstanceStore.node, [[InstanceStore.bootstrapNode, InstanceBootstrap.node]])),
+          )
         }
 
         if (input.workspaceID === null) {

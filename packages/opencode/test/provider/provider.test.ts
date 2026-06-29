@@ -17,7 +17,8 @@ import { Provider } from "@/provider/provider"
 
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Filesystem } from "@/util/filesystem"
-import { InstanceLayer } from "@/project/instance-layer"
+import { InstanceBootstrap } from "@/project/bootstrap"
+import { InstanceStore } from "@/project/instance-store"
 import { testEffect } from "../lib/effect"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
@@ -1760,8 +1761,9 @@ it.instance(
 // Tests that need plugin file setup or multi-instance flows fall back to a
 // scoped tmpdir + provideInstance pattern via it.effect.
 
+const instanceStoreLayer = LayerNode.compile(InstanceStore.node, [[InstanceStore.bootstrapNode, InstanceBootstrap.node]])
 const provideMultiInstance = <A, E, R>(eff: Effect.Effect<A, E, R>) =>
-  eff.pipe(Effect.provide(InstanceLayer.layer), Effect.provide(CrossSpawnSpawner.defaultLayer))
+  eff.pipe(Effect.provide(instanceStoreLayer), Effect.provide(CrossSpawnSpawner.defaultLayer))
 
 it.effect("plugin config providers persist after instance dispose", () =>
   Effect.gen(function* () {
@@ -1864,7 +1866,7 @@ it.effect("opencode loader keeps paid models when config apiKey is present", () 
       Provider.use
         .list()
         .pipe(provideInstanceEffect(directory))
-        .pipe(Effect.provide(InstanceLayer.layer), Effect.provide(CrossSpawnSpawner.defaultLayer))
+        .pipe(Effect.provide(instanceStoreLayer), Effect.provide(CrossSpawnSpawner.defaultLayer))
 
     const none = paid(yield* listIn(noneDir))
     const keyedCount = paid(yield* listIn(keyedDir))
@@ -1883,7 +1885,7 @@ it.effect("opencode loader keeps paid models when auth exists", () =>
       Provider.use
         .list()
         .pipe(provideInstanceEffect(directory))
-        .pipe(Effect.provide(InstanceLayer.layer), Effect.provide(CrossSpawnSpawner.defaultLayer))
+        .pipe(Effect.provide(instanceStoreLayer), Effect.provide(CrossSpawnSpawner.defaultLayer))
 
     const none = paid(yield* listIn(noneDir))
 

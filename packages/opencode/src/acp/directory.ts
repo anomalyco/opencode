@@ -1,6 +1,7 @@
 import { Agent } from "@/agent/agent"
 import { Command } from "@/command"
 import { InstanceRef } from "@/effect/instance-ref"
+import { InstanceBootstrap } from "@/project/bootstrap"
 import { InstanceStore } from "@/project/instance-store"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { ProviderV2 } from "@opencode-ai/core/provider"
@@ -205,7 +206,7 @@ export const defaultLayer = layer.pipe(
   Layer.provide(Provider.defaultLayer),
   Layer.provide(Agent.defaultLayer),
   Layer.provide(Command.defaultLayer),
-  Layer.provide(InstanceStore.defaultLayer),
+  Layer.provide(LayerNode.compile(InstanceStore.node, [[InstanceStore.bootstrapNode, InstanceBootstrap.node]])),
 )
 
 export const loaderNode = LayerNode.make({

@@ -1,5 +1,6 @@
 import { FetchHttpClient } from "effect/unstable/http"
 import { Layer } from "effect"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Database } from "@opencode-ai/core/database/database"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Auth } from "../../src/auth"
@@ -25,6 +26,5 @@ export const workspaceLayerWithRuntimeFlags = (overrides: Partial<RuntimeFlags.I
     Layer.provide(FetchHttpClient.layer),
     Layer.provide(FSUtil.defaultLayer),
     Layer.provide(RuntimeFlags.layer(overrides)),
-    Layer.provide(InstanceStore.defaultLayer),
-    Layer.provide(InstanceBootstrap.defaultLayer),
+    Layer.provide(LayerNode.compile(InstanceStore.node, [[InstanceStore.bootstrapNode, InstanceBootstrap.node]])),
   )

@@ -5,11 +5,17 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Cause, Deferred, Effect, Exit, Fiber } from "effect"
 import { GlobalBus, type GlobalEvent } from "../../src/bus/global"
 import { Git } from "../../src/git"
+import { InstanceBootstrap } from "../../src/project/bootstrap"
+import { InstanceStore } from "../../src/project/instance-store"
 import { Worktree } from "../../src/worktree"
 import { disposeAllInstances, provideInstance, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
-const it = testEffect(LayerNode.compile(LayerNode.group([Worktree.node, FSUtil.node, Git.node])))
+const it = testEffect(
+  LayerNode.compile(LayerNode.group([Worktree.node, FSUtil.node, Git.node]), [
+    [InstanceStore.bootstrapNode, InstanceBootstrap.node],
+  ]),
+)
 const wintest = process.platform !== "win32" ? it.instance : it.instance.skip
 
 function normalize(input: string) {

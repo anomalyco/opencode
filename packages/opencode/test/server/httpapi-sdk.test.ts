@@ -7,6 +7,7 @@ import { HttpServer } from "effect/unstable/http"
 import { ChildProcessSpawner } from "effect/unstable/process"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { createOpencodeClient } from "@opencode-ai/sdk/v2"
 import { validateSession } from "../../src/cli/tui/validate-session"
@@ -34,7 +35,7 @@ const it = testEffect(
   Layer.mergeAll(
     FSUtil.defaultLayer,
     CrossSpawnSpawner.defaultLayer,
-    InstanceStore.defaultLayer.pipe(Layer.provide(noopBootstrap)),
+    LayerNode.compile(InstanceStore.node, [[InstanceStore.bootstrapNode, noopBootstrap]]),
     Database.defaultLayer,
     httpApiLayer,
   ),

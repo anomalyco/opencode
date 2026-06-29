@@ -9,6 +9,7 @@ import type * as Scope from "effect/Scope"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import type { Config } from "@/config/config"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { InstanceRef } from "../../src/effect/instance-ref"
 import { InstanceBootstrap } from "../../src/project/bootstrap-service"
 import type { InstanceContext } from "../../src/project/instance-context"
@@ -17,7 +18,7 @@ import { InstanceStore } from "../../src/project/instance-store"
 import { TestLLMServer } from "../lib/llm-server"
 
 const noopBootstrap = Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void }))
-export const testInstanceStoreLayer = InstanceStore.defaultLayer.pipe(Layer.provide(noopBootstrap))
+export const testInstanceStoreLayer = LayerNode.compile(InstanceStore.node, [[InstanceStore.bootstrapNode, noopBootstrap]])
 
 export async function provideTestInstance<R>(input: {
   directory: string
