@@ -1,5 +1,5 @@
 import { Buffer } from "node:buffer"
-import { Effect, JsonSchema, Schema, Stream } from "effect"
+import { Effect, Schema, Stream } from "effect"
 import * as Sse from "effect/unstable/encoding/Sse"
 import { Headers, HttpClientRequest } from "effect/unstable/http"
 import {
@@ -9,11 +9,13 @@ import {
   type ContentPart,
   type LLMRequest,
   type MediaPart,
+  type ToolDefinition,
   type ToolFileContent,
   type TextPart,
   type ToolResultPart,
 } from "../schema"
 import { isRecord } from "../utils/record"
+import { ToolSchemaProjection } from "./utils/tool-schema"
 export { isRecord }
 
 export const Json = Schema.fromJsonString(Schema.Unknown)
@@ -24,38 +26,10 @@ export const JsonObject = Schema.Record(Schema.String, Schema.Unknown)
 export const optionalArray = <const S extends Schema.Top>(schema: S) => Schema.optional(Schema.Array(schema))
 export const optionalNull = <const S extends Schema.Top>(schema: S) => Schema.optional(Schema.NullOr(schema))
 
-/** OpenAI function schemas require one flat object at the top level. */
-export const openAiToolInputSchema = (schema: JsonSchema.JsonSchema): JsonSchema.JsonSchema => {
-  const variants = Array.isArray(schema.anyOf) ? schema.anyOf.filter(isRecord) : []
-  const flattened =
-    variants.length === 0
-      ? { ...schema, type: "object" }
-      : {
-          ...Object.fromEntries(Object.entries(schema).filter(([key]) => key !== "anyOf")),
-          type: "object",
-          properties: variants.reduce(
-            (properties, variant) => ({ ...(isRecord(variant.properties) ? variant.properties : {}), ...properties }),
-            {},
-          ),
-          additionalProperties: false,
-        }
-  const normalized = removeNullSchemas(flattened)
-  return isRecord(normalized) ? normalized : { type: "object" }
-}
+export const openAiToolInputSchema = ToolSchemaProjection.openAI
 
-const removeNullSchemas = (value: unknown): unknown => {
-  if (Array.isArray(value)) return value.map(removeNullSchemas)
-  if (!isRecord(value)) return value
-  const fields = Object.fromEntries(
-    Object.entries(value)
-      .filter(([key]) => key !== "anyOf")
-      .map(([key, field]) => [key, removeNullSchemas(field)]),
-  )
-  if (!Array.isArray(value.anyOf)) return fields
-  const variants = value.anyOf.filter((variant) => !isRecord(variant) || variant.type !== "null").map(removeNullSchemas)
-  if (variants.length === 1 && isRecord(variants[0])) return { ...fields, ...variants[0] }
-  return { ...fields, anyOf: variants }
-}
+export const toolInputSchema = (request: LLMRequest, tool: ToolDefinition) =>
+  ToolSchemaProjection.modelCompatibility(tool.inputSchema, request.model.compatibility?.toolSchema)
 
 /**
  * Streaming tool-call accumulator. Adapters that build a tool call across

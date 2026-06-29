@@ -174,12 +174,12 @@ const invalid = ProviderShared.invalidRequest
 // Lowering is the only place that knows how common LLM messages map onto the
 // OpenAI Chat wire format. Keep provider quirks here instead of leaking native
 // fields into `LLMRequest`.
-const lowerTool = (tool: ToolDefinition): OpenAIChatTool => ({
+const lowerTool = (request: LLMRequest, tool: ToolDefinition): OpenAIChatTool => ({
   type: "function",
   function: {
     name: tool.name,
     description: tool.description,
-    parameters: ProviderShared.openAiToolInputSchema(tool.inputSchema),
+    parameters: ProviderShared.openAiToolInputSchema(ProviderShared.toolInputSchema(request, tool)),
   },
 })
 
@@ -346,7 +346,7 @@ const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (request: LLMR
   return {
     model: request.model.id,
     messages: yield* lowerMessages(request),
-    tools: request.tools.length === 0 ? undefined : request.tools.map(lowerTool),
+    tools: request.tools.length === 0 ? undefined : request.tools.map((tool) => lowerTool(request, tool)),
     tool_choice: request.toolChoice ? yield* lowerToolChoice(request.toolChoice) : undefined,
     stream: true as const,
     stream_options: { include_usage: true },

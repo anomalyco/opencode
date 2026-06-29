@@ -254,11 +254,11 @@ const invalid = ProviderShared.invalidRequest
 // =============================================================================
 // Request Lowering
 // =============================================================================
-const lowerTool = (tool: ToolDefinition): OpenAIResponsesTool => ({
+const lowerTool = (request: LLMRequest, tool: ToolDefinition): OpenAIResponsesTool => ({
   type: "function",
   name: tool.name,
   description: tool.description,
-  parameters: ProviderShared.openAiToolInputSchema(tool.inputSchema),
+  parameters: ProviderShared.openAiToolInputSchema(ProviderShared.toolInputSchema(request, tool)),
   // TODO: Read this from OpenAI-specific tool options so direct LLM callers can opt into strict schemas.
   strict: false,
 })
@@ -479,7 +479,7 @@ const fromRequest = Effect.fn("OpenAIResponses.fromRequest")(function* (request:
   return {
     model: request.model.id,
     input: yield* lowerMessages(request),
-    tools: request.tools.length === 0 ? undefined : request.tools.map(lowerTool),
+    tools: request.tools.length === 0 ? undefined : request.tools.map((tool) => lowerTool(request, tool)),
     tool_choice: request.toolChoice ? yield* lowerToolChoice(request.toolChoice) : undefined,
     stream: true as const,
     max_output_tokens: generation?.maxTokens,

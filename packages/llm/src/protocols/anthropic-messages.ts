@@ -256,10 +256,10 @@ const signatureFromMetadata = (metadata: ProviderMetadata | undefined): string |
   return typeof anthropic.signature === "string" ? anthropic.signature : undefined
 }
 
-const lowerTool = (breakpoints: Cache.Breakpoints, tool: ToolDefinition): AnthropicTool => ({
+const lowerTool = (request: LLMRequest, breakpoints: Cache.Breakpoints, tool: ToolDefinition): AnthropicTool => ({
   name: tool.name,
   description: tool.description,
-  input_schema: tool.inputSchema,
+  input_schema: ProviderShared.toolInputSchema(request, tool),
   cache_control: cacheControl(breakpoints, tool.cache),
 })
 
@@ -512,7 +512,7 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
   const tools =
     request.tools.length === 0 || request.toolChoice?.type === "none"
       ? undefined
-      : request.tools.map((tool) => lowerTool(breakpoints, tool))
+      : request.tools.map((tool) => lowerTool(request, breakpoints, tool))
   const system =
     request.system.length === 0
       ? undefined
