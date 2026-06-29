@@ -88,12 +88,17 @@ const call = (input: typeof ShellTool.Input.Type, id = "call-shell") => ({
   call: { type: "tool-call" as const, id, name: "shell", input },
 })
 
-const scriptCommand = (script: string) => `${process.execPath} -e ${JSON.stringify(script)}`
-const cwdCommand = scriptCommand("process.stdout.write(process.cwd())")
-const helloCommand = scriptCommand("process.stdout.write('hello')")
-const idleCommand = scriptCommand("setTimeout(() => {}, 60000)")
-const bodyExitCommand = scriptCommand("process.stdout.write('body'); process.exit(7)")
-const overflowCommand = (bytes: number) => scriptCommand(`process.stdout.write('x'.repeat(${bytes}))`)
+const isWindows = process.platform === "win32"
+const cwdCommand = isWindows ? "(Get-Location).Path; Start-Sleep -Milliseconds 100" : "pwd"
+const helloCommand = isWindows ? "Write-Output -NoNewline hello; Start-Sleep -Milliseconds 100" : "printf hello"
+const idleCommand = isWindows ? "Start-Sleep -Seconds 60" : "sleep 60"
+const bodyExitCommand = isWindows
+  ? "Write-Output -NoNewline body; Start-Sleep -Milliseconds 100; exit 7"
+  : "printf body && exit 7"
+const overflowCommand = (bytes: number) =>
+  isWindows
+    ? `[Console]::Out.Write(('x' * ${bytes})); Start-Sleep -Milliseconds 100`
+    : `head -c ${bytes} /dev/zero | tr '\\0' 'x'`
 
 const it = testEffect(Layer.empty)
 
