@@ -1,1 +1,6 @@
-["client-error.ts", "client.ts", "index.ts", "types.ts"]
+[
+  "client-error.ts",
+  "client.ts",
+  "index.ts",
+  "types.ts"
+]

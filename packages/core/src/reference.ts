@@ -1,5 +1,6 @@
 export * as Reference from "./reference"
 
+import { makeLocationNode } from "./effect/app-node"
 import { Context, Effect, Layer, Scope, Types } from "effect"
 import { Reference } from "@opencode-ai/schema/reference"
 import { Global } from "./global"
@@ -65,8 +66,8 @@ export const layer = Layer.effect(
                 new Info({
                   name,
                   path: source.path,
-                  description: source.description,
-                  hidden: source.hidden,
+                  ...(source.description === undefined ? {} : { description: source.description }),
+                  ...(source.hidden === undefined ? {} : { hidden: source.hidden }),
                   source,
                 }),
               )
@@ -89,8 +90,8 @@ export const layer = Layer.effect(
               new Info({
                 name,
                 path: AbsolutePath.make(target),
-                description: source.description,
-                hidden: source.hidden,
+                ...(source.description === undefined ? {} : { description: source.description }),
+                ...(source.hidden === undefined ? {} : { hidden: source.hidden }),
                 source,
               }),
             )
@@ -120,3 +121,9 @@ export const layer = Layer.effect(
 )
 
 export const locationLayer = layer
+
+export const node = makeLocationNode({
+  service: Service,
+  layer,
+  deps: [Global.node, EventV2.node, RepositoryCache.node],
+})

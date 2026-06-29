@@ -1,5 +1,6 @@
 export * as BuiltInTools from "./builtins"
 
+import { makeLocationNode } from "../effect/app-node"
 import { Layer } from "effect"
 import { BashTool } from "./bash"
 import { ApplyPatchTool } from "./apply-patch"
@@ -14,6 +15,20 @@ import { TodoWriteTool } from "./todowrite"
 import { WebFetchTool } from "./webfetch"
 import { WebSearchTool } from "./websearch"
 import { WriteTool } from "./write"
+import { FSUtil } from "../fs-util"
+import { AppProcess } from "../process"
+import { Config } from "../config"
+import { Location } from "../location"
+import { LocationMutation } from "../location-mutation"
+import { FileMutation } from "../file-mutation"
+import { PermissionV2 } from "../permission"
+import { Ripgrep } from "../ripgrep"
+import { Image } from "../image"
+import { QuestionV2 } from "../question"
+import { SkillV2 } from "../skill"
+import { SessionTodo } from "../session/todo"
+import { ToolRegistry } from "./registry"
+import { httpClient } from "../effect/app-node-platform"
 
 /**
  * Composes only the shipped Location-scoped built-in tool transforms.
@@ -42,3 +57,25 @@ export const locationLayer = Layer.mergeAll(
   WebSearchTool.layer.pipe(Layer.provide(WebSearchTool.defaultConfigLayer)),
   WriteTool.layer,
 )
+
+export const node = makeLocationNode({
+  name: "built-in-tools",
+  layer: locationLayer,
+  deps: [
+    ToolRegistry.toolsNode,
+    FSUtil.node,
+    AppProcess.node,
+    Config.node,
+    Location.node,
+    LocationMutation.node,
+    FileMutation.node,
+    PermissionV2.node,
+    Ripgrep.node,
+    Image.node,
+    QuestionV2.node,
+    SkillV2.node,
+    SessionTodo.node,
+    ReadToolFileSystem.node,
+    httpClient,
+  ],
+})

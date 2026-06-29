@@ -5,6 +5,9 @@ import { Effect, Layer, Schema } from "effect"
 import { FastCheck } from "effect/testing"
 import { Config } from "@opencode-ai/core/config"
 import { ConfigProvider } from "@opencode-ai/core/config/provider"
+import { makeLocationNode } from "@opencode-ai/core/effect/app-node"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { ConfigMigrateV1 } from "@opencode-ai/core/v1/config/migrate"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import { FSUtil } from "@opencode-ai/core/fs-util"
@@ -25,21 +28,21 @@ function testLayer(
   projectDirectory = directory,
   vcs?: Project.Vcs,
 ) {
-  return Config.locationLayer.pipe(
-    Layer.provide(FSUtil.defaultLayer),
-    Layer.provide(Global.layerWith({ config: globalDirectory })),
-    Layer.provide(
-      Layer.succeed(
-        Location.Service,
-        Location.Service.of(
-          location(
-            { directory: AbsolutePath.make(directory) },
-            { projectDirectory: AbsolutePath.make(projectDirectory), vcs },
-          ),
-        ),
+  const configNode = makeLocationNode({
+    service: Config.Service,
+    layer: Layer.fresh(Config.layer.pipe(Layer.provide(Global.layerWith({ config: globalDirectory })))),
+    deps: [FSUtil.node, Location.node, Policy.node],
+  })
+  const locationLayer = Layer.succeed(
+    Location.Service,
+    Location.Service.of(
+      location(
+        { directory: AbsolutePath.make(directory) },
+        { projectDirectory: AbsolutePath.make(projectDirectory), vcs },
       ),
     ),
   )
+  return AppNodeBuilder.build(LayerNode.group([configNode, Policy.node]), [[Location.node, locationLayer]])
 }
 
 const provider = {
@@ -106,7 +109,6 @@ describe("Config", () => {
       expect(migrated.providers?.bedrock?.api).toEqual({
         type: "aisdk",
         package: "@ai-sdk/amazon-bedrock",
-        url: undefined,
         settings: { region: "us-east-1", profile: "dev" },
       })
       expect(migrated.providers?.bedrock?.request).toEqual({
@@ -299,14 +301,14 @@ describe("Config", () => {
                 },
                 tool_output: { max_lines: 1000, max_bytes: 32768 },
                 mcp: {
-                  timeout: 5000,
+                  timeout: { startup: 5000, request: 60000 },
                   servers: {
                     local: {
                       type: "local",
                       command: ["node", "./mcp/server.js"],
                       environment: { API_KEY: "secret" },
                       disabled: false,
-                      timeout: 10000,
+                      timeout: { request: 10000 },
                     },
                     remote: {
                       type: "remote",
@@ -314,6 +316,7 @@ describe("Config", () => {
                       headers: { Authorization: "Bearer token" },
                       oauth: { client_id: "client", scope: "read write", callback_port: 19876 },
                       disabled: true,
+                      timeout: { startup: 15000 },
                     },
                   },
                 },
@@ -384,14 +387,14 @@ describe("Config", () => {
             })
             expect(documents[0]?.info.tool_output).toEqual({ max_lines: 1000, max_bytes: 32768 })
             expect(documents[0]?.info.mcp).toEqual({
-              timeout: 5000,
+              timeout: { startup: 5000, request: 60000 },
               servers: {
                 local: {
                   type: "local",
                   command: ["node", "./mcp/server.js"],
                   environment: { API_KEY: "secret" },
                   disabled: false,
-                  timeout: 10000,
+                  timeout: { request: 10000 },
                 },
                 remote: {
                   type: "remote",
@@ -399,6 +402,7 @@ describe("Config", () => {
                   headers: { Authorization: "Bearer token" },
                   oauth: { client_id: "client", scope: "read write", callback_port: 19876 },
                   disabled: true,
+                  timeout: { startup: 15000 },
                 },
               },
             })
@@ -542,11 +546,12 @@ describe("Config", () => {
                 compaction: { auto: true, tail_turns: 3, preserve_recent_tokens: 2000, reserved: 10000 },
                 experimental: { mcp_timeout: 5000 },
                 mcp: {
-                  local: { type: "local", command: ["node", "server.js"], enabled: false },
+                  local: { type: "local", command: ["node", "server.js"], enabled: false, timeout: 10000 },
                   remote: {
                     type: "remote",
                     url: "https://mcp.example.com",
                     oauth: { clientId: "client", callbackPort: 19876 },
+                    timeout: 20000,
                   },
                 },
               }),
@@ -599,9 +604,9 @@ describe("Config", () => {
               models: {
                 model: {
                   request: {
-                    body: { temperature: 0.3, reasoning_effort: "high", service_tier: "priority" },
+                    body: { temperature: 0.3, reasoning: { effort: "high" }, service_tier: "priority" },
                   },
-                  variants: [{ id: "high", body: { reasoning_effort: "high", reasoning_summary: "auto" } }],
+                  variants: [{ id: "high", body: { reasoning: { effort: "high", summary: "auto" } } }],
                 },
               },
             })
@@ -624,13 +629,19 @@ describe("Config", () => {
               buffer: 10000,
             })
             expect(documents[0]?.info.mcp).toMatchObject({
-              timeout: 5000,
+              timeout: { request: 5000 },
               servers: {
-                local: { type: "local", command: ["node", "server.js"], disabled: true },
+                local: {
+                  type: "local",
+                  command: ["node", "server.js"],
+                  disabled: true,
+                  timeout: { request: 10000 },
+                },
                 remote: {
                   type: "remote",
                   url: "https://mcp.example.com",
                   oauth: { client_id: "client", callback_port: 19876 },
+                  timeout: { request: 20000 },
                 },
               },
             })

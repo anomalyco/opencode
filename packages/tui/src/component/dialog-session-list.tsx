@@ -2,7 +2,7 @@ import { useDialog } from "../ui/dialog"
 import { DialogSelect } from "../ui/dialog-select"
 import { useRoute } from "../context/route"
 import { useSync } from "../context/sync"
-import { createMemo, createResource, createSignal, onMount } from "solid-js"
+import { createMemo, createResource, createSignal, onCleanup, onMount } from "solid-js"
 import path from "path"
 import { Locale } from "../util/locale"
 import { useProject } from "../context/project"
@@ -17,6 +17,30 @@ import { Spinner } from "./spinner"
 import { errorMessage } from "../util/error"
 import { DialogSessionDeleteFailed } from "./dialog-session-delete-failed"
 import { useCommandShortcut } from "../keymap"
+import { useEvent } from "../context/event"
+
+type SessionListFilter = { scope?: "project"; path?: string }
+
+export function createDialogSessionListQuery(input: { search?: string; filter: SessionListFilter }) {
+  const search = input.search?.trim()
+  return {
+    roots: true,
+    limit: search ? 30 : 100,
+    ...(search ? { search } : {}),
+    ...input.filter,
+  }
+}
+
+export function loadDialogSessionList<T>(input: {
+  search?: string
+  filter: SessionListFilter
+  list: (query: ReturnType<typeof createDialogSessionListQuery>) => Promise<{ data?: T[] }>
+}) {
+  return input.list(createDialogSessionListQuery(input)).then(
+    (result) => result.data,
+    () => undefined,
+  )
+}
 
 export function DialogSessionList() {
   const dialog = useDialog()
@@ -25,25 +49,54 @@ export function DialogSessionList() {
   const project = useProject()
   const { theme } = useTheme()
   const sdk = useSDK()
+  const event = useEvent()
   const local = useLocal()
   const toast = useToast()
   const [toDelete, setToDelete] = createSignal<string>()
+  const [deleted, setDeleted] = createSignal(new Set<string>())
   const [search, setSearch] = createDebouncedSignal("", 150)
   const deleteHint = useCommandShortcut("session.delete")
   const quickSwitch1 = useCommandShortcut("session.quick_switch.1")
   const quickSwitch9 = useCommandShortcut("session.quick_switch.9")
 
+  const [browseResults, { refetch: refetchBrowse }] = createResource(
+    () => sync.session.query(),
+    (filter) => loadDialogSessionList({ filter, list: (query) => sdk.client.session.list(query) }),
+  )
   const [searchResults, { refetch }] = createResource(
     () => ({ query: search(), filter: sync.session.query() }),
-    async (input) => {
+    (input) => {
       if (!input.query) return undefined
-      const result = await sdk.client.session.list({ search: input.query, limit: 30, ...input.filter })
-      return result.data ?? []
+      return loadDialogSessionList({
+        search: input.query,
+        filter: input.filter,
+        list: (query) => sdk.client.session.list(query),
+      })
     },
   )
 
   const currentSessionID = createMemo(() => (route.data.type === "session" ? route.data.sessionID : undefined))
-  const sessions = createMemo(() => searchResults() ?? sync.data.session)
+  const sessions = createMemo(() => {
+    const result = searchResults() ?? browseResults() ?? sync.data.session
+    const synced = new Map(sync.data.session.map((session) => [session.id, session]))
+    const ids = new Set(result.map((session) => session.id))
+    const extra = [currentSessionID(), ...local.session.pinned()].flatMap((id) => {
+      if (!id || ids.has(id)) return []
+      const session = synced.get(id)
+      if (session) ids.add(id)
+      return session ? [session] : []
+    })
+    const query = search().trim().toLowerCase()
+    return [...result.map((session) => synced.get(session.id) ?? session), ...extra]
+      .filter((session) => !deleted().has(session.id))
+      .filter((session) => !query || session.title.toLowerCase().includes(query))
+  })
+
+  onCleanup(
+    event.on("session.deleted", (event) => {
+      setDeleted((current) => new Set(current).add(event.properties.info.id))
+    }),
+  )
 
   function recover(session: NonNullable<ReturnType<typeof sessions>[number]>) {
     const workspace = project.workspace.get(session.workspaceID!)
@@ -108,6 +161,7 @@ export function DialogSessionList() {
           }
           await project.workspace.sync()
           await sync.session.refresh()
+          await refetchBrowse()
           if (search()) await refetch()
           if (info?.workspaceID === session.workspaceID) {
             route.navigate({ type: "home" })
@@ -138,7 +192,7 @@ export function DialogSessionList() {
       .map((x) => x.id)
   }
 
-  const [browseOrder] = createSignal<string[]>(orderByRecency(sync.data.session))
+  const browseOrder = createMemo(() => orderByRecency(browseResults() ?? sync.data.session))
 
   const quickSwitchHint = createMemo(() => {
     const first = quickSwitch1()
@@ -160,7 +214,9 @@ export function DialogSessionList() {
     )
 
     const searchResult = searchResults()
-    const displayOrder = searchResult ? orderByRecency(searchResult) : browseOrder()
+    const order = searchResult ? orderByRecency(sessions()) : browseOrder()
+    const current = currentSessionID()
+    const displayOrder = current && sessionMap.has(current) && !order.includes(current) ? [...order, current] : order
 
     const pinned = local.session.pinned().filter((id) => sessionMap.has(id))
     const pinnedSet = new Set(pinned)
@@ -218,6 +274,7 @@ export function DialogSessionList() {
       title="Sessions"
       options={options()}
       skipFilter={true}
+      preserveSelection={true}
       current={currentSessionID()}
       onFilter={setSearch}
       onMove={() => {
@@ -279,6 +336,7 @@ export function DialogSessionList() {
               if (status && status !== "connected") {
                 await sync.session.refresh()
               }
+              await refetchBrowse()
               if (search()) await refetch()
               setToDelete(undefined)
               return
