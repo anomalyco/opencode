@@ -65,7 +65,7 @@ const openAI = (schema: JsonSchema): JsonSchema => {
 
 const gemini = (schema: JsonSchema): JsonSchema => GeminiToolSchema.convert(schema) ?? {}
 
-export const modelCompatibility = (
+const modelCompatibility = (
   schema: JsonSchema,
   compatibility: ModelToolSchemaCompatibility | undefined,
 ): JsonSchema => {

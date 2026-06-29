@@ -9,13 +9,11 @@ import {
   type ContentPart,
   type LLMRequest,
   type MediaPart,
-  type ToolDefinition,
   type ToolFileContent,
   type TextPart,
   type ToolResultPart,
 } from "../schema"
 import { isRecord } from "../utils/record"
-import { ToolSchemaProjection } from "./utils/tool-schema"
 export { isRecord }
 
 export const Json = Schema.fromJsonString(Schema.Unknown)
@@ -25,11 +23,6 @@ const isJson = Schema.is(Schema.Json)
 export const JsonObject = Schema.Record(Schema.String, Schema.Unknown)
 export const optionalArray = <const S extends Schema.Top>(schema: S) => Schema.optional(Schema.Array(schema))
 export const optionalNull = <const S extends Schema.Top>(schema: S) => Schema.optional(Schema.NullOr(schema))
-
-export const openAiToolInputSchema = ToolSchemaProjection.openAI
-
-export const toolInputSchema = (request: LLMRequest, tool: ToolDefinition) =>
-  ToolSchemaProjection.modelCompatibility(tool.inputSchema, request.model.compatibility?.toolSchema)
 
 /**
  * Streaming tool-call accumulator. Adapters that build a tool call across
