@@ -59,11 +59,11 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
   // A failed current-checkout lookup only affects which row is highlighted, so
   // swallow it and let the directory list render without a current marker.
   const [loadedProject] = createResource(
-    () => (projectContext.project() === props.projectID ? undefined : props.projectID),
+    () => (projectContext.project() ? undefined : props.projectID),
     (projectID) =>
-      sdk.api.projects
-        .current({ location: { directory: projectContext.instance.directory() || paths.cwd } })
-        .then((project) => (project.id === projectID ? project.directory : undefined))
+      sdk.api.location
+        .get({ location: { directory: projectContext.instance.directory() || paths.cwd } })
+        .then((location) => (location.project.id === projectID ? location.project.directory : undefined))
         .catch(() => undefined),
   )
   const currentCheckout = createMemo(() => {
@@ -75,13 +75,14 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
     () => (props.initialRemoving ? undefined : props.projectID),
     async (projectID, info): Promise<ReadonlyArray<ProjectDirectory> | undefined> => {
       try {
+        const location = { directory: projectContext.instance.directory() || paths.cwd }
         await sdk.api.projectCopies.refresh({
           projectID,
-          location: { directory: projectContext.instance.directory() || paths.cwd },
+          location,
         })
         const directories = await sdk.api.projects.directories({
           projectID,
-          location: { directory: projectContext.instance.directory() || paths.cwd },
+          location,
         })
         setLoadError(undefined)
         return directories
