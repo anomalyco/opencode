@@ -19,6 +19,7 @@ import { SessionStatus } from "../../src/session/status"
 import { SessionSummary } from "../../src/session/summary"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
+import { SessionProjector } from "@opencode-ai/core/session/projector"
 
 import { Provider } from "@/provider/provider"
 import * as SessionProcessorModule from "../../src/session/processor"
@@ -225,6 +226,7 @@ const defaultProvider = wide()
 const compactionTestNode = LayerNode.group([
   SessionCompaction.node,
   SessionNs.node,
+  SessionProjector.node,
   Database.node,
   EventV2Bridge.node,
   CrossSpawnSpawner.node,
@@ -238,7 +240,7 @@ const env = AppNodeBuilder.build(compactionTestNode, [
 const it = testEffect(env)
 
 const compactionEnv = AppNodeBuilder.build(
-  LayerNode.group([SessionNs.node, Database.node, EventV2Bridge.node, CrossSpawnSpawner.node]),
+  LayerNode.group([SessionNs.node, SessionProjector.node, Database.node, EventV2Bridge.node, CrossSpawnSpawner.node]),
 )
 const itCompaction = testEffect(compactionEnv)
 

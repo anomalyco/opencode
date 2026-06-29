@@ -1,4 +1,5 @@
 import { describe, expect } from "bun:test"
+import { EventV2Bridge } from "@/event-v2-bridge"
 import { Project } from "@/project/project"
 import { $ } from "bun"
 import path from "path"
@@ -14,13 +15,16 @@ import { SessionID } from "@/session/schema"
 import { WorkspaceV2 } from "@opencode-ai/core/workspace"
 import { Cause, Effect, Exit, Layer, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
+import { NodePath } from "@effect/platform-node"
+import { FSUtil } from "@opencode-ai/core/fs-util"
+import { AppProcess } from "@opencode-ai/core/process"
 import { ProjectV2 } from "@opencode-ai/core/project"
+import { ProjectDirectories } from "@opencode-ai/core/project/directories"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { testEffect } from "../lib/effect"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { LayerNodePlatform } from "@opencode-ai/core/effect/app-node-platform"
 
 const encoder = new TextEncoder()
 
@@ -37,10 +41,10 @@ function remoteProjectID(remote: string) {
  * else to the real CrossSpawnSpawner.
  */
 function mockGitFailure(failArg: string) {
-  const mockLayer = Layer.effect(
+  return Layer.effect(
     ChildProcessSpawner.ChildProcessSpawner,
     Effect.gen(function* () {
-      const real = yield* CrossSpawnSpawner.make
+      const real = yield* ChildProcessSpawner.ChildProcessSpawner
       return ChildProcessSpawner.make(
         Effect.fnUntraced(function* (command) {
           const std = ChildProcess.isStandardCommand(command) ? command : undefined
@@ -63,16 +67,25 @@ function mockGitFailure(failArg: string) {
         }),
       )
     }),
+  ).pipe(Layer.provide(CrossSpawnSpawner.defaultLayer))
+}
+
+function projectLayerWithFailure(failArg: string) {
+  return Project.layer.pipe(
+    Layer.provide(AppProcess.layer.pipe(Layer.provide(mockGitFailure(failArg)))),
+    Layer.provide(mockGitFailure(failArg)),
+    Layer.provide(ProjectV2.defaultLayer),
+    Layer.provide(ProjectDirectories.defaultLayer),
+    Layer.provide(EventV2Bridge.defaultLayer),
+    Layer.provide(FSUtil.defaultLayer),
+    Layer.provide(NodePath.layer),
+    Layer.provide(Database.defaultLayer),
+    Layer.provide(RuntimeFlags.defaultLayer),
   )
-  return LayerNode.make({
-    service: ChildProcessSpawner.ChildProcessSpawner,
-    layer: mockLayer,
-    deps: [LayerNodePlatform.filesystem, LayerNodePlatform.path],
-  })
 }
 
 const failureIt = (failArg: string) =>
-  testEffect(AppNodeBuilder.build(projectTestNode, [[CrossSpawnSpawner.node, mockGitFailure(failArg)]]))
+  testEffect(AppNodeBuilder.build(projectTestNode, [[Project.node, projectLayerWithFailure(failArg)]]))
 
 const iconDiscoveryIt = testEffect(
   AppNodeBuilder.build(projectTestNode, [[RuntimeFlags.node, RuntimeFlags.layer({ experimentalIconDiscovery: true })]]),
