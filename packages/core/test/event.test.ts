@@ -6,6 +6,8 @@ import { Session } from "@opencode-ai/schema/session"
 import { SessionEvent } from "@opencode-ai/schema/session-event"
 import { SessionV1 } from "@opencode-ai/schema/session-v1"
 import { Database } from "@opencode-ai/core/database/database"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventSequenceTable, EventTable } from "@opencode-ai/core/event/sql"
 import { Location } from "@opencode-ai/core/location"
 import { AbsolutePath } from "@opencode-ai/core/schema"
@@ -76,9 +78,10 @@ const durableData = (sessionID: Session.ID, text: string) => ({
   messageID: SessionV1.MessageID.ascending(`msg_${text}`),
 })
 
-const eventLayer = Layer.mergeAll(EventV2.layerWith().pipe(Layer.provide(Database.defaultLayer)), Database.defaultLayer)
-const it = testEffect(eventLayer.pipe(Layer.provideMerge(locationLayer)))
-const itWithoutLocation = testEffect(eventLayer)
+const it = testEffect(
+  AppNodeBuilder.build(LayerNode.group([Database.node, EventV2.node, Location.node]), [[Location.node, locationLayer]]),
+)
+const itWithoutLocation = testEffect(AppNodeBuilder.build(LayerNode.group([Database.node, EventV2.node])))
 
 describe("EventV2", () => {
   it.effect("publishes events with the current location", () =>
@@ -462,7 +465,7 @@ describe("EventV2", () => {
           pause
             ? Deferred.succeed(readStarted, undefined).pipe(Effect.andThen(Deferred.await(continueRead)))
             : Effect.void,
-      }).pipe(Layer.provide(Database.defaultLayer))
+      }).pipe(Layer.provide(LayerNode.compile(Database.node)))
 
       yield* Effect.gen(function* () {
         const events = yield* EventV2.Service
@@ -477,7 +480,7 @@ describe("EventV2", () => {
         expect(Array.from(yield* Fiber.join(fiber)).map((event) => [event.durable?.seq, event.data])).toEqual([
           [0, durableData(aggregateID, "during handoff")],
         ])
-      }).pipe(Effect.provide(Layer.mergeAll(Database.defaultLayer, eventLayer)))
+      }).pipe(Effect.provide(Layer.merge(LayerNode.compile(Database.node), eventLayer)))
     }),
   )
 
