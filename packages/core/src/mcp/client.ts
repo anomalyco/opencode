@@ -114,7 +114,12 @@ export const connect = Effect.fnUntraced(function* (
     catch: (error) => error,
   }).pipe(Effect.exit)
   if (Exit.isSuccess(exit)) {
-    yield* Effect.addFinalizer(() => closeClient(transport, client))
+    yield* Effect.addFinalizer(() =>
+      cleanupStdioDescendants(transport).pipe(
+        Effect.andThen(Effect.promise(() => client.close())),
+        Effect.ignore,
+      ),
+    )
     const requestTimeout = config.timeout?.request ?? DEFAULT_REQUEST_TIMEOUT
     return {
       instructions: client.getInstructions()?.trim() || undefined,
@@ -188,31 +193,31 @@ export const connect = Effect.fnUntraced(function* (
     } satisfies Connection
   }
 
-  yield* closeTransport(transport)
+  yield* cleanupStdioDescendants(transport).pipe(
+    Effect.andThen(Effect.promise(() => transport.close())),
+    Effect.ignore,
+  )
   const error = Cause.squash(exit.cause)
   if (error instanceof UnauthorizedError || (error instanceof Error && error.message.includes("OAuth")))
     return yield* new NeedsAuthError({ server })
   return yield* new ConnectError({ server, message: error instanceof Error ? error.message : String(error) })
 })
 
-const closeClient = (transport: Transport, client: Client) =>
-  cleanupStdioDescendants(transport).pipe(Effect.andThen(Effect.promise(() => client.close())), Effect.ignore)
-
-const closeTransport = (transport: Transport) =>
-  cleanupStdioDescendants(transport).pipe(Effect.andThen(Effect.promise(() => transport.close())), Effect.ignore)
-
 const cleanupStdioDescendants = (transport: Transport) =>
   Effect.gen(function* () {
-    const pid = stdioPid(transport)
-    if (pid === undefined) return
-    yield* Effect.forEach(yield* descendantPids(pid), killPid, { discard: true })
+    if (!(transport instanceof StdioClientTransport)) return
+    const pid = transport.pid
+    if (typeof pid !== "number") return
+    yield* Effect.forEach(
+      yield* descendantPids(pid),
+      (pid) =>
+        Effect.try({
+          try: () => process.kill(pid, "SIGTERM"),
+          catch: () => undefined,
+        }).pipe(Effect.ignore),
+      { discard: true },
+    )
   })
-
-const stdioPid = (transport: Transport) => {
-  if (!(transport instanceof StdioClientTransport)) return undefined
-  const pid = (transport as { readonly pid?: unknown }).pid
-  return typeof pid === "number" ? pid : undefined
-}
 
 const descendantPids = Effect.fnUntraced(function* (root: number) {
   if (process.platform === "win32") return []
@@ -242,12 +247,6 @@ const childPids = (pid: number) =>
         })
       }),
   )
-
-const killPid = (pid: number) =>
-  Effect.try({
-    try: () => process.kill(pid, "SIGTERM"),
-    catch: () => undefined,
-  }).pipe(Effect.ignore)
 
 async function paginate<R extends { nextCursor?: string }, T>(
   list: (cursor: string | undefined) => Promise<R>,
