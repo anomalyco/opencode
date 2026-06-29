@@ -1147,15 +1147,32 @@ function AssistantFooter(props: { message: SessionMessageAssistant }) {
     props.message.time.completed ? props.message.time.completed - props.message.time.created : 0,
   )
   return (
-    <box paddingLeft={3}>
-      <text>
-        <span style={{ fg: local.agent.color(props.message.agent) }}>{Locale.titlecase(props.message.agent)}</span>
-        <span style={{ fg: theme.textMuted }}> · {model()}</span>
-        <Show when={duration()}>
-          <span style={{ fg: theme.textMuted }}> · {Locale.duration(duration())}</span>
-        </Show>
-      </text>
-    </box>
+    <>
+      <Show when={props.message.error}>
+        <box
+          border={["left"]}
+          paddingTop={1}
+          paddingBottom={1}
+          paddingLeft={2}
+          backgroundColor={theme.backgroundPanel}
+          customBorderChars={SplitBorder.customBorderChars}
+          borderColor={theme.error}
+        >
+          <text fg={theme.textMuted}>{errorMessage(props.message.error)}</text>
+        </box>
+      </Show>
+      <box paddingLeft={3} marginTop={props.message.error ? 1 : 0}>
+        <text>
+          <span style={{ fg: props.message.error ? theme.textMuted : local.agent.color(props.message.agent) }}>
+            {Locale.titlecase(props.message.agent)}
+          </span>
+          <span style={{ fg: theme.textMuted }}> · {model()}</span>
+          <Show when={duration()}>
+            <span style={{ fg: theme.textMuted }}> · {Locale.duration(duration())}</span>
+          </Show>
+        </text>
+      </box>
+    </>
   )
 }
 
