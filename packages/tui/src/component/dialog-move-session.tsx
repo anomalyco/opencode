@@ -11,6 +11,7 @@ import { abbreviateHome } from "../runtime"
 import { useTuiPaths } from "../context/runtime"
 import { Locale } from "../util/locale"
 import { errorMessage } from "../util/error"
+import { isRecord } from "../util/record"
 import { useToast } from "../ui/toast"
 import { useCommandShortcut } from "../keymap"
 import { useProject } from "../context/project"
@@ -74,10 +75,10 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
     () => (props.initialRemoving ? undefined : props.projectID),
     async (projectID, info): Promise<ProjectDirectory[] | undefined> => {
       try {
-        await sdk.client.v2.projectCopy.refresh(
-          { projectID, location: { directory: projectContext.instance.directory() || paths.cwd } },
-          { throwOnError: true },
-        )
+        await sdk.api.projectCopies.refresh({
+          projectID,
+          location: { directory: projectContext.instance.directory() || paths.cwd },
+        })
         const directories = await sdk.client.project.directories({ projectID }, { throwOnError: true })
         setLoadError(undefined)
         return directories.data ?? []
@@ -221,18 +222,21 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
     setToDelete(undefined)
     setRemoving(selected.directory)
     setWorking(true)
-    const result = await sdk.client.v2.projectCopy
+    const error = await sdk.api.projectCopies
       .remove({
         projectID: props.projectID,
         location: { directory: projectContext.instance.directory() || paths.cwd },
         directory: selected.directory,
         force: false,
       })
-      .catch((error) => ({ error }))
-    if (result.error) {
+      .then(
+        () => undefined,
+        (error) => error,
+      )
+    if (error) {
       setRemoving(undefined)
       setWorking(false)
-      if ("data" in result.error && result.error.data.forceRequired) {
+      if (isRecord(error) && isRecord(error.data) && error.data.forceRequired === true) {
         const status = await sdk.client.vcs.status({ directory: selected.directory }).catch(() => undefined)
         const choice = await DialogWorkspaceFileChanges.show(dialog, status?.data ?? [], {
           title: "Delete working copy?",
@@ -243,19 +247,22 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
           return
         }
         reopen(selected.directory)
-        const forced = await sdk.client.v2.projectCopy
+        const forcedError = await sdk.api.projectCopies
           .remove({
             projectID: props.projectID,
             location: { directory: projectContext.instance.directory() || paths.cwd },
             directory: selected.directory,
             force: true,
           })
-          .catch((error) => ({ error }))
-        if (forced.error) {
+          .then(
+            () => undefined,
+            (error) => error,
+          )
+        if (forcedError) {
           toast.show({
             variant: "error",
             title: "Failed to delete project copy",
-            message: errorMessage(forced.error),
+            message: errorMessage(forcedError),
           })
           reopen()
           return
@@ -269,7 +276,7 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
       toast.show({
         variant: "error",
         title: "Failed to delete project copy",
-        message: errorMessage(result.error),
+        message: errorMessage(error),
       })
       return
     }

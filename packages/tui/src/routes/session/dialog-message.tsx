@@ -11,9 +11,7 @@ export function DialogMessage(props: { messageID: string; sessionID: string; set
   const clipboard = useClipboard()
   const toast = useToast()
   const sdk = useSDK()
-  const message = createMemo(() =>
-    data.session.message.get(props.sessionID, props.messageID),
-  )
+  const message = createMemo(() => data.session.message.get(props.sessionID, props.messageID))
 
   return (
     <DialogSelect
@@ -24,11 +22,9 @@ export function DialogMessage(props: { messageID: string; sessionID: string; set
           value: "session.revert",
           description: "undo messages and file changes",
           onSelect: async (dialog) => {
-            const result = await sdk.client.v2.session.revert.stage({
-              sessionID: props.sessionID,
-              messageID: props.messageID,
-            })
-            if (result.error) toast.show({ message: errorMessage(result.error), variant: "error", duration: 5000 })
+            await sdk.api.sessions
+              .stage({ sessionID: props.sessionID, messageID: props.messageID })
+              .catch((error) => toast.show({ message: errorMessage(error), variant: "error", duration: 5000 }))
             dialog.clear()
           },
         },

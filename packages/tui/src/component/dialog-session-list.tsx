@@ -31,11 +31,16 @@ export function DialogSessionList() {
 
   const [searchResults] = createResource(search, async (query) => {
     if (!query) return
-    const response = await sdk.client.v2.session.list(
-      { search: query, limit: 50, order: "desc" },
-      { throwOnError: true },
-    )
-    return { query, sessions: response.data.data }
+    const location = data.location.default()
+    const response = await sdk.api.sessions.list({
+      search: query,
+      limit: 50,
+      order: "desc",
+      directory: location.directory,
+      workspace: location.workspaceID,
+    })
+    // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- generated client output is readonly; session list UI reuses legacy mutable session types.
+    return { query, sessions: structuredClone(response.data) as SessionV2Info[] }
   })
 
   const currentSessionID = createMemo(() => (route.data.type === "session" ? route.data.sessionID : undefined))
@@ -59,7 +64,11 @@ export function DialogSessionList() {
 
   const options = createMemo(() => {
     const today = new Date().toDateString()
-    const sessionMap = new Map(sessions().filter((session) => !session.parentID).map((session) => [session.id, session]))
+    const sessionMap = new Map(
+      sessions()
+        .filter((session) => !session.parentID)
+        .map((session) => [session.id, session]),
+    )
     const pinned = local.session.pinned().filter((sessionID) => sessionMap.has(sessionID))
     const pinnedSet = new Set(pinned)
     const slotByID = new Map(local.session.slots().map((sessionID, index) => [sessionID, index + 1]))

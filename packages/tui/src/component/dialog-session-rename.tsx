@@ -17,11 +17,15 @@ export function DialogSessionRename(props: { sessionID: string; currentTitle?: s
       onConfirm={(value) => {
         const title = value.trim()
         if (!title) return
-        void sdk.client.v2.session
-          .rename({ sessionID: props.sessionID, title }, { throwOnError: true })
+        void sdk.api.sessions
+          .rename({ sessionID: props.sessionID, title })
           .then(() => dialog.clear())
           .catch((error) =>
-            toast.show({ message: `Failed to rename session: ${errorMessage(error)}`, variant: "error", duration: 5000 }),
+            toast.show({
+              message: `Failed to rename session: ${errorMessage(error)}`,
+              variant: "error",
+              duration: 5000,
+            }),
           )
       }}
       onCancel={() => dialog.clear()}

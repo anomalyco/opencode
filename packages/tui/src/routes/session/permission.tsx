@@ -186,7 +186,7 @@ export function PermissionPrompt(props: { request: PermissionV2Request; director
           onSelect={(option) => {
             setStore("stage", "permission")
             if (option === "cancel") return
-            void sdk.client.v2.session.permission.reply({
+            void sdk.api.permissions.reply({
               sessionID: props.request.sessionID,
               reply: "always",
               requestID: props.request.id,
@@ -197,7 +197,7 @@ export function PermissionPrompt(props: { request: PermissionV2Request; director
       <Match when={store.stage === "reject"}>
         <RejectPrompt
           onConfirm={(message) => {
-            void sdk.client.v2.session.permission.reply({
+            void sdk.api.permissions.reply({
               sessionID: props.request.sessionID,
               reply: "reject",
               requestID: props.request.id,
@@ -438,14 +438,14 @@ export function PermissionPrompt(props: { request: PermissionV2Request; director
                     setStore("stage", "reject")
                     return
                   }
-                  void sdk.client.v2.session.permission.reply({
+                  void sdk.api.permissions.reply({
                     sessionID: props.request.sessionID,
                     reply: "reject",
                     requestID: props.request.id,
                   })
                   return
                 }
-                void sdk.client.v2.session.permission.reply({
+                void sdk.api.permissions.reply({
                   sessionID: props.request.sessionID,
                   reply: "once",
                   requestID: props.request.id,

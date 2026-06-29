@@ -678,15 +678,22 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
 
     async function bootstrap() {
       const settled = await Promise.allSettled([
-        sdk.api.sessions.list({ limit: 50, order: "desc" }).then((response) =>
-          setStore(
-            "session",
-            "info",
-            produce((draft) => {
-              for (const session of response.data) draft[session.id] = mutable(session)
-            }),
+        sdk.api.sessions
+          .list({
+            limit: 50,
+            order: "desc",
+            directory: defaultLocation().directory,
+            workspace: defaultLocation().workspaceID,
+          })
+          .then((response) =>
+            setStore(
+              "session",
+              "info",
+              produce((draft) => {
+                for (const session of response.data) draft[session.id] = mutable(session)
+              }),
+            ),
           ),
-        ),
         sdk.api.sessions
           .active()
           .then((active) =>

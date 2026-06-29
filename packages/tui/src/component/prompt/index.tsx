@@ -37,7 +37,7 @@ import { usePromptStash } from "../../prompt/stash"
 import { DialogStash } from "../dialog-stash"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
 import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
-import type { AssistantMessage, FilePart, UserMessage } from "@opencode-ai/sdk/v2"
+import type { AssistantMessage, FilePart, SessionV2Info, UserMessage } from "@opencode-ai/sdk/v2"
 import { Locale } from "../../util/locale"
 import { errorMessage } from "../../util/error"
 import { createColors, createFrames } from "../../ui/spinner"
@@ -158,11 +158,12 @@ export function Prompt(props: PromptProps) {
   const dialog = useDialog()
   const toast = useToast()
   const status = createMemo(() => data.session.status(props.sessionID ?? ""))
-  const activeSubagents = createMemo(() =>
-    data.session
-      .list()
-      .filter((session) => session.parentID === props.sessionID && data.session.status(session.id) === "running")
-      .length,
+  const activeSubagents = createMemo(
+    () =>
+      data.session
+        .list()
+        .filter((session) => session.parentID === props.sessionID && data.session.status(session.id) === "running")
+        .length,
   )
   const history = usePromptHistory()
   const stash = usePromptStash()
@@ -407,7 +408,7 @@ export function Prompt(props: PromptProps) {
           }, 5000)
 
           if (store.interrupt >= 2) {
-            void sdk.client.v2.session.interrupt({
+            void sdk.api.sessions.interrupt({
               sessionID: props.sessionID,
             })
             setStore("interrupt", 0)
@@ -992,18 +993,23 @@ export function Prompt(props: PromptProps) {
       const directory = await move.getDirectory(store.prompt.input)
       if (move.pending() && !directory) return false
       finishMoveProgress = Boolean(move.progress())
+      const location = data.location.default()
 
-      const res = await sdk.client.v2.session.create({
-        location: directory ? { directory, workspaceID } : undefined,
-        agent: agent.id,
-        model: {
-          providerID: selectedModel.providerID,
-          id: selectedModel.modelID,
-          variant,
-        },
-      })
+      const created = await sdk.api.sessions
+        .create({
+          location: directory
+            ? { directory, workspaceID }
+            : { directory: location.directory, workspaceID: workspaceID ?? location.workspaceID },
+          agent: agent.id,
+          model: {
+            providerID: selectedModel.providerID,
+            id: selectedModel.modelID,
+            variant,
+          },
+        })
+        .catch(() => undefined)
 
-      if (res.error) {
+      if (!created) {
         if (finishMoveProgress) move.finishSubmit()
         toast.show({
           message: "Creating a session failed. Open console for more details.",
@@ -1013,8 +1019,9 @@ export function Prompt(props: PromptProps) {
         return true
       }
 
-      sessionID = res.data.data.id
-      session = res.data.data
+      sessionID = created.id
+      // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- generated client output is readonly; prompt state still uses legacy mutable session types.
+      session = structuredClone(created) as SessionV2Info
     }
 
     const inputText = expandTrackedPastedText(
@@ -1090,65 +1097,70 @@ export function Prompt(props: PromptProps) {
         session = data.session.get(sessionID)
       }
       if (session?.agent !== agent.id) {
-        await sdk.client.v2.session.switchAgent({ sessionID, agent: agent.id }, { throwOnError: true })
+        await sdk.api.sessions.switchAgent({ sessionID, agent: agent.id })
       }
       if (
         session?.model?.providerID !== selectedModel.providerID ||
         session.model.id !== selectedModel.modelID ||
         session.model.variant !== variant
       ) {
-        await sdk.client.v2.session.switchModel(
-          {
-            sessionID,
-            model: { providerID: selectedModel.providerID, id: selectedModel.modelID, variant },
-          },
-          { throwOnError: true },
-        )
+        await sdk.api.sessions.switchModel({
+          sessionID,
+          model: { providerID: selectedModel.providerID, id: selectedModel.modelID, variant },
+        })
       }
       if (session?.revert) {
-        const revertResult = await sdk.client.v2.session.revert.commit({ sessionID })
-        if (revertResult.error) {
-          toast.show({ title: "Failed to commit revert", message: errorMessage(revertResult.error), variant: "error" })
+        const error = await sdk.api.sessions.commit({ sessionID }).then(
+          () => undefined,
+          (error) => error,
+        )
+        if (error) {
+          toast.show({ title: "Failed to commit revert", message: errorMessage(error), variant: "error" })
           return false
         }
       }
-      const result = await sdk.client.v2.session.prompt({
-        sessionID,
-        prompt: {
-          text: [...editorParts.map((part) => part.text), inputText].filter(Boolean).join("\n\n"),
-          files: nonTextParts.flatMap((part) =>
-            part.type === "file"
-              ? [
-                  {
-                    uri: part.url,
-                    name: part.filename,
-                    source: part.source
-                      ? {
-                          start: part.source.text.start,
-                          end: part.source.text.end,
-                          text: part.source.text.value,
-                        }
-                      : undefined,
-                  },
-                ]
-              : [],
-          ),
-          agents: nonTextParts.flatMap((part) =>
-            part.type === "agent"
-              ? [
-                  {
-                    name: part.name,
-                    source: part.source
-                      ? { start: part.source.start, end: part.source.end, text: part.source.value }
-                      : undefined,
-                  },
-                ]
-              : [],
-          ),
-        },
-      })
-      if (result.error) {
-        toast.show({ title: "Failed to send prompt", message: errorMessage(result.error), variant: "error" })
+      const error = await sdk.api.sessions
+        .prompt({
+          sessionID,
+          prompt: {
+            text: [...editorParts.map((part) => part.text), inputText].filter(Boolean).join("\n\n"),
+            files: nonTextParts.flatMap((part) =>
+              part.type === "file"
+                ? [
+                    {
+                      uri: part.url,
+                      name: part.filename,
+                      source: part.source
+                        ? {
+                            start: part.source.text.start,
+                            end: part.source.text.end,
+                            text: part.source.text.value,
+                          }
+                        : undefined,
+                    },
+                  ]
+                : [],
+            ),
+            agents: nonTextParts.flatMap((part) =>
+              part.type === "agent"
+                ? [
+                    {
+                      name: part.name,
+                      source: part.source
+                        ? { start: part.source.start, end: part.source.end, text: part.source.value }
+                        : undefined,
+                    },
+                  ]
+                : [],
+            ),
+          },
+        })
+        .then(
+          () => undefined,
+          (error) => error,
+        )
+      if (error) {
+        toast.show({ title: "Failed to send prompt", message: errorMessage(error), variant: "error" })
         return false
       }
       if (editorParts.length > 0) editor.markSelectionSent()

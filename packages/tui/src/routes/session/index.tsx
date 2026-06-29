@@ -156,10 +156,11 @@ export function Session() {
   const promptRef = usePromptRef()
   const session = createMemo(() => data.session.get(route.sessionID))
   const messageIDs = createMemo(() => data.session.message.ids(route.sessionID))
-  const sessionMessages = () => messageIDs().flatMap((id) => {
-    const message = data.session.message.get(route.sessionID, id)
-    return message ? [message] : []
-  })
+  const sessionMessages = () =>
+    messageIDs().flatMap((id) => {
+      const message = data.session.message.get(route.sessionID, id)
+      return message ? [message] : []
+    })
   const location = createMemo(() => session()?.location)
 
   createEffect(() => {
@@ -286,7 +287,10 @@ export function Session() {
         if (!message) return false
 
         if (message.type === "user") return Boolean(message.text.trim())
-        return message.type === "assistant" && message.content.some((content) => content.type === "text" && content.text.trim())
+        return (
+          message.type === "assistant" &&
+          message.content.some((content) => content.type === "text" && content.text.trim())
+        )
       })
       .sort((a, b) => a.y - b.y)
 
@@ -361,7 +365,7 @@ export function Session() {
         aliases: ["summarize"],
       },
       run: () => {
-        void sdk.client.v2.session.compact({ sessionID: route.sessionID })
+        void sdk.api.sessions.compact({ sessionID: route.sessionID })
         dialog.clear()
       },
     },
@@ -395,8 +399,11 @@ export function Session() {
             dialog.clear()
             return
           }
-          const result = await sdk.client.v2.session.revert.stage({ sessionID: route.sessionID, messageID: target })
-          if (result.error) toast.show({ message: errorMessage(result.error), variant: "error", duration: 5000 })
+          const error = await sdk.api.sessions.stage({ sessionID: route.sessionID, messageID: target }).then(
+            () => undefined,
+            (error) => error,
+          )
+          if (error) toast.show({ message: errorMessage(error), variant: "error", duration: 5000 })
           dialog.clear()
         })()
       },
@@ -409,8 +416,11 @@ export function Session() {
       slash: { name: "redo" },
       run: () => {
         void (async () => {
-          const result = await sdk.client.v2.session.revert.clear({ sessionID: route.sessionID })
-          if (result.error) toast.show({ message: errorMessage(result.error), variant: "error", duration: 5000 })
+          const error = await sdk.api.sessions.clear({ sessionID: route.sessionID }).then(
+            () => undefined,
+            (error) => error,
+          )
+          if (error) toast.show({ message: errorMessage(error), variant: "error", duration: 5000 })
           dialog.clear()
         })()
       },
@@ -878,23 +888,21 @@ export function Session() {
                 </For>
                 <Show when={session()?.revert?.messageID}>
                   <RevertMessage
-                    count={messages().filter((message) => message.id >= session()!.revert!.messageID && message.type === "user").length}
+                    count={
+                      messages().filter(
+                        (message) => message.id >= session()!.revert!.messageID && message.type === "user",
+                      ).length
+                    }
                     files={session()!.revert!.files ?? []}
                   />
                 </Show>
               </scrollbox>
               <box flexShrink={0}>
                 <Show when={permissions().length > 0}>
-                  <PermissionPrompt
-                    request={permissions()[0]}
-                    directory={session()?.location.directory}
-                  />
+                  <PermissionPrompt request={permissions()[0]} directory={session()?.location.directory} />
                 </Show>
                 <Show when={permissions().length === 0 && questions().length > 0}>
-                  <QuestionPrompt
-                    request={questions()[0]}
-                    directory={session()?.location.directory}
-                  />
+                  <QuestionPrompt request={questions()[0]} directory={session()?.location.directory} />
                 </Show>
                 <Show when={session()?.parentID}>
                   <SubagentFooter />
@@ -957,9 +965,7 @@ function SessionRowView(props: { row: SessionRow; message: (messageID: string) =
       <Switch>
         <Match when={props.row.type === "message" ? props.row : undefined}>
           {(row) => (
-            <Show when={props.message(row().messageID)}>
-              {(message) => <SessionMessageView message={message()} />}
-            </Show>
+            <Show when={props.message(row().messageID)}>{(message) => <SessionMessageView message={message()} />}</Show>
           )}
         </Match>
         <Match when={props.row.type === "part" ? props.row : undefined}>
@@ -1073,8 +1079,8 @@ function SessionGroupView(props: {
       result[name] = (result[name] ?? 0) + 1
       return result
     }, {})
-    const tools = Object.entries(counts).map(([name, count]) =>
-      `${count} ${count === 1 ? name : name === "search" ? "searches" : `${name}s`}`,
+    const tools = Object.entries(counts).map(
+      ([name, count]) => `${count} ${count === 1 ? name : name === "search" ? "searches" : `${name}s`}`,
     )
     return `${props.completed ? "Explored" : "Exploring"} — ${tools.join(", ")}`
   })
@@ -1116,9 +1122,10 @@ function AssistantFooter(props: { message: SessionMessageAssistant }) {
   const { theme } = useTheme()
   const model = createMemo(
     () =>
-      ctx.models().find(
-        (model) => model.providerID === props.message.model.providerID && model.id === props.message.model.id,
-      )?.name ?? `${props.message.model.providerID}/${props.message.model.id}`,
+      ctx
+        .models()
+        .find((model) => model.providerID === props.message.model.providerID && model.id === props.message.model.id)
+        ?.name ?? `${props.message.model.providerID}/${props.message.model.id}`,
   )
   const duration = createMemo(() =>
     props.message.time.completed ? props.message.time.completed - props.message.time.created : 0,
@@ -1158,14 +1165,7 @@ function SessionNoticeMessageV2(props: { message: SessionMessage }) {
 
 function CompactionMessage() {
   const { theme } = useTheme()
-  return (
-    <box
-      border={["top"]}
-      title=" Compaction "
-      titleAlignment="center"
-      borderColor={theme.borderActive}
-    />
-  )
+  return <box border={["top"]} title=" Compaction " titleAlignment="center" borderColor={theme.borderActive} />
 }
 
 function statusLabel(status: "added" | "modified" | "deleted") {
@@ -1197,8 +1197,11 @@ function RevertMessage(props: {
       onMouseUp={() => {
         if (renderer.getSelection()?.getSelectedText()) return
         void (async () => {
-          const result = await sdk.client.v2.session.revert.clear({ sessionID: route.sessionID })
-          if (result.error) toast.show({ message: errorMessage(result.error), variant: "error", duration: 5000 })
+          const error = await sdk.api.sessions.clear({ sessionID: route.sessionID }).then(
+            () => undefined,
+            (error) => error,
+          )
+          if (error) toast.show({ message: errorMessage(error), variant: "error", duration: 5000 })
         })()
       }}
       flexShrink={0}
@@ -1207,7 +1210,12 @@ function RevertMessage(props: {
       customBorderChars={SplitBorder.customBorderChars}
       borderColor={theme.backgroundPanel}
     >
-      <box paddingTop={1} paddingBottom={1} paddingLeft={2} backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}>
+      <box
+        paddingTop={1}
+        paddingBottom={1}
+        paddingLeft={2}
+        backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
+      >
         <text fg={theme.textMuted}>
           {props.count} message{props.count === 1 ? "" : "s"} reverted
         </text>
@@ -1251,54 +1259,63 @@ function UserMessage(props: { message: SessionMessageUser }) {
 
   return (
     <Show when={props.message.text.trim() || files().length}>
+      <box
+        id={props.message.id}
+        border={["left"]}
+        borderColor={color()}
+        customBorderChars={SplitBorder.customBorderChars}
+      >
         <box
-          id={props.message.id}
-          border={["left"]}
-          borderColor={color()}
-          customBorderChars={SplitBorder.customBorderChars}
+          onMouseOver={() => {
+            setHover(true)
+          }}
+          onMouseOut={() => {
+            setHover(false)
+          }}
+          onMouseUp={() => {
+            if (renderer.getSelection()?.getSelectedText()) return
+            dialog.replace(() => <DialogMessage messageID={props.message.id} sessionID={ctx.sessionID} />)
+          }}
+          paddingTop={1}
+          paddingBottom={1}
+          paddingLeft={2}
+          backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
+          flexShrink={0}
         >
-          <box
-            onMouseOver={() => {
-              setHover(true)
-            }}
-            onMouseOut={() => {
-              setHover(false)
-            }}
-            onMouseUp={() => {
-              if (renderer.getSelection()?.getSelectedText()) return
-              dialog.replace(() => <DialogMessage messageID={props.message.id} sessionID={ctx.sessionID} />)
-            }}
-            paddingTop={1}
-            paddingBottom={1}
-            paddingLeft={2}
-            backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
-            flexShrink={0}
-          >
-            <text fg={theme.text}>{props.message.text}</text>
-            <Show when={files().length}>
-              <box flexDirection="row" paddingBottom={ctx.showTimestamps() ? 1 : 0} paddingTop={1} gap={1} flexWrap="wrap">
-                <For each={files()}>
-                  {(file) => {
-                    const directory = file.mime === "application/x-directory"
-                    return (
-                      <text fg={theme.text}>
-                        <span style={{ bg: theme.secondary, fg: theme.background }}>
-                          {directory ? " Directory " : " File "}
-                        </span>
-                        <span style={{ bg: theme.backgroundElement, fg: theme.textMuted }}> {file.name ?? file.uri} </span>
-                      </text>
-                    )
-                  }}
-                </For>
-              </box>
-            </Show>
-            <Show when={ctx.showTimestamps()}>
-              <text fg={theme.textMuted}>
-                <span style={{ fg: theme.textMuted }}>{Locale.todayTimeOrDateTime(props.message.time.created)}</span>
-              </text>
-            </Show>
-          </box>
+          <text fg={theme.text}>{props.message.text}</text>
+          <Show when={files().length}>
+            <box
+              flexDirection="row"
+              paddingBottom={ctx.showTimestamps() ? 1 : 0}
+              paddingTop={1}
+              gap={1}
+              flexWrap="wrap"
+            >
+              <For each={files()}>
+                {(file) => {
+                  const directory = file.mime === "application/x-directory"
+                  return (
+                    <text fg={theme.text}>
+                      <span style={{ bg: theme.secondary, fg: theme.background }}>
+                        {directory ? " Directory " : " File "}
+                      </span>
+                      <span style={{ bg: theme.backgroundElement, fg: theme.textMuted }}>
+                        {" "}
+                        {file.name ?? file.uri}{" "}
+                      </span>
+                    </text>
+                  )
+                }}
+              </For>
+            </box>
+          </Show>
+          <Show when={ctx.showTimestamps()}>
+            <text fg={theme.textMuted}>
+              <span style={{ fg: theme.textMuted }}>{Locale.todayTimeOrDateTime(props.message.time.created)}</span>
+            </text>
+          </Show>
         </box>
+      </box>
     </Show>
   )
 }
@@ -1309,9 +1326,10 @@ function AssistantMessage(props: { message: SessionMessageAssistant; last: boole
   const { theme } = useTheme()
   const model = createMemo(
     () =>
-      ctx.models().find(
-        (model) => model.providerID === props.message.model.providerID && model.id === props.message.model.id,
-      )?.name ?? `${props.message.model.providerID}/${props.message.model.id}`,
+      ctx
+        .models()
+        .find((model) => model.providerID === props.message.model.providerID && model.id === props.message.model.id)
+        ?.name ?? `${props.message.model.providerID}/${props.message.model.id}`,
   )
 
   const final = createMemo(() => {
@@ -1325,10 +1343,7 @@ function AssistantMessage(props: { message: SessionMessageAssistant; last: boole
   })
 
   const exploration = createMemo(() => {
-    const grouped = new Map<
-      string,
-      { first: boolean; parts: SessionMessageAssistantTool[]; active: boolean }
-    >()
+    const grouped = new Map<string, { first: boolean; parts: SessionMessageAssistantTool[]; active: boolean }>()
     if (!ctx.groupExploration()) return grouped
     const runs = props.message.content
       .map((part) =>
@@ -1471,7 +1486,9 @@ function ReasoningPart(props: {
     // OpenRouter encrypts some reasoning blocks; drop the placeholder.
     return props.part.text.replace("[REDACTED]", "").trim()
   })
-  const isDone = createMemo(() => props.part.time?.completed !== undefined || props.message.time.completed !== undefined)
+  const isDone = createMemo(
+    () => props.part.time?.completed !== undefined || props.message.time.completed !== undefined,
+  )
   const inMinimal = createMemo(() => ctx.thinkingMode() === "hide")
   const duration = createMemo(() => {
     const end = props.part.time?.completed ?? props.message.time.completed
@@ -1488,11 +1505,7 @@ function ReasoningPart(props: {
 
   return (
     <Show when={content()}>
-      <box
-        paddingLeft={3}
-        flexDirection="column"
-        flexShrink={0}
-      >
+      <box paddingLeft={3} flexDirection="column" flexShrink={0}>
         <box onMouseUp={toggle}>
           <ReasoningHeader
             toggleable={inMinimal()}
@@ -1808,12 +1821,7 @@ export function InlineToolRow(props: {
   onMouseUp?: () => void
 }) {
   return (
-    <box
-      paddingLeft={3}
-      onMouseOver={props.onMouseOver}
-      onMouseOut={props.onMouseOut}
-      onMouseUp={props.onMouseUp}
-    >
+    <box paddingLeft={3} onMouseOver={props.onMouseOver} onMouseOut={props.onMouseOut} onMouseUp={props.onMouseUp}>
       <Switch>
         <Match when={props.spinner}>
           <Spinner color={props.color} children={props.children} />
@@ -2003,12 +2011,7 @@ function Write(props: ToolProps) {
         </BlockTool>
       </Match>
       <Match when={true}>
-        <InlineTool
-          icon="←"
-          pending="Preparing write..."
-          complete={stringValue(props.input.path)}
-          part={props.part}
-        >
+        <InlineTool icon="←" pending="Preparing write..." complete={stringValue(props.input.path)} part={props.part}>
           Write {pathFormatter.format(stringValue(props.input.path))}
         </InlineTool>
       </Match>
@@ -2470,7 +2473,14 @@ export function parseApplyPatchFiles(value: unknown) {
     const patch = stringValue(file.patch)
     const additions = numberValue(file.additions)
     const deletions = numberValue(file.deletions)
-    if (!type || !relativePath || !filePath || patch === undefined || additions === undefined || deletions === undefined)
+    if (
+      !type ||
+      !relativePath ||
+      !filePath ||
+      patch === undefined ||
+      additions === undefined ||
+      deletions === undefined
+    )
       return []
     return [{ type, relativePath, filePath, patch, additions, deletions, movePath: stringValue(file.movePath) }]
   })
