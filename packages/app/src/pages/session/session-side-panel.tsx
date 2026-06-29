@@ -233,7 +233,10 @@ export function SessionSidePanel(props: {
           <div
             class="size-full flex"
             classList={{
-              "border-l border-border-weaker-base": !settings.general.newLayoutDesigns(),
+              "border-l border-border-weaker-base":
+                !settings.general.newLayoutDesigns() && settings.appearance.sidebarPosition() !== "left",
+              "border-r border-border-weaker-base":
+                !settings.general.newLayoutDesigns() && settings.appearance.sidebarPosition() === "left",
             }}
           >
             <div

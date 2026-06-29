@@ -830,6 +830,8 @@ export const dict = {
   "settings.general.row.font.description": "Customise the font used in code blocks",
   "settings.general.row.terminalFont.title": "Terminal Font",
   "settings.general.row.terminalFont.description": "Customise the font used in the terminal",
+  "settings.general.row.sidebarPosition.title": "Sidebar position",
+  "settings.general.row.sidebarPosition.description": "Place the file tree and review panel on the left side",
   "settings.general.row.uiFont.title": "UI Font",
   "settings.general.row.uiFont.description": "Customise the font used throughout the interface",
   "settings.general.row.followup.title": "Follow-up behavior",

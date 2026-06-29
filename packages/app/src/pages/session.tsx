@@ -1703,6 +1703,7 @@ export default function Page() {
         class="flex-1 min-h-0 flex flex-col md:flex-row"
         classList={{
           "gap-2 p-2": settings.general.newLayoutDesigns(),
+          "md:flex-row-reverse": settings.appearance.sidebarPosition() === "left",
         }}
       >
         <Show when={!isDesktop() && !!params.id && !settings.general.newLayoutDesigns()}>{mobileTabs()}</Show>

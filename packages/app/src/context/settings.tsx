@@ -40,6 +40,7 @@ export interface Settings {
     mono: string
     sans: string
     terminal: string
+    sidebarPosition: "left" | "right"
   }
   keybinds: Record<string, string>
   permissions: {
@@ -124,6 +125,7 @@ const defaultSettings: Settings = {
     mono: "",
     sans: "",
     terminal: "",
+    sidebarPosition: "right",
   },
   keybinds: {},
   permissions: {
@@ -275,6 +277,13 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         terminalFont: withFallback(() => store.appearance?.terminal, defaultSettings.appearance.terminal),
         setTerminalFont(value: string) {
           setStore("appearance", "terminal", value.trim() ? value : "")
+        },
+        sidebarPosition: withFallback(
+          () => store.appearance?.sidebarPosition,
+          defaultSettings.appearance.sidebarPosition,
+        ),
+        setSidebarPosition(value: "left" | "right") {
+          setStore("appearance", "sidebarPosition", value)
         },
       },
       keybinds: {

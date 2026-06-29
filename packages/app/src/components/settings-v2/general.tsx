@@ -527,6 +527,22 @@ export const SettingsGeneralV2: Component<{
             />
           </div>
         </SettingsRowV2>
+
+        <Show when={desktop()}>
+          <SettingsRowV2
+            title={language.t("settings.general.row.sidebarPosition.title")}
+            description={language.t("settings.general.row.sidebarPosition.description")}
+          >
+            <div data-action="settings-sidebar-position">
+              <Switch
+                checked={settings.appearance.sidebarPosition() === "left"}
+                onChange={(checked) =>
+                  settings.appearance.setSidebarPosition(checked ? "left" : "right")
+                }
+              />
+            </div>
+          </SettingsRowV2>
+        </Show>
       </SettingsListV2>
     </div>
   )
