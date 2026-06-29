@@ -3,6 +3,8 @@ import { Effect, Fiber, Layer, Stream } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Integration } from "@opencode-ai/core/integration"
 import { Credential } from "@opencode-ai/core/credential"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventV2 } from "@opencode-ai/core/event"
 import { Location } from "@opencode-ai/core/location"
 import { ModelV2 } from "@opencode-ai/core/model"
@@ -21,12 +23,12 @@ const locationLayer = Layer.succeed(
   Location.Service,
   Location.Service.of(location({ directory: AbsolutePath.make("test") })),
 )
+const catalogLayer = AppNodeBuilder.build(
+  LayerNode.group([Catalog.node, EventV2.node, Credential.node, Integration.node, Policy.node]),
+  [[Location.node, locationLayer]],
+)
 const it = testEffect(
-  Catalog.locationLayer.pipe(
-    Layer.provideMerge(EventV2.defaultLayer),
-    Layer.provideMerge(locationLayer),
-    Layer.provideMerge(Credential.defaultLayer),
-  ),
+  catalogLayer,
 )
 
 describe("CatalogV2", () => {
@@ -47,11 +49,11 @@ describe("CatalogV2", () => {
 
   it.effect("derives availability from active credentials without changing provider state", () => {
     const integrationID = Integration.ID.make("test")
-    const layer = Catalog.locationLayer.pipe(
-      Layer.fresh,
-      Layer.provideMerge(EventV2.defaultLayer),
-      Layer.provideMerge(locationLayer),
-      Layer.provideMerge(Credential.defaultLayer.pipe(Layer.fresh)),
+    const localCatalogLayer = Layer.fresh(
+      AppNodeBuilder.build(
+        LayerNode.group([Catalog.node, Credential.node]),
+        [[Location.node, locationLayer]],
+      ),
     )
 
     return Effect.gen(function* () {
@@ -73,17 +75,17 @@ describe("CatalogV2", () => {
       })
       expect((yield* catalog.provider.available()).map((provider) => provider.id)).toEqual([ProviderV2.ID.make("test")])
       expect(required(yield* catalog.provider.get(ProviderV2.ID.make("test"))).request.body).toEqual({})
-    }).pipe(Effect.provide(layer))
+    }).pipe(Effect.provide(localCatalogLayer))
   })
 
   it.effect("derives availability from a provider's integration", () => {
     const integrationID = Integration.ID.make("gateway")
     const providerID = ProviderV2.ID.make("remote")
-    const layer = Catalog.locationLayer.pipe(
-      Layer.fresh,
-      Layer.provideMerge(EventV2.defaultLayer),
-      Layer.provideMerge(locationLayer),
-      Layer.provideMerge(Credential.defaultLayer.pipe(Layer.fresh)),
+    const localCatalogLayer = Layer.fresh(
+      AppNodeBuilder.build(
+        LayerNode.group([Catalog.node, Credential.node, Integration.node]),
+        [[Location.node, locationLayer]],
+      ),
     )
 
     return Effect.gen(function* () {
@@ -102,7 +104,7 @@ describe("CatalogV2", () => {
       })
 
       expect((yield* catalog.provider.available()).map((provider) => provider.id)).toEqual([providerID])
-    }).pipe(Effect.provide(layer))
+    }).pipe(Effect.provide(localCatalogLayer))
   })
 
   it.effect("projects environment connections without a catalog plugin", () =>

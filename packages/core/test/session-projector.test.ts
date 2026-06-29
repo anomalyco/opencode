@@ -4,7 +4,6 @@ import { asc, eq } from "drizzle-orm"
 import { Database } from "@opencode-ai/core/database/database"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { makeGlobalNode } from "@opencode-ai/core/effect/app-node"
 import { EventV2 } from "@opencode-ai/core/event"
 import { EventTable } from "@opencode-ai/core/event/sql"
 import { ModelV2 } from "@opencode-ai/core/model"
@@ -26,11 +25,8 @@ import { Snapshot } from "@opencode-ai/core/snapshot"
 
 const it = testEffect(AppNodeBuilder.build(LayerNode.group([Database.node, EventV2.node, SessionProjector.node])))
 const sessionsLayer = AppNodeBuilder.build(
-  LayerNode.bind(
-    SessionV2.node,
-    SessionExecution.node,
-    makeGlobalNode({ service: SessionExecution.Service, layer: SessionExecution.noopLayer, deps: [] }),
-  ),
+  SessionV2.node,
+  [[SessionExecution.node, SessionExecution.noopLayer]],
 )
 const sessionID = SessionV2.ID.make("ses_projector_test")
 const created = DateTime.makeUnsafe(0)

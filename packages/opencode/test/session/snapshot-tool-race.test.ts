@@ -89,13 +89,11 @@ const root = LayerNode.group([
 const it = testEffect(
   LayerNode.compile(
     root,
-    new Map(
-      [
-        LayerNode.replace(MCP.layer, mcp),
-        LayerNode.replace(LSP.layer, lsp),
-        LayerNode.replace(RuntimeFlags.defaultLayer, RuntimeFlags.layer({ experimentalEventSystem: true })),
-      ].map((item) => [item.source, item.replacement]),
-    ),
+    [
+      [MCP.node, mcp],
+      [LSP.node, lsp],
+      [RuntimeFlags.node, RuntimeFlags.layer({ experimentalEventSystem: true })],
+    ],
   ),
 )
 

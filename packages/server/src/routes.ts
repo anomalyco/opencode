@@ -50,7 +50,8 @@ export function createEmbeddedRoutes() {
 
 function makeRoutes<AuthError, AuthServices>(auth: Layer.Layer<ServerAuth.Config, AuthError, AuthServices>) {
   const serviceLayer = AppNodeBuilder.build(
-    LayerNode.bind(applicationServices, SessionExecution.node, SessionExecutionLocal.node),
+    applicationServices,
+    [[SessionExecution.node, SessionExecutionLocal.node]],
   )
 
   return HttpApiBuilder.layer(Api, { openapiPath: "/openapi.json" }).pipe(

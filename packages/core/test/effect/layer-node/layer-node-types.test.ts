@@ -56,16 +56,22 @@ const checkError: Layer.Layer<B, LayerError, never> = closedWithError
 void checkClosed
 void checkError
 
-LayerNode.replace(aLayer, Layer.succeed(A, A.of({})))
+LayerNode.compile(a, [[a, Layer.succeed(A, A.of({}))]])
+LayerNode.compile(a, [[a, make({ service: A, layer: Layer.succeed(A, A.of({})), deps: [] })]])
 
 // @ts-expect-error Replacement must provide A
-LayerNode.replace(aLayer, Layer.succeed(B, B.of({})))
+LayerNode.compile(a, [[a, Layer.succeed(B, B.of({}))]])
+
+// @ts-expect-error Node replacement must provide A
+const invalidNodeReplacement = () => LayerNode.compile(a, [[a, b]])
+void invalidNodeReplacement
 
 // @ts-expect-error Replacement cannot introduce a new error
-LayerNode.replace(aLayer, Layer.effect(A, Effect.fail(new OtherError())))
+LayerNode.compile(a, [[a, Layer.effect(A, Effect.fail(new OtherError()))]])
 
-// @ts-expect-error Replacement must be closed
-LayerNode.replace(bLayer, bLayer)
+// @ts-expect-error Node replacement cannot introduce a new error
+const invalidNodeErrorReplacement = () => LayerNode.compile(a, [[a, make({ service: A, layer: Layer.effect(A, Effect.fail(new OtherError())), deps: [] })]])
+void invalidNodeErrorReplacement
 
 class TagA extends Context.Service<TagA, {}>()("test/TagA") {}
 class TagB extends Context.Service<TagB, {}>()("test/TagB") {}
