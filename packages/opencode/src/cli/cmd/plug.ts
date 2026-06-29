@@ -45,7 +45,23 @@ export type PlugCtx = {
 }
 
 const defaultPlugDeps: PlugDeps = {
-  spinner: () => spinner(),
+  spinner: () => {
+    // Non-TTY environments (CI, subprocess, PowerShell): use plain text output
+    // to avoid ANSI escape sequences being printed as garbage
+    if (!process.stdout.isTTY) {
+      return {
+        start: (msg: string) => console.log(msg),
+        stop: (msg: string, code?: number) => {
+          if (code && code !== 0) {
+            console.error(msg)
+          } else {
+            console.log(msg)
+          }
+        },
+      }
+    }
+    return spinner()
+  },
   log: {
     error: (msg) => log.error(msg),
     info: (msg) => log.info(msg),
