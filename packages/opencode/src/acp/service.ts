@@ -30,6 +30,7 @@ import {
   type SetSessionModeResponse,
 } from "@agentclientprotocol/sdk"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import type { AssistantMessage, Message, OpencodeClient, SessionMessageResponse } from "@opencode-ai/sdk/v2"
 import { Context, Effect, Layer, ManagedRuntime } from "effect"
 import * as ACPError from "./error"
@@ -569,22 +570,26 @@ export function make(input: {
 }
 
 function makeSessionService() {
-  return ManagedRuntime.make(ACPSession.defaultLayer).runSync(
+  return ManagedRuntime.make(AppNodeBuilder.build(ACPSession.node)).runSync(
     ACPSession.Service.use((service) => Effect.succeed(service)),
   )
 }
 
 function makeDirectoryService(sdk: OpencodeClient) {
   return ManagedRuntime.make(
-    Directory.layer.pipe(
-      Layer.provide(
-        Layer.succeed(
-          Directory.Loader,
-          Directory.Loader.of({
-            load: (directory) => request(() => loadDirectorySnapshot(sdk, directory), "directory"),
-          }),
-        ),
-      ),
+    AppNodeBuilder.build(
+      Directory.node,
+      [
+        [
+          Directory.loaderNode,
+          Layer.succeed(
+            Directory.Loader,
+            Directory.Loader.of({
+              load: (directory) => request(() => loadDirectorySnapshot(sdk, directory), "directory"),
+            }),
+          ),
+        ],
+      ],
     ),
   ).runSync(Directory.Service.use((service) => Effect.succeed(service)))
 }
