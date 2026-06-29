@@ -33,6 +33,7 @@ import { Instruction } from "@/session/instruction"
 import { LLM } from "@/session/llm"
 import { LSP } from "@/lsp/lsp"
 import { MCP } from "@/mcp"
+import { Marketplace } from "@/marketplace"
 import { McpAuth } from "@/mcp/auth"
 import { Command } from "@/command"
 import { Truncate } from "@/tool/truncate"
@@ -90,6 +91,7 @@ export const AppLayer = Layer.mergeAll(
   LSP.defaultLayer,
   MCP.defaultLayer,
   McpAuth.defaultLayer,
+  Marketplace.defaultLayer,
   Command.defaultLayer,
   Truncate.defaultLayer,
   ToolRegistry.defaultLayer,
