@@ -355,20 +355,8 @@ describe("HttpApiCodegen.generate", () => {
     ).toThrow("Unsupported Promise success encoding: session.text")
 
     expect(() =>
-      emitPromise(
-        compileContract(
-          api(
-            HttpApiEndpoint.get("binary", "/binary", {
-              success: Schema.Uint8Array.pipe(HttpApiSchema.asUint8Array()),
-            }),
-          ),
-        ),
-      ),
-    ).toThrow("Unsupported Promise success encoding: session.binary")
-
-    expect(() =>
-      emitPromise(compileContract(api(HttpApiEndpoint.get("read", "/file/*", { success: Schema.String })))),
-    ).toThrow("Unsupported Promise path wildcard: /file/*")
+      emitPromise(compileContract(api(HttpApiEndpoint.get("read", "/file/*/tail", { success: Schema.String })))),
+    ).toThrow("Unsupported Promise path wildcard: /file/*/tail")
 
     expect(() =>
       emitPromise(
@@ -438,6 +426,41 @@ describe("HttpApiCodegen.generate", () => {
       })
 
       expect(await client.session.interrupt({ sessionID: "session" })).toBeUndefined()
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  test("executes an emitted binary wildcard GET through fetch", async () => {
+    const output = emitPromise(
+      compileContract(
+        api(
+          HttpApiEndpoint.get("read", "/file/*", {
+            query: { token: Schema.optional(Schema.String) },
+            success: Schema.Uint8Array.pipe(HttpApiSchema.asUint8Array()),
+          }),
+        ),
+      ),
+    )
+    const directory = await mkdtemp(join(tmpdir(), "opencode-httpapi-codegen-"))
+
+    try {
+      await Promise.all(output.files.map((file) => Bun.write(join(directory, file.path), file.content)))
+      const generated = await import(`${join(directory, "index.ts")}?t=${crypto.randomUUID()}`)
+      let request: Request | undefined
+      const client = generated.OpenCode.make({
+        baseUrl: "https://example.com",
+        fetch: async (input: RequestInfo | URL) => {
+          request = input instanceof Request ? input : new Request(input)
+          return new Response(new Uint8Array([1, 2, 3]))
+        },
+      })
+
+      const result = await client.session.read({ path: "src/a b#c.ts", token: "x/y" })
+      expect(result).toBeInstanceOf(Uint8Array)
+      expect(Array.from(result)).toEqual([1, 2, 3])
+      expect(request?.method).toBe("GET")
+      expect(request?.url).toBe("https://example.com/file/src/a%20b%23c.ts?token=x%2Fy")
     } finally {
       await rm(directory, { recursive: true, force: true })
     }

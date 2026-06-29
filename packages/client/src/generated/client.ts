@@ -87,6 +87,8 @@ import type {
   PermissionsGetOutput,
   PermissionsReplyInput,
   PermissionsReplyOutput,
+  FilesReadInput,
+  FilesReadOutput,
   FilesListInput,
   FilesListOutput,
   FilesFindInput,
@@ -155,6 +157,7 @@ interface RequestDescriptor {
   readonly successStatus: number
   readonly declaredStatuses: ReadonlyArray<number>
   readonly empty: boolean
+  readonly binary?: true
 }
 
 export function make(options: ClientOptions) {
@@ -200,6 +203,7 @@ export function make(options: ClientOptions) {
   const request = async <A>(descriptor: RequestDescriptor, requestOptions?: RequestOptions): Promise<A> => {
     const response = await execute(descriptor, requestOptions)
     if (response.status !== descriptor.successStatus) return responseError(response, descriptor)
+    if (descriptor.binary) return new Uint8Array(await response.arrayBuffer()) as A
     if (descriptor.empty) {
       try {
         await response.body?.cancel()
@@ -840,6 +844,19 @@ export function make(options: ClientOptions) {
         ),
     },
     files: {
+      read: (input: FilesReadInput, requestOptions?: RequestOptions) =>
+        request<FilesReadOutput>(
+          {
+            method: "GET",
+            path: `/api/fs/read/${encodePath(input.path)}`,
+            query: { location: input["location"] },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+            binary: true,
+          },
+          requestOptions,
+        ),
       list: (input?: FilesListInput, requestOptions?: RequestOptions) =>
         request<FilesListOutput>(
           {
@@ -1141,6 +1158,10 @@ export function make(options: ClientOptions) {
         ),
     },
   }
+}
+
+function encodePath(value: string): string {
+  return value.split("/").map(encodeURIComponent).join("/")
 }
 
 function appendQuery(params: URLSearchParams, key: string, value: unknown): void {

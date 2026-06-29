@@ -2572,6 +2572,15 @@ export type PermissionsReplyInput = {
 
 export type PermissionsReplyOutput = void
 
+export type FilesReadInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+  readonly path: string
+}
+
+export type FilesReadOutput = globalThis.Uint8Array
+
 export type FilesListInput = {
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined

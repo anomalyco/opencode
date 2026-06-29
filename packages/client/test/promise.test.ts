@@ -37,9 +37,30 @@ test("exposes every standard HTTP API group", () => {
     "attemptComplete",
     "attemptCancel",
   ])
-  expect(Object.keys(client.files)).toEqual(["list", "find"])
+  expect(Object.keys(client.files)).toEqual(["read", "list", "find"])
   expect(Object.keys(client.ptys)).toEqual(["list", "create", "get", "update", "remove"])
   expect(Object.keys(client.project)).toEqual(["current", "directories"])
+})
+
+test("files.read returns binary content from the public HTTP contract", async () => {
+  let request: Request | undefined
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async (input) => {
+      request = input instanceof Request ? input : new Request(input)
+      return new Response(new Uint8Array([104, 105]))
+    },
+  })
+
+  const content = await client.files.read({
+    path: "src/a b#c.ts",
+    location: { directory: "/tmp/project" },
+  })
+
+  expect(Array.from(content)).toEqual([104, 105])
+  expect(request?.url).toBe(
+    "http://localhost:3000/api/fs/read/src/a%20b%23c.ts?location%5Bdirectory%5D=%2Ftmp%2Fproject",
+  )
 })
 
 test("project methods use the public HTTP contract", async () => {
