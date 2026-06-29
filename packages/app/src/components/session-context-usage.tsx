@@ -1,7 +1,9 @@
 import { Match, Show, Switch, createMemo } from "solid-js"
 import { Tooltip, type TooltipProps } from "@opencode-ai/ui/tooltip"
 import { ProgressCircle } from "@opencode-ai/ui/progress-circle"
+import { ProgressCircleV2 } from "@opencode-ai/ui/v2/progress-circle-v2"
 import { Button } from "@opencode-ai/ui/button"
+import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 
 import { useFile } from "@/context/file"
 import { useLayout } from "@/context/layout"
@@ -15,6 +17,7 @@ import { createSessionTabs } from "@/pages/session/helpers"
 
 interface SessionContextUsageProps {
   variant?: "button" | "indicator"
+  buttonAppearance?: "default" | "v2"
   placement?: TooltipProps["placement"]
 }
 
@@ -39,6 +42,7 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
   const { params, tabs, view } = useSessionLayout()
 
   const variant = createMemo(() => props.variant ?? "button")
+  const buttonAppearance = createMemo(() => props.buttonAppearance ?? "default")
   const tabState = createSessionTabs({
     tabs,
     pathFromTab: file.pathFromTab,
@@ -80,6 +84,11 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
       <ProgressCircle size={16} strokeWidth={2} percentage={context()?.usage ?? 0} />
     </div>
   )
+  const circleV2 = () => (
+    <div class="flex items-center justify-center">
+      <ProgressCircleV2 percentage={context()?.usage ?? 0} />
+    </div>
+  )
 
   const tooltipValue = () => (
     <div>
@@ -113,6 +122,16 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
       <Tooltip value={tooltipValue()} placement={props.placement ?? "top"}>
         <Switch>
           <Match when={variant() === "indicator"}>{circle()}</Match>
+          <Match when={buttonAppearance() === "v2"}>
+            <IconButtonV2
+              type="button"
+              variant="ghost-muted"
+              size="large"
+              icon={circleV2()}
+              onClick={openContext}
+              aria-label={language.t("context.usage.view")}
+            />
+          </Match>
           <Match when={true}>
             <Button
               type="button"
