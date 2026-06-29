@@ -690,7 +690,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
   if (glm52 && model.api.npm === "@ai-sdk/openai-compatible") {
     return {
       high: { reasoningEffort: "high" },
-      max: { reasoningEffort: "max" },
+      xhigh: { reasoningEffort: "xhigh" },
     }
   }
   if (glm52 && model.api.npm === "@ai-sdk/anthropic") {
