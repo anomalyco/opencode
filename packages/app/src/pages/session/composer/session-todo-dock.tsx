@@ -6,9 +6,9 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { useSpring } from "@opencode-ai/ui/motion-spring"
 import { TextReveal } from "@opencode-ai/ui/text-reveal"
 import { TextStrikethrough } from "@opencode-ai/ui/text-strikethrough"
-import { Index, createEffect, createMemo, on, onCleanup } from "solid-js"
+import { createResizeObserver } from "@solid-primitives/resize-observer"
+import { Index, createEffect, createMemo } from "solid-js"
 import { createStore } from "solid-js/store"
-import { composerEnabled, composerProbe } from "@/testing/session-composer"
 import { useLanguage } from "@/context/language"
 
 const doneToken = "\u0000done\u0000"
@@ -40,19 +40,17 @@ function dot(status: Todo["status"]) {
 }
 
 export function SessionTodoDock(props: {
-  sessionID?: string
   todos: Todo[]
+  collapsed: boolean
+  onToggle: () => void
   collapseLabel: string
   expandLabel: string
   dockProgress: number
 }) {
   const language = useLanguage()
   const [store, setStore] = createStore({
-    collapsed: false,
-    height: 320,
+    height: 78,
   })
-
-  const toggle = () => setStore("collapsed", (value) => !value)
 
   const total = createMemo(() => props.todos.length)
   const done = createMemo(() => props.todos.filter((todo) => todo.status === "completed").length)
@@ -72,7 +70,7 @@ export function SessionTodoDock(props: {
   )
 
   const preview = createMemo(() => active()?.content ?? "")
-  const collapse = useSpring(() => (store.collapsed ? 1 : 0), { visualDuration: 0.3, bounce: 0 })
+  const collapse = useSpring(() => (props.collapsed ? 1 : 0), { visualDuration: 0.3, bounce: 0 })
   const dock = createMemo(() => Math.max(0, Math.min(1, props.dockProgress)))
   const shut = createMemo(() => 1 - dock())
   const value = createMemo(() => Math.max(0, Math.min(1, collapse())))
@@ -80,37 +78,16 @@ export function SessionTodoDock(props: {
   const off = createMemo(() => hide() > 0.98)
   const turn = createMemo(() => Math.max(0, Math.min(1, value())))
   const full = createMemo(() => Math.max(78, store.height))
-  const e2e = composerEnabled()
-  const probe = composerProbe(props.sessionID)
   let contentRef: HTMLDivElement | undefined
 
   createEffect(() => {
     const el = contentRef
     if (!el) return
     const update = () => {
-      setStore("height", el.getBoundingClientRect().height)
+      setStore("height", (height) => Math.max(height, el.scrollHeight))
     }
     update()
-    const observer = new ResizeObserver(update)
-    observer.observe(el)
-    onCleanup(() => observer.disconnect())
-  })
-
-  createEffect(() => {
-    if (!e2e) return
-
-    probe.set({
-      mounted: true,
-      collapsed: store.collapsed,
-      hidden: store.collapsed || off(),
-      count: props.todos.length,
-      states: props.todos.map((todo) => todo.status),
-    })
-  })
-
-  onCleanup(() => {
-    if (!e2e) return
-    probe.drop()
+    createResizeObserver(el, update)
   })
 
   return (
@@ -128,11 +105,11 @@ export function SessionTodoDock(props: {
           class="pl-3 pr-2 py-2 flex items-center gap-2 overflow-visible"
           role="button"
           tabIndex={0}
-          onClick={toggle}
+          onClick={props.onToggle}
           onKeyDown={(event) => {
             if (event.key !== "Enter" && event.key !== " ") return
             event.preventDefault()
-            toggle()
+            props.onToggle()
           }}
         >
           <span
@@ -169,7 +146,7 @@ export function SessionTodoDock(props: {
           >
             <TextReveal
               class="text-14-regular text-text-base cursor-default"
-              text={store.collapsed ? preview() : undefined}
+              text={props.collapsed ? preview() : undefined}
               duration={600}
               travel={25}
               edge={17}
@@ -182,7 +159,7 @@ export function SessionTodoDock(props: {
           <div class="ml-auto">
             <IconButton
               data-action="session-todo-toggle-button"
-              data-collapsed={store.collapsed ? "true" : "false"}
+              data-collapsed={props.collapsed ? "true" : "false"}
               icon="chevron-down"
               size="normal"
               variant="ghost"
@@ -193,16 +170,16 @@ export function SessionTodoDock(props: {
               }}
               onClick={(event) => {
                 event.stopPropagation()
-                toggle()
+                props.onToggle()
               }}
-              aria-label={store.collapsed ? props.expandLabel : props.collapseLabel}
+              aria-label={props.collapsed ? props.expandLabel : props.collapseLabel}
             />
           </div>
         </div>
 
         <div
           data-slot="session-todo-list"
-          aria-hidden={store.collapsed || off()}
+          aria-hidden={props.collapsed || off()}
           classList={{
             "pointer-events-none": hide() > 0.1,
           }}
@@ -211,76 +188,25 @@ export function SessionTodoDock(props: {
             opacity: `${Math.max(0, Math.min(1, 1 - hide()))}`,
           }}
         >
-          <TodoList todos={props.todos} open={!store.collapsed} />
+          <TodoList todos={props.todos} />
         </div>
       </div>
     </DockTray>
   )
 }
 
-function TodoList(props: { todos: Todo[]; open: boolean }) {
+function TodoList(props: { todos: Todo[] }) {
   const [store, setStore] = createStore({
     stuck: false,
-    scrolling: false,
-  })
-  let scrollRef!: HTMLDivElement
-  let timer: number | undefined
-
-  const inProgress = createMemo(() => props.todos.findIndex((todo) => todo.status === "in_progress"))
-
-  const ensure = () => {
-    if (!props.open) return
-    if (store.scrolling) return
-    if (!scrollRef || scrollRef.offsetParent === null) return
-
-    const el = scrollRef.querySelector("[data-in-progress]")
-    if (!(el instanceof HTMLElement)) return
-
-    const topFade = 16
-    const bottomFade = 44
-    const container = scrollRef.getBoundingClientRect()
-    const rect = el.getBoundingClientRect()
-    const top = rect.top - container.top + scrollRef.scrollTop
-    const bottom = rect.bottom - container.top + scrollRef.scrollTop
-    const viewTop = scrollRef.scrollTop + topFade
-    const viewBottom = scrollRef.scrollTop + scrollRef.clientHeight - bottomFade
-
-    if (top < viewTop) {
-      scrollRef.scrollTop = Math.max(0, top - topFade)
-    } else if (bottom > viewBottom) {
-      scrollRef.scrollTop = bottom - (scrollRef.clientHeight - bottomFade)
-    }
-
-    setStore("stuck", scrollRef.scrollTop > 0)
-  }
-
-  createEffect(
-    on([() => props.open, inProgress], () => {
-      if (!props.open || inProgress() < 0) return
-      requestAnimationFrame(ensure)
-    }),
-  )
-
-  onCleanup(() => {
-    if (!timer) return
-    window.clearTimeout(timer)
   })
 
   return (
     <div class="relative">
       <div
         class="px-3 pb-11 flex flex-col gap-1.5 max-h-42 overflow-y-auto no-scrollbar"
-        ref={scrollRef}
         style={{ "overflow-anchor": "none" }}
         onScroll={(e) => {
           setStore("stuck", e.currentTarget.scrollTop > 0)
-          setStore("scrolling", true)
-          if (timer) window.clearTimeout(timer)
-          timer = window.setTimeout(() => {
-            setStore("scrolling", false)
-            if (inProgress() < 0) return
-            requestAnimationFrame(ensure)
-          }, 250)
         }}
       >
         <Index each={props.todos}>

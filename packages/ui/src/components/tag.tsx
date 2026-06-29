@@ -12,7 +12,7 @@ export function Tag(props: TagProps) {
       data-component="tag"
       data-size={split.size || "normal"}
       classList={{
-        ...(split.classList ?? {}),
+        ...split.classList,
         [split.class ?? ""]: !!split.class,
       }}
     >

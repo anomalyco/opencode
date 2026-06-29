@@ -12,7 +12,6 @@ import { Header } from "~/component/header"
 import { Footer } from "~/component/footer"
 import { Legal } from "~/component/legal"
 import { github } from "~/lib/github"
-import { createMemo } from "solid-js"
 import { config } from "~/config"
 import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
@@ -30,14 +29,12 @@ function CopyStatus() {
 export default function Home() {
   const i18n = useI18n()
   const language = useLanguage()
-  const githubData = createAsync(() => github())
-  const release = createMemo(() => githubData()?.release)
-
+  const _githubData = createAsync(() => github())
   const handleCopyClick = (event: Event) => {
     const button = event.currentTarget as HTMLButtonElement
     const text = button.textContent
     if (text) {
-      navigator.clipboard.writeText(text)
+      void navigator.clipboard.writeText(text)
       button.setAttribute("data-copied", "")
       setTimeout(() => {
         button.removeAttribute("data-copied")

@@ -12,6 +12,7 @@ export namespace Identifier {
     model: "mod",
     payment: "pay",
     provider: "prv",
+    referral: "ref",
     subscription: "sub",
     usage: "usg",
     user: "usr",

@@ -1,4 +1,5 @@
-import { onCleanup, onMount, splitProps, type ComponentProps, Show, mergeProps } from "solid-js"
+import { onMount, splitProps, type ComponentProps, Show, mergeProps } from "solid-js"
+import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { createStore } from "solid-js/store"
 import { useI18n } from "../context/i18n"
 
@@ -24,6 +25,21 @@ export const scrollKey = (event: Pick<KeyboardEvent, "key" | "altKey" | "ctrlKey
     case "ArrowDown":
       return "down"
   }
+}
+
+export function scrollTopFromThumbPointer(input: {
+  pointer: number
+  viewportTop: number
+  grabOffset: number
+  clientHeight: number
+  scrollHeight: number
+  thumbHeight: number
+}) {
+  const padding = 8
+  const maxThumbTop = input.clientHeight - padding * 2 - input.thumbHeight
+  if (maxThumbTop <= 0) return 0
+  const thumbTop = Math.max(0, Math.min(input.pointer - input.viewportTop - padding - input.grabOffset, maxThumbTop))
+  return (thumbTop / maxThumbTop) * Math.max(0, input.scrollHeight - input.clientHeight)
 }
 
 export function ScrollView(props: ScrollViewProps) {
@@ -97,56 +113,42 @@ export function ScrollView(props: ScrollViewProps) {
       local.viewportRef(viewportRef)
     }
 
-    const observer = new ResizeObserver(() => {
-      updateThumb()
-    })
-
-    observer.observe(viewportRef)
-    // Also observe the first child if possible to catch content changes
-    if (viewportRef.firstElementChild) {
-      observer.observe(viewportRef.firstElementChild)
-    }
-
-    onCleanup(() => {
-      observer.disconnect()
-    })
+    createResizeObserver([viewportRef, viewportRef.firstElementChild], updateThumb)
 
     updateThumb()
   })
-
-  let startY = 0
-  let startScrollTop = 0
 
   const onThumbPointerDown = (e: PointerEvent) => {
     e.preventDefault()
     e.stopPropagation()
     setState("isDragging", true)
-    startY = e.clientY
-    startScrollTop = viewportRef.scrollTop
+    const grabOffset = e.clientY - thumbRef.getBoundingClientRect().top
 
     thumbRef.setPointerCapture(e.pointerId)
 
     const onPointerMove = (e: PointerEvent) => {
-      const deltaY = e.clientY - startY
       const { scrollHeight, clientHeight } = viewportRef
-      const maxScrollTop = scrollHeight - clientHeight
-      const maxThumbTop = clientHeight - thumbHeight()
-
-      if (maxThumbTop > 0) {
-        const scrollDelta = deltaY * (maxScrollTop / maxThumbTop)
-        viewportRef.scrollTop = startScrollTop + scrollDelta
-      }
+      viewportRef.scrollTop = scrollTopFromThumbPointer({
+        pointer: e.clientY,
+        viewportTop: viewportRef.getBoundingClientRect().top,
+        grabOffset,
+        clientHeight,
+        scrollHeight,
+        thumbHeight: thumbHeight(),
+      })
     }
 
-    const onPointerUp = (e: PointerEvent) => {
+    const done = (e: PointerEvent) => {
       setState("isDragging", false)
       thumbRef.releasePointerCapture(e.pointerId)
       thumbRef.removeEventListener("pointermove", onPointerMove)
-      thumbRef.removeEventListener("pointerup", onPointerUp)
+      thumbRef.removeEventListener("pointerup", done)
+      thumbRef.removeEventListener("pointercancel", done)
     }
 
     thumbRef.addEventListener("pointermove", onPointerMove)
-    thumbRef.addEventListener("pointerup", onPointerUp)
+    thumbRef.addEventListener("pointerup", done)
+    thumbRef.addEventListener("pointercancel", done)
   }
 
   // Keybinds implementation
