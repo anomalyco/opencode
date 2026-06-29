@@ -436,6 +436,7 @@ export const layer = Layer.effect(
       }),
       compact: Effect.fn("V2Session.compact")(function* (input) {
         const session = yield* result.get(input.sessionID)
+        // TODO: admit manual compaction as durable pending work, like prompt input, instead of rejecting active sessions.
         if ((yield* execution.active).has(input.sessionID)) return yield* new BusyError({ sessionID: input.sessionID })
         const context = yield* store.context(input.sessionID)
         return yield* Effect.gen(function* () {
