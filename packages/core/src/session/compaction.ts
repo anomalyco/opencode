@@ -89,7 +89,7 @@ export type ManualInput = {
 export interface Interface {
   readonly compactIfNeeded: (input: AutoInput) => Effect.Effect<boolean>
   readonly compactAfterOverflow: (input: AutoInput) => Effect.Effect<boolean>
-  readonly compactManual: (input: ManualInput) => Effect.Effect<boolean, SessionRunnerModel.Error>
+  readonly compactManual: (input: ManualInput) => Effect.Effect<boolean>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/SessionCompaction") {}
@@ -320,10 +320,12 @@ export const layer = Layer.effect(
       compactIfNeeded: compaction.compactIfNeeded,
       compactAfterOverflow: compaction.compactAfterOverflow,
       compactManual: Effect.fn("SessionCompaction.compactManual")(function* (input) {
+        const model = yield* models.resolve(input.session).pipe(Effect.catch(() => Effect.succeed(undefined)))
+        if (!model) return false
         return yield* compaction.compactManual({
           sessionID: input.session.id,
           messages: input.messages,
-          model: yield* models.resolve(input.session),
+          model,
         })
       }),
     })

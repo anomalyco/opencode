@@ -439,16 +439,15 @@ export const layer = Layer.effect(
         // TODO: admit manual compaction as durable pending work, like prompt input, instead of rejecting active sessions.
         if ((yield* execution.active).has(input.sessionID)) return yield* new BusyError({ sessionID: input.sessionID })
         const context = yield* store.context(input.sessionID)
-        return yield* Effect.gen(function* () {
+        const compacted = yield* Effect.gen(function* () {
           const compaction = yield* SessionCompaction.Service
-          if (!(yield* compaction.compactManual({ session, messages: context }))) {
-            return yield* new OperationUnavailableError({ operation: "compact" })
-          }
-          return undefined
+          return yield* compaction.compactManual({ session, messages: context })
         }).pipe(
-          Effect.mapError(() => new OperationUnavailableError({ operation: "compact" })),
           Effect.provide(locations.get(session.location)),
+          Effect.catch(() => Effect.succeed(false)),
         )
+        if (!compacted) return yield* new OperationUnavailableError({ operation: "compact" })
+        return undefined
       }),
       wait: Effect.fn("V2Session.wait")(function* (sessionID) {
         yield* result.get(sessionID)
