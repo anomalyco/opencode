@@ -136,6 +136,8 @@ export const validateName = (name: string) =>
     ? Effect.void
     : Effect.fail(new RegistrationError({ name, message: `Invalid tool name: ${name}` }))
 
+export const sanitizeName = (name: string) => name.replace(/[^a-zA-Z0-9_-]/g, "_")
+
 export const withPermission = <Input extends SchemaType<any>, Output extends SchemaType<any>>(
   tool: Definition<Input, Output>,
   permission: string,
