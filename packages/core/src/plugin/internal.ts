@@ -31,6 +31,7 @@ import { AgentPlugin } from "./agent"
 import { CommandPlugin } from "./command"
 import { ModelsDevPlugin } from "./models-dev"
 import { ProviderPlugins } from "./provider"
+import { SdkPlugins } from "./sdk"
 import { SkillPlugin } from "./skill"
 import { VariantPlugin } from "./variant"
 
@@ -65,6 +66,7 @@ const layer = Layer.effectDiscard(
     const catalog = yield* Catalog.Service
     const commands = yield* CommandV2.Service
     const plugin = yield* PluginV2.Service
+    const sdkPlugins = yield* SdkPlugins.Service
     const integration = yield* Integration.Service
     const agents = yield* AgentV2.Service
     const config = yield* Config.Service
@@ -119,6 +121,8 @@ const layer = Layer.effectDiscard(
         yield* add(ConfigExternalPlugin.Plugin)
         yield* add(ConfigProviderPlugin.Plugin)
         yield* add(VariantPlugin.Plugin)
+        // Embedder-contributed plugins are added last so they layer over config.
+        for (const plugin of sdkPlugins.all()) yield* add(plugin)
       }),
     ).pipe(Effect.withSpan("PluginInternal.boot"), Effect.forkScoped({ startImmediately: true }))
   }),
@@ -151,5 +155,6 @@ export const node = makeLocationNode({
     httpClient,
     SkillV2.node,
     Reference.node,
+    SdkPlugins.node,
   ],
 })

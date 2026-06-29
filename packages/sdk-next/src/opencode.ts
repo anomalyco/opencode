@@ -1,5 +1,6 @@
 import { OpenCode } from "@opencode-ai/client/effect"
 import { PermissionSaved } from "@opencode-ai/core/permission/saved"
+import { SdkPlugins } from "@opencode-ai/core/plugin/sdk"
 import { ApplicationTools } from "@opencode-ai/core/tool/application-tools"
 import { createEmbeddedRoutes } from "@opencode-ai/server/routes"
 import { Context, Effect, Layer, Scope } from "effect"
@@ -9,11 +10,12 @@ export const create = Effect.fn("OpenCode.create")(function* () {
   const scope = yield* Scope.Scope
   const memoMap = yield* Layer.makeMemoMap
   const context = yield* Layer.buildWithMemoMap(
-    Layer.merge(ApplicationTools.layer, PermissionSaved.defaultLayer),
+    Layer.mergeAll(ApplicationTools.layer, PermissionSaved.defaultLayer, SdkPlugins.layer),
     memoMap,
     scope,
   )
   const tools = Context.get(context, ApplicationTools.Service)
+  const plugins = Context.get(context, SdkPlugins.Service)
   const permissions = Context.get(context, PermissionSaved.Service)
   const web = yield* Effect.acquireRelease(
     Effect.sync(() =>
@@ -37,6 +39,12 @@ export const create = Effect.fn("OpenCode.create")(function* () {
   return {
     ...client,
     tools: { register: tools.register },
+    // The embedded host contributes plugins through the ordinary discovery flow:
+    // each plugin's `effect` runs inside every Location with the real
+    // `PluginContext`, so `ctx.agent.transform` and every other hook behave exactly
+    // as they do for a config-discovered plugin. Define agent profiles here at
+    // startup, then select one per Session with `sessions.create({ agent })`.
+    plugin: plugins.register,
   }
 })
 
