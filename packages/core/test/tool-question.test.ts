@@ -1,10 +1,13 @@
 import { describe, expect } from "bun:test"
 import { Effect, Exit, Fiber, Layer } from "effect"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { PermissionV2 } from "@opencode-ai/core/permission"
 import { QuestionV2 } from "@opencode-ai/core/question"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { QuestionTool } from "@opencode-ai/core/tool/question"
+import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
 import { testEffect } from "./lib/effect"
 import { toolIdentity, executeTool, settleTool, toolDefinitions } from "./lib/tool"
 
@@ -28,7 +31,6 @@ const permission = Layer.succeed(
     list: () => Effect.die("unused"),
   }),
 )
-const registry = ToolRegistry.defaultLayer.pipe(Layer.provide(permission))
 const question = Layer.succeed(
   QuestionV2.Service,
   QuestionV2.Service.of({
@@ -41,8 +43,13 @@ const question = Layer.succeed(
     list: () => Effect.die("unused"),
   }),
 )
-const tool = QuestionTool.layer.pipe(Layer.provide(registry), Layer.provide(permission), Layer.provide(question))
-const it = testEffect(Layer.mergeAll(permission, registry, question, tool))
+const it = testEffect(
+  AppNodeBuilder.build(LayerNode.group([ToolRegistry.node, ToolRegistry.toolsNode, QuestionTool.node]), [
+    [PermissionV2.node, permission],
+    [QuestionV2.node, question],
+    [ToolOutputStore.node, ToolOutputStore.nodeWithoutConfig],
+  ]),
+)
 
 describe("QuestionTool", () => {
   it.effect("omits a denied built-in question and terminally settles a stale call", () =>

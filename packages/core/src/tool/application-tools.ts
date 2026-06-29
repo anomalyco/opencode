@@ -3,6 +3,7 @@ export * as ApplicationTools from "./application-tools"
 import { Context, Effect, Layer, Scope } from "effect"
 import { State } from "../state"
 import { Tool } from "./tool"
+import { makeGlobalNode } from "../effect/app-node"
 
 type Data = {
   readonly entries: Map<string, Entry>
@@ -52,3 +53,5 @@ export const layer = Layer.effect(
     })
   }),
 )
+
+export const node = makeGlobalNode({ service: Service, layer, deps: [] })

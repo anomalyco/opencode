@@ -1,12 +1,10 @@
 import fs from "fs/promises"
 import path from "path"
 import { describe, expect, test } from "bun:test"
-import { NodeFileSystem } from "@effect/platform-node"
-import { Effect, Layer, Option } from "effect"
-import { FSUtil } from "@opencode-ai/core/fs-util"
+import { Effect, Option } from "effect"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Global } from "@opencode-ai/core/global"
 import { Npm } from "@opencode-ai/core/npm"
-import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
 import { tmpdir } from "./fixture/tmpdir"
 
 const win = process.platform === "win32"
@@ -21,12 +19,7 @@ const writePackage = (dir: string, pkg: Record<string, unknown>) =>
   )
 
 const npmLayer = (cache: string) =>
-  Npm.layer.pipe(
-    Layer.provide(EffectFlock.layer),
-    Layer.provide(FSUtil.layer),
-    Layer.provide(Global.layerWith({ cache, state: path.join(cache, "state") })),
-    Layer.provide(NodeFileSystem.layer),
-  )
+  AppNodeBuilder.build(Npm.node, [[Global.node, Global.layerWith({ cache, state: path.join(cache, "state") })]])
 
 describe("Npm.sanitize", () => {
   test("keeps normal scoped package specs unchanged", () => {

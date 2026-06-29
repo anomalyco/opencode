@@ -2,6 +2,8 @@ import type { AgentSideConnection, Usage } from "@agentclientprotocol/sdk"
 import type { AssistantMessage as OpenCodeAssistantMessage, Message } from "@opencode-ai/sdk/v2"
 import { InstanceRef } from "@/effect/instance-ref"
 import { InstanceStore } from "@/project/instance-store"
+import { makeGlobalNode, Node } from "@opencode-ai/core/effect/app-node"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { Provider } from "@/provider/provider"
@@ -228,5 +230,15 @@ export const defaultLayer = layer.pipe(
   Layer.provide(Provider.defaultLayer),
   Layer.provide(InstanceStore.defaultLayer),
 )
+
+export const messageLoaderNode = LayerNode.unbound(MessageLoader, Node.tags.values.global)
+
+export const contextLimitLoaderNode = makeGlobalNode({
+  service: ContextLimitLoader,
+  layer: contextLimitLoaderLayer,
+  deps: [Provider.node, InstanceStore.node],
+})
+
+export const node = makeGlobalNode({ service: Service, layer, deps: [messageLoaderNode, contextLimitLoaderNode] })
 
 export * as UsageService from "./usage"

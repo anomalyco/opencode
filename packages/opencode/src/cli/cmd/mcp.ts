@@ -761,7 +761,7 @@ export const McpDebugCommand = effectCmd({
         }
 
         if (response.status === 401) {
-          prompts.log.warn("Server returned 401 Unauthorized")
+          prompts.log.info("Initial unauthenticated check returned 401, so this server requires OAuth")
 
           // Try to discover OAuth metadata
           const oauthConfig = typeof serverConfig.oauth === "object" ? serverConfig.oauth : undefined
