@@ -1,10 +1,12 @@
 import { describe, expect } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
-import { Effect, Layer, Schema } from "effect"
+import { Effect, Schema } from "effect"
 import { AgentV2 } from "@opencode-ai/core/agent"
 import { Config } from "@opencode-ai/core/config"
 import { ConfigAgentPlugin } from "@opencode-ai/core/config/plugin/agent"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { PermissionV2 } from "@opencode-ai/core/permission"
 import { AbsolutePath } from "@opencode-ai/core/schema"
@@ -12,7 +14,7 @@ import { tmpdir } from "../fixture/tmpdir"
 import { testEffect } from "../lib/effect"
 import { agentHost, host } from "../plugin/host"
 
-const it = testEffect(Layer.mergeAll(AgentV2.locationLayer, FSUtil.defaultLayer))
+const it = testEffect(AppNodeBuilder.build(LayerNode.group([AgentV2.node, FSUtil.node])))
 const decode = Schema.decodeUnknownSync(Config.Info)
 
 describe("ConfigAgentPlugin.Plugin", () => {
