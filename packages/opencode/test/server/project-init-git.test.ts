@@ -1,4 +1,5 @@
 import { afterEach, describe, expect } from "bun:test"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Effect, Layer } from "effect"
@@ -20,10 +21,10 @@ afterEach(async () => {
 })
 
 const noopBootstrap = Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void }))
-const testInstanceStore = LayerNode.compile(InstanceStore.node, [[InstanceStore.bootstrapNode, noopBootstrap]])
+const testInstanceStore = AppNodeBuilder.build(InstanceStore.node, [[InstanceStore.bootstrapNode, noopBootstrap]])
 
 const it = testEffect(
-  Layer.mergeAll(LayerNode.compile(LayerNode.group([FSUtil.node, Snapshot.node])), testInstanceStore, httpApiLayer),
+  Layer.mergeAll(AppNodeBuilder.build(LayerNode.group([FSUtil.node, Snapshot.node])), testInstanceStore, httpApiLayer),
 )
 
 function request(directory: string, url: string, init: RequestInit = {}) {

@@ -7,15 +7,15 @@ import path from "node:path"
 import { Cause, Config, Effect, Exit, Layer } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse, HttpRouter, HttpServer } from "effect/unstable/http"
 import { layerWebSocketConstructorGlobal } from "effect/unstable/socket/Socket"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Flag } from "@opencode-ai/core/flag/flag"
-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { registerAdapter } from "../../src/control-plane/adapters"
 import type { WorkspaceAdapter } from "../../src/control-plane/types"
 import { Workspace } from "../../src/control-plane/workspace"
 
-import { InstanceBootstrap } from "../../src/project/bootstrap"
 import { InstanceBootstrap as InstanceBootstrapService } from "../../src/project/bootstrap-service"
 import { InstanceStore } from "../../src/project/instance-store"
 import { Project } from "../../src/project/project"
@@ -38,15 +38,14 @@ import { testProviderConfig } from "../lib/test-provider"
 import { pollWithTimeout, testEffect } from "../lib/effect"
 
 const originalWorkspaces = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
-const workspaceLayer = Workspace.defaultLayer.pipe(
-  Layer.provide(LayerNode.compile(InstanceStore.node, [[InstanceStore.bootstrapNode, InstanceBootstrap.node]])),
+const noopBootstrapLayer = Layer.succeed(
+  InstanceBootstrapService.Service,
+  InstanceBootstrapService.Service.of({ run: Effect.void }),
 )
-const instanceStoreLayer = LayerNode.compile(InstanceStore.node, [
-  [
-    InstanceStore.bootstrapNode,
-    Layer.succeed(InstanceBootstrapService.Service, InstanceBootstrapService.Service.of({ run: Effect.void })),
-  ],
-])
+const appLayer = AppNodeBuilder.build(
+  LayerNode.group([InstanceStore.node, Project.node, Session.node, Workspace.node, Database.node, Ripgrep.node]),
+  [[InstanceStore.bootstrapNode, noopBootstrapLayer]],
+)
 const servedRoutes: Layer.Layer<never, Config.ConfigError, HttpServer.HttpServer> = HttpRouter.serve(
   HttpApiApp.routes,
   {
@@ -60,14 +59,7 @@ const httpApiLayer = servedRoutes.pipe(
   Layer.provideMerge(NodeServices.layer),
 )
 const it = testEffect(
-  Layer.mergeAll(
-    instanceStoreLayer,
-    Project.defaultLayer,
-    Session.defaultLayer,
-    workspaceLayer,
-    Database.defaultLayer,
-    httpApiLayer,
-  ).pipe(Layer.provide(Ripgrep.defaultLayer)),
+  Layer.mergeAll(appLayer, httpApiLayer),
 )
 
 function pathFor(path: string, params: Record<string, string>) {
@@ -433,7 +425,7 @@ describe("session HttpApi", () => {
         cwd: sessionDirectory,
         root: sessionDirectory,
       })
-    }).pipe(Effect.provide(TestLLMServer.layer), Effect.provide(CrossSpawnSpawner.defaultLayer)),
+    }).pipe(Effect.provide(TestLLMServer.layer), Effect.provide(AppNodeBuilder.build(CrossSpawnSpawner.node))),
   )
 
   it.instance(
@@ -869,7 +861,7 @@ describe("session HttpApi", () => {
               pathSession: yield* createSession(),
               pathlessSession: yield* createSession(),
             }
-          }).pipe(Effect.provideService(TestInstance, { directory: currentDir }), Effect.provide(Session.defaultLayer)),
+          }).pipe(Effect.provideService(TestInstance, { directory: currentDir })),
         )
         yield* clearSessionPath(pathlessSession.id)
 
