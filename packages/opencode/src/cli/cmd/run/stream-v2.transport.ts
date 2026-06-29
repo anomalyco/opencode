@@ -8,7 +8,7 @@ import type {
   SessionMessageAssistant,
   SessionMessageAssistantTool,
   ToolPart,
-  V2Event,
+  V2Event1,
 } from "@opencode-ai/sdk/v2"
 import { blockerStatus, pickBlockerView } from "./session-data"
 import { writeSessionOutput } from "./stream"
@@ -97,7 +97,7 @@ type State = {
   connected: boolean
   closed: boolean
   initial: boolean
-  buffered?: V2Event[]
+  buffered?: V2Event1[]
   errors: Set<string>
 }
 
@@ -237,7 +237,7 @@ function toolCommit(part: ToolPart, phase: "start" | "progress" | "final"): Stre
   }
 }
 
-function sessionID(event: V2Event) {
+function sessionID(event: V2Event1) {
   return "sessionID" in event.data && typeof event.data.sessionID === "string" ? event.data.sessionID : undefined
 }
 
@@ -434,7 +434,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     }
   }
 
-  const apply = (event: V2Event) => {
+  const apply = (event: V2Event1) => {
     if (sessionID(event) !== input.sessionID) return
     input.trace?.write("recv.event", event)
     if (event.type === "session.next.prompted") {
@@ -626,7 +626,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     }
   }
 
-  const receive = (event: V2Event) => {
+  const receive = (event: V2Event1) => {
     if (state.buffered) {
       state.buffered.push(event)
       return
@@ -645,11 +645,11 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
           sseMaxRetryAttempts: 0,
           throwOnError: true,
         })
-        const stream = response.stream[Symbol.asyncIterator]()
+          const stream = response.stream[Symbol.asyncIterator]() as AsyncGenerator<V2Event1>
         try {
           const first = await stream.next()
           if (first.done || first.value.type !== "server.connected") throw new Error("Event stream disconnected")
-          const buffered: V2Event[] = []
+          const buffered: V2Event1[] = []
           let booting = true
           const consume = (async () => {
             while (!connection.signal.aborted) {
@@ -670,7 +670,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
         } finally {
           controller.signal.removeEventListener("abort", abortConnection)
           connection.abort()
-          void stream.return?.().catch(() => {})
+          void stream.return?.(undefined).catch(() => {})
         }
       })().catch((error) => error)
       state.connected = false
@@ -800,7 +800,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     selectSubagent() {},
     async replayOnResize(next) {
       if (!input.replay || state.closed || input.footer.isClosed) return false
-      const buffered: V2Event[] = []
+      const buffered: V2Event1[] = []
       state.buffered = buffered
       try {
         await input.footer.idle()

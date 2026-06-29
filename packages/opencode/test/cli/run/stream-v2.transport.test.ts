@@ -1,15 +1,13 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
-import { OpencodeClient, type V2Event } from "@opencode-ai/sdk/v2"
+import { OpencodeClient, type V2Event1 } from "@opencode-ai/sdk/v2"
 import { createSessionTransport } from "@/cli/cmd/run/stream-v2.transport"
 import type { FooterApi, FooterEvent, StreamCommit } from "@/cli/cmd/run/types"
 
-const StreamClosed = undefined as never
-
 function feed() {
-  const values: V2Event[] = []
+  const values: V2Event1[] = []
   let closed = false
   let wake: (() => void) | undefined
-  const stream = (async function* (): AsyncGenerator<V2Event> {
+  const stream = (async function* (): AsyncGenerator<V2Event1, void, unknown> {
     while (!closed || values.length > 0) {
       if (values.length === 0) {
         await new Promise<void>((resolve) => {
@@ -20,11 +18,10 @@ function feed() {
       const value = values.shift()
       if (value) yield value
     }
-    return StreamClosed
   })()
   return {
     stream,
-    push(value: V2Event) {
+    push(value: V2Event1) {
       values.push(value)
       wake?.()
       wake = undefined
@@ -47,7 +44,7 @@ function ok<T>(data: T) {
 }
 
 function connected(id = "evt_connected") {
-  return { id, type: "server.connected", data: {} } satisfies V2Event
+  return { id, type: "server.connected", data: {} } satisfies V2Event1
 }
 
 function footer() {
@@ -81,8 +78,8 @@ function footer() {
 function sdk(input: { streams: ReturnType<typeof feed>[]; active?: () => Record<string, { type: "running" }> }) {
   const client = new OpencodeClient()
   let subscription = 0
-  spyOn(client.v2.event, "subscribe").mockImplementation(() =>
-    Promise.resolve({ stream: input.streams[subscription++]?.stream ?? feed().stream }),
+  spyOn(client.v2.event, "subscribe").mockImplementation(
+    () => Promise.resolve({ stream: input.streams[subscription++]?.stream ?? feed().stream }) as ReturnType<typeof client.v2.event.subscribe>,
   )
   spyOn(client.v2.session, "messages").mockImplementation(() =>
     ok({

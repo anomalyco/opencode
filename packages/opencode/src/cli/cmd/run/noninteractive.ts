@@ -5,6 +5,7 @@ import type {
   StepStartPart,
   TextPart,
   ToolPart,
+  V2Event1,
 } from "@opencode-ai/sdk/v2"
 import { EOL } from "node:os"
 import { MessageID } from "@/session/schema"
@@ -56,12 +57,13 @@ export async function runNonInteractivePrompt(input: Input) {
     sseMaxRetryAttempts: 0,
     throwOnError: true,
   })
-  const stream = events.stream[Symbol.asyncIterator]()
+  const stream = events.stream[Symbol.asyncIterator]() as AsyncGenerator<V2Event1>
   const connected = await stream.next()
   if (connected.done) throw new Error("Event stream disconnected before prompt admission")
 
   const messageID = MessageID.ascending()
   const starts = new Map<string, StartedPart>()
+  const textBuffers = new Map<string, StartedPart & { assistantMessageID: string; text: string }>()
   const tools = new Map<string, ToolState>()
   let submitted = false
   let promoted = false
@@ -75,6 +77,19 @@ export async function runNonInteractivePrompt(input: Input) {
     if (input.format !== "json") return false
     process.stdout.write(JSON.stringify({ type, timestamp, sessionID: input.sessionID, ...data }) + EOL)
     return true
+  }
+
+  const writeText = (part: TextPart, timestamp: number) => {
+    if (emit("text", timestamp, { part })) return
+    const text = part.text.trim()
+    if (!text) return
+    if (!process.stdout.isTTY) {
+      process.stdout.write(text + EOL)
+      return
+    }
+    UI.empty()
+    UI.println(text)
+    UI.empty()
   }
 
   const replyPermission = async (request: { id: string; action: string; resources: string[] }) => {
@@ -156,26 +171,43 @@ export async function runNonInteractivePrompt(input: Input) {
         starts.set(event.data.textID, { id: partID(event.id), timestamp: time })
         continue
       }
+      if (event.type === "session.next.text.delta" && input.format === "json") {
+        const started = starts.get(event.data.textID) ?? { id: partID(event.id), timestamp: time }
+        const current = textBuffers.get(event.data.textID)
+        textBuffers.set(event.data.textID, {
+          id: current?.id ?? started.id,
+          timestamp: current?.timestamp ?? started.timestamp,
+          assistantMessageID: event.data.assistantMessageID,
+          text: (current?.text ?? "") + event.data.delta,
+        })
+        writeText(
+          {
+            id: current?.id ?? started.id,
+            sessionID: input.sessionID,
+            messageID: event.data.assistantMessageID,
+            type: "text",
+            text: event.data.delta,
+            time: { start: current?.timestamp ?? started.timestamp, end: time },
+          },
+          time,
+        )
+        continue
+      }
       if (event.type === "session.next.text.ended") {
         const started = starts.get(event.data.textID)
+        const emitted = textBuffers.get(event.data.textID)
+        textBuffers.delete(event.data.textID)
+        const text = emitted ? event.data.text.slice(emitted.text.length) : event.data.text
+        if (!text) continue
         const part: TextPart = {
-          id: started?.id ?? partID(event.id),
+          id: emitted?.id ?? started?.id ?? partID(event.id),
           sessionID: input.sessionID,
           messageID: event.data.assistantMessageID,
           type: "text",
-          text: event.data.text,
-          time: { start: started?.timestamp ?? time, end: time },
+          text,
+          time: { start: emitted?.timestamp ?? started?.timestamp ?? time, end: time },
         }
-        if (emit("text", time, { part })) continue
-        const text = part.text.trim()
-        if (!text) continue
-        if (!process.stdout.isTTY) {
-          process.stdout.write(text + EOL)
-          continue
-        }
-        UI.empty()
-        UI.println(text)
-        UI.empty()
+        writeText(part, time)
         continue
       }
 
@@ -315,6 +347,7 @@ export async function runNonInteractivePrompt(input: Input) {
         continue
       }
       if (event.type === "session.next.step.failed") {
+        if (interrupted || permissionRejected || questionRejected) continue
         emittedError = true
         process.exitCode = 1
         if (!emit("error", time, { error: event.data.error })) UI.error(event.data.error.message)
@@ -417,7 +450,7 @@ export async function runNonInteractivePrompt(input: Input) {
   } finally {
     process.off("SIGINT", interrupt)
     controller.abort()
-    await stream.return?.().catch(() => {})
+    await stream.return?.(undefined).catch(() => {})
   }
 }
 
