@@ -73,10 +73,13 @@ const drainWith = (layer: Layer.Layer<LLM.Service>, input: LLM.StreamInput) =>
     )
   })
 
-function llmLayerWithExecutor(executor?: Layer.Layer<RequestExecutor.Service>, flags: Partial<RuntimeFlags.Info> = {}) {
+function llmLayerWithExecutor(options: {
+  executor?: Layer.Layer<RequestExecutor.Service>
+  flags?: Partial<RuntimeFlags.Info>
+} = {}) {
   return AppNodeBuilder.build(LLM.node, [
-    [RuntimeFlags.node, RuntimeFlags.layer(flags)],
-    ...(executor ? ([[LayerNodePlatform.requestExecutor, executor]] as const) : []),
+    [RuntimeFlags.node, RuntimeFlags.layer(options.flags)],
+    ...(options.executor ? ([[LayerNodePlatform.requestExecutor, options.executor]] as const) : []),
   ])
 }
 
@@ -1189,7 +1192,7 @@ describe("session.llm.stream", () => {
           temperature: 0.2,
         } satisfies Agent.Info
 
-        yield* drainWith(llmLayerWithExecutor(undefined, { experimentalNativeLlm: true }), {
+        yield* drainWith(llmLayerWithExecutor({ flags: { experimentalNativeLlm: true } }), {
           user: {
             id: MessageID.make("msg_user-native"),
             sessionID,
@@ -1272,7 +1275,7 @@ describe("session.llm.stream", () => {
           permission: [{ permission: "*", pattern: "*", action: "allow" }],
         } satisfies Agent.Info
 
-        yield* drainWith(llmLayerWithExecutor(executor, { experimentalNativeLlm: true }), {
+        yield* drainWith(llmLayerWithExecutor({ executor, flags: { experimentalNativeLlm: true } }), {
           user: {
             id: MessageID.make("msg_user-native-injected-tool"),
             sessionID,
@@ -1361,7 +1364,7 @@ describe("session.llm.stream", () => {
           permission: [{ permission: "*", pattern: "*", action: "allow" }],
         } satisfies Agent.Info
 
-        yield* drainWith(llmLayerWithExecutor(undefined, { experimentalNativeLlm: true }), {
+        yield* drainWith(llmLayerWithExecutor({ flags: { experimentalNativeLlm: true } }), {
           user: {
             id: MessageID.make("msg_user-native-tool"),
             sessionID,
