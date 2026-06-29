@@ -42,9 +42,9 @@ const layer = Layer.mergeAll(
 )
 
 // Derive sanitized server namespaces from the catalog keys, mirroring how
-// session/tools.ts passes namespaces built from `mcp.clients()` + `mcp.instructions()`.
-function build(mcpTools: Record<string, AITool>, namespaces?: Array<{ name: string; description?: string }>) {
-  const names = namespaces ?? [...new Set(Object.keys(mcpTools).map((key) => key.split("_")[0]!))].map((name) => ({ name }))
+// session/tools.ts passes `Object.keys(mcp.clients()).map(sanitize)`.
+function build(mcpTools: Record<string, AITool>, servers?: string[]) {
+  const names = servers ?? [...new Set(Object.keys(mcpTools).map((key) => key.split("_")[0]!))]
   return Effect.runPromise(define(mcpTools, names).pipe(Effect.flatMap(Tool.init), Effect.provide(layer)))
 }
 
@@ -64,17 +64,11 @@ describe("code mode execute", () => {
       },
       ["github", "linear"],
     )
-    const description = describeTools(
-      groups,
-      new Map([
-        ["github", "GitHub repository automation.\nmore detail here"],
-        ["linear", undefined],
-      ]),
-    )
+    const description = describeTools(groups)
 
     expect(description).toContain("tools.search(query")
     expect(description).toContain("tools.describe(path)")
-    expect(description).toContain("- github (2 tools) — GitHub repository automation.")
+    expect(description).toContain("- github (2 tools)")
     expect(description).toContain("- linear (1 tool)")
     // The full catalog must NOT be inlined in the prompt.
     expect(description).not.toContain("create_issue")

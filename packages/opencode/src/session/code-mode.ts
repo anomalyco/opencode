@@ -16,8 +16,6 @@ type Metadata = {
   error?: boolean
 }
 
-export type Namespace = { name: string; description?: string }
-
 // `new Function`/`AsyncFunction` is not on the global scope, so reach it via the
 // prototype of an async function literal. The body may use top-level `await` and `return`.
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor as {
@@ -105,7 +103,7 @@ const signatureFor = (entry: CatalogEntry) =>
  * list of namespaces only — never the full tool catalog. Per-tool signatures are
  * fetched on demand with `tools.describe` so the prompt stays small.
  */
-export function describe(groups: Map<string, CatalogEntry[]>, descriptions?: Map<string, string | undefined>): string {
+export function describe(groups: Map<string, CatalogEntry[]>): string {
   const lines = [
     "Execute JavaScript with access to connected MCP tools, grouped into namespaces (one per MCP server).",
     "",
@@ -122,9 +120,7 @@ export function describe(groups: Map<string, CatalogEntry[]>, descriptions?: Map
   }
   lines.push("", "Available namespaces:")
   for (const [server, entries] of [...groups].sort(([a], [b]) => a.localeCompare(b))) {
-    const note = brief(descriptions?.get(server))
-    const count = `${entries.length} tool${entries.length === 1 ? "" : "s"}`
-    lines.push(`- ${server} (${count})${note ? ` — ${note}` : ""}`)
+    lines.push(`- ${server} (${entries.length} tool${entries.length === 1 ? "" : "s"})`)
   }
   return lines.join("\n")
 }
@@ -170,12 +166,8 @@ function errorMessage(error: unknown): string {
   }
 }
 
-export function define(mcpTools: Record<string, AITool>, namespaces: ReadonlyArray<Namespace>) {
-  const groups = groupByServer(
-    mcpTools,
-    namespaces.map((n) => n.name),
-  )
-  const descriptions = new Map(namespaces.map((n) => [n.name, n.description] as const))
+export function define(mcpTools: Record<string, AITool>, servers: readonly string[]) {
+  const groups = groupByServer(mcpTools, servers)
   const catalog: CatalogEntry[] = [...groups.values()].flat()
   const byKey = new Map(catalog.map((entry) => [entry.key, entry] as const))
 
@@ -216,7 +208,7 @@ export function define(mcpTools: Record<string, AITool>, namespaces: ReadonlyArr
   return Tool.define(
     CODE_MODE_TOOL,
     Effect.succeed<Tool.DefWithoutID<typeof Parameters, Metadata>>({
-      description: describe(groups, descriptions),
+      description: describe(groups),
       parameters: Parameters,
       execute: Effect.fn("CodeMode.execute")(function* (params, ctx) {
         const run = yield* EffectBridge.make()

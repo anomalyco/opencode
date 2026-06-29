@@ -94,18 +94,14 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   // When code mode is enabled and MCP tools are present, expose them through the
   // single code-mode `execute` tool instead of registering each MCP tool directly
   // (see the early return below). Code mode is experimental and off by default.
-  let codeModeTool: Tool.Def | undefined
-  if (flags.experimentalCodeMode && Object.keys(mcpTools).length > 0) {
-    // Namespaces are sanitized client names (tool keys are `sanitize(server)_sanitize(tool)`,
-    // so they match the catalog key prefixes). The brief per-namespace note reuses the
-    // server's MCP instructions, whose full text is already in the system prompt.
-    const instructions = new Map((yield* mcp.instructions()).map((item) => [item.name, item.instructions] as const))
-    const namespaces = Object.keys(yield* mcp.clients()).map((name) => ({
-      name: McpCatalog.sanitize(name),
-      description: instructions.get(name),
-    }))
-    codeModeTool = yield* Tool.init(yield* CodeModeTool.define(mcpTools, namespaces))
-  }
+  // Namespaces are sanitized client names; tool keys are `sanitize(server)_sanitize(tool)`,
+  // so the names match the catalog key prefixes.
+  const codeModeTool =
+    flags.experimentalCodeMode && Object.keys(mcpTools).length > 0
+      ? yield* Tool.init(
+          yield* CodeModeTool.define(mcpTools, Object.keys(yield* mcp.clients()).map(McpCatalog.sanitize)),
+        )
+      : undefined
   const registryTools = yield* registry.tools({
     modelID: ModelV2.ID.make(input.model.api.id),
     providerID: input.model.providerID,
