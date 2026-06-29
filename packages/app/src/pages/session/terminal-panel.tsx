@@ -293,7 +293,7 @@ export function TerminalPanel() {
                 </Tabs.List>
               </Tabs>
               <div class="flex-1 min-h-0 relative">
-                <Show when={terminal.active()} keyed>
+                <Show when={opened() && terminal.active()} keyed>
                   {(id) => {
                     const ops = terminal.bind()
                     return (

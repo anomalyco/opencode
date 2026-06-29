@@ -87,6 +87,11 @@
   display: none !important;
 }
 
+[data-page="stats"] section[id],
+[data-page="stats"] [data-component="leaderboard"][id] {
+  scroll-margin-top: 88px;
+}
+
 [data-page="stats"] [data-component="content"] {
   color: var(--stats-text);
   font-family:
@@ -659,6 +664,38 @@
 
 [data-page="stats"] [data-slot="footer-bottom"] > div:first-child {
   gap: 24px;
+}
+
+[data-page="stats"] [data-slot="footer-controls"] {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  min-width: 0;
+}
+
+[data-page="stats"] [data-slot="footer-language"] {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--stats-muted);
+  font-size: 11px;
+  line-height: 1;
+}
+
+[data-page="stats"] [data-slot="footer-language"] select {
+  height: 24px;
+  min-width: 136px;
+  margin: 0;
+  padding: 0 8px;
+  border: 1px solid var(--stats-line);
+  border-radius: 0;
+  background: var(--stats-bg);
+  color: var(--stats-text);
+  font: inherit;
+  font-size: 11px;
+  line-height: 1;
 }
 
 [data-page="stats"] [data-slot="theme-toggle"] {
@@ -1747,6 +1784,35 @@
 [data-page="stats"] [data-slot="section-title"] span {
   color: var(--stats-muted);
   font-weight: 400;
+}
+
+[data-page="stats"] [data-slot="heading-link"] {
+  position: relative;
+  color: inherit;
+  text-decoration: none;
+}
+
+[data-page="stats"] [data-slot="heading-link"]:hover {
+  text-decoration: none;
+}
+
+[data-page="stats"] [data-slot="heading-link"]:focus-visible {
+  outline: 1px solid var(--stats-accent);
+  outline-offset: 4px;
+}
+
+[data-page="stats"] [data-slot="heading-anchor"] {
+  position: absolute;
+  top: -0.08em;
+  right: 100%;
+  margin-right: 0.48em;
+  color: var(--stats-accent);
+  opacity: 0;
+}
+
+[data-page="stats"] [data-slot="heading-link"]:hover [data-slot="heading-anchor"],
+[data-page="stats"] [data-slot="heading-link"]:focus-visible [data-slot="heading-anchor"] {
+  opacity: 1;
 }
 
 [data-page="stats"] [data-component="leaderboard"],
@@ -3736,6 +3802,11 @@
 
   [data-page="stats"] [data-slot="footer-bottom"] {
     line-height: 1.5;
+  }
+
+  [data-page="stats"] [data-slot="footer-controls"] {
+    justify-content: flex-start;
+    flex-wrap: wrap;
   }
 }
 
