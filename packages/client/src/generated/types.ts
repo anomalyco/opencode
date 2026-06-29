@@ -412,7 +412,6 @@ export type SessionsPromptInput = {
         readonly name: string
         readonly source?: { readonly start: number; readonly end: number; readonly text: string }
       }>
-      readonly system?: string
     }
     readonly delivery?: "steer" | "queue" | null
     readonly resume?: boolean | null
@@ -431,7 +430,6 @@ export type SessionsPromptInput = {
         readonly name: string
         readonly source?: { readonly start: number; readonly end: number; readonly text: string }
       }>
-      readonly system?: string
     }
     readonly delivery?: "steer" | "queue" | null
     readonly resume?: boolean | null
@@ -450,7 +448,6 @@ export type SessionsPromptInput = {
         readonly name: string
         readonly source?: { readonly start: number; readonly end: number; readonly text: string }
       }>
-      readonly system?: string
     }
     readonly delivery?: "steer" | "queue" | null
     readonly resume?: boolean | null
@@ -469,7 +466,6 @@ export type SessionsPromptInput = {
         readonly name: string
         readonly source?: { readonly start: number; readonly end: number; readonly text: string }
       }>
-      readonly system?: string
     }
     readonly delivery?: "steer" | "queue" | null
     readonly resume?: boolean | null
@@ -494,7 +490,6 @@ export type SessionsPromptOutput = {
         readonly name: string
         readonly source?: { readonly start: number; readonly end: number; readonly text: string }
       }>
-      readonly system?: string
     }
     readonly delivery: "steer" | "queue"
     readonly timeCreated: number
@@ -574,7 +569,6 @@ export type SessionsContextOutput = {
           readonly name: string
           readonly source?: { readonly start: number; readonly end: number; readonly text: string }
         }>
-        readonly system?: string
         readonly type: "user"
       }
     | {
@@ -775,7 +769,6 @@ export type SessionsHistoryOutput = {
               readonly name: string
               readonly source?: { readonly start: number; readonly end: number; readonly text: string }
             }>
-            readonly system?: string
           }
           readonly delivery: "steer" | "queue"
         }
@@ -803,7 +796,6 @@ export type SessionsHistoryOutput = {
               readonly name: string
               readonly source?: { readonly start: number; readonly end: number; readonly text: string }
             }>
-            readonly system?: string
           }
           readonly delivery: "steer" | "queue"
         }
@@ -1243,7 +1235,6 @@ export type SessionsEventsOutput =
             readonly name: string
             readonly source?: { readonly start: number; readonly end: number; readonly text: string }
           }>
-          readonly system?: string
         }
         readonly delivery: "steer" | "queue"
       }
@@ -1271,7 +1262,6 @@ export type SessionsEventsOutput =
             readonly name: string
             readonly source?: { readonly start: number; readonly end: number; readonly text: string }
           }>
-          readonly system?: string
         }
         readonly delivery: "steer" | "queue"
       }
@@ -1673,7 +1663,6 @@ export type SessionsMessageOutput = {
           readonly name: string
           readonly source?: { readonly start: number; readonly end: number; readonly text: string }
         }>
-        readonly system?: string
         readonly type: "user"
       }
     | {
@@ -1846,7 +1835,6 @@ export type MessagesListOutput = {
           readonly name: string
           readonly source?: { readonly start: number; readonly end: number; readonly text: string }
         }>
-        readonly system?: string
         readonly type: "user"
       }
     | {
