@@ -70,8 +70,8 @@ const layer = Layer.effect(
 
     const available = (provider: ProviderV2.Info, integration: Integration.Info | undefined) => {
       if (provider.disabled) return false
-      if (typeof provider.request.body.apiKey === "string") return true
-      if (typeof provider.api.settings?.apiKey === "string") return true
+      if (typeof provider.request.body.apiKey === "string" && provider.request.body.apiKey.length > 0) return true
+      if (typeof provider.api.settings?.apiKey === "string" && provider.api.settings.apiKey.length > 0) return true
       if (integration?.connections.length) return true
       return provider.integrationID === undefined && !integration
     }
@@ -217,8 +217,8 @@ const layer = Layer.effect(
               model.enabled &&
               records.get(model.providerID)?.disabled !== true &&
               (providers.has(model.providerID) ||
-                typeof model.request.body.apiKey === "string" ||
-                typeof model.api.settings?.apiKey === "string"),
+                (typeof model.request.body.apiKey === "string" && model.request.body.apiKey.length > 0) ||
+                (typeof model.api.settings?.apiKey === "string" && model.api.settings.apiKey.length > 0)),
           )
         }),
 

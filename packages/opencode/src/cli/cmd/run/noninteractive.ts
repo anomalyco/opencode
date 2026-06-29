@@ -67,6 +67,7 @@ export async function runNonInteractivePrompt(input: Input) {
   let promoted = false
   let emittedError = false
   let questionRejected = false
+  let permissionRejected = false
   let interrupted = false
   let admission: AbortController | undefined
 
@@ -78,6 +79,7 @@ export async function runNonInteractivePrompt(input: Input) {
 
   const replyPermission = async (request: { id: string; action: string; resources: string[] }) => {
     if (!input.dangerouslySkipPermissions) {
+      permissionRejected = true
       UI.println(
         UI.Style.TEXT_WARNING_BOLD + "!",
         UI.Style.TEXT_NORMAL +
@@ -124,6 +126,13 @@ export async function runNonInteractivePrompt(input: Input) {
           continue
         }
         if (promoted && event.data.delivery === "queue") return
+      }
+      if (
+        event.type === "session.next.execution.settled" &&
+        event.data.outcome === "interrupted" &&
+        (interrupted || permissionRejected || questionRejected)
+      ) {
+        return
       }
       if (!promoted) continue
 
@@ -347,7 +356,17 @@ export async function runNonInteractivePrompt(input: Input) {
         ? await input.client.v2.session
             .get({ sessionID: input.sessionID }, { throwOnError: true })
             .then((result) => result.data.data.model)
-            .then((model) => (model ? { ...model, variant: input.variant } : undefined))
+            .then(async (model) => {
+              if (model) return { ...model, variant: input.variant }
+              const config = await input.client.config.get(undefined, { throwOnError: true })
+              if (config.data?.model) {
+                const [providerID, ...modelID] = config.data.model.split("/")
+                return { providerID, id: modelID.join("/"), variant: input.variant }
+              }
+              const result = await input.client.v2.model.list(undefined, { throwOnError: true })
+              const fallback = result.data.data[0]
+              return fallback ? { providerID: fallback.providerID, id: fallback.id, variant: input.variant } : undefined
+            })
         : undefined
     if (input.variant && !selected) throw new Error("Cannot select a variant before selecting a model")
     if (selected) {
@@ -427,7 +446,10 @@ function toMillis(value: unknown) {
 
 async function prepareFile(file: File) {
   if (file.mime !== "text/plain") {
-    return { attachment: { uri: file.url, mime: file.mime, name: file.filename } }
+    const uri = file.url.startsWith("data:")
+      ? file.url
+      : `data:${file.mime};base64,${Buffer.from(await Bun.file(new URL(file.url)).arrayBuffer()).toString("base64")}`
+    return { attachment: { uri, mime: file.mime, name: file.filename } }
   }
   const content = file.url.startsWith("data:")
     ? Buffer.from(file.url.slice(file.url.indexOf(",") + 1), "base64").toString("utf8")

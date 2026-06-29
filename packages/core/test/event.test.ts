@@ -380,6 +380,23 @@ describe("EventV2", () => {
     }),
   )
 
+  it.effect("can isolate live-only listener defects from later subscribers", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const received = new Array<string>()
+      yield* events.listen(() => Effect.die("listener defect"))
+      yield* events.listen((event) =>
+        Effect.sync(() => {
+          received.push(event.type)
+        }),
+      )
+
+      yield* events.publish(Message, { text: "hello" }, { isolateListeners: true })
+
+      expect(received).toEqual([Message.type])
+    }),
+  )
+
   it.effect("inserts durable event rows on publish", () =>
     Effect.gen(function* () {
       const events = yield* EventV2.Service

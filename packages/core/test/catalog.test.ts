@@ -101,6 +101,35 @@ describe("CatalogV2", () => {
     }).pipe(Effect.provide(localCatalogLayer))
   })
 
+  it.effect("does not treat empty configured API keys as available credentials", () => {
+    const integrationID = Integration.ID.make("gateway")
+    const providerID = ProviderV2.ID.make("remote")
+    const modelID = ModelV2.ID.make("model")
+    const layer = Catalog.locationLayer.pipe(
+      Layer.fresh,
+      Layer.provideMerge(EventV2.defaultLayer),
+      Layer.provideMerge(locationLayer),
+      Layer.provideMerge(Credential.defaultLayer.pipe(Layer.fresh)),
+    )
+
+    return Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      yield* (yield* Integration.Service).transform((editor) => editor.update(integrationID, () => {}))
+      yield* catalog.transform((editor) => {
+        editor.provider.update(providerID, (provider) => {
+          provider.integrationID = integrationID
+          provider.api.settings = { apiKey: "" }
+        })
+        editor.model.update(providerID, modelID, (model) => {
+          model.api.settings = { apiKey: "" }
+        })
+      })
+
+      expect(yield* catalog.provider.available()).toEqual([])
+      expect(yield* catalog.model.available()).toEqual([])
+    }).pipe(Effect.provide(layer))
+  })
+
   it.effect("projects environment connections without a catalog plugin", () =>
     Effect.acquireUseRelease(
       Effect.sync(() => {

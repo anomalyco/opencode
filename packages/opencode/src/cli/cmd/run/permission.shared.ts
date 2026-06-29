@@ -150,8 +150,11 @@ export function permissionReply(requestID: string, reply: PermissionReply["reply
   }
 }
 
-export function permissionShift(state: PermissionBodyState, dir: -1 | 1): PermissionBodyState {
-  const list = permissionOptions(state.stage)
+export function permissionShift(
+  state: PermissionBodyState,
+  dir: -1 | 1,
+  list = permissionOptions(state.stage),
+): PermissionBodyState {
   if (list.length === 0) {
     return state
   }

@@ -10,7 +10,7 @@ import { resolve } from "@opencode-ai/tui/config"
 import { TuiConfig } from "@/config/tui"
 import { makeRuntime } from "@/effect/run-service"
 import { reusePendingTask } from "./runtime.shared"
-import { resolveSession, sessionHistory } from "./session.shared"
+import { resolveCurrentSession, sessionHistory } from "./session.shared"
 import type { RunDiffStyle, RunInput, RunPrompt, RunProvider, RunTuiConfig } from "./types"
 import { pickVariant } from "./variant.shared"
 
@@ -143,7 +143,7 @@ const layer = Layer.effect(
       sessionID: string,
       model: RunInput["model"],
     ) {
-      const session = yield* Effect.promise(() => resolveSession(sdk, sessionID).catch(() => undefined))
+      const session = yield* Effect.promise(() => resolveCurrentSession(sdk, sessionID).catch(() => undefined))
       if (!session) {
         return emptySessionInfo()
       }

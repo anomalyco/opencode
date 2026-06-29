@@ -77,7 +77,7 @@ type RunLocalInput = {
 }
 
 type StreamTransportModule = Pick<
-  Awaited<typeof import("./stream.transport")>,
+  Awaited<typeof import("./stream-v2.transport")>,
   "createSessionTransport" | "formatUnknownError"
 >
 
@@ -164,11 +164,9 @@ async function resolveExitTitle(
     return undefined
   }
 
-  return ctx.sdk.session
-    .get({
-      sessionID: state.sessionID,
-    })
-    .then((x) => x.data?.title)
+  return ctx.sdk.v2.session
+    .get({ sessionID: state.sessionID })
+    .then((x) => x.data?.data.title)
     .catch(() => undefined)
 }
 
@@ -250,21 +248,25 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
       }
 
       log?.write("send.permission.reply", next)
-      await ctx.sdk.permission.reply(next)
+      await ctx.sdk.v2.session.permission.reply({ sessionID: state.sessionID, ...next })
     },
     onQuestionReply: async (next) => {
       if (state.demo?.questionReply(next)) {
         return
       }
 
-      await ctx.sdk.question.reply(next)
+      await ctx.sdk.v2.session.question.reply({
+        sessionID: state.sessionID,
+        requestID: next.requestID,
+        questionV2Reply: { answers: next.answers ?? [] },
+      })
     },
     onQuestionReject: async (next) => {
       if (state.demo?.questionReject(next)) {
         return
       }
 
-      await ctx.sdk.question.reject(next)
+      await ctx.sdk.v2.session.question.reject({ sessionID: state.sessionID, ...next })
     },
     onCycleVariant: () => {
       if (!state.model || state.variants.length === 0) {
@@ -343,10 +345,8 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
       }
 
       state.aborting = true
-      void ctx.sdk.session
-        .abort({
-          sessionID: state.sessionID,
-        })
+      void ctx.sdk.v2.session
+        .interrupt({ sessionID: state.sessionID })
         .catch(() => {})
         .finally(() => {
           state.aborting = false
@@ -453,7 +453,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
     })
   })
 
-  const streamTask = deps.streamTransport ?? import("./stream.transport")
+  const streamTask = deps.streamTransport ?? import("./stream-v2.transport")
   const ensureStream = () => {
     if (state.stream) {
       return state.stream

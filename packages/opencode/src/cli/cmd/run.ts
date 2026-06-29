@@ -25,6 +25,7 @@ import { Filesystem } from "@/util/filesystem"
 import { createOpencodeClient, type OpencodeClient, type ToolPart } from "@opencode-ai/sdk/v2"
 import { FormatError, FormatUnknownError } from "../error"
 import { INTERACTIVE_INPUT_ERROR, resolveInteractiveStdin } from "./run/runtime.stdin"
+import { isImageAttachment, isPdfAttachment } from "@/util/media"
 
 type ModelInput = Parameters<OpencodeClient["session"]["prompt"]>[0]["model"]
 
@@ -47,6 +48,14 @@ function resolveRunInput(value?: string, piped?: string): string | undefined {
   }
 
   return value + "\n" + piped
+}
+
+function isBinaryContent(bytes: Uint8Array) {
+  if (bytes.length === 0) return false
+  if (bytes.includes(0)) return true
+  return (
+    bytes.reduce((count, byte) => count + Number(byte < 9 || (byte > 13 && byte < 32)), 0) / bytes.length > 0.3
+  )
 }
 
 type FilePart = {
@@ -372,9 +381,13 @@ export const RunCommand = effectCmd({
             UI.error(`Cannot attach local directory without a shared filesystem: ${filePath}`)
             process.exit(1)
           }
+          if (!isDirectory && (!stat?.isFile() || stat.size > ATTACH_FILE_MAX_BYTES)) {
+            UI.error(`Cannot attach local file larger than 10 MiB or a special file: ${filePath}`)
+            process.exit(1)
+          }
 
           const content = await (async () => {
-            if (!args.attach) return
+            if (isDirectory) return
             const handle = await open(resolvedPath, "r")
             try {
               const opened = await handle.stat()
@@ -397,13 +410,13 @@ export const RunCommand = effectCmd({
           })()
           const detected = FSUtil.mimeType(resolvedPath)
           const text = content?.toString("utf8")
-          const mime = !args.attach
-            ? isDirectory
-              ? "application/x-directory"
-              : "text/plain"
-            : content && text !== undefined && Buffer.from(text, "utf8").equals(content)
-              ? "text/plain"
-              : detected
+          const mime = isDirectory
+            ? "application/x-directory"
+            : isImageAttachment(detected) || isPdfAttachment(detected)
+              ? detected
+              : content && !isBinaryContent(content) && text !== undefined && Buffer.from(text, "utf8").equals(content)
+                ? "text/plain"
+                : detected
 
           files.push({
             type: "file",
@@ -458,18 +471,25 @@ export const RunCommand = effectCmd({
 
       async function session(sdk: OpencodeClient): Promise<SessionInfo | undefined> {
         if (args.session) {
-          if (currentPrompt) {
+          if (interactive || currentPrompt) {
             const response = await sdk.v2.session.get({ sessionID: args.session }).catch(() => undefined)
             const current = response?.data?.data
             if (!current) {
               UI.error("Session not found")
               process.exit(1)
             }
+            const transcript = await transcriptKind(sdk, current.id)
+            if (interactive && transcript === "legacy") {
+              throw new Error("Mini cannot resume a legacy Session transcript")
+            }
+            if (interactive && args.fork) {
+              throw new Error("Fork is not yet available for current Session transcripts")
+            }
             return {
               id: current.id,
               title: current.title,
               directory: current.location.directory,
-              current: await currentTranscript(sdk, current.id),
+              current: transcript !== "legacy",
             }
           }
 
@@ -511,13 +531,14 @@ export const RunCommand = effectCmd({
         }
 
         const base = args.continue
-          ? currentPrompt
+          ? interactive || currentPrompt
             ? await currentRootSession(sdk)
             : (await sdk.session.list()).data?.find((item) => !item.parentID)
           : undefined
         if (base && !interactive && !currentPrompt) await requireLegacyTranscript(sdk, base.id)
 
         if (base && args.fork) {
+          if (interactive) throw new Error("Fork is not yet available for current Session transcripts")
           const forked = await sdk.session.fork({
             sessionID: base.id,
           })
@@ -577,9 +598,11 @@ export const RunCommand = effectCmd({
       }
 
       async function currentRootSession(sdk: OpencodeClient): Promise<SessionInfo | undefined> {
-        // The current list is creation-ordered; continue preserves the product's last-updated selection semantics.
-        const root = (await sdk.session.list()).data?.find((item) => !item.parentID)
+        // Current list pagination is creation-ordered; legacy projection preserves the product's updated root selection.
+        const root = (await sdk.session.list({ roots: true, limit: 1 })).data?.[0]
         if (!root) return
+        const transcript = await transcriptKind(sdk, root.id)
+        if (interactive && transcript === "legacy") throw new Error("Mini cannot resume a legacy Session transcript")
         const response = await sdk.v2.session.get({ sessionID: root.id })
         const current = response.data?.data
         if (!current) return
@@ -587,7 +610,7 @@ export const RunCommand = effectCmd({
           id: current.id,
           title: current.title,
           directory: current.location.directory,
-          current: await currentTranscript(sdk, current.id),
+          current: transcript !== "legacy",
         }
       }
 

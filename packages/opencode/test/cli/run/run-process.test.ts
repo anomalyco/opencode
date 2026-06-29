@@ -7,6 +7,7 @@ import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { reply } from "../../lib/llm-server"
 import { cliIt } from "../../lib/cli-process"
+import { testProviderConfig } from "../../lib/test-provider"
 
 describe("opencode run (non-interactive subprocess)", () => {
   // Happy path: prompt completes, output reaches stdout, process exits 0.
@@ -304,6 +305,46 @@ describe("opencode run (non-interactive subprocess)", () => {
         opencode.expectExit(second, 0)
         expect(second.stdout).toBe("second response\n")
         expect(JSON.stringify(yield* llm.inputs)).toContain("first prompt")
+      }),
+    60_000,
+  )
+
+  cliIt.concurrent(
+    "applies a variant to the configured default model",
+    ({ llm, opencode }) =>
+      Effect.gen(function* () {
+        yield* llm.text("variant response")
+        const result = yield* opencode.spawn(["run", "--variant", "default", "use the default model"], {
+          env: {
+            OPENCODE_CONFIG_CONTENT: JSON.stringify({ ...testProviderConfig(llm.url), model: "test/test-model" }),
+          },
+        })
+
+        opencode.expectExit(result, 0)
+        expect(result.stdout).toBe("variant response\n")
+      }),
+    60_000,
+  )
+
+  cliIt.live(
+    "preserves local image files as media attachments",
+    ({ home, llm, opencode }) =>
+      Effect.gen(function* () {
+        const source = `${home}/image.png`
+        yield* Effect.promise(() => Bun.write(source, Buffer.from("iVBORw0KGgo=", "base64")))
+        yield* llm.text("attachment received")
+        const config = testProviderConfig(llm.url)
+        config.provider.test.models["test-model"].attachment = true
+
+        const result = yield* opencode.run("read the attachment", {
+          extraArgs: [`--file=${source}`, "--"],
+          env: { OPENCODE_CONFIG_CONTENT: JSON.stringify(config) },
+        })
+
+        opencode.expectExit(result, 0)
+        const input = JSON.stringify(yield* llm.inputs)
+        expect(input).toContain("image/png")
+        expect(input).not.toContain("<file name=\\\"image.png\\\">")
       }),
     60_000,
   )

@@ -425,15 +425,19 @@ const layer = Layer.effect(
             Effect.gen(function* () {
               const failure =
                 Exit.isFailure(exit) && !Cause.hasInterrupts(exit.cause) ? Cause.squash(exit.cause) : undefined
-              yield* events.publish(SessionEvent.ExecutionSettled, {
-                sessionID: input.sessionID,
-                timestamp: yield* DateTime.now,
-                outcome: Exit.isSuccess(exit) ? "success" : Cause.hasInterrupts(exit.cause) ? "interrupted" : "failure",
-                error:
-                  failure !== undefined
-                    ? { type: "unknown", message: failure instanceof Error ? failure.message : String(failure) }
-                    : undefined,
-              })
+              yield* events.publish(
+                SessionEvent.ExecutionSettled,
+                {
+                  sessionID: input.sessionID,
+                  timestamp: yield* DateTime.now,
+                  outcome: Exit.isSuccess(exit) ? "success" : Cause.hasInterrupts(exit.cause) ? "interrupted" : "failure",
+                  error:
+                    failure !== undefined
+                      ? { type: "unknown", message: failure instanceof Error ? failure.message : String(failure) }
+                      : undefined,
+                },
+                { isolateListeners: true },
+              )
             }).pipe(
               Effect.catchCause(() => Effect.void),
               Effect.asVoid,
