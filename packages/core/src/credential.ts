@@ -5,6 +5,7 @@ import { Context, Effect, Layer, Schema } from "effect"
 import { Credential } from "@opencode-ai/schema/credential"
 import { Integration } from "@opencode-ai/schema/integration"
 import { Database } from "./database/database"
+import { makeGlobalNode } from "./effect/app-node"
 import { CredentialTable } from "./credential/sql"
 
 export const ID = Credential.ID
@@ -135,3 +136,5 @@ export const layer = Layer.effect(
 )
 
 export const defaultLayer = layer.pipe(Layer.provide(Database.defaultLayer))
+
+export const node = makeGlobalNode({ service: Service, layer, deps: [Database.node] })

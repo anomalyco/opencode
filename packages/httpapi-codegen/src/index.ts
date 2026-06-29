@@ -50,7 +50,7 @@ export type Endpoint = {
   readonly operation: Operation
   readonly input: ReadonlyArray<InputField & { readonly optional: boolean }>
   readonly unwrapData: boolean
-  readonly errors: ReadonlyArray<Schema.Top>
+  readonly errors: ReadonlyArray<{ readonly status: number; readonly schema: Schema.Top }>
   readonly successes: ReadonlyArray<Schema.Top>
   readonly effectPortable: boolean
 }
@@ -75,7 +75,11 @@ const manifestName = ".httpapi-codegen.json"
 
 export function compile<Id extends string, Groups extends HttpApiGroup.Any>(
   api: HttpApi.HttpApi<Id, Groups>,
-  options?: { readonly groupNames?: Readonly<Record<string, string>> },
+  options?: {
+    readonly groupNames?: Readonly<Record<string, string>>
+    readonly endpointNames?: Readonly<Record<string, string>>
+    readonly omitEndpoints?: ReadonlySet<string>
+  },
 ): Contract {
   const endpoints: Array<Endpoint> = []
   const portable = new Map<SchemaAST.AST, boolean>()
@@ -83,6 +87,7 @@ export function compile<Id extends string, Groups extends HttpApiGroup.Any>(
   HttpApi.reflect(api, {
     onGroup() {},
     onEndpoint({ endpoint, errors, group, middleware }) {
+      if (options?.omitEndpoints?.has(endpoint.name)) return
       const groupName = options?.groupNames?.[group.identifier] ?? group.identifier
       const name = `${groupName}.${endpoint.name}`
       const required = Array.from(middleware).find((item) => item.requiredForClient)
@@ -103,8 +108,8 @@ export function compile<Id extends string, Groups extends HttpApiGroup.Any>(
       }
       const payloads = sourcePayloads.map((schema) => normalizeTransport(schema, "payload", endpoint, name)!)
       const success = normalizeTransport(successSchemas[0], "success", endpoint, name)!
-      const errorSchemas = Array.from(errors.values()).flatMap((schemas) =>
-        schemas.map((schema) => normalizeTransport(schema, "error", endpoint, name)!),
+      const errorSchemas = Array.from(errors).flatMap(([status, schemas]) =>
+        schemas.map((schema) => ({ status, ...normalizeTransport(schema, "error", endpoint, name)! })),
       )
       const inputs = [
         ...inputFields(params?.schema, "params", name),
@@ -124,7 +129,7 @@ export function compile<Id extends string, Groups extends HttpApiGroup.Any>(
         ...(headers === undefined ? [] : [[`${name}.headers`, headers.schema] as const]),
         ...payloads.map((item) => [`${name}.payload`, item.schema] as const),
         ...responseSchemas(success.schema, `${name}.success`),
-        ...errorSchemas.map((item) => [`${name}.error`, item.schema] as const),
+        ...errorSchemas.map((item) => [`${name}.error.${item.status}`, item.schema] as const),
       ]
       const effectPortable =
         [params, query, headers, ...payloads, success, ...errorSchemas].every(
@@ -146,11 +151,11 @@ export function compile<Id extends string, Groups extends HttpApiGroup.Any>(
         input: inputs,
         unwrapData: isDataEnvelope(success.schema),
         successes: [success.schema],
-        errors: errorSchemas.map((item) => item.schema),
+        errors: errorSchemas.map((item) => ({ status: item.status, schema: item.schema })),
         effectPortable,
         operation: {
           group: groupName,
-          name: clientEndpointName(endpoint.name),
+          name: options?.endpointNames?.[endpoint.name] ?? clientEndpointName(endpoint.name),
           input: inputs.map(({ name, source }) => ({ name, source })),
           inputMode: inputs.length === 0 ? "none" : inputs.every((field) => field.optional) ? "optional" : "required",
           success: isStreamSchema(success.schema)
@@ -230,7 +235,12 @@ export function emitEffectImported(
   }
 }
 
-export function emitPromise(contract: Contract): Output {
+export function emitPromise(
+  contract: Contract,
+  options?: {
+    readonly outputTypes?: Readonly<Record<string, { readonly name: string; readonly import: string }>>
+  },
+): Output {
   const groups = contract.groups
   for (const group of groups) {
     for (const endpoint of group.endpoints) assertPromiseEndpoint(endpoint)
@@ -238,7 +248,7 @@ export function emitPromise(contract: Contract): Output {
   return {
     operations: operations(groups),
     files: [
-      { path: "types.ts", content: renderPromiseTypes(groups) },
+      { path: "types.ts", content: renderPromiseTypes(groups, options?.outputTypes) },
       {
         path: "client-error.ts",
         content: `export type ClientErrorReason = "Transport" | "UnexpectedStatus" | "UnsupportedContentType" | "MalformedResponse"\n\nexport class ClientError extends Error {\n  override readonly name = "ClientError"\n  constructor(readonly reason: ClientErrorReason, options?: ErrorOptions) {\n    super(reason, options)\n  }\n}\n`,
@@ -282,10 +292,10 @@ function assertPromiseEndpoint(endpoint: Endpoint) {
     throw new GenerationError({ reason: `Unsupported Promise success encoding: ${name}` })
   }
   for (const error of endpoint.errors) {
-    if (taggedErrorFields(error) === undefined) {
-      throw new GenerationError({ reason: `Promise error must be tagged: ${name}` })
+    if (declaredErrorFields(error.schema) === undefined) {
+      throw new GenerationError({ reason: `Promise error must have a literal discriminator: ${name}` })
     }
-    if ((resolveHttpApiEncoding(error.ast)?._tag ?? "Json") !== "Json") {
+    if ((resolveHttpApiEncoding(error.schema.ast)?._tag ?? "Json") !== "Json") {
       throw new GenerationError({ reason: `Unsupported Promise error encoding: ${name}` })
     }
   }
@@ -327,7 +337,7 @@ function renderImportedEffectFiles(
           const fields = item.input.filter((field) => field.source === source)
           if (fields.length === 0) return []
           return [
-            `${source}: { ${fields.map((field) => `${JSON.stringify(field.name)}: input${item.operation.inputMode === "optional" ? "?." : "."}${field.name}`).join(", ")} }`,
+            `${source}: { ${fields.map((field) => `${JSON.stringify(field.name)}: input${item.operation.inputMode === "optional" ? "?." : ""}[${JSON.stringify(field.name)}]`).join(", ")} }`,
           ]
         })
         .join(", ")
@@ -408,21 +418,24 @@ function renderImportedProjection(groups: ReadonlyArray<Group>, endpoints: Reado
   return { imports: [...new Set(imports)], source }
 }
 
-function renderPromiseTypes(groups: ReadonlyArray<Group>) {
+function renderPromiseTypes(
+  groups: ReadonlyArray<Group>,
+  outputTypes?: Readonly<Record<string, { readonly name: string; readonly import: string }>>,
+) {
   const types = new Map<SchemaAST.AST, string>()
-  const typeOf = (schema: Schema.Top) => {
-    const encoded = Schema.toEncoded(schema)
-    const cached = types.get(encoded.ast)
+  const typeOf = (schema: Schema.Top, decoded = false) => {
+    const projected = decoded ? Schema.toType(schema) : Schema.toEncoded(schema)
+    const cached = types.get(projected.ast)
     if (cached !== undefined) return cached
-    const type = structuralType(encoded)
-    types.set(encoded.ast, type)
+    const type = structuralType(projected)
+    types.set(projected.ast, type)
     return type
   }
   const errors = new Map(
     groups.flatMap((group) =>
       group.endpoints.flatMap((endpoint) =>
-        endpoint.errors.flatMap((schema) => {
-          const tagged = taggedErrorFields(schema)
+        endpoint.errors.flatMap((error) => {
+          const tagged = declaredErrorFields(error.schema)
           return tagged === undefined ? [] : [[tagged.tag, tagged] as const]
         }),
       ),
@@ -432,7 +445,7 @@ function renderPromiseTypes(groups: ReadonlyArray<Group>) {
     const fields = error.fields
       .map(([name, schema, optional]) => `readonly ${JSON.stringify(name)}${optional ? "?" : ""}: ${typeOf(schema)}`)
       .join("; ")
-    return `export type ${error.identifier} = { readonly _tag: ${JSON.stringify(error.tag)}; ${fields} }\nexport const is${error.identifier} = (value: unknown): value is ${error.identifier} => typeof value === "object" && value !== null && "_tag" in value && value._tag === ${JSON.stringify(error.tag)}`
+    return `export type ${error.identifier} = { readonly ${JSON.stringify(error.key)}: ${JSON.stringify(error.tag)}; ${fields} }\nexport const is${error.identifier} = (value: unknown): value is ${error.identifier} => typeof value === "object" && value !== null && ${JSON.stringify(error.key)} in value && value[${JSON.stringify(error.key)}] === ${JSON.stringify(error.tag)}`
   })
   const operations = groups
     .flatMap((group) =>
@@ -449,17 +462,19 @@ function renderPromiseTypes(groups: ReadonlyArray<Group>) {
             const schema = schemas[field.source]
             if (schema === undefined)
               throw new GenerationError({ reason: `Missing input schema: ${prefix}.${field.name}` })
-            return `readonly ${JSON.stringify(field.name)}${field.optional ? "?" : ""}: (${typeOf(schema)})[${JSON.stringify(field.name)}]`
+            return `readonly ${JSON.stringify(field.name)}${field.optional ? "?" : ""}: (${typeOf(schema, field.source === "query")})[${JSON.stringify(field.name)}]`
           })
           .join("; ")
         const successSchema = endpoint.successes[0]
-        const success = typeOf(
-          isStreamSchema(successSchema) && successSchema._tag === "StreamSse"
-            ? successSchema.sseMode === "data"
-              ? streamEncodedDataSchema(successSchema)
-              : successSchema.events
-            : successSchema,
-        )
+        const success =
+          outputTypes?.[`${group.identifier}.${endpoint.operation.name}`]?.name ??
+          typeOf(
+            isStreamSchema(successSchema) && successSchema._tag === "StreamSse"
+              ? successSchema.sseMode === "data"
+                ? streamEncodedDataSchema(successSchema)
+                : successSchema.events
+              : successSchema,
+          )
         return [
           ...(endpoint.operation.inputMode === "none" ? [] : [`export type ${prefix}Input = { ${input} }`]),
           `export type ${prefix}Output = ${endpoint.unwrapData ? `(${success})["data"]` : success}`,
@@ -470,7 +485,8 @@ function renderPromiseTypes(groups: ReadonlyArray<Group>) {
   const json = operations.includes("JsonValue")
     ? "export type JsonValue = null | boolean | number | string | ReadonlyArray<JsonValue> | { readonly [key: string]: JsonValue }"
     : ""
-  return [json, ...errorTypes, operations].filter(Boolean).join("\n\n")
+  const imports = [...new Set(Object.values(outputTypes ?? {}).map((override) => override.import))]
+  return [...imports, json, ...errorTypes, operations].filter(Boolean).join("\n\n")
 }
 
 function renderPromiseClient(groups: ReadonlyArray<Group>) {
@@ -488,7 +504,8 @@ function renderPromiseClient(groups: ReadonlyArray<Group>) {
           ? "requestOptions?: RequestOptions"
           : `input${endpoint.operation.inputMode === "optional" ? "?" : ""}: ${prefix}Input, requestOptions?: RequestOptions`
       const path = promisePath(endpoint.endpoint.path, endpoint.input)
-      const access = (name: string) => `input${endpoint.operation.inputMode === "optional" ? "?." : "."}${name}`
+      const access = (name: string) =>
+        `input${endpoint.operation.inputMode === "optional" ? "?." : ""}[${JSON.stringify(name)}]`
       const part = (source: InputField["source"]) => {
         const inputs = endpoint.input.filter((field) => field.source === source)
         return inputs.length === 0
@@ -500,11 +517,7 @@ function renderPromiseClient(groups: ReadonlyArray<Group>) {
         endpoint.headers === undefined ? undefined : `headers: ${part("headers")}`,
         endpoint.payloads.length === 0 ? undefined : `body: ${part("payload")}`,
       ].filter((value): value is string => value !== undefined)
-      const declaredStatuses = [
-        ...new Set(
-          endpoint.errors.map((schema) => resolveHttpApiStatus(schema.ast)).filter((status) => status !== undefined),
-        ),
-      ]
+      const declaredStatuses = [...new Set(endpoint.errors.map((error) => error.status))]
       const descriptor = `{ method: ${JSON.stringify(endpoint.endpoint.method)}, path: ${path}${parts.length === 0 ? "" : `, ${parts.join(", ")}`}, successStatus: ${resolveHttpApiStatus(endpoint.successes[0].ast) ?? 200}, declaredStatuses: [${declaredStatuses.join(", ")}], empty: ${endpoint.operation.success === "void"} }`
       if (endpoint.operation.success === "stream") {
         const success = endpoint.successes[0]
@@ -556,9 +569,12 @@ function structuralType(schema: Schema.Top) {
   )
   const expand = (type: string, seen = new Set<string>()): string => {
     for (const [reference, value] of references) {
-      if (!type.includes(reference)) continue
-      if (seen.has(reference)) throw new GenerationError({ reason: "Recursive Promise types are not implemented" })
-      type = type.replaceAll(reference, `(${expand(value, new Set([...seen, reference]))})`)
+      const pattern = `(?<![A-Za-z0-9_$.'"])${reference.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![A-Za-z0-9_$.'"])`
+      if (!new RegExp(pattern).test(type)) continue
+      if (seen.has(reference)) {
+        throw new GenerationError({ reason: `Recursive Promise types are not implemented: ${reference}` })
+      }
+      type = type.replace(new RegExp(pattern, "g"), `(${expand(value, new Set([...seen, reference]))})`)
     }
     return type
   }
@@ -568,6 +584,7 @@ function structuralType(schema: Schema.Top) {
 }
 
 function promisePath(path: string, input: ReadonlyArray<InputField>) {
+  if (path.includes("*")) throw new GenerationError({ reason: `Unsupported Promise path wildcard: ${path}` })
   const fields = new Set(input.filter((field) => field.source === "params").map((field) => field.name))
   const segments = path.split(/(:[A-Za-z_][A-Za-z0-9_]*)/g).filter(Boolean)
   const template = segments
@@ -921,18 +938,26 @@ function serializable(value: unknown): boolean {
 }
 
 function taggedErrorFields(schema: Schema.Top) {
+  const fields = declaredErrorFields(schema)
+  return fields?.key === "_tag" ? fields : undefined
+}
+
+function declaredErrorFields(schema: Schema.Top) {
   if (!SchemaAST.isDeclaration(schema.ast) || schema.ast.annotations?.["~effect/Schema/Class"] === undefined) {
     return undefined
   }
   const fields = schema.ast.typeParameters[0]
   if (!SchemaAST.isObjects(fields) || fields.indexSignatures.length > 0) return undefined
-  const tag = fields.propertySignatures.find((field) => field.name === "_tag")?.type
+  const key = fields.propertySignatures.find((field) => field.name === "_tag" || field.name === "name")?.name
+  if (key !== "_tag" && key !== "name") return undefined
+  const tag = fields.propertySignatures.find((field) => field.name === key)?.type
   if (tag === undefined || !SchemaAST.isLiteral(tag) || typeof tag.literal !== "string") return undefined
   return {
+    key,
     tag: tag.literal,
     identifier: SchemaAST.resolveIdentifier(schema.ast) ?? tag.literal,
     fields: fields.propertySignatures.flatMap((field) =>
-      field.name === "_tag" || typeof field.name !== "string"
+      field.name === key || typeof field.name !== "string"
         ? []
         : [[field.name, Schema.make(field.type), SchemaAST.isOptional(field.type)] as const],
     ),
@@ -1003,7 +1028,7 @@ function renderGroup(group: Group, groupIndex: number) {
     const headers = addSlot(endpointHeaders, `${prefix}Headers`)
     const payloads = endpointPayloads.map((schema, index) => addSlot(schema, `${prefix}Payload${index}`)!)
     const success = renderSuccess(successes[0], `${prefix}Success`)
-    const errorSlots = errors.map((schema, index) => addSlot(schema, `${prefix}Error${index}`)!)
+    const errorSlots = errors.map((error, index) => addSlot(error.schema, `${prefix}Error${index}`)!)
     const options = [
       params === undefined ? undefined : `params: ${params.name}`,
       query === undefined ? undefined : `query: ${query.name}`,

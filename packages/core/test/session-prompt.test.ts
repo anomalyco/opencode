@@ -9,7 +9,7 @@ import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
-import { LocationServiceMap } from "@opencode-ai/core/location-layer"
+import { locationServiceMapLayer } from "@opencode-ai/core/location-services"
 import { Prompt } from "@opencode-ai/core/session/prompt"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
@@ -42,7 +42,7 @@ const execution = Layer.succeed(
   }),
 )
 const sessions = SessionV2.layer.pipe(
-  Layer.provide(LocationServiceMap.layer),
+  Layer.provide(locationServiceMapLayer),
   Layer.provide(EventV2.defaultLayer),
   Layer.provide(Database.defaultLayer),
   Layer.provide(SessionStore.defaultLayer),
@@ -170,6 +170,27 @@ describe("SessionV2.prompt", () => {
         prompt: { text: "Fix the failing tests" },
         delivery: "steer",
       })
+    }),
+  )
+
+  it.effect("resolves attachment MIME before admission", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+
+      const message = yield* session.prompt({
+        sessionID,
+        prompt: {
+          text: "Inspect this image",
+          files: [{ uri: "data:image/png;base64,aGVsbG8=", name: "image.png" }],
+        },
+        resume: false,
+      })
+
+      expect(message.prompt.files).toEqual([
+        { uri: "data:image/png;base64,aGVsbG8=", name: "image.png", mime: "image/png" },
+      ])
+      expect((yield* admitted(message.id))?.prompt.files).toEqual(message.prompt.files)
     }),
   )
 
