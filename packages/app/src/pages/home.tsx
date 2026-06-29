@@ -569,13 +569,14 @@ function HomeProjectColumn(props: {
             const key = ServerConnection.key(item)
             const healthy = () => !!global.servers.health[key]?.healthy
             const serverCtx = global.ensureServerCtx(item)
+            const projects = () => serverCtx.projects.list()
+            const hasProjects = () => projects().length > 0
             const collapsed = () => !!state().collapsed[key]
             return (
               <div class="flex max-h-[min(572px,calc(100vh_-_300px))] min-w-0 flex-col gap-1 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 <HomeServerRow
                   server={item}
                   selected={props.selected.server === key && !props.selected.directory}
-                  healthy={healthy()}
                   collapsed={collapsed()}
                   health={global.servers.health[key]}
                   controller={controller}
@@ -585,9 +586,9 @@ function HomeProjectColumn(props: {
                   toggleCollapsed={() => setState("collapsed", key, !state().collapsed[key])}
                   language={props.language}
                 />
-                <Show when={healthy() && !collapsed()}>
+                <Show when={healthy() && hasProjects() && !collapsed()}>
                   <div class="mx-3 h-px bg-v2-border-border-base" />
-                  <HomeProjectList {...props} server={item} projects={serverCtx.projects.list()} />
+                  <HomeProjectList {...props} server={item} projects={projects()} />
                 </Show>
               </div>
             )
@@ -635,7 +636,6 @@ function HomeUtilityNav(props: {
 function HomeServerRow(props: {
   server: ServerConnection.Any
   selected: boolean
-  healthy: boolean
   collapsed: boolean
   health: ServerHealth | undefined
   controller: ReturnType<typeof useServerManagementController>
@@ -645,39 +645,46 @@ function HomeServerRow(props: {
   toggleCollapsed: () => void
   language: ReturnType<typeof useLanguage>
 }) {
+  const global = useGlobal()
   const [state, setState] = createStore({ menuOpen: false })
+  const healthy = () => !!props.health?.healthy
+  const canToggle = () => healthy() && global.ensureServerCtx(props.server).projects.list().length > 0
   return (
     <div class="group/server relative flex h-7 min-w-0 items-center rounded-[6px]">
       <button
         type="button"
         class={`${HOME_PROJECT_NAV_ROW} pr-16 disabled:opacity-60`}
         data-selected={props.selected ? "" : undefined}
-        disabled={!props.healthy}
+        disabled={!healthy()}
         onClick={() => props.focusServer(props.server)}
       >
-        <Show when={props.healthy}>
-          <span
-            data-action="home-server-collapse"
-            class="inline-flex -ml-0.5 -mr-1.5 size-5 shrink-0 items-center justify-center rounded-[4px] text-v2-icon-icon-muted hover:bg-v2-overlay-simple-overlay-hover"
-            aria-label={
-              props.collapsed ? props.language.t("home.server.expand") : props.language.t("home.server.collapse")
-            }
-            aria-expanded={!props.collapsed}
-            onClick={(event) => {
-              event.preventDefault()
-              event.stopPropagation()
-              props.toggleCollapsed()
-            }}
-            onPointerDown={(event) => event.preventDefault()}
-          >
-            <IconV2
-              name="chevron-down"
-              size="small"
-              class="transition-transform duration-150 ease-in-out"
-              style={{ transform: `rotate(${props.collapsed ? -90 : 0}deg)` }}
-            />
-          </span>
-        </Show>
+        <span
+          data-action="home-server-collapse"
+          class="inline-flex -ml-0.5 -mr-1.5 size-5 shrink-0 items-center justify-center rounded-[4px] text-v2-icon-icon-muted"
+          classList={{
+            "hover:bg-v2-overlay-simple-overlay-hover": canToggle(),
+            "cursor-default opacity-40": !canToggle(),
+          }}
+          aria-label={
+            props.collapsed ? props.language.t("home.server.expand") : props.language.t("home.server.collapse")
+          }
+          aria-disabled={!canToggle()}
+          aria-expanded={canToggle() ? !props.collapsed : undefined}
+          onClick={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            if (!canToggle()) return
+            props.toggleCollapsed()
+          }}
+          onPointerDown={(event) => event.preventDefault()}
+        >
+          <IconV2
+            name="chevron-down"
+            size="small"
+            class="transition-transform duration-150 ease-in-out"
+            style={{ transform: `rotate(${props.collapsed ? -90 : 0}deg)` }}
+          />
+        </span>
         <div class="flex size-4 shrink-0 items-center justify-center -mr-0.5">
           <ServerHealthIndicator health={props.health} />
         </div>

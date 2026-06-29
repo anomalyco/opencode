@@ -9,7 +9,7 @@ import { useSync } from "@/context/sync"
 import { useLanguage } from "@/context/language"
 import { useProviders } from "@/hooks/use-providers"
 import { useSDK } from "@/context/sdk"
-import { getSessionContextMetrics } from "@/components/session/session-context-metrics"
+import { getSessionContext, getSessionTokenTotal } from "@/components/session/session-context-metrics"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionTabs } from "@/pages/session/helpers"
 
@@ -45,6 +45,7 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
     normalizeTab: (tab) => (tab.startsWith("file://") ? file.tab(tab) : tab),
   })
   const messages = createMemo(() => (params.id ? (sync().data.message[params.id] ?? []) : []))
+  const info = createMemo(() => (params.id ? sync().session.get(params.id) : undefined))
 
   const usd = createMemo(
     () =>
@@ -54,10 +55,10 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
       }),
   )
 
-  const metrics = createMemo(() => getSessionContextMetrics(messages(), [...providers.all().values()]))
-  const context = createMemo(() => metrics().context)
+  const context = createMemo(() => getSessionContext(messages(), [...providers.all().values()]))
+  const tokens = createMemo(() => info()?.tokens)
   const cost = createMemo(() => {
-    return usd().format(metrics().totalCost)
+    return usd().format(info()?.cost ?? 0)
   })
 
   const openContext = () => {
@@ -82,18 +83,22 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
 
   const tooltipValue = () => (
     <div>
+      <Show when={tokens()}>
+        {(value) => (
+          <div class="flex items-center gap-2">
+            <span class="text-text-invert-strong">
+              {getSessionTokenTotal(value())?.toLocaleString(language.intl())}
+            </span>
+            <span class="text-text-invert-base">{language.t("context.usage.tokens")}</span>
+          </div>
+        )}
+      </Show>
       <Show when={context()}>
         {(ctx) => (
-          <>
-            <div class="flex items-center gap-2">
-              <span class="text-text-invert-strong">{ctx().total.toLocaleString(language.intl())}</span>
-              <span class="text-text-invert-base">{language.t("context.usage.tokens")}</span>
-            </div>
-            <div class="flex items-center gap-2">
-              <span class="text-text-invert-strong">{ctx().usage ?? 0}%</span>
-              <span class="text-text-invert-base">{language.t("context.usage.usage")}</span>
-            </div>
-          </>
+          <div class="flex items-center gap-2">
+            <span class="text-text-invert-strong">{ctx().usage ?? 0}%</span>
+            <span class="text-text-invert-base">{language.t("context.usage.usage")}</span>
+          </div>
         )}
       </Show>
       <div class="flex items-center gap-2">

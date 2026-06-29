@@ -3,7 +3,9 @@ import path from "path"
 import { describe, expect, test } from "bun:test"
 import { Effect, Layer } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/unstable/http"
-import { FSUtil } from "@opencode-ai/core/fs-util"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNodePlatform } from "@opencode-ai/core/effect/app-node-platform"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Global } from "@opencode-ai/core/global"
 import { SkillDiscovery } from "@opencode-ai/core/skill/discovery"
 import { tmpdir } from "./fixture/tmpdir"
@@ -27,15 +29,14 @@ async function pull(skills: unknown[], files: Record<string, string> = {}, cache
       ),
     ),
   )
-  const layer = SkillDiscovery.layer.pipe(
-    Layer.provide(http),
-    Layer.provide(FSUtil.defaultLayer),
-    Layer.provide(Global.layerWith({ cache: tmp.path })),
-  )
+  const skillDiscoveryLayer = AppNodeBuilder.build(SkillDiscovery.node, [
+    [LayerNodePlatform.httpClient, http],
+    [Global.node, Global.layerWith({ cache: tmp.path })],
+  ])
   const directories = await Effect.runPromise(
     Effect.gen(function* () {
       return yield* (yield* SkillDiscovery.Service).pull(base)
-    }).pipe(Effect.provide(layer)),
+    }).pipe(Effect.provide(skillDiscoveryLayer)),
   )
   return { tmp, requests, directories }
 }
