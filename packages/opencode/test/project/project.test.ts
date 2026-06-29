@@ -1,5 +1,4 @@
 import { describe, expect } from "bun:test"
-import { EventV2Bridge } from "@/event-v2-bridge"
 import { Project } from "@/project/project"
 import { $ } from "bun"
 import path from "path"
@@ -15,11 +14,7 @@ import { SessionID } from "@/session/schema"
 import { WorkspaceV2 } from "@opencode-ai/core/workspace"
 import { Cause, Effect, Exit, Layer, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
-import { NodePath } from "@effect/platform-node"
-import { FSUtil } from "@opencode-ai/core/fs-util"
-import { AppProcess } from "@opencode-ai/core/process"
 import { ProjectV2 } from "@opencode-ai/core/project"
-import { ProjectDirectories } from "@opencode-ai/core/project/directories"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { testEffect } from "../lib/effect"
 import { RuntimeFlags } from "@/effect/runtime-flags"
@@ -67,20 +62,29 @@ function mockGitFailure(failArg: string) {
         }),
       )
     }),
-  ).pipe(Layer.provide(CrossSpawnSpawner.defaultLayer))
+  ).pipe(Layer.provide(AppNodeBuilder.build(CrossSpawnSpawner.node)))
 }
 
 function projectLayerWithFailure(failArg: string) {
-  return Project.layer.pipe(
-    Layer.provide(AppProcess.layer.pipe(Layer.provide(mockGitFailure(failArg)))),
-    Layer.provide(mockGitFailure(failArg)),
-    Layer.provide(ProjectV2.defaultLayer),
-    Layer.provide(ProjectDirectories.defaultLayer),
-    Layer.provide(EventV2Bridge.defaultLayer),
-    Layer.provide(FSUtil.defaultLayer),
-    Layer.provide(NodePath.layer),
-    Layer.provide(Database.defaultLayer),
-    Layer.provide(RuntimeFlags.defaultLayer),
+  return AppNodeBuilder.build(Project.node, [
+    [ProjectV2.node, projectV2FailureLayer()],
+    [CrossSpawnSpawner.node, mockGitFailure(failArg)],
+  ])
+}
+
+function projectV2FailureLayer() {
+  return Layer.succeed(
+    ProjectV2.Service,
+    ProjectV2.Service.of({
+      directories: () => Effect.succeed([]),
+      resolve: (input) =>
+        Effect.succeed({
+          id: ProjectV2.ID.global,
+          directory: input,
+          vcs: { type: "git" as const, store: input },
+        }),
+      commit: () => Effect.void,
+    }),
   )
 }
 
