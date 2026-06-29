@@ -216,6 +216,9 @@ export async function handler(
           return headers
         })(),
         body: reqBody,
+        // Propagate caller disconnects to the upstream provider request so
+        // abandoned Console requests do not leave orphaned inference work open.
+        signal: input.request.signal,
       })
 
       if (providerInfo.id.startsWith("console.")) {
@@ -311,9 +314,10 @@ export async function handler(
     const streamConverter = createStreamPartConverter(providerInfo.format, opts.format)
     const usageParser = providerInfo.createUsageParser()
     const binaryDecoder = providerInfo.createBinaryStreamDecoder()
+    let reader: ReadableStreamDefaultReader<Uint8Array> | undefined
     const stream = new ReadableStream({
       start(c) {
-        const reader = res.body?.getReader()
+        reader = res.body?.getReader()
         const decoder = new TextDecoder()
         const encoder = new TextEncoder()
 
@@ -399,6 +403,11 @@ export async function handler(
 
         return pump()
       },
+      cancel() {
+        // When the downstream caller stops reading, release the upstream
+        // response body instead of keeping the provider/inference stream alive.
+        return reader?.cancel()
+      },
     })
     return new Response(stream, {
       status: resStatus,
@@ -406,6 +415,15 @@ export async function handler(
       headers: resHeaders,
     })
   } catch (error: any) {
+    // The caller disconnected before we finished. Because the outbound provider
+    // request shares input.request.signal, an aborted caller surfaces here as an
+    // AbortError. There is no client left to receive a body, so skip the error
+    // metric and 500 and return a quiet client-closed response.
+    if (input.request.signal.aborted || error?.name === "AbortError") {
+      logger.debug("REQUEST ABORTED BY CALLER")
+      return new Response(null, { status: 499 })
+    }
+
     logger.metric({
       "error.type": error.constructor.name,
       "error.message": error.message,
