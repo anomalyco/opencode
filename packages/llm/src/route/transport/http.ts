@@ -28,7 +28,7 @@ const applyQuery = (url: string, query: Record<string, string> | undefined) => {
   return next.toString()
 }
 
-const PROTOCOL_BODY_ROOTS = new Set([
+const PROTOCOL_BODY_OVERLAY_DENYLIST = new Set([
   "content",
   "contents",
   "frequencyPenalty",
@@ -67,17 +67,17 @@ const PROTOCOL_BODY_ROOTS = new Set([
   "top_p",
 ])
 
-const validateBodyOverlay = (body: Record<string, unknown>) => {
-  const invalidKeys = Object.keys(body).filter((key) => PROTOCOL_BODY_ROOTS.has(key))
-  if (invalidKeys.length === 0) return undefined
-  return ProviderShared.invalidRequest(`http.body cannot overlay protocol-owned field(s): ${invalidKeys.join(", ")}`)
-}
+const forbiddenBodyOverlayKeys = (body: Record<string, unknown>) =>
+  Object.keys(body).filter((key) => PROTOCOL_BODY_OVERLAY_DENYLIST.has(key))
 
 const bodyWithOverlay = <Body>(body: Body, request: LLMRequest, encodeBody: (body: Body) => string) =>
   Effect.gen(function* () {
     if (request.http?.body === undefined) return { jsonBody: body, bodyText: encodeBody(body) }
-    const error = validateBodyOverlay(request.http.body)
-    if (error) return yield* error
+    const forbiddenKeys = forbiddenBodyOverlayKeys(request.http.body)
+    if (forbiddenKeys.length > 0)
+      return yield* ProviderShared.invalidRequest(
+        `http.body cannot overlay protocol-owned field(s): ${forbiddenKeys.join(", ")}`,
+      )
     if (ProviderShared.isRecord(body)) {
       const overlaid = mergeJsonRecords(body, request.http.body) ?? {}
       return { jsonBody: overlaid, bodyText: ProviderShared.encodeJson(overlaid) }
