@@ -9,6 +9,10 @@
   justify-content: center;
 }
 
+[data-titlebar-tab][data-editing="true"] [data-slot="tab-close"] {
+  display: none;
+}
+
 [data-titlebar-tab-list] {
   gap: 13.5px;
 }

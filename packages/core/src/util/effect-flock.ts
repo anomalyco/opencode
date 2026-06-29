@@ -6,7 +6,7 @@ import type { FileSystem, Scope } from "effect"
 import type { PlatformError } from "effect/PlatformError"
 import { FSUtil } from "../fs-util"
 import { Global } from "../global"
-import { LayerNode } from "../effect/layer-node"
+import { makeGlobalNode } from "../effect/app-node"
 import { Hash } from "./hash"
 
 export namespace EffectFlock {
@@ -281,5 +281,5 @@ export namespace EffectFlock {
   )
 
   export const defaultLayer = layer.pipe(Layer.provide(FSUtil.defaultLayer), Layer.provide(Global.layer))
-  export const node = LayerNode.make({ service: Service, layer: layer, deps: [Global.node, FSUtil.node] })
+  export const node = makeGlobalNode({ service: Service, layer: layer, deps: [Global.node, FSUtil.node] })
 }

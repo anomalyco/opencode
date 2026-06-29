@@ -149,6 +149,29 @@ describe("ApplyPatchTool", () => {
                     { type: "update", resource: "update.txt" },
                     { type: "delete", resource: "remove.txt" },
                   ],
+                  files: [
+                    {
+                      file: "nested/new.txt",
+                      status: "added",
+                      additions: 1,
+                      deletions: 0,
+                      patch: expect.stringContaining("+created"),
+                    },
+                    {
+                      file: "update.txt",
+                      status: "modified",
+                      additions: 1,
+                      deletions: 1,
+                      patch: expect.stringContaining("-before\n+after"),
+                    },
+                    {
+                      file: "remove.txt",
+                      status: "deleted",
+                      additions: 0,
+                      deletions: 1,
+                      patch: expect.stringContaining("-remove"),
+                    },
+                  ],
                 })
                 expect(assertions).toMatchObject([
                   { sessionID, action: "edit", resources: ["nested/new.txt", "update.txt", "remove.txt"], save: ["*"] },

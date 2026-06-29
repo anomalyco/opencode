@@ -1,6 +1,7 @@
 @import "@opencode-ai/ui/styles/tailwind";
 @import "@opencode-ai/session-ui/styles";
 @import "@opencode-ai/ui/v2/styles/tailwind.css";
+@import "tw-animate-css";
 
 @font-face {
   font-family: "JetBrainsMono Nerd Font Mono";
@@ -129,15 +130,6 @@
   @keyframes titlebar-update-loader-spin {
     to {
       transform: rotate(360deg);
-    }
-  }
-
-  @keyframes fade-in {
-    from {
-      opacity: 0;
-    }
-    to {
-      opacity: 1;
     }
   }
 }

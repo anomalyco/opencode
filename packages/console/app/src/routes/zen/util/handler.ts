@@ -201,7 +201,10 @@ export async function handler(
             if (v === "$model") return headers.set(k, model)
             if (v === "$request") return headers.set(k, requestId)
             if (v === "$project") return headers.set(k, projectId)
-            if (v === "$workspace" && authInfo?.workspaceID) return headers.set(k, authInfo.workspaceID)
+            if (v === "$workspace") {
+              if (authInfo?.workspaceID) headers.set(k, authInfo.workspaceID)
+              return
+            }
             headers.set(k, v)
           })
           headers.delete("host")
@@ -214,6 +217,16 @@ export async function handler(
         })(),
         body: reqBody,
       })
+
+      if (providerInfo.id.startsWith("console.")) {
+        const resEndpointId = res.headers.get("x-opencode-endpoint-id")
+        const resEndpointModelId = res.headers.get("x-opencode-upstream-model-id")
+        if (resEndpointId && resEndpointModelId)
+          logger.metric({
+            provider: resEndpointId,
+            "provider.model": resEndpointModelId,
+          })
+      }
 
       if (res.status !== 200) {
         logger.metric({

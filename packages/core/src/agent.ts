@@ -1,5 +1,6 @@
 export * as AgentV2 from "./agent"
 
+import { makeLocationNode } from "./effect/app-node"
 import { Array, Context, Effect, Layer, Types } from "effect"
 import { Agent } from "@opencode-ai/schema/agent"
 import { State } from "./state"
@@ -106,3 +107,5 @@ export const layer = Layer.effect(
 )
 
 export const locationLayer = layer
+
+export const node = makeLocationNode({ service: Service, layer, deps: [] })

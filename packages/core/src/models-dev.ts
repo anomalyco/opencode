@@ -9,8 +9,8 @@ import { Hash } from "./util/hash"
 import { FSUtil } from "./fs-util"
 import { InstallationChannel, InstallationVersion } from "./installation/version"
 import { EventV2 } from "./event"
-import { LayerNode } from "./effect/layer-node"
-import { httpClient } from "./effect/layer-node-platform"
+import { makeGlobalNode } from "./effect/app-node"
+import { httpClient } from "./effect/app-node-platform"
 
 export const CatalogModelStatus = Schema.Literals(["alpha", "beta", "deprecated"])
 export type CatalogModelStatus = typeof CatalogModelStatus.Type
@@ -244,6 +244,6 @@ export const defaultLayer = layer.pipe(
   Layer.provide(FSUtil.defaultLayer),
   Layer.provide(EventV2.defaultLayer),
 )
-export const node = LayerNode.make({ service: Service, layer: layer, deps: [FSUtil.node, EventV2.node, httpClient] })
+export const node = makeGlobalNode({ service: Service, layer: layer, deps: [FSUtil.node, EventV2.node, httpClient] })
 
 export * as ModelsDev from "./models-dev"

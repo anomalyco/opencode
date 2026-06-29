@@ -14,7 +14,7 @@ import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { ProjectDirectories } from "@opencode-ai/core/project/directories"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
-import { LocationServiceMap } from "@opencode-ai/core/location-layer"
+import { locationServiceMapLayer } from "@opencode-ai/core/location-services"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionTable } from "@opencode-ai/core/session/sql"
@@ -29,7 +29,7 @@ const project = Project.layer.pipe(
   Layer.provide(ProjectDirectories.defaultLayer),
 )
 const sessions = SessionV2.layer.pipe(
-  Layer.provide(LocationServiceMap.layer),
+  Layer.provide(locationServiceMapLayer),
   Layer.provide(Database.defaultLayer),
   Layer.provide(EventV2.defaultLayer),
   Layer.provide(project),
@@ -42,7 +42,7 @@ const layer = MoveSession.layer.pipe(
   Layer.provide(Git.defaultLayer),
   Layer.provide(EventV2.defaultLayer),
   Layer.provide(project),
-  Layer.provide(sessions),
+  Layer.provide(SessionStore.defaultLayer),
 )
 const it = testEffect(
   Layer.mergeAll(
@@ -53,7 +53,6 @@ const it = testEffect(
     project,
     SessionProjector.defaultLayer,
     SessionStore.defaultLayer,
-    SessionExecution.noopLayer,
     sessions,
   ),
 )

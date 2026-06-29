@@ -52,15 +52,18 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { MoveSession } from "@opencode-ai/core/control-plane/move-session"
 import { Database } from "@opencode-ai/core/database/database"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { httpClient } from "@opencode-ai/core/effect/layer-node-platform"
+import { httpClient } from "@opencode-ai/core/effect/app-node-platform"
 import { EventV2 } from "@opencode-ai/core/event"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { Npm } from "@opencode-ai/core/npm"
+import { PermissionSaved } from "@opencode-ai/core/permission/saved"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { ProjectCopy } from "@opencode-ai/core/project/copy"
 import { PtyTicket } from "@opencode-ai/core/pty/ticket"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
+import { SessionV2 } from "@opencode-ai/core/session"
+import * as SessionExecutionLocal from "@opencode-ai/core/session/execution/local"
 import { lazy } from "@/util/lazy"
 import { CorsConfig, isAllowedCorsOrigin, type CorsOptions } from "@opencode-ai/server/cors"
 import { serveUIEffect } from "@/server/shared/ui"
@@ -95,6 +98,10 @@ import { sessionHandlers } from "./handlers/session"
 import { syncHandlers } from "./handlers/sync"
 import { tuiHandlers } from "./handlers/tui"
 import { handlers } from "@opencode-ai/server/handlers"
+import { locationServiceMapLayer } from "@opencode-ai/core/location-services"
+import { layer as locationLayer } from "@opencode-ai/server/location"
+import { sessionLocationLayer } from "@opencode-ai/server/middleware/session-location"
+import { PtyEnvironment } from "@opencode-ai/server/pty-environment"
 import { schemaErrorLayer as v2SchemaErrorLayer } from "@opencode-ai/server/middleware/schema-error"
 import { workspaceHandlers } from "./handlers/workspace"
 import { instanceContextLayer } from "./middleware/instance-context"
@@ -221,6 +228,7 @@ const app = LayerNode.group([
   Discovery.node,
   Question.node,
   Permission.node,
+  PermissionSaved.node,
   Todo.node,
   Session.node,
   SessionProjector.node,
@@ -279,9 +287,21 @@ export function createRoutes(
       MoveSession.defaultLayer,
       HttpServer.layerServices,
     ]),
-    Layer.provide(LayerNode.buildLayer(app)),
     Layer.provide(Layer.succeed(CorsConfig)(corsOptions)),
     Layer.provideMerge(Observability.layer),
+
+    Layer.provide(sessionLocationLayer),
+    Layer.provide(locationLayer),
+    Layer.provide(PtyEnvironment.layer),
+    Layer.provide(
+      SessionV2.defaultLayer.pipe(
+        Layer.provide(SessionExecutionLocal.defaultLayer),
+        Layer.provide(locationServiceMapLayer),
+      ),
+    ),
+    Layer.provide(locationServiceMapLayer),
+
+    Layer.provide(LayerNode.compile(app)),
   )
 }
 

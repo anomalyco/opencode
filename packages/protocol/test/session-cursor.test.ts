@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { Effect } from "effect"
-import { SessionsCursor } from "../src/groups/session"
+import { Effect, Schema } from "effect"
+import { SessionHistoryQuery, SessionsCursor } from "../src/groups/session"
 import { Session } from "@opencode-ai/schema/session"
 
 describe("SessionsCursor", () => {
@@ -14,5 +14,13 @@ describe("SessionsCursor", () => {
     const cursor = SessionsCursor.make(input)
 
     expect(await Effect.runPromise(SessionsCursor.parse(cursor))).toEqual(input)
+  })
+})
+
+describe("SessionHistoryQuery", () => {
+  test("decodes numeric paging inputs", async () => {
+    const query = await Effect.runPromise(Schema.decodeUnknownEffect(SessionHistoryQuery)({ after: "3", limit: "10" }))
+
+    expect(query).toEqual({ after: 3, limit: 10 })
   })
 })

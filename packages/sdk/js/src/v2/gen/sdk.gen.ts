@@ -142,7 +142,7 @@ import type {
   ProjectListResponses,
   ProjectUpdateErrors,
   ProjectUpdateResponses,
-  Prompt,
+  PromptInput,
   ProviderAuthErrors,
   ProviderAuthResponses,
   ProviderListErrors,
@@ -333,6 +333,8 @@ import type {
   V2QuestionRequestListResponses,
   V2ReferenceListErrors,
   V2ReferenceListResponses,
+  V2SessionActiveErrors,
+  V2SessionActiveResponses,
   V2SessionCompactErrors,
   V2SessionCompactResponses,
   V2SessionContextErrors,
@@ -343,6 +345,8 @@ import type {
   V2SessionEventsResponses,
   V2SessionGetErrors,
   V2SessionGetResponses,
+  V2SessionHistoryErrors,
+  V2SessionHistoryResponses,
   V2SessionInterruptErrors,
   V2SessionInterruptResponses,
   V2SessionListErrors,
@@ -5502,6 +5506,18 @@ export class Session3 extends HeyApiClient {
   }
 
   /**
+   * List active sessions
+   *
+   * Retrieve foreground Session drains currently owned by this OpenCode process. Sessions absent from the result are inactive.
+   */
+  public active<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<V2SessionActiveResponses, V2SessionActiveErrors, ThrowOnError>({
+      url: "/api/session/active",
+      ...options,
+    })
+  }
+
+  /**
    * Get session
    *
    * Retrieve a session by ID.
@@ -5607,7 +5623,7 @@ export class Session3 extends HeyApiClient {
     parameters: {
       sessionID: string
       id?: string
-      prompt?: Prompt
+      prompt?: PromptInput
       delivery?: "steer" | "queue"
       resume?: boolean
     },
@@ -5691,6 +5707,38 @@ export class Session3 extends HeyApiClient {
     const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "sessionID" }] }])
     return (options?.client ?? this.client).get<V2SessionContextResponses, V2SessionContextErrors, ThrowOnError>({
       url: "/api/session/{sessionID}/context",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get session history
+   *
+   * Read one finite page of public durable Session events after an exclusive aggregate sequence. Newly committed events may appear on later pages.
+   */
+  public history<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      limit?: number
+      after?: number
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "limit" },
+            { in: "query", key: "after" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<V2SessionHistoryResponses, V2SessionHistoryErrors, ThrowOnError>({
+      url: "/api/session/{sessionID}/history",
       ...options,
       ...params,
     })

@@ -1,5 +1,6 @@
 export * as ReferenceGuidance from "./guidance"
 
+import { makeLocationNode } from "../effect/app-node"
 import { Context, Effect, Layer, Schema } from "effect"
 import { Reference } from "../reference"
 import { SystemContext } from "../system-context/index"
@@ -64,3 +65,5 @@ export const layer = Layer.effect(
 )
 
 export const locationLayer = layer
+
+export const node = makeLocationNode({ service: Service, layer, deps: [Reference.node] })

@@ -3,6 +3,7 @@ export * as Watcher from "./watcher"
 // @ts-ignore
 import { createWrapper } from "@parcel/watcher/wrapper"
 import type ParcelWatcher from "@parcel/watcher"
+import { makeLocationNode } from "../effect/app-node"
 import { Cause, Context, Effect, Layer } from "effect"
 import { FileSystemWatcher } from "@opencode-ai/schema/filesystem-watcher"
 import path from "path"
@@ -133,3 +134,9 @@ export const layer = Layer.effect(
 )
 
 export const locationLayer = layer.pipe(Layer.provide(Config.locationLayer), Layer.provide(Git.defaultLayer))
+
+export const node = makeLocationNode({
+  service: Service,
+  layer,
+  deps: [FSUtil.node, Location.node, Config.node, Git.node, EventV2.node],
+})

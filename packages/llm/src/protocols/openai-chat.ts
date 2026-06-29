@@ -411,7 +411,12 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
     if (delta?.reasoning_content)
       lifecycle = Lifecycle.reasoningDelta(lifecycle, events, "reasoning-0", delta.reasoning_content)
 
-    if (delta?.content) lifecycle = Lifecycle.textDelta(lifecycle, events, "text-0", delta.content)
+    if (delta?.content) {
+      lifecycle = Lifecycle.reasoningEnd(lifecycle, events, "reasoning-0")
+      lifecycle = Lifecycle.textDelta(lifecycle, events, "text-0", delta.content)
+    }
+
+    if (toolDeltas.length) lifecycle = Lifecycle.reasoningEnd(lifecycle, events, "reasoning-0")
 
     for (const tool of toolDeltas) {
       const result = ToolStream.appendOrStart(

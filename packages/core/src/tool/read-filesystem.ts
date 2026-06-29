@@ -5,6 +5,7 @@ import { pathToFileURL } from "url"
 import { Context, Effect, Layer, Option, Schema } from "effect"
 import { FileSystem } from "../filesystem"
 import { FSUtil } from "../fs-util"
+import { makeLocationNode } from "../effect/app-node"
 import { AbsolutePath, PositiveInt, RelativePath } from "../schema"
 
 export const MAX_READ_LINES = 2_000
@@ -361,3 +362,5 @@ export const layer = Layer.effect(
     })
   }),
 )
+
+export const node = makeLocationNode({ service: Service, layer, deps: [FSUtil.node] })
