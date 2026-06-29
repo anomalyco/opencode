@@ -4,7 +4,6 @@ import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { FSUtil } from "@opencode-ai/core/fs-util"
 import { PermissionV2 } from "@opencode-ai/core/permission"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
@@ -66,16 +65,14 @@ describe("SkillTool", () => {
               list: () => Effect.succeed(current),
             }),
           )
-          const registry = AppNodeBuilder.build(LayerNode.group([ToolRegistry.node, ToolRegistry.toolsNode]), [
-            [ToolOutputStore.node, ToolOutputStore.nodeWithoutConfig],
-          ])
-          const tool = SkillTool.layer.pipe(
-            Layer.provide(registry),
-            Layer.provide(permission),
-            Layer.provide(LayerNode.compile(FSUtil.node)),
-            Layer.provide(skills),
+          const skillToolLayer = AppNodeBuilder.build(
+            LayerNode.group([ToolRegistry.node, ToolRegistry.toolsNode, SkillTool.node]),
+            [
+              [PermissionV2.node, permission],
+              [SkillV2.node, skills],
+              [ToolOutputStore.node, ToolOutputStore.nodeWithoutConfig],
+            ],
           )
-          const layer = Layer.mergeAll(permission, skills, registry, tool)
 
           return yield* Effect.gen(function* () {
             const registry = yield* ToolRegistry.Service
@@ -144,7 +141,7 @@ describe("SkillTool", () => {
                 call: { type: "tool-call", id: "call-flat-skill", name: "skill", input: { name: "public" } },
               }),
             ).toEqual({ type: "text", value: SkillTool.toModelOutput(flat, []) })
-          }).pipe(Effect.provide(layer))
+          }).pipe(Effect.provide(skillToolLayer))
         }),
       ),
     ),
