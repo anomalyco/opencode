@@ -1165,10 +1165,6 @@ function HomeSessionSearch(props: {
         </Show>
         <label
           class="relative z-20 flex h-9 w-full items-center gap-2 rounded-[6px] bg-v2-background-bg-layer-02 py-1 pl-3 pr-2 text-v2-icon-icon-muted transition-[background-color,box-shadow] duration-[120ms] ease-in-out"
-          classList={{
-            "focus-within:shadow-[0_0_0_0.5px_var(--v2-border-border-focus),var(--v2-elevation-raised)]": !props.open,
-            "shadow-[0_0_0_0.5px_var(--v2-border-border-focus)]": props.open,
-          }}
         >
           <IconV2 name="magnifying-glass" />
           <input
