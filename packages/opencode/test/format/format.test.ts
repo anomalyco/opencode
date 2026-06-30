@@ -1,5 +1,6 @@
 import { NodeFileSystem } from "@effect/platform-node"
 import { describe, expect } from "bun:test"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Effect, Layer } from "effect"
 import { provideTmpdirInstance, testInstanceStoreLayer, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
@@ -7,7 +8,9 @@ import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Format } from "../../src/format"
 import * as Formatter from "../../src/format/formatter"
 
-const it = testEffect(Layer.mergeAll(Format.defaultLayer, CrossSpawnSpawner.defaultLayer, NodeFileSystem.layer))
+const it = testEffect(
+  Layer.mergeAll(LayerNode.compile(LayerNode.group([Format.node, CrossSpawnSpawner.node])), NodeFileSystem.layer),
+)
 
 describe("Format", () => {
   it.instance("status() returns empty list when no formatters are configured", () =>
@@ -106,7 +109,11 @@ describe("Format", () => {
   )
 
   testEffect(
-    Layer.mergeAll(Format.defaultLayer, CrossSpawnSpawner.defaultLayer, NodeFileSystem.layer, testInstanceStoreLayer),
+    Layer.mergeAll(
+      LayerNode.compile(LayerNode.group([Format.node, CrossSpawnSpawner.node])),
+      NodeFileSystem.layer,
+      testInstanceStoreLayer,
+    ),
   ).live("status() initializes formatter state per directory", () =>
     Effect.gen(function* () {
       const a = yield* provideTmpdirInstance(() => Format.use.status(), {
