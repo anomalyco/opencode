@@ -313,7 +313,7 @@ export function ModelSelectorPopoverV2(props: {
     setOpen(false)
     afterClose(() => {
       void import("./dialog-manage-models").then((x) => {
-        dialog.show(() => <x.DialogManageModels />)
+        dialog.show(() => <x.DialogManageModelsV2 />)
       })
     })
   }
@@ -445,6 +445,7 @@ export function ModelSelectorPopoverV2(props: {
                               value={modelKey(item)}
                               data-option-key={modelKey(item)}
                               data-selected-model={current() === modelKey(item) ? true : undefined}
+                              class="scroll-my-6"
                               classList={{ "!bg-v2-overlay-simple-overlay-hover": store.active === modelKey(item) }}
                               onMouseEnter={() => {
                                 setStore("active", modelKey(item))
