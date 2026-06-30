@@ -54,6 +54,7 @@ export type StatsModelData = {
   tokenChange: number
   totals: {
     sessions: number
+    uniqueUsers: number
     tokens: number
     cost: number
     tokensPerSession: number
@@ -381,6 +382,7 @@ function buildStatsModelData(
     tokenChange: percentChange(current.totalTokens, previous.totalTokens),
     totals: {
       sessions: current.sessions,
+      uniqueUsers: current.uniqueUsers,
       tokens: current.totalTokens,
       cost: round(microcentsToDollars(current.totalCostMicrocents), 2),
       tokensPerSession: current.sessions > 0 ? Math.round(current.totalTokens / current.sessions) : 0,
@@ -536,11 +538,11 @@ function buildMarketShare(rows: ProviderMetricRow[], product: UsageProduct, rang
     return [
       {
         date: bucket.label,
-        total: round(totalTokens / 1_000_000_000_000, 2),
+        total: round(totalTokens / 1_000_000_000_000, 6),
         authors: withOther.map((item) => ({
           author: item.provider === "Other" ? "Other" : formatProvider(item.provider),
           share: round((item.tokens / totalTokens) * 100, 1),
-          tokens: round(item.tokens / 1_000_000_000_000, 2),
+          tokens: round(item.tokens / 1_000_000_000_000, 6),
         })),
       },
     ]

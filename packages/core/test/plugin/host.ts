@@ -1,120 +1,60 @@
-import type { AISDKHooks, PluginHost } from "@opencode-ai/plugin/v2/effect"
+import type { PluginContext } from "@opencode-ai/plugin/v2/effect"
 import { AgentV2 } from "@opencode-ai/core/agent"
 import { Catalog } from "@opencode-ai/core/catalog"
+import { Credential } from "@opencode-ai/core/credential"
 import { Integration } from "@opencode-ai/core/integration"
 import { ModelV2 } from "@opencode-ai/core/model"
-import { PluginV2 } from "@opencode-ai/core/plugin"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import type { IntegrationEnvMethod, IntegrationKeyMethod, IntegrationOAuthMethod } from "@opencode-ai/sdk/v2/types"
-import { Effect, Stream } from "effect"
+import { Effect } from "effect"
 
-export function host(overrides: Partial<PluginHost> = {}): PluginHost {
+type Overrides = Partial<Omit<PluginContext, "options">>
+
+export function host(overrides: Overrides = {}): PluginContext {
   return {
-    aisdk: {
-      hook: () => Effect.die("unused aisdk.hook"),
-    },
-    agent: {
-      get: () => Effect.die("unused agent.get"),
-      default: () => Effect.die("unused agent.default"),
-      list: () => Effect.die("unused agent.list"),
-      rebuild: () => Effect.die("unused agent.rebuild"),
+    options: {},
+    agent: overrides.agent ?? {
       transform: () => Effect.die("unused agent.transform"),
+      reload: () => Effect.die("unused agent.reload"),
     },
-    catalog: {
-      provider: {
-        get: () => Effect.die("unused catalog.provider.get"),
-        list: () => Effect.die("unused catalog.provider.list"),
-        available: () => Effect.die("unused catalog.provider.available"),
-      },
-      model: {
-        get: () => Effect.die("unused catalog.model.get"),
-        list: () => Effect.die("unused catalog.model.list"),
-        available: () => Effect.die("unused catalog.model.available"),
-        default: () => Effect.die("unused catalog.model.default"),
-        small: () => Effect.die("unused catalog.model.small"),
-      },
-      rebuild: () => Effect.die("unused catalog.rebuild"),
+    aisdk: overrides.aisdk ?? {
+      sdk: () => Effect.die("unused aisdk.sdk"),
+      language: () => Effect.die("unused aisdk.language"),
+    },
+    catalog: overrides.catalog ?? {
       transform: () => Effect.die("unused catalog.transform"),
+      reload: () => Effect.die("unused catalog.reload"),
     },
-    command: {
-      get: () => Effect.die("unused command.get"),
-      list: () => Effect.die("unused command.list"),
-      rebuild: () => Effect.die("unused command.rebuild"),
+    command: overrides.command ?? {
       transform: () => Effect.die("unused command.transform"),
+      reload: () => Effect.die("unused command.reload"),
     },
-    event: {
-      subscribe: () => Stream.die("unused event.subscribe"),
-    },
-    filesystem: {
-      read: () => Effect.die("unused filesystem.read"),
-      list: () => Effect.die("unused filesystem.list"),
-      find: () => Effect.die("unused filesystem.find"),
-      glob: () => Effect.die("unused filesystem.glob"),
-    },
-    integration: {
-      get: () => Effect.die("unused integration.get"),
-      list: () => Effect.die("unused integration.list"),
-      rebuild: () => Effect.die("unused integration.rebuild"),
+    integration: overrides.integration ?? {
       transform: () => Effect.die("unused integration.transform"),
+      reload: () => Effect.die("unused integration.reload"),
+      connection: {
+        active: () => Effect.die("unused integration.connection.active"),
+        resolve: () => Effect.die("unused integration.connection.resolve"),
+      },
     },
-    location: {
-      directory: "/unused/location",
-      project: { directory: "/unused/project" },
+    plugin: overrides.plugin ?? {
+      add: () => Effect.die("unused plugin.add"),
+      remove: () => Effect.die("unused plugin.remove"),
     },
-    npm: {
-      add: () => Effect.die("unused npm.add"),
-    },
-    path: {
-      home: "/unused/home",
-      data: "/unused/data",
-      cache: "/unused/cache",
-      config: "/unused/config",
-      state: "/unused/state",
-      temp: "/unused/temp",
-    },
-    reference: {
-      list: () => Effect.die("unused reference.list"),
-      rebuild: () => Effect.die("unused reference.rebuild"),
+    reference: overrides.reference ?? {
       transform: () => Effect.die("unused reference.transform"),
+      reload: () => Effect.die("unused reference.reload"),
     },
-    skill: {
-      sources: () => Effect.die("unused skill.sources"),
-      list: () => Effect.die("unused skill.list"),
-      rebuild: () => Effect.die("unused skill.rebuild"),
+    skill: overrides.skill ?? {
       transform: () => Effect.die("unused skill.transform"),
-    },
-    ...overrides,
-  }
-}
-
-export function aisdkHost(plugin: PluginV2.Interface): PluginHost["aisdk"] {
-  return {
-    hook: (name, callback) => {
-      if (name === "sdk") {
-        const run = callback as AISDKHooks["sdk"]
-        return plugin.hook("aisdk.sdk", (event) => {
-          const output = { ...event }
-          const result = run(output)
-          return Effect.suspend(() => (Effect.isEffect(result) ? result : Effect.void)).pipe(
-            Effect.tap(() => Effect.sync(() => (event.sdk = output.sdk))),
-          )
-        })
-      }
-      const run = callback as AISDKHooks["language"]
-      return plugin.hook("aisdk.language", (event) => {
-        const output = { ...event }
-        const result = run(output)
-        return Effect.suspend(() => (Effect.isEffect(result) ? result : Effect.void)).pipe(
-          Effect.tap(() => Effect.sync(() => (event.language = output.language))),
-        )
-      })
+      reload: () => Effect.die("unused skill.reload"),
     },
   }
 }
 
-export function agentHost(agent: AgentV2.Interface): PluginHost["agent"] {
+export function agentHost(agent: AgentV2.Interface): PluginContext["agent"] {
   return {
-    ...host().agent,
+    reload: agent.reload,
     transform: (callback) =>
       agent.transform((draft) =>
         callback({
@@ -136,10 +76,9 @@ export function agentHost(agent: AgentV2.Interface): PluginHost["agent"] {
   }
 }
 
-export function catalogHost(catalog: Catalog.Interface): PluginHost["catalog"] {
+export function catalogHost(catalog: Catalog.Interface): PluginContext["catalog"] {
   return {
-    ...host().catalog,
-    rebuild: catalog.rebuild,
+    reload: catalog.reload,
     transform: (callback) =>
       catalog.transform((draft) =>
         callback({
@@ -201,17 +140,16 @@ export function catalogHost(catalog: Catalog.Interface): PluginHost["catalog"] {
   }
 }
 
-export function integrationHost(integration: Integration.Interface): PluginHost["integration"] {
-  const info = (value: Integration.Info) => ({
-    id: value.id,
-    name: value.name,
-    methods: value.methods.map(method),
-    connections: value.connections.map((item) => ({ ...item })),
-  })
+export function integrationHost(integration: Integration.Interface): PluginContext["integration"] {
   return {
-    get: (id) => integration.get(Integration.ID.make(id)).pipe(Effect.map((value) => value && info(value))),
-    list: () => integration.list().pipe(Effect.map((items) => items.map(info))),
-    rebuild: integration.rebuild,
+    reload: integration.reload,
+    connection: {
+      active: (id) => integration.connection.active(Integration.ID.make(id)),
+      resolve: (connection) =>
+        integration.connection.resolve(
+          connection.type === "credential" ? { ...connection, id: Credential.ID.make(connection.id) } : connection,
+        ),
+    },
     transform: (callback) =>
       integration.transform((draft) =>
         callback({
@@ -224,16 +162,72 @@ export function integrationHost(integration: Integration.Interface): PluginHost[
           remove: (id) => draft.remove(Integration.ID.make(id)),
           method: {
             list: (id) => draft.method.list(Integration.ID.make(id)).map(method),
-            update: (input) =>
-              input.method.type === "env"
-                ? draft.method.update({
-                    integrationID: Integration.ID.make(input.integrationID),
-                    method: { ...input.method, names: [...input.method.names] },
-                  })
-                : draft.method.update({
-                    integrationID: Integration.ID.make(input.integrationID),
-                    method: input.method,
-                  }),
+            update: (input) => {
+              if ("authorize" in input) {
+                const methodID = Integration.MethodID.make(input.method.id)
+                const refresh = input.refresh
+                draft.method.update({
+                  integrationID: Integration.ID.make(input.integrationID),
+                  method: { ...input.method, id: methodID },
+                  authorize: (inputs) =>
+                    input.authorize(inputs).pipe(
+                      Effect.map((authorization) => {
+                        if (authorization.mode === "auto") {
+                          return {
+                            ...authorization,
+                            callback: authorization.callback.pipe(
+                              Effect.map((credential) =>
+                                Credential.OAuth.make({
+                                  ...credential,
+                                  methodID: Integration.MethodID.make(credential.methodID),
+                                }),
+                              ),
+                            ),
+                          }
+                        }
+                        return {
+                          ...authorization,
+                          callback: (code: string) =>
+                            authorization.callback(code).pipe(
+                              Effect.map((credential) =>
+                                Credential.OAuth.make({
+                                  ...credential,
+                                  methodID: Integration.MethodID.make(credential.methodID),
+                                }),
+                              ),
+                            ),
+                        }
+                      }),
+                    ),
+                  ...(refresh
+                    ? {
+                        refresh: (value: Credential.OAuth) =>
+                          refresh(value).pipe(
+                            Effect.map((next) =>
+                              Credential.OAuth.make({
+                                ...next,
+                                methodID: Integration.MethodID.make(next.methodID),
+                              }),
+                            ),
+                          ),
+                      }
+                    : {}),
+                  ...(input.label ? { label: input.label } : {}),
+                })
+                return
+              }
+              if (input.method.type === "env") {
+                draft.method.update({
+                  integrationID: Integration.ID.make(input.integrationID),
+                  method: { ...input.method, names: [...input.method.names] },
+                })
+                return
+              }
+              draft.method.update({
+                integrationID: Integration.ID.make(input.integrationID),
+                method: input.method,
+              })
+            },
             remove: (id, item) => draft.method.remove(Integration.ID.make(id), internalMethod(item)),
           },
         }),
@@ -296,21 +290,11 @@ function modelInfo(value: ModelV2.Info | ModelV2.MutableInfo) {
       ...value.request,
       headers: { ...value.request.headers },
       body: { ...value.request.body },
-      generation: value.request.generation && {
-        ...value.request.generation,
-        stop: value.request.generation.stop && [...value.request.generation.stop],
-      },
-      options: value.request.options && { ...value.request.options },
     },
     variants: value.variants.map((variant) => ({
       ...variant,
       headers: { ...variant.headers },
       body: { ...variant.body },
-      generation: variant.generation && {
-        ...variant.generation,
-        stop: variant.generation.stop && [...variant.generation.stop],
-      },
-      options: variant.options && { ...variant.options },
     })),
     time: { ...value.time },
     cost: value.cost.map((cost) => ({ ...cost, tier: cost.tier && { ...cost.tier }, cache: { ...cost.cache } })),

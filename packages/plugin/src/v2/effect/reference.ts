@@ -1,6 +1,5 @@
-import type { ReferenceGitSource, ReferenceInfo, ReferenceLocalSource } from "@opencode-ai/sdk/v2/types"
-import type { Effect } from "effect"
-import type { Transformable } from "./registration.js"
+import type { ReferenceGitSource, ReferenceLocalSource } from "@opencode-ai/sdk/v2/types"
+import type { Hooks } from "./registration.js"
 
 export interface ReferenceDraft {
   add(name: string, source: ReferenceLocalSource | ReferenceGitSource): void
@@ -8,6 +7,6 @@ export interface ReferenceDraft {
   list(): readonly (readonly [string, ReferenceLocalSource | ReferenceGitSource])[]
 }
 
-export interface Reference extends Transformable<ReferenceDraft> {
-  list(): Effect.Effect<ReferenceInfo[]>
-}
+export type ReferenceHooks = Hooks<{
+  transform: ReferenceDraft
+}>

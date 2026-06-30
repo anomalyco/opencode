@@ -27,8 +27,6 @@ exports[`TUI inline tool wrapping snapshots expanded tool errors under the tool 
 exports[`TUI inline tool wrapping keeps separation after a shell output block 1`] = `
 "
 
-  # List files
-
   $ ls
 
   file.ts

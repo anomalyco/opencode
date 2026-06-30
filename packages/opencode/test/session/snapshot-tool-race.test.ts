@@ -37,9 +37,11 @@ const mcp = Layer.succeed(
   MCP.Service.of({
     status: () => Effect.succeed({}),
     clients: () => Effect.succeed({}),
+    instructions: () => Effect.succeed([]),
     tools: () => Effect.succeed({}),
     prompts: () => Effect.succeed({}),
     resources: () => Effect.succeed({}),
+    resourceTemplates: () => Effect.succeed({}),
     add: () => Effect.succeed({ status: { status: "disabled" as const } }),
     connect: () => Effect.void,
     disconnect: () => Effect.void,
@@ -82,16 +84,14 @@ const root = LayerNode.group([
   SessionSummary.node,
   Database.node,
   CrossSpawnSpawner.node,
-  LayerNode.make(TestLLMServer.layer, []),
+  LayerNode.make({ service: TestLLMServer, layer: TestLLMServer.layer, deps: [] }),
 ])
 const it = testEffect(
-  LayerNode.buildLayer(root, {
-    replacements: [
-      LayerNode.replace(MCP.node, mcp),
-      LayerNode.replace(LSP.node, lsp),
-      LayerNode.replace(RuntimeFlags.node, RuntimeFlags.layer({ experimentalEventSystem: true })),
-    ],
-  }),
+  LayerNode.compile(root, [
+    [MCP.node, mcp],
+    [LSP.node, lsp],
+    [RuntimeFlags.node, RuntimeFlags.layer({ experimentalEventSystem: true })],
+  ]),
 )
 
 const providerCfg = (url: string) => ({
@@ -139,7 +139,6 @@ it.live("tool execution produces non-empty session diff (snapshot race)", () =>
       const command = `echo 'snapshot race test content' > ${path.join(dir, "race-test.txt")}`
       yield* llm.toolMatch((hit) => JSON.stringify(hit.body).includes("create the file"), "bash", {
         command,
-        description: "create test file",
       })
       yield* llm.textMatch((hit) => JSON.stringify(hit.body).includes("bash"), "done")
 

@@ -1,6 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Exit, Scope } from "effect"
 import { AgentV2 } from "@opencode-ai/core/agent"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Location } from "@opencode-ai/core/location"
 import { AgentPlugin } from "@opencode-ai/core/plugin/agent"
 import { AbsolutePath } from "@opencode-ai/core/schema"
@@ -8,7 +9,7 @@ import { location } from "./fixture/location"
 import { testEffect } from "./lib/effect"
 import { agentHost, host } from "./plugin/host"
 
-const it = testEffect(AgentV2.locationLayer)
+const it = testEffect(AppNodeBuilder.build(AgentV2.node))
 
 describe("AgentV2", () => {
   it.effect("starts without agents", () =>
@@ -50,7 +51,7 @@ describe("AgentV2", () => {
       )
       description = "New description"
       hidden = false
-      yield* agent.rebuild()
+      yield* agent.reload()
 
       expect(yield* agent.get(id)).toMatchObject({ description: "New description", hidden: false })
     }),
@@ -104,8 +105,12 @@ describe("AgentV2", () => {
       yield* AgentPlugin.Plugin.effect(
         host({
           agent: agentHost(agent),
-          location: location({ directory: AbsolutePath.make("/project") }),
         }),
+      ).pipe(
+        Effect.provideService(
+          Location.Service,
+          Location.Service.of(location({ directory: AbsolutePath.make("/project") })),
+        ),
       )
 
       const agents = yield* agent.all()
