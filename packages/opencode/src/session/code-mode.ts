@@ -1,10 +1,22 @@
 import { Tool } from "@/tool/tool"
-import { EffectBridge } from "@/effect/bridge"
 import { asSchema, type Tool as AITool, type JSONSchema7 } from "ai"
 import type { Tool as MCPToolDef } from "@modelcontextprotocol/sdk/types.js"
 import { Effect, Schema } from "effect"
+import { Rune } from "./rune/rune"
+import type { ExecutionLimits } from "./rune/rune"
+import type { HostTools } from "./rune/tool-runtime"
 
 export const CODE_MODE_TOOL = "execute"
+
+/**
+ * Execution limits for the Rune interpreter. `maxDataBytes` is raised well above
+ * the Rune default (256KB) because code mode forwards base64 media attachments,
+ * and the timeout matches the default MCP request timeout.
+ */
+const CODE_LIMITS: ExecutionLimits = {
+  maxDataBytes: 10_000_000,
+  timeoutMs: 30_000,
+}
 
 export const Parameters = Schema.Struct({
   code: Schema.String.annotate({
@@ -26,12 +38,6 @@ export type Attachment = NonNullable<Tool.ExecuteResult["attachments"]>[number]
 
 /** The envelope every tool call resolves to, and the shape a program should `return`. */
 export type Envelope = { result: unknown; attachments?: Attachment[] }
-
-// `new Function`/`AsyncFunction` is not on the global scope, so reach it via the
-// prototype of an async function literal. The body may use top-level `await` and `return`.
-const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor as {
-  new (...args: string[]): (...args: unknown[]) => Promise<unknown>
-}
 
 const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/
 const SEARCH = "search"
@@ -282,16 +288,6 @@ export function fromReturn(value: unknown): { output: string; attachments?: Atta
   return { output: formatValue(value) }
 }
 
-function errorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message
-  if (typeof error === "string") return error
-  try {
-    return JSON.stringify(error) ?? String(error)
-  } catch {
-    return String(error)
-  }
-}
-
 export function define(
   mcpTools: Record<string, AITool>,
   mcpDefs: Record<string, MCPToolDef>,
@@ -347,73 +343,69 @@ export function define(
       description: describe(groups),
       parameters: Parameters,
       execute: Effect.fn("CodeMode.execute")(function* (params, ctx) {
-        const run = yield* EffectBridge.make()
         const calls: string[] = []
 
-        // Each tool call runs the native MCP tool through the permission gate, so
-        // approving `execute` does not approve every child call.
-        const invoke = (key: string, tool: AITool, args: unknown) =>
+        // One host function per MCP tool: gate on permission, dispatch to the native
+        // MCP tool, and coerce the result into the { result, attachments? } envelope.
+        // A failure (e.g. an MCP isError) fails the Effect, which the interpreter
+        // surfaces as a catchable in-program error.
+        const callTool = (key: string, tool: AITool) => (input: unknown) =>
           Effect.gen(function* () {
             yield* ctx.ask({ permission: key, metadata: {}, patterns: ["*"], always: ["*"] })
-            const result = yield* Effect.promise(() =>
-              Promise.resolve(
-                tool.execute!(args ?? {}, {
-                  toolCallId: ctx.callID ?? key,
-                  abortSignal: ctx.abort,
-                  messages: [],
-                }),
-              ),
-            )
+            calls.push(key)
+            const result = yield* Effect.tryPromise({
+              try: () =>
+                Promise.resolve(
+                  tool.execute!(input ?? {}, { toolCallId: ctx.callID ?? key, abortSignal: ctx.abort, messages: [] }),
+                ),
+              catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+            })
             return toEnvelope(result)
           })
 
-        // Recursive path-accumulating proxy: `tools.<server>.<tool>(args)` and
-        // `tools[path](args)` both resolve to a flat catalog key, while the reserved
-        // top-level `tools.search`/`tools.describe` provide on-demand discovery.
-        const make = (segments: readonly string[]): unknown =>
-          new Proxy(function () {} as object, {
-            get(_target, prop) {
-              if (typeof prop !== "string" || prop === "then") return undefined
-              return make([...segments, prop])
-            },
-            apply(_target, _thisArg, args: unknown[]) {
-              if (segments.length === 1 && segments[0] === SEARCH) return search(args[0], args[1])
-              if (segments.length === 1 && segments[0] === DESCRIBE) return describeTool(args[0])
-              const key = toKey(segments)
-              const tool = mcpTools[key]
-              if (!tool || !tool.execute) {
-                throw new Error(
-                  `Unknown tool 'tools.${segments.join(".")}'. Use tools.search(query) to discover available tools.`,
-                )
-              }
-              calls.push(key)
-              return run.promise(invoke(key, tool, args[0]))
-            },
-          })
+        // The Rune host-tool tree: per-server namespaces (`tools.<server>.<tool>`)
+        // plus the top-level discovery helpers. The interpreter resolves and invokes
+        // these; approving `execute` does not approve any child call.
+        const tools: HostTools = {
+          [SEARCH]: (query: unknown, options: unknown) => Effect.succeed(search(query, options)),
+          [DESCRIBE]: (path: unknown) => Effect.succeed(describeTool(path)),
+        }
+        for (const entry of catalog) {
+          if (!entry.tool.execute) continue
+          let namespace = tools[entry.server] as HostTools | undefined
+          if (!namespace) {
+            namespace = {}
+            tools[entry.server] = namespace
+          }
+          namespace[entry.local] = callTool(entry.key, entry.tool)
+        }
 
-        const tools = make([])
+        const result = yield* Rune.execute({
+          code: params.code,
+          tools: tools as unknown as Record<string, never>,
+          limits: CODE_LIMITS,
+        })
 
-        return yield* Effect.tryPromise({
-          try: () => new AsyncFunction("tools", params.code)(tools),
-          catch: (error) => error,
-        }).pipe(
-          Effect.map((value) => {
-            const { output, attachments } = fromReturn(value)
-            return {
-              title: "Code mode",
-              metadata: { toolCalls: calls },
-              output,
-              ...(attachments && attachments.length > 0 ? { attachments } : {}),
-            } satisfies Tool.ExecuteResult<Metadata>
-          }),
-          Effect.catch((error) =>
-            Effect.succeed({
-              title: "Code mode",
-              metadata: { toolCalls: calls, error: true },
-              output: errorMessage(error),
-            } satisfies Tool.ExecuteResult<Metadata>),
-          ),
-        )
+        if (result.ok) {
+          const { output, attachments } = fromReturn(result.value)
+          return {
+            title: "Code mode",
+            metadata: { toolCalls: calls },
+            output,
+            ...(attachments && attachments.length > 0 ? { attachments } : {}),
+          } satisfies Tool.ExecuteResult<Metadata>
+        }
+        // Rune's built-in unknown-capability hint points at `$rune.search`; redirect
+        // the model to this integration's actual discovery entrypoint instead.
+        const hint =
+          result.error.kind === "UnknownCapability"
+            ? "\nUse tools.search(query) to discover available tools."
+            : ""
+        return {
+          title: "Code mode",
+          metadata: { toolCalls: calls, error: true },
+          output: result.error.message + hint,
+        } satisfies Tool.ExecuteResult<Metadata>
       }),
     }),
   )

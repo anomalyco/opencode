@@ -182,7 +182,7 @@ describe("code mode execute", () => {
   test("returns a readable error when the program throws", async () => {
     const tool = await build({})
     const output = await Effect.runPromise(tool.execute({ code: "throw new Error('boom')" }, ctx))
-    expect(output.output).toBe("boom")
+    expect(output.output).toBe("Uncaught: boom")
     expect(output.metadata.error).toBe(true)
   })
 
@@ -190,7 +190,7 @@ describe("code mode execute", () => {
     const tool = await build({ known_tool: mcpTool("tool", () => "ok") })
     const output = await Effect.runPromise(tool.execute({ code: "return await tools.known.missing({})" }, ctx))
     expect(output.metadata.error).toBe(true)
-    expect(output.output).toContain("Unknown tool 'tools.known.missing'")
+    expect(output.output).toContain("Unknown tool 'known.missing'")
     expect(output.output).toContain("tools.search")
   })
 
@@ -249,6 +249,19 @@ describe("code mode execute", () => {
     expect(formatValue("text")).toBe("text")
     expect(formatValue({ a: 1 })).toBe(JSON.stringify({ a: 1 }, null, 2))
     expect(formatValue(undefined)).toBe("undefined")
+  })
+
+  test("terminates a runaway loop via the operation limit instead of hanging", async () => {
+    const tool = await build({})
+    const output = await Effect.runPromise(tool.execute({ code: "while (true) {}" }, ctx))
+    expect(output.metadata.error).toBe(true)
+    expect(output.output.toLowerCase()).toContain("operation")
+  })
+
+  test("isolates the sandbox from host globals", async () => {
+    const tool = await build({})
+    const output = await Effect.runPromise(tool.execute({ code: "return process.env" }, ctx))
+    expect(output.metadata.error).toBe(true)
   })
 
   test("describe shows the structured return type when the tool declares an outputSchema", async () => {
