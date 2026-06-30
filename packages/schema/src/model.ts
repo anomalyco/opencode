@@ -1,6 +1,7 @@
 export * as Model from "./model"
 
 import { Schema } from "effect"
+import { optional } from "./schema"
 import { Provider } from "./provider"
 import { statics } from "./schema"
 
@@ -13,9 +14,9 @@ export type VariantID = typeof VariantID.Type
 export const Ref = Schema.Struct({
   id: ID,
   providerID: Provider.ID,
-  variant: VariantID.pipe(Schema.optional),
-})
-export type Ref = typeof Ref.Type
+  variant: VariantID.pipe(optional),
+}).annotate({ identifier: "Model.Ref" })
+export interface Ref extends Schema.Schema.Type<typeof Ref> {}
 
 export const Family = Schema.String.pipe(Schema.brand("Family"))
 export type Family = typeof Family.Type
@@ -23,23 +24,23 @@ export type Family = typeof Family.Type
 export interface Capabilities extends Schema.Schema.Type<typeof Capabilities> {}
 export const Capabilities = Schema.Struct({
   tools: Schema.Boolean,
-  input: Schema.String.pipe(Schema.Array, Schema.mutable),
-  output: Schema.String.pipe(Schema.Array, Schema.mutable),
-})
+  input: Schema.Array(Schema.String),
+  output: Schema.Array(Schema.String),
+}).annotate({ identifier: "Model.Capabilities" })
 
 export interface Cost extends Schema.Schema.Type<typeof Cost> {}
 export const Cost = Schema.Struct({
   tier: Schema.Struct({
     type: Schema.Literal("context"),
     size: Schema.Int,
-  }).pipe(Schema.optional),
+  }).pipe(optional),
   input: Schema.Finite,
   output: Schema.Finite,
   cache: Schema.Struct({
     read: Schema.Finite,
     write: Schema.Finite,
   }),
-})
+}).annotate({ identifier: "Model.Cost" })
 
 export const Api = Schema.Union([
   Schema.Struct({
@@ -50,34 +51,36 @@ export const Api = Schema.Union([
     id: ID,
     ...Provider.Native.fields,
   }),
-]).pipe(Schema.toTaggedUnion("type"))
+])
+  .pipe(Schema.toTaggedUnion("type"))
+  .annotate({ identifier: "Model.Api" })
 export type Api = typeof Api.Type
 
 export interface Info extends Schema.Schema.Type<typeof Info> {}
 export const Info = Schema.Struct({
   id: ID,
   providerID: Provider.ID,
-  family: Family.pipe(Schema.optional),
+  family: Family.pipe(optional),
   name: Schema.String,
   api: Api,
   capabilities: Capabilities,
   request: Schema.Struct({
     ...Provider.Request.fields,
-    variant: Schema.String.pipe(Schema.optional),
+    variant: Schema.String.pipe(optional),
   }),
   variants: Schema.Struct({
     id: VariantID,
     ...Provider.Request.fields,
-  }).pipe(Schema.Array, Schema.mutable),
+  }).pipe(Schema.Array),
   time: Schema.Struct({
     released: Schema.Finite,
   }),
-  cost: Cost.pipe(Schema.Array, Schema.mutable),
+  cost: Schema.Array(Cost),
   status: Schema.Literals(["alpha", "beta", "deprecated", "active"]),
   enabled: Schema.Boolean,
   limit: Schema.Struct({
     context: Schema.Int,
-    input: Schema.Int.pipe(Schema.optional),
+    input: Schema.Int.pipe(optional),
     output: Schema.Int,
   }),
 })

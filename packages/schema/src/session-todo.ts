@@ -9,9 +9,11 @@ export const Info = Schema.Struct({
   status: Schema.String.annotate({
     description: "Current status of the task: pending, in_progress, completed, cancelled",
   }),
-  priority: Schema.String.annotate({ description: "Priority level of the task: high, medium, low" }),
+  priority: Schema.String.annotate({
+    description: "Priority level of the task: high, medium, low",
+  }),
 }).annotate({ identifier: "Todo" })
-export type Info = typeof Info.Type
+export interface Info extends Schema.Schema.Type<typeof Info> {}
 
 const Updated = define({
   type: "todo.updated",

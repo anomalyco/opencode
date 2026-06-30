@@ -1,13 +1,14 @@
 export * as WorktreeEvent from "./worktree-event"
 
 import { Schema } from "effect"
+import { optional } from "./schema"
 import { Event } from "./event"
 
 export const Ready = Event.define({
   type: "worktree.ready",
   schema: {
     name: Schema.String,
-    branch: Schema.optional(Schema.String),
+    branch: optional(Schema.String),
   },
 })
 

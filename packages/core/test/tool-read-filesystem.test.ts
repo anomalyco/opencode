@@ -1,12 +1,13 @@
 import { describe, expect } from "bun:test"
-import { NodeFileSystem } from "@effect/platform-node"
 import path from "path"
-import { Effect, FileSystem, Layer } from "effect"
+import { Effect, FileSystem } from "effect"
+import { LayerNodePlatform } from "@opencode-ai/core/effect/app-node-platform"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { ReadToolFileSystem } from "@opencode-ai/core/tool/read-filesystem"
 import { testEffect } from "./lib/effect"
 
-const it = testEffect(Layer.merge(FSUtil.defaultLayer, NodeFileSystem.layer))
+const it = testEffect(LayerNode.compile(LayerNode.group([FSUtil.node, LayerNodePlatform.filesystem])))
 const fixture = Effect.gen(function* () {
   const fs = yield* FSUtil.Service
   const files = yield* FileSystem.FileSystem

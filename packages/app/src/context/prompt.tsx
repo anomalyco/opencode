@@ -9,9 +9,10 @@ import { useServerSDK } from "./server-sdk"
 import type { ServerScope } from "@/utils/server-scope"
 import { useSDK } from "./sdk"
 import { useTabs, type Tab } from "./tabs"
-import { ServerConnection, useServer } from "./server"
+import { ServerConnection } from "./server"
 import { requireServerKey } from "@/utils/session-route"
 import { useSettings } from "./settings"
+import type { FilePartSource } from "@opencode-ai/sdk/v2/client"
 
 interface PartBase {
   content: string
@@ -27,6 +28,10 @@ export interface FileAttachmentPart extends PartBase {
   type: "file"
   path: string
   selection?: FileSelection
+  mime?: string
+  filename?: string
+  url?: string
+  source?: FilePartSource
 }
 
 export interface AgentPart extends PartBase {
@@ -73,7 +78,13 @@ function isPartEqual(partA: ContentPart, partB: ContentPart) {
     case "text":
       return partB.type === "text" && partA.content === partB.content
     case "file":
-      return partB.type === "file" && partA.path === partB.path && isSelectionEqual(partA.selection, partB.selection)
+      return (
+        partB.type === "file" &&
+        partA.path === partB.path &&
+        partA.mime === partB.mime &&
+        partA.filename === partB.filename &&
+        isSelectionEqual(partA.selection, partB.selection)
+      )
     case "agent":
       return partB.type === "agent" && partA.name === partB.name
     case "image":
@@ -287,7 +298,6 @@ export const { use: usePrompt, provider: PromptProvider } = createSimpleContext(
     const sdk = useSDK()
     const [search] = useSearchParams<{ draftId?: string }>()
     const serverSDK = useServerSDK()
-    const server = useServer()
     const tabs = useTabs()
     const settings = useSettings()
     const cache = new Map<string, PromptCacheEntry>()
@@ -312,7 +322,8 @@ export const { use: usePrompt, provider: PromptProvider } = createSimpleContext(
     }
 
     const owner = getOwner()
-    const serverKey = () => (params.serverKey ? requireServerKey(params.serverKey) : server.key)
+    const serverKey = () =>
+      params.serverKey ? requireServerKey(params.serverKey) : ServerConnection.key(serverSDK().server)
     const scope = () =>
       search.draftId ? { draftID: search.draftId } : { dir: base64Encode(sdk().directory), id: params.id }
     const load = (scope: Scope) => {

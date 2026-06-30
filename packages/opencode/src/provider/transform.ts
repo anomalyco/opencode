@@ -605,8 +605,14 @@ function anthropicOpus47OrLater(apiId: string) {
   return major > 4 || (major === 4 && minor >= 7)
 }
 
+function anthropicSonnet5OrLater(apiId: string) {
+  const version = /sonnet-(\d+)(?:[.@-]|$)|claude-(\d+)-sonnet(?:[.@-]|$)/i.exec(apiId)
+  if (!version) return false
+  return Number(version[1] ?? version[2]) >= 5
+}
+
 function anthropicAdaptiveEfforts(apiId: string): string[] | null {
-  if (anthropicOpus47OrLater(apiId) || apiId.includes("fable-5")) {
+  if (anthropicOpus47OrLater(apiId) || anthropicSonnet5OrLater(apiId) || apiId.includes("fable-5")) {
     return ["low", "medium", "high", "xhigh", "max"]
   }
   if (
@@ -620,7 +626,7 @@ function anthropicAdaptiveEfforts(apiId: string): string[] | null {
 }
 
 function anthropicOmitsThinking(apiId: string) {
-  return anthropicOpus47OrLater(apiId) || apiId.includes("fable-5")
+  return anthropicOpus47OrLater(apiId) || anthropicSonnet5OrLater(apiId) || apiId.includes("fable-5")
 }
 
 function googleThinkingLevelEfforts(apiId: string) {

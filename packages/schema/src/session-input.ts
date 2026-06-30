@@ -1,6 +1,7 @@
 export * as SessionInput from "./session-input"
 
 import { Schema } from "effect"
+import { optional } from "./schema"
 import { Prompt } from "./prompt"
 import { DateTimeUtcFromMillis, NonNegativeInt } from "./schema"
 import { SessionDelivery } from "./session-delivery"
@@ -18,5 +19,5 @@ export const Admitted = Schema.Struct({
   prompt: Prompt,
   delivery: Delivery,
   timeCreated: DateTimeUtcFromMillis,
-  promotedSeq: NonNegativeInt.pipe(Schema.optional),
+  promotedSeq: NonNegativeInt.pipe(optional),
 }).annotate({ identifier: "SessionInput.Admitted" })

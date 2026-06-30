@@ -9,10 +9,10 @@ import { Decimal } from "decimal.js"
 import type { ProviderMetadata, Usage } from "@opencode-ai/llm"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { Database } from "@opencode-ai/core/database/database"
-import { makeRuntime } from "@opencode-ai/core/effect/runtime"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { SessionV2 } from "@opencode-ai/core/session"
-import { SessionExecution } from "@opencode-ai/core/session/execution"
+import * as SessionExecutionLocal from "@opencode-ai/core/session/execution/local"
+import { locationServiceMapLayer } from "@opencode-ai/core/location-services"
 
 import { NotFoundError } from "@/storage/storage"
 import { eq } from "drizzle-orm"
@@ -44,8 +44,6 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { SessionMessage } from "@opencode-ai/schema/session-message"
-
-const runtime = makeRuntime(Database.Service, Database.defaultLayer)
 
 const parentTitlePrefix = "New session - "
 const childTitlePrefix = "Child session - "
@@ -432,6 +430,12 @@ export interface Interface {
   readonly setTitle: (input: { sessionID: SessionID; title: string }) => Effect.Effect<void>
   readonly setArchived: (input: { sessionID: SessionID; time?: number }) => Effect.Effect<void>
   readonly setMetadata: (input: typeof SetMetadataInput.Type) => Effect.Effect<void>
+  readonly setAgentModel: (input: {
+    sessionID: SessionID
+    agent: string
+    model: NonNullable<Info["model"]>
+    time: number
+  }) => Effect.Effect<void>
   readonly setPermission: (input: { sessionID: SessionID; permission: PermissionV1.Ruleset }) => Effect.Effect<void>
   readonly setRevert: (input: {
     sessionID: SessionID
@@ -481,7 +485,7 @@ export type Patch = Omit<Partial<Info>, "time" | "share" | "summary" | "revert" 
   permission?: Info["permission"] | null
 }
 
-export const layer: Layer.Layer<
+const layer: Layer.Layer<
   Service,
   never,
   BackgroundJob.Service | RuntimeFlags.Service | Database.Service | EventV2Bridge.Service
@@ -760,6 +764,19 @@ export const layer: Layer.Layer<
       yield* patch(input.sessionID, { metadata: input.metadata, time: { updated: Date.now() } }).pipe(Effect.orDie)
     })
 
+    const setAgentModel = Effect.fn("Session.setAgentModel")(function* (input: {
+      sessionID: SessionID
+      agent: string
+      model: NonNullable<Info["model"]>
+      time: number
+    }) {
+      yield* patch(input.sessionID, {
+        agent: input.agent,
+        model: input.model,
+        time: { updated: input.time },
+      }).pipe(Effect.orDie)
+    })
+
     const setPermission = Effect.fn("Session.setPermission")(function* (input: {
       sessionID: SessionID
       permission: PermissionV1.Ruleset
@@ -898,6 +915,7 @@ export const layer: Layer.Layer<
       setTitle,
       setArchived,
       setMetadata,
+      setAgentModel,
       setPermission,
       setRevert,
       clearRevert,
@@ -917,15 +935,6 @@ export const layer: Layer.Layer<
       findMessage,
     })
   }),
-)
-
-export const defaultLayer = layer.pipe(
-  Layer.provide(BackgroundJob.defaultLayer),
-  Layer.provide(Database.defaultLayer),
-  Layer.provide(EventV2Bridge.defaultLayer),
-  Layer.provide(SessionExecution.noopLayer),
-  Layer.provide(SessionV2.defaultLayer),
-  Layer.provide(RuntimeFlags.defaultLayer),
 )
 
 const cancelBackgroundJobs = Effect.fn("Session.cancelBackgroundJobs")(function* (
@@ -1000,76 +1009,10 @@ function listByProject(
     )
 }
 
-export function* listGlobal(input?: {
-  directory?: string
-  roots?: boolean
-  start?: number
-  cursor?: number
-  search?: string
-  limit?: number
-  archived?: boolean
-}) {
-  const conditions: SQL[] = []
-
-  if (input?.directory) {
-    conditions.push(eq(SessionTable.directory, input.directory))
-  }
-  if (input?.roots) {
-    conditions.push(isNull(SessionTable.parent_id))
-  }
-  if (input?.start) {
-    conditions.push(gte(SessionTable.time_updated, input.start))
-  }
-  if (input?.cursor) {
-    conditions.push(lt(SessionTable.time_updated, input.cursor))
-  }
-  if (input?.search) {
-    conditions.push(like(SessionTable.title, `%${input.search}%`))
-  }
-  if (!input?.archived) {
-    conditions.push(isNull(SessionTable.time_archived))
-  }
-
-  const limit = input?.limit ?? 100
-
-  const rows = runtime.runSync(({ db }) => {
-    const query =
-      conditions.length > 0
-        ? db
-            .select()
-            .from(SessionTable)
-            .where(and(...conditions))
-        : db.select().from(SessionTable)
-    return query.orderBy(desc(SessionTable.time_updated), desc(SessionTable.id)).limit(limit).all().pipe(Effect.orDie)
-  })
-
-  const ids = [...new Set(rows.map((row) => row.project_id))]
-  const projects = new Map<string, ProjectInfo>()
-
-  if (ids.length > 0) {
-    const items = runtime.runSync(({ db }) =>
-      db
-        .select({ id: ProjectTable.id, name: ProjectTable.name, worktree: ProjectTable.worktree })
-        .from(ProjectTable)
-        .where(inArray(ProjectTable.id, ids))
-        .all()
-        .pipe(Effect.orDie),
-    )
-    for (const item of items) {
-      projects.set(item.id, {
-        id: item.id,
-        name: item.name ?? undefined,
-        worktree: item.worktree,
-      })
-    }
-  }
-
-  for (const row of rows) {
-    const project = projects.get(row.project_id) ?? null
-    yield { ...fromRow(row), project }
-  }
-}
-
-export const node = LayerNode.make(layer, [BackgroundJob.node, RuntimeFlags.node, Database.node, EventV2Bridge.node])
+export const node = LayerNode.make({
+  service: Service,
+  layer: layer,
+  deps: [BackgroundJob.node, RuntimeFlags.node, Database.node, EventV2Bridge.node],
+})
 
 export * as Session from "./session"

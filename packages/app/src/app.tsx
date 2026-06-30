@@ -16,6 +16,7 @@ import {
   type Component,
   createEffect,
   createMemo,
+  createRenderEffect,
   createResource,
   createSignal,
   ErrorBoundary,
@@ -27,18 +28,19 @@ import {
   Show,
 } from "solid-js"
 import { Dynamic } from "solid-js/web"
-import { CommandProvider } from "@/context/command"
+import { CommandProvider, useCommand, type CommandOption } from "@/context/command"
 import { CommentsProvider } from "@/context/comments"
 import { FileProvider } from "@/context/file"
 import { ServerSDKProvider, useServerSDK } from "@/context/server-sdk"
 import { ServerSyncProvider, useServerSync } from "@/context/server-sync"
-import { GlobalProvider } from "@/context/global"
+import { GlobalProvider, useGlobal } from "@/context/global"
 import { HighlightsProvider } from "@/context/highlights"
 import { LanguageProvider, type Locale, useLanguage } from "@/context/language"
 import { LayoutProvider } from "@/context/layout"
 import { ModelsProvider } from "@/context/models"
-import { NotificationProvider } from "@/context/notification"
+import { NotificationProvider, useNotification } from "@/context/notification"
 import { PermissionProvider } from "@/context/permission"
+import { usePlatform } from "@/context/platform"
 import { PromptProvider } from "@/context/prompt"
 import { ServerConnection, ServerProvider, serverName, useServer } from "@/context/server"
 import { SettingsProvider, useSettings } from "@/context/settings"
@@ -103,10 +105,10 @@ const SessionRoute = () => {
 
 const TargetSessionRoute = () => {
   const params = useParams<{ serverKey: string; id: string }>()
-  const server = useServer()
+  const global = useGlobal()
   const conn = createMemo(() => {
     const key = requireServerKey(params.serverKey)
-    return server.list.find((item) => ServerConnection.key(item) === key)
+    return global.servers.list().find((item) => ServerConnection.key(item) === key)
   })
 
   return (
@@ -221,25 +223,27 @@ function DraftRoute() {
 }
 
 function ResolvedDraftRoute(props: { draft: DraftTab }) {
-  const server = useServer()
-  const conn = createMemo(() => server.list.find((item) => ServerConnection.key(item) === props.draft.server))
+  const global = useGlobal()
+  const conn = createMemo(() => global.servers.list().find((item) => ServerConnection.key(item) === props.draft.server))
   const directory = () => props.draft.directory
   const serverKey = () => props.draft.server
 
   return (
-    <ServerSDKProvider server={conn}>
-      <ServerSyncProvider server={conn}>
-        <TargetServerScopedProviders directory={directory}>
-          <SDKProvider directory={directory}>
-            <DirectoryDataProvider directory={directory} server={serverKey}>
-              <DraftProviders>
-                <NewSession />
-              </DraftProviders>
-            </DirectoryDataProvider>
-          </SDKProvider>
-        </TargetServerScopedProviders>
-      </ServerSyncProvider>
-    </ServerSDKProvider>
+    <Show when={`${props.draft.server}\0${props.draft.directory}`} keyed>
+      <ServerSDKProvider server={conn}>
+        <ServerSyncProvider server={conn}>
+          <TargetServerScopedProviders directory={directory}>
+            <SDKProvider directory={directory}>
+              <DirectoryDataProvider directory={directory} server={serverKey}>
+                <DraftProviders>
+                  <NewSession />
+                </DraftProviders>
+              </DirectoryDataProvider>
+            </SDKProvider>
+          </TargetServerScopedProviders>
+        </ServerSyncProvider>
+      </ServerSDKProvider>
+    </Show>
   )
 }
 
@@ -276,10 +280,11 @@ function QueryProvider(props: ParentProps) {
 function BodyDesignClass() {
   const settings = useSettings()
 
-  createEffect(() => {
+  createRenderEffect(() => {
     if (typeof document === "undefined") return
 
     const enabled = settings.general.newLayoutDesigns()
+    document.body.toggleAttribute("data-new-layout", enabled)
     document.body.classList.toggle("text-12-regular", !enabled)
     document.body.classList.toggle("font-(family-name:--font-family-text)", enabled)
     document.body.classList.toggle("text-[13px]", enabled)
@@ -296,10 +301,34 @@ function SharedProviders(props: ParentProps) {
     <>
       <BodyDesignClass />
       <CommandProvider>
+        <DesktopCommands />
         <HighlightsProvider>{props.children}</HighlightsProvider>
       </CommandProvider>
     </>
   )
+}
+
+function DesktopCommands() {
+  const command = useCommand()
+  const language = useLanguage()
+  const platform = usePlatform()
+
+  command.register("desktop", () => {
+    const commands: CommandOption[] = []
+    if (platform.platform === "desktop" && platform.exportDebugLogs) {
+      commands.push({
+        id: "logs.export",
+        title: "Export logs",
+        category: language.t("command.category.settings"),
+        onSelect: () => {
+          void platform.exportDebugLogs?.()
+        },
+      })
+    }
+    return commands
+  })
+
+  return null
 }
 
 // Server-scoped providers shared by the legacy shell and the top-level new shell.
@@ -312,9 +341,7 @@ function ServerScopedProviders(props: ServerScopedShellProps) {
   return (
     <PermissionProvider directory={props.directory}>
       <LayoutProvider>
-        <NotificationProvider directory={props.directory} sessionID={props.sessionID}>
-          <ModelsProvider directory={props.directory}>{props.children}</ModelsProvider>
-        </NotificationProvider>
+        <ModelsProvider directory={props.directory}>{props.children}</ModelsProvider>
       </LayoutProvider>
     </PermissionProvider>
   )
@@ -341,11 +368,21 @@ function NewAppLayout(props: ParentProps) {
 function TargetServerScopedProviders(props: ServerScopedShellProps) {
   return (
     <PermissionProvider directory={props.directory}>
-      <NotificationProvider directory={props.directory} sessionID={props.sessionID}>
-        <ModelsProvider directory={props.directory}>{props.children}</ModelsProvider>
-      </NotificationProvider>
+      <MarkSessionNotificationsViewed sessionID={props.sessionID} />
+      <ModelsProvider directory={props.directory}>{props.children}</ModelsProvider>
     </PermissionProvider>
   )
+}
+
+function MarkSessionNotificationsViewed(props: { sessionID?: () => string | undefined }) {
+  const notification = useNotification()
+  createEffect(() => {
+    const sessionID = props.sessionID?.()
+    if (!notification.ready() || !sessionID) return
+    if (notification.session.unseenCount(sessionID) === 0) return
+    notification.session.markViewed(sessionID)
+  })
+  return null
 }
 
 function SessionProviders(props: ParentProps) {
@@ -556,11 +593,13 @@ export function AppInterface(props: {
                 component={props.router ?? Router}
                 root={(routerProps) => (
                   <TabsProvider>
-                    <ServerShell>
-                      <Show when={useSettings().general.newLayoutDesigns()} fallback={routerProps.children}>
-                        <NewAppLayout>{routerProps.children}</NewAppLayout>
-                      </Show>
-                    </ServerShell>
+                    <NotificationProvider>
+                      <ServerShell>
+                        <Show when={useSettings().general.newLayoutDesigns()} fallback={routerProps.children}>
+                          <NewAppLayout>{routerProps.children}</NewAppLayout>
+                        </Show>
+                      </ServerShell>
+                    </NotificationProvider>
                   </TabsProvider>
                 )}
               >
@@ -588,18 +627,31 @@ function Routes() {
       </Route>
       <Show when={settings.general.newLayoutDesigns()}>
         <Route path="/" component={NewHome} />
-        <Route
-          path="/:dir/session/:id"
-          component={() => {
-            const server = useServer()
-            const { id } = useParams()
-
-            return <Navigate href={`/server/${server.key}/session/${id}`} />
-          }}
-        />
+        <Route path="/:dir/session/:id" component={LegacyTargetSessionRoute} />
       </Show>
       <Route path="/new-session" component={DraftRoute} />
       <Route path="/server/:serverKey/session/:id" component={TargetSessionRoute} />
     </>
+  )
+}
+
+function LegacyTargetSessionRoute() {
+  const server = useServer()
+  const tabs = useTabs()
+  const params = useParams<{ id: string }>()
+
+  return (
+    <Show when={tabs.ready()}>
+      <Navigate
+        href={sessionHref(
+          legacySessionServer(
+            tabs.store.filter((item) => item.type === "session"),
+            params.id,
+            server.key,
+          ),
+          params.id,
+        )}
+      />
+    </Show>
   )
 }
