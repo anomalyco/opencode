@@ -44,7 +44,7 @@ export const toModelOutput = (
   return `User has answered your questions: ${formatted}. You can now continue with the user's answers in mind.`
 }
 
-export const layer = Layer.effectDiscard(
+const layer = Layer.effectDiscard(
   Effect.gen(function* () {
     const tools = yield* Tools.Service
     const question = yield* QuestionV2.Service

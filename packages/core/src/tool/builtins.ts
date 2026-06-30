@@ -29,21 +29,6 @@ import { WriteTool } from "./write"
  * repo_clone, repo_overview, plan_exit, and Rune/code mode. Keep MCP and plugin
  * transforms separate from this static built-in list.
  */
-export const locationLayer = Layer.mergeAll(
-  ApplyPatchTool.layer,
-  BashTool.layer,
-  EditTool.layer,
-  GlobTool.layer,
-  GrepTool.layer,
-  QuestionTool.layer,
-  ReadTool.layer.pipe(Layer.provide(ReadToolFileSystem.layer)),
-  SkillTool.layer,
-  TodoWriteTool.layer,
-  WebFetchTool.layer,
-  WebSearchTool.layer.pipe(Layer.provide(WebSearchTool.defaultConfigLayer)),
-  WriteTool.layer,
-)
-
 export const node = makeLocationNode({
   name: "built-in-tools",
   layer: Layer.empty,
@@ -55,6 +40,7 @@ export const node = makeLocationNode({
     GrepTool.node,
     QuestionTool.node,
     ReadTool.node,
+    ReadToolFileSystem.node,
     SkillTool.node,
     TodoWriteTool.node,
     WebFetchTool.node,

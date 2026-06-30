@@ -109,7 +109,7 @@ const lineCount = (text: string) => {
   return count
 }
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
@@ -191,8 +191,6 @@ export const layer = Layer.effect(
     return Service.of({ limits, bound, cleanup })
   }),
 )
-
-export const defaultLayer = layer.pipe(Layer.provide(FSUtil.defaultLayer), Layer.provide(Global.defaultLayer))
 
 export const node = makeLocationNode({ service: Service, layer, deps: [FSUtil.node, Global.node, Config.node] })
 
