@@ -1059,6 +1059,7 @@
     "@ai-sdk/google@3.0.73": "patches/@ai-sdk%2Fgoogle@3.0.73.patch",
     "@ai-sdk/xai@3.0.82": "patches/@ai-sdk%2Fxai@3.0.82.patch",
     "@tanstack/virtual-core@3.17.0": "patches/@tanstack%2Fvirtual-core@3.17.0.patch",
+    "ai@6.0.168": "patches/ai@6.0.168.patch",
     "pacote@21.5.0": "patches/pacote@21.5.0.patch",
   },
   "overrides": {

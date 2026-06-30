@@ -1,0 +1,136 @@
+diff --git a/dist/index.js b/dist/index.js
+index 205ee98..6792d50 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -6725,10 +6725,7 @@ var DefaultStreamTextResult = class {
+-          const activeReasoning = activeReasoningContent[part.id];
+-          if (activeReasoning == null) {
+-            controller.enqueue({
+-              part: {
+-                type: "error",
+-                error: `reasoning part ${part.id} not found`
+-              },
+-              partialOutput: void 0
+-            });
+-            return;
++          if (activeReasoningContent[part.id] == null) {
++            activeReasoningContent[part.id] = {
++              type: "reasoning",
++              text: "",
++              providerMetadata: part.providerMetadata
++            };
++            recordedContent.push(activeReasoningContent[part.id]);
+@@ -6735,0 +6733 @@ var DefaultStreamTextResult = class {
++          const activeReasoning = activeReasoningContent[part.id];
+@@ -6740,10 +6738,7 @@ var DefaultStreamTextResult = class {
+-          const activeReasoning = activeReasoningContent[part.id];
+-          if (activeReasoning == null) {
+-            controller.enqueue({
+-              part: {
+-                type: "error",
+-                error: `reasoning part ${part.id} not found`
+-              },
+-              partialOutput: void 0
+-            });
+-            return;
++          if (activeReasoningContent[part.id] == null) {
++            activeReasoningContent[part.id] = {
++              type: "reasoning",
++              text: "",
++              providerMetadata: part.providerMetadata
++            };
++            recordedContent.push(activeReasoningContent[part.id]);
+@@ -6750,0 +6746 @@ var DefaultStreamTextResult = class {
++          const activeReasoning = activeReasoningContent[part.id];
+diff --git a/dist/index.mjs b/dist/index.mjs
+index 4fb9b6b..b2d6f19 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -6647,10 +6647,7 @@ var DefaultStreamTextResult = class {
+-          const activeReasoning = activeReasoningContent[part.id];
+-          if (activeReasoning == null) {
+-            controller.enqueue({
+-              part: {
+-                type: "error",
+-                error: `reasoning part ${part.id} not found`
+-              },
+-              partialOutput: void 0
+-            });
+-            return;
++          if (activeReasoningContent[part.id] == null) {
++            activeReasoningContent[part.id] = {
++              type: "reasoning",
++              text: "",
++              providerMetadata: part.providerMetadata
++            };
++            recordedContent.push(activeReasoningContent[part.id]);
+@@ -6657,0 +6655 @@ var DefaultStreamTextResult = class {
++          const activeReasoning = activeReasoningContent[part.id];
+@@ -6662,10 +6660,7 @@ var DefaultStreamTextResult = class {
+-          const activeReasoning = activeReasoningContent[part.id];
+-          if (activeReasoning == null) {
+-            controller.enqueue({
+-              part: {
+-                type: "error",
+-                error: `reasoning part ${part.id} not found`
+-              },
+-              partialOutput: void 0
+-            });
+-            return;
++          if (activeReasoningContent[part.id] == null) {
++            activeReasoningContent[part.id] = {
++              type: "reasoning",
++              text: "",
++              providerMetadata: part.providerMetadata
++            };
++            recordedContent.push(activeReasoningContent[part.id]);
+@@ -6672,0 +6668 @@ var DefaultStreamTextResult = class {
++          const activeReasoning = activeReasoningContent[part.id];
+diff --git a/src/generate-text/stream-text.ts b/src/generate-text/stream-text.ts
+index 3a74929..1be068e 100644
+--- a/src/generate-text/stream-text.ts
++++ b/src/generate-text/stream-text.ts
+@@ -943,11 +943,8 @@ class DefaultStreamTextResult<
+-          const activeReasoning = activeReasoningContent[part.id];
+-
+-          if (activeReasoning == null) {
+-            controller.enqueue({
+-              part: {
+-                type: 'error',
+-                error: `reasoning part ${part.id} not found`,
+-              },
+-              partialOutput: undefined,
+-            });
+-            return;
++          if (activeReasoningContent[part.id] == null) {
++            activeReasoningContent[part.id] = {
++              type: 'reasoning',
++              text: '',
++              providerMetadata: part.providerMetadata,
++            };
++
++            recordedContent.push(activeReasoningContent[part.id]);
+@@ -955,0 +953 @@ class DefaultStreamTextResult<
++          const activeReasoning = activeReasoningContent[part.id];
+@@ -962,11 +960,8 @@ class DefaultStreamTextResult<
+-          const activeReasoning = activeReasoningContent[part.id];
+-
+-          if (activeReasoning == null) {
+-            controller.enqueue({
+-              part: {
+-                type: 'error',
+-                error: `reasoning part ${part.id} not found`,
+-              },
+-              partialOutput: undefined,
+-            });
+-            return;
++          if (activeReasoningContent[part.id] == null) {
++            activeReasoningContent[part.id] = {
++              type: 'reasoning',
++              text: '',
++              providerMetadata: part.providerMetadata,
++            };
++
++            recordedContent.push(activeReasoningContent[part.id]);
+@@ -974,0 +970 @@ class DefaultStreamTextResult<
++          const activeReasoning = activeReasoningContent[part.id];
