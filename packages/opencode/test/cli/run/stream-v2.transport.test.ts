@@ -114,6 +114,19 @@ function sdk(input: { streams: ReturnType<typeof feed>[]; active?: () => Record<
   spyOn(client.v2.session, "active").mockImplementation(() => ok({ data: input.active?.() ?? {} }))
   spyOn(client.v2.session, "switchAgent").mockImplementation(() => ok(undefined))
   spyOn(client.v2.session, "switchModel").mockImplementation(() => ok(undefined))
+  spyOn(client.config, "get").mockImplementation(() => ok({}))
+  spyOn(client.v2.model, "list").mockImplementation(() =>
+    ok({
+      location: {
+        directory: "/tmp",
+        project: {
+          id: "proj_1",
+          directory: "/tmp",
+        },
+      },
+      data: [],
+    }),
+  )
   return client
 }
 
@@ -305,6 +318,75 @@ describe("V2 mini transport", () => {
     await transport.close()
   })
 
+  test("does not duplicate the optimistic user row when reconnect hydration recovers a missed prompt", async () => {
+    const first = feed()
+    const second = feed()
+    first.push(connected("evt_connected_1"))
+    second.push(connected("evt_connected_2"))
+    let running = true
+    let projected = false
+    const client = sdk({
+      streams: [first, second],
+      active: () => {
+        const active: Record<string, { type: "running" }> = {}
+        if (running) active.ses_1 = { type: "running" }
+        return active
+      },
+    })
+    spyOn(client.v2.session, "messages").mockImplementation(() =>
+      ok({
+        data: projected
+          ? [
+              {
+                id: "msg_prompt",
+                type: "user",
+                text: "hello",
+                files: [],
+                agents: [],
+                time: { created: 2 },
+              },
+            ]
+          : [],
+        cursor: {},
+      }),
+    )
+    const ui = footer()
+    ui.commits.push({ kind: "user", source: "system", text: "hello", phase: "start", messageID: "msg_prompt" })
+    const transport = await createSessionTransport({
+      sdk: client,
+      sessionID: "ses_1",
+      thinking: false,
+      limits: () => ({}),
+      footer: ui.api,
+    })
+    let admitted = false
+    // The generated method has conditional return types for throwOnError; this mock represents the successful branch.
+    // @ts-expect-error successful SDK response is valid for both modes at runtime
+    spyOn(client.v2.session, "prompt").mockImplementation((request) => {
+      const messageID = request.id ?? "msg_prompt"
+      const prompt = request.prompt ?? { text: "" }
+      admitted = true
+      return ok({ data: { admittedSeq: 1, id: messageID, sessionID: "ses_1", prompt, delivery: "steer" as const, timeCreated: 2 } })
+    })
+
+    const turn = transport.runPromptTurn({
+      agent: undefined,
+      model: undefined,
+      variant: undefined,
+      prompt: { messageID: "msg_prompt", text: "hello", parts: [] },
+      files: [],
+      includeFiles: true,
+    })
+    while (!admitted) await Bun.sleep(0)
+    projected = true
+    running = false
+    first.close()
+    await turn
+
+    expect(ui.commits.filter((item) => item.kind === "user" && item.messageID === "msg_prompt")).toHaveLength(1)
+    await transport.close()
+  })
+
   test("reconciles buffered deltas already present in a resize snapshot", async () => {
     const events = feed()
     events.push(connected())
@@ -384,6 +466,114 @@ describe("V2 mini transport", () => {
     await Bun.sleep(0)
 
     expect(ui.commits.at(-1)?.text).toBe("Thinking: considering")
+    await transport.close()
+  })
+
+  test("resolves an interrupted turn even when promotion never arrived", async () => {
+    const events = feed()
+    events.push(connected())
+    const client = sdk({
+      streams: [events],
+      active: () => ({ ses_1: { type: "running" } }),
+    })
+    const ui = footer()
+    const transport = await createSessionTransport({
+      sdk: client,
+      sessionID: "ses_1",
+      thinking: false,
+      limits: () => ({}),
+      footer: ui.api,
+    })
+    let admitted = false
+    // The generated method has conditional return types for throwOnError; this mock represents the successful branch.
+    // @ts-expect-error successful SDK response is valid for both modes at runtime
+    spyOn(client.v2.session, "prompt").mockImplementation((request) => {
+      const messageID = request.id ?? "msg_prompt"
+      const prompt = request.prompt ?? { text: "" }
+      admitted = true
+      return ok({ data: { admittedSeq: 1, id: messageID, sessionID: "ses_1", prompt, delivery: "steer" as const, timeCreated: 2 } })
+    })
+    const interrupted = spyOn(client.v2.session, "interrupt").mockImplementation(() => ok(undefined))
+
+    const turn = transport.runPromptTurn({
+      agent: undefined,
+      model: undefined,
+      variant: undefined,
+      prompt: { messageID: "msg_prompt", text: "hello", parts: [] },
+      files: [],
+      includeFiles: true,
+    })
+    while (!admitted) await Bun.sleep(0)
+    await transport.interruptActiveTurn()
+    events.push({
+      id: "evt_settled",
+      type: "session.next.execution.settled",
+      data: { timestamp: 3, sessionID: "ses_1", outcome: "interrupted" },
+    })
+    await turn
+
+    expect(interrupted).toHaveBeenCalledWith({ sessionID: "ses_1" })
+    await transport.close()
+  })
+
+  test("falls back to the configured model when selecting a variant on a fresh session", async () => {
+    const events = feed()
+    events.push(connected())
+    const client = sdk({ streams: [events] })
+    const ui = footer()
+    const transport = await createSessionTransport({
+      sdk: client,
+      sessionID: "ses_1",
+      thinking: false,
+      limits: () => ({}),
+      footer: ui.api,
+    })
+    // The generated method has conditional return types for throwOnError; the test only needs the nested model field.
+    // @ts-expect-error minimal session shape is enough for this lookup
+    spyOn(client.v2.session, "get").mockImplementation(() => ok({ data: { model: undefined } }))
+    spyOn(client.config, "get").mockImplementation(() => ok({ model: "openai/gpt-5" }))
+    const switched = spyOn(client.v2.session, "switchModel").mockImplementation(() => ok(undefined))
+    let admitted = false
+    // The generated method has conditional return types for throwOnError; this mock represents the successful branch.
+    // @ts-expect-error successful SDK response is valid for both modes at runtime
+    spyOn(client.v2.session, "prompt").mockImplementation((request) => {
+      const messageID = request.id ?? "msg_prompt"
+      const prompt = request.prompt ?? { text: "" }
+      admitted = true
+      return ok({ data: { admittedSeq: 1, id: messageID, sessionID: "ses_1", prompt, delivery: "steer" as const, timeCreated: 2 } })
+    })
+
+    const turn = transport.runPromptTurn({
+      agent: undefined,
+      model: undefined,
+      variant: "high",
+      prompt: { messageID: "msg_prompt", text: "hello", parts: [] },
+      files: [],
+      includeFiles: true,
+    })
+    while (!admitted) await Bun.sleep(0)
+    events.push({
+      id: "evt_prompted",
+      type: "session.next.prompted",
+      data: {
+        timestamp: 2,
+        sessionID: "ses_1",
+        messageID: "msg_prompt",
+        prompt: { text: "hello" },
+        delivery: "steer",
+      },
+    })
+    events.push({
+      id: "evt_settled",
+      type: "session.next.execution.settled",
+      data: { timestamp: 3, sessionID: "ses_1", outcome: "success" },
+    })
+    await turn
+
+    expect(switched).toHaveBeenCalledWith(
+      { sessionID: "ses_1", model: { providerID: "openai", id: "gpt-5", variant: "high" } },
+      expect.objectContaining({ throwOnError: true }),
+    )
     await transport.close()
   })
 

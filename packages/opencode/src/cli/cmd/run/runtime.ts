@@ -341,16 +341,18 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
     },
     onInterrupt: () => {
       if (!hasSession(input, state) || state.aborting) {
-        return
+        return false
       }
 
       state.aborting = true
-      void ctx.sdk.v2.session
-        .interrupt({ sessionID: state.sessionID })
+      void (state.stream
+        ? state.stream.then((item) => item.handle.interruptActiveTurn())
+        : ctx.sdk.v2.session.interrupt({ sessionID: state.sessionID }))
         .catch(() => {})
         .finally(() => {
           state.aborting = false
         })
+      return true
     },
     onBackground: () => {
       if (!hasSession(input, state)) return

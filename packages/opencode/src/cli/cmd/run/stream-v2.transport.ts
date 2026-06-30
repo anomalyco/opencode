@@ -60,6 +60,7 @@ export type SessionResizeReplayInput = {
 
 export type SessionTransport = {
   runPromptTurn(input: SessionTurnInput): Promise<void>
+  interruptActiveTurn(): Promise<void>
   selectSubagent(sessionID: string | undefined): void
   replayOnResize(input: SessionResizeReplayInput): Promise<boolean>
   close(): Promise<void>
@@ -68,6 +69,7 @@ export type SessionTransport = {
 type Wait = {
   messageID: string
   promoted: boolean
+  interrupted: boolean
   failureRendered: boolean
   resolve: () => void
   reject: (error: unknown) => void
@@ -278,6 +280,27 @@ async function prepareFile(file: RunFilePart) {
   return { text: `<file name="${file.filename}">\n${content}\n</file>` }
 }
 
+async function resolveSelectedModel(input: StreamInput, next: Pick<SessionTurnInput, "model" | "variant" | "signal">) {
+  if (next.model) return { providerID: next.model.providerID, id: next.model.modelID, variant: next.variant }
+  if (!next.variant) return
+
+  const session = await input.sdk.v2.session
+    .get({ sessionID: input.sessionID }, { throwOnError: true, signal: next.signal })
+    .then((response) => response.data.data.model)
+  if (session) return { ...session, variant: next.variant }
+
+  const config = await input.sdk.config.get(undefined, { throwOnError: true, signal: next.signal })
+  if (config.data?.model) {
+    const [providerID, ...modelID] = config.data.model.split("/")
+    return { providerID, id: modelID.join("/"), variant: next.variant }
+  }
+
+  const listed = await input.sdk.v2.model.list(undefined, { throwOnError: true, signal: next.signal })
+  const fallback = listed.data.data[0]
+  if (!fallback) return
+  return { providerID: fallback.providerID, id: fallback.id, variant: next.variant }
+}
+
 export async function createSessionTransport(input: StreamInput): Promise<SessionTransport> {
   const controller = new AbortController()
   input.signal?.addEventListener("abort", () => controller.abort(), { once: true })
@@ -363,11 +386,13 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     write([toolCommit(part, item.state.status === "completed" && part.state.status === "completed" && part.state.output ? "progress" : "final")])
   }
 
-  const renderMessage = (message: SessionMessage, render: boolean) => {
+  const renderMessage = (message: SessionMessage, render: boolean, reuseVisibleWait: boolean) => {
     if (message.type === "user") {
-      if (state.wait?.messageID === message.id) state.wait.promoted = true
+      const waiting = state.wait?.messageID === message.id
+      if (waiting && state.wait) state.wait.promoted = true
       if (!render || state.messageIDs.has(message.id)) return
       state.messageIDs.add(message.id)
+      if (reuseVisibleWait && waiting) return
       write([{ kind: "user", source: "system", text: message.text, phase: "start", messageID: message.id }])
       return
     }
@@ -424,7 +449,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     }
   }
 
-  const hydrate = async (render: boolean) => {
+  const hydrate = async (next: { render: boolean; reuseVisibleWait: boolean }) => {
     const [messages, permissions, questions, active] = await Promise.all([
       input.sdk.v2.session.messages(
         { sessionID: input.sessionID, limit: input.replayLimit ?? 200, order: "desc" },
@@ -434,13 +459,13 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       input.sdk.v2.session.question.list({ sessionID: input.sessionID }, { throwOnError: true }),
       input.sdk.v2.session.active({ throwOnError: true }),
     ])
-    for (const message of messages.data.data.toReversed()) renderMessage(message, render)
+    for (const message of messages.data.data.toReversed()) renderMessage(message, next.render, next.reuseVisibleWait)
     state.permissions = permissions.data.data.map(permission)
     state.questions = questions.data.data.map(question)
     syncBlockers()
     const running = input.sessionID in active.data.data
     write([], { phase: running ? "running" : "idle", status: running ? "assistant responding" : "" })
-    if (!running && state.wait?.promoted) {
+    if (!running && state.wait && (state.wait.promoted || state.wait.interrupted)) {
       const current = state.wait
       state.wait = undefined
       current.resolve()
@@ -625,8 +650,12 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     if (event.type === "session.next.execution.settled") {
       write([], { phase: "idle", status: "" })
       const current = state.wait
-      if (!current?.promoted) return
+      if (!current || (!current.promoted && !current.interrupted)) return
       state.wait = undefined
+      if (current.interrupted) {
+        current.resolve()
+        return
+      }
       if (event.data.outcome === "failure") {
         if (current.failureRendered) {
           current.resolve()
@@ -673,7 +702,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
             }
           })()
           void consume.catch(() => {})
-          await hydrate(state.initial ? input.replay === true : true)
+          await hydrate({ render: state.initial ? input.replay === true : true, reuseVisibleWait: !state.initial })
           state.initial = false
           booting = false
           for (const event of buffered.splice(0)) apply(event)
@@ -716,14 +745,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
           { throwOnError: true, signal: next.signal },
         )
       }
-      const selected = next.model
-        ? { providerID: next.model.providerID, id: next.model.modelID, variant: next.variant }
-        : next.variant
-          ? await input.sdk.v2.session
-              .get({ sessionID: input.sessionID }, { throwOnError: true, signal: next.signal })
-              .then((response) => response.data.data.model)
-              .then((model) => (model ? { ...model, variant: next.variant } : undefined))
-          : undefined
+      const selected = await resolveSelectedModel(input, next)
       if (next.variant && !selected) throw new Error("Cannot select a variant before selecting a model")
       if (selected)
         await input.sdk.v2.session.switchModel(
@@ -776,6 +798,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       const active: Wait = {
         messageID,
         promoted: false,
+        interrupted: false,
         failureRendered: false,
         resolve,
         reject,
@@ -783,6 +806,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       }
       state.wait = active
       const interrupt = () => {
+        active.interrupted = true
         void input.sdk.v2.session.interrupt({ sessionID: input.sessionID }).catch(() => {})
       }
       next.signal?.addEventListener("abort", interrupt, { once: true })
@@ -810,6 +834,10 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
         next.signal?.removeEventListener("abort", interrupt)
       }
     },
+    async interruptActiveTurn() {
+      if (state.wait) state.wait.interrupted = true
+      await input.sdk.v2.session.interrupt({ sessionID: input.sessionID }).catch(() => {})
+    },
     selectSubagent() {},
     async replayOnResize(next) {
       if (!input.replay || state.closed || input.footer.isClosed) return false
@@ -826,7 +854,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
         state.tools.clear()
         state.finishedTools.clear()
         state.errors.clear()
-        await hydrate(true)
+        await hydrate({ render: true, reuseVisibleWait: false })
       } finally {
         state.buffered = undefined
       }
