@@ -10,6 +10,7 @@ import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { getFilename } from "@opencode-ai/core/util/path"
 import { createEffect, createMemo, createSignal, For, onMount, Show } from "solid-js"
 import { createStore } from "solid-js/store"
+import { createMediaQuery } from "@solid-primitives/media"
 import { Portal } from "solid-js/web"
 import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
@@ -27,6 +28,9 @@ import { Persist, persisted } from "@/utils/persist"
 import { StatusPopover, StatusPopoverV2 } from "../status-popover"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
+import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
+import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
+import { reviewTooltipKeybind } from "../command-tooltip-keybind"
 
 const OPEN_APPS = [
   "vscode",
@@ -158,6 +162,7 @@ export function SessionHeader() {
   const isV2 = settings.general.newLayoutDesigns
   const search = settings.visibility.search
   const status = settings.visibility.status
+  const isDesktop = createMediaQuery("(min-width: 768px)")
 
   const [exists, setExists] = createStore<Partial<Record<OpenApp, boolean>>>({
     finder: true,
@@ -235,7 +240,8 @@ export function SessionHeader() {
     statusVisible: status(),
     statusLabel: language.t("status.popover.trigger"),
     reviewLabel: language.t("command.review.toggle"),
-    reviewKeybind: command.keybind("review.toggle"),
+    reviewKeybind: reviewTooltipKeybind(command),
+    reviewVisible: isDesktop(),
     reviewOpened: view().reviewPanel.opened(),
     onReviewToggle: () => view().reviewPanel.toggle(),
   }))
@@ -517,12 +523,15 @@ type SessionHeaderV2ActionsState = {
   statusVisible: boolean
   statusLabel: string
   reviewLabel: string
-  reviewKeybind: string
+  reviewKeybind: string[]
+  reviewVisible: boolean
   reviewOpened: boolean
   onReviewToggle: () => void
 }
 
 function SessionHeaderV2Actions(props: { state: SessionHeaderV2ActionsState }) {
+  const language = useLanguage()
+
   return (
     <div class="flex items-center gap-2">
       <Show when={props.state.statusVisible}>
@@ -530,20 +539,33 @@ function SessionHeaderV2Actions(props: { state: SessionHeaderV2ActionsState }) {
           <StatusPopoverV2 />
         </Tooltip>
       </Show>
-      <TooltipKeybind title={props.state.reviewLabel} keybind={props.state.reviewKeybind}>
-        <IconButtonV2
-          type="button"
-          variant="ghost-muted"
-          size="large"
-          class="!w-9 shrink-0"
-          state={props.state.reviewOpened ? "pressed" : undefined}
-          onClick={props.state.onReviewToggle}
-          aria-label={props.state.reviewLabel}
-          aria-expanded={props.state.reviewOpened}
-          aria-controls="review-panel"
-          icon={<IconV2 name="sidebar-right" />}
-        />
-      </TooltipKeybind>
+      <Show when={props.state.reviewVisible}>
+        <TooltipV2
+          class="shrink-0"
+          placement="bottom"
+          value={
+            <>
+              {props.state.reviewLabel}
+              <Show when={props.state.reviewKeybind.length > 0}>
+                <KeybindV2 keys={props.state.reviewKeybind} variant="neutral" />
+              </Show>
+            </>
+          }
+        >
+          <IconButtonV2
+            type="button"
+            variant="ghost-muted"
+            size="large"
+            class="!w-9 shrink-0"
+            state={props.state.reviewOpened ? "pressed" : undefined}
+            onClick={props.state.onReviewToggle}
+            aria-label={props.state.reviewLabel}
+            aria-expanded={props.state.reviewOpened}
+            aria-controls="review-panel"
+            icon={<IconV2 name="sidebar-right" />}
+          />
+        </TooltipV2>
+      </Show>
     </div>
   )
 }

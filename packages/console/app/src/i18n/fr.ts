@@ -254,9 +254,8 @@ export const dict = {
   "zen.privacy.exceptionsLink": "exceptions suivantes",
 
   "go.title": "OpenCode Go | Modèles de code à faible coût pour tous",
-  "go.banner.text": "MiniMax M3 bénéficie de limites d’utilisation 3x supérieures pour une durée limitée",
   "go.meta.description":
-    "Go commence à $5 pour le premier mois, puis 10 $/mois, avec des limites de requêtes généreuses sur 5 heures pour GLM-5.1, GLM-5, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro et DeepSeek V4 Flash.",
+    "Go commence à $5 pour le premier mois, puis 10 $/mois, avec des limites de requêtes généreuses sur 5 heures pour GLM-5.2, GLM-5.1, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro et DeepSeek V4 Flash.",
   "go.hero.title": "Modèles de code à faible coût pour tous",
   "go.hero.body":
     "Go apporte le codage agentique aux programmeurs du monde entier. Offrant des limites généreuses et un accès fiable aux modèles open source les plus capables, pour que vous puissiez construire avec des agents puissants sans vous soucier du coût ou de la disponibilité.",
@@ -305,7 +304,7 @@ export const dict = {
   "go.problem.item2": "Limites généreuses et accès fiable",
   "go.problem.item3": "Conçu pour autant de programmeurs que possible",
   "go.problem.item4":
-    "Inclut GLM-5.1, GLM-5, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro et DeepSeek V4 Flash",
+    "Inclut GLM-5.2, GLM-5.1, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro et DeepSeek V4 Flash",
   "go.how.title": "Comment fonctionne Go",
   "go.how.body":
     "Go commence à $5 pour le premier mois, puis 10 $/mois. Vous pouvez l'utiliser avec OpenCode ou n'importe quel agent.",
@@ -331,7 +330,7 @@ export const dict = {
   "go.faq.a2": "Go inclut les modèles ci-dessous, avec des limites généreuses et un accès fiable.",
   "go.faq.q3": "Est-ce que Go est la même chose que Zen ?",
   "go.faq.a3":
-    "Non. Zen est un paiement à l'utilisation, tandis que Go commence à $5 pour le premier mois, puis 10 $/mois, avec des limites généreuses et un accès fiable aux modèles open source GLM-5.1, GLM-5, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro et DeepSeek V4 Flash.",
+    "Non. Zen est un paiement à l'utilisation, tandis que Go commence à $5 pour le premier mois, puis 10 $/mois, avec des limites généreuses et un accès fiable aux modèles open source GLM-5.2, GLM-5.1, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro et DeepSeek V4 Flash.",
   "go.faq.q4": "Combien coûte Go ?",
   "go.faq.a4.p1.beforePricing": "Go coûte",
   "go.faq.a4.p1.pricingLink": "$5 le premier mois",
@@ -354,7 +353,7 @@ export const dict = {
     "Oui, vous pouvez utiliser Go avec n'importe quel agent. Suivez les instructions de configuration dans votre agent de code préféré.",
   "go.faq.q9": "Quelle est la différence entre les modèles gratuits et Go ?",
   "go.faq.a9":
-    "Les modèles gratuits incluent Big Pickle ainsi que des modèles promotionnels disponibles à ce moment-là, avec un quota de 200 requêtes/jour. Go inclut GLM-5.1, GLM-5, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro et DeepSeek V4 Flash avec des quotas de requêtes plus élevés appliqués sur des fenêtres glissantes (5 heures, hebdomadaire et mensuelle), à peu près équivalent à 12 $ par 5 heures, 30 $ par semaine et 60 $ par mois (le nombre réel de requêtes varie selon le modèle et l'utilisation).",
+    "Les modèles gratuits incluent Big Pickle ainsi que des modèles promotionnels disponibles à ce moment-là, avec un quota de 200 requêtes/jour. Go inclut GLM-5.2, GLM-5.1, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro et DeepSeek V4 Flash avec des quotas de requêtes plus élevés appliqués sur des fenêtres glissantes (5 heures, hebdomadaire et mensuelle), à peu près équivalent à 12 $ par 5 heures, 30 $ par semaine et 60 $ par mois (le nombre réel de requêtes varie selon le modèle et l'utilisation).",
 
   "zen.api.error.rateLimitExceeded": "Limite de débit dépassée. Veuillez réessayer plus tard.",
   "zen.api.error.modelNotSupported": "Modèle {{model}} non pris en charge",
@@ -377,6 +376,8 @@ export const dict = {
   "zen.api.error.userMonthlyLimitReached":
     "Vous avez atteint votre limite de dépense mensuelle de {{amount}} $. Gérez vos limites ici : {{membersUrl}}",
   "zen.api.error.modelDisabled": "Le modèle est désactivé",
+  "zen.api.error.regionNotAllowed":
+    "Ce modèle est hébergé en Chine. Si vous souhaitez utiliser ce modèle, activez-le dans vos paramètres : {{consoleGoUrl}}",
   "zen.api.error.trialEnded":
     "La promotion gratuite de {{model}} est terminée. Vous pouvez continuer à utiliser le modèle en vous abonnant à OpenCode Go - {{link}}",
 
@@ -662,6 +663,9 @@ export const dict = {
     "Utilisez votre solde disponible après avoir atteint les limites d'utilisation",
   "workspace.lite.subscription.selectProvider":
     'Sélectionnez "OpenCode Go" comme fournisseur dans votre configuration opencode pour utiliser les modèles Go.',
+  "workspace.lite.providers.title": "Fournisseurs",
+  "workspace.lite.providers.description": "Contrôlez les fournisseurs utilisés pour le routage.",
+  "workspace.lite.providers.useChina": "Activer les modèles hébergés en Chine",
   "workspace.lite.black.message":
     "Vous êtes actuellement abonné à OpenCode Black ou sur liste d'attente. Veuillez d'abord vous désabonner si vous souhaitez passer à Go.",
   "workspace.lite.other.message":

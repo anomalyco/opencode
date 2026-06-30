@@ -17,7 +17,7 @@ import {
 import type { UpdaterState } from "@opencode-ai/app/updater"
 import * as Sentry from "@sentry/solid"
 import type { AsyncStorage } from "@solid-primitives/storage"
-import { MemoryRouter } from "@solidjs/router"
+import { createMemoryHistory, MemoryRouter, type BaseRouterProps } from "@solidjs/router"
 import { createEffect, createMemo, createResource, createSignal, onCleanup, onMount, Show } from "solid-js"
 import { render } from "solid-js/web"
 import pkg from "../../package.json"
@@ -63,6 +63,7 @@ const [updaterState, setUpdaterState] = createSignal<UpdaterState>({ status: "di
 void window.api.updater.subscribe(setUpdaterState)
 
 const deepLinkEvent = "opencode:deep-link"
+const lastActiveUrlKey = "opencode.desktop.last-active-url"
 
 const emitDeepLinks = (urls: string[]) => {
   if (urls.length === 0) return
@@ -77,7 +78,32 @@ const listenForDeepLinks = () => {
   return window.api.onDeepLink((urls) => emitDeepLinks(urls))
 }
 
+function getLastActiveUrl() {
+  if (typeof localStorage !== "object") return "/"
+  try {
+    const value = localStorage.getItem(lastActiveUrlKey)
+    if (value?.startsWith("/") && !value.startsWith("//")) return value
+  } catch {}
+  return "/"
+}
+
+function setLastActiveUrl(value: string) {
+  if (typeof localStorage !== "object") return
+  try {
+    localStorage.setItem(lastActiveUrlKey, value)
+  } catch {}
+}
+
+function DesktopMemoryRouter(props: BaseRouterProps) {
+  const history = createMemoryHistory()
+  const initialUrl = getLastActiveUrl()
+  if (initialUrl !== "/") history.set({ value: initialUrl, replace: true, scroll: false })
+  onCleanup(history.listen(setLastActiveUrl))
+  return <MemoryRouter {...props} history={history} />
+}
+
 const createPlatform = (): Platform => {
+  const attachmentPaths = new WeakMap<File, string>()
   const os = (() => {
     const ua = navigator.userAgent
     if (ua.includes("Mac")) return "macos"
@@ -153,11 +179,17 @@ const createPlatform = (): Platform => {
       if (!result) return
       try {
         for (const file of result.files) {
-          await onFile(new File([await window.api.readPickedFile(result.token, file.path)], file.name))
+          const selected = new File([await window.api.readPickedFile(result.token, file.path)], file.name)
+          attachmentPaths.set(selected, file.path)
+          await onFile(selected)
         }
       } finally {
         await window.api.releasePickedFiles(result.token)
       }
+    },
+
+    getPathForFile(file) {
+      return attachmentPaths.get(file) ?? window.api.getPathForFile(file)
     },
 
     async saveFilePickerDialog(opts) {
@@ -360,7 +392,7 @@ render(() => {
       <Show when={ready()} fallback={splash}>
         <Show when={effectiveDefaultServer()} keyed>
           {(key) => (
-            <AppInterface defaultServer={key} servers={servers()} router={MemoryRouter}>
+            <AppInterface defaultServer={key} servers={servers()} router={DesktopMemoryRouter}>
               <Inner />
             </AppInterface>
           )}

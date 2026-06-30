@@ -1,11 +1,12 @@
 import { describe, expect } from "bun:test"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Effect, Layer } from "effect"
 import { Session } from "@/session/session"
 import { TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { httpApiLayer, requestInDirectory } from "./httpapi-layer"
 
-const it = testEffect(Layer.mergeAll(Session.defaultLayer, httpApiLayer))
+const it = testEffect(Layer.mergeAll(LayerNode.compile(Session.node), httpApiLayer))
 
 describe("tui.selectSession endpoint", () => {
   it.instance(

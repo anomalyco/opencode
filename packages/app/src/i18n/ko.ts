@@ -280,6 +280,11 @@ export const dict = {
   "dialog.fork.empty": "분기할 메시지 없음",
   "dialog.directory.search.placeholder": "폴더 검색",
   "dialog.directory.empty": "폴더 없음",
+  "dialog.directory.action.selectFile": "파일 선택",
+  "dialog.directory.action.selectFolder": "폴더 선택",
+  "dialog.directory.root": "루트",
+  "dialog.directory.parent": "상위 폴더",
+  "dialog.directory.readError": "이 폴더를 읽을 수 없습니다",
   "dialog.server.title": "서버",
   "dialog.server.description": "이 앱이 연결할 OpenCode 서버를 전환합니다.",
   "dialog.server.search.placeholder": "서버 검색",
@@ -586,9 +591,6 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "edit 도구 파트 펼치기",
   "settings.general.row.editToolPartsExpanded.description":
     "타임라인에서 기본적으로 edit, write, patch 도구 파트를 펼친 상태로 표시합니다",
-  "settings.general.row.showSessionProgressBar.title": "세션 진행 표시줄 표시",
-  "settings.general.row.showSessionProgressBar.description":
-    "에이전트가 작업 중일 때 세션 상단에 애니메이션 진행 표시줄을 표시합니다",
   "settings.general.row.wayland.title": "네이티브 Wayland 사용",
   "settings.general.row.wayland.description": "Wayland에서 X11 폴백을 비활성화합니다. 다시 시작해야 합니다.",
   "settings.general.row.wayland.tooltip":

@@ -248,9 +248,8 @@ export const dict = {
   "zen.privacy.exceptionsLink": "الاستثناءات التالية",
 
   "go.title": "OpenCode Go | نماذج برمجة منخفضة التكلفة للجميع",
-  "go.banner.text": "MiniMax M3: حد استخدام أكبر 3 مرات لفترة محدودة",
   "go.meta.description":
-    "يبدأ Go من $5 للشهر الأول، ثم $10/شهر، مع حدود طلب سخية لمدة 5 ساعات لـ GLM-5.1 وGLM-5 وKimi K2.7 Code وKimi K2.6 وMiMo-V2.5-Pro وMiMo-V2.5 وQwen3.7 Max وQwen3.7 Plus وQwen3.6 Plus وMiniMax M2.7 وMiniMax M3 وDeepSeek V4 Pro وDeepSeek V4 Flash.",
+    "يبدأ Go من $5 للشهر الأول، ثم $10/شهر، مع حدود طلب سخية لمدة 5 ساعات لـ GLM-5.2 وGLM-5.1 وKimi K2.7 Code وKimi K2.6 وMiMo-V2.5-Pro وMiMo-V2.5 وQwen3.7 Max وQwen3.7 Plus وQwen3.6 Plus وMiniMax M2.7 وMiniMax M3 وDeepSeek V4 Pro وDeepSeek V4 Flash.",
   "go.hero.title": "نماذج برمجة منخفضة التكلفة للجميع",
   "go.hero.body":
     "يجلب Go البرمجة الوكيلة للمبرمجين حول العالم. يوفر حدودًا سخية ووصولًا موثوقًا إلى أقوى النماذج مفتوحة المصدر، حتى تتمكن من البناء باستخدام وكلاء أقوياء دون القلق بشأن التكلفة أو التوفر.",
@@ -299,7 +298,7 @@ export const dict = {
   "go.problem.item2": "حدود سخية ووصول موثوق",
   "go.problem.item3": "مصمم لأكبر عدد ممكن من المبرمجين",
   "go.problem.item4":
-    "يتضمن GLM-5.1 وGLM-5 وKimi K2.7 Code وKimi K2.6 وMiMo-V2.5-Pro وMiMo-V2.5 وQwen3.7 Max وQwen3.7 Plus وQwen3.6 Plus وMiniMax M2.7 وMiniMax M3 وDeepSeek V4 Pro وDeepSeek V4 Flash",
+    "يتضمن GLM-5.2 وGLM-5.1 وKimi K2.7 Code وKimi K2.6 وMiMo-V2.5-Pro وMiMo-V2.5 وQwen3.7 Max وQwen3.7 Plus وQwen3.6 Plus وMiniMax M2.7 وMiniMax M3 وDeepSeek V4 Pro وDeepSeek V4 Flash",
   "go.how.title": "كيف يعمل Go",
   "go.how.body": "يبدأ Go من $5 للشهر الأول، ثم $10/شهر. يمكنك استخدامه مع OpenCode أو أي وكيل.",
   "go.how.step1.title": "أنشئ حسابًا",
@@ -323,7 +322,7 @@ export const dict = {
   "go.faq.a2": "يتضمن Go النماذج المدرجة أدناه، مع حدود سخية وإتاحة موثوقة.",
   "go.faq.q3": "هل Go هو نفسه Zen؟",
   "go.faq.a3":
-    "لا. Zen هو الدفع حسب الاستخدام، بينما يبدأ Go من $5 للشهر الأول، ثم $10/شهر، مع حدود سخية ووصول موثوق إلى نماذج المصدر المفتوح GLM-5.1 وGLM-5 وKimi K2.7 Code وKimi K2.6 وMiMo-V2.5-Pro وMiMo-V2.5 وQwen3.7 Max وQwen3.7 Plus وQwen3.6 Plus وMiniMax M2.7 وMiniMax M3 وDeepSeek V4 Pro وDeepSeek V4 Flash.",
+    "لا. Zen هو الدفع حسب الاستخدام، بينما يبدأ Go من $5 للشهر الأول، ثم $10/شهر، مع حدود سخية ووصول موثوق إلى نماذج المصدر المفتوح GLM-5.2 وGLM-5.1 وKimi K2.7 Code وKimi K2.6 وMiMo-V2.5-Pro وMiMo-V2.5 وQwen3.7 Max وQwen3.7 Plus وQwen3.6 Plus وMiniMax M2.7 وMiniMax M3 وDeepSeek V4 Pro وDeepSeek V4 Flash.",
   "go.faq.q4": "كم تكلفة Go؟",
   "go.faq.a4.p1.beforePricing": "تكلفة Go",
   "go.faq.a4.p1.pricingLink": "$5 للشهر الأول",
@@ -346,7 +345,7 @@ export const dict = {
 
   "go.faq.q9": "ما الفرق بين النماذج المجانية وGo؟",
   "go.faq.a9":
-    "تشمل النماذج المجانية Big Pickle بالإضافة إلى النماذج الترويجية المتاحة في ذلك الوقت، مع حصة 200 طلب/يوم. يتضمن Go نماذج GLM-5.1 وGLM-5 وKimi K2.7 Code وKimi K2.6 وMiMo-V2.5-Pro وMiMo-V2.5 وQwen3.7 Max وQwen3.7 Plus وQwen3.6 Plus وMiniMax M2.7 وMiniMax M3 وDeepSeek V4 Pro وDeepSeek V4 Flash مع حصص طلبات أعلى مطبقة عبر نوافذ متجددة (5 ساعات، أسبوعيًا، وشهريًا)، تعادل تقريبًا 12 دولارًا كل 5 ساعات، و30 دولارًا في الأسبوع، و60 دولارًا في الشهر (تختلف أعداد الطلبات الفعلية حسب النموذج والاستخدام).",
+    "تشمل النماذج المجانية Big Pickle بالإضافة إلى النماذج الترويجية المتاحة في ذلك الوقت، مع حصة 200 طلب/يوم. يتضمن Go نماذج GLM-5.2 وGLM-5.1 وKimi K2.7 Code وKimi K2.6 وMiMo-V2.5-Pro وMiMo-V2.5 وQwen3.7 Max وQwen3.7 Plus وQwen3.6 Plus وMiniMax M2.7 وMiniMax M3 وDeepSeek V4 Pro وDeepSeek V4 Flash مع حصص طلبات أعلى مطبقة عبر نوافذ متجددة (5 ساعات، أسبوعيًا، وشهريًا)، تعادل تقريبًا 12 دولارًا كل 5 ساعات، و30 دولارًا في الأسبوع، و60 دولارًا في الشهر (تختلف أعداد الطلبات الفعلية حسب النموذج والاستخدام).",
 
   "zen.api.error.rateLimitExceeded": "تم تجاوز حد الطلبات. يرجى المحاولة مرة أخرى لاحقًا.",
   "zen.api.error.modelNotSupported": "النموذج {{model}} غير مدعوم",
@@ -369,6 +368,8 @@ export const dict = {
   "zen.api.error.userMonthlyLimitReached":
     "لقد وصلت إلى حد الإنفاق الشهري البالغ ${{amount}}. إدارة حدودك هنا: {{membersUrl}}",
   "zen.api.error.modelDisabled": "النموذج معطل",
+  "zen.api.error.regionNotAllowed":
+    "هذا النموذج مستضاف في الصين. إذا كنت ترغب في استخدام هذا النموذج، فعّله في إعداداتك: {{consoleGoUrl}}",
   "zen.api.error.trialEnded":
     "انتهى العرض المجاني لـ {{model}}. يمكنك مواصلة استخدام النموذج بالاشتراك في OpenCode Go - {{link}}",
 
@@ -646,6 +647,9 @@ export const dict = {
   "workspace.lite.subscription.useBalance": "استخدم رصيدك المتوفر بعد الوصول إلى حدود الاستخدام",
   "workspace.lite.subscription.selectProvider":
     'اختر "OpenCode Go" كمزود في إعدادات opencode الخاصة بك لاستخدام نماذج Go.',
+  "workspace.lite.providers.title": "المزودون",
+  "workspace.lite.providers.description": "تحكم في المزودين المستخدمين للتوجيه.",
+  "workspace.lite.providers.useChina": "تفعيل النماذج المستضافة في الصين",
   "workspace.lite.black.message":
     "أنت مشترك حاليًا في OpenCode Black أو في قائمة الانتظار. يرجى إلغاء الاشتراك أولاً إذا كنت ترغب في التبديل إلى Go.",
   "workspace.lite.other.message":
