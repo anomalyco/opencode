@@ -259,6 +259,11 @@ export function Prompt(props: PromptProps) {
   const usage = createMemo(() => {
     if (!props.sessionID) return
     const session = sync.session.get(props.sessionID)
+
+    const mcpList = Object.values(sync.data.mcp)
+    const lspList = sync.data.lsp
+    const title = session?.title
+
     const msg = sync.data.message[props.sessionID] ?? []
     const last = msg.findLast((item): item is AssistantMessage => item.role === "assistant" && item.tokens.output > 0)
     if (!last) return
@@ -270,9 +275,26 @@ export function Prompt(props: PromptProps) {
     const model = sync.data.provider.find((item) => item.id === last.providerID)?.models[last.modelID]
     const pct = model?.limit.context ? `${Math.round((tokens / model.limit.context) * 100)}%` : undefined
     const cost = session?.cost ?? 0
+
+    const mcpConnected = mcpList.filter((x) => x.status === "connected").length
+    const mcpHasError = mcpList.some((x) => x.status === "failed")
+
+    const lspConnected = lspList.filter((x) => x.status === "connected").length
+
+    const branch = sync.data.vcs?.branch
+    const directory = session?.directory ? session.directory.split("/").pop() : undefined
+
     return {
+      title,
       context: pct ? `${Locale.number(tokens)} (${pct})` : Locale.number(tokens),
       cost: cost > 0 ? money.format(cost) : undefined,
+      mcpConnected,
+      mcpHasError,
+      mcpTotal: mcpList.length,
+      lspConnected,
+      lspTotal: lspList.length,
+      branch,
+      directory,
     }
   })
 
@@ -1648,11 +1670,32 @@ export function Prompt(props: PromptProps) {
                 <Match when={store.mode === "normal"}>
                   <Switch>
                     <Match when={usage()}>
-                      {(item) => (
-                        <text fg={theme.textMuted} wrapMode="none">
-                          {[item().context, item().cost].filter(Boolean).join(" · ")}
-                        </text>
-                      )}
+                      {(item) => {
+                        const parts: string[] = []
+                        const title = item().title
+                        if (title) parts.push(title)
+                        const ctx = item().context
+                        if (ctx) parts.push(ctx)
+                        const cost = item().cost
+                        if (cost) parts.push(cost)
+                        if (item().mcpTotal > 0) {
+                          const dot = item().mcpHasError ? "⊙" : (item().mcpConnected > 0 ? "⊙" : "⊙")
+                          parts.push(`${dot} ${item().mcpConnected}/${item().mcpTotal} MCP`)
+                        }
+                        if (item().lspTotal > 0) {
+                          parts.push(`• ${item().lspConnected}/${item().lspTotal} LSP`)
+                        }
+                        const branch = item().branch
+                        const directory = item().directory
+                        if (directory || branch) {
+                          parts.push([directory, branch].filter(Boolean).join(":"))
+                        }
+                        return (
+                          <text fg={theme.textMuted} wrapMode="none">
+                            {parts.join(" · ")}
+                          </text>
+                        )
+                      }}
                     </Match>
                     <Match when={true}>
                       <text fg={theme.text}>
