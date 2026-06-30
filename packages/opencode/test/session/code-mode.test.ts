@@ -76,14 +76,14 @@ describe("code mode execute", () => {
     )
     const description = describeTools(groups)
 
-    expect(description).toContain("tools.search(query")
-    expect(description).toContain("tools.describe(path)")
+    expect(description).toContain("tools.$rune.search(query")
+    expect(description).toContain("tools.$rune.describe(path)")
     expect(description).toContain("- github (2 tools)")
     expect(description).toContain("- linear (1 tool)")
     // Small catalog: individual tools are previewed inline as `<server>.<tool>`.
     expect(description).toContain("github.create_issue")
     expect(description).toContain("linear.search")
-    // ...but never full signatures (those come from tools.describe).
+    // ...but never full signatures (those come from tools.$rune.describe).
     expect(description).not.toContain("): Promise<")
   })
 
@@ -107,7 +107,7 @@ describe("code mode execute", () => {
     expect(description).toContain("alpha.op_0")
   })
 
-  test("tools.search and tools.describe expose the catalog on demand", async () => {
+  test("tools.$rune.search and tools.$rune.describe expose the catalog on demand", async () => {
     const tool = await build({
       github_create_issue: mcpTool("create_issue", () => "", {
         type: "object",
@@ -119,14 +119,14 @@ describe("code mode execute", () => {
     })
 
     const searched = await Effect.runPromise(
-      tool.execute({ code: "return await tools.search('issue', { namespace: 'github' })" }, ctx),
+      tool.execute({ code: "return await tools.$rune.search('issue', { namespace: 'github' })" }, ctx),
     )
     const search = JSON.parse(searched.output)
     expect(search.total).toBe(2)
     expect(search.items.map((i: any) => i.path).sort()).toEqual(["github.create_issue", "github.list_issues"])
 
     const described = await Effect.runPromise(
-      tool.execute({ code: "return await tools.describe('github.create_issue')" }, ctx),
+      tool.execute({ code: "return await tools.$rune.describe('github.create_issue')" }, ctx),
     )
     const desc = JSON.parse(described.output)
     expect(desc.path).toBe("github.create_issue")
@@ -134,7 +134,7 @@ describe("code mode execute", () => {
       "tools.github.create_issue(input: { title: string; body?: string }): Promise<{ result: unknown; attachments?: Attachment[] }>",
     )
 
-    const missing = await Effect.runPromise(tool.execute({ code: "return await tools.describe('github.nope')" }, ctx))
+    const missing = await Effect.runPromise(tool.execute({ code: "return await tools.$rune.describe('github.nope')" }, ctx))
     expect(JSON.parse(missing.output).error.code).toBe("tool_not_found")
   })
 
@@ -223,7 +223,7 @@ describe("code mode execute", () => {
     const output = await Effect.runPromise(tool.execute({ code: "return await tools.known.missing({})" }, ctx))
     expect(output.metadata.error).toBe(true)
     expect(output.output).toContain("Unknown tool 'known.missing'")
-    expect(output.output).toContain("tools.search")
+    expect(output.output).toContain("tools.$rune.search")
   })
 
   test("propagates an MCP tool error into the program", async () => {
@@ -306,7 +306,7 @@ describe("code mode execute", () => {
       } as any,
     }
     const tool = await build(tools, defs)
-    const described = await Effect.runPromise(tool.execute({ code: "return await tools.describe('weather.current')" }, ctx))
+    const described = await Effect.runPromise(tool.execute({ code: "return await tools.$rune.describe('weather.current')" }, ctx))
     const desc = JSON.parse(described.output)
     expect(desc.signature).toBe(
       "tools.weather.current(input: { city?: string }): Promise<{ result: { tempC: number; summary?: string }; attachments?: Attachment[] }>",
@@ -342,7 +342,7 @@ describe("code mode execute", () => {
       }),
       other_noop: mcpTool("noop", () => ""),
     })
-    const out = await Effect.runPromise(tool.execute({ code: "return await tools.search('trace_id')" }, ctx))
+    const out = await Effect.runPromise(tool.execute({ code: "return await tools.$rune.search('trace_id')" }, ctx))
     const result = JSON.parse(out.output)
     expect(result.items.map((i: any) => i.path)).toEqual(["traces.lookup"])
   })

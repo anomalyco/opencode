@@ -20,7 +20,7 @@ const CODE_LIMITS: ExecutionLimits = {
 
 export const Parameters = Schema.Struct({
   code: Schema.String.annotate({
-    description: "JavaScript to run. Discover tools with `tools.search`/`tools.describe`, call them, and `return` the final value.",
+    description: "JavaScript to run. Discover tools with `tools.$rune.search`/`tools.$rune.describe`, call them, and `return` the final value.",
   }),
 })
 
@@ -42,6 +42,10 @@ export type Envelope = { result: unknown; attachments?: Attachment[] }
 const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/
 const SEARCH = "search"
 const DESCRIBE = "describe"
+// The runtime's own capabilities live under `tools.$rune.*`, separated from the
+// MCP server namespaces. `$` can never appear in a sanitized server name, so this
+// namespace is collision-proof.
+const RUNE_NS = "$rune"
 
 type CatalogEntry = {
   path: string
@@ -164,15 +168,16 @@ const PREVIEW_BUDGET = 2000
 /**
  * The execute tool description: the calling convention, the discovery API, and the
  * list of namespaces. A budgeted preview of individual tools is inlined; the full
- * per-tool signatures are still fetched on demand with `tools.describe`.
+ * per-tool signatures are still fetched on demand with `tools.$rune.describe`.
  */
 export function describe(groups: Map<string, CatalogEntry[]>): string {
   const lines = [
     "Execute JavaScript with access to connected MCP tools, grouped into namespaces (one per MCP server).",
     "",
-    "Discover tools inside your program, then call them:",
-    "- `await tools.search(query, { namespace?, limit? })` -> `{ items: [{ path, description }], total }`",
-    "- `await tools.describe(path)` -> `{ path, description, signature, inputSchema, outputSchema? }`",
+    "The runtime provides two discovery capabilities under `tools.$rune` (its own namespace, separate",
+    "from your MCP servers):",
+    "- `await tools.$rune.search(query, { namespace?, limit? })` -> `{ items: [{ path, description }], total }`",
+    "- `await tools.$rune.describe(path)` -> `{ path, description, signature, inputSchema, outputSchema? }`",
     "- Call a tool by its path: `await tools.<server>.<tool>(input)`. Each resolves to `{ result, attachments? }`.",
     "",
     "Every tool call and your final `return` use the same envelope: `{ result, attachments? }`.",
@@ -181,13 +186,13 @@ export function describe(groups: Map<string, CatalogEntry[]>): string {
     "contents of an attachment in code — only pass it along.",
     "",
     "Compose multiple calls in one program and `return` the final value — intermediate results stay in the",
-    "sandbox and never re-enter the conversation. Use `tools.search('', { namespace })` to list a namespace.",
+    "sandbox and never re-enter the conversation. Use `tools.$rune.search('', { namespace })` to list a namespace.",
   ]
   if (groups.size === 0) {
     lines.push("", "No MCP servers are currently connected.")
     return lines.join("\n")
   }
-  lines.push("", "Available namespaces (use tools.search / tools.describe to explore tools not shown):")
+  lines.push("", "Available namespaces (use tools.$rune.search / tools.$rune.describe to explore tools not shown):")
   let used = 0
   let previewing = true
   for (const [server, entries] of [...groups].sort(([a], [b]) => a.localeCompare(b))) {
@@ -456,11 +461,14 @@ export function define(
           })
 
         // The Rune host-tool tree: per-server namespaces (`tools.<server>.<tool>`)
-        // plus the top-level discovery helpers. The interpreter resolves and invokes
-        // these; approving `execute` does not approve any child call.
+        // plus the runtime's own discovery capabilities under `tools.$rune.*`. The
+        // interpreter resolves and invokes these; approving `execute` does not
+        // approve any child call.
         const tools: HostTools = {
-          [SEARCH]: (query: unknown, options: unknown) => Effect.succeed(search(query, options)),
-          [DESCRIBE]: (path: unknown) => Effect.succeed(describeTool(path)),
+          [RUNE_NS]: {
+            [SEARCH]: (query: unknown, options: unknown) => Effect.succeed(search(query, options)),
+            [DESCRIBE]: (path: unknown) => Effect.succeed(describeTool(path)),
+          },
         }
         for (const entry of catalog) {
           if (!entry.tool.execute) continue
@@ -487,11 +495,10 @@ export function define(
             ...(attachments && attachments.length > 0 ? { attachments } : {}),
           } satisfies Tool.ExecuteResult<Metadata>
         }
-        // Rune's built-in unknown-capability hint points at `$rune.search`; redirect
-        // the model to this integration's actual discovery entrypoint instead.
+        // Point the model at discovery when it references a tool that does not exist.
         const hint =
           result.error.kind === "UnknownCapability"
-            ? "\nUse tools.search(query) to discover available tools."
+            ? "\nUse tools.$rune.search(query) to discover available tools."
             : ""
         return {
           title: "Code mode",

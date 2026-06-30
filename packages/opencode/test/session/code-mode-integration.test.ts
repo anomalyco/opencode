@@ -114,7 +114,7 @@ beforeAll(async () => {
 
 describe("code mode integration (real MCP server)", () => {
   test("describe exposes the typed return signature from the tool's outputSchema", async () => {
-    const out = await run("return await tools.describe('fixtures.add')")
+    const out = await run("return await tools.$rune.describe('fixtures.add')")
     const desc = JSON.parse(out.output)
     expect(desc.path).toBe("fixtures.add")
     expect(desc.signature).toBe(
@@ -124,13 +124,13 @@ describe("code mode integration (real MCP server)", () => {
   })
 
   test("describe falls back to result: unknown when no outputSchema is declared", async () => {
-    const out = await run("return await tools.describe('fixtures.get_text')")
+    const out = await run("return await tools.$rune.describe('fixtures.get_text')")
     const desc = JSON.parse(out.output)
     expect(desc.signature).toContain("Promise<{ result: unknown; attachments?: Attachment[] }>")
   })
 
   test("search finds a tool by keyword", async () => {
-    const out = await run("return await tools.search('screenshot')")
+    const out = await run("return await tools.$rune.search('screenshot')")
     const result = JSON.parse(out.output)
     expect(result.items.map((i: any) => i.path)).toContain("fixtures.screenshot")
   })
@@ -196,8 +196,8 @@ describe("code mode integration (real MCP server)", () => {
       tool.execute(
         {
           code: `
-            await tools.search('add')
-            await tools.describe('fixtures.add')
+            await tools.$rune.search('add')
+            await tools.$rune.describe('fixtures.add')
             await tools.fixtures.add({ a: 1, b: 1 })
             return 'done'
           `,

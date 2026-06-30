@@ -27,8 +27,6 @@ export type ToolDescription = {
 
 export type SafeObject = Record<string, unknown>
 
-const reservedNamespace = "$rune"
-
 export class ToolReference {
   constructor(readonly path: ReadonlyArray<string>) {}
 }
@@ -149,11 +147,9 @@ const visibleDefinitions = <R>(tools: HostTools<R>) =>
 export const catalog = <R>(tools: HostTools<R>): ReadonlyArray<ToolDescription> =>
   visibleDefinitions(tools).map(({ description }) => description)
 
-export const assertValidTools = <R>(tools: HostTools<R>): void => {
-  if (Object.hasOwn(tools, reservedNamespace)) {
-    throw new Error(`Tool namespace '${reservedNamespace}' is reserved for Rune discovery capabilities.`)
-  }
-}
+// Discovery is provided by the embedder as ordinary host tools (e.g. under a
+// `$rune` namespace), not by the runtime, so there are no reserved namespaces.
+export const assertValidTools = <R>(_tools: HostTools<R>): void => {}
 
 export const instructions = <R>(tools: HostTools<R>): string => {
   const described = catalog(tools)
@@ -214,7 +210,6 @@ export const make = <R>(
 ): ToolRuntime<R> => {
   const calls: Array<ToolCall> = []
   let auditBytes = 0
-  const visibleCatalog = visibleDefinitions(tools)
 
   const checkedCopyIn = (value: unknown, label: string): unknown => {
     const copied = copyIn(value, label, dataLimits)
@@ -248,40 +243,6 @@ export const make = <R>(
           throw new ToolRuntimeError("InvalidDataValue", `Arguments for tool '${name}' exceed ${dataLimits.maxDataBytes} bytes.`)
         }
         const call = { name }
-        if (name === "$rune.search") {
-          const input = externalArgs[0]
-          if (externalArgs.length !== 1 || input === null || typeof input !== "object" || Array.isArray(input)) {
-            throw new ToolRuntimeError("InvalidToolInput", "tools.$rune.search expects { query?: string; limit?: number }.")
-          }
-          const request = input as { query?: unknown; limit?: unknown }
-          if (request.query !== undefined && typeof request.query !== "string") {
-            throw new ToolRuntimeError("InvalidToolInput", "tools.$rune.search query must be a string when provided.")
-          }
-          if (request.limit !== undefined && (typeof request.limit !== "number" || !Number.isFinite(request.limit) || request.limit <= 0)) {
-            throw new ToolRuntimeError("InvalidToolInput", "tools.$rune.search limit must be a positive number when provided.")
-          }
-          const query = typeof request.query === "string" ? request.query.toLowerCase() : ""
-          recordCall(call)
-          const matched = visibleCatalog
-            .filter((item) => `${item.path} ${item.definition.description}`.toLowerCase().includes(query))
-            .map((item) => ({ path: item.path, description: item.definition.description }))
-          const limit = typeof request.limit === "number" ? Math.floor(request.limit) : 12
-          return checkedCopyIn({ items: matched.slice(0, limit), total: matched.length }, "Result from tool '$rune.search'")
-        }
-        if (name === "$rune.describe") {
-          const input = externalArgs[0]
-          const requested = input !== null && typeof input === "object" && !Array.isArray(input)
-            ? (input as { path?: unknown }).path
-            : undefined
-          if (externalArgs.length !== 1 || typeof requested !== "string") {
-            throw new ToolRuntimeError("InvalidToolInput", "tools.$rune.describe expects { path: string }.")
-          }
-          recordCall(call)
-          const found = visibleCatalog.find((item) => item.path === requested)
-          if (!found) throw new ToolRuntimeError("UnknownCapability", `Unknown tool '${String(requested)}'.`)
-          return checkedCopyIn(found.description, "Result from tool '$rune.describe'")
-        }
-
         const tool = resolve(tools, path)
         let describedInput: unknown
         if (isDefinition(tool)) {
