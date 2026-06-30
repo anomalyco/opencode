@@ -194,7 +194,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/MC
 
 export const use = serviceUse(Service)
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
@@ -946,7 +946,7 @@ export const layer = Layer.effect(
 
       const mcpConfig = yield* requireMcpConfig(mcpName)
 
-      return yield* createAndStore(mcpName, mcpConfig)
+      return yield* createAndStore(mcpName, { ...mcpConfig, enabled: true })
     })
 
     const removeAuth = Effect.fn("MCP.removeAuth")(function* (mcpName: string) {
@@ -1002,16 +1002,6 @@ export const layer = Layer.effect(
 )
 
 export type AuthStatus = "authenticated" | "expired" | "not_authenticated"
-
-// --- Per-service runtime ---
-
-export const defaultLayer = layer.pipe(
-  Layer.provide(McpAuth.defaultLayer),
-  Layer.provide(EventV2Bridge.defaultLayer),
-  Layer.provide(Config.defaultLayer),
-  Layer.provide(CrossSpawnSpawner.defaultLayer),
-  Layer.provide(FSUtil.defaultLayer),
-)
 
 export const node = LayerNode.make({
   service: Service,

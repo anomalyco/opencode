@@ -13,7 +13,7 @@ class App extends Context.Service<App, { readonly run: Effect.Effect<string[]> }
 const tags = LayerNode.tags({ app: [] })
 const make = tags.make("app")
 const build = <A, E>(root: LayerNode.Node<A, E, any>, replacements?: readonly LayerNode.Replacement[]) =>
-  LayerNode.compile(root, new Map(replacements?.map((item) => [item.source, item.replacement]))) as Layer.Layer<A, E>
+  LayerNode.compile(root, replacements) as Layer.Layer<A, E>
 const valueLayer = Layer.succeed(Value, Value.of({ value: "production" }))
 const greetingLayer = Layer.effect(
   Greeting,
@@ -63,21 +63,20 @@ describe("layer node", () => {
     expect(await Effect.runPromise(program)).toEqual(["first", "second"])
   })
 
-  test("requires unbound nodes to be bound before compilation", async () => {
+  test("requires unbound nodes to be replaced before compilation", async () => {
     const unbound = LayerNode.unbound(Value, tags.values.app)
     const greeting = make({ service: Greeting, layer: greetingLayer, deps: [unbound] })
     const tree = LayerNode.group([greeting])
     expect(() => LayerNode.compile(tree)).toThrow("Unbound layer node: test/LayerNodeValue")
-    const bound = LayerNode.bind(tree, unbound, value)
-    const layer = LayerNode.compile(bound) as Layer.Layer<Greeting>
+    const layer = LayerNode.compile(tree, [[unbound, value]]) as Layer.Layer<Greeting>
     const program = Effect.map(Greeting, (item) => item.value).pipe(Effect.provide(layer))
     expect(await Effect.runPromise(program)).toBe("hello production")
   })
 
-  test("replaces a layer by identity", async () => {
+  test("replaces a node with a closed layer", async () => {
     const replacement = Layer.succeed(Value, Value.of({ value: "simulation" }))
     const program = Effect.map(Greeting, (item) => item.value).pipe(
-      Effect.provide(build(LayerNode.group([greeting]), [LayerNode.replace(valueLayer, replacement)])),
+      Effect.provide(build(LayerNode.group([greeting]), [[value, replacement]])),
     )
     expect(await Effect.runPromise(program)).toBe("hello simulation")
   })
@@ -94,7 +93,7 @@ describe("layer node", () => {
     const left = make({ service: Left, layer: leftLayer, deps: [value] })
     const right = make({ service: Right, layer: rightLayer, deps: [value] })
     const replacement = Layer.succeed(Value, Value.of({ value: "replaced" }))
-    const layer = build(LayerNode.group([left, right]), [LayerNode.replace(valueLayer, replacement)])
+    const layer = build(LayerNode.group([left, right]), [[value, replacement]])
     const program = Effect.gen(function* () {
       return [(yield* Left).value, (yield* Right).value]
     }).pipe(Effect.provide(layer))
@@ -103,20 +102,60 @@ describe("layer node", () => {
 
   test("does not acquire an unused replacement", async () => {
     let acquisitions = 0
-    const other = Layer.succeed(Value, Value.of({ value: "other" }))
+    const other = make({ service: Left, layer: Layer.succeed(Left, Left.of({ value: "other" })), deps: [] })
     const replacement = Layer.effect(
-      Value,
+      Left,
       Effect.sync(() => {
         acquisitions++
-        return Value.of({ value: "replacement" })
+        return Left.of({ value: "replacement" })
       }),
     )
     await Effect.runPromise(
       Effect.map(Greeting, (item) => item.value).pipe(
-        Effect.provide(build(LayerNode.group([greeting]), [LayerNode.replace(other, replacement)])),
+        Effect.provide(build(LayerNode.group([greeting]), [[other, replacement]])),
       ),
     )
     expect(acquisitions).toBe(0)
+  })
+
+  test("replaces a node without acquiring its dependencies", async () => {
+    let acquisitions = 0
+    const dependencyLayer = Layer.effect(
+      Value,
+      Effect.sync(() => {
+        acquisitions++
+        return Value.of({ value: "dependency" })
+      }),
+    )
+    const dependency = make({ service: Value, layer: dependencyLayer, deps: [] })
+    const original = make({ service: Greeting, layer: greetingLayer, deps: [dependency] })
+    const replacement = make({
+      service: Greeting,
+      layer: Layer.succeed(Greeting, Greeting.of({ value: "replacement" })),
+      deps: [],
+    })
+
+    const program = Effect.map(Greeting, (item) => item.value).pipe(
+      Effect.provide(build(LayerNode.group([original]), [[original, replacement]])),
+    )
+
+    expect(await Effect.runPromise(program)).toBe("replacement")
+    expect(acquisitions).toBe(0)
+  })
+
+  test("applies later replacements inside earlier replacement nodes", async () => {
+    const original = make({ service: Greeting, layer: greetingLayer, deps: [value] })
+    const replacement = make({ service: Greeting, layer: greetingLayer, deps: [value] })
+    const program = Effect.map(Greeting, (item) => item.value).pipe(
+      Effect.provide(
+        build(LayerNode.group([original]), [
+          [original, replacement],
+          [value, Layer.succeed(Value, Value.of({ value: "replacement dependency" }))],
+        ]),
+      ),
+    )
+
+    expect(await Effect.runPromise(program)).toBe("hello replacement dependency")
   })
 
   test("hoists and compiles tagged graphs", async () => {
