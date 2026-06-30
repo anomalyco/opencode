@@ -55,6 +55,7 @@ const clone = (value: State | undefined) => {
 
 export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   name: "Local",
+  gate: true,
   init: () => {
     const params = useParams()
     const sdk = useSDK()
@@ -372,6 +373,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
     const result = {
       slug: createMemo(() => base64Encode(sdk().directory)),
+      get ready() {
+        return models.ready() && savedReady()
+      },
       model,
       agent,
       session: {
