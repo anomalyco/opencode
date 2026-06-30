@@ -1,13 +1,26 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
-import { OpencodeClient, type V2Event1 } from "@opencode-ai/sdk/v2"
+import { OpencodeClient, type V2Event } from "@opencode-ai/sdk/v2"
 import { createSessionTransport } from "@/cli/cmd/run/stream-v2.transport"
 import type { FooterApi, FooterEvent, StreamCommit } from "@/cli/cmd/run/types"
 
+type ExecutionSettledEvent = {
+  id: string
+  type: "session.next.execution.settled"
+  data: {
+    timestamp: number | string
+    sessionID: string
+    outcome: "success" | "failure" | "interrupted"
+    error?: { message?: string; _tag?: string; type?: string } & Record<string, unknown>
+  }
+}
+
+type RunV2Event = V2Event | ExecutionSettledEvent
+
 function feed() {
-  const values: V2Event1[] = []
+  const values: RunV2Event[] = []
   let closed = false
   let wake: (() => void) | undefined
-  const stream = (async function* (): AsyncGenerator<V2Event1, void, unknown> {
+  const stream = (async function* (): AsyncGenerator<RunV2Event, void, unknown> {
     while (!closed || values.length > 0) {
       if (values.length === 0) {
         await new Promise<void>((resolve) => {
@@ -21,7 +34,7 @@ function feed() {
   })()
   return {
     stream,
-    push(value: V2Event1) {
+    push(value: RunV2Event) {
       values.push(value)
       wake?.()
       wake = undefined
@@ -44,7 +57,7 @@ function ok<T>(data: T) {
 }
 
 function connected(id = "evt_connected") {
-  return { id, type: "server.connected", data: {} } satisfies V2Event1
+  return { id, type: "server.connected", data: {} } satisfies RunV2Event
 }
 
 function footer() {

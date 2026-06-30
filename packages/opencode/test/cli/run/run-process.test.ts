@@ -2,7 +2,7 @@
 // These exercise the real CLI binary against a TestLLMServer running in the
 // same process. See `test/lib/cli-process.ts` for the harness — each test uses
 // `opencode.run(message, opts?)` to spawn `bun src/index.ts run ...` with
-// `OPENCODE_CONFIG_CONTENT` providing the test provider config inline.
+// an isolated test provider config under the fixture's temp home.
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { reply } from "../../lib/llm-server"
@@ -315,9 +315,7 @@ describe("opencode run (non-interactive subprocess)", () => {
       Effect.gen(function* () {
         yield* llm.text("variant response")
         const result = yield* opencode.spawn(["run", "--variant", "default", "use the default model"], {
-          env: {
-            OPENCODE_CONFIG_CONTENT: JSON.stringify({ ...testProviderConfig(llm.url), model: "test/test-model" }),
-          },
+          config: { ...testProviderConfig(llm.url), model: "test/test-model" },
         })
 
         opencode.expectExit(result, 0)
@@ -338,7 +336,7 @@ describe("opencode run (non-interactive subprocess)", () => {
 
         const result = yield* opencode.run("read the attachment", {
           extraArgs: [`--file=${source}`, "--"],
-          env: { OPENCODE_CONFIG_CONTENT: JSON.stringify(config) },
+          config,
         })
 
         opencode.expectExit(result, 0)

@@ -5,8 +5,7 @@
 // argv parsing → server boot → SDK call → event consumption → exit code (like
 // the original /event race or #27371's invalid-model hang).
 //
-// Configuration flows through opencode's built-in test affordances:
-//   - OPENCODE_CONFIG_CONTENT      : provider config inline, no files to find
+// Configuration flows through an isolated global opencode.json under the temp home:
 //   - OPENCODE_TEST_HOME           : pins os.homedir() → tmpdir
 //   - OPENCODE_DISABLE_PROJECT_CONFIG : skip walking up for opencode.json
 //   - OPENCODE_PURE                : skip external plugin discovery + install
@@ -59,7 +58,7 @@ function forkStderrDrain(stream: ReadableStream<Uint8Array>, into: string[]) {
   )
 }
 
-function isolatedEnv(home: string, configJson: string): Record<string, string> {
+function isolatedEnv(home: string): Record<string, string> {
   return {
     OPENCODE_TEST_HOME: home,
     HOME: home,
@@ -67,7 +66,7 @@ function isolatedEnv(home: string, configJson: string): Record<string, string> {
     XDG_DATA_HOME: path.join(home, ".local/share"),
     XDG_STATE_HOME: path.join(home, ".local/state"),
     XDG_CACHE_HOME: path.join(home, ".cache"),
-    OPENCODE_CONFIG_CONTENT: configJson,
+    OPENCODE_CONFIG_DIR: path.join(home, ".opencode-config"),
     OPENCODE_DISABLE_PROJECT_CONFIG: "1",
     OPENCODE_PURE: "1",
     OPENCODE_DISABLE_AUTOUPDATE: "1",
@@ -89,7 +88,11 @@ export type RunHandle = {
   readonly result: Effect.Effect<RunResult>
 }
 
-export type SpawnOpts = { readonly timeoutMs?: number; readonly env?: Record<string, string> }
+export type SpawnOpts = {
+  readonly timeoutMs?: number
+  readonly env?: Record<string, string>
+  readonly config?: ReturnType<typeof testProviderConfig> & Record<string, unknown>
+}
 
 // Typed equivalent of constructing argv for `opencode run`. New flags should
 // land here so tests stay grep-able and refactor-safe.
@@ -201,10 +204,15 @@ export function withCliFixture<A, E>(
         .pipe(Effect.retry(Schedule.spaced("50 millis").pipe(Schedule.both(Schedule.recurs(20)))), Effect.ignore),
     )
 
-    const configJson = JSON.stringify(testProviderConfig(llm.url))
-    const env = isolatedEnv(home, configJson)
+    const env = isolatedEnv(home)
+    const writeConfig = (config?: SpawnOpts["config"]) =>
+      fs
+        .writeWithDirs(path.join(env.OPENCODE_CONFIG_DIR, "opencode.json"), JSON.stringify(config ?? testProviderConfig(llm.url)))
+        .pipe(Effect.orDie)
+    yield* writeConfig()
 
     const spawn = Effect.fn("opencode.spawn")(function* (args: string[], opts?: SpawnOpts) {
+      yield* writeConfig(opts?.config)
       const start = Date.now()
       const timeoutMs = opts?.timeoutMs ?? 30_000
       // stdin: "ignore" so the child doesn't see a piped stdin and block
@@ -264,13 +272,8 @@ export function withCliFixture<A, E>(
       if (!opts?.permission) return opts
       return {
         ...opts,
-        env: {
-          ...opts.env,
-          OPENCODE_CONFIG_CONTENT: JSON.stringify({
-            ...testProviderConfig(llm.url),
-            permission: opts.permission,
-          }),
-        },
+        env: opts.env,
+        config: { ...testProviderConfig(llm.url), permission: opts.permission },
       }
     }
 
@@ -281,6 +284,7 @@ export function withCliFixture<A, E>(
     const startRun = Effect.fn("opencode.startRun")(function* (message: string, opts?: RunOpts) {
       const start = Date.now()
       const options = runOpts(opts)
+      yield* writeConfig(options?.config)
       const proc = yield* Effect.acquireRelease(
         Effect.sync(() =>
           Bun.spawn(["bun", "run", "--conditions=browser", cliEntry, ...runArgs(message, opts)], {

@@ -5,7 +5,7 @@ import type {
   StepStartPart,
   TextPart,
   ToolPart,
-  V2Event1,
+  V2Event,
 } from "@opencode-ai/sdk/v2"
 import { EOL } from "node:os"
 import { MessageID } from "@/session/schema"
@@ -50,6 +50,19 @@ type ToolState = StartedPart & {
   provider?: unknown
 }
 
+type ExecutionSettledEvent = {
+  id: string
+  type: "session.next.execution.settled"
+  data: {
+    timestamp: number | string
+    sessionID: string
+    outcome: "success" | "failure" | "interrupted"
+    error?: { message?: string; _tag?: string; type?: string } & Record<string, unknown>
+  }
+}
+
+type RunV2Event = V2Event | ExecutionSettledEvent
+
 export async function runNonInteractivePrompt(input: Input) {
   const controller = new AbortController()
   const events = await input.client.v2.event.subscribe({
@@ -57,7 +70,7 @@ export async function runNonInteractivePrompt(input: Input) {
     sseMaxRetryAttempts: 0,
     throwOnError: true,
   })
-  const stream = events.stream[Symbol.asyncIterator]() as AsyncGenerator<V2Event1>
+  const stream = events.stream[Symbol.asyncIterator]() as AsyncGenerator<RunV2Event>
   const connected = await stream.next()
   if (connected.done) throw new Error("Event stream disconnected before prompt admission")
 
@@ -358,7 +371,8 @@ export async function runNonInteractivePrompt(input: Input) {
           emittedError = true
           process.exitCode = 1
           const error = event.data.error ?? { type: "unknown", message: "Session execution failed" }
-          if (!emit("error", toMillis(event.data.timestamp), { error })) UI.error(error.message)
+          if (!emit("error", toMillis(event.data.timestamp), { error }))
+            UI.error(error.message ?? error._tag ?? "Session execution failed")
         }
         if (event.data.outcome === "interrupted" && interrupted) process.exitCode = 130
         return

@@ -279,8 +279,6 @@ import type {
   V2FsListResponses,
   V2FsReadErrors,
   V2FsReadResponses,
-  V2GenerateTextErrors,
-  V2GenerateTextResponses,
   V2HealthGetErrors,
   V2HealthGetResponses,
   V2IntegrationAttemptCancelErrors,
@@ -5528,7 +5526,6 @@ export class Session3 extends HeyApiClient {
   public create<ThrowOnError extends boolean = false>(
     parameters?: {
       id?: string
-      title?: string
       agent?: string
       model?: ModelRef
       location?: LocationRef
@@ -5541,7 +5538,6 @@ export class Session3 extends HeyApiClient {
         {
           args: [
             { in: "body", key: "id" },
-            { in: "body", key: "title" },
             { in: "body", key: "agent" },
             { in: "body", key: "model" },
             { in: "body", key: "location" },
@@ -6120,48 +6116,6 @@ export class Model extends HeyApiClient {
       url: "/api/model",
       ...options,
       ...params,
-    })
-  }
-}
-
-export class Generate extends HeyApiClient {
-  /**
-   * Generate text
-   *
-   * Run one stateless model generation at the requested location and return the assistant text. Uses the location's default model when none is specified.
-   */
-  public text<ThrowOnError extends boolean = false>(
-    parameters?: {
-      location?: {
-        directory?: string
-        workspace?: string
-      }
-      prompt?: string
-      model?: ModelRef
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "location" },
-            { in: "body", key: "prompt" },
-            { in: "body", key: "model" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<V2GenerateTextResponses, V2GenerateTextErrors, ThrowOnError>({
-      url: "/api/generate",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
     })
   }
 }
@@ -7543,11 +7497,6 @@ export class V2 extends HeyApiClient {
   private _model?: Model
   get model(): Model {
     return (this._model ??= new Model({ client: this.client }))
-  }
-
-  private _generate?: Generate
-  get generate(): Generate {
-    return (this._generate ??= new Generate({ client: this.client }))
   }
 
   private _provider?: Provider2

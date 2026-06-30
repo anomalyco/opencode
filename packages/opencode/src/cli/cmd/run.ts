@@ -565,15 +565,16 @@ export const RunCommand = effectCmd({
         }
 
         if (interactive || currentPrompt) {
+          const name = title()
           const result = await sdk.v2.session.create({
-            title: title(),
             location: { directory: await current(sdk) },
           })
           const created = result.data?.data
           if (!created) return
+          if (name) await sdk.v2.session.rename({ sessionID: created.id, title: name })
           return {
             id: created.id,
-            title: created.title,
+            title: name ?? created.title,
             directory: created.location.directory,
             current: true,
           }
@@ -653,8 +654,8 @@ export const RunCommand = effectCmd({
         sdk: OpencodeClient,
         input: { agent: string | undefined; model: ModelInput | undefined; variant: string | undefined },
       ): Promise<SessionInfo> {
+        const name = args.title !== undefined && args.title !== "" ? args.title : undefined
         const result = await sdk.v2.session.create({
-          title: args.title !== undefined && args.title !== "" ? args.title : undefined,
           agent: input.agent,
           model: input.model
             ? {
@@ -670,11 +671,12 @@ export const RunCommand = effectCmd({
         if (!id) {
           throw new Error("Failed to create session")
         }
+        if (name) await sdk.v2.session.rename({ sessionID: id, title: name })
 
         void share(sdk, id).catch(() => {})
         return {
           id,
-          title: created.title,
+          title: name ?? created.title,
         }
       }
 

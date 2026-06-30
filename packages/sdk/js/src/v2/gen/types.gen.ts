@@ -24,7 +24,6 @@ export type Event =
   | EventSessionNextForked
   | EventSessionNextPrompted
   | EventSessionNextPromptAdmitted
-  | EventSessionNextExecutionSettled
   | EventSessionNextContextUpdated
   | EventSessionNextSynthetic
   | EventSessionNextSkillActivated
@@ -652,6 +651,7 @@ export type Prompt = {
   text: string
   files?: Array<PromptFileAttachment>
   agents?: Array<PromptAgentAttachment>
+  system?: string
 }
 
 export type Pty = {
@@ -922,16 +922,6 @@ export type GlobalEvent = {
           messageID: string
           prompt: Prompt
           delivery: "steer" | "queue"
-        }
-      }
-    | {
-        id: string
-        type: "session.next.execution.settled"
-        properties: {
-          timestamp: number
-          sessionID: string
-          outcome: "success" | "failure" | "interrupted"
-          error?: SessionErrorUnknown
         }
       }
     | {
@@ -2832,6 +2822,7 @@ export type PromptInput = {
   text: string
   files?: Array<PromptInputFileAttachment>
   agents?: Array<PromptAgentAttachment>
+  system?: string
 }
 
 export type ConflictError = {
@@ -2896,19 +2887,13 @@ export type SessionHistory = {
   hasMore: boolean
 }
 
-export type SessionDurableEvent1 = string
+export type SessionDurableEventStream = string
 
 export type SessionMessagesResponse = {
   data: Array<SessionMessage>
   cursor: {
     previous?: string
     next?: string
-  }
-}
-
-export type GenerateTextResponse = {
-  data: {
-    text: string
   }
 }
 
@@ -3001,7 +2986,7 @@ export type QuestionRejected2 = {
   }
 }
 
-export type V2Event1 =
+export type V2Event =
   | ModelsDevRefreshed
   | IntegrationUpdated
   | IntegrationConnectionUpdated
@@ -3021,7 +3006,6 @@ export type V2Event1 =
   | SessionNextForked
   | SessionNextPrompted
   | SessionNextPromptAdmitted
-  | SessionNextExecutionSettled
   | SessionNextContextUpdated
   | SessionNextSynthetic
   | SessionNextSkillActivated
@@ -3101,7 +3085,7 @@ export type V2Event1 =
   | ServerConnected
   | GlobalDisposed
 
-export type V2Event = string
+export type V2EventStream = string
 
 export type ForbiddenError = {
   _tag: "ForbiddenError"
@@ -4231,6 +4215,7 @@ export type SessionMessageUser = {
   text: string
   files?: Array<PromptFileAttachment>
   agents?: Array<PromptAgentAttachment>
+  system?: string
   type: "user"
 }
 
@@ -5609,26 +5594,6 @@ export type MessagePartRemoved = {
   }
 }
 
-export type SessionNextExecutionSettled = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "session.next.execution.settled"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef
-  data: {
-    timestamp: number
-    sessionID: string
-    outcome: "success" | "failure" | "interrupted"
-    error?: SessionErrorUnknown
-  }
-}
-
 export type SessionNextTextDelta = {
   id: string
   metadata?: {
@@ -6831,17 +6796,6 @@ export type EventSessionNextPromptAdmitted = {
     messageID: string
     prompt: Prompt
     delivery: "steer" | "queue"
-  }
-}
-
-export type EventSessionNextExecutionSettled = {
-  id: string
-  type: "session.next.execution.settled"
-  properties: {
-    timestamp: number
-    sessionID: string
-    outcome: "success" | "failure" | "interrupted"
-    error?: SessionErrorUnknown
   }
 }
 
@@ -12008,7 +11962,6 @@ export type V2SessionListResponse = V2SessionListResponses[keyof V2SessionListRe
 export type V2SessionCreateData = {
   body: {
     id?: string
-    title?: string
     agent?: string
     model?: ModelRef
     location?: LocationRef
@@ -12718,7 +12671,7 @@ export type V2SessionEventsResponses = {
   200: {
     id: string
     event: string
-    data: SessionDurableEvent1
+    data: SessionDurableEventStream
   }
 }
 
@@ -12918,47 +12871,6 @@ export type V2ModelListResponses = {
 }
 
 export type V2ModelListResponse = V2ModelListResponses[keyof V2ModelListResponses]
-
-export type V2GenerateTextData = {
-  body: {
-    prompt: string
-    model?: ModelRef
-  }
-  path?: never
-  query?: {
-    location?: {
-      directory?: string
-      workspace?: string
-    }
-  }
-  url: "/api/generate"
-}
-
-export type V2GenerateTextErrors = {
-  /**
-   * InvalidRequestError
-   */
-  400: InvalidRequestError
-  /**
-   * UnauthorizedError
-   */
-  401: UnauthorizedError
-  /**
-   * ServiceUnavailableError
-   */
-  503: ServiceUnavailableError
-}
-
-export type V2GenerateTextError = V2GenerateTextErrors[keyof V2GenerateTextErrors]
-
-export type V2GenerateTextResponses = {
-  /**
-   * GenerateTextResponse
-   */
-  200: GenerateTextResponse
-}
-
-export type V2GenerateTextResponse = V2GenerateTextResponses[keyof V2GenerateTextResponses]
 
 export type V2ProviderListData = {
   body?: never
