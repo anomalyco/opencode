@@ -2,6 +2,7 @@ import { getFilename } from "@opencode-ai/core/util/path"
 import { type Session } from "@opencode-ai/sdk/v2/client"
 import { pathKey } from "@/utils/path-key"
 import type { ServerConnection } from "@/context/server"
+import type { HomeProjectSelection } from "@/context/layout"
 
 type SessionStore = {
   session?: Session[]
@@ -55,8 +56,6 @@ export const childSessionOnPath = (sessions: Session[] | undefined, rootID: stri
 
 export const displayName = (project: { name?: string; worktree: string }) =>
   project.name || getFilename(project.worktree) || project.worktree
-
-export type HomeProjectSelection = { server: ServerConnection.Key; directory?: string }
 
 export function toggleHomeProjectSelection(
   current: HomeProjectSelection | undefined,

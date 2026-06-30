@@ -15,6 +15,61 @@ const isAbortError = (error: unknown) =>
   error !== null && typeof error === "object" && "name" in error && error.name === "AbortError"
 
 const isStreamClosed = (error: unknown, signal?: AbortSignal) => isAbortError(error) || signal?.aborted === true
+type QueuedServerEvent = { directory: string; payload: Event }
+
+const coalescedKey = (event: QueuedServerEvent) => {
+  if (event.payload.type === "lsp.updated") return `lsp.updated:${event.directory}`
+  if (event.payload.type === "message.part.updated") {
+    const part = event.payload.properties.part
+    return `message.part.updated:${event.directory}:${part.messageID}:${part.id}`
+  }
+  return undefined
+}
+
+export function enqueueServerEvent(queue: QueuedServerEvent[], event: QueuedServerEvent) {
+  const key = coalescedKey(event)
+  const previous = queue[queue.length - 1]
+  if (key && previous && coalescedKey(previous) === key) {
+    queue[queue.length - 1] = event
+    return false
+  }
+  queue.push(event)
+  return true
+}
+
+export function coalesceServerEvents(events: QueuedServerEvent[]) {
+  const output: QueuedServerEvent[] = []
+  events.forEach((event) => {
+    if (event.payload.type !== "message.part.delta") {
+      output.push(event)
+      return
+    }
+    const props = event.payload.properties
+    const previous = output[output.length - 1]
+    if (
+      !previous ||
+      previous.payload.type !== "message.part.delta" ||
+      previous.directory !== event.directory ||
+      previous.payload.properties.messageID !== props.messageID ||
+      previous.payload.properties.partID !== props.partID ||
+      previous.payload.properties.field !== props.field
+    ) {
+      output.push({
+        directory: event.directory,
+        payload: { ...event.payload, properties: { ...props } },
+      })
+      return
+    }
+    output[output.length - 1] = {
+      directory: event.directory,
+      payload: {
+        ...event.payload,
+        properties: { ...props, delta: previous.payload.properties.delta + props.delta },
+      },
+    }
+  })
+  return output
+}
 
 export function resumeStreamAfterPageShow(event: PageTransitionEvent, start: () => unknown) {
   if (!event.persisted) return
@@ -45,28 +100,15 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
     [key: string]: Event
   }>()
 
-  type Queued = { directory: string; payload: Event }
+  type Queued = QueuedServerEvent
   const FLUSH_FRAME_MS = 16
   const STREAM_YIELD_MS = 8
   const RECONNECT_DELAY_MS = 250
 
   let queue: Queued[] = []
   let buffer: Queued[] = []
-  const coalesced = new Map<string, number>()
-  const staleDeltas = new Set<string>()
   let timer: ReturnType<typeof setTimeout> | undefined
   let last = 0
-
-  const deltaKey = (directory: string, messageID: string, partID: string) => `${directory}:${messageID}:${partID}`
-
-  const key = (directory: string, payload: Event) => {
-    if (payload.type === "session.status") return `session.status:${directory}:${payload.properties.sessionID}`
-    if (payload.type === "lsp.updated") return `lsp.updated:${directory}`
-    if (payload.type === "message.part.updated") {
-      const part = payload.properties.part
-      return `message.part.updated:${directory}:${part.messageID}:${part.id}`
-    }
-  }
 
   const flush = () => {
     if (timer) clearTimeout(timer)
@@ -75,22 +117,14 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
     if (queue.length === 0) return
 
     const events = queue
-    const skip = staleDeltas.size > 0 ? new Set(staleDeltas) : undefined
     queue = buffer
     buffer = events
     queue.length = 0
-    coalesced.clear()
-    staleDeltas.clear()
 
     last = Date.now()
+    const output = coalesceServerEvents(events)
     batch(() => {
-      for (const event of events) {
-        if (skip && event.payload.type === "message.part.delta") {
-          const props = event.payload.properties
-          if (skip.has(deltaKey(event.directory, props.messageID, props.partID))) continue
-        }
-        emitter.emit(event.directory, event.payload)
-      }
+      output.forEach((event) => emitter.emit(event.directory, event.payload))
     })
 
     buffer.length = 0
@@ -158,28 +192,11 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
           for await (const event of events.stream) {
             resetHeartbeat()
             streamErrorLogged = false
-            const directory = event.directory ?? "global"
-            if (event.payload.type === "sync") {
-              continue
+            if (event.payload.type !== "sync") {
+              const directory = event.directory ?? "global"
+              const payload = event.payload as Event
+              if (enqueueServerEvent(queue, { directory, payload })) schedule()
             }
-
-            const payload = event.payload as Event
-
-            const k = key(directory, payload)
-            if (k) {
-              const i = coalesced.get(k)
-              if (i !== undefined) {
-                queue[i] = { directory, payload }
-                if (payload.type === "message.part.updated") {
-                  const part = payload.properties.part
-                  staleDeltas.add(deltaKey(directory, part.messageID, part.id))
-                }
-                continue
-              }
-              coalesced.set(k, queue.length)
-            }
-            queue.push({ directory, payload })
-            schedule()
 
             if (Date.now() - yielded < STREAM_YIELD_MS) continue
             yielded = Date.now()
@@ -243,6 +260,7 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
   })
 
   return {
+    server,
     scope,
     url: server.http.url,
     client: sdk,
@@ -263,13 +281,13 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
 
 type ServerSDKBase = ReturnType<typeof createServerSdkContextBase>
 export type ServerSDK = ServerSDKBase & {
-  createDirSdkContext: (directory: string) => ReturnType<typeof createDirSdkContext>
+  ensureDirSdkContext: (directory: string) => ReturnType<typeof createDirSdkContext>
 }
 
 export function createServerSdkContext(server: ServerConnection.Any, scope: ServerScope): ServerSDK {
   const sdk = createServerSdkContextBase(server, scope)
   return Object.assign(sdk, {
-    createDirSdkContext: createRefCountMap((dir) => createDirSdkContext(dir, sdk)),
+    ensureDirSdkContext: createRefCountMap((dir) => createDirSdkContext(dir, sdk)),
   })
 }
 
@@ -285,7 +303,7 @@ export const { use: useServerSDK, provider: ServerSDKProvider } = createSimpleCo
     return createMemo<ServerSDK>(() => {
       const conn = props.server?.() ?? server.current
       if (!conn) throw new Error(language.t("error.serverSDK.noServerAvailable"))
-      return global.createServerCtx(conn).sdk
+      return global.ensureServerCtx(conn).sdk
     })
   },
 })

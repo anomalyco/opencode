@@ -17,6 +17,8 @@ export type StatDimension = "model" | "provider" | "geo" | "geo_model"
 export function buildStatsQuery(periodStart: Date, periodEnd: Date, dimension: StatDimension) {
   const periodStartValue = sqlString(periodStart.toISOString())
   const periodEndValue = sqlString(periodEnd.toISOString())
+  const periodStartDateValue = sqlString(periodStart.toISOString().slice(0, 10))
+  const periodEndDateValue = sqlString(periodEnd.toISOString().slice(0, 10))
   const sourceTable = [Resource.InferenceEvent.catalog, Resource.InferenceEvent.database, Resource.InferenceEvent.table]
     .map(sqlIdentifier)
     .join(".")
@@ -40,6 +42,7 @@ export function buildStatsQuery(periodStart: Date, periodEnd: Date, dimension: S
   const aggregateColumns = `
     COUNT(DISTINCT session) AS sessions,
     COUNT(*) AS requests,
+    COUNT(DISTINCT user_key) AS unique_users,
     COALESCE(SUM(tokens_input), 0) AS input_tokens,
     COALESCE(SUM(tokens_output), 0) AS output_tokens,
     COALESCE(SUM(tokens_reasoning), 0) AS reasoning_tokens,
@@ -70,6 +73,9 @@ WITH normalized AS (
     UPPER(COALESCE(NULLIF(cf_country, ''), 'ZZ')) AS country,
     COALESCE(NULLIF(cf_continent, ''), '') AS continent,
     session,
+    COALESCE(NULLIF(workspace, ''), '') AS workspace,
+    COALESCE(NULLIF(api_key, ''), '') AS api_key,
+    COALESCE(NULLIF(user_id, ''), '') AS user_id,
     status,
     duration AS duration_ms,
     time_to_first_byte AS ttfb_ms,
@@ -92,6 +98,9 @@ WITH normalized AS (
   WHERE event_type = 'completions'
     AND model IS NOT NULL
     AND model <> ''
+    AND source = 'lite'
+    AND event_date >= ${periodStartDateValue}
+    AND event_date <= ${periodEndDateValue}
     AND event_timestamp >= ${periodStartValue}
     AND event_timestamp < ${periodEndValue}
 ), filtered AS (
@@ -108,6 +117,7 @@ WITH normalized AS (
     country,
     continent,
     session,
+    COALESCE(NULLIF(user_id, ''), NULLIF(workspace, ''), NULLIF(api_key, '')) AS user_key,
     status,
     duration_ms,
     ttfb_ms,
@@ -197,6 +207,7 @@ function toStatBaseAggregate(data: AthenaData): StatBaseAggregate[] {
       tier: normalizeTier(data.tier || "unknown"),
       sessions: integer(data, "sessions"),
       requests: integer(data, "requests"),
+      unique_users: integer(data, "unique_users"),
       input_tokens: integer(data, "input_tokens"),
       output_tokens: integer(data, "output_tokens"),
       reasoning_tokens: integer(data, "reasoning_tokens"),

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { createStore } from "solid-js/store"
 import { QueryClient } from "@tanstack/solid-query"
 import type { Config, OpencodeClient, Project } from "@opencode-ai/sdk/v2/client"
-import type { NormalizedProviderListResponse } from "@opencode-ai/ui/context"
+import type { NormalizedProviderListResponse } from "@opencode-ai/session-ui/context"
 import { bootstrapDirectory, loadPathQuery, loadProvidersQuery } from "./bootstrap"
 import type { State, VcsCache } from "./types"
 import { ServerScope } from "@/utils/server-scope"
@@ -16,6 +16,7 @@ describe("bootstrapDirectory", () => {
       status: "loading",
       agent: [],
       command: [],
+      reference: [],
       project: "",
       projectMeta: undefined,
       icon: undefined,
@@ -35,6 +36,7 @@ describe("bootstrapDirectory", () => {
       question: {},
       mcp_ready: true,
       mcp: {},
+      mcp_resource: {},
       lsp_ready: true,
       lsp: [],
       vcs: undefined,
@@ -67,6 +69,7 @@ describe("bootstrapDirectory", () => {
         },
         permission: { list: async () => ({ data: [] }) },
         question: { list: async () => ({ data: [] }) },
+        v2: { reference: { list: async () => ({ data: { data: [] } }) } },
         mcp: {
           status: async () => {
             mcpReads.push("status")
