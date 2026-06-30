@@ -28,7 +28,6 @@ import {
 } from "@/context/prompt"
 import { useLayout } from "@/context/layout"
 import { useSDK } from "@/context/sdk"
-import { useQueryOptions } from "@/context/server-sync"
 import { useSync } from "@/context/sync"
 import { useComments } from "@/context/comments"
 import { Button } from "@opencode-ai/ui/button"
@@ -70,8 +69,6 @@ import { createPromptInputTransientState } from "./prompt-input/transient-state"
 import { showToast } from "@/utils/toast"
 import { ImagePreview } from "@opencode-ai/ui/image-preview"
 import type { ReferenceInfo } from "@opencode-ai/sdk/v2/client"
-import { useQuery } from "@tanstack/solid-query"
-import { pathKey } from "@/utils/path-key"
 
 export type PromptInputState = ReturnType<typeof usePrompt>
 
@@ -202,7 +199,6 @@ const EXAMPLES = [
 
 export const PromptInput: Component<PromptInputProps> = (props) => {
   const sdk = useSDK()
-  const queryOptions = useQueryOptions()
 
   const sync = useSync()
   const files = useFile()
@@ -634,19 +630,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     })
   }
 
-  const referencesQuery = useQuery(() => queryOptions().references(pathKey(sdk().directory)))
-
-  createEffect(() => {
-    const unsubscribe = sdk().event.on("reference.updated", () => void referencesQuery.refetch())
-    onCleanup(unsubscribe)
-  })
-
   const referenceDescription = (reference: ReferenceInfo) =>
     reference.source.type === "git" ? reference.source.repository : reference.source.path
 
   const referenceList = createMemo(() =>
-    (referencesQuery.data ?? [])
-      .filter((reference) => !reference.hidden)
+    sync()
+      .data.reference.filter((reference) => !reference.hidden)
       .map(
         (reference): AtOption => ({
           type: "reference",

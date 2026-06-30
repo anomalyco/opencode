@@ -200,7 +200,7 @@ export const loadReferencesQuery = (scope: ServerScope, directory: string, sdk: 
   queryOptions<ReferenceInfo[]>({
     queryKey: [scope, directory, "references"] as const,
     queryFn: () => retry(() => sdk.v2.reference.list().then((x) => x.data?.data ?? [])).catch(() => []),
-    initialData: [],
+    placeholderData: [],
   })
 
 export async function bootstrapDirectory(input: {

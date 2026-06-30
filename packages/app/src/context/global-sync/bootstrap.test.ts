@@ -16,6 +16,7 @@ describe("bootstrapDirectory", () => {
       status: "loading",
       agent: [],
       command: [],
+      reference: [],
       project: "",
       projectMeta: undefined,
       icon: undefined,
@@ -67,6 +68,7 @@ describe("bootstrapDirectory", () => {
         },
         permission: { list: async () => ({ data: [] }) },
         question: { list: async () => ({ data: [] }) },
+        v2: { reference: { list: async () => ({ data: { data: [] } }) } },
         mcp: {
           status: async () => {
             mcpReads.push("status")
