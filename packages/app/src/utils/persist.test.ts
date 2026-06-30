@@ -4,6 +4,7 @@ import { ServerScope } from "./server-scope"
 type PersistTestingType = typeof import("./persist").PersistTesting
 type PersistType = typeof import("./persist").Persist
 type RemovePersistedType = typeof import("./persist").removePersisted
+type ResolvePlatform = Parameters<PersistTestingType["resolveTarget"]>[1]
 
 class MemoryStorage implements Storage {
   private values = new Map<string, string>()
@@ -207,5 +208,57 @@ describe("persist localStorage resilience", () => {
 
   test("server global target cannot collide when scope and key contain colons", () => {
     expect(Persist.serverGlobal("a:b" as ServerScope, "c")).not.toEqual(Persist.serverGlobal("a" as ServerScope, "b:c"))
+  })
+
+  test("window target scopes browser storage and migrates global values", () => {
+    const target = persistTesting.resolveTarget(Persist.window("tabs"), { platform: "web" } as ResolvePlatform)
+
+    expect(target).toEqual({
+      scope: "window",
+      storage: persistTesting.windowStorage("browser"),
+      legacyStorageNames: ["opencode.global.dat"],
+      key: "tabs",
+      legacy: undefined,
+    })
+  })
+
+  test("window target scopes desktop storage by window id", () => {
+    const target = persistTesting.resolveTarget(Persist.window("tabs"), {
+      platform: "desktop",
+      windowID: "window-a",
+      migrateGlobalWindowState: false,
+    } as ResolvePlatform)
+
+    expect(target).toEqual({
+      scope: "window",
+      storage: persistTesting.windowStorage("window-a"),
+      legacyStorageNames: undefined,
+      key: "tabs",
+      legacy: undefined,
+    })
+  })
+
+  test("window target preserves global desktop storage without a window id", () => {
+    const target = persistTesting.resolveTarget(Persist.window("tabs"), {
+      platform: "desktop",
+      migrateGlobalWindowState: true,
+    } as ResolvePlatform)
+
+    expect(target).toEqual({
+      scope: "window",
+      storage: "opencode.global.dat",
+      key: "tabs",
+      legacy: undefined,
+    })
+  })
+
+  test("window target lets one desktop window migrate global values", () => {
+    const target = persistTesting.resolveTarget(Persist.window("tabs"), {
+      platform: "desktop",
+      windowID: "window-a",
+      migrateGlobalWindowState: true,
+    } as ResolvePlatform)
+
+    expect(target.legacyStorageNames).toEqual(["opencode.global.dat"])
   })
 })

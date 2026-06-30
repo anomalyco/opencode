@@ -9,7 +9,7 @@ import { fileURLToPath, pathToFileURL } from "node:url"
 import type { TitlebarTheme } from "../preload/types"
 import { exportDebugLogs, write as writeLog } from "./logging"
 import { getStore } from "./store"
-import { PINCH_ZOOM_ENABLED_KEY, WINDOW_IDS_KEY } from "./store-keys"
+import { PINCH_ZOOM_ENABLED_KEY, WINDOW_GLOBAL_STATE_MIGRATION_ID_KEY, WINDOW_IDS_KEY } from "./store-keys"
 import { createUnresponsiveSampler } from "./unresponsive"
 
 const root = dirname(fileURLToPath(import.meta.url))
@@ -45,6 +45,7 @@ let relaunchHandler = () => {
 }
 let appQuitting = false
 let lastFocusedWindowID: string | undefined
+let windowGlobalStateMigrationID: string | undefined
 const titlebarThemes = new WeakMap<BrowserWindow, Partial<TitlebarTheme>>()
 const pinchZoomEnabled = new WeakMap<BrowserWindow, boolean>()
 const windowIDs = new WeakMap<BrowserWindow, string>()
@@ -124,6 +125,10 @@ export function getWindowID(win: BrowserWindow) {
   return windowIDs.get(win)
 }
 
+export function getWindowMigrateGlobalState(win: BrowserWindow) {
+  return getWindowID(win) === windowGlobalStateMigrationID
+}
+
 export function getLastFocusedWindow() {
   const focused = BrowserWindow.getFocusedWindow()
   if (focused) return focused
@@ -135,7 +140,9 @@ export function getLastFocusedWindow() {
 
 export function restoreMainWindows() {
   const ids = readWindowIDs()
-  return (ids.length ? ids : [randomUUID()]).map((id) => createMainWindow(id))
+  const next = ids.length ? ids : [randomUUID()]
+  windowGlobalStateMigrationID = readWindowGlobalStateMigrationID(next)
+  return next.map((id) => createMainWindow(id))
 }
 
 export function setDockIcon() {
@@ -243,6 +250,14 @@ function persistWindowID(id: string) {
 
 function removeWindowID(id: string) {
   writeWindowIDs(readWindowIDs().filter((item) => item !== id))
+}
+
+function readWindowGlobalStateMigrationID(ids: string[]) {
+  const value = getStore().get(WINDOW_GLOBAL_STATE_MIGRATION_ID_KEY)
+  if (typeof value === "string" && ids.includes(value)) return value
+  const next = ids[0]
+  if (next) getStore().set(WINDOW_GLOBAL_STATE_MIGRATION_ID_KEY, next)
+  return next
 }
 
 export function registerRendererProtocol() {

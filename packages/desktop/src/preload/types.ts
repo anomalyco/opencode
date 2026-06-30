@@ -63,6 +63,7 @@ export type ElectronAPI = {
 
   getWindowCount: () => Promise<number>
   getWindowID: () => Promise<string>
+  getWindowMigrateGlobalState: () => Promise<boolean>
   onMenuCommand: (cb: (id: string) => void) => () => void
   onDeepLink: (cb: (urls: string[]) => void) => () => void
 
