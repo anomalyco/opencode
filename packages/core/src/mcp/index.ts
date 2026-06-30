@@ -297,6 +297,10 @@ export const layer = Layer.effect(
           entry.status = { status: "connected" }
           watch(name, entry, result.value.connection)
           yield* Effect.logInfo("mcp connected", { server: name, tools: entry.tools.length })
+          // Announce the new tool set so the tool registry registers it. A server that finishes connecting
+          // after the initial registration sweep and emits no list-changed notification would otherwise
+          // stay invisible to the model.
+          yield* events.publish(McpEvent.ToolsChanged, { server: name }).pipe(Effect.ignore)
           return
         }
         yield* Scope.close(scope, Exit.void)
