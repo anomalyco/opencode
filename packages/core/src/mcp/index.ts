@@ -24,7 +24,6 @@ export type Status = Mcp.Status
 
 export class ServerInfo extends Schema.Class<ServerInfo>("MCP.ServerInfo")({
   name: ServerName,
-  config: ConfigMCP.Server,
   status: Status,
   integrationID: Integration.ID.pipe(Schema.optional),
   connection: IntegrationConnection.Info.pipe(Schema.optional),
@@ -239,7 +238,6 @@ export const layer = Layer.effect(
     const info = (name: ServerName, entry: ServerEntry, connection: IntegrationConnection.Info | undefined) =>
       new ServerInfo({
         name,
-        config: entry.config,
         status: entry.status,
         integrationID: entry.integrationID,
         connection,
