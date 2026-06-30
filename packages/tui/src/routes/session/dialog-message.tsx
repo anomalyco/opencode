@@ -23,7 +23,7 @@ export function DialogMessage(props: { messageID: string; sessionID: string; set
           description: "undo messages and file changes",
           onSelect: async (dialog) => {
             await sdk.api.session
-              .stage({ sessionID: props.sessionID, messageID: props.messageID })
+              .revertStage({ sessionID: props.sessionID, messageID: props.messageID })
               .catch((error) => toast.show({ message: errorMessage(error), variant: "error", duration: 5000 }))
             dialog.clear()
           },

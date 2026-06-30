@@ -15,7 +15,7 @@ class OtherError {
 
 const tags = LayerNode.tags({ app: [] })
 const make = tags.make("app")
-const build = <A, E>(root: LayerNode.Node<A, E, any>) => LayerNode.compile(root) as Layer.Layer<A, E>
+const build = <A, E>(root: LayerNode.Node<A, E, any>) => LayerNode.compile(root)
 const aLayer = Layer.succeed(A, A.of({}))
 const bLayer = Layer.effect(B, Effect.as(A, B.of({})))
 const cLayer = Layer.effect(
@@ -32,8 +32,6 @@ const b = make({ service: B, layer: bLayer, deps: [a] })
 const c = make({ service: C, layer: cLayer, deps: [a, b] })
 const failing = make({ service: A, layer: failingA, deps: [] })
 const dependent = make({ service: B, layer: bLayer, deps: [failing] })
-const inputA = LayerNode.unbound(A, tags.values.app)
-const inputDependent = make({ service: B, layer: bLayer, deps: [inputA] })
 
 make({ name: "manual-a", layer: aLayer, deps: [] })
 
@@ -51,8 +49,8 @@ make({ service: C, layer: cLayer, deps: [a] })
 
 const closed = build(LayerNode.group([c]))
 const closedWithError = build(LayerNode.group([dependent]))
-const checkClosed: Layer.Layer<C, never, never> = closed
-const checkError: Layer.Layer<B, LayerError, never> = closedWithError
+const checkClosed: Layer.Layer<C> = closed
+const checkError: Layer.Layer<B, LayerError> = closedWithError
 void checkClosed
 void checkError
 
@@ -64,7 +62,6 @@ LayerNode.replace(aLayer, Layer.succeed(B, B.of({})))
 // @ts-expect-error Replacement cannot introduce a new error
 LayerNode.replace(aLayer, Layer.effect(A, Effect.fail(new OtherError())))
 
-// @ts-expect-error Replacement must be closed
 LayerNode.replace(bLayer, bLayer)
 
 class TagA extends Context.Service<TagA, {}>()("test/TagA") {}

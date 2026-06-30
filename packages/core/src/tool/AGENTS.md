@@ -4,10 +4,9 @@ This folder owns Core's one local tool representation, process and Location regi
 
 ## Representations
 
-- `tool.ts` defines the opaque canonical `Tool.make({ description, input, output, execute, toModelOutput })` value. Application tools and shipped built-ins use the same type.
-- `application-tools.ts` stores process-scoped application registrations.
+- `tool.ts` defines the opaque canonical `Tool.make({ description, input, output, execute, toModelOutput })` value. Shipped built-ins and plugin tools use the same type.
 - `tools.ts` exposes the registration-only `Tools.Service` view used by Location producers.
-- `registry.ts` stores only canonical tools, overlays Location registrations over application registrations, derives definitions, invokes tools, and applies generic output bounding.
+- `registry.ts` stores only canonical Location registrations, derives definitions, invokes tools, and applies generic output bounding.
 
 Do not add a second executable entry type, registry-owned executor, authorization callback, output-path callback, or legacy normalization path.
 
@@ -29,16 +28,15 @@ Leaves own resolution, permission, and side-effect ordering. Translate only expe
 
 ## Registration
 
-Built-ins register through `Tools.Service.register({ [name]: tool })`. Application tools register through `ApplicationTools.Service.register(...)`, exposed publicly as `opencode.tools.register(...)`.
+Built-ins and plugin tools register through `Tools.Service.register({ [name]: tool })`.
 
-Both are scoped:
+Registrations are scoped:
 
 - The latest active same-placement registration wins.
 - Closing any registration removes only that registration and reveals the next active one.
-- Location registrations take precedence over application registrations.
 - An invocation captures the effective tool once settlement starts.
 
-`ApplicationTools.Service` is process-scoped and shared by all Locations. `ToolRegistry.Service` is Location-scoped. Do not make the registry process-global or construct a separate application-tool service for each Location.
+`ToolRegistry.Service` is Location-scoped. Do not make the registry process-global or construct a separate application-tool service for each Location.
 
 ## Permissions
 
@@ -54,6 +52,5 @@ Producer capture limits are separate. For example, Bash keeps `AppProcess.maxOut
 
 ## Current Gaps
 
-- Plugin boot has not been redesigned to register canonical tools through `Tools.Service`; do not redesign it as part of leaf migrations.
 - MCP and future Session-scoped registrations still need an explicit canonical registration design.
 - The public Session result shape currently exposes managed `outputPaths`; full storage encapsulation requires a future opaque managed-output reference design.

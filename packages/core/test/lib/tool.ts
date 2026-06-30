@@ -18,6 +18,22 @@ export const toolDefinitions = (
   model = testModel,
 ) => registry.materialize({ permissions, model }).pipe(Effect.map((materialized) => materialized.definitions))
 
+export function waitForTool(
+  registry: ToolRegistry.Interface,
+  name: string,
+  remaining = 1000,
+): Effect.Effect<void, Error> {
+  return Effect.gen(function* () {
+    if ((yield* toolDefinitions(registry)).some((tool) => tool.name === name)) return
+    if (remaining === 0) {
+      yield* Effect.fail(new Error(`Timed out waiting for tool: ${name}`))
+      return
+    }
+    yield* Effect.promise(() => Bun.sleep(1))
+    yield* waitForTool(registry, name, remaining - 1)
+  })
+}
+
 export const settleTool = (registry: ToolRegistry.Interface, input: ToolRegistry.ExecuteInput, model = testModel) =>
   registry.materialize({ model }).pipe(Effect.flatMap((materialized) => materialized.settle(input)))
 

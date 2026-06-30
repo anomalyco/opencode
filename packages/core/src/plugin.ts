@@ -2,7 +2,7 @@ export * as PluginV2 from "./plugin"
 
 import { makeLocationNode } from "./effect/app-node"
 import { Context, Deferred, Effect, Exit, Layer, Scope } from "effect"
-import type { Plugin as PluginRuntime } from "@opencode-ai/plugin/v2/effect"
+import type { Plugin as PluginDefinition } from "@opencode-ai/plugin/v2/effect"
 import { Plugin } from "@opencode-ai/schema/plugin"
 import { AgentV2 } from "./agent"
 import { AISDK } from "./aisdk"
@@ -11,17 +11,20 @@ import { CommandV2 } from "./command"
 import { EventV2 } from "./event"
 import { Integration } from "./integration"
 import { KeyedMutex } from "./effect/keyed-mutex"
+import { Location } from "./location"
 import { PluginHost } from "./plugin/host"
+import { PluginRuntime } from "./plugin/runtime"
 import { Reference } from "./reference"
 import { SkillV2 } from "./skill"
 import { State } from "./state"
+import { ToolRegistry } from "./tool/registry"
 
 export const ID = Plugin.ID
 export type ID = typeof ID.Type
 export const Event = Plugin.Event
 
 export interface Interface {
-  readonly add: (id: ID, effect: PluginRuntime["effect"]) => Effect.Effect<void>
+  readonly add: (id: ID, effect: PluginDefinition["effect"]) => Effect.Effect<void>
   readonly remove: (id: ID) => Effect.Effect<void>
   readonly wait: (id: ID) => Effect.Effect<void>
 }
@@ -38,9 +41,9 @@ export const layer = Layer.effect(
     const loading = new Set<ID>()
     const waiters = new Map<ID, Set<Deferred.Deferred<void>>>()
     const failures = new Map<ID, Exit.Exit<void, never>>()
-    let host: Parameters<PluginRuntime["effect"]>[0]
+    let host: Parameters<PluginDefinition["effect"]>[0]
 
-    const add = Effect.fn("Plugin.add")(function* (id: ID, effect: PluginRuntime["effect"]) {
+    const add = Effect.fn("Plugin.add")(function* (id: ID, effect: PluginDefinition["effect"]) {
       if (loading.has(id)) return yield* Effect.die(`Plugin load cycle detected for ${id}`)
 
       yield* locks.withLock(id)(
@@ -150,6 +153,8 @@ export const locationLayer = layer.pipe(
   Layer.provideMerge(Integration.locationLayer),
   Layer.provideMerge(Reference.locationLayer),
   Layer.provideMerge(SkillV2.locationLayer),
+  Layer.provideMerge(ToolRegistry.defaultLayer),
+  Layer.provideMerge(PluginRuntime.layer),
 )
 
 export const node = makeLocationNode({
@@ -162,7 +167,10 @@ export const node = makeLocationNode({
     Catalog.node,
     CommandV2.node,
     Integration.node,
+    Location.node,
     Reference.node,
     SkillV2.node,
+    ToolRegistry.toolsNode,
+    PluginRuntime.node,
   ],
 })

@@ -24,12 +24,13 @@ import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { PermissionV2 } from "@opencode-ai/core/permission"
+import { PluginRuntime } from "@opencode-ai/core/plugin/runtime"
 import { ShellTool } from "@opencode-ai/core/tool/shell"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
-import { toolIdentity, executeTool, settleTool, toolDefinitions } from "./lib/tool"
+import { toolIdentity, executeTool, settleTool, toolDefinitions, waitForTool } from "./lib/tool"
 
 const sessionID = SessionV2.ID.make("ses_shell_tool_test")
 const sessionModel = ModelV2.Ref.make({ id: ModelV2.ID.make("test"), providerID: ProviderV2.ID.make("test") })
@@ -122,7 +123,7 @@ const layer = AppNodeBuilder.build(
       Job.node,
       ToolOutputStore.cleanupNode,
       SessionV2.node,
-      ShellTool.node,
+      PluginRuntime.providerNode,
       LocationServiceMap.node,
       filesystem,
       FSUtil.node,
@@ -167,6 +168,7 @@ const withSession = <A, E, R>(directory: string, body: (registry: ToolRegistry.I
     const locations = yield* LocationServiceMap.Service
     const locationLayer = locations.get(location)
     const registry = yield* ToolRegistry.Service.pipe(Effect.provide(locationLayer))
+    yield* waitForTool(registry, ShellTool.name)
     return yield* body(registry).pipe(Effect.provide(locationLayer))
   })
 

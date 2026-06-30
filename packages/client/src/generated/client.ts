@@ -27,12 +27,12 @@ import type {
   SessionCompactOutput,
   SessionWaitInput,
   SessionWaitOutput,
-  SessionStageInput,
-  SessionStageOutput,
-  SessionClearInput,
-  SessionClearOutput,
-  SessionCommitInput,
-  SessionCommitOutput,
+  SessionRevertStageInput,
+  SessionRevertStageOutput,
+  SessionRevertClearInput,
+  SessionRevertClearOutput,
+  SessionRevertCommitInput,
+  SessionRevertCommitOutput,
   SessionContextInput,
   SessionContextOutput,
   SessionHistoryInput,
@@ -465,8 +465,8 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
-      stage: (input: SessionStageInput, requestOptions?: RequestOptions) =>
-        request<{ readonly data: SessionStageOutput }>(
+      revertStage: (input: SessionRevertStageInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: SessionRevertStageOutput }>(
           {
             method: "POST",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/revert/stage`,
@@ -477,8 +477,8 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ).then((value) => value.data),
-      clear: (input: SessionClearInput, requestOptions?: RequestOptions) =>
-        request<SessionClearOutput>(
+      revertClear: (input: SessionRevertClearInput, requestOptions?: RequestOptions) =>
+        request<SessionRevertClearOutput>(
           {
             method: "POST",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/revert/clear`,
@@ -488,8 +488,8 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
-      commit: (input: SessionCommitInput, requestOptions?: RequestOptions) =>
-        request<SessionCommitOutput>(
+      revertCommit: (input: SessionRevertCommitInput, requestOptions?: RequestOptions) =>
+        request<SessionRevertCommitOutput>(
           {
             method: "POST",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/revert/commit`,

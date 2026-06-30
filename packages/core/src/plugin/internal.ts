@@ -20,12 +20,18 @@ import { FSUtil } from "../fs-util"
 import { Global } from "../global"
 import { Integration } from "../integration"
 import { Location } from "../location"
+import { LocationMutation } from "../location-mutation"
 import { ModelsDev } from "../models-dev"
 import { Npm } from "../npm"
 import { PluginV2 } from "../plugin"
+import { PluginRuntime } from "../plugin/runtime"
+import { PermissionV2 } from "../permission"
 import { Reference } from "../reference"
+import { Shell } from "../shell"
 import { SkillV2 } from "../skill"
 import { State } from "../state"
+import { ToolRegistry } from "../tool/registry"
+import { Tools } from "../tool/tools"
 import { FetchHttpClient, HttpClient } from "effect/unstable/http"
 import { AgentPlugin } from "./agent"
 import { CommandPlugin } from "./command"
@@ -34,6 +40,8 @@ import { ProviderPlugins } from "./provider"
 import { SdkPlugins } from "./sdk"
 import { SkillPlugin } from "./skill"
 import { VariantPlugin } from "./variant"
+import { ShellTool } from "../tool/shell"
+import { SubagentTool } from "../tool/subagent"
 
 export type Requirements =
   | AgentV2.Service
@@ -47,10 +55,15 @@ export type Requirements =
   | HttpClient.HttpClient
   | Integration.Service
   | Location.Service
+  | LocationMutation.Service
   | ModelsDev.Service
   | Npm.Service
+  | PermissionV2.Service
+  | PluginRuntime.Service
   | Reference.Service
+  | Shell.Service
   | SkillV2.Service
+  | Tools.Service
 
 export interface Plugin<R = never> {
   readonly id: string
@@ -78,8 +91,13 @@ const layer = Layer.effectDiscard(
     const filesystem = yield* FileSystem.Service
     const global = yield* Global.Service
     const http = yield* HttpClient.HttpClient
+    const mutation = yield* LocationMutation.Service
+    const permission = yield* PermissionV2.Service
     const skill = yield* SkillV2.Service
     const reference = yield* Reference.Service
+    const shell = yield* Shell.Service
+    const tools = yield* Tools.Service
+    const runtime = yield* PluginRuntime.Service
     const add = <R>(input: Plugin<R>) => {
       const loaded = {
         id: input.id,
@@ -100,8 +118,13 @@ const layer = Layer.effectDiscard(
               Effect.provideService(FileSystem.Service, filesystem),
               Effect.provideService(Global.Service, global),
               Effect.provideService(HttpClient.HttpClient, http),
+              Effect.provideService(LocationMutation.Service, mutation),
+              Effect.provideService(PermissionV2.Service, permission),
               Effect.provideService(SkillV2.Service, skill),
               Effect.provideService(Reference.Service, reference),
+              Effect.provideService(Shell.Service, shell),
+              Effect.provideService(Tools.Service, tools),
+              Effect.provideService(PluginRuntime.Service, runtime),
             ),
       }
       return plugin.add(PluginV2.ID.make(loaded.id), loaded.effect)
@@ -115,6 +138,8 @@ const layer = Layer.effectDiscard(
         yield* add(SkillPlugin.Plugin)
         yield* add(ModelsDevPlugin)
         yield* add(ConfigExternalPlugin.Plugin)
+        yield* add(ShellTool.Plugin)
+        yield* add(SubagentTool.Plugin)
         yield* add(ConfigAgentPlugin.Plugin)
         yield* add(ConfigCommandPlugin.Plugin)
         yield* add(ConfigSkillPlugin.Plugin)
@@ -146,6 +171,7 @@ export const node = makeLocationNode({
     AgentV2.node,
     Config.node,
     Location.node,
+    LocationMutation.node,
     ModelsDev.node,
     Npm.node,
     EventV2.node,
@@ -153,8 +179,12 @@ export const node = makeLocationNode({
     FileSystem.node,
     Global.node,
     httpClient,
+    PermissionV2.node,
     SkillV2.node,
     Reference.node,
+    Shell.node,
+    ToolRegistry.toolsNode,
+    PluginRuntime.node,
     SdkPlugins.node,
   ],
 })

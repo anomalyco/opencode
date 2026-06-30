@@ -2,7 +2,6 @@ import { describe, expect } from "bun:test"
 import { Tool } from "@opencode-ai/core/tool/tool"
 import { AgentV2 } from "@opencode-ai/core/agent"
 import type { PermissionV2 } from "@opencode-ai/core/permission"
-import { ApplicationTools } from "@opencode-ai/core/tool/application-tools"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
@@ -28,9 +27,8 @@ const outputStore = Layer.mock(ToolOutputStore.Service, {
     )
   },
 })
-const registry = ToolRegistry.layer.pipe(Layer.provide(ApplicationTools.layer), Layer.provide(outputStore))
+const registry = ToolRegistry.layer.pipe(Layer.provide(outputStore))
 const it = testEffect(registry)
-const integrated = testEffect(Layer.mergeAll(ApplicationTools.layer, registry))
 const identity = {
   agent: AgentV2.ID.make("build"),
   assistantMessageID: SessionMessage.ID.make("msg_registry"),
@@ -391,38 +389,6 @@ describe("ToolRegistry", () => {
       yield* service.register({ echo: make() }).pipe(Scope.provide(overlay))
       const materialized = yield* service.materialize({ model: testModel })
       yield* Scope.close(overlay, Exit.void)
-
-      expect((yield* materialized.settle(call("echo"))).result).toEqual({
-        type: "error",
-        value: "Stale tool call: echo",
-      })
-    }),
-  )
-
-  integrated.effect("rejects an application call after a Location override is registered", () =>
-    Effect.gen(function* () {
-      const applications = yield* ApplicationTools.Service
-      const service = yield* ToolRegistry.Service
-      yield* applications.register({ echo: make() })
-      const materialized = yield* service.materialize({ model: testModel })
-      yield* service.register({ echo: make() })
-
-      expect((yield* materialized.settle(call("echo"))).result).toEqual({
-        type: "error",
-        value: "Stale tool call: echo",
-      })
-    }),
-  )
-
-  integrated.effect("rejects a Location call after removal reveals an application registration", () =>
-    Effect.gen(function* () {
-      const applications = yield* ApplicationTools.Service
-      const service = yield* ToolRegistry.Service
-      yield* applications.register({ echo: make() })
-      const scope = yield* Scope.make()
-      yield* service.register({ echo: make() }).pipe(Scope.provide(scope))
-      const materialized = yield* service.materialize({ model: testModel })
-      yield* Scope.close(scope, Exit.void)
 
       expect((yield* materialized.settle(call("echo"))).result).toEqual({
         type: "error",

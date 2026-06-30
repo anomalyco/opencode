@@ -2,8 +2,8 @@ import fs from "fs/promises"
 import { tmpdir as osTmpdir } from "os"
 import path from "path"
 
-export const tmpdir = async () => {
-  const dir = await fs.realpath(await fs.mkdtemp(path.join(osTmpdir(), "opencode-core-test-")))
+export const tmpdir = async (prefix = "opencode-core-test-") => {
+  const dir = await fs.realpath(await fs.mkdtemp(path.join(osTmpdir(), prefix)))
   return {
     path: dir,
     async [Symbol.asyncDispose]() {

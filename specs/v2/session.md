@@ -186,7 +186,7 @@ Event replay owner claims are separate from clustered Session execution ownershi
 
 ## Current Tool Registry Slice
 
-`ApplicationTools` stores process-scoped application registrations shared by all Locations. Each Location-scoped `ToolRegistry` overlays Location registrations, materializes definitions, and owns lookup and settlement. Closing a contribution scope removes its definition and rebuilds the advertised catalog. Trusted tool executors capture and perform authorization; the registry applies catalog visibility filtering, decodes input, invokes the retained handler, validates output, and settles failures as typed tool-result errors.
+Each Location-scoped `ToolRegistry` stores scoped tool registrations, materializes definitions, and owns lookup and settlement. Built-ins and plugins contribute through the same `Tools.Service.register(...)` path. Closing a contribution scope removes its definition and rebuilds the advertised catalog. Trusted tool executors capture and perform authorization; the registry applies catalog visibility filtering, decodes input, invokes the retained handler, validates output, and settles failures as typed tool-result errors.
 
 When a Session omits `agent`, both execution and permission evaluation use the default `build` agent. A caller must not observe `build` model behavior while permission checks silently evaluate an empty no-agent policy.
 

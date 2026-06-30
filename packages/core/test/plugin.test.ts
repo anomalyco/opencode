@@ -1,9 +1,12 @@
 import { describe, expect } from "bun:test"
-import { Effect, Exit, Fiber } from "effect"
+import { Effect, Exit, Fiber, Schema } from "effect"
 import { define } from "@opencode-ai/plugin/v2/effect"
 import { AgentV2 } from "@opencode-ai/core/agent"
 import { PluginV2 } from "@opencode-ai/core/plugin"
+import { Tool } from "@opencode-ai/core/tool/tool"
+import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { testEffect } from "./lib/effect"
+import { testModel } from "./lib/tool"
 import { PluginTestLayer } from "./plugin/fixture"
 
 const it = testEffect(PluginTestLayer)
@@ -66,6 +69,37 @@ describe("PluginV2", () => {
 
       yield* plugins.remove(PluginV2.ID.make("managed"))
       expect(yield* agents.get(AgentV2.ID.make("configured"))).toBeUndefined()
+    }),
+  )
+
+  it.effect("registers location tools through the plugin context", () =>
+    Effect.gen(function* () {
+      const plugins = yield* PluginV2.Service
+      const registry = yield* ToolRegistry.Service
+      const plugin = define({
+        id: "tool-plugin",
+        effect: (ctx) =>
+          ctx.tool
+            .register({
+              plugin_tool: Tool.make({
+                description: "Plugin tool",
+                input: Schema.Struct({}),
+                output: Schema.Struct({ ok: Schema.Boolean }),
+                execute: () => Effect.succeed({ ok: true }),
+              }),
+            })
+            .pipe(Effect.orDie),
+      })
+
+      yield* plugins.add(PluginV2.ID.make(plugin.id), plugin.effect)
+      expect((yield* registry.materialize({ model: testModel })).definitions.map((tool) => tool.name)).toContain(
+        "plugin_tool",
+      )
+
+      yield* plugins.remove(PluginV2.ID.make(plugin.id))
+      expect((yield* registry.materialize({ model: testModel })).definitions.map((tool) => tool.name)).not.toContain(
+        "plugin_tool",
+      )
     }),
   )
 })

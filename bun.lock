@@ -680,6 +680,7 @@
       "version": "1.17.11",
       "dependencies": {
         "@ai-sdk/provider": "3.0.8",
+        "@opencode-ai/protocol": "workspace:*",
         "@opencode-ai/sdk": "workspace:*",
         "effect": "catalog:",
         "zod": "catalog:",
@@ -688,6 +689,7 @@
         "@opentui/core": "catalog:",
         "@opentui/keymap": "catalog:",
         "@opentui/solid": "catalog:",
+        "@tsconfig/bun": "catalog:",
         "@tsconfig/node22": "catalog:",
         "@types/node": "catalog:",
         "@typescript/native-preview": "catalog:",

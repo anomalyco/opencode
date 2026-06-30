@@ -10,8 +10,8 @@ import { SessionV2 } from "@opencode-ai/core/session"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
 import { SessionExecutionLocal } from "@opencode-ai/core/session/execution/local"
-import { SubagentTool } from "@opencode-ai/core/tool/subagent"
-import { ShellTool } from "@opencode-ai/core/tool/shell"
+import { PluginRuntime } from "@opencode-ai/core/plugin/runtime"
+import { SdkPlugins } from "@opencode-ai/core/plugin/sdk"
 import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
 import { HttpRouter, HttpServer } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
@@ -31,8 +31,7 @@ const applicationServices = LayerNode.group([
   httpClient,
   ToolOutputStore.cleanupNode,
   SessionV2.node,
-  SubagentTool.node,
-  ShellTool.node,
+  PluginRuntime.providerNode,
   PermissionSaved.node,
   PtyTicket.node,
   Credential.node,
@@ -48,13 +47,22 @@ export function createRoutes(password?: string) {
   )
 }
 
-export function createEmbeddedRoutes() {
-  return makeRoutes(ServerAuth.Config.layer({ username: "opencode", password: Option.none() }))
+export function createEmbeddedRoutes(sdkPlugins?: SdkPlugins.Store) {
+  return makeRoutes(ServerAuth.Config.layer({ username: "opencode", password: Option.none() }), sdkPlugins)
 }
 
-function makeRoutes<AuthError, AuthServices>(auth: Layer.Layer<ServerAuth.Config, AuthError, AuthServices>) {
+function makeRoutes<AuthError, AuthServices>(
+  auth: Layer.Layer<ServerAuth.Config, AuthError, AuthServices>,
+  sdkPlugins?: SdkPlugins.Store,
+) {
+  const pluginRuntimeCell = PluginRuntime.makeCell()
   const serviceLayer = AppNodeBuilder.build(
     LayerNode.bind(applicationServices, SessionExecution.node, SessionExecutionLocal.node),
+    [
+      LayerNode.replace(PluginRuntime.layer, PluginRuntime.layerWithCell(pluginRuntimeCell)),
+      LayerNode.replace(PluginRuntime.providerLayer, PluginRuntime.providerLayerWithCell(pluginRuntimeCell)),
+      ...(sdkPlugins ? [LayerNode.replace(SdkPlugins.layer, SdkPlugins.layerWithStore(sdkPlugins))] : []),
+    ],
   )
 
   return HttpApiBuilder.layer(Api, { openapiPath: "/openapi.json" }).pipe(

@@ -1,6 +1,12 @@
 import { NodeFileSystem } from "@effect/platform-node"
-import { compile, emitEffectImported, emitPromise, write } from "@opencode-ai/httpapi-codegen"
-import { ClientApi, effectOmitEndpoints, endpointNames, groupNames, promiseOmitEndpoints } from "../src/contract"
+import { compile, emitEffectImported, emitEffectShape, emitPromise, write } from "@opencode-ai/httpapi-codegen"
+import {
+  ClientApi,
+  effectOmitEndpoints,
+  endpointNames,
+  groupNames,
+  promiseOmitEndpoints,
+} from "@opencode-ai/protocol/client"
 import { Effect } from "effect"
 import { fileURLToPath } from "url"
 
@@ -25,7 +31,11 @@ await Effect.runPromise(
         emitEffectImported(effectContract, { module: "../contract", api: "ClientApi" }),
         fileURLToPath(new URL("../src/generated-effect", import.meta.url)),
       ),
+      write(
+        emitEffectShape(effectContract, { module: "@opencode-ai/protocol/client", api: "ClientApi" }),
+        fileURLToPath(new URL("../../plugin/src/v2/effect/generated", import.meta.url)),
+      ),
     ],
-    { concurrency: 2, discard: true },
+    { concurrency: 3, discard: true },
   ).pipe(Effect.provide(NodeFileSystem.layer)),
 )

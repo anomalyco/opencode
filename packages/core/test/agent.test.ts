@@ -39,7 +39,7 @@ describe("AgentV2", () => {
     Effect.gen(function* () {
       const agent = yield* AgentV2.Service
 
-      expect(yield* agent.all()).toEqual([])
+      expect(yield* agent.list()).toEqual([])
       expect(yield* agent.get(AgentV2.ID.make("build"))).toBeUndefined()
     }),
   )
@@ -56,7 +56,7 @@ describe("AgentV2", () => {
       )
 
       expect(yield* agent.get(id)).toMatchObject({ id, description: "Reviews code", mode: "subagent" })
-      expect((yield* agent.all()).map((info) => info.id)).toEqual([id])
+      expect((yield* agent.list()).map((info) => info.id)).toEqual([id])
     }),
   )
 
@@ -136,7 +136,7 @@ describe("AgentV2", () => {
         ),
       )
 
-      const agents = yield* agent.all()
+      const agents = yield* agent.list()
       expect(agents.map((item) => String(item.id)).sort()).toEqual([
         "build",
         "compaction",

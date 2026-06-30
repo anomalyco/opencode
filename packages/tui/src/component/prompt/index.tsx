@@ -1143,7 +1143,7 @@ export function Prompt(props: PromptProps) {
         })
       }
       if (session?.revert) {
-        const error = await sdk.api.session.commit({ sessionID }).then(
+        const error = await sdk.api.session.revertCommit({ sessionID }).then(
           () => undefined,
           (error) => error,
         )

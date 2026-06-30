@@ -8,12 +8,17 @@ import { Catalog } from "../catalog"
 import { CommandV2 } from "../command"
 import { Credential } from "../credential"
 import { Integration } from "../integration"
+import { Location } from "../location"
 import { ModelV2 } from "../model"
 import { PluginV2 } from "../plugin"
+import { PluginRuntime } from "./runtime"
 import { ProviderV2 } from "../provider"
 import { Reference } from "../reference"
-import type { DeepMutable } from "../schema"
+import { AbsolutePath, type DeepMutable } from "../schema"
 import { SkillV2 } from "../skill"
+import { Tool } from "../tool/tool"
+import { Tools } from "../tool/tools"
+import { WorkspaceV2 } from "../workspace"
 
 const mutable = <T>(value: T) => value as DeepMutable<T>
 
@@ -23,12 +28,38 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
   const catalog = yield* Catalog.Service
   const commands = yield* CommandV2.Service
   const integration = yield* Integration.Service
+  const location = yield* Location.Service
   const reference = yield* Reference.Service
   const skill = yield* SkillV2.Service
+  const tools = yield* Tools.Service
+  const runtime = yield* PluginRuntime.Service
+  const locationInfo = () =>
+    new Location.Info({
+      directory: location.directory,
+      workspaceID: location.workspaceID,
+      project: location.project,
+    })
+  const locationRef = (input?: Parameters<Interface["agent"]["list"]>[0]) =>
+    input?.location === undefined
+      ? undefined
+      : Location.Ref.make({
+          directory: AbsolutePath.make(input.location.directory ?? location.directory),
+          workspaceID:
+            input.location.workspace === undefined
+              ? location.workspaceID
+              : WorkspaceV2.ID.make(input.location.workspace),
+        })
+  const isCurrentLocation = (ref: Location.Ref) =>
+    ref.directory === location.directory && ref.workspaceID === location.workspaceID
 
   return {
     options: {},
     agent: {
+      list: (input) => {
+        const ref = locationRef(input)
+        if (ref && !isCurrentLocation(ref)) return runtime.location.agent.list(ref)
+        return agents.list().pipe(Effect.map((data) => ({ location: locationInfo(), data })))
+      },
       reload: agents.reload,
       transform: (callback) =>
         agents.transform((draft) =>
@@ -214,6 +245,22 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
             list: draft.list,
           }),
         ),
+    },
+    tool: {
+      register: (input) => tools.register(input as Readonly<Record<string, Tool.AnyTool>>),
+    },
+    session: {
+      create: (input) =>
+        runtime.session.create({
+          id: input?.id,
+          agent: input?.agent,
+          model: input?.model,
+          location:
+            input?.location ?? Location.Ref.make({ directory: location.directory, workspaceID: location.workspaceID }),
+        }),
+      get: (input) => runtime.session.get(input.sessionID),
+      prompt: runtime.session.prompt,
+      interrupt: (input) => runtime.session.interrupt(input.sessionID),
     },
   } satisfies Interface
 })

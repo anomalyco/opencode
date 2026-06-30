@@ -185,7 +185,9 @@ export function Session() {
   })
   const permissions = createMemo(() => {
     if (session()?.parentID) return []
-    return [route.sessionID, ...descendantSessionIDs()].flatMap((sessionID) => data.session.permission.list(sessionID) ?? [])
+    return [route.sessionID, ...descendantSessionIDs()].flatMap(
+      (sessionID) => data.session.permission.list(sessionID) ?? [],
+    )
   })
   const questions = createMemo(() => {
     if (session()?.parentID) return []
@@ -422,7 +424,7 @@ export function Session() {
             dialog.clear()
             return
           }
-          const error = await sdk.api.session.stage({ sessionID: route.sessionID, messageID: target }).then(
+          const error = await sdk.api.session.revertStage({ sessionID: route.sessionID, messageID: target }).then(
             () => undefined,
             (error) => error,
           )
@@ -439,7 +441,7 @@ export function Session() {
       slash: { name: "redo" },
       run: () => {
         void (async () => {
-          const error = await sdk.api.session.clear({ sessionID: route.sessionID }).then(
+          const error = await sdk.api.session.revertClear({ sessionID: route.sessionID }).then(
             () => undefined,
             (error) => error,
           )
@@ -1049,7 +1051,9 @@ function SessionMessageView(props: { message: SessionMessage }) {
       <Match when={props.message.type === "agent-switched" || props.message.type === "model-switched"}>
         <SessionSwitchMessageV2 message={props.message} />
       </Match>
-      <Match when={props.message.type === "system" || props.message.type === "synthetic" || props.message.type === "skill"}>
+      <Match
+        when={props.message.type === "system" || props.message.type === "synthetic" || props.message.type === "skill"}
+      >
         <Show when={props.message.type === "skill"} fallback={<SessionNoticeMessageV2 message={props.message} />}>
           <SessionSkillMessage message={props.message as Extract<SessionMessage, { type: "skill" }>} />
         </Show>
@@ -1217,11 +1221,7 @@ function SessionNoticeMessageV2(props: { message: SessionMessage }) {
     if (props.message.type === "system" || props.message.type === "synthetic") return props.message.text
     return ""
   }
-  return (
-    <text fg={theme.textMuted}>
-      {text()}
-    </text>
-  )
+  return <text fg={theme.textMuted}>{text()}</text>
 }
 
 function SessionSkillMessage(props: { message: Extract<SessionMessage, { type: "skill" }> }) {
@@ -1267,7 +1267,7 @@ function RevertMessage(props: {
       onMouseUp={() => {
         if (renderer.getSelection()?.getSelectedText()) return
         void (async () => {
-          const error = await sdk.api.session.clear({ sessionID: route.sessionID }).then(
+          const error = await sdk.api.session.revertClear({ sessionID: route.sessionID }).then(
             () => undefined,
             (error) => error,
           )

@@ -1,4 +1,4 @@
-import { Plugin } from "./index.js"
+import type { Plugin } from "./index.js"
 import { tool } from "./tool.js"
 
 export const ExamplePlugin: Plugin = async (_ctx) => {

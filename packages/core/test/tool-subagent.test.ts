@@ -18,12 +18,13 @@ import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { SessionStore } from "@opencode-ai/core/session/store"
+import { PluginRuntime } from "@opencode-ai/core/plugin/runtime"
 import { SubagentTool } from "@opencode-ai/core/tool/subagent"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
-import { executeTool, settleTool, testModel, toolIdentity } from "./lib/tool"
+import { executeTool, settleTool, testModel, toolIdentity, waitForTool } from "./lib/tool"
 
 const childText = "child final response"
 const childModel = ModelV2.Ref.make({ id: ModelV2.ID.make("child"), providerID: ProviderV2.ID.make("test") })
@@ -98,7 +99,7 @@ const layer = AppNodeBuilder.build(
       Job.node,
       ToolOutputStore.cleanupNode,
       SessionV2.node,
-      SubagentTool.node,
+      PluginRuntime.providerNode,
       LocationServiceMap.node,
     ]),
     SessionExecution.node,
@@ -142,6 +143,7 @@ describe("SubagentTool", () => {
 
           const locations = yield* LocationServiceMap.Service
           const registry = yield* ToolRegistry.Service.pipe(Effect.provide(locations.get(parent.location)))
+          yield* waitForTool(registry, SubagentTool.name)
           expect((yield* registry.materialize({ model: testModel })).definitions.map((tool) => tool.name)).toContain(
             SubagentTool.name,
           )
@@ -175,6 +177,7 @@ describe("SubagentTool", () => {
           yield* withSubagent(parent.location)
           const locations = yield* LocationServiceMap.Service
           const registry = yield* ToolRegistry.Service.pipe(Effect.provide(locations.get(parent.location)))
+          yield* waitForTool(registry, SubagentTool.name)
 
           const settled = yield* settleTool(registry, {
             sessionID: parent.id,
@@ -226,6 +229,7 @@ describe("SubagentTool", () => {
           yield* withSubagent(parent.location)
           const locations = yield* LocationServiceMap.Service
           const registry = yield* ToolRegistry.Service.pipe(Effect.provide(locations.get(parent.location)))
+          yield* waitForTool(registry, SubagentTool.name)
 
           expect(
             yield* executeTool(registry, {
@@ -257,6 +261,7 @@ describe("SubagentTool", () => {
           yield* withSubagent(parent.location)
           const locations = yield* LocationServiceMap.Service
           const registry = yield* ToolRegistry.Service.pipe(Effect.provide(locations.get(parent.location)))
+          yield* waitForTool(registry, SubagentTool.name)
 
           const settled = yield* settleTool(registry, {
             sessionID: parent.id,

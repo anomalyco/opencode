@@ -577,13 +577,13 @@ export type SessionWaitInput = { readonly sessionID: { readonly sessionID: strin
 
 export type SessionWaitOutput = void
 
-export type SessionStageInput = {
+export type SessionRevertStageInput = {
   readonly sessionID: { readonly sessionID: string }["sessionID"]
   readonly messageID: { readonly messageID: string; readonly files?: boolean | undefined }["messageID"]
   readonly files?: { readonly messageID: string; readonly files?: boolean | undefined }["files"]
 }
 
-export type SessionStageOutput = {
+export type SessionRevertStageOutput = {
   readonly data: {
     readonly messageID: string
     readonly partID?: string
@@ -599,13 +599,13 @@ export type SessionStageOutput = {
   }
 }["data"]
 
-export type SessionClearInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
+export type SessionRevertClearInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
 
-export type SessionClearOutput = void
+export type SessionRevertClearOutput = void
 
-export type SessionCommitInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
+export type SessionRevertCommitInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
 
-export type SessionCommitOutput = void
+export type SessionRevertCommitOutput = void
 
 export type SessionContextInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
 

@@ -1,4 +1,5 @@
 import type { AgentV2Info } from "@opencode-ai/sdk/v2/types"
+import type { AgentApi } from "./generated/api.js"
 import type { Hooks } from "./registration.js"
 
 export interface AgentDraft {
@@ -12,3 +13,6 @@ export interface AgentDraft {
 export type AgentHooks = Hooks<{
   transform: AgentDraft
 }>
+
+export type AgentPluginApi = AgentHooks
+export type AgentDomain = AgentApi & AgentPluginApi

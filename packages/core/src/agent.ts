@@ -40,7 +40,7 @@ export interface Interface extends State.Transformable<Draft> {
   readonly default: () => Effect.Effect<Info | undefined>
   readonly resolve: (id?: ID | string) => Effect.Effect<Info | undefined>
   readonly select: (id?: ID | string) => Effect.Effect<Selection>
-  readonly all: () => Effect.Effect<Info[]>
+  readonly list: () => Effect.Effect<Info[]>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Agent") {}
@@ -104,7 +104,7 @@ export const layer = Layer.effect(
         const info = selectedDefault()
         return { id: info?.id ?? defaultID, info }
       }),
-      all: Effect.fn("AgentV2.all")(function* () {
+      list: Effect.fn("AgentV2.list")(function* () {
         return Array.fromIterable(state.get().agents.values())
       }),
     })

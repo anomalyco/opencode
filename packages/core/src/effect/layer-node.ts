@@ -122,7 +122,7 @@ type CheckReplacementErrors<SourceError, ReplacementError> = [Exclude<Replacemen
 
 export function replace<A, E, R, E2>(
   source: Layer.Layer<A, E, R>,
-  replacement: Layer.Layer<NoInfer<A>, E2, never> & CheckReplacementErrors<E, NoInfer<E2>>,
+  replacement: Layer.Layer<NoInfer<A>, E2, NoInfer<R>> & CheckReplacementErrors<E, NoInfer<E2>>,
 ): Replacement {
   return { source, replacement }
 }
