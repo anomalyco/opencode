@@ -196,6 +196,8 @@ export const defaultLayer = layer.pipe(Layer.provide(FSUtil.defaultLayer), Layer
 
 export const node = makeLocationNode({ service: Service, layer, deps: [FSUtil.node, Global.node, Config.node] })
 
+export const nodeWithoutConfig = makeLocationNode({ service: Service, layer, deps: [FSUtil.node, Global.node] })
+
 /** Runs retention scanning once globally rather than once per active Location. */
 export const cleanupLayer = Layer.effectDiscard(
   Effect.gen(function* () {

@@ -373,6 +373,8 @@ export const dict = {
   "zen.api.error.userMonthlyLimitReached":
     "Du har nået din månedlige forbrugsgrænse på ${{amount}}. Administrer dine grænser her: {{membersUrl}}",
   "zen.api.error.modelDisabled": "Modellen er deaktiveret",
+  "zen.api.error.regionNotAllowed":
+    "Denne model hostes i Kina. Hvis du vil bruge denne model, skal du aktivere den i dine indstillinger: {{consoleGoUrl}}",
   "zen.api.error.trialEnded":
     "Den gratis kampagne for {{model}} er afsluttet. Du kan fortsætte med at bruge modellen ved at abonnere på OpenCode Go - {{link}}",
 
@@ -652,6 +654,9 @@ export const dict = {
   "workspace.lite.subscription.useBalance": "Brug din tilgængelige saldo, når du har nået forbrugsgrænserne",
   "workspace.lite.subscription.selectProvider":
     'Vælg "OpenCode Go" som udbyder i din opencode-konfiguration for at bruge Go-modeller.',
+  "workspace.lite.providers.title": "Udbydere",
+  "workspace.lite.providers.description": "Styr, hvilke udbydere der bruges til routing.",
+  "workspace.lite.providers.useChina": "Aktivér modeller hostet i Kina",
   "workspace.lite.black.message":
     "Du abonnerer i øjeblikket på OpenCode Black eller er på venteliste. Afmeld venligst først, hvis du vil skifte til Go.",
   "workspace.lite.other.message":

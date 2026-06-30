@@ -28,6 +28,7 @@ const DEFAULT_SIDEBAR_WIDTH = 344
 const DEFAULT_FILE_TREE_WIDTH = 200
 const DEFAULT_SESSION_WIDTH = 600
 const DEFAULT_TERMINAL_HEIGHT = 280
+const DEFAULT_REVIEW_PANEL_OPENED = false
 export type AvatarColorKey = (typeof AVATAR_COLOR_KEYS)[number]
 
 export function getAvatarColors(key?: string) {
@@ -210,7 +211,8 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         if (!isRecord(review)) return review
         if (typeof review.panelOpened === "boolean") return review
 
-        const opened = isRecord(fileTree) && typeof fileTree.opened === "boolean" ? fileTree.opened : true
+        const opened =
+          isRecord(fileTree) && typeof fileTree.opened === "boolean" ? fileTree.opened : DEFAULT_REVIEW_PANEL_OPENED
         return {
           ...review,
           panelOpened: opened,
@@ -279,7 +281,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         },
         review: {
           diffStyle: "split" as ReviewDiffStyle,
-          panelOpened: true,
+          panelOpened: DEFAULT_REVIEW_PANEL_OPENED,
         },
         fileTree: {
           opened: false,
@@ -662,7 +664,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         diffStyle: createMemo(() => store.review?.diffStyle ?? "split"),
         setDiffStyle(diffStyle: ReviewDiffStyle) {
           if (!store.review) {
-            setStore("review", { diffStyle, panelOpened: true })
+            setStore("review", { diffStyle, panelOpened: DEFAULT_REVIEW_PANEL_OPENED })
             return
           }
           setStore("review", "diffStyle", diffStyle)
@@ -777,7 +779,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         const key = createSessionKeyReader(sessionKey, ensureKey)
         const s = createMemo(() => store.sessionView[key()] ?? { scroll: {} })
         const terminalOpened = createMemo(() => store.terminal?.opened ?? false)
-        const reviewPanelOpened = createMemo(() => store.review?.panelOpened ?? true)
+        const reviewPanelOpened = createMemo(() => store.review?.panelOpened ?? DEFAULT_REVIEW_PANEL_OPENED)
 
         function setTerminalOpened(next: boolean) {
           const current = store.terminal
@@ -798,7 +800,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             return
           }
 
-          const value = current.panelOpened ?? true
+          const value = current.panelOpened ?? DEFAULT_REVIEW_PANEL_OPENED
           if (value === next) return
           setStore("review", "panelOpened", next)
         }
