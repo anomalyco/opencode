@@ -308,6 +308,9 @@ export const layer = Layer.effect(
 
     const watch = (name: ServerName, entry: ServerEntry, connection: MCPClient.Connection) => {
       connection.onClose(() => {
+          // A reconnect closes the previous scope, but the SDK may fire this onclose after the new
+          // connection is already assigned; ignore the stale close so it can't null out the live client.
+          if (entry.client !== connection) return
           entry.client = undefined
           entry.tools = undefined
           entry.status = { status: "failed", error: "Connection closed" }

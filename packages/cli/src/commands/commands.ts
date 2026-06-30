@@ -36,6 +36,43 @@ export const Commands = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCO
       description: "Debugging and troubleshooting tools",
       commands: [Spec.make("agents", { description: "List all agents" })],
     }),
+    Spec.make("mcp", {
+      description: "Manage MCP (Model Context Protocol) servers",
+      commands: [
+        Spec.make("list", { description: "List configured MCP servers and their status" }),
+        Spec.make("add", {
+          description: "Add an MCP server to your configuration",
+          params: {
+            name: Argument.string("name").pipe(Argument.withDescription("Name of the MCP server")),
+            command: Argument.string("command").pipe(
+              Argument.withDescription("Command and arguments for a local server, passed after --"),
+              Argument.variadic({ min: 0 }),
+            ),
+            url: Flag.string("url").pipe(Flag.withDescription("URL for a remote MCP server"), Flag.optional),
+            header: Flag.keyValuePair("header").pipe(
+              Flag.withDescription("HTTP header for a remote server, as name=value"),
+              Flag.optional,
+            ),
+            env: Flag.keyValuePair("env").pipe(
+              Flag.withDescription("Environment variable for a local server, as name=value"),
+              Flag.optional,
+            ),
+            global: Flag.boolean("global").pipe(
+              Flag.withDescription("Write to the global config instead of the project config"),
+              Flag.withDefault(false),
+            ),
+          },
+        }),
+        Spec.make("auth", {
+          description: "Authenticate with an OAuth-capable remote MCP server",
+          params: { name: Argument.string("name").pipe(Argument.withDescription("Name of the MCP server")) },
+        }),
+        Spec.make("logout", {
+          description: "Remove stored OAuth credentials for an MCP server",
+          params: { name: Argument.string("name").pipe(Argument.withDescription("Name of the MCP server")) },
+        }),
+      ],
+    }),
     Spec.make("migrate", { description: "Migrate v1 data to v2" }),
     Spec.make("service", {
       description: "Manage the background server",

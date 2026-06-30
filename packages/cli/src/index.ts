@@ -24,6 +24,12 @@ const Handlers = Runtime.handlers(Commands, {
   debug: {
     agents: () => import("./commands/handlers/debug/agents"),
   },
+  mcp: {
+    list: () => import("./commands/handlers/mcp/list"),
+    add: () => import("./commands/handlers/mcp/add"),
+    auth: () => import("./commands/handlers/mcp/auth"),
+    logout: () => import("./commands/handlers/mcp/logout"),
+  },
   migrate: () => import("./commands/handlers/migrate"),
   service: {
     start: () => import("./commands/handlers/service/start"),
