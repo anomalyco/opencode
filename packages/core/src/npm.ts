@@ -9,6 +9,7 @@ import { Global } from "./global"
 import { EffectFlock } from "./util/effect-flock"
 import { makeGlobalNode } from "./effect/app-node"
 import { filesystem } from "./effect/app-node-platform"
+import { LayerNode } from "./effect/layer-node"
 import { makeRuntime } from "./effect/runtime"
 import { NpmConfig } from "./npm-config"
 
@@ -259,7 +260,7 @@ export const node = makeGlobalNode({
   deps: [FSUtil.node, Global.node, filesystem, EffectFlock.node],
 })
 
-const { runPromise } = makeRuntime(Service, defaultLayer)
+const { runPromise } = makeRuntime(Service, LayerNode.compile(node))
 
 export async function install(...args: Parameters<Interface["install"]>) {
   return runPromise((svc) => svc.install(...args))

@@ -106,9 +106,18 @@ export const TuiThreadCommand = cmd({
         describe: "agent to use",
       })
       .option("auto", {
-        alias: ["yolo", "dangerously-skip-permissions"],
         type: "boolean",
         describe: "auto-approve permissions that are not explicitly denied (dangerous!)",
+        default: false,
+      })
+      .option("yolo", {
+        type: "boolean",
+        hidden: true,
+        default: false,
+      })
+      .option("dangerously-skip-permissions", {
+        type: "boolean",
+        hidden: true,
         default: false,
       })
       .option("mini", {
@@ -278,7 +287,7 @@ export const TuiThreadCommand = cmd({
               model: args.model,
               prompt,
               fork: args.fork,
-              auto: args.auto,
+              auto: args.auto || args.yolo || args["dangerously-skip-permissions"],
             },
           }),
         )
