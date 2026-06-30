@@ -63,6 +63,8 @@ import type {
   IntegrationsAttemptCompleteOutput,
   IntegrationsAttemptCancelInput,
   IntegrationsAttemptCancelOutput,
+  ServerMcpListInput,
+  ServerMcpListOutput,
   CredentialsUpdateInput,
   CredentialsUpdateOutput,
   CredentialsRemoveInput,
@@ -673,6 +675,20 @@ export function make(options: ClientOptions) {
             successStatus: 204,
             declaredStatuses: [401, 400],
             empty: true,
+          },
+          requestOptions,
+        ),
+    },
+    "server.mcp": {
+      list: (input?: ServerMcpListInput, requestOptions?: RequestOptions) =>
+        request<ServerMcpListOutput>(
+          {
+            method: "GET",
+            path: `/api/mcp`,
+            query: { location: input?.["location"] },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
           },
           requestOptions,
         ),

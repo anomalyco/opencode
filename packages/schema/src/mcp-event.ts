@@ -18,4 +18,13 @@ export const BrowserOpenFailed = Event.define({
   },
 })
 
-export const Definitions = Event.inventory(ToolsChanged, BrowserOpenFailed)
+// Emitted whenever a server's connection status settles (connected, failed, needs_auth, closed) so
+// observers can refresh status without polling.
+export const StatusChanged = Event.define({
+  type: "mcp.status.changed",
+  schema: {
+    server: Schema.String,
+  },
+})
+
+export const Definitions = Event.inventory(ToolsChanged, BrowserOpenFailed, StatusChanged)

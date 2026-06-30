@@ -1,5 +1,6 @@
 export * as MCP from "./index"
 
+import { Mcp } from "@opencode-ai/schema/mcp"
 import { McpEvent } from "@opencode-ai/schema/mcp-event"
 import { createHash } from "node:crypto"
 import { Cause, Context, Deferred, Effect, Exit, FiberSet, Layer, Schema, Scope, Stream } from "effect"
@@ -17,35 +18,9 @@ import { MCPOAuth } from "./oauth"
 export const ServerName = Schema.String.pipe(Schema.brand("MCP.ServerName"))
 export type ServerName = typeof ServerName.Type
 
-const StatusConnected = Schema.Struct({ status: Schema.Literal("connected") }).annotate({
-  identifier: "MCP.Status.Connected",
-})
-const StatusDisconnected = Schema.Struct({ status: Schema.Literal("disconnected") }).annotate({
-  identifier: "MCP.Status.Disconnected",
-})
-const StatusDisabled = Schema.Struct({ status: Schema.Literal("disabled") }).annotate({
-  identifier: "MCP.Status.Disabled",
-})
-const StatusFailed = Schema.Struct({ status: Schema.Literal("failed"), error: Schema.String }).annotate({
-  identifier: "MCP.Status.Failed",
-})
-const StatusNeedsAuth = Schema.Struct({ status: Schema.Literal("needs_auth") }).annotate({
-  identifier: "MCP.Status.NeedsAuth",
-})
-const StatusNeedsClientRegistration = Schema.Struct({
-  status: Schema.Literal("needs_client_registration"),
-  error: Schema.String,
-}).annotate({ identifier: "MCP.Status.NeedsClientRegistration" })
-
-export const Status = Schema.Union([
-  StatusConnected,
-  StatusDisconnected,
-  StatusDisabled,
-  StatusFailed,
-  StatusNeedsAuth,
-  StatusNeedsClientRegistration,
-]).pipe(Schema.toTaggedUnion("status"))
-export type Status = typeof Status.Type
+// The status union is a public wire contract, so it lives in @opencode-ai/schema and is re-exported here.
+export const Status = Mcp.Status
+export type Status = Mcp.Status
 
 export class ServerInfo extends Schema.Class<ServerInfo>("MCP.ServerInfo")({
   name: ServerName,
@@ -335,10 +310,11 @@ export const layer = Layer.effect(
 
     const watch = (name: ServerName, entry: ServerEntry, connection: MCPClient.Connection) => {
       connection.onClose(() => {
-        entry.client = undefined
-        entry.tools = undefined
-        entry.status = { status: "failed", error: "Connection closed" }
-        fork(events.publish(McpEvent.ToolsChanged, { server: name }).pipe(Effect.ignore))
+          entry.client = undefined
+          entry.tools = undefined
+          entry.status = { status: "failed", error: "Connection closed" }
+          fork(events.publish(McpEvent.ToolsChanged, { server: name }).pipe(Effect.ignore))
+          fork(events.publish(McpEvent.StatusChanged, { server: name }).pipe(Effect.ignore))
       })
       connection.onLog((message) => fork(serverLog(name, message).pipe(Effect.ignore)))
       connection.onToolsChanged(() => {
@@ -391,6 +367,7 @@ export const layer = Layer.effect(
           // after the initial registration sweep and emits no list-changed notification would otherwise
           // stay invisible to the model.
           yield* events.publish(McpEvent.ToolsChanged, { server: name }).pipe(Effect.ignore)
+          yield* events.publish(McpEvent.StatusChanged, { server: name }).pipe(Effect.ignore)
           return
         }
         yield* Scope.close(scope, Exit.void)
@@ -401,6 +378,7 @@ export const layer = Layer.effect(
             ? { status: "needs_auth" }
             : { status: "failed", error: error instanceof Error ? error.message : String(error) }
         yield* Effect.logWarning("mcp connect failed", { server: name, status: entry.status })
+        yield* events.publish(McpEvent.StatusChanged, { server: name }).pipe(Effect.ignore)
       }).pipe(Effect.ensuring(Deferred.succeed(entry.startup, undefined)))
 
     // Disabled servers settle their startup immediately so queries never block on them.
