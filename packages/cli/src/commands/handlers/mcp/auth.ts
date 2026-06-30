@@ -4,6 +4,7 @@ import type { IntegrationAttemptStatus, IntegrationOAuthMethod, OpencodeClient }
 import { Commands } from "../../commands"
 import { Runtime } from "../../../framework/runtime"
 import { Daemon } from "../../../services/daemon"
+import { resolveIntegration } from "./resolve"
 
 const location = { directory: process.cwd() }
 
@@ -13,21 +14,14 @@ export default Runtime.handler(
     const daemon = yield* Daemon.Service
     const client = yield* daemon.client()
 
-    // Resolve through the MCP-owned integrationID rather than matching integration names: the shared
-    // integration registry also holds provider/plugin integrations, whose names could collide with a server.
-    const servers = yield* Effect.promise(() => client.v2.mcp.list({ location }))
-    const server = (servers.data?.data ?? []).find((entry) => entry.name === input.name)
-    if (!server) return yield* Effect.fail(new Error(`MCP server not found: ${input.name}`))
-    const integrationID = server.integrationID
-    if (!integrationID)
+    const integration = yield* resolveIntegration(client, input.name, location)
+    if (!integration)
       return yield* Effect.fail(new Error(`MCP server "${input.name}" is not an OAuth-capable remote server`))
-    const found = yield* Effect.promise(() => client.v2.integration.get({ integrationID, location }))
-    const integration = found.data?.data
-    if (!integration) return yield* Effect.fail(new Error(`Integration not found for MCP server: ${input.name}`))
     const method = integration.methods.find(
       (candidate): candidate is IntegrationOAuthMethod => candidate.type === "oauth",
     )
-    if (!method) return yield* Effect.fail(new Error(`MCP server "${input.name}" is not an OAuth-capable remote server`))
+    if (!method)
+      return yield* Effect.fail(new Error(`MCP server "${input.name}" is not an OAuth-capable remote server`))
 
     const started = yield* Effect.promise(() =>
       client.v2.integration.connect.oauth({ integrationID: integration.id, methodID: method.id, inputs: {}, location }),

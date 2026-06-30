@@ -17,11 +17,13 @@ export default Runtime.handler(
     const dash = process.argv.indexOf("--")
     const command = dash === -1 ? [...input.command] : process.argv.slice(dash + 1)
 
-    if (!!url === command.length > 0)
+    const hasCommand = command.length > 0
+    if (url && hasCommand)
       return yield* Effect.fail(new Error("Provide either --url <url> or a command after --, not both"))
+    if (!url && !hasCommand) return yield* Effect.fail(new Error("Provide either --url <url> or a command after --"))
     if (url && !URL.canParse(url)) return yield* Effect.fail(new Error(`Invalid URL: ${url}`))
     if (url && environment) return yield* Effect.fail(new Error("--env is only valid for local MCP servers"))
-    if (command.length && headers) return yield* Effect.fail(new Error("--header is only valid for remote MCP servers"))
+    if (hasCommand && headers) return yield* Effect.fail(new Error("--header is only valid for remote MCP servers"))
 
     const server = url
       ? { type: "remote" as const, url, ...(headers ? { headers } : {}) }

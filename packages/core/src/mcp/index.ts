@@ -210,9 +210,19 @@ export const layer = Layer.effect(
       const remote = entry.config
       // Key identity on name + url, not url alone: two configs for the same url under different names are
       // distinct logical servers that may hold different accounts, so they must not share a credential row.
-      const suffix = "mcp_" + createHash("sha1").update(name + "\u0000" + remote.url).digest("hex").slice(0, 16)
+      const suffix =
+        "mcp_" +
+        createHash("sha1")
+          .update(name + "\u0000" + remote.url)
+          .digest("hex")
+          .slice(0, 16)
       entry.integrationID = Integration.ID.make(suffix)
-      registrations.push({ name, remote, integrationID: entry.integrationID, methodID: Integration.MethodID.make(suffix) })
+      registrations.push({
+        name,
+        remote,
+        integrationID: entry.integrationID,
+        methodID: Integration.MethodID.make(suffix),
+      })
     }
     if (registrations.length > 0)
       yield* integration.transform((draft) => {
@@ -308,14 +318,14 @@ export const layer = Layer.effect(
 
     const watch = (name: ServerName, entry: ServerEntry, connection: MCPClient.Connection) => {
       connection.onClose(() => {
-          // A reconnect closes the previous scope, but the SDK may fire this onclose after the new
-          // connection is already assigned; ignore the stale close so it can't null out the live client.
-          if (entry.client !== connection) return
-          entry.client = undefined
-          entry.tools = undefined
-          entry.status = { status: "failed", error: "Connection closed" }
-          fork(events.publish(McpEvent.ToolsChanged, { server: name }).pipe(Effect.ignore))
-          fork(events.publish(McpEvent.StatusChanged, { server: name }).pipe(Effect.ignore))
+        // A reconnect closes the previous scope, but the SDK may fire this onclose after the new
+        // connection is already assigned; ignore the stale close so it can't null out the live client.
+        if (entry.client !== connection) return
+        entry.client = undefined
+        entry.tools = undefined
+        entry.status = { status: "failed", error: "Connection closed" }
+        fork(events.publish(McpEvent.ToolsChanged, { server: name }).pipe(Effect.ignore))
+        fork(events.publish(McpEvent.StatusChanged, { server: name }).pipe(Effect.ignore))
       })
       connection.onLog((message) => fork(serverLog(name, message).pipe(Effect.ignore)))
       connection.onToolsChanged(() => {
@@ -455,7 +465,11 @@ export const layer = Layer.effect(
           })
         const result = yield* target.entry.client
           .callTool({ name: input.name, args: input.args })
-          .pipe(Effect.mapError((error) => new ToolCallError({ server: target.name, tool: input.name, message: error.message })))
+          .pipe(
+            Effect.mapError(
+              (error) => new ToolCallError({ server: target.name, tool: input.name, message: error.message }),
+            ),
+          )
         return new ToolResult({
           server: target.name,
           tool: input.name,
