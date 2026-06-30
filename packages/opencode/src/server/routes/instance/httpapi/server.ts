@@ -19,6 +19,9 @@ import { Installation } from "@/installation"
 import { LSP } from "@/lsp/lsp"
 import { MCP } from "@/mcp"
 import { McpAuth } from "@/mcp/auth"
+import { McpOAuthCallback } from "@/mcp/oauth-callback"
+import { OAUTH_CALLBACK_PATH } from "@/mcp/oauth-provider"
+import { OauthCallbackPage } from "@opencode-ai/core/oauth/page"
 import { Permission } from "@/permission"
 import { Plugin } from "@/plugin"
 import { PluginPtyEnvironment } from "@/plugin/pty-environment"
@@ -190,6 +193,30 @@ const docRoute = HttpRouter.use((router) => router.add("GET", "/doc", () => Effe
   Layer.provide(authOnlyRouterLayer),
 )
 
+const oauthCallbackRoute = HttpRouter.use((router) =>
+  router.add("GET", OAUTH_CALLBACK_PATH, (request) => {
+    const url = new URL(request.url, "http://localhost")
+    const code = url.searchParams.get("code")
+    const state = url.searchParams.get("state")
+    const error = url.searchParams.get("error")
+    const provider = "MCP"
+    let html: string
+    if (error) {
+      const reason = url.searchParams.get("error_description") ?? error
+      McpOAuthCallback.rejectFromExternal(state ?? "", reason)
+      html = OauthCallbackPage.error(reason, { provider })
+    } else if (code && state) {
+      const resolved = McpOAuthCallback.resolveFromExternal(code, state)
+      html = resolved
+        ? OauthCallbackPage.success({ provider })
+        : OauthCallbackPage.error("Invalid or expired state parameter", { provider })
+    } else {
+      html = OauthCallbackPage.error("Invalid or expired state parameter", { provider })
+    }
+    return Effect.succeed(HttpServerResponse.html(html))
+  }),
+).pipe(Layer.provide(authOnlyRouterLayer))
+
 const uiRoute = HttpRouter.use((router) =>
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
@@ -277,6 +304,7 @@ export function createRoutes(
     instanceRoutes,
     serverRoutes,
     docRoute,
+    oauthCallbackRoute,
     uiRoute,
   ).pipe(
     Layer.provide([

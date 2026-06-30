@@ -4,6 +4,7 @@ import { OauthCallbackPage } from "@opencode-ai/core/oauth/page"
 import { OAUTH_CALLBACK_PORT, OAUTH_CALLBACK_PATH, parseRedirectUri } from "./oauth-provider"
 
 const OAUTH_CALLBACK_HOST = "127.0.0.1"
+const LOCALHOST_REDIRECT_RE = /^https?:\/\/(127\.0\.0\.1|localhost)([:\/]|$)/
 
 // Current callback server configuration (may differ from defaults if custom redirectUri is used)
 let currentPort = OAUTH_CALLBACK_PORT
@@ -39,6 +40,17 @@ function stopIfIdle() {
   server = undefined
 }
 
+function settleAuth(state: string, settler: (p: PendingAuth) => void): boolean {
+  const pending = pendingAuths.get(state)
+  if (!pending) return false
+  clearTimeout(pending.timeout)
+  pendingAuths.delete(state)
+  cleanupStateIndex(state)
+  settler(pending)
+  stopIfIdle()
+  return true
+}
+
 function handleRequest(req: import("http").IncomingMessage, res: import("http").ServerResponse) {
   const url = new URL(req.url || "/", `http://localhost:${currentPort}`)
 
@@ -63,16 +75,9 @@ function handleRequest(req: import("http").IncomingMessage, res: import("http").
 
   if (error) {
     const errorMsg = errorDescription || error
-    if (pendingAuths.has(state)) {
-      const pending = pendingAuths.get(state)!
-      clearTimeout(pending.timeout)
-      pendingAuths.delete(state)
-      cleanupStateIndex(state)
-      pending.reject(new Error(errorMsg))
-    }
+    settleAuth(state, (p) => p.reject(new Error(errorMsg)))
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" })
     res.end(OauthCallbackPage.error(errorMsg, { provider: "MCP" }))
-    stopIfIdle()
     return
   }
 
@@ -82,28 +87,32 @@ function handleRequest(req: import("http").IncomingMessage, res: import("http").
     return
   }
 
-  // Validate state parameter
-  if (!pendingAuths.has(state)) {
-    const errorMsg = "Invalid or expired state parameter - potential CSRF attack"
+  const resolved = settleAuth(state, (p) => p.resolve(code))
+  if (!resolved) {
     res.writeHead(400, { "Content-Type": "text/html; charset=utf-8" })
-    res.end(OauthCallbackPage.error(errorMsg, { provider: "MCP" }))
+    res.end(OauthCallbackPage.error("Invalid or expired state parameter - potential CSRF attack", { provider: "MCP" }))
     return
   }
-
-  const pending = pendingAuths.get(state)!
-
-  clearTimeout(pending.timeout)
-  pendingAuths.delete(state)
-  cleanupStateIndex(state)
-  pending.resolve(code)
-
   res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" })
   res.end(OauthCallbackPage.success({ provider: "MCP" }))
-  stopIfIdle()
+}
+
+/** Resolve a pending OAuth callback received by the main web server (OPENCODE_PUBLIC_URL path). */
+export function resolveFromExternal(code: string, state: string): boolean {
+  return settleAuth(state, (p) => p.resolve(code))
+}
+
+/** Reject a pending OAuth callback received by the main web server with an error. */
+export function rejectFromExternal(state: string, errorMessage: string): boolean {
+  return settleAuth(state, (p) => p.reject(new Error(errorMessage)))
 }
 
 export async function ensureRunning(redirectUri?: string): Promise<void> {
-  // Parse the redirect URI to get port and path (uses defaults if not provided)
+  // If the redirect URI points to a non-localhost host, the callback will be
+  // received by an external handler (e.g. the main web server via
+  // OPENCODE_PUBLIC_URL). No local server needed.
+  if (redirectUri && !LOCALHOST_REDIRECT_RE.test(redirectUri)) return
+
   const { port, path } = parseRedirectUri(redirectUri)
 
   // If server is running on a different port/path, stop it first

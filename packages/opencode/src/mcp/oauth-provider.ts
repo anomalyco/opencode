@@ -36,6 +36,10 @@ export class McpOAuthProvider implements OAuthClientProvider {
     if (this.config.redirectUri) {
       return this.config.redirectUri
     }
+    const publicUrl = process.env.OPENCODE_PUBLIC_URL
+    if (publicUrl) {
+      return `${publicUrl.replace(/\/$/, "")}${OAUTH_CALLBACK_PATH}`
+    }
     const port = this.config.callbackPort ?? OAUTH_CALLBACK_PORT
     return `http://127.0.0.1:${port}${OAUTH_CALLBACK_PATH}`
   }
