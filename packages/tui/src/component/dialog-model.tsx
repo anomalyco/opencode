@@ -8,12 +8,14 @@ import { DialogVariant } from "./dialog-variant"
 import * as fuzzysort from "fuzzysort"
 import { useConnected } from "./use-connected"
 import { useSync } from "../context/sync"
+import { useTuiConfig } from "../config"
 
 export function DialogModel(props: { providerID?: string }) {
   const local = useLocal()
   const sync = useSync()
   const dialog = useDialog()
   const [query, setQuery] = createSignal("")
+  const tuiConfig = useTuiConfig()
 
   const connected = useConnected()
   const providers = createDialogProviderOptions()
@@ -22,7 +24,7 @@ export function DialogModel(props: { providerID?: string }) {
 
   const options = createMemo(() => {
     const needle = query().trim()
-    const showSections = showExtra() && needle.length === 0
+    const showSections = showExtra() && (needle.length === 0 || tuiConfig.model_picker.group_search_results)
     const favorites = connected() ? local.model.favorite() : []
     const recents = local.model.recent()
 
@@ -117,6 +119,17 @@ export function DialogModel(props: { providerID?: string }) {
       : []
 
     if (needle) {
+      if (tuiConfig.model_picker.group_search_results) {
+        return [
+          ...fuzzysort.go(needle, favoriteOptions, { keys: ["title", "description"] }).map((x) => x.obj),
+          ...fuzzysort.go(needle, recentOptions, { keys: ["title", "description"] }).map((x) => x.obj),
+          ...sortModelOptions(
+            fuzzysort.go(needle, providerOptions, { keys: ["title", "category"] }).map((x) => x.obj),
+            false,
+          ),
+          ...fuzzysort.go(needle, popularProviders, { keys: ["title"] }).map((x) => x.obj),
+        ]
+      }
       return [
         ...sortModelOptions(
           fuzzysort.go(needle, providerOptions, { keys: ["title", "category"] }).map((x) => x.obj),
@@ -175,7 +188,7 @@ export function DialogModel(props: { providerID?: string }) {
         },
       ]}
       onFilter={setQuery}
-      flat={true}
+      flat={!tuiConfig.model_picker.group_search_results}
       skipFilter={true}
       title={title()}
       current={local.model.current()}

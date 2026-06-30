@@ -889,6 +889,22 @@ it.instance("missing tui.json - silently treated as empty (ENOENT path)", () =>
       const config = yield* getTuiConfig(test.directory)
       expect(config).toBeDefined()
       expect(config.theme).toBeUndefined()
+      expect(config.model_picker.group_search_results).toBe(false)
+    }),
+  ),
+)
+
+it.instance("resolves model_picker.group_search_results from tui.json", () =>
+  withCleanState(
+    Effect.gen(function* () {
+      const fs = yield* FSUtil.Service
+      const test = yield* TestInstance
+      yield* fs.writeJson(path.join(test.directory, "tui.json"), {
+        model_picker: { group_search_results: true },
+      })
+
+      const config = yield* getTuiConfig(test.directory)
+      expect(config.model_picker.group_search_results).toBe(true)
     }),
   ),
 )

@@ -50,6 +50,12 @@ export const Prompt = Schema.Struct({
   }),
 }).annotate({ description: "Prompt size settings" })
 
+export const ModelPicker = Schema.Struct({
+  group_search_results: Schema.optional(Schema.Boolean).annotate({
+    description: "Keep Favorites, Recent, and provider groups while searching models",
+  }),
+}).annotate({ description: "Model picker settings" })
+
 export const Info = Schema.Struct({
   $schema: Schema.optional(Schema.String),
   theme: Schema.optional(Schema.String),
@@ -63,10 +69,11 @@ export const Info = Schema.Struct({
   scroll_acceleration: Schema.optional(ScrollAcceleration),
   diff_style: Schema.optional(DiffStyle),
   mouse: Schema.optional(Schema.Boolean).annotate({ description: "Enable or disable mouse capture (default: true)" }),
+  model_picker: Schema.optional(ModelPicker),
 })
 export type Info = Schema.Schema.Type<typeof Info>
 
-export type Resolved = Omit<Info, "attention" | "keybinds" | "leader_timeout" | "mouse"> & {
+export type Resolved = Omit<Info, "attention" | "keybinds" | "leader_timeout" | "mouse" | "model_picker"> & {
   attention: {
     enabled: boolean
     notifications: boolean
@@ -78,6 +85,9 @@ export type Resolved = Omit<Info, "attention" | "keybinds" | "leader_timeout" | 
   keybinds: TuiKeybind.BindingLookupView
   leader_timeout: number
   mouse: boolean
+  model_picker: {
+    group_search_results: boolean
+  }
 }
 
 export const ResolveOptions = Schema.Struct({
@@ -113,6 +123,9 @@ export function resolve(input: Info, options: ResolveOptions): Resolved {
     }),
     leader_timeout: input.leader_timeout ?? LeaderTimeoutDefault,
     mouse: input.mouse ?? true,
+    model_picker: {
+      group_search_results: input.model_picker?.group_search_results ?? false,
+    },
   }
 }
 

@@ -370,6 +370,9 @@ You can customize TUI behavior through `tui.json` (or `tui.jsonc`).
   },
   "diff_style": "auto",
   "mouse": true,
+  "model_picker": {
+    "group_search_results": false
+  },
   "attention": {
     "enabled": true,
     "notifications": true,
@@ -396,6 +399,7 @@ This is separate from `opencode.json`, which configures server/runtime behavior.
 - `scroll_speed` - Controls how fast the TUI scrolls when using scroll commands (minimum: `0.001`, supports decimal values). Defaults to `3`. **Note: This is ignored if `scroll_acceleration.enabled` is set to `true`.**
 - `diff_style` - Controls diff rendering. `"auto"` adapts to terminal width, `"stacked"` always shows a single-column layout.
 - `mouse` - Enable or disable mouse capture in the TUI (default: `true`). When disabled, the terminal's native mouse selection/scrolling behavior is preserved.
+- `model_picker.group_search_results` - Keep Favorites, Recent, and provider groups while searching models. Defaults to `false`.
 - `attention` - Configures TUI desktop notifications and sounds. Disabled by default.
 
 Use `OPENCODE_TUI_CONFIG` to load a custom TUI config path.
