@@ -7,6 +7,11 @@ import "./titlebar-tab-popover.css"
 const OPEN_DELAY = 200
 // Mouse-out delay: hide instantly.
 const CLOSE_DELAY = 0
+// After a preview closes, hovering a neighbouring tab within this window skips
+// the open delay — mirrors the tooltip's skipDelayDuration so moving across
+// tabs doesn't re-wait the full delay each time.
+const SKIP_WINDOW = 300
+let lastClosedAt = 0
 
 export interface TabPreviewData {
   projectName?: string
@@ -24,12 +29,23 @@ export function TabPreviewPopover(props: {
 }) {
   let triggerEl: HTMLDivElement | undefined
 
+  // Kobalte reads openDelay lazily when the pointer enters the trigger, so this
+  // resolves the skip window per-hover.
+  const resolveOpenDelay = () => (Date.now() - lastClosedAt < SKIP_WINDOW ? 0 : OPEN_DELAY)
+  const handleOpenChange = (open: boolean) => {
+    if (!open) lastClosedAt = Date.now()
+    props.onOpenChange(open)
+  }
+
   return (
     <Kobalte
       open={props.open}
-      onOpenChange={props.onOpenChange}
-      openDelay={OPEN_DELAY}
+      onOpenChange={handleOpenChange}
+      openDelay={resolveOpenDelay()}
       closeDelay={CLOSE_DELAY}
+      // The preview is non-interactive (pointer-events: none), so there is no
+      // safe area to traverse — leaving the tab hides it immediately.
+      ignoreSafeArea
       placement="bottom-start"
       gutter={6}
     >
