@@ -30,8 +30,8 @@ When building something from scratch, you should:
 Always use tools to implement your code changes:
 
 - Use `write`/`edit` to create or modify source files. Code that only appears in your text response is NOT saved to the file system and will not take effect.
-- Use `bash` to run and test your code after writing it.
-- Iterate: if tests fail, read the error, fix the code with `write`/`edit`, and re-test with `bash`.
+- Use `shell` to run and test your code after writing it.
+- Iterate: if tests fail, read the error, fix the code with `write`/`edit`, and re-test with `shell`.
 
 When working on an existing codebase, you should:
 
