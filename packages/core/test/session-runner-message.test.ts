@@ -1,20 +1,13 @@
 import { describe, expect, test } from "bun:test"
-import fs from "fs/promises"
-import path from "path"
-import { pathToFileURL } from "node:url"
 import { Message, Model } from "@opencode-ai/llm"
 import * as OpenAIChat from "@opencode-ai/llm/protocols/openai-chat"
-import { FSUtil } from "@opencode-ai/core/fs-util"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { AgentAttachment, FileAttachment } from "@opencode-ai/core/session/prompt"
-import { toLLMMessages, toLLMMessagesResolved } from "@opencode-ai/core/session/runner/to-llm-message"
+import { toLLMMessages } from "@opencode-ai/core/session/runner/to-llm-message"
 import { SessionV2 } from "@opencode-ai/core/session"
-import { ReadToolFileSystem } from "@opencode-ai/core/tool/read-filesystem"
-import { DateTime, Effect } from "effect"
-import { tmpdir } from "./fixture/tmpdir"
+import { DateTime } from "effect"
 
 const created = DateTime.makeUnsafe(0)
 const id = (value: string) => SessionMessage.ID.make(`msg_${value}`)
@@ -506,54 +499,4 @@ Recent work
     ])
   })
 
-  test("materializes local file and directory prompt attachments before provider lowering", async () => {
-    await using tmp = await tmpdir()
-    const source = path.join(tmp.path, "note.ts")
-    const directory = path.join(tmp.path, "docs")
-    await Bun.write(source, "export const answer = 42\n")
-    await fs.mkdir(directory)
-    await Bun.write(path.join(directory, "README.md"), "# hello\n")
-
-    const messages = await Effect.runPromise(
-      Effect.gen(function* () {
-        const reader = yield* ReadToolFileSystem.Service
-        return yield* toLLMMessagesResolved(
-          [
-            SessionMessage.User.make({
-              id: id("user-local-file"),
-              type: "user",
-              text: "Review these",
-              files: [
-                FileAttachment.make({
-                  uri: pathToFileURL(source).href,
-                  mime: FSUtil.mimeType(source),
-                  name: "note.ts",
-                }),
-                FileAttachment.make({
-                  uri: pathToFileURL(`${directory}${path.sep}`).href,
-                  mime: "application/x-directory",
-                  name: "docs",
-                }),
-              ],
-              time: { created },
-            }),
-          ],
-          model,
-          reader,
-        )
-      }).pipe(Effect.provide(AppNodeBuilder.build(ReadToolFileSystem.node))),
-    )
-
-    const user = messages[0]
-    if (!user || user.role !== "user") throw new Error("expected user message")
-    const text = user.content
-      .filter((part): part is Extract<(typeof user.content)[number], { type: "text" }> => part.type === "text")
-      .map((part) => part.text)
-      .join("\n\n")
-
-    expect(text).toContain("Review these")
-    expect(text).toContain("Called the Read tool with the following input:")
-    expect(text).toContain("1: export const answer = 42")
-    expect(text).toContain("README.md")
-  })
 })

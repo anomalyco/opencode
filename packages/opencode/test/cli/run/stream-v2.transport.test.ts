@@ -1,7 +1,11 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
+import fs from "fs/promises"
+import path from "path"
+import { pathToFileURL } from "node:url"
 import { OpencodeClient, type V2Event } from "@opencode-ai/sdk/v2"
 import { createSessionTransport } from "@/cli/cmd/run/stream-v2.transport"
 import type { FooterApi, FooterEvent, StreamCommit } from "@/cli/cmd/run/types"
+import { tmpdir } from "../../fixture/fixture"
 
 type ExecutionSettledEvent = {
   id: string
@@ -209,6 +213,187 @@ describe("V2 mini transport", () => {
 
     expect(ui.commits.map((item) => item.text)).toEqual(["previous prompt", "answer"])
     expect(ui.events).toContainEqual({ type: "stream.patch", patch: { phase: "idle", status: "" } })
+    await transport.close()
+  })
+
+  test("inlines local text files and directories before current prompt admission", async () => {
+    await using tmp = await tmpdir()
+    const filePath = path.join(tmp.path, "note.ts")
+    const directoryPath = path.join(tmp.path, "docs")
+    await Bun.write(filePath, "export const answer = 42\n")
+    await fs.mkdir(directoryPath)
+    await Bun.write(path.join(directoryPath, "README.md"), "# hello\n")
+
+    const events = feed()
+    events.push(connected())
+    const client = sdk({ streams: [events] })
+    const ui = footer()
+    const transport = await createSessionTransport({
+      sdk: client,
+      sessionID: "ses_1",
+      thinking: false,
+      limits: () => ({}),
+      footer: ui.api,
+    })
+    let request:
+      | Parameters<OpencodeClient["v2"]["session"]["prompt"]>[0]
+      | undefined
+    // The generated method has conditional return types for throwOnError; this mock represents the successful branch.
+    // @ts-expect-error successful SDK response is valid for both modes at runtime
+    spyOn(client.v2.session, "prompt").mockImplementation((input) => {
+      request = input
+      queueMicrotask(() => {
+        events.push({
+          id: "evt_prompted",
+          type: "session.next.prompted",
+          data: {
+            timestamp: 2,
+            sessionID: "ses_1",
+            messageID: "msg_prompt",
+            prompt: { text: input.prompt?.text ?? "" },
+            delivery: "steer",
+          },
+        })
+        events.push({
+          id: "evt_settled",
+          type: "session.next.execution.settled",
+          data: { timestamp: 3, sessionID: "ses_1", outcome: "success" },
+        })
+      })
+      return ok({
+        data: {
+          admittedSeq: 1,
+          id: input.id ?? "msg_prompt",
+          sessionID: "ses_1",
+          prompt: input.prompt ?? { text: "" },
+          delivery: "steer" as const,
+          timeCreated: 2,
+        },
+      })
+    })
+
+    await transport.runPromptTurn({
+      agent: undefined,
+      model: undefined,
+      variant: undefined,
+      prompt: {
+        messageID: "msg_prompt",
+        text: "Review @note.ts and @docs",
+        parts: [
+          {
+            type: "file",
+            url: pathToFileURL(filePath).href,
+            mime: "text/plain",
+            filename: "note.ts",
+            source: { type: "file", path: "note.ts", text: { start: 7, end: 15, value: "@note.ts" } },
+          },
+          {
+            type: "file",
+            url: pathToFileURL(`${directoryPath}${path.sep}`).href,
+            mime: "application/x-directory",
+            filename: "docs",
+            source: { type: "file", path: "docs/", text: { start: 20, end: 25, value: "@docs" } },
+          },
+        ],
+      },
+      files: [],
+      includeFiles: true,
+    })
+
+    expect(request?.prompt?.text).toContain("Review @note.ts and @docs")
+    expect(request?.prompt?.text).toContain(
+      `Called the Read tool with the following input: ${JSON.stringify({ filePath: filePath })}`,
+    )
+    expect(request?.prompt?.text).toContain("1: export const answer = 42")
+    expect(request?.prompt?.text).toContain("<type>directory</type>")
+    expect(request?.prompt?.text).toContain("README.md")
+    expect(request?.prompt?.files).toBeUndefined()
+    await transport.close()
+  })
+
+  test("converts local media mentions into data URL attachments before current prompt admission", async () => {
+    await using tmp = await tmpdir()
+    const filePath = path.join(tmp.path, "diagram.png")
+    await Bun.write(filePath, Uint8Array.of(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00))
+
+    const events = feed()
+    events.push(connected())
+    const client = sdk({ streams: [events] })
+    const ui = footer()
+    const transport = await createSessionTransport({
+      sdk: client,
+      sessionID: "ses_1",
+      thinking: false,
+      limits: () => ({}),
+      footer: ui.api,
+    })
+    let request:
+      | Parameters<OpencodeClient["v2"]["session"]["prompt"]>[0]
+      | undefined
+    // The generated method has conditional return types for throwOnError; this mock represents the successful branch.
+    // @ts-expect-error successful SDK response is valid for both modes at runtime
+    spyOn(client.v2.session, "prompt").mockImplementation((input) => {
+      request = input
+      queueMicrotask(() => {
+        events.push({
+          id: "evt_prompted",
+          type: "session.next.prompted",
+          data: {
+            timestamp: 2,
+            sessionID: "ses_1",
+            messageID: "msg_prompt",
+            prompt: { text: input.prompt?.text ?? "" },
+            delivery: "steer",
+          },
+        })
+        events.push({
+          id: "evt_settled",
+          type: "session.next.execution.settled",
+          data: { timestamp: 3, sessionID: "ses_1", outcome: "success" },
+        })
+      })
+      return ok({
+        data: {
+          admittedSeq: 1,
+          id: input.id ?? "msg_prompt",
+          sessionID: "ses_1",
+          prompt: input.prompt ?? { text: "" },
+          delivery: "steer" as const,
+          timeCreated: 2,
+        },
+      })
+    })
+
+    await transport.runPromptTurn({
+      agent: undefined,
+      model: undefined,
+      variant: undefined,
+      prompt: {
+        messageID: "msg_prompt",
+        text: "Review @diagram.png",
+        parts: [
+          {
+            type: "file",
+            url: pathToFileURL(filePath).href,
+            mime: "text/plain",
+            filename: "diagram.png",
+            source: { type: "file", path: "diagram.png", text: { start: 7, end: 19, value: "@diagram.png" } },
+          },
+        ],
+      },
+      files: [],
+      includeFiles: true,
+    })
+
+    expect(request?.prompt?.text).toContain(
+      `Called the Read tool with the following input: ${JSON.stringify({ filePath: filePath })}`,
+    )
+    expect(request?.prompt?.files).toEqual([
+      expect.objectContaining({
+        name: "diagram.png",
+        uri: expect.stringMatching(/^data:image\/png;base64,/),
+      }),
+    ])
     await transport.close()
   })
 

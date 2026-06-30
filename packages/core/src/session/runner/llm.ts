@@ -35,13 +35,12 @@ import { SessionTitle } from "../title"
 import { type RunError, Service } from "./index"
 import { SessionRunnerModel } from "./model"
 import { createLLMEventPublisher } from "./publish-llm-event"
-import { toLLMMessagesResolved } from "./to-llm-message"
+import { toLLMMessages } from "./to-llm-message"
 import { MAX_STEPS_PROMPT } from "./max-steps"
 import { SessionRunnerSystemPrompt } from "./system-prompt"
 import { Snapshot } from "../../snapshot"
 import { makeLocationNode } from "../../effect/app-node"
 import { llmClient } from "../../effect/app-node-platform"
-import { ReadToolFileSystem } from "../../tool/read-filesystem"
 
 /**
  * Runs one durable coding-agent Session until it settles.
@@ -108,7 +107,6 @@ const layer = Layer.effect(
     const referenceGuidance = yield* ReferenceGuidance.Service
     const mcpGuidance = yield* McpGuidance.Service
     const snapshots = yield* Snapshot.Service
-    const readToolFileSystem = yield* ReadToolFileSystem.Service
     const db = (yield* Database.Service).db
     const compaction = yield* SessionCompaction.Service
     const title = yield* SessionTitle.Service
@@ -210,14 +208,13 @@ const layer = Layer.effect(
         ? undefined
         : yield* tools.materialize({ permissions: agent.info?.permissions, model })
       const promptCacheKey = /^ses_[0-9a-f]{64}$/.test(session.id) ? session.id.slice(4) : session.id
-      const messages = yield* toLLMMessagesResolved(context, model, readToolFileSystem)
       const request = LLM.request({
         model,
         providerOptions: { openai: { promptCacheKey } },
         system: [agent.info?.system ? agent.info.system : SessionRunnerSystemPrompt.provider(model), system.baseline]
           .filter((part): part is string => part !== undefined && part.length > 0)
           .map(SystemPart.make),
-        messages: [...messages, ...(isLastStep ? [Message.assistant(MAX_STEPS_PROMPT)] : [])],
+        messages: [...toLLMMessages(context, model), ...(isLastStep ? [Message.assistant(MAX_STEPS_PROMPT)] : [])],
         tools: toolMaterialization?.definitions ?? [],
         toolChoice: isLastStep ? "none" : undefined,
       })
@@ -475,6 +472,5 @@ export const node = makeLocationNode({
     Config.node,
     Snapshot.node,
     Database.node,
-    ReadToolFileSystem.node,
   ],
 })
