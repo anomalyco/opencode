@@ -1,6 +1,7 @@
 import { expect } from "bun:test"
 import path from "path"
 import { pathToFileURL } from "url"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Effect, Layer } from "effect"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Global } from "@opencode-ai/core/global"
@@ -11,7 +12,7 @@ import { TuiConfig } from "../../src/config/tui"
 import { TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
-const it = testEffect(Layer.mergeAll(Config.defaultLayer, FSUtil.defaultLayer))
+const it = testEffect(LayerNode.compile(LayerNode.group([Config.node, FSUtil.node])))
 const winIt = process.platform === "win32" ? it.instance : it.instance.skip
 
 const globalConfigFiles = ["opencode.json", "opencode.jsonc", "tui.json", "tui.jsonc"].map((file) =>
@@ -472,6 +473,7 @@ it.instance("resolves keybind lookup from canonical keybinds", () =>
         keybinds: {
           leader: { key: { name: "g", ctrl: true } },
           command_list: "alt+p",
+          diff_open: "ctrl+j",
           which_key_toggle: "alt+k",
           editor_open: "ctrl+e",
           "prompt.autocomplete.next": "ctrl+j",
@@ -487,6 +489,7 @@ it.instance("resolves keybind lookup from canonical keybinds", () =>
       expect(config.keybinds.get("leader")?.[0]?.key).toEqual({ name: "g", ctrl: true })
       expect(config.leader_timeout).toBe(1234)
       expect(config.keybinds.get("command.palette.show")?.[0]?.key).toBe("alt+p")
+      expect(config.keybinds.get("diff.open")?.[0]?.key).toBe("ctrl+j")
       expect(config.keybinds.get("session.new")?.[0]?.key).toBe("<leader>n")
       expect(config.keybinds.get("which-key.toggle")?.[0]?.key).toBe("alt+k")
       expect(config.keybinds.get("which-key.layout.toggle")?.[0]?.key).toBe("ctrl+alt+shift+k")

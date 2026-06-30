@@ -1,14 +1,14 @@
 import { describe, expect } from "bun:test"
-import { Duration, Effect, Exit, Fiber, Layer, Scope, Stream } from "effect"
+import { Duration, Effect, Exit, Fiber, Scope, Stream } from "effect"
 import * as TestClock from "effect/testing/TestClock"
-import { Integration } from "@opencode-ai/core/integration"
 import { Credential } from "@opencode-ai/core/credential"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventV2 } from "@opencode-ai/core/event"
+import { Integration } from "@opencode-ai/core/integration"
 import { testEffect } from "./lib/effect"
 
-const it = testEffect(
-  Integration.locationLayer.pipe(Layer.provideMerge(Credential.defaultLayer), Layer.provideMerge(EventV2.defaultLayer)),
-)
+const it = testEffect(AppNodeBuilder.build(LayerNode.group([Integration.node, Credential.node, EventV2.node])))
 
 describe("Integration", () => {
   it.effect("registers integrations through the editor", () =>
@@ -125,7 +125,7 @@ describe("Integration", () => {
         expect.objectContaining({
           integrationID,
           label: "Work",
-          value: new Credential.Key({ type: "key", key: "secret" }),
+          value: Credential.Key.make({ type: "key", key: "secret" }),
         }),
       ])
       expect((yield* Fiber.join(updated)).length).toBe(1)
@@ -149,7 +149,7 @@ describe("Integration", () => {
               instructions: "Paste the code",
               callback: (code: string) =>
                 Effect.succeed(
-                  new Credential.OAuth({
+                  Credential.OAuth.make({
                     type: "oauth",
                     methodID,
                     access: "access",
@@ -175,7 +175,7 @@ describe("Integration", () => {
         expect.objectContaining({
           integrationID,
           label: "Personal",
-          value: new Credential.OAuth({
+          value: Credential.OAuth.make({
             type: "oauth",
             methodID,
             access: "access",
@@ -238,7 +238,7 @@ describe("Integration", () => {
               url: "https://example.com/authorize",
               instructions: "Sign in",
               callback: Effect.succeed(
-                new Credential.OAuth({ type: "oauth", methodID, access: "access", refresh: "refresh", expires: 1 }),
+                Credential.OAuth.make({ type: "oauth", methodID, access: "access", refresh: "refresh", expires: 1 }),
               ),
             }),
         }),
@@ -315,12 +315,12 @@ describe("Integration", () => {
           const work = yield* credentials.create({
             integrationID,
             label: "Work",
-            value: new Credential.Key({ type: "key", key: "a" }),
+            value: Credential.Key.make({ type: "key", key: "a" }),
           })
           const personal = yield* credentials.create({
             integrationID,
             label: "Personal",
-            value: new Credential.Key({ type: "key", key: "b" }),
+            value: Credential.Key.make({ type: "key", key: "b" }),
           })
 
           // Stored credentials and detected env vars appear as connections.
@@ -332,7 +332,7 @@ describe("Integration", () => {
             },
             { type: "env", name: "INTEGRATION_TEST_ACME_KEY" },
           ])
-          expect(yield* integrations.connection.forIntegration(integrationID)).toEqual({
+          expect(yield* integrations.connection.active(integrationID)).toEqual({
             type: "credential",
             id: personal.id,
             label: "Personal",
