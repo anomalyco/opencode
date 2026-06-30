@@ -2268,7 +2268,7 @@ describe("ProviderTransform.message - strip openai metadata when store=false", (
     expect(result[0].content[0].providerOptions?.openai?.reasoningEncryptedContent).toBe("encrypted")
   })
 
-  test("strips GitHub Copilot itemId from the OpenAI namespace, preserving copilot request options", () => {
+  test("strips GitHub Copilot itemId from the copilot namespace, preserving other copilot options", () => {
     const copilotModel = {
       ...openaiModel,
       id: "github-copilot/gpt-5.5",
@@ -2287,7 +2287,7 @@ describe("ProviderTransform.message - strip openai metadata when store=false", (
             type: "reasoning",
             text: "thinking...",
             providerOptions: {
-              openai: { itemId: "rs_123", reasoningEncryptedContent: "encrypted" },
+              copilot: { itemId: "rs_123", reasoningEncryptedContent: "encrypted" },
             },
           },
           {
@@ -2298,8 +2298,41 @@ describe("ProviderTransform.message - strip openai metadata when store=false", (
             toolName: "bash",
             input: { command: "ls" },
             providerOptions: {
-              openai: { itemId: "fc_456" },
-              copilot: { reasoningEffort: "medium" },
+              copilot: { itemId: "fc_456", reasoningEffort: "medium" },
+            },
+          },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, copilotModel, { store: false }) as any[]
+
+    expect(result[0].content[0].providerOptions?.copilot?.itemId).toBeUndefined()
+    expect(result[0].content[0].providerOptions?.copilot?.reasoningEncryptedContent).toBe("encrypted")
+    expect(result[0].content[1].providerOptions?.copilot?.itemId).toBeUndefined()
+    expect(result[0].content[1].providerOptions?.copilot?.reasoningEffort).toBe("medium")
+  })
+
+  test("also strips GitHub Copilot itemId from the legacy openai namespace for sessions predating the copilot-namespace fix", () => {
+    const copilotModel = {
+      ...openaiModel,
+      id: "github-copilot/gpt-5.5",
+      providerID: "github-copilot",
+      api: {
+        id: "gpt-5.5",
+        url: "https://api.githubcopilot.com",
+        npm: "@ai-sdk/github-copilot",
+      },
+    }
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "text",
+            text: "Hello",
+            providerOptions: {
+              openai: { itemId: "msg_456" },
             },
           },
         ],
@@ -2309,9 +2342,6 @@ describe("ProviderTransform.message - strip openai metadata when store=false", (
     const result = ProviderTransform.message(msgs, copilotModel, { store: false }) as any[]
 
     expect(result[0].content[0].providerOptions?.openai?.itemId).toBeUndefined()
-    expect(result[0].content[0].providerOptions?.openai?.reasoningEncryptedContent).toBe("encrypted")
-    expect(result[0].content[1].providerOptions?.openai?.itemId).toBeUndefined()
-    expect(result[0].content[1].providerOptions?.copilot?.reasoningEffort).toBe("medium")
   })
 
   test("preserves metadata for openai package when store is true", () => {

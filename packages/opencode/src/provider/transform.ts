@@ -460,23 +460,28 @@ export function message(msgs: ModelMessage[], model: Provider.Model, options: Re
   }
 
   // Strip Responses item IDs before serialization, following Codex and keeping signed request bodies immutable.
-  // GitHub Copilot's Responses model is a fork of the OpenAI Responses model that still echoes
-  // item metadata under the "openai" namespace even though request options use "copilot" (sdkKey's
-  // mapping), so it strips from "openai" rather than `key` to actually hit the stale itemId.
-  const itemIDKey = model.api.npm === "@ai-sdk/github-copilot" ? "openai" : key
-  if (
+  // GitHub Copilot's Responses model echoes item metadata under "copilot" (sdkKey's mapping), but
+  // wrote it under "openai" before that was fixed. Sessions started before the fix still carry
+  // stale itemIds under "openai", so both namespaces are stripped for Copilot models.
+  const itemIDKeys =
     options.store !== true &&
-    itemIDKey &&
+    key &&
     ["@ai-sdk/openai", "@ai-sdk/azure", "@ai-sdk/amazon-bedrock/mantle", "@ai-sdk/github-copilot"].includes(
       model.api.npm,
     )
-  ) {
-    msgs = mapProviderOptions(msgs, (options) => {
-      if (!options?.[itemIDKey] || !("itemId" in options[itemIDKey])) return options
-      const metadata = { ...options[itemIDKey] }
-      delete metadata.itemId
-      return { ...options, [itemIDKey]: metadata }
-    })
+      ? model.api.npm === "@ai-sdk/github-copilot"
+        ? [key, "openai"]
+        : [key]
+      : []
+  if (itemIDKeys.length > 0) {
+    msgs = mapProviderOptions(msgs, (options) =>
+      itemIDKeys.reduce((result, itemIDKey) => {
+        if (!result?.[itemIDKey] || !("itemId" in result[itemIDKey])) return result
+        const metadata = { ...result[itemIDKey] }
+        delete metadata.itemId
+        return { ...result, [itemIDKey]: metadata }
+      }, options),
+    )
   }
 
   return msgs
