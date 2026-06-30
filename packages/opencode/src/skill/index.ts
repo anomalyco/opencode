@@ -1,12 +1,16 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import path from "path"
-import { Effect, Layer, Context, Schema } from "effect"
+import { Effect, Layer, Context, Option, Schema } from "effect"
 import { NamedError } from "@opencode-ai/core/util/error"
 import type { Agent } from "@/agent/agent"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { InstanceState } from "@/effect/instance-state"
 import { Global } from "@opencode-ai/core/global"
 import { SkillPlugin } from "@opencode-ai/core/plugin/skill"
+import { SkillV2 } from "@opencode-ai/core/skill"
+import { Location } from "@opencode-ai/core/location"
+import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
+import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Permission } from "@/permission"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Config } from "@/config/config"
@@ -286,21 +290,47 @@ const layer = Layer.effect(
       }),
     )
 
-    const get = Effect.fn("Skill.get")(function* (name: string) {
+    const mergedSkills = Effect.fn("Skill.merged")(function* () {
       const s = yield* InstanceState.get(state)
-      return s.skills[name]
+      const skills = { ...s.skills }
+      const v2Skills = yield* Effect.gen(function* () {
+        const service = Option.getOrUndefined(yield* Effect.serviceOption(SkillV2.Service))
+        if (service) return yield* service.list()
+
+        const locations = Option.getOrUndefined(yield* Effect.serviceOption(LocationServiceMap.Service))
+        if (!locations) return []
+
+        const ctx = yield* InstanceState.context
+        return yield* SkillV2.Service.use((skill) => skill.list()).pipe(
+          Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(ctx.directory) }))),
+        )
+      })
+      for (const item of v2Skills) {
+        if (skills[item.name]) continue
+        skills[item.name] = {
+          name: item.name,
+          description: item.description,
+          location: item.location,
+          content: item.content,
+        }
+      }
+      return skills
+    })
+
+    const get = Effect.fn("Skill.get")(function* (name: string) {
+      const skills = yield* mergedSkills()
+      return skills[name]
     })
 
     const require = Effect.fn("Skill.require")(function* (name: string) {
-      const s = yield* InstanceState.get(state)
-      const info = s.skills[name]
+      const skills = yield* mergedSkills()
+      const info = skills[name]
       if (info) return info
-      return yield* new NotFoundError({ name, available: Object.keys(s.skills).toSorted() })
+      return yield* new NotFoundError({ name, available: Object.keys(skills).toSorted() })
     })
 
     const all = Effect.fn("Skill.all")(function* () {
-      const s = yield* InstanceState.get(state)
-      return Object.values(s.skills)
+      return Object.values(yield* mergedSkills())
     })
 
     const dirs = Effect.fn("Skill.dirs")(function* () {
@@ -308,8 +338,7 @@ const layer = Layer.effect(
     })
 
     const available = Effect.fn("Skill.available")(function* (agent?: Agent.Info) {
-      const s = yield* InstanceState.get(state)
-      const list = Object.values(s.skills).toSorted((a, b) => a.name.localeCompare(b.name))
+      const list = Object.values(yield* mergedSkills()).toSorted((a, b) => a.name.localeCompare(b.name))
       if (!agent) return list
       return list.filter((skill) => Permission.evaluate("skill", skill.name, agent.permission).action !== "deny")
     })
