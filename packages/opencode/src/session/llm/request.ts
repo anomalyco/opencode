@@ -157,11 +157,9 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
     for (const key of Object.keys(tools)) tools[key] = { ...tools[key], strict: false }
   }
   if (
-    input.model.providerID.includes("github-copilot") &&
     Object.keys(tools).length === 0 &&
     hasToolCalls(input.messages)
   ) {
-    // Copilot needs a tools field when replaying prior tool calls, even if no tools are currently enabled.
     tools["_noop"] = aiTool({
       description: "Do not call this tool. It exists only for API compatibility and must never be invoked.",
       inputSchema: jsonSchema({
