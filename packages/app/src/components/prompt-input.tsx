@@ -35,7 +35,9 @@ import { DockShellForm, DockTray } from "@opencode-ai/ui/dock-surface"
 import { Icon } from "@opencode-ai/ui/icon"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
+import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
+import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Select } from "@opencode-ai/ui/select"
@@ -1533,6 +1535,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   <Show when={!providersLoading() && store.mode !== "shell" && showVariantControl()}>
                     <div
                       data-component="prompt-variant-control"
+                      class="[&_[data-action=prompt-model-variant]]:![font-weight:440]"
                       classList={{
                         "animate-in fade-in": providersShouldFadeIn(),
                         "hidden group-hover/prompt-input:block group-focus-within/prompt-input:block":
@@ -1549,22 +1552,45 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                           </>
                         }
                       >
-                        <Select
-                          size="normal"
-                          options={variants()}
-                          current={props.controls.model.selection.variant.current() ?? "default"}
-                          label={(x) => (x === "default" ? language.t("common.default") : x)}
+                        <MenuV2
+                          gutter={4}
+                          modal={false}
+                          placement="top-start"
                           onOpenChange={(open) => setStore("variantOpen", open)}
-                          onSelect={(value) => {
-                            props.controls.model.selection.variant.set(value === "default" ? undefined : value)
-                            restoreFocus()
-                          }}
-                          class="capitalize max-w-[160px] justify-start text-v2-text-text-faint"
-                          valueClass="truncate text-[13px] font-[440] leading-5 text-v2-text-text-faint"
-                          triggerStyle={control()}
-                          triggerProps={{ "data-action": "prompt-model-variant" }}
-                          variant="ghost"
-                        />
+                        >
+                          <MenuV2.Trigger
+                            as={ButtonV2}
+                            data-action="prompt-model-variant"
+                            variant="ghost-muted"
+                            size="normal"
+                            class="max-w-[160px] justify-start capitalize"
+                            style={control()}
+                          >
+                            <span class="truncate">
+                              {props.controls.model.selection.variant.current() ?? language.t("common.default")}
+                            </span>
+                            <span class="-ml-0.5 -mr-1 flex shrink-0">
+                              <Icon name="chevron-down" size="small" />
+                            </span>
+                          </MenuV2.Trigger>
+                          <MenuV2.Portal>
+                            <MenuV2.Content>
+                              <MenuV2.RadioGroup
+                                value={props.controls.model.selection.variant.current() ?? "default"}
+                                onChange={(value) => {
+                                  props.controls.model.selection.variant.set(value === "default" ? undefined : value)
+                                  restoreFocus()
+                                }}
+                              >
+                                {variants().map((value) => (
+                                  <MenuV2.RadioItem value={value} class="capitalize">
+                                    {value === "default" ? language.t("common.default") : value}
+                                  </MenuV2.RadioItem>
+                                ))}
+                              </MenuV2.RadioGroup>
+                            </MenuV2.Content>
+                          </MenuV2.Portal>
+                        </MenuV2>
                       </TooltipV2>
                     </div>
                   </Show>
