@@ -1,8 +1,11 @@
 import { useFile } from "@/context/file"
 import { encodeFilePath } from "@/context/file/path"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
+import { ContextMenu } from "@opencode-ai/ui/context-menu"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Icon } from "@opencode-ai/ui/icon"
+import { usePlatform } from "@/context/platform"
+import { useLanguage } from "@/context/language"
 import {
   createEffect,
   createMemo,
@@ -134,6 +137,7 @@ const FileTreeNode = (
     "class",
     "classList",
   ])
+  const platform = usePlatform()
   const kind = () => visibleKind(local.node, local.kinds, local.marks)
   const active = () => !!kind() && !local.node.ignored
   const color = () => {
@@ -141,52 +145,76 @@ const FileTreeNode = (
     if (!value) return
     return kindTextColor(value)
   }
+  const canOpenInFinder = platform.platform === "desktop" && !!platform.openPath
+  const language = useLanguage()
 
   return (
-    <Dynamic
-      component={local.as ?? "div"}
-      classList={{
-        "w-full min-w-0 h-6 flex items-center justify-start gap-x-1.5 rounded-md px-1.5 py-0 text-left hover:bg-surface-raised-base-hover active:bg-surface-base-active transition-colors cursor-pointer": true,
-        "bg-surface-base-active": local.node.path === local.active,
-        ...local.classList,
-        [local.class ?? ""]: !!local.class,
-        [local.nodeClass ?? ""]: !!local.nodeClass,
-      }}
-      style={`padding-left: ${Math.max(0, 8 + local.level * 12 - (local.node.type === "file" ? 24 : 4))}px`}
-      draggable={local.draggable}
-      onDragStart={(event: DragEvent) => {
-        if (!local.draggable) return
-        event.dataTransfer?.setData("text/plain", `file:${local.node.path}`)
-        event.dataTransfer?.setData("text/uri-list", pathToFileUrl(local.node.path))
-        if (event.dataTransfer) event.dataTransfer.effectAllowed = "copy"
-        withFileDragImage(event)
-      }}
-      {...rest}
-    >
-      {local.children}
-      <span
+    <ContextMenu modal={false}>
+      <ContextMenu.Trigger
+        as={local.as ?? "div"}
         classList={{
-          "flex-1 min-w-0 text-12-medium whitespace-nowrap truncate": true,
-          "text-text-weaker": local.node.ignored,
-          "text-text-weak": !local.node.ignored && !active(),
+          "w-full min-w-0 h-6 flex items-center justify-start gap-x-1.5 rounded-md px-1.5 py-0 text-left hover:bg-surface-raised-base-hover active:bg-surface-base-active transition-colors cursor-pointer": true,
+          "bg-surface-base-active": local.node.path === local.active,
+          ...local.classList,
+          [local.class ?? ""]: !!local.class,
+          [local.nodeClass ?? ""]: !!local.nodeClass,
         }}
-        style={active() ? color() : undefined}
+        style={`padding-left: ${Math.max(0, 8 + local.level * 12 - (local.node.type === "file" ? 24 : 4))}px`}
+        draggable={local.draggable}
+        onDragStart={(event: DragEvent) => {
+          if (!local.draggable) return
+          event.dataTransfer?.setData("text/plain", `file:${local.node.path}`)
+          event.dataTransfer?.setData("text/uri-list", pathToFileUrl(local.node.path))
+          if (event.dataTransfer) event.dataTransfer.effectAllowed = "copy"
+          withFileDragImage(event)
+        }}
+        onContextMenu={(event: MouseEvent) => {
+          event.preventDefault()
+          event.stopPropagation()
+        }}
+        {...rest}
       >
-        {local.node.name}
-      </span>
-      {(() => {
-        const value = kind()
-        if (!value) return null
-        if (local.node.type === "file") {
-          return (
-            <span class="shrink-0 w-4 text-center text-12-medium" style={kindTextColor(value)}>
-              {kindLabel(value)}
-            </span>
-          )
-        }
-        return <div class="shrink-0 size-1.5 mr-1.5 rounded-full" style={kindDotColor(value)} />
-      })()}
-    </Dynamic>
+        {local.children}
+        <span
+          classList={{
+            "flex-1 min-w-0 text-12-medium whitespace-nowrap truncate": true,
+            "text-text-weaker": local.node.ignored,
+            "text-text-weak": !local.node.ignored && !active(),
+          }}
+          style={active() ? color() : undefined}
+        >
+          {local.node.name}
+        </span>
+        {(() => {
+          const value = kind()
+          if (!value) return null
+          if (local.node.type === "file") {
+            return (
+              <span class="shrink-0 w-4 text-center text-12-medium" style={kindTextColor(value)}>
+                {kindLabel(value)}
+              </span>
+            )
+          }
+          return <div class="shrink-0 size-1.5 mr-1.5 rounded-full" style={kindDotColor(value)} />
+        })()}
+      </ContextMenu.Trigger>
+      <ContextMenu.Portal>
+        <ContextMenu.Content>
+          {canOpenInFinder && (
+            <>
+              <ContextMenu.Item
+                onSelect={() => {
+                  void platform.openPath?.(local.node.absolute)
+                }}
+              >
+                <ContextMenu.ItemLabel>{language.t("fileTree.context.revealInFinder")}</ContextMenu.ItemLabel>
+              </ContextMenu.Item>
+              <ContextMenu.Separator />
+            </>
+          )}
+        </ContextMenu.Content>
+      </ContextMenu.Portal>
+    </ContextMenu>
   )
 }
 

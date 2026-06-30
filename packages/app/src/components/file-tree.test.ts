@@ -28,6 +28,9 @@ beforeAll(async () => {
       Content: (props: { children?: unknown }) => props.children,
     },
   }))
+  mock.module("@opencode-ai/ui/context-menu", () => ({
+    ContextMenu: (props: { children?: unknown }) => props.children,
+  }))
   mock.module("@opencode-ai/ui/file-icon", () => ({ FileIcon: () => null }))
   mock.module("@opencode-ai/ui/icon", () => ({ Icon: () => null }))
   mock.module("@opencode-ai/ui/tooltip", () => ({ Tooltip: (props: { children?: unknown }) => props.children }))
