@@ -1,4 +1,38 @@
-export const ACCEPTED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"]
+import { ACCEPTED_FILE_TYPES, ACCEPTED_IMAGE_TYPES } from "@/constants/file-picker"
+
+export { ACCEPTED_FILE_TYPES }
+
+type AttachmentPicker = (
+  options: {
+    defaultPath?: string
+    multiple?: boolean
+    accept?: string[]
+  },
+  onFile: (file: File) => Promise<unknown>,
+) => Promise<void>
+
+export function pickAttachmentFiles(input: {
+  picker?: AttachmentPicker
+  directory: () => string
+  fallback: () => void
+  onFile: (file: File) => Promise<unknown>
+  onError: (error: unknown) => void
+}) {
+  if (!input.picker) {
+    input.fallback()
+    return
+  }
+  void input
+    .picker(
+      {
+        defaultPath: input.directory(),
+        multiple: true,
+        accept: ACCEPTED_FILE_TYPES,
+      },
+      input.onFile,
+    )
+    .catch(input.onError)
+}
 
 const IMAGE_MIMES = new Set(ACCEPTED_IMAGE_TYPES)
 const IMAGE_EXTS = new Map([
@@ -17,61 +51,6 @@ const TEXT_MIMES = new Set([
   "application/xml",
   "application/yaml",
 ])
-
-export const ACCEPTED_FILE_TYPES = [
-  ...ACCEPTED_IMAGE_TYPES,
-  "application/pdf",
-  "text/*",
-  "application/json",
-  "application/ld+json",
-  "application/toml",
-  "application/x-toml",
-  "application/x-yaml",
-  "application/xml",
-  "application/yaml",
-  ".c",
-  ".cc",
-  ".cjs",
-  ".conf",
-  ".cpp",
-  ".css",
-  ".csv",
-  ".cts",
-  ".env",
-  ".go",
-  ".gql",
-  ".graphql",
-  ".h",
-  ".hh",
-  ".hpp",
-  ".htm",
-  ".html",
-  ".ini",
-  ".java",
-  ".js",
-  ".json",
-  ".jsx",
-  ".log",
-  ".md",
-  ".mdx",
-  ".mjs",
-  ".mts",
-  ".py",
-  ".rb",
-  ".rs",
-  ".sass",
-  ".scss",
-  ".sh",
-  ".sql",
-  ".toml",
-  ".ts",
-  ".tsx",
-  ".txt",
-  ".xml",
-  ".yaml",
-  ".yml",
-  ".zsh",
-]
 
 const SAMPLE = 4096
 

@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@opencode-ai/stats-server",
+  "version": "1.17.11",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "main": "./src/server.ts",
+  "exports": {
+    ".": "./src/server.ts"
+  },
+  "scripts": {
+    "start": "bun src/server.ts",
+    "typecheck": "tsgo --noEmit"
+  },
+  "dependencies": {
+    "@aws-sdk/client-firehose": "3.933.0",
+    "@effect/platform-node": "catalog:",
+    "@opencode-ai/stats-core": "workspace:*",
+    "effect": "catalog:",
+    "sst": "catalog:"
+  },
+  "devDependencies": {
+    "@tsconfig/node22": "catalog:",
+    "@types/bun": "catalog:",
+    "@types/node": "catalog:",
+    "@typescript/native-preview": "catalog:",
+    "typescript": "catalog:"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

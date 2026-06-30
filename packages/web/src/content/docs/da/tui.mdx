@@ -358,28 +358,57 @@ Du kan tilpasse TUI-adfærd gennem `tui.json` (eller `tui.jsonc`).
 {
   "$schema": "https://opencode.ai/tui.json",
   "theme": "opencode",
+  "leader_timeout": 2000,
   "keybinds": {
-    "leader": "ctrl+x"
+    "leader": "ctrl+x",
+    "command_list": "ctrl+p"
   },
   "scroll_speed": 3,
   "scroll_acceleration": {
-    "enabled": true
+    "enabled": false
   },
-  "diff_style": "auto"
+  "diff_style": "auto",
+  "mouse": true,
+  "attention": {
+    "enabled": true,
+    "notifications": true,
+    "sound": true,
+    "volume": 0.4,
+    "sound_pack": "opencode.default",
+    "sounds": {
+      "error": "./sounds/error.mp3"
+    }
+  }
 }
 ```
 
 Dette er adskilt fra `opencode.json`, som konfigurerer server-/kørselstidsadfærd.
 
+`keybinds` flettes sammen med de indbyggede standarder, så du behøver kun at konfigurere de genveje, du vil ændre.
+
 ### Indstillinger
 
 - `theme` - Indstiller dit brugergrænsefladetema. [Læs mere](/docs/themes).
 - `keybinds` - Tilpasser tastaturgenveje. [Læs mere](/docs/keybinds).
+- `leader_timeout` - Styrer hvor længe OpenCode venter efter leader key. Standard er `2000`.
 - `scroll_acceleration.enabled` - Aktiver rulleacceleration i macOS-stil for jævn, naturlig rulning. Når aktiveret, øger rullehastigheden med hurtige rullebevægelser og forbliver præcis for langsommere bevægelser. **Denne indstilling har forrang over `scroll_speed` og tilsidesætter den, når den er aktiveret.**
 - `scroll_speed` - Styrer hvor hurtigt TUI ruller, når du bruger rullekommandoer (minimum: `0.001`, understøtter decimalværdier). Standard er `3`. **Bemærk: Dette ignoreres hvis `scroll_acceleration.enabled` er sat til `true`.**
 - `diff_style` - Styrer diff-gengivelse. `"auto"` tilpasser sig terminalbredde, `"stacked"` viser altid et enkeltkolonne-layout.
+- `mouse` - Aktiverer eller deaktiverer musefangst i TUI (standard: `true`). Når den er deaktiveret, bevares terminalens oprindelige musemarkering og rulning.
+- `attention` - Konfigurerer skrivebordsnotifikationer og lyde for TUI. Deaktiveret som standard.
 
 Brug `OPENCODE_TUI_CONFIG` til at indlæse en brugerdefineret TUI-konfigurationssti.
+
+### Attention
+
+Attention lader TUI give dig besked, når OpenCode venter på et svar, kræver godkendelse af en tilladelse, rapporterer en sessionsfejl eller har afsluttet en session. Aktivér det med `attention.enabled`; indbyggede hændelser afspiller en lyd, når de sker. Skrivebordsnotifikationer sendes kun, når terminalvinduet ikke er i fokus, og bruges ikke til subagent-hændelser.
+
+- `enabled` - Aktiverer alle notifikationer og lyde for Attention. Standard er `false`.
+- `notifications` - Når Attention er aktiveret, lader dette TUI sende skrivebordsnotifikationer via terminalen. Standard er `true`.
+- `sound` - Når Attention er aktiveret, tillader dette advarselslyde. Standard er `true`.
+- `volume` - Standard lydstyrke for advarselslyde fra `0` til `1`. Standard er `0.4`.
+- `sound_pack` - Sound pack-ID der skal bruges. Standard er `opencode.default`.
+- `sounds` - Angiver brugerdefinerede lydfiler for `default`, `question`, `permission`, `error`, `done` eller `subagent_done`. Stier kan være absolutte, `file://` URL'er eller relative til `tui.json`.
 
 ---
 

@@ -14,7 +14,6 @@ import {
   Switch,
   untrack,
   type ComponentProps,
-  type JSXElement,
   type ParentProps,
 } from "solid-js"
 import { Dynamic } from "solid-js/web"
@@ -149,7 +148,7 @@ const FileTreeNode = (
       classList={{
         "w-full min-w-0 h-6 flex items-center justify-start gap-x-1.5 rounded-md px-1.5 py-0 text-left hover:bg-surface-raised-base-hover active:bg-surface-base-active transition-colors cursor-pointer": true,
         "bg-surface-base-active": local.node.path === local.active,
-        ...(local.classList ?? {}),
+        ...local.classList,
         [local.class ?? ""]: !!local.class,
         [local.nodeClass ?? ""]: !!local.nodeClass,
       }}

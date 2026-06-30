@@ -1,9 +1,11 @@
-import { createStore, produce } from "solid-js/store"
+import { createStore, produce, reconcile } from "solid-js/store"
 import { batch, createEffect, createMemo, onCleanup, onMount, type Accessor } from "solid-js"
+import { useLocation } from "@solidjs/router"
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import { useGlobalSync } from "./global-sync"
-import { useGlobalSDK } from "./global-sdk"
-import { useServer } from "./server"
+import { makeEventListener } from "@solid-primitives/event-listener"
+import { useServerSync } from "./server-sync"
+import { useServerSDK } from "./server-sdk"
+import { ServerConnection, useServer } from "./server"
 import { usePlatform } from "./platform"
 import { Project } from "@opencode-ai/sdk/v2"
 import { Persist, persisted, removePersisted } from "@/utils/persist"
@@ -11,11 +13,22 @@ import { decode64 } from "@/utils/base64"
 import { same } from "@/utils/same"
 import { createScrollPersistence, type SessionScroll } from "./layout-scroll"
 import { createPathHelpers } from "./file/path"
+import type { ProjectAvatarVariant } from "@opencode-ai/ui/v2/project-avatar-v2"
+import { migrateLegacySessionStateKeys, ServerScope, SessionStateKey } from "@/utils/server-scope"
+import { createSessionKeyReader, ensureSessionKey, pruneSessionKeys } from "./layout-helpers"
+import { requireServerKey } from "@/utils/session-route"
+import { type DraftTab, useTabs } from "./tabs"
+
+export { createSessionKeyReader, ensureSessionKey, pruneSessionKeys }
+
+export type { ProjectAvatarVariant }
 
 const AVATAR_COLOR_KEYS = ["pink", "mint", "orange", "purple", "cyan", "lime"] as const
-const DEFAULT_PANEL_WIDTH = 344
+const DEFAULT_SIDEBAR_WIDTH = 344
+const DEFAULT_FILE_TREE_WIDTH = 200
 const DEFAULT_SESSION_WIDTH = 600
 const DEFAULT_TERMINAL_HEIGHT = 280
+const DEFAULT_REVIEW_PANEL_OPENED = false
 export type AvatarColorKey = (typeof AVATAR_COLOR_KEYS)[number]
 
 export function getAvatarColors(key?: string) {
@@ -31,6 +44,16 @@ export function getAvatarColors(key?: string) {
   }
 }
 
+export function getProjectAvatarVariant(key?: string): ProjectAvatarVariant {
+  if (key === "orange") return "orange"
+  if (key === "pink") return "pink"
+  if (key === "cyan") return "cyan"
+  if (key === "purple") return "purple"
+  if (key === "mint") return "cyan"
+  if (key === "lime") return "green"
+  return "gray"
+}
+
 type SessionTabs = {
   active?: string
   all: string[]
@@ -41,54 +64,27 @@ type SessionView = {
   reviewOpen?: string[]
   pendingMessage?: string
   pendingMessageAt?: number
+  todoCollapsed?: boolean
 }
 
 type TabHandoff = {
+  scope: ServerScope
   dir: string
   id: string
   at: number
 }
 
 export type LocalProject = Partial<Project> & { worktree: string; expanded: boolean }
+export type HomeProjectSelection = { server: ServerConnection.Key; directory?: string }
 
 export type ReviewDiffStyle = "unified" | "split"
+export type ReviewPanelSource = "context-button" | "other"
 
-export function ensureSessionKey(key: string, touch: (key: string) => void, seed: (key: string) => void) {
-  touch(key)
-  seed(key)
-  return key
-}
-
-export function createSessionKeyReader(sessionKey: string | Accessor<string>, ensure: (key: string) => void) {
-  const key = typeof sessionKey === "function" ? sessionKey : () => sessionKey
-  return () => {
-    const value = key()
-    ensure(value)
-    return value
-  }
-}
-
-export function pruneSessionKeys(input: {
-  keep?: string
-  max: number
-  used: Map<string, number>
-  view: string[]
-  tabs: string[]
-}) {
-  if (!input.keep) return []
-
-  const keys = new Set<string>([...input.view, ...input.tabs])
-  if (keys.size <= input.max) return []
-
-  const score = (key: string) => {
-    if (key === input.keep) return Number.MAX_SAFE_INTEGER
-    return input.used.get(key) ?? 0
-  }
-
-  return Array.from(keys)
-    .sort((a, b) => score(b) - score(a))
-    .slice(input.max)
-}
+export type LayoutRoute =
+  | { type: "home" }
+  | { type: "draft"; draftID: string; server?: ServerConnection.Key }
+  | { type: "dir-new-sesssion"; dir: string; dirBase64: string; server?: ServerConnection.Key }
+  | { type: "session"; sessionId: string; server?: ServerConnection.Key }
 
 function nextSessionTabsForOpen(current: SessionTabs | undefined, tab: string): SessionTabs {
   const all = current?.all ?? []
@@ -99,7 +95,7 @@ function nextSessionTabsForOpen(current: SessionTabs | undefined, tab: string): 
 }
 
 const sessionPath = (key: string) => {
-  const dir = key.split("/")[0]
+  const dir = SessionStateKey.route(key).split("/")[0]
   if (!dir) return
   const root = decode64(dir)
   if (!root) return
@@ -130,13 +126,55 @@ const normalizeStoredSessionTabs = (key: string, tabs: SessionTabs) => {
   }
 }
 
+const currentRoute = (pathname: string, search: string): LayoutRoute => {
+  const parts = pathname.split("/").filter(Boolean)
+  if (parts.length === 0) return { type: "home" }
+
+  if (parts[0] === "new-session") {
+    const draftID = new URLSearchParams(search).get("draftId")
+    if (!draftID) return { type: "home" }
+    return { type: "draft", draftID }
+  }
+
+  if (parts[0] === "server" && parts[2] === "session" && parts[3]) {
+    return {
+      type: "session",
+      sessionId: parts[3],
+      server: requireServerKey(parts[1]),
+    }
+  }
+
+  const dirBase64 = parts[0]
+  const dir = decode64(dirBase64)
+  if (!dir) return { type: "home" }
+
+  if (parts[1] !== "session") return { type: "home" }
+
+  const id = parts[2]
+  if (id) return { type: "session", sessionId: id }
+  return { type: "dir-new-sesssion", dir, dirBase64 }
+}
+
 export const { use: useLayout, provider: LayoutProvider } = createSimpleContext({
   name: "Layout",
+  gate: false,
   init: () => {
-    const globalSdk = useGlobalSDK()
-    const globalSync = useGlobalSync()
+    const serverSdk = useServerSDK()
+    const serverSync = useServerSync()
     const server = useServer()
+    const tabs = useTabs()
     const platform = usePlatform()
+    const location = useLocation()
+    const route = createMemo(() => {
+      const value = currentRoute(location.pathname, location.search)
+      if (value.type === "home") return value
+      if (value.server) return value
+      if (value.type === "draft") {
+        const draft = tabs.store.find((tab): tab is DraftTab => tab.type === "draft" && tab.draftID === value.draftID)
+        if (draft) return { ...value, server: draft.server }
+      }
+      return { ...value, server: server.key }
+    })
 
     const isRecord = (value: unknown): value is Record<string, unknown> =>
       typeof value === "object" && value !== null && !Array.isArray(value)
@@ -161,11 +199,11 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         if (!isRecord(fileTree)) return fileTree
         if (fileTree.tab === "changes" || fileTree.tab === "all") return fileTree
 
-        const width = typeof fileTree.width === "number" ? fileTree.width : DEFAULT_PANEL_WIDTH
+        const width = typeof fileTree.width === "number" ? fileTree.width : DEFAULT_FILE_TREE_WIDTH
         return {
           ...fileTree,
           opened: true,
-          width: width === 260 ? DEFAULT_PANEL_WIDTH : width,
+          width: width === 260 ? DEFAULT_FILE_TREE_WIDTH : width,
           tab: "changes",
         }
       })()
@@ -174,14 +212,16 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         if (!isRecord(review)) return review
         if (typeof review.panelOpened === "boolean") return review
 
-        const opened = isRecord(fileTree) && typeof fileTree.opened === "boolean" ? fileTree.opened : true
+        const opened =
+          isRecord(fileTree) && typeof fileTree.opened === "boolean" ? fileTree.opened : DEFAULT_REVIEW_PANEL_OPENED
         return {
           ...review,
           panelOpened: opened,
         }
       })()
 
-      const sessionTabs = value.sessionTabs
+      const sessionTabs = migrateLegacySessionStateKeys(value.sessionTabs)
+      const sessionView = migrateLegacySessionStateKeys(value.sessionView)
       const migratedSessionTabs = (() => {
         if (!isRecord(sessionTabs)) return sessionTabs
 
@@ -210,7 +250,8 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         migratedSidebar === sidebar &&
         migratedReview === review &&
         migratedFileTree === fileTree &&
-        migratedSessionTabs === sessionTabs
+        migratedSessionTabs === value.sessionTabs &&
+        sessionView === value.sessionView
       ) {
         return value
       }
@@ -221,16 +262,17 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         review: migratedReview,
         fileTree: migratedFileTree,
         sessionTabs: migratedSessionTabs,
+        sessionView,
       }
     }
 
-    const target = Persist.global("layout", ["layout.v6"])
+    const target = Persist.serverGlobal(serverSdk().scope, "layout", ["layout.v6"])
     const [store, setStore, _, ready] = persisted(
       { ...target, migrate },
       createStore({
         sidebar: {
           opened: false,
-          width: DEFAULT_PANEL_WIDTH,
+          width: DEFAULT_SIDEBAR_WIDTH,
           workspaces: {} as Record<string, boolean>,
           workspacesDefault: false,
         },
@@ -240,11 +282,11 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         },
         review: {
           diffStyle: "split" as ReviewDiffStyle,
-          panelOpened: true,
+          panelOpened: DEFAULT_REVIEW_PANEL_OPENED,
         },
         fileTree: {
-          opened: true,
-          width: DEFAULT_PANEL_WIDTH,
+          opened: false,
+          width: DEFAULT_FILE_TREE_WIDTH,
           tab: "changes" as "changes" | "all",
         },
         session: {
@@ -258,8 +300,14 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         handoff: {
           tabs: undefined as TabHandoff | undefined,
         },
+        home: {
+          selection: { server: server.key } as HomeProjectSelection,
+        },
       }),
     )
+    const [ephemeral, setEphemeral] = createStore({
+      reviewPanelSource: "other" as ReviewPanelSource,
+    })
 
     const MAX_SESSION_KEYS = 50
     const PENDING_MESSAGE_TTL_MS = 2 * 60 * 1000
@@ -277,15 +325,19 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
     const dropSessionState = (keys: string[]) => {
       for (const key of keys) {
-        const parts = key.split("/")
+        const scope = SessionStateKey.scope(key)
+        const parts = SessionStateKey.route(key).split("/")
         const dir = parts[0]
         const session = parts[1]
         if (!dir) continue
 
         for (const entry of SESSION_STATE_KEYS) {
-          const target = session ? Persist.session(dir, session, entry.key) : Persist.workspace(dir, entry.key)
+          const target = session
+            ? Persist.serverSession(scope, dir, session, entry.key)
+            : Persist.serverWorkspace(scope, dir, entry.key)
           void removePersisted(target, platform)
 
+          if (scope !== ServerScope.local) continue
           const legacyKey = `${dir}/${entry.legacy}${session ? "/" + session : ""}.${entry.version}`
           void removePersisted({ key: legacyKey }, platform)
         }
@@ -342,7 +394,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           return
         }
 
-        setStore("sessionView", sessionKey, "scroll", (prev) => ({ ...(prev ?? {}), ...next }))
+        setStore("sessionView", sessionKey, "scroll", (prev) => ({ ...prev, ...next }))
         prune(keep)
       },
     })
@@ -365,12 +417,10 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         flush()
       }
 
-      window.addEventListener("pagehide", flush)
-      document.addEventListener("visibilitychange", handleVisibility)
+      makeEventListener(window, "pagehide", flush)
+      makeEventListener(document, "visibilitychange", handleVisibility)
 
       onCleanup(() => {
-        window.removeEventListener("pagehide", flush)
-        document.removeEventListener("visibilitychange", handleVisibility)
         scroll.dispose()
       })
     })
@@ -385,48 +435,25 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     }
 
     function enrich(project: { worktree: string; expanded: boolean }) {
-      const [childStore] = globalSync.child(project.worktree, { bootstrap: false })
+      const [childStore] = serverSync().child(project.worktree, { bootstrap: false })
       const projectID = childStore.project
       const metadata = projectID
-        ? globalSync.data.project.find((x) => x.id === projectID)
-        : globalSync.data.project.find((x) => x.worktree === project.worktree)
+        ? serverSync().data.project.find((x) => x.id === projectID)
+        : serverSync().data.project.find((x) => x.worktree === project.worktree)
 
-      const local = childStore.projectMeta
-      const localOverride =
-        local?.name !== undefined ||
-        local?.commands?.start !== undefined ||
-        local?.icon?.override !== undefined ||
-        local?.icon?.color !== undefined
-
-      const base = {
-        ...(metadata ?? {}),
-        ...project,
-        icon: {
-          url: metadata?.icon?.url,
-          override: metadata?.icon?.override ?? childStore.icon,
-          color: metadata?.icon?.color,
-        },
+      // Preserve local icon override from per-workspace localStorage cache (childStore.icon).
+      // Without this, different subdirectories of the same git repo would share the same
+      // icon from the database instead of using their individual overrides.
+      const base = { ...metadata, ...project }
+      if (childStore.icon) {
+        return { ...base, icon: { ...base.icon, override: childStore.icon } }
       }
-
-      const isGlobal = projectID === "global" || (metadata?.id === undefined && localOverride)
-      if (!isGlobal) return base
-
-      return {
-        ...base,
-        id: base.id ?? "global",
-        name: local?.name,
-        commands: local?.commands,
-        icon: {
-          url: base.icon?.url,
-          override: local?.icon?.override,
-          color: local?.icon?.color,
-        },
-      }
+      return base
     }
 
     const roots = createMemo(() => {
       const map = new Map<string, string>()
-      for (const project of globalSync.data.project) {
+      for (const project of serverSync().data.project) {
         const sandboxes = project.sandboxes ?? []
         for (const sandbox of sandboxes) {
           map.set(sandbox, project.worktree)
@@ -492,12 +519,12 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     createEffect(() => {
       const projects = enriched()
       if (projects.length === 0) return
-      if (!globalSync.ready) return
+      if (!serverSync().ready) return
 
       for (const project of projects) {
         if (!project.id) continue
         if (project.id === "global") continue
-        globalSync.project.icon(project.worktree, project.icon?.override)
+        serverSync().project.icon(project.worktree, project.icon?.override)
       }
     })
 
@@ -516,7 +543,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       }
 
       for (const project of projects) {
-        if (project.icon?.color) continue
+        if (project.icon?.color || project.icon?.override || project.icon?.url) continue
         const worktree = project.worktree
         const existing = colors[worktree]
         const color = existing ?? pickAvailableColor(used)
@@ -531,32 +558,53 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         colorRequested.set(worktree, color)
 
         if (project.id === "global") {
-          globalSync.project.meta(worktree, { icon: { color } })
+          serverSync().project.meta(worktree, { icon: { color } })
           continue
         }
 
-        void globalSdk.client.project
-          .update({ projectID: project.id, directory: worktree, icon: { color } })
+        void serverSdk()
+          .client.project.update({ projectID: project.id, directory: worktree, icon: { color } })
           .catch(() => {
             if (colorRequested.get(worktree) === color) colorRequested.delete(worktree)
           })
       }
     })
 
+    let sessionFrame: number | undefined
+    let sessionTimer: number | undefined
+
     onMount(() => {
-      Promise.all(
-        server.projects.list().map((project) => {
-          return globalSync.project.loadSessions(project.worktree)
-        }),
-      )
+      sessionFrame = requestAnimationFrame(() => {
+        sessionFrame = undefined
+        sessionTimer = window.setTimeout(() => {
+          sessionTimer = undefined
+          void Promise.all(
+            server.projects.list().map((project) => {
+              return serverSync().project.loadSessions(project.worktree)
+            }),
+          )
+        }, 0)
+      })
+    })
+
+    onCleanup(() => {
+      if (sessionFrame !== undefined) cancelAnimationFrame(sessionFrame)
+      if (sessionTimer !== undefined) window.clearTimeout(sessionTimer)
     })
 
     return {
+      route,
       ready,
+      home: {
+        selection: createMemo(() => store.home.selection),
+        setSelection(selection: HomeProjectSelection) {
+          setStore("home", "selection", reconcile(selection))
+        },
+      },
       handoff: {
         tabs: createMemo(() => store.handoff?.tabs),
         setTabs(dir: string, id: string) {
-          setStore("handoff", "tabs", { dir, id, at: Date.now() })
+          setStore("handoff", "tabs", { scope: serverSdk().scope, dir, id, at: Date.now() })
         },
         clearTabs() {
           if (!store.handoff?.tabs) return
@@ -568,7 +616,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         open(directory: string) {
           const root = rootFor(directory)
           if (server.projects.list().find((x) => x.worktree === root)) return
-          globalSync.project.loadSessions(root)
+          void serverSync().project.loadSessions(root)
           server.projects.open(root)
         },
         close(directory: string) {
@@ -620,7 +668,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         diffStyle: createMemo(() => store.review?.diffStyle ?? "split"),
         setDiffStyle(diffStyle: ReviewDiffStyle) {
           if (!store.review) {
-            setStore("review", { diffStyle, panelOpened: true })
+            setStore("review", { diffStyle, panelOpened: DEFAULT_REVIEW_PANEL_OPENED })
             return
           }
           setStore("review", "diffStyle", diffStyle)
@@ -628,32 +676,32 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       },
       fileTree: {
         opened: createMemo(() => store.fileTree?.opened ?? true),
-        width: createMemo(() => store.fileTree?.width ?? DEFAULT_PANEL_WIDTH),
+        width: createMemo(() => store.fileTree?.width ?? DEFAULT_FILE_TREE_WIDTH),
         tab: createMemo(() => store.fileTree?.tab ?? "changes"),
         setTab(tab: "changes" | "all") {
           if (!store.fileTree) {
-            setStore("fileTree", { opened: true, width: DEFAULT_PANEL_WIDTH, tab })
+            setStore("fileTree", { opened: true, width: DEFAULT_FILE_TREE_WIDTH, tab })
             return
           }
           setStore("fileTree", "tab", tab)
         },
         open() {
           if (!store.fileTree) {
-            setStore("fileTree", { opened: true, width: DEFAULT_PANEL_WIDTH, tab: "changes" })
+            setStore("fileTree", { opened: true, width: DEFAULT_FILE_TREE_WIDTH, tab: "changes" })
             return
           }
           setStore("fileTree", "opened", true)
         },
         close() {
           if (!store.fileTree) {
-            setStore("fileTree", { opened: false, width: DEFAULT_PANEL_WIDTH, tab: "changes" })
+            setStore("fileTree", { opened: false, width: DEFAULT_FILE_TREE_WIDTH, tab: "changes" })
             return
           }
           setStore("fileTree", "opened", false)
         },
         toggle() {
           if (!store.fileTree) {
-            setStore("fileTree", { opened: true, width: DEFAULT_PANEL_WIDTH, tab: "changes" })
+            setStore("fileTree", { opened: true, width: DEFAULT_FILE_TREE_WIDTH, tab: "changes" })
             return
           }
           setStore("fileTree", "opened", (x) => !x)
@@ -735,7 +783,8 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         const key = createSessionKeyReader(sessionKey, ensureKey)
         const s = createMemo(() => store.sessionView[key()] ?? { scroll: {} })
         const terminalOpened = createMemo(() => store.terminal?.opened ?? false)
-        const reviewPanelOpened = createMemo(() => store.review?.panelOpened ?? true)
+        const reviewPanelOpened = createMemo(() => store.review?.panelOpened ?? DEFAULT_REVIEW_PANEL_OPENED)
+        const reviewPanelSource = createMemo(() => (reviewPanelOpened() ? ephemeral.reviewPanelSource : "other"))
 
         function setTerminalOpened(next: boolean) {
           const current = store.terminal
@@ -749,16 +798,26 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           setStore("terminal", "opened", next)
         }
 
-        function setReviewPanelOpened(next: boolean) {
+        function setReviewPanelOpened(next: boolean, source: ReviewPanelSource) {
+          const nextSource = next ? source : "other"
           const current = store.review
           if (!current) {
-            setStore("review", { diffStyle: "split" as ReviewDiffStyle, panelOpened: next })
+            batch(() => {
+              setStore("review", { diffStyle: "split" as ReviewDiffStyle, panelOpened: next })
+              setEphemeral("reviewPanelSource", nextSource)
+            })
             return
           }
 
-          const value = current.panelOpened ?? true
-          if (value === next) return
-          setStore("review", "panelOpened", next)
+          const value = current.panelOpened ?? DEFAULT_REVIEW_PANEL_OPENED
+          if (value === next) {
+            if (ephemeral.reviewPanelSource !== nextSource) setEphemeral("reviewPanelSource", nextSource)
+            return
+          }
+          batch(() => {
+            setStore("review", "panelOpened", next)
+            setEphemeral("reviewPanelSource", nextSource)
+          })
         }
 
         return {
@@ -767,6 +826,18 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           },
           setScroll(tab: string, pos: SessionScroll) {
             scroll.setScroll(key(), tab, pos)
+          },
+          todoCollapsed: {
+            get: () => s().todoCollapsed ?? false,
+            set(collapsed: boolean) {
+              const session = key()
+              const current = store.sessionView[session]
+              if (!current) {
+                setStore("sessionView", session, { scroll: {}, todoCollapsed: collapsed })
+              } else {
+                setStore("sessionView", session, "todoCollapsed", collapsed)
+              }
+            },
           },
           terminal: {
             opened: terminalOpened,
@@ -782,14 +853,15 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           },
           reviewPanel: {
             opened: reviewPanelOpened,
-            open() {
-              setReviewPanelOpened(true)
+            source: reviewPanelSource,
+            open(source: ReviewPanelSource = "other") {
+              setReviewPanelOpened(true, source)
             },
             close() {
-              setReviewPanelOpened(false)
+              setReviewPanelOpened(false, "other")
             },
             toggle() {
-              setReviewPanelOpened(!reviewPanelOpened())
+              setReviewPanelOpened(!reviewPanelOpened(), "other")
             },
           },
           review: {

@@ -9,24 +9,27 @@ const [data, setData] = createStore({
     "story-session": [] as Array<{ id: string; role: string }>,
   } as Record<string, Array<{ id: string; role: string }>>,
   session_status: {} as Record<string, { type: "idle" | "busy" }>,
+  session_working: () => false,
   agent: [{ name: "build", mode: "task", hidden: false }],
   command: [{ name: "fix", description: "Run fix command", source: "project" }],
 })
 
+const sync = {
+  data,
+  set(...input: unknown[]) {
+    ;(setData as (...args: unknown[]) => void)(...input)
+  },
+  session: {
+    get(id: string) {
+      return { id }
+    },
+    optimistic: {
+      add() {},
+      remove() {},
+    },
+  },
+}
+
 export function useSync() {
-  return {
-    data,
-    set(...input: unknown[]) {
-      ;(setData as (...args: unknown[]) => void)(...input)
-    },
-    session: {
-      get(id: string) {
-        return { id }
-      },
-      optimistic: {
-        add() {},
-        remove() {},
-      },
-    },
-  }
+  return () => sync
 }

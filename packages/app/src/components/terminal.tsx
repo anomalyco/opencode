@@ -1,5 +1,8 @@
-import { type HexColor, resolveThemeVariant, useTheme, withAlpha } from "@opencode-ai/ui/theme"
-import { showToast } from "@opencode-ai/ui/toast"
+import { withAlpha } from "@opencode-ai/ui/theme/color"
+import { useTheme } from "@opencode-ai/ui/theme/context"
+import { resolveThemeVariant } from "@opencode-ai/ui/theme/resolve"
+import type { HexColor } from "@opencode-ai/ui/theme/types"
+import { showToast } from "@/utils/toast"
 import type { FitAddon, Ghostty, Terminal as Term } from "ghostty-web"
 import { type ComponentProps, createEffect, createMemo, onCleanup, onMount, splitProps } from "solid-js"
 import { SerializeAddon } from "@/addons/serialize"
@@ -7,12 +10,12 @@ import { matchKeybind, parseKeybind } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { useSDK } from "@/context/sdk"
-import { useServer } from "@/context/server"
-import { monoFontFamily, useSettings } from "@/context/settings"
+import { useServerSDK } from "@/context/server-sdk"
+import { terminalFontFamily, useSettings } from "@/context/settings"
 import type { LocalPTY } from "@/context/terminal"
-import { terminalAttr, terminalProbe } from "@/testing/terminal"
 import { disposeIfDisposable, getHoveredLinkText, setOptionIfSupported } from "@/utils/runtime-adapters"
 import { terminalWriter } from "@/utils/terminal-writer"
+import { terminalWebSocketURL } from "@/utils/terminal-websocket-url"
 
 const TOGGLE_TERMINAL_ID = "terminal.toggle"
 const DEFAULT_TOGGLE_TERMINAL_KEYBIND = "ctrl+`"
@@ -63,16 +66,6 @@ const DEFAULT_TERMINAL_COLORS: Record<"light" | "dark", TerminalColors> = {
 const debugTerminal = (...values: unknown[]) => {
   if (!import.meta.env.DEV) return
   console.debug("[terminal]", ...values)
-}
-
-const errorStatus = (err: unknown) => {
-  if (!err || typeof err !== "object") return
-  if (!("data" in err)) return
-  const data = err.data
-  if (!data || typeof data !== "object") return
-  if (!("statusCode" in data)) return
-  const status = data.statusCode
-  return typeof status === "number" ? status : undefined
 }
 
 const useTerminalUiBindings = (input: {
@@ -167,11 +160,19 @@ export const Terminal = (props: TerminalProps) => {
   const settings = useSettings()
   const theme = useTheme()
   const language = useLanguage()
-  const server = useServer()
+  // Terminal captures its connection for the PTY lifetime, so callers must key it per server/session.
+  const connection = useServerSDK()().server
+  const directory = sdk().directory
+  const client = sdk().client
+  const url = sdk().url
+  const auth = connection.http
+  const username = auth?.username ?? "opencode"
+  const password = auth?.password ?? ""
+  const authToken = connection.type === "http" ? connection.authToken : false
+  const sameOrigin = new URL(url, location.href).origin === location.origin
   let container!: HTMLDivElement
   const [local, others] = splitProps(props, ["pty", "class", "classList", "autoFocus", "onConnect", "onConnectError"])
   const id = local.pty.id
-  const probe = terminalProbe(id)
   const restore = typeof local.pty.buffer === "string" ? local.pty.buffer : ""
   const restoreSize =
     restore &&
@@ -186,7 +187,7 @@ export const Terminal = (props: TerminalProps) => {
   const scrollY = typeof local.pty.scrollY === "number" ? local.pty.scrollY : undefined
   let ws: WebSocket | undefined
   let term: Term | undefined
-  let ghostty: Ghostty
+  let _ghostty: Ghostty
   let serializeAddon: SerializeAddon
   let fitAddon: FitAddon
   let handleResize: () => void
@@ -218,7 +219,7 @@ export const Terminal = (props: TerminalProps) => {
   }
 
   const pushSize = (cols: number, rows: number) => {
-    return sdk.client.pty
+    return client.pty
       .update({
         ptyID: id,
         size: { cols, rows },
@@ -295,7 +296,7 @@ export const Terminal = (props: TerminalProps) => {
   })
 
   createEffect(() => {
-    const font = monoFontFamily(settings.appearance.font())
+    const font = terminalFontFamily(settings.appearance.terminalFont())
     if (!term) return
     setOptionIfSupported(term, "fontFamily", font)
     scheduleFit()
@@ -342,9 +343,6 @@ export const Terminal = (props: TerminalProps) => {
   }
 
   onMount(() => {
-    probe.init()
-    cleanups.push(() => probe.drop())
-
     const run = async () => {
       const loaded = await loadGhostty()
       if (disposed) return
@@ -358,7 +356,7 @@ export const Terminal = (props: TerminalProps) => {
         cols: restoreSize?.cols,
         rows: restoreSize?.rows,
         fontSize: 14,
-        fontFamily: monoFontFamily(settings.appearance.font()),
+        fontFamily: terminalFontFamily(settings.appearance.terminalFont()),
         allowTransparency: false,
         convertEol: false,
         theme: terminalColors(),
@@ -370,12 +368,10 @@ export const Terminal = (props: TerminalProps) => {
         cleanup()
         return
       }
-      ghostty = g
+      _ghostty = g
       term = t
       output = terminalWriter((data, done) =>
         t.write(data, () => {
-          probe.render(data)
-          probe.settle()
           done?.()
         }),
       )
@@ -415,7 +411,7 @@ export const Terminal = (props: TerminalProps) => {
       if (local.autoFocus !== false) focusTerminal()
 
       if (typeof document !== "undefined" && document.fonts) {
-        document.fonts.ready.then(scheduleFit)
+        void document.fonts.ready.then(scheduleFit)
       }
 
       const onResize = t.onResize((size) => {
@@ -477,14 +473,34 @@ export const Terminal = (props: TerminalProps) => {
       }
 
       const gone = () =>
-        sdk.client.pty
-          .get({ ptyID: id })
-          .then(() => false)
+        client.pty
+          .get({ ptyID: id }, { throwOnError: false })
+          .then((result) => result.response.status === 404)
           .catch((err) => {
-            if (errorStatus(err) === 404) return true
             debugTerminal("failed to inspect terminal session", err)
             return false
           })
+
+      const connectToken = async () => {
+        const result = await client.pty
+          .connectToken(
+            { ptyID: id, directory },
+            {
+              throwOnError: false,
+              headers: { "x-opencode-ticket": "1" },
+            },
+          )
+          .catch((err: unknown) => {
+            if (err instanceof Error && err.message.includes("Request is not supported")) return
+            throw err
+          })
+        if (!result) return
+        if (result.response.status === 200 && result.data?.ticket) return result.data.ticket
+        if (result.response.status === 404 || result.response.status === 405) return
+        if (result.response.status === 403)
+          throw new Error("PTY connect ticket rejected by origin or CSRF checks. Check the server CORS config.")
+        throw new Error(`PTY connect ticket failed with ${result.response.status}`)
+      }
 
       const retry = (err: unknown) => {
         if (disposed) return
@@ -505,25 +521,36 @@ export const Terminal = (props: TerminalProps) => {
         }, ms)
       }
 
-      const open = () => {
+      const open = async () => {
         if (disposed) return
         drop?.()
 
-        const url = new URL(sdk.url + `/pty/${id}/connect`)
-        url.searchParams.set("directory", sdk.directory)
-        url.searchParams.set("cursor", String(seek))
-        url.protocol = url.protocol === "https:" ? "wss:" : "ws:"
-        url.username = server.current?.http.username ?? "opencode"
-        url.password = server.current?.http.password ?? ""
+        const ticket = await connectToken().catch((err) => {
+          fail(err)
+          return undefined
+        })
+        if (once.value) return
+        if (disposed) return
 
-        const socket = new WebSocket(url)
+        const socket = new WebSocket(
+          terminalWebSocketURL({
+            url,
+            id,
+            directory,
+            cursor: seek,
+            ticket,
+            sameOrigin,
+            username,
+            password,
+            authToken,
+          }),
+        )
         socket.binaryType = "arraybuffer"
         ws = socket
 
         const handleOpen = () => {
           if (disposed) return
           tries = 0
-          probe.connect()
           local.onConnect?.()
           scheduleSize(t.cols, t.rows)
         }
@@ -588,13 +615,6 @@ export const Terminal = (props: TerminalProps) => {
         socket.addEventListener("close", handleClose)
       }
 
-      probe.control({
-        disconnect: () => {
-          if (!ws) return
-          ws.close(4_000, "e2e")
-        },
-      })
-
       open()
     }
 
@@ -634,12 +654,11 @@ export const Terminal = (props: TerminalProps) => {
     <div
       ref={container}
       data-component="terminal"
-      {...{ [terminalAttr]: id }}
       data-prevent-autofocus
       tabIndex={-1}
       style={{ "background-color": terminalColors().background }}
       classList={{
-        ...(local.classList ?? {}),
+        ...local.classList,
         "select-text": true,
         "size-full px-6 py-3 font-mono relative overflow-hidden": true,
         [local.class ?? ""]: !!local.class,
