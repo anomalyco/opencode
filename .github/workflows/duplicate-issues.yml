@@ -17,12 +17,31 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: Check exempt issue author
+        id: author
+        run: |
+          LOGIN="${{ github.event.issue.user.login }}"
+          ASSOCIATION="${{ github.event.issue.author_association }}"
+
+          if [ "$LOGIN" = "opencode-agent[bot]" ] ||
+             [ "$ASSOCIATION" = "OWNER" ] ||
+             [ "$ASSOCIATION" = "MEMBER" ] ||
+             grep -qxiF "$LOGIN" .github/TEAM_MEMBERS; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Skipping issue automation for exempt author: $LOGIN ($ASSOCIATION)"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: ./.github/actions/setup-bun
+        if: steps.author.outputs.skip != 'true'
 
       - name: Install opencode
+        if: steps.author.outputs.skip != 'true'
         run: curl -fsSL https://opencode.ai/install | bash
 
       - name: Check duplicates and compliance
+        if: steps.author.outputs.skip != 'true'
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -132,12 +151,31 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: Check exempt issue author
+        id: author
+        run: |
+          LOGIN="${{ github.event.issue.user.login }}"
+          ASSOCIATION="${{ github.event.issue.author_association }}"
+
+          if [ "$LOGIN" = "opencode-agent[bot]" ] ||
+             [ "$ASSOCIATION" = "OWNER" ] ||
+             [ "$ASSOCIATION" = "MEMBER" ] ||
+             grep -qxiF "$LOGIN" .github/TEAM_MEMBERS; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Skipping issue automation for exempt author: $LOGIN ($ASSOCIATION)"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: ./.github/actions/setup-bun
+        if: steps.author.outputs.skip != 'true'
 
       - name: Install opencode
+        if: steps.author.outputs.skip != 'true'
         run: curl -fsSL https://opencode.ai/install | bash
 
       - name: Recheck compliance
+        if: steps.author.outputs.skip != 'true'
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

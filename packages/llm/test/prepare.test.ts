@@ -117,11 +117,7 @@ describe("request option precedence", () => {
         dynamicResponse((input) =>
           Effect.gen(function* () {
             const web = yield* HttpClientRequest.toWeb(input.request).pipe(Effect.orDie)
-            const url = new URL(web.url)
-            expect(url.searchParams.get("route")).toBe("1")
-            expect(url.searchParams.get("model")).toBe("1")
-            expect(url.searchParams.get("request")).toBe("1")
-            expect(url.searchParams.get("shared")).toBe("model")
+            expect(web.url).toBe("https://api.openai.test/v1/chat/completions?route=1&shared=model&model=1&request=1")
             expect(web.headers.get("authorization")).toBe("Bearer fresh-key")
             expect(web.headers.get("x-route")).toBe("route")
             expect(web.headers.get("x-model")).toBe("model")
@@ -138,6 +134,26 @@ describe("request option precedence", () => {
         ),
       ),
     ),
+  )
+
+  it.effect("rejects raw body overlays for protocol-owned roots", () =>
+    Effect.gen(function* () {
+      const model = OpenAIChat.route
+        .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
+        .model({ id: "gpt-4o-mini" })
+      const error = yield* LLMClient.prepare(
+        LLM.request({
+          model,
+          prompt: "Say hello.",
+          http: { body: { model: "gpt-5", messages: [], tools: [] } },
+        }),
+      ).pipe(Effect.flip)
+
+      expect(error.reason).toMatchObject({
+        _tag: "InvalidRequest",
+        message: "http.body cannot overlay protocol-owned field(s): model, messages, tools",
+      })
+    }),
   )
 
   it.effect("uses model output limits after route limits and before call maxTokens", () =>
