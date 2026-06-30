@@ -87,10 +87,12 @@ function windowLastActiveUrlKey(windowID: string) {
   return `opencode.desktop.window.${windowID}.last-active-url`
 }
 
-function getLastActiveUrl(windowID: string) {
+function getLastActiveUrl(windowID: string, migrateGlobalWindowState: boolean) {
   if (typeof localStorage !== "object") return "/"
   try {
-    const value = localStorage.getItem(windowLastActiveUrlKey(windowID)) ?? localStorage.getItem(lastActiveUrlKey)
+    const value =
+      localStorage.getItem(windowLastActiveUrlKey(windowID)) ??
+      (migrateGlobalWindowState ? localStorage.getItem(lastActiveUrlKey) : null)
     if (value?.startsWith("/") && !value.startsWith("//")) return value
   } catch {}
   return "/"
@@ -103,9 +105,9 @@ function setLastActiveUrl(windowID: string, value: string) {
   } catch {}
 }
 
-function DesktopMemoryRouter(props: BaseRouterProps & { windowID: string }) {
+function DesktopMemoryRouter(props: BaseRouterProps & { windowID: string; migrateGlobalWindowState: boolean }) {
   const history = createMemoryHistory()
-  const initialUrl = getLastActiveUrl(props.windowID)
+  const initialUrl = getLastActiveUrl(props.windowID, props.migrateGlobalWindowState)
   if (initialUrl !== "/") history.set({ value: initialUrl, replace: true, scroll: false })
   onCleanup(history.listen((value) => setLastActiveUrl(props.windowID, value)))
   return <MemoryRouter {...props} history={history} />
@@ -347,7 +349,13 @@ function DesktopRoot(props: { windowState: DesktopWindowState }) {
 
   const [defaultServer] = createResource(() => platform.getDefaultServer?.())
   const [locale] = createResource(loadLocale)
-  const router = (props: BaseRouterProps) => <DesktopMemoryRouter {...props} windowID={platform.windowID ?? "browser"} />
+  const router = (props: BaseRouterProps) => (
+    <DesktopMemoryRouter
+      {...props}
+      windowID={platform.windowID ?? "browser"}
+      migrateGlobalWindowState={platform.migrateGlobalWindowState === true}
+    />
+  )
 
   function handleClick(e: MouseEvent) {
     const link = (e.target as HTMLElement).closest("a.external-link") as HTMLAnchorElement | null
