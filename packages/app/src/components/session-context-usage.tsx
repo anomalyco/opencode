@@ -1,10 +1,11 @@
-import { Match, Show, Switch, createEffect, createMemo } from "solid-js"
+import { Match, Show, Switch, createMemo } from "solid-js"
 import { Tooltip, type TooltipProps } from "@opencode-ai/ui/tooltip"
 import { ProgressCircle } from "@opencode-ai/ui/progress-circle"
 import { ProgressCircleV2 } from "@opencode-ai/ui/v2/progress-circle-v2"
 import { Button } from "@opencode-ai/ui/button"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 
+import { useFile } from "@/context/file"
 import { useLayout } from "@/context/layout"
 import { useSync } from "@/context/sync"
 import { useLanguage } from "@/context/language"
@@ -12,6 +13,7 @@ import { useProviders } from "@/hooks/use-providers"
 import { useSDK } from "@/context/sdk"
 import { getSessionContext, getSessionTokenTotal } from "@/components/session/session-context-metrics"
 import { useSessionLayout } from "@/pages/session/session-layout"
+import { createSessionTabs } from "@/pages/session/helpers"
 
 interface SessionContextUsageProps {
   variant?: "button" | "indicator"
@@ -24,7 +26,7 @@ function openSessionContext(args: {
   layout: ReturnType<typeof useLayout>
   tabs: ReturnType<ReturnType<typeof useLayout>["tabs"]>
 }) {
-  if (!args.view.reviewPanel.opened()) args.view.reviewPanel.open()
+  args.view.reviewPanel.open(args.view.reviewPanel.opened() ? "other" : "context-button")
   if (args.layout.fileTree.opened() && args.layout.fileTree.tab() !== "all") args.layout.fileTree.setTab("all")
   void args.tabs.open("context")
   args.tabs.setActive("context")
@@ -32,6 +34,7 @@ function openSessionContext(args: {
 
 export function SessionContextUsage(props: SessionContextUsageProps) {
   const sync = useSync()
+  const file = useFile()
   const layout = useLayout()
   const language = useLanguage()
   const sdk = useSDK()
@@ -40,6 +43,11 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
 
   const variant = createMemo(() => props.variant ?? "button")
   const buttonAppearance = createMemo(() => props.buttonAppearance ?? "default")
+  const tabState = createSessionTabs({
+    tabs,
+    pathFromTab: file.pathFromTab,
+    normalizeTab: (tab) => (tab.startsWith("file://") ? file.tab(tab) : tab),
+  })
   const messages = createMemo(() => (params.id ? (sync().data.message[params.id] ?? []) : []))
   const info = createMemo(() => (params.id ? sync().session.get(params.id) : undefined))
 
@@ -56,26 +64,19 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
   const cost = createMemo(() => {
     return usd().format(info()?.cost ?? 0)
   })
-
-  let openedPanelWithContext = false
-
-  createEffect(() => {
-    if (!view().reviewPanel.opened()) openedPanelWithContext = false
-  })
+  const contextVisible = createMemo(() => view().reviewPanel.opened() && tabState.activeTab() === "context")
+  const hasOtherTabs = createMemo(() => tabs().all().some((tab) => tab !== "context" && tab !== "review"))
 
   const openContext = () => {
     if (!params.id) return
 
     const sessionView = view()
-    if (sessionView.reviewPanel.opened() && tabs().active() === "context") {
-      const hasOtherTabs = tabs().all().some((tab) => tab !== "context" && tab !== "review")
+    if (contextVisible()) {
       tabs().close("context")
-      if (openedPanelWithContext && !hasOtherTabs) sessionView.reviewPanel.close()
-      openedPanelWithContext = false
+      if (sessionView.reviewPanel.source() === "context-button" && !hasOtherTabs()) sessionView.reviewPanel.close()
       return
     }
 
-    openedPanelWithContext = !sessionView.reviewPanel.opened()
     openSessionContext({
       view: sessionView,
       layout,
