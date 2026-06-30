@@ -2,9 +2,6 @@ import fs from "fs/promises"
 import path from "path"
 import os from "os"
 import { Effect } from "effect"
-import * as Log from "@opencode-ai/core/util/log"
-
-const log = Log.create({ service: "attachment-save" })
 
 /**
  * Decode a data URL and save the payload to disk.
@@ -77,7 +74,7 @@ function writeFileSafe(
     return true
   }).pipe(
     Effect.catch((error) => {
-      log.warn("failed to save attachment to disk", { filePath, error: String(error) })
+      console.warn("attachment-save: failed to save attachment to disk", { filePath, error: String(error) })
       return Effect.succeed(false)
     }),
   )

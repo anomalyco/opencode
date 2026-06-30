@@ -1,0 +1,62 @@
+# OpenSpec configuration — opencode
+# Generated: 2026-05-31 by sdd-init (hybrid mode)
+
+context: |
+  OpenCode (https://github.com/anomalyco/opencode) is an open-source AI coding agent.
+  Monorepo (Bun/Turborepo) with 24 packages under packages/.
+  Core: packages/opencode (business logic + server); packages/core (shared libs);
+  packages/app (web UI, SolidJS); packages/ui (UI components, SolidJS).
+  Uses Effect v4 (beta) for typed composable services.
+  Schema: Drizzle ORM with SQLite.
+  UI: SolidJS + opentui (TUI) + Tailwind CSS.
+  Default branch: dev.
+
+strict_tdd: true
+
+testing:
+  runner:
+    framework: bun:test
+    root_command: 'echo "do not run tests from root" && exit 1'
+    package_command: 'bun test'
+  layers:
+    unit:
+      available: true
+      command: 'bun test --timeout 30000'
+    integration:
+      available: true
+      tool: 'testEffect() / it.live() / it.instance() (Effect-based)'
+      test_helpers:
+        - test/lib/effect.ts (testEffect, pollWithTimeout, awaitWithTimeout)
+        - test/lib/cli-process.ts (withCliFixture, cliIt)
+        - test/fixture/fixture.ts (tmpdir, tmpdirScoped, provideTmpdirInstance)
+    e2e:
+      available: true
+      tool: Playwright
+      package: packages/app
+      command: 'bun --cwd packages/app test:e2e'
+  coverage:
+    available: false
+    note: 'JUnit reporter used in CI; no coverage thresholds configured'
+  quality:
+    linter: oxlint
+    type_checker: tsgo (bun typecheck via turbo)
+    formatter: Prettier
+    pre_push: husky → bun typecheck
+
+layers:
+  - name: sdd-explore
+    prompt: 'Explore before committing to a change. Check existing patterns.'
+  - name: sdd-propose
+    prompt: 'Define intent, scope, and approach in a proposal.'
+  - name: sdd-spec
+    prompt: 'Write delta specs with requirements and scenarios.'
+  - name: sdd-design
+    prompt: 'Technical design and architecture approach.'
+  - name: sdd-tasks
+    prompt: 'Break change into implementation tasks.'
+  - name: sdd-apply
+    prompt: 'Implement tasks from specs and design.'
+  - name: sdd-verify
+    prompt: 'Execute tests and verify implementation matches specs.'
+  - name: sdd-archive
+    prompt: 'Archive completed change, sync delta specs.'

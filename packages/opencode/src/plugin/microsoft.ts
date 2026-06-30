@@ -1,10 +1,7 @@
 import type { Hooks, PluginInput } from "@opencode-ai/plugin"
-import * as Log from "@opencode-ai/core/util/log"
 import { OAUTH_DUMMY_KEY } from "../auth"
 import { createServer } from "http"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
-
-const log = Log.create({ service: "plugin.microsoft" })
 
 // Microsoft Entra ID / Microsoft Account OAuth2/OIDC endpoints.
 // Tenant is substituted at runtime: common | organizations | consumers | {tenant-id}
@@ -547,8 +544,8 @@ async function startOAuthServer(): Promise<{ port: number; redirectUri: string }
     server.once("error", onError)
     server.listen(OAUTH_PORT, OAUTH_HOST, () => {
       server.removeListener("error", onError)
-      server.on("error", (err) => log.warn("microsoft oauth server error", { error: err }))
-      log.info("microsoft oauth server started", { host: OAUTH_HOST, port: OAUTH_PORT })
+      server.on("error", (err) => console.warn("microsoft oauth server error", { error: err }))
+      console.log("microsoft oauth server started", { host: OAUTH_HOST, port: OAUTH_PORT })
       resolve()
     })
     oauthServer = server
@@ -564,7 +561,7 @@ function resetPendingOAuth() {
 
 function stopOAuthServer() {
   if (oauthServer) {
-    oauthServer.close(() => log.info("microsoft oauth server stopped"))
+    oauthServer.close(() => console.log("microsoft oauth server stopped"))
     oauthServer = undefined
   }
 }
@@ -660,7 +657,7 @@ export async function MicrosoftAuthPlugin(
             if (expiresSoon) {
               if (!refreshPromise) {
                 const refreshToken = currentAuth.refresh
-                log.info("refreshing microsoft access token")
+                console.log("refreshing microsoft access token")
                 refreshPromise = refreshAccessToken(refreshToken, config)
                   .then(async (tokens) => {
                     const refreshedExpires = Date.now() + (tokens.expires_in ?? 3600) * 1000
@@ -678,7 +675,7 @@ export async function MicrosoftAuthPlugin(
                         },
                       })
                       .catch((err) =>
-                        log.warn("failed to persist refreshed microsoft tokens", { error: err }),
+                        console.warn("failed to persist refreshed microsoft tokens", { error: err }),
                       )
                     return {
                       access: tokens.access_token,
@@ -751,7 +748,7 @@ export async function MicrosoftAuthPlugin(
                     ...(accountId && { accountId }),
                   }
                 } catch (err) {
-                  log.error("microsoft oauth callback failed", { error: err })
+                  console.error("microsoft oauth callback failed", { error: err })
                   return { type: "failed" as const }
                 } finally {
                   stopOAuthServer()
@@ -783,7 +780,7 @@ export async function MicrosoftAuthPlugin(
                     ...(accountId && { accountId }),
                   }
                 } catch (err) {
-                  log.error("microsoft device code callback failed", { error: err })
+                  console.error("microsoft device code callback failed", { error: err })
                   return { type: "failed" as const }
                 }
               },
