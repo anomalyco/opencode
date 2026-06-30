@@ -1,7 +1,7 @@
 import { createMemo, createSignal } from "solid-js"
 import { useLocal } from "../context/local"
 import { map, pipe, flatMap, entries, filter, sortBy, take } from "remeda"
-import { DialogSelect } from "../ui/dialog-select"
+import { DialogSelect, type DialogSelectOption } from "../ui/dialog-select"
 import { useDialog } from "../ui/dialog"
 import { createDialogProviderOptions, DialogProvider } from "./dialog-provider"
 import { DialogVariant } from "./dialog-variant"
@@ -9,6 +9,11 @@ import * as fuzzysort from "fuzzysort"
 import { useConnected } from "./use-connected"
 import { useSync } from "../context/sync"
 import { useTuiConfig } from "../config"
+import type { Provider } from "@opencode-ai/sdk/v2"
+
+type ModelReference = { providerID: string; modelID: string }
+
+type ModelPickerOption = DialogSelectOption<ModelReference | string> & { key?: ModelReference }
 
 export function DialogModel(props: { providerID?: string }) {
   const local = useLocal()
@@ -20,126 +25,18 @@ export function DialogModel(props: { providerID?: string }) {
   const connected = useConnected()
   const providers = createDialogProviderOptions()
 
-  const showExtra = createMemo(() => connected() && !props.providerID)
-
   const options = createMemo(() => {
-    const needle = query().trim()
-    const showSections = showExtra() && (needle.length === 0 || tuiConfig.model_picker.group_search_results)
-    const favorites = connected() ? local.model.favorite() : []
-    const recents = local.model.recent()
-
-    function toOptions(items: typeof favorites, category: string) {
-      if (!showSections) return []
-      return items.flatMap((item) => {
-        const provider = sync.data.provider.find((provider) => provider.id === item.providerID)
-        if (!provider) return []
-        const model = provider.models[item.modelID]
-        if (!model) return []
-        return [
-          {
-            key: item,
-            value: { providerID: provider.id, modelID: model.id },
-            title: model.name ?? item.modelID,
-            description: provider.name,
-            category,
-            disabled: provider.id === "opencode" && model.id.includes("-nano"),
-            footer: model.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
-            onSelect: () => {
-              onSelect(provider.id, model.id)
-            },
-          },
-        ]
-      })
-    }
-
-    const favoriteOptions = toOptions(favorites, "Favorites")
-    const recentOptions = toOptions(
-      recents.filter(
-        (item) => !favorites.some((fav) => fav.providerID === item.providerID && fav.modelID === item.modelID),
-      ),
-      "Recent",
-    )
-
-    const providerOptions = pipe(
-      sync.data.provider,
-      sortBy(
-        (provider) => provider.id !== "opencode",
-        (provider) => provider.name,
-      ),
-      flatMap((provider) =>
-        pipe(
-          provider.models,
-          entries(),
-          filter(([_, info]) => info.status !== "deprecated"),
-          filter(([_, info]) => (props.providerID ? info.providerID === props.providerID : true)),
-          map(([model, info]) => ({
-            value: { providerID: provider.id, modelID: model },
-            title: info.name ?? model,
-            releaseDate: info.release_date,
-            description: favorites.some((item) => item.providerID === provider.id && item.modelID === model)
-              ? "(Favorite)"
-              : undefined,
-            category: connected() ? provider.name : undefined,
-            disabled: provider.id === "opencode" && model.includes("-nano"),
-            footer: info.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
-            onSelect() {
-              onSelect(provider.id, model)
-            },
-          })),
-          filter((option) => {
-            if (!showSections) return true
-            if (
-              favorites.some(
-                (item) => item.providerID === option.value.providerID && item.modelID === option.value.modelID,
-              )
-            )
-              return false
-            if (
-              recents.some(
-                (item) => item.providerID === option.value.providerID && item.modelID === option.value.modelID,
-              )
-            )
-              return false
-            return true
-          }),
-          (options) => sortModelOptions(options, props.providerID !== undefined),
-        ),
-      ),
-    )
-
-    const popularProviders = !connected()
-      ? pipe(
-          providers(),
-          map((option) => ({
-            ...option,
-            category: "Popular providers",
-          })),
-          take(6),
-        )
-      : []
-
-    if (needle) {
-      if (tuiConfig.model_picker.group_search_results) {
-        return [
-          ...fuzzysort.go(needle, favoriteOptions, { keys: ["title", "description"] }).map((x) => x.obj),
-          ...fuzzysort.go(needle, recentOptions, { keys: ["title", "description"] }).map((x) => x.obj),
-          ...sortModelOptions(
-            fuzzysort.go(needle, providerOptions, { keys: ["title", "category"] }).map((x) => x.obj),
-            false,
-          ),
-          ...fuzzysort.go(needle, popularProviders, { keys: ["title"] }).map((x) => x.obj),
-        ]
-      }
-      return [
-        ...sortModelOptions(
-          fuzzysort.go(needle, providerOptions, { keys: ["title", "category"] }).map((x) => x.obj),
-          false,
-        ),
-        ...fuzzysort.go(needle, popularProviders, { keys: ["title"] }).map((x) => x.obj),
-      ]
-    }
-
-    return [...favoriteOptions, ...recentOptions, ...providerOptions, ...popularProviders]
+    return createModelPickerOptions({
+      query: query(),
+      connected: connected(),
+      providerID: props.providerID,
+      groupSearchResults: tuiConfig.model_picker.group_search_results,
+      providers: sync.data.provider,
+      favorites: connected() ? local.model.favorite() : [],
+      recents: local.model.recent(),
+      popularProviders: providers(),
+      onSelect,
+    })
   })
 
   const provider = createMemo(() =>
@@ -194,6 +91,134 @@ export function DialogModel(props: { providerID?: string }) {
       current={local.model.current()}
     />
   )
+}
+
+export function createModelPickerOptions(input: {
+  query: string
+  connected: boolean
+  providerID?: string
+  groupSearchResults: boolean
+  providers: Provider[]
+  favorites: ModelReference[]
+  recents: ModelReference[]
+  popularProviders: ModelPickerOption[]
+  onSelect: (providerID: string, modelID: string) => void
+}) {
+  const needle = input.query.trim()
+  const showSections = input.connected && !input.providerID && (needle.length === 0 || input.groupSearchResults)
+
+  function toOptions(items: ModelReference[], category: string): ModelPickerOption[] {
+    if (!showSections) return []
+    return items.flatMap((item) => {
+      const provider = input.providers.find((provider) => provider.id === item.providerID)
+      if (!provider) return []
+      const model = provider.models[item.modelID]
+      if (!model) return []
+      return [
+        {
+          key: item,
+          value: { providerID: provider.id, modelID: model.id },
+          title: model.name ?? item.modelID,
+          description: provider.name,
+          category,
+          disabled: provider.id === "opencode" && model.id.includes("-nano"),
+          footer: model.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
+          onSelect: () => {
+            input.onSelect(provider.id, model.id)
+          },
+        },
+      ]
+    })
+  }
+
+  const favoriteOptions = toOptions(input.favorites, "Favorites")
+  const recentOptions = toOptions(
+    input.recents.filter(
+      (item) => !input.favorites.some((fav) => fav.providerID === item.providerID && fav.modelID === item.modelID),
+    ),
+    "Recent",
+  )
+
+  const providerOptions = pipe(
+    input.providers,
+    sortBy(
+      (provider) => provider.id !== "opencode",
+      (provider) => provider.name,
+    ),
+    flatMap((provider) =>
+      pipe(
+        provider.models,
+        entries(),
+        filter(([_, info]) => info.status !== "deprecated"),
+        filter(([_, info]) => (input.providerID ? info.providerID === input.providerID : true)),
+        map(([model, info]) => ({
+          value: { providerID: provider.id, modelID: model },
+          title: info.name ?? model,
+          releaseDate: info.release_date,
+          description: input.favorites.some((item) => item.providerID === provider.id && item.modelID === model)
+            ? "(Favorite)"
+            : undefined,
+          category: input.connected ? provider.name : undefined,
+          disabled: provider.id === "opencode" && model.includes("-nano"),
+          footer: info.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
+          onSelect() {
+            input.onSelect(provider.id, model)
+          },
+        })),
+        filter((option) => {
+          if (!showSections) return true
+          if (
+            input.favorites.some(
+              (item) => item.providerID === option.value.providerID && item.modelID === option.value.modelID,
+            )
+          )
+            return false
+          if (
+            input.recents.some(
+              (item) => item.providerID === option.value.providerID && item.modelID === option.value.modelID,
+            )
+          )
+            return false
+          return true
+        }),
+        (options) => sortModelOptions(options, input.providerID !== undefined),
+      ),
+    ),
+  )
+
+  const popularProviders = !input.connected
+    ? pipe(
+        input.popularProviders,
+        map((option) => ({
+          ...option,
+          category: "Popular providers",
+        })),
+        take(6),
+      )
+    : []
+
+  if (needle) {
+    if (input.groupSearchResults) {
+      return [
+        ...fuzzysort.go(needle, favoriteOptions, { keys: ["title", "description"] }).map((x) => x.obj),
+        ...fuzzysort.go(needle, recentOptions, { keys: ["title", "description"] }).map((x) => x.obj),
+        ...sortModelOptions(
+          fuzzysort.go(needle, providerOptions, { keys: ["title", "category"] }).map((x) => x.obj),
+          false,
+        ),
+        ...fuzzysort.go(needle, popularProviders, { keys: ["title"] }).map((x) => x.obj),
+      ]
+    }
+    return [
+      ...sortModelOptions(
+        fuzzysort.go(needle, providerOptions, { keys: ["title", "category"] }).map((x) => x.obj),
+        false,
+      ),
+      ...fuzzysort.go(needle, popularProviders, { keys: ["title"] }).map((x) => x.obj),
+    ]
+  }
+
+  return [...favoriteOptions, ...recentOptions, ...providerOptions, ...popularProviders]
 }
 
 export function sortModelOptions<T extends { footer?: string; releaseDate: string | number; title: string }>(
