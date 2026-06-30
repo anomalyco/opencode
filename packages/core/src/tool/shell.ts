@@ -3,8 +3,8 @@ export * as ShellTool from "./shell"
 import path from "path"
 import { ToolFailure } from "@opencode-ai/llm"
 import { Effect, Layer, Schema, Scope } from "effect"
-import { BackgroundJob } from "../background-job"
 import { FSUtil } from "../fs-util"
+import { Job } from "../job"
 import { LocationMutation } from "../location-mutation"
 import { LocationServiceMap } from "../location-service-map"
 import { PermissionV2 } from "../permission"
@@ -74,8 +74,8 @@ const modelOutput = (output: Output): string | undefined => {
 // TODO: Restore PowerShell and cmd-specific invocation/path handling on Windows.
 // TODO: Add plugin shell.env environment augmentation once V2 plugin hooks exist.
 // TODO: Add durable/live progress metadata streaming for long-running commands once V2 tool invocation progress context is wired.
-// TODO: Persist background job status and define restart recovery before exposing remote observation.
-// TODO: Add HTTP background-job observation only after durable status, restart recovery, and authorization are defined.
+// TODO: Persist job status and define restart recovery before exposing remote observation.
+// TODO: Add HTTP job observation only after durable status, restart recovery, and authorization are defined.
 // TODO: Revisit process-group cleanup and platform coverage with shell-specific tests if current AppProcess semantics do not fully cover it.
 // TODO: Revisit binary output handling if stdout/stderr decoding is text-only.
 // TODO: Stream full shell output into managed storage while retaining only a bounded in-memory preview.
@@ -98,12 +98,12 @@ export const layer = Layer.effectDiscard(
   Effect.gen(function* () {
     const tools = yield* ApplicationTools.Service
     const sessions = yield* SessionV2.Service
-    const jobs = yield* BackgroundJob.Service
+    const jobs = yield* Job.Service
     const locations = yield* LocationServiceMap.Service
     const scope = yield* Scope.Scope
     const fsUtil = yield* FSUtil.Service
 
-    const injectWhenDone = Effect.fn("ShellTool.injectWhenDone")(function* (
+    const notifyWhenDone = Effect.fn("ShellTool.notifyWhenDone")(function* (
       sessionID: SessionSchema.ID,
       callID: string,
       command: string,
@@ -121,9 +121,9 @@ export const layer = Layer.effectDiscard(
           if (state === undefined) return Effect.void
           const text =
             state === "completed"
-              ? result.info!.output ?? ""
+              ? (result.info!.output ?? "")
               : state === "error"
-                ? result.info!.error ?? "Command failed"
+                ? (result.info!.error ?? "Command failed")
                 : "Command cancelled"
           return sessions.synthetic({
             sessionID,
@@ -156,9 +156,7 @@ export const layer = Layer.effectDiscard(
             Effect.gen(function* () {
               const parent = yield* sessions
                 .get(context.sessionID)
-                .pipe(
-                  Effect.mapError(() => new ToolFailure({ message: `Session not found: ${context.sessionID}` })),
-                )
+                .pipe(Effect.mapError(() => new ToolFailure({ message: `Session not found: ${context.sessionID}` })))
               return yield* Effect.gen(function* () {
                 const mutation = yield* LocationMutation.Service
                 const shell = yield* Shell.Service
@@ -203,16 +201,18 @@ export const layer = Layer.effectDiscard(
                       timeout,
                       metadata: { sessionID: context.sessionID },
                     })
-                    const final = yield* shell.wait(info.id)
-                    const page = yield* shell.output(info.id, { limit: MAX_CAPTURE_BYTES })
+                    return yield* Effect.gen(function* () {
+                      const final = yield* shell.wait(info.id)
+                      const page = yield* shell.output(info.id, { limit: MAX_CAPTURE_BYTES })
 
-                    if (final.status === "timeout")
-                      return `Command exceeded timeout of ${timeout} ms. Retry with a larger timeout if the command is expected to take longer.`
+                      if (final.status === "timeout")
+                        return `Command exceeded timeout of ${timeout} ms. Retry with a larger timeout if the command is expected to take longer.`
 
-                    const truncated = page.size > page.cursor
-                    const body = page.output || "(no output)"
-                    const notice = truncated ? `\n\n[output truncated; full output saved to: ${final.file}]` : ""
-                    return `${body}${notice}`
+                      const truncated = page.size > page.cursor
+                      const body = page.output || "(no output)"
+                      const notice = truncated ? `\n\n[output truncated; full output saved to: ${final.file}]` : ""
+                      return `${body}${notice}`
+                    }).pipe(Effect.onInterrupt(() => shell.remove(info.id).pipe(Effect.ignore)))
                   })
 
                   const info = yield* jobs.start({
@@ -220,10 +220,10 @@ export const layer = Layer.effectDiscard(
                     type: name,
                     title: input.command,
                     metadata: { sessionID: context.sessionID },
-                    onPromote: injectWhenDone(context.sessionID, context.toolCallID, input.command),
                     run: run(),
                   })
-                  yield* injectWhenDone(context.sessionID, context.toolCallID, input.command)
+                  yield* jobs.background(info.id)
+                  yield* notifyWhenDone(context.sessionID, context.toolCallID, input.command)
                   return {
                     output: BACKGROUND_STARTED,
                     truncated: false,
@@ -262,7 +262,7 @@ export const layer = Layer.effectDiscard(
                   status: "completed" as const,
                   ...(warnings.length ? { warnings } : {}),
                 }
-              }).pipe(Effect.provide(locations.get(parent.location))) as Effect.Effect<Schema.Schema.Type<typeof Output>, ToolFailure>
+              }).pipe(Effect.provide(locations.get(parent.location)))
             }).pipe(Effect.mapError(() => new ToolFailure({ message: `Unable to execute command: ${input.command}` }))),
         }),
       })
@@ -273,5 +273,5 @@ export const layer = Layer.effectDiscard(
 export const node = makeGlobalNode({
   name: "shell-tool",
   layer,
-  deps: [ApplicationTools.node, SessionV2.node, BackgroundJob.node, LocationServiceMap.node, FSUtil.node],
+  deps: [ApplicationTools.node, SessionV2.node, Job.node, LocationServiceMap.node, FSUtil.node],
 })

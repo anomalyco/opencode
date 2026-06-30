@@ -172,7 +172,7 @@ Wait on a **published readiness signal**, not wall-clock time. Available afforda
 - `awaitWithTimeout(effect, message, duration?)` from `test/lib/effect.ts` — wrap any effect with `Effect.timeoutOrElse` and a custom error message.
 - `llm.wait(n)` from `test/lib/llm-server.ts` — wait until the mock LLM has received `n` HTTP calls.
 - `SessionStatus.Service` `.get(sessionID)` — observable per-session state (`{ type: "busy" | "idle" | ... }`).
-- `BackgroundJob.wait({ id, timeout })` from `src/background/job.ts` — wait for a background job to complete.
+- `Job.wait({ id, timeout })` from `src/job.ts` — wait for a job to complete.
 - Bus subscriptions — fork `Stream.runForEach(bus.subscribe(Event), ...)` and open a `Latch` inside the callback to signal first-event readiness.
 - `Deferred.await(deferred).pipe(Effect.timeoutOrElse(...))` for one-shot signals.
 

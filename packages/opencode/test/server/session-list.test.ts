@@ -12,7 +12,7 @@ import { testEffect } from "../lib/effect"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Storage } from "@/storage/storage"
 import { RuntimeFlags } from "@/effect/runtime-flags"
-import { BackgroundJob } from "@/background/job"
+import { Job } from "@/job"
 
 const layer = (experimentalWorkspaces: boolean) =>
   Layer.mergeAll(
@@ -24,7 +24,7 @@ const layer = (experimentalWorkspaces: boolean) =>
       Layer.provide(EventV2Bridge.defaultLayer),
       Layer.provide(SessionProjector.defaultLayer),
       Layer.provide(RuntimeFlags.layer({ experimentalWorkspaces })),
-      Layer.provide(BackgroundJob.defaultLayer),
+      Layer.provide(Job.defaultLayer),
     ),
   )
 const it = testEffect(layer(false))

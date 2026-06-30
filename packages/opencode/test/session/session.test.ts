@@ -12,7 +12,7 @@ import { provideInstance, testInstanceStoreLayer, tmpdirScoped } from "../fixtur
 import { testEffect } from "../lib/effect"
 import { Storage } from "@/storage/storage"
 import { RuntimeFlags } from "@/effect/runtime-flags"
-import { BackgroundJob } from "@/background/job"
+import { Job } from "@/job"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { GlobalBus } from "@/bus/global"
 
@@ -24,7 +24,7 @@ const it = testEffect(
       Layer.provideMerge(EventV2Bridge.defaultLayer),
       Layer.provide(SessionProjector.defaultLayer),
       Layer.provide(RuntimeFlags.layer({ experimentalWorkspaces: false })),
-      Layer.provide(BackgroundJob.defaultLayer),
+      Layer.provide(Job.defaultLayer),
     ),
     CrossSpawnSpawner.defaultLayer,
     testInstanceStoreLayer,

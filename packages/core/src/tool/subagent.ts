@@ -3,7 +3,7 @@ export * as SubagentTool from "./subagent"
 import { ToolFailure } from "@opencode-ai/llm"
 import { Effect, Layer, Schema, Scope } from "effect"
 import { AgentV2 } from "../agent"
-import { BackgroundJob } from "../background-job"
+import { Job } from "../job"
 import { LocationServiceMap } from "../location-service-map"
 import { SessionV2 } from "../session"
 import { SessionSchema } from "../session/schema"
@@ -44,7 +44,7 @@ export const layer = Layer.effectDiscard(
   Effect.gen(function* () {
     const tools = yield* ApplicationTools.Service
     const sessions = yield* SessionV2.Service
-    const jobs = yield* BackgroundJob.Service
+    const jobs = yield* Job.Service
     const locations = yield* LocationServiceMap.Service
     const scope = yield* Scope.Scope
 
@@ -77,7 +77,7 @@ export const layer = Layer.effectDiscard(
       })
     })
 
-    const injectWhenDone = Effect.fn("SubagentTool.injectWhenDone")(function* (
+    const notifyWhenDone = Effect.fn("SubagentTool.notifyWhenDone")(function* (
       parentID: SessionSchema.ID,
       childID: SessionSchema.ID,
       description: string,
@@ -138,37 +138,37 @@ export const layer = Layer.effectDiscard(
                 yield* sessions.prompt({ sessionID: child.id, prompt: { text: input.prompt }, resume: false })
                 yield* sessions.resume(child.id)
                 return yield* latestAssistantText(child.id)
-              })
+              }).pipe(Effect.onInterrupt(() => sessions.interrupt(child.id)))
 
               const info = yield* jobs.start({
                 id: child.id,
                 type: name,
                 title: input.description,
                 metadata: {},
-                onPromote: injectWhenDone(context.sessionID, child.id, input.description),
                 run,
               })
 
               if (background) {
-                if ((yield* jobs.promote(info.id)) === undefined)
-                  yield* injectWhenDone(context.sessionID, child.id, input.description)
+                yield* jobs.background(info.id)
+                yield* notifyWhenDone(context.sessionID, child.id, input.description)
                 return { sessionID: child.id, status: "running" as const, output: BACKGROUND_STARTED }
               }
 
-              const result = yield* Effect.raceFirst(
-                jobs.wait({ id: child.id }).pipe(Effect.map((waited) => waited.info)),
-                jobs.waitForPromotion(child.id),
-              ).pipe(
-                Effect.onInterrupt(() =>
-                  Effect.all([sessions.interrupt(child.id), jobs.cancel(child.id)], { discard: true }),
-                ),
-              )
-              if (result?.metadata?.background === true)
+              const result = yield* jobs
+                .block({ id: child.id, sessionID: context.sessionID })
+                .pipe(
+                  Effect.onInterrupt(() =>
+                    Effect.all([sessions.interrupt(child.id), jobs.cancel(child.id)], { discard: true }),
+                  ),
+                )
+              if (result?.type === "backgrounded") {
+                yield* notifyWhenDone(context.sessionID, child.id, input.description)
                 return { sessionID: child.id, status: "running" as const, output: BACKGROUND_STARTED }
-              if (result?.status === "error")
-                return yield* new ToolFailure({ message: result.error ?? "Subagent failed" })
-              if (result?.status === "cancelled") return yield* new ToolFailure({ message: "Subagent cancelled" })
-              return { sessionID: child.id, status: "completed" as const, output: result?.output ?? NO_TEXT }
+              }
+              if (result?.info.status === "error")
+                return yield* new ToolFailure({ message: result.info.error ?? "Subagent failed" })
+              if (result?.info.status === "cancelled") return yield* new ToolFailure({ message: "Subagent cancelled" })
+              return { sessionID: child.id, status: "completed" as const, output: result?.info.output ?? NO_TEXT }
             }),
         }),
       })
@@ -182,5 +182,5 @@ export const layer = Layer.effectDiscard(
 export const node = makeGlobalNode({
   name: "subagent-tool",
   layer,
-  deps: [ApplicationTools.node, SessionV2.node, BackgroundJob.node, LocationServiceMap.node],
+  deps: [ApplicationTools.node, SessionV2.node, Job.node, LocationServiceMap.node],
 })

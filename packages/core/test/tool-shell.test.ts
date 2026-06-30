@@ -17,12 +17,11 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { AgentV2 } from "@opencode-ai/core/agent"
-import { BackgroundJob } from "@opencode-ai/core/background-job"
+import { Job } from "@opencode-ai/core/job"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionMessage } from "@opencode-ai/core/session/message"
-import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { PermissionV2 } from "@opencode-ai/core/permission"
 import { ShellTool } from "@opencode-ai/core/tool/shell"
@@ -120,7 +119,7 @@ const layer = AppNodeBuilder.build(
     LayerNode.group([
       Database.node,
       EventV2.node,
-      BackgroundJob.node,
+      Job.node,
       ToolOutputStore.cleanupNode,
       SessionV2.node,
       ShellTool.node,
@@ -155,10 +154,7 @@ const overflowCommand = (bytes: number) =>
     ? `[Console]::Out.Write(('x' * ${bytes})); Start-Sleep -Milliseconds 100`
     : `head -c ${bytes} /dev/zero | tr '\\0' 'x'`
 
-const withSession = <A, E, R>(
-  directory: string,
-  body: (registry: ToolRegistry.Interface) => Effect.Effect<A, E, R>,
-) =>
+const withSession = <A, E, R>(directory: string, body: (registry: ToolRegistry.Interface) => Effect.Effect<A, E, R>) =>
   Effect.gen(function* () {
     const sessions = yield* SessionV2.Service
     const location = Location.Ref.make({ directory: AbsolutePath.make(directory) })
@@ -214,9 +210,7 @@ describe("ShellTool", () => {
         reset()
         return Effect.promise(() => fs.mkdir(path.join(tmp.path, "src"))).pipe(
           Effect.andThen(
-            withSession(tmp.path, (registry) =>
-              settleTool(registry, call({ command: cwdCommand, workdir: "src" })),
-            ),
+            withSession(tmp.path, (registry) => settleTool(registry, call({ command: cwdCommand, workdir: "src" }))),
           ),
           Effect.andThen((settled) =>
             Effect.sync(() =>
@@ -247,9 +241,7 @@ describe("ShellTool", () => {
             : Effect.void
         return Effect.promise(() => fs.mkdir(workdir)).pipe(
           Effect.andThen(
-            withSession(tmp.path, (registry) =>
-              executeTool(registry, call({ command: cwdCommand, workdir: "src" })),
-            ),
+            withSession(tmp.path, (registry) => executeTool(registry, call({ command: cwdCommand, workdir: "src" }))),
           ),
           Effect.andThen(Effect.sync(() => expect(assertions.map((input) => input.action)).toEqual(["shell"]))),
         )
@@ -314,9 +306,7 @@ describe("ShellTool", () => {
         reset()
         denyAction = "external_directory"
         const target = path.join(outside.path, "secret.txt")
-        return withSession(active.path, (registry) =>
-          settleTool(registry, call({ command: `cat ${target}` })),
-        ).pipe(
+        return withSession(active.path, (registry) => settleTool(registry, call({ command: `cat ${target}` }))).pipe(
           Effect.andThen((settled) =>
             Effect.sync(() => {
               expect(assertions.map((item) => item.action)).toEqual(["shell"])
@@ -417,7 +407,7 @@ test("keeps locked deferred parity TODOs visible", async () => {
     "Restore PowerShell and cmd-specific invocation/path handling on Windows.",
     "Add plugin shell.env environment augmentation once V2 plugin hooks exist.",
     "Add durable/live progress metadata streaming for long-running commands once V2 tool invocation progress context is wired.",
-    "Persist background job status and define restart recovery before exposing remote observation.",
+    "Persist job status and define restart recovery before exposing remote observation.",
     "Revisit process-group cleanup and platform coverage with shell-specific tests if current AppProcess semantics do not fully cover it.",
     "Revisit binary output handling if stdout/stderr decoding is text-only.",
     "Stream full shell output into managed storage while retaining only a bounded in-memory preview.",

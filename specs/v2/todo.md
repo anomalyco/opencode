@@ -47,7 +47,7 @@ Next reviewed slices:
   remaining one-turn native-adapter use with a narrow typed dispatcher
 - batch streamed deltas and add covering context indexes
 - expose replayable Session event cursors over HTTP and the generated SDK where remote consumers need them
-- integrate the new BackgroundJob service with V2 tool execution: support background
+- integrate the new Job service with V2 tool execution: support background
   bash jobs and background agent dispatch with durable status observation,
   completion delivery, and explicit cancellation / continuation semantics
 - add durable/clustered interruption, retries, and stale-owner fencing only as
