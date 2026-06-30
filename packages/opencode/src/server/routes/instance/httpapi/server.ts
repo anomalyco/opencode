@@ -271,7 +271,8 @@ const app = LayerNode.group([
 export function createRoutes(
   corsOptions?: CorsOptions,
 ): Layer.Layer<never, EffectConfig.ConfigError, RouteRequirements> {
-  const locationServiceMap = buildLocationServiceMap()
+  const locationServiceMapV2 = buildLocationServiceMap()
+
   return Layer.mergeAll(
     rootApiRoutes,
     eventApiRoutes,
@@ -287,7 +288,7 @@ export function createRoutes(
       corsVaryFix,
       fenceLayer,
       cors(corsOptions),
-      AppNodeBuilderV1.build(MoveSession.node, [[LocationServiceMap.node, locationServiceMap]]),
+      AppNodeBuilderV1.build(MoveSession.node, [[LocationServiceMap.node, locationServiceMapV2]]),
       HttpServer.layerServices,
     ]),
     Layer.provide(Layer.succeed(CorsConfig)(corsOptions)),
@@ -298,13 +299,13 @@ export function createRoutes(
     Layer.provide(PtyEnvironment.layer),
     Layer.provide(
       AppNodeBuilderV1.build(SessionV2.node, [
-        [LocationServiceMap.node, locationServiceMap],
+        [LocationServiceMap.node, locationServiceMapV2],
         [SessionExecution.node, SessionExecutionLocal.node],
       ]),
     ),
-    Layer.provide(locationServiceMap),
+    Layer.provide(locationServiceMapV2),
 
-    Layer.provide(AppNodeBuilderV1.build(app, [[LocationServiceMap.node, locationServiceMap]])),
+    Layer.provide(AppNodeBuilderV1.build(app)),
   )
 }
 
