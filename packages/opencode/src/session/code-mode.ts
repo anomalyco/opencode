@@ -484,8 +484,8 @@ export function define(
         const calls: CallEntry[] = []
         // Stream the current call list to the UI. Sent on every status change so the
         // tool part shows each child call appearing and resolving while the program runs.
-        const publish = () =>
-          ctx.metadata({ title: "Code mode", metadata: { toolCalls: calls.map((c) => ({ ...c })) } })
+        const publish = (error?: boolean) =>
+          ctx.metadata({ title: "execute", metadata: { toolCalls: calls.map((c) => ({ ...c })), ...(error ? { error } : {}) } })
         const mark = (index: number, status: CallEntry["status"]) =>
           Effect.suspend(() => {
             calls[index] = { ...calls[index]!, status }
@@ -548,7 +548,7 @@ export function define(
         if (result.ok) {
           const { output, attachments } = fromReturn(result.value)
           return {
-            title: "Code mode",
+            title: "execute",
             metadata: { toolCalls: calls },
             output,
             ...(attachments && attachments.length > 0 ? { attachments } : {}),
@@ -560,7 +560,7 @@ export function define(
             ? "\nUse tools.$rune.search(query) to discover available tools."
             : ""
         return {
-          title: "Code mode",
+          title: "execute",
           metadata: { toolCalls: calls, error: true },
           output: result.error.message + hint,
         } satisfies Tool.ExecuteResult<Metadata>

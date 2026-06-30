@@ -2325,42 +2325,42 @@ export function formatCompletedSubagentDetail(toolcalls: number, duration: strin
   return `${formatSubagentToolcalls(toolcalls)} · ${duration}`
 }
 
-type CodeCall = { tool: string; status: "running" | "completed" | "error" }
+type ExecuteCall = { tool: string; status: "running" | "completed" | "error" }
 
-function codeCalls(value: unknown): CodeCall[] {
+function executeCalls(value: unknown): ExecuteCall[] {
   if (!Array.isArray(value)) return []
   return value.filter(
-    (call): call is CodeCall =>
+    (call): call is ExecuteCall =>
       !!call &&
       typeof call === "object" &&
-      typeof (call as CodeCall).tool === "string" &&
-      ["running", "completed", "error"].includes((call as CodeCall).status),
+      typeof (call as ExecuteCall).tool === "string" &&
+      ["running", "completed", "error"].includes((call as ExecuteCall).status),
   )
 }
 
-// The code-mode `execute` tool: a header with the run status, a live `↳` line per
-// child tool call (sourced from streamed metadata, not a child session like Task),
-// and the program source on demand.
+// The `execute` tool streams child tool calls through metadata, not a child session like Task.
 function Execute(props: ToolProps) {
   const { theme, syntax } = useTheme()
   const isRunning = createMemo(() => props.part.state.status === "running")
-  const calls = createMemo(() => codeCalls(props.metadata.toolCalls))
+  const calls = createMemo(() => executeCalls(props.metadata.toolCalls))
   const code = createMemo(() => stringValue(props.input.code) ?? "")
   const [expanded, setExpanded] = createSignal(false)
 
   const summary = createMemo(() => {
     const count = calls().length
-    if (count === 0) return "Execute"
-    return `Execute · ${count} tool call${count === 1 ? "" : "s"}`
+    if (count === 0) return "execute"
+    return `execute · ${formatSubagentToolcalls(count)}`
   })
+
+  const complete = createMemo(() => (props.part.state.status === "pending" ? false : summary()))
 
   return (
     <>
       <InlineTool
-        icon={props.part.state.status === "completed" ? "✓" : "▶"}
+        icon={props.part.state.status === "completed" ? "✓" : props.part.state.status === "error" ? "✗" : "│"}
         spinner={isRunning()}
-        pending="Running code..."
-        complete={summary()}
+        pending="Executing..."
+        complete={complete()}
         part={props.part}
         onClick={code() ? () => setExpanded((value) => !value) : undefined}
       >
@@ -2377,9 +2377,9 @@ function Execute(props: ToolProps) {
         )}
       </For>
       <Show when={code()}>
-        <box paddingLeft={3}>
+        <box paddingLeft={3} onMouseUp={() => setExpanded((value) => !value)}>
           <text paddingLeft={3} fg={theme.textMuted}>
-            ↳ {expanded() ? "Hide code" : "View code"}
+            ↳ {expanded() ? "hide code" : "view code"}
           </text>
         </box>
       </Show>
