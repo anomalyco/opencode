@@ -24,6 +24,7 @@ export type Event =
   | EventSessionNextForked
   | EventSessionNextPrompted
   | EventSessionNextPromptAdmitted
+  | EventSessionNextExecutionSettled
   | EventSessionNextContextUpdated
   | EventSessionNextSynthetic
   | EventSessionNextSkillActivated
@@ -921,6 +922,16 @@ export type GlobalEvent = {
           messageID: string
           prompt: Prompt
           delivery: "steer" | "queue"
+        }
+      }
+    | {
+        id: string
+        type: "session.next.execution.settled"
+        properties: {
+          timestamp: number
+          sessionID: string
+          outcome: "success" | "failure" | "interrupted"
+          error?: SessionErrorUnknown
         }
       }
     | {
@@ -3010,6 +3021,7 @@ export type V2Event =
   | SessionNextForked
   | SessionNextPrompted
   | SessionNextPromptAdmitted
+  | SessionNextExecutionSettled
   | SessionNextContextUpdated
   | SessionNextSynthetic
   | SessionNextSkillActivated
@@ -5597,6 +5609,26 @@ export type MessagePartRemoved = {
   }
 }
 
+export type SessionNextExecutionSettled = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.execution.settled"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    outcome: "success" | "failure" | "interrupted"
+    error?: SessionErrorUnknown
+  }
+}
+
 export type SessionNextTextDelta = {
   id: string
   metadata?: {
@@ -6799,6 +6831,17 @@ export type EventSessionNextPromptAdmitted = {
     messageID: string
     prompt: Prompt
     delivery: "steer" | "queue"
+  }
+}
+
+export type EventSessionNextExecutionSettled = {
+  id: string
+  type: "session.next.execution.settled"
+  properties: {
+    timestamp: number
+    sessionID: string
+    outcome: "success" | "failure" | "interrupted"
+    error?: SessionErrorUnknown
   }
 }
 

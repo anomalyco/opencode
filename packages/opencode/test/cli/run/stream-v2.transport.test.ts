@@ -7,18 +7,7 @@ import { createSessionTransport } from "@/cli/cmd/run/stream-v2.transport"
 import type { FooterApi, FooterEvent, StreamCommit } from "@/cli/cmd/run/types"
 import { tmpdir } from "../../fixture/fixture"
 
-type ExecutionSettledEvent = {
-  id: string
-  type: "session.next.execution.settled"
-  data: {
-    timestamp: number | string
-    sessionID: string
-    outcome: "success" | "failure" | "interrupted"
-    error?: { message?: string; _tag?: string; type?: string } & Record<string, unknown>
-  }
-}
-
-type RunV2Event = V2Event | ExecutionSettledEvent
+type RunV2Event = V2Event
 
 function feed() {
   const values: RunV2Event[] = []

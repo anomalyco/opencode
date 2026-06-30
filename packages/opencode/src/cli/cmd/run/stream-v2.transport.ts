@@ -82,18 +82,7 @@ type Wait = {
   onVisibleOutput?: (anchor: LocalReplayAnchor) => void
 }
 
-type ExecutionSettledEvent = {
-  id: string
-  type: "session.next.execution.settled"
-  data: {
-    timestamp: number | string
-    sessionID: string
-    outcome: "success" | "failure" | "interrupted"
-    error?: { message?: string; _tag?: string; type?: string } & Record<string, unknown>
-  }
-}
-
-type RunV2Event = V2Event | ExecutionSettledEvent
+type RunV2Event = V2Event
 type PromptFilePart = Extract<RunPromptPart, { type: "file" }>
 
 type ToolState = {

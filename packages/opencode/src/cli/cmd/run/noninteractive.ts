@@ -50,19 +50,6 @@ type ToolState = StartedPart & {
   provider?: unknown
 }
 
-type ExecutionSettledEvent = {
-  id: string
-  type: "session.next.execution.settled"
-  data: {
-    timestamp: number | string
-    sessionID: string
-    outcome: "success" | "failure" | "interrupted"
-    error?: { message?: string; _tag?: string; type?: string } & Record<string, unknown>
-  }
-}
-
-type RunV2Event = V2Event | ExecutionSettledEvent
-
 export async function runNonInteractivePrompt(input: Input) {
   const controller = new AbortController()
   const events = await input.client.v2.event.subscribe({
@@ -70,13 +57,12 @@ export async function runNonInteractivePrompt(input: Input) {
     sseMaxRetryAttempts: 0,
     throwOnError: true,
   })
-  const stream = events.stream[Symbol.asyncIterator]() as AsyncGenerator<RunV2Event>
+  const stream = events.stream[Symbol.asyncIterator]() as AsyncGenerator<V2Event>
   const connected = await stream.next()
   if (connected.done) throw new Error("Event stream disconnected before prompt admission")
 
   const messageID = MessageID.ascending()
   const starts = new Map<string, StartedPart>()
-  const textBuffers = new Map<string, StartedPart & { assistantMessageID: string; text: string }>()
   const tools = new Map<string, ToolState>()
   let submitted = false
   let promoted = false
@@ -184,41 +170,15 @@ export async function runNonInteractivePrompt(input: Input) {
         starts.set(event.data.textID, { id: partID(event.id), timestamp: time })
         continue
       }
-      if (event.type === "session.next.text.delta" && input.format === "json") {
-        const started = starts.get(event.data.textID) ?? { id: partID(event.id), timestamp: time }
-        const current = textBuffers.get(event.data.textID)
-        textBuffers.set(event.data.textID, {
-          id: current?.id ?? started.id,
-          timestamp: current?.timestamp ?? started.timestamp,
-          assistantMessageID: event.data.assistantMessageID,
-          text: (current?.text ?? "") + event.data.delta,
-        })
-        writeText(
-          {
-            id: current?.id ?? started.id,
-            sessionID: input.sessionID,
-            messageID: event.data.assistantMessageID,
-            type: "text",
-            text: event.data.delta,
-            time: { start: current?.timestamp ?? started.timestamp, end: time },
-          },
-          time,
-        )
-        continue
-      }
       if (event.type === "session.next.text.ended") {
         const started = starts.get(event.data.textID)
-        const emitted = textBuffers.get(event.data.textID)
-        textBuffers.delete(event.data.textID)
-        const text = emitted ? event.data.text.slice(emitted.text.length) : event.data.text
-        if (!text) continue
         const part: TextPart = {
-          id: emitted?.id ?? started?.id ?? partID(event.id),
+          id: started?.id ?? partID(event.id),
           sessionID: input.sessionID,
           messageID: event.data.assistantMessageID,
           type: "text",
-          text,
-          time: { start: emitted?.timestamp ?? started?.timestamp ?? time, end: time },
+          text: event.data.text,
+          time: { start: started?.timestamp ?? time, end: time },
         }
         writeText(part, time)
         continue
@@ -371,8 +331,7 @@ export async function runNonInteractivePrompt(input: Input) {
           emittedError = true
           process.exitCode = 1
           const error = event.data.error ?? { type: "unknown", message: "Session execution failed" }
-          if (!emit("error", toMillis(event.data.timestamp), { error }))
-            UI.error(error.message ?? error._tag ?? "Session execution failed")
+          if (!emit("error", toMillis(event.data.timestamp), { error })) UI.error(error.message)
         }
         if (event.data.outcome === "interrupted" && interrupted) process.exitCode = 130
         return
