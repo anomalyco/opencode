@@ -138,6 +138,7 @@ const FileTreeNode = (
     "classList",
   ])
   const platform = usePlatform()
+  const { onContextMenu: _omit, ...triggerRest } = rest
   const kind = () => visibleKind(local.node, local.kinds, local.marks)
   const active = () => !!kind() && !local.node.ignored
   const color = () => {
@@ -168,11 +169,7 @@ const FileTreeNode = (
           if (event.dataTransfer) event.dataTransfer.effectAllowed = "copy"
           withFileDragImage(event)
         }}
-        onContextMenu={(event: MouseEvent) => {
-          event.preventDefault()
-          event.stopPropagation()
-        }}
-        {...rest}
+        {...triggerRest}
       >
         {local.children}
         <span
@@ -202,11 +199,7 @@ const FileTreeNode = (
         <ContextMenu.Content>
           {canOpenInFinder && (
             <>
-              <ContextMenu.Item
-                onSelect={() => {
-                  void platform.openPath?.(local.node.absolute)
-                }}
-              >
+              <ContextMenu.Item onSelect={() => void platform.openPath?.(local.node.absolute)}>
                 <ContextMenu.ItemLabel>{language.t("fileTree.context.revealInFinder")}</ContextMenu.ItemLabel>
               </ContextMenu.Item>
               <ContextMenu.Separator />
