@@ -6,7 +6,7 @@ permissions:
 on:
   workflow_dispatch:
   push:
-    branches: [dev, beta]
+    branches: [dev, beta, v2]
     paths:
       - "bun.lock"
       - "package.json"
