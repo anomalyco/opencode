@@ -42,7 +42,7 @@ import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Select } from "@opencode-ai/ui/select"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { ModelSelectorPopover } from "@/components/dialog-select-model"
+import { ModelSelectorPopover, ModelSelectorPopoverV2 } from "@/components/dialog-select-model"
 import { useCommand } from "@/context/command"
 import { Persist, persisted } from "@/utils/persist"
 import { usePermission } from "@/context/permission"
@@ -1372,6 +1372,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     model: props.controls.model.selection,
     providerID: props.controls.model.selection.current()?.provider?.id,
     modelName: props.controls.model.selection.current()?.name ?? language.t("dialog.model.select.title"),
+    newLayoutDesigns: props.controls.newLayoutDesigns,
     style: control(),
     onClose: restoreFocus,
     onUnpaidClick: () => {
@@ -1972,6 +1973,7 @@ type ComposerModelControlState = {
   model: ReturnType<typeof useLocal>["model"]
   providerID?: string
   modelName: string
+  newLayoutDesigns: boolean
   style: JSX.CSSProperties | undefined
   onClose: () => void
   onUnpaidClick: () => void
@@ -2062,36 +2064,65 @@ function ComposerModelControl(props: { state: ComposerModelControlState }) {
             </>
           }
         >
-          <ModelSelectorPopover
-            model={props.state.model}
-            triggerAs={Button}
-            triggerProps={{
-              variant: "ghost",
-              size: "normal",
-              style: props.state.style,
-              class:
-                "min-w-0 max-w-[220px] justify-start text-[13px] font-[440] leading-5 text-v2-text-text-faint group",
-              classList: { "animate-in fade-in": props.state.shouldAnimate },
-              "data-action": "prompt-model",
-            }}
-            onClose={props.state.onClose}
+          <Show
+            when={props.state.newLayoutDesigns}
+            fallback={
+              <ModelSelectorPopover
+                model={props.state.model}
+                triggerAs={Button}
+                triggerProps={{
+                  variant: "ghost",
+                  size: "normal",
+                  style: props.state.style,
+                  class:
+                    "min-w-0 max-w-[220px] justify-start text-[13px] font-[440] leading-5 text-v2-text-text-faint group",
+                  classList: { "animate-in fade-in": props.state.shouldAnimate },
+                  "data-action": "prompt-model",
+                }}
+                onClose={props.state.onClose}
+              >
+                <ModelControlContent state={props.state} />
+              </ModelSelectorPopover>
+            }
           >
-            <Show when={props.state.providerID}>
-              {(providerID) => (
-                <ProviderIcon
-                  id={providerID()}
-                  class="size-4 shrink-0 opacity-40 group-hover:opacity-100 transition-opacity duration-150"
-                  style={{ "will-change": "opacity", transform: "translateZ(0)" }}
-                />
-              )}
-            </Show>
-            <span class="truncate">{props.state.modelName}</span>
-            <span class="-ml-1 shrink-0 flex size-fit">
-              <Icon name="chevron-down" size="small" class="text-v2-icon-icon-muted" />
-            </span>
-          </ModelSelectorPopover>
+            <ModelSelectorPopoverV2
+              model={props.state.model}
+              triggerAs={ButtonV2}
+              triggerProps={{
+                variant: "ghost-muted",
+                size: "normal",
+                style: props.state.style,
+                class: "min-w-0 max-w-[220px] justify-start ![font-weight:440] group",
+                classList: { "animate-in fade-in": props.state.shouldAnimate },
+                "data-action": "prompt-model",
+              }}
+              onClose={props.state.onClose}
+            >
+              <ModelControlContent state={props.state} v2 />
+            </ModelSelectorPopoverV2>
+          </Show>
         </TooltipV2>
       </Show>
     </Show>
+  )
+}
+
+function ModelControlContent(props: { state: ComposerModelControlState; v2?: boolean }) {
+  return (
+    <>
+      <Show when={props.state.providerID}>
+        {(providerID) => (
+          <ProviderIcon
+            id={providerID()}
+            class="size-4 shrink-0 opacity-40 group-hover:opacity-100 transition-opacity duration-150"
+            style={{ "will-change": "opacity", transform: "translateZ(0)" }}
+          />
+        )}
+      </Show>
+      <span class="truncate">{props.state.modelName}</span>
+      <span class={props.v2 ? "-ml-0.5 -mr-1 flex shrink-0" : "-ml-1 shrink-0 flex size-fit"}>
+        <Icon name="chevron-down" size="small" class="text-v2-icon-icon-muted" />
+      </span>
+    </>
   )
 }
