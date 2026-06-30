@@ -517,6 +517,11 @@ export const { use: useMarked, provider: MarkedProvider } = createSimpleContext(
       }
     }
 
-    return jsParser
+    return {
+      async parse(markdown: string): Promise<string> {
+        const html = await Promise.resolve(jsParser.parse(markdown))
+        return renderMathExpressions(html)
+      },
+    }
   },
 })
