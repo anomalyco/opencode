@@ -72,7 +72,6 @@ interface ProcessorContext extends Input {
   needsCompaction: boolean
   currentText: SessionV1.TextPart | undefined
   reasoningMap: Record<string, SessionV1.ReasoningPart>
-  v2AssistantMessageID: SessionMessage.ID | undefined
   // Observability state for the chat.stream.start/end plugin hooks. Set when a
   // model call starts; read when it settles. `undefined` start means no pending
   // call (so the end hook is skipped).
@@ -118,7 +117,6 @@ export const layer = Layer.effect(
         needsCompaction: false,
         currentText: undefined,
         reasoningMap: {},
-        v2AssistantMessageID: undefined,
         llmStartedAt: undefined,
         llmFirstEventAt: undefined,
         llmText: "",
