@@ -50,12 +50,13 @@ function sdkKey(npm: string): string | undefined {
       return "gateway"
     case "@openrouter/ai-sdk-provider":
       return "openrouter"
+    case "@ai-sdk/openai-compatible":
     case "ai-gateway-provider":
-      // ai-gateway-provider/unified wraps createOpenAICompatible({ name: "Unified" }),
-      // and @ai-sdk/openai-compatible parses compatibleOptions from one of
-      // "openai-compatible" / "openaiCompatible" / "Unified" / "unified". The
-      // "openai-compatible" key emits a deprecation warning at runtime, so we
-      // pick the camelCase form the SDK now treats as canonical.
+      // Both wrap createOpenAICompatible({ ... }), and @ai-sdk/openai-compatible
+      // parses compatibleOptions from one of "openai-compatible" / "openaiCompatible"
+      // / "Unified" / "unified". The "openai-compatible" key emits a deprecation
+      // warning at runtime, so we pick the camelCase form the SDK now treats as
+      // canonical.
       return "openaiCompatible"
   }
   return undefined

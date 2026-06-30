@@ -2325,7 +2325,7 @@ describe("ProviderTransform.message - strip openai metadata when store=false", (
     expect(result[0].content[0].providerOptions?.openai?.itemId).toBe("msg_123")
   })
 
-  test("preserves metadata using providerID key when store is false", () => {
+  test("preserves metadata using sdk-compatible key when store is false", () => {
     const opencodeModel = {
       ...openaiModel,
       providerID: "opencode",
@@ -2355,8 +2355,8 @@ describe("ProviderTransform.message - strip openai metadata when store=false", (
 
     const result = ProviderTransform.message(msgs, opencodeModel, { store: false }) as any[]
 
-    expect(result[0].content[0].providerOptions?.opencode?.itemId).toBe("msg_123")
-    expect(result[0].content[0].providerOptions?.opencode?.otherOption).toBe("value")
+    expect(result[0].content[0].providerOptions?.openaiCompatible?.itemId).toBe("msg_123")
+    expect(result[0].content[0].providerOptions?.openaiCompatible?.otherOption).toBe("value")
   })
 
   test("preserves itemId across all providerOptions keys", () => {
@@ -2394,10 +2394,10 @@ describe("ProviderTransform.message - strip openai metadata when store=false", (
     const result = ProviderTransform.message(msgs, opencodeModel, { store: false }) as any[]
 
     expect(result[0].providerOptions?.openai?.itemId).toBe("msg_root")
-    expect(result[0].providerOptions?.opencode?.itemId).toBe("msg_opencode")
+    expect(result[0].providerOptions?.openaiCompatible?.itemId).toBe("msg_opencode")
     expect(result[0].providerOptions?.extra?.itemId).toBe("msg_extra")
     expect(result[0].content[0].providerOptions?.openai?.itemId).toBe("msg_openai_part")
-    expect(result[0].content[0].providerOptions?.opencode?.itemId).toBe("msg_opencode_part")
+    expect(result[0].content[0].providerOptions?.openaiCompatible?.itemId).toBe("msg_opencode_part")
     expect(result[0].content[0].providerOptions?.extra?.itemId).toBe("msg_extra_part")
   })
 
@@ -4505,6 +4505,42 @@ describe("ProviderTransform.providerOptions - ai-gateway-provider", () => {
   test("routes options under openaiCompatible (the key @ai-sdk/openai-compatible reads)", () => {
     // Regression: previously fell back to providerID="cloudflare-ai-gateway",
     // which @ai-sdk/openai-compatible never reads, silently dropping reasoningEffort.
+    const result = ProviderTransform.providerOptions(createModel(), { reasoningEffort: "high" })
+    expect(result).toEqual({ openaiCompatible: { reasoningEffort: "high" } })
+  })
+})
+
+describe("ProviderTransform.providerOptions - @ai-sdk/openai-compatible", () => {
+  const createModel = (overrides: Partial<any> = {}) =>
+    ({
+      id: "custom-provider/my-model",
+      providerID: "custom-provider",
+      api: {
+        id: "my-model",
+        url: "https://api.custom-provider.com/v1",
+        npm: "@ai-sdk/openai-compatible",
+      },
+      capabilities: {
+        temperature: true,
+        reasoning: true,
+        attachment: false,
+        toolcall: true,
+        input: { text: true, audio: false, image: false, video: false, pdf: false },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+      cost: { input: 1, output: 1, cache: { read: 0, write: 0 } },
+      limit: { context: 128_000, output: 16_000 },
+      status: "active",
+      options: {},
+      headers: {},
+      release_date: "2025-01-01",
+      ...overrides,
+    }) as any
+
+  test("routes options under openaiCompatible for @ai-sdk/openai-compatible providers", () => {
+    // Regression: sdkKey() had no case for @ai-sdk/openai-compatible,
+    // falling back to model.providerID which the SDK never reads.
     const result = ProviderTransform.providerOptions(createModel(), { reasoningEffort: "high" })
     expect(result).toEqual({ openaiCompatible: { reasoningEffort: "high" } })
   })
