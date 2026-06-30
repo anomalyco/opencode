@@ -34,11 +34,17 @@ function resourceAttributes() {
 }
 
 export function resource(): { serviceName: string; serviceVersion: string; attributes: Record<string, string> } {
+  const attrs = resourceAttributes()
+  if (attrs["nav.pilot.device_id"]) {
+    attrs["nav_pilot_device_id"] = attrs["nav.pilot.device_id"]
+  }
   return {
     serviceName: "opencode",
     serviceVersion: InstallationVersion,
     attributes: {
-      ...resourceAttributes(),
+      ...attrs,
+      app: "opencode",
+      version: InstallationVersion,
       "deployment.environment.name": InstallationChannel,
       "opencode.client": Flag.OPENCODE_CLIENT,
       "opencode.run": runID,
@@ -57,6 +63,8 @@ export async function tracingLayer() {
   const NodeSdk = await import("@effect/opentelemetry/NodeSdk")
   const OTLP = await import("@opentelemetry/exporter-trace-otlp-http")
   const SdkBase = await import("@opentelemetry/sdk-trace-base")
+  const OTLPMetric = await import("@opentelemetry/exporter-metrics-otlp-http")
+  const { PeriodicExportingMetricReader } = await import("@opentelemetry/sdk-metrics")
   const { AsyncLocalStorageContextManager } = await import("@opentelemetry/context-async-hooks")
   const { context } = await import("@opentelemetry/api")
 
@@ -73,6 +81,13 @@ export async function tracingLayer() {
         headers,
       }),
     ),
+    metricReader: new PeriodicExportingMetricReader({
+      exporter: new OTLPMetric.OTLPMetricExporter({
+        url: `${endpoint}/v1/metrics`,
+        headers,
+      }),
+      exportIntervalMillis: 10000,
+    }),
   }))
 }
 

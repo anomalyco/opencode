@@ -21,6 +21,7 @@ import { EffectBridge } from "@/effect/bridge"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { isRecord } from "@/util/record"
+import { toolCallCountTotal, toolCallDurationSeconds } from "@opencode-ai/core/observability/metrics"
 
 const MCP_RESOURCE_TOOLS = {
   list: "list_mcp_resources",
@@ -480,6 +481,30 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
         }),
       )
     tools[key] = item
+  }
+
+  // Wrap all tools to record metrics
+  for (const [name, t] of Object.entries(tools)) {
+    const originalExecute = t.execute
+    if (originalExecute) {
+      t.execute = (args, options) => {
+        const startTime = Date.now()
+        return Promise.resolve(originalExecute(args, options)).then(
+          (res) => {
+            const duration = (Date.now() - startTime) / 1000
+            toolCallCountTotal.add(1, { gen_ai_tool_name: name, success: "true" })
+            toolCallDurationSeconds.record(duration, { gen_ai_tool_name: name, success: "true" })
+            return res
+          },
+          (err) => {
+            const duration = (Date.now() - startTime) / 1000
+            toolCallCountTotal.add(1, { gen_ai_tool_name: name, success: "false" })
+            toolCallDurationSeconds.record(duration, { gen_ai_tool_name: name, success: "false" })
+            throw err
+          }
+        )
+      }
+    }
   }
 
   return tools

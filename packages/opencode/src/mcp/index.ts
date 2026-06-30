@@ -25,6 +25,7 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import { McpOAuthPendingProvider, McpOAuthProvider, OAUTH_CALLBACK_PATH } from "./oauth-provider"
 import { McpOAuthCallback } from "./oauth-callback"
 import { McpAuth } from "./auth"
+import { mcpServerConnectionCountTotal } from "@opencode-ai/core/observability/metrics"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { TuiEvent } from "@/server/tui-event"
 import open from "open"
@@ -215,7 +216,10 @@ const layer = Layer.effect(
           Effect.tryPromise({
             try: () => {
               const client = createClient(directory)
-              return withTimeout(client.connect(t), timeout).then(() => client)
+              return withTimeout(client.connect(t), timeout).then(() => {
+                mcpServerConnectionCountTotal.add(1)
+                return client
+              })
             },
             catch: (e) => (e instanceof Error ? e : new Error(String(e))),
           }),

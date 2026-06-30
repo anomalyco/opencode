@@ -25,6 +25,7 @@ import { isRecord } from "@/util/record"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Database } from "@opencode-ai/core/database/database"
 import { Usage, type LLMEvent } from "@opencode-ai/llm"
+import { agentTurnCount } from "@opencode-ai/core/observability/metrics"
 
 const DOOM_LOOP_THRESHOLD = 3
 export type Result = "compact" | "stop" | "continue"
@@ -673,6 +674,8 @@ const layer = Layer.effect(
             Effect.catch(halt),
             Effect.ensuring(cleanup()),
           )
+
+          agentTurnCount.record(1, { gen_ai_operation_name: "invoke_agent" })
 
           if (ctx.needsCompaction) return "compact"
           if (ctx.blocked || ctx.assistantMessage.error) return "stop"
