@@ -20896,14 +20896,14 @@
                       "type": "array",
                       "items": {
                         "type": "string",
-                        "enum": ["text", "audio", "image", "video", "pdf"]
+                        "enum": ["text", "audio", "image", "video", "pdf", "embedding"]
                       }
                     },
                     "output": {
                       "type": "array",
                       "items": {
                         "type": "string",
-                        "enum": ["text", "audio", "image", "video", "pdf"]
+                        "enum": ["text", "audio", "image", "video", "pdf", "embedding"]
                       }
                     }
                   },

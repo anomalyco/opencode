@@ -58,4 +58,12 @@ describe("provider model status schemas", () => {
       }).status,
     ).toBe("active")
   })
+
+  test("accepts embedding modality in configured provider models", () => {
+    expect(
+      Schema.decodeUnknownSync(ConfigProviderV1.Model)({
+        modalities: { output: ["embedding"] },
+      }).modalities?.output,
+    ).toEqual(["embedding"])
+  })
 })
