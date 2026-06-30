@@ -15,6 +15,7 @@
     "./v2/effect": "./src/v2/effect/index.ts",
     "./v2/effect/integration": "./src/v2/effect/integration.ts",
     "./v2/effect/plugin": "./src/v2/effect/plugin.ts",
+    "./v2/effect/tool": "./src/v2/effect/tool.ts",
     "./v2/promise": "./src/v2/promise/index.ts"
   },
   "files": [
@@ -22,7 +23,9 @@
   ],
   "dependencies": {
     "@ai-sdk/provider": "3.0.8",
+    "@opencode-ai/llm": "workspace:*",
     "@opencode-ai/protocol": "workspace:*",
+    "@opencode-ai/schema": "workspace:*",
     "@opencode-ai/sdk": "workspace:*",
     "effect": "catalog:",
     "zod": "catalog:"

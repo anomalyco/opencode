@@ -14,6 +14,7 @@
   "dependencies": {
     "@opencode-ai/client": "workspace:*",
     "@opencode-ai/core": "workspace:*",
+    "@opencode-ai/plugin": "workspace:*",
     "@opencode-ai/server": "workspace:*",
     "effect": "catalog:"
   },

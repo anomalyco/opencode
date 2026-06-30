@@ -1,5 +1,6 @@
 export type { PluginContext } from "./context.js"
 export { define } from "./plugin.js"
 export type { Plugin } from "./plugin.js"
+export * as Tool from "./tool.js"
 export type { ToolDomain } from "./tool.js"
 export type { SessionDomain } from "./runtime.js"

@@ -16,7 +16,6 @@ import { ProviderV2 } from "../provider"
 import { Reference } from "../reference"
 import { AbsolutePath, type DeepMutable } from "../schema"
 import { SkillV2 } from "../skill"
-import { Tool } from "../tool/tool"
 import { Tools } from "../tool/tools"
 import { WorkspaceV2 } from "../workspace"
 
@@ -247,7 +246,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
         ),
     },
     tool: {
-      register: (input) => tools.register(input as Readonly<Record<string, Tool.AnyTool>>),
+      register: (input) => tools.register(input),
     },
     session: {
       create: (input) =>
