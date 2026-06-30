@@ -54,6 +54,7 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { SessionProjector } from "@opencode-ai/core/session/projector"
 
 export const AppLayer = AppNodeBuilder.build(
   LayerNode.group([
@@ -77,6 +78,7 @@ export const AppLayer = AppNodeBuilder.build(
     Permission.node,
     Todo.node,
     Session.node,
+    SessionProjector.node,
     SessionStatus.node,
     BackgroundJob.node,
     RuntimeFlags.node,
