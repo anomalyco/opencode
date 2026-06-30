@@ -5298,6 +5298,7 @@ export type McpServer = {
     | McpStatusFailed2
     | McpStatusNeedsAuth2
     | McpStatusNeedsClientRegistration2
+  integrationID?: string
 }
 
 export type ProjectCurrent = {

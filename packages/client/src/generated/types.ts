@@ -2487,6 +2487,7 @@ export type ServerMcpListOutput = {
       | { readonly status: "failed"; readonly error: string }
       | { readonly status: "needs_auth" }
       | { readonly status: "needs_client_registration"; readonly error: string }
+    readonly integrationID?: string
   }>
 }
 

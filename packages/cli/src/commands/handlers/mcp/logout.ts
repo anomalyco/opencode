@@ -12,9 +12,22 @@ export default Runtime.handler(
     const daemon = yield* Daemon.Service
     const client = yield* daemon.client()
 
-    const integrations = yield* Effect.promise(() => client.v2.integration.list({ location }))
-    const integration = (integrations.data?.data ?? []).find((entry) => entry.name === input.name)
-    if (!integration) return yield* Effect.fail(new Error(`MCP server not found: ${input.name}`))
+    // Resolve through the MCP-owned integrationID rather than matching integration names: the shared
+    // integration registry also holds provider/plugin integrations, whose names could collide with a server.
+    const servers = yield* Effect.promise(() => client.v2.mcp.list({ location }))
+    const server = (servers.data?.data ?? []).find((entry) => entry.name === input.name)
+    if (!server) return yield* Effect.fail(new Error(`MCP server not found: ${input.name}`))
+    const integrationID = server.integrationID
+    if (!integrationID) {
+      process.stdout.write(`No stored credentials for ${input.name}` + EOL)
+      return
+    }
+    const found = yield* Effect.promise(() => client.v2.integration.get({ integrationID, location }))
+    const integration = found.data?.data
+    if (!integration) {
+      process.stdout.write(`No stored credentials for ${input.name}` + EOL)
+      return
+    }
 
     const credentials = integration.connections.filter((connection) => connection.type === "credential")
     if (credentials.length === 0) {

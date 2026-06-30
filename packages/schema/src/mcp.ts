@@ -1,6 +1,8 @@
 export * as Mcp from "./mcp"
 
 import { Schema } from "effect"
+import { optional } from "./schema"
+import { IntegrationID } from "./integration-id"
 
 const Connected = Schema.Struct({ status: Schema.Literal("connected") }).annotate({
   identifier: "Mcp.Status.Connected",
@@ -36,4 +38,7 @@ export interface Server extends Schema.Schema.Type<typeof Server> {}
 export const Server = Schema.Struct({
   name: Schema.String,
   status: Status,
+  // Set for remote servers registered as OAuth integrations; lets clients act on the right integration
+  // without matching by name, which could collide with provider or plugin integrations.
+  integrationID: optional(IntegrationID),
 }).annotate({ identifier: "Mcp.Server" })
