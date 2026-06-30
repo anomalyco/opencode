@@ -56,10 +56,18 @@ const layer = Layer.effect(
     const decode = Schema.decodeUnknownOption(Info)
 
     const all = Effect.fn("Auth.all")(function* () {
-      if (process.env.OPENCODE_AUTH_CONTENT) {
-        try {
-          return JSON.parse(process.env.OPENCODE_AUTH_CONTENT)
-        } catch (err) {}
+      const env = process.env.OPENCODE_AUTH_CONTENT
+      if (env) {
+        const parsed = yield* Effect.try({
+          try: () => JSON.parse(env),
+          catch: (cause) => new AuthError({ message: "OPENCODE_AUTH_CONTENT is not valid JSON", cause }),
+        })
+        if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+          return yield* Effect.fail(new AuthError({ message: "OPENCODE_AUTH_CONTENT must be a JSON object" }))
+        }
+        return Record.filterMap(parsed as Record<string, unknown>, (value) =>
+          Result.fromOption(decode(value), () => undefined),
+        )
       }
 
       const data = (yield* fsys.readJson(file).pipe(Effect.orElseSucceed(() => ({})))) as Record<string, unknown>
