@@ -151,12 +151,11 @@ export const catalog = <R>(tools: HostTools<R>): ReadonlyArray<ToolDescription> 
 // `$rune` namespace), not by the runtime, so there are no reserved namespaces.
 export const assertValidTools = <R>(_tools: HostTools<R>): void => {}
 
+// Generic Rune-language instructions. Discovery (e.g. searching a large or dynamic
+// catalog) is not a runtime feature; an embedder that wants it registers ordinary
+// host tools and documents them itself, so nothing is hardcoded here.
 export const instructions = <R>(tools: HostTools<R>): string => {
   const described = catalog(tools)
-  const discovery = [
-    "- tools.$rune.search({ query: string, limit?: number }): Promise<{ items: Array<{ path: string; description: string }>; total: number }>",
-    "- tools.$rune.describe({ path: string }): Promise<{ path: string; description: string; signature: string }>",
-  ]
   const lines = [
     "Write a Rune Program to answer the request. Return code only.",
     "Rune Programs can call explicit tools.* capabilities and transform plain data.",
@@ -165,11 +164,6 @@ export const instructions = <R>(tools: HostTools<R>): string => {
     "Available Tool Capabilities:",
     ...described.map((tool) => `- ${tool.signature} // ${tool.description}`),
     "",
-    ...(discovery.length > 0 ? [
-      "For a large or dynamic catalog, you can discover additional capabilities in the program:",
-      ...discovery,
-      "",
-    ] : []),
     "Common syntax: arrow functions and `function` declarations (hoisted) with closures, default/rest parameters, destructuring (incl. rest/defaults), optional chaining, template literals, conditionals, switch, loops, spread (arrays/objects/strings), try/catch, ternary, the `in` operator, logical assignment (??=/||=/&&=), and bitwise operators (& | ^ ~ << >> >>>). Signal failure with `throw` (any value) or `throw new Error(message)`.",
     "Transform data with array methods (map/filter/reduce/reduceRight/flatMap/forEach/find/findIndex/findLast/findLastIndex/sort/toSorted/slice/concat/indexOf/at/flat/reverse/toReversed/with/includes/join, plus push/pop/shift/unshift for accumulation), string methods (toLowerCase/toUpperCase/trim/split/slice/substring/replace/replaceAll/includes/startsWith/endsWith/indexOf/padStart/padEnd/repeat/charCodeAt), number methods (toFixed/toString(radix)/toPrecision), Object.keys/values/entries/fromEntries/hasOwn, Math.* (incl. PI/E), JSON.parse/stringify, Array.from/isArray/of, Number.isInteger/isNaN/parseInt, String.fromCharCode, parseInt/parseFloat, and Number/String/Boolean.",
     "Use Promise.all([...]) for parallel tool calls (a direct array of calls, or items.map((item) => tool call)).",
@@ -182,7 +176,7 @@ const resolve = <R>(tools: HostTools<R>, path: ReadonlyArray<string>): HostTool<
 
   for (const segment of path) {
     if (isBlockedMember(segment) || typeof value === "function" || isDefinition(value) || !Object.hasOwn(value, segment)) {
-      throw new ToolRuntimeError("UnknownCapability", `Unknown tool '${path.join(".")}'.`, ["Use tools.$rune.search({ query }) to find available described capabilities."])
+      throw new ToolRuntimeError("UnknownCapability", `Unknown tool '${path.join(".")}'.`, ["Call a capability by its exact tools.* path."])
     }
     value = value[segment] as HostTool<R> | Definition<R> | HostTools<R>
   }
