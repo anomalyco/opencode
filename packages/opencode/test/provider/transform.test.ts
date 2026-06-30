@@ -2268,6 +2268,52 @@ describe("ProviderTransform.message - strip openai metadata when store=false", (
     expect(result[0].content[0].providerOptions?.openai?.reasoningEncryptedContent).toBe("encrypted")
   })
 
+  test("strips GitHub Copilot itemId from the OpenAI namespace, preserving copilot request options", () => {
+    const copilotModel = {
+      ...openaiModel,
+      id: "github-copilot/gpt-5.5",
+      providerID: "github-copilot",
+      api: {
+        id: "gpt-5.5",
+        url: "https://api.githubcopilot.com",
+        npm: "@ai-sdk/github-copilot",
+      },
+    }
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "reasoning",
+            text: "thinking...",
+            providerOptions: {
+              openai: { itemId: "rs_123", reasoningEncryptedContent: "encrypted" },
+            },
+          },
+          {
+            // The stale itemId on tool-call parts is what Copilot echoes back as the
+            // `function_call` item `id`, which is what the upstream connection rejects.
+            type: "tool-call",
+            toolCallId: "call_1",
+            toolName: "bash",
+            input: { command: "ls" },
+            providerOptions: {
+              openai: { itemId: "fc_456" },
+              copilot: { reasoningEffort: "medium" },
+            },
+          },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, copilotModel, { store: false }) as any[]
+
+    expect(result[0].content[0].providerOptions?.openai?.itemId).toBeUndefined()
+    expect(result[0].content[0].providerOptions?.openai?.reasoningEncryptedContent).toBe("encrypted")
+    expect(result[0].content[1].providerOptions?.openai?.itemId).toBeUndefined()
+    expect(result[0].content[1].providerOptions?.copilot?.reasoningEffort).toBe("medium")
+  })
+
   test("preserves metadata for openai package when store is true", () => {
     const msgs = [
       {
