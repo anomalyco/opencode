@@ -1263,6 +1263,44 @@ test("completely new provider not in database can be configured", async () => {
   })
 })
 
+test("config-defined custom models allow temperature by default", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            "brand-new-provider": {
+              name: "Brand New",
+              npm: "@ai-sdk/openai-compatible",
+              env: [],
+              api: "https://new-api.com/v1",
+              models: {
+                "new-model": {
+                  name: "New Model",
+                  tool_call: true,
+                  limit: { context: 32000, output: 8000 },
+                },
+              },
+              options: {
+                apiKey: "new-key",
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const model = (await Provider.list())[ProviderID.make("brand-new-provider")].models["new-model"]
+      expect(model.capabilities.temperature).toBe(true)
+    },
+  })
+})
+
 test("disabled_providers and enabled_providers interaction", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {

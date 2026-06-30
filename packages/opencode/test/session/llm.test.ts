@@ -385,6 +385,96 @@ describe("session.llm.stream", () => {
     })
   })
 
+  test("sends agent temperature for config-defined custom openai-compatible models by default", async () => {
+    const server = state.server
+    if (!server) {
+      throw new Error("Server not initialized")
+    }
+
+    const request = waitRequest(
+      "/chat/completions",
+      new Response(createChatStream("Hello"), {
+        status: 200,
+        headers: { "Content-Type": "text/event-stream" },
+      }),
+    )
+
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            enabled_providers: ["custom-openai"],
+            provider: {
+              "custom-openai": {
+                name: "Custom OpenAI",
+                npm: "@ai-sdk/openai-compatible",
+                env: [],
+                api: `${server.url.origin}/v1`,
+                options: {
+                  apiKey: "test-key",
+                  baseURL: `${server.url.origin}/v1`,
+                },
+                models: {
+                  "custom-model": {
+                    name: "Custom Model",
+                    limit: { context: 32000, output: 8000 },
+                    tool_call: true,
+                  },
+                },
+              },
+            },
+          }),
+        )
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const resolved = await Provider.getModel(ProviderID.make("custom-openai"), ModelID.make("custom-model"))
+        const sessionID = SessionID.make("session-test-custom-temp")
+        const agent = {
+          name: "build",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+          temperature: 1,
+        } satisfies Agent.Info
+
+        const user = {
+          id: MessageID.make("user-custom-temp"),
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: agent.name,
+          model: { providerID: ProviderID.make("custom-openai"), modelID: resolved.id },
+          variant: "high",
+        } satisfies MessageV2.User
+
+        const stream = await LLM.stream({
+          user,
+          sessionID,
+          model: resolved,
+          agent,
+          system: ["You are a helpful assistant."],
+          abort: new AbortController().signal,
+          messages: [{ role: "user", content: "Hello" }],
+          tools: {},
+        })
+
+        for await (const _ of stream.fullStream) {
+        }
+
+        const capture = await request
+        const body = capture.body
+        expect(body.model).toBe(resolved.api.id)
+        expect(body.temperature).toBe(1)
+      },
+    })
+  })
+
   test("raw stream abort signal cancels provider response body promptly", async () => {
     const server = state.server
     if (!server) throw new Error("Server not initialized")
