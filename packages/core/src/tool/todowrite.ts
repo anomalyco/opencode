@@ -22,7 +22,7 @@ export type Output = typeof Output.Type
 
 export const toModelOutput = (output: Output) => JSON.stringify(output.todos, null, 2)
 
-export const layer = Layer.effectDiscard(
+const layer = Layer.effectDiscard(
   Effect.gen(function* () {
     const tools = yield* Tools.Service
     const todos = yield* SessionTodo.Service

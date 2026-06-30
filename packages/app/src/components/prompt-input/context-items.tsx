@@ -37,7 +37,7 @@ export const PromptContextItems: Component<ContextItemsProps> = (props) => {
                   </span>
                 }
                 placement="top"
-                openDelay={2000}
+                openDelay={800}
               >
                 <div
                   classList={{
