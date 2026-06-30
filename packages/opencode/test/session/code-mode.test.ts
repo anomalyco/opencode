@@ -1,5 +1,14 @@
 import { describe, expect, test } from "bun:test"
-import { Parameters, define, describe as describeTools, formatValue, groupByServer, toEnvelope } from "@/session/code-mode"
+import {
+  Parameters,
+  define,
+  describe as describeTools,
+  formatValue,
+  groupByServer,
+  rankTools,
+  toEnvelope,
+  type SearchEntry,
+} from "@/session/code-mode"
 import type { Tool as MCPToolDef } from "@modelcontextprotocol/sdk/types.js"
 import { Agent } from "@/agent/agent"
 import { Tool } from "@/tool/tool"
@@ -322,5 +331,88 @@ describe("code mode execute", () => {
     )
     expect(suppressed.attachments).toBeUndefined()
     expect(JSON.parse(suppressed.output)).toEqual({ name: "shot.png" })
+  })
+
+  test("indexes parameter names so tools are searchable by their inputs", async () => {
+    const tool = await build({
+      // The query word appears only as a parameter name, not in path or description.
+      traces_lookup: mcpTool("lookup", () => "", {
+        type: "object",
+        properties: { trace_id: { type: "string", description: "the distributed trace identifier" } },
+      }),
+      other_noop: mcpTool("noop", () => ""),
+    })
+    const out = await Effect.runPromise(tool.execute({ code: "return await tools.search('trace_id')" }, ctx))
+    const result = JSON.parse(out.output)
+    expect(result.items.map((i: any) => i.path)).toEqual(["traces.lookup"])
+  })
+})
+
+describe("rankTools", () => {
+  const E = (path: string, description: string, params = ""): SearchEntry => ({
+    path,
+    server: path.split(".")[0]!,
+    description,
+    searchText: [path, description, params].join("\n").toLowerCase(),
+  })
+
+  test("matches multiple non-contiguous terms (not just a contiguous substring)", () => {
+    const entries = [
+      E("github.create_issue", "Create a new issue on a repository"),
+      E("github.list_pulls", "List pull requests"),
+    ]
+    const { items, total } = rankTools(entries, "create issue")
+    expect(total).toBe(1)
+    expect(items[0]!.path).toBe("github.create_issue")
+  })
+
+  test("ranks an exact tool-name match above a substring match", () => {
+    const entries = [E("github.search_issues", "Search issues"), E("github.search", "Full text search")]
+    const { items } = rankTools(entries, "search")
+    expect(items[0]!.path).toBe("github.search")
+  })
+
+  test("ranks a name match above a description-only match", () => {
+    const entries = [
+      E("datadog.list_monitors", "Enumerate alerting definitions"),
+      E("datadog.get_dashboard", "List the monitors on a dashboard"),
+    ]
+    const { items } = rankTools(entries, "monitors")
+    expect(items[0]!.path).toBe("datadog.list_monitors")
+  })
+
+  test("matches against indexed parameter text", () => {
+    const entries = [E("traces.lookup", "Fetch a span", "trace_id the distributed trace id"), E("other.noop", "Does nothing")]
+    const { items, total } = rankTools(entries, "trace_id")
+    expect(total).toBe(1)
+    expect(items[0]!.path).toBe("traces.lookup")
+  })
+
+  test("respects the namespace filter", () => {
+    const entries = [E("github.search", "search"), E("linear.search", "search")]
+    const { items, total } = rankTools(entries, "search", "linear")
+    expect(total).toBe(1)
+    expect(items[0]!.path).toBe("linear.search")
+  })
+
+  test("an empty query (or bare wildcard) lists everything alphabetically", () => {
+    const entries = [E("b.two", "second"), E("a.one", "first")]
+    for (const q of ["", "*"]) {
+      const { items, total } = rankTools(entries, q)
+      expect(total).toBe(2)
+      expect(items.map((i) => i.path)).toEqual(["a.one", "b.two"])
+    }
+  })
+
+  test("honors the limit while reporting the full match total", () => {
+    const entries = Array.from({ length: 10 }, (_, i) => E(`s.tool_${i}`, "searchable tool"))
+    const { items, total } = rankTools(entries, "searchable", undefined, 3)
+    expect(total).toBe(10)
+    expect(items).toHaveLength(3)
+  })
+
+  test("returns nothing when no term matches", () => {
+    const entries = [E("github.search", "search")]
+    expect(rankTools(entries, "nonexistent")).toEqual({ items: [], total: 0 })
   })
 })

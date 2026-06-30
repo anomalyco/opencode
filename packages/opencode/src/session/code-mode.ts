@@ -309,6 +309,77 @@ export function fromReturn(value: unknown): { output: string; attachments?: Atta
   return { output: formatValue(value) }
 }
 
+/** A search-indexed catalog entry: the fields ranking matches against, with
+ *  `searchText` (path + description + parameter names/descriptions) precomputed. */
+export type SearchEntry = { path: string; server: string; description: string; searchText: string }
+
+/** The lowercased searchable text for a tool: its path, description, and the name
+ *  (and description, when present) of each input parameter. */
+function searchTextFor(entry: CatalogEntry): string {
+  const parts = [entry.path, entry.description]
+  try {
+    const schema = asSchema(entry.tool.inputSchema).jsonSchema as JSONSchema7 | undefined
+    const props = schema?.properties
+    if (props && typeof props === "object") {
+      for (const [name, value] of Object.entries(props)) {
+        parts.push(name)
+        const desc = (value as JSONSchema7 | undefined)?.description
+        if (typeof desc === "string") parts.push(desc)
+      }
+    }
+  } catch {
+    // fall back to path + description only
+  }
+  return parts.join("\n").toLowerCase()
+}
+
+/** Split a query into lowercased search terms, dropping empties and the `*` wildcard. */
+const tokenize = (query: string) =>
+  query
+    .toLowerCase()
+    .split(/[^a-z0-9_-]+/)
+    .map((term) => term.trim())
+    .filter((term) => term.length > 0 && term !== "*")
+
+/**
+ * Rank catalog entries against a query using tokenized, field-weighted scoring
+ * (adapted from the deferred-tool-search bridge). Each term contributes per field:
+ * exact tool name (20) > path substring (8) > description (4) > any searchable text (2),
+ * summed across terms. Because paths are `server.tool`, the exact tier matches a
+ * whole path segment (e.g. the term `search` matches `github.search`). An empty
+ * query lists everything (alphabetical). Results are ranked by score, tie-broken by path.
+ */
+export function rankTools(
+  entries: ReadonlyArray<SearchEntry>,
+  query: string,
+  namespace?: string,
+  limit = 25,
+): { items: { path: string; description: string }[]; total: number } {
+  const terms = tokenize(query)
+  const scoped = namespace ? entries.filter((entry) => entry.server === namespace) : entries
+  const ranked = scoped
+    .map((entry) => {
+      const path = entry.path.toLowerCase()
+      const description = entry.description.toLowerCase()
+      const score = terms.reduce(
+        (total, term) =>
+          total +
+          (path === term || path.endsWith(`.${term}`) ? 20 : 0) +
+          (path.includes(term) ? 8 : 0) +
+          (description.includes(term) ? 4 : 0) +
+          (entry.searchText.includes(term) ? 2 : 0),
+        0,
+      )
+      return { entry, score }
+    })
+    .filter((item) => terms.length === 0 || item.score > 0)
+    .sort((a, b) => b.score - a.score || a.entry.path.localeCompare(b.entry.path))
+  return {
+    items: ranked.slice(0, limit).map(({ entry }) => ({ path: entry.path, description: brief(entry.description) })),
+    total: ranked.length,
+  }
+}
+
 export function define(
   mcpTools: Record<string, AITool>,
   mcpDefs: Record<string, MCPToolDef>,
@@ -317,19 +388,19 @@ export function define(
   const groups = groupByServer(mcpTools, servers, mcpDefs)
   const catalog: CatalogEntry[] = [...groups.values()].flat()
   const byKey = new Map(catalog.map((entry) => [entry.key, entry] as const))
+  const index: SearchEntry[] = catalog.map((entry) => ({
+    path: entry.path,
+    server: entry.server,
+    description: entry.description,
+    searchText: searchTextFor(entry),
+  }))
 
   const search = (query: unknown, options: unknown) => {
-    const q = (typeof query === "string" ? query : "").toLowerCase()
+    const q = typeof query === "string" ? query : ""
     const opts = (options ?? {}) as { namespace?: unknown; limit?: unknown }
     const namespace = typeof opts.namespace === "string" ? opts.namespace : undefined
     const limit = typeof opts.limit === "number" && opts.limit > 0 ? Math.floor(opts.limit) : 25
-    const matched = catalog
-      .filter((entry) => (namespace ? entry.server === namespace : true))
-      .filter((entry) => (q ? `${entry.path} ${entry.description}`.toLowerCase().includes(q) : true))
-    return {
-      items: matched.slice(0, limit).map((entry) => ({ path: entry.path, description: brief(entry.description) })),
-      total: matched.length,
-    }
+    return rankTools(index, q, namespace, limit)
   }
 
   const describeTool = (path: unknown) => {
