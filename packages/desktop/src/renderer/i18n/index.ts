@@ -1,6 +1,7 @@
 import * as i18n from "@solid-primitives/i18n"
 
 import { dict as desktopEn } from "./en"
+import { dict as desktopVi } from "./vi"
 import { dict as desktopZh } from "./zh"
 import { dict as desktopZht } from "./zht"
 import { dict as desktopKo } from "./ko"
@@ -18,6 +19,7 @@ import { dict as desktopBr } from "./br"
 import { dict as desktopBs } from "./bs"
 
 import { dict as appEn } from "../../../../app/src/i18n/en"
+import { dict as appVi } from "../../../../app/src/i18n/vi"
 import { dict as appZh } from "../../../../app/src/i18n/zh"
 import { dict as appZht } from "../../../../app/src/i18n/zht"
 import { dict as appKo } from "../../../../app/src/i18n/ko"
@@ -36,6 +38,7 @@ import { dict as appBs } from "../../../../app/src/i18n/bs"
 
 export type Locale =
   | "en"
+  | "vi"
   | "zh"
   | "zht"
   | "ko"
@@ -57,6 +60,7 @@ type Dictionary = i18n.Flatten<RawDictionary>
 
 const LOCALES: readonly Locale[] = [
   "en",
+  "vi",
   "zh",
   "zht",
   "ko",
@@ -81,6 +85,7 @@ function detectLocale(): Locale {
   for (const language of languages) {
     if (!language) continue
     if (language.toLowerCase().startsWith("en")) return "en"
+    if (language.toLowerCase().startsWith("vi")) return "vi"
     if (language.toLowerCase().startsWith("zh")) {
       if (language.toLowerCase().includes("hant")) return "zht"
       return "zh"
@@ -144,6 +149,7 @@ const base = i18n.flatten({ ...appEn, ...desktopEn })
 
 function build(locale: Locale): Dictionary {
   if (locale === "en") return base
+  if (locale === "vi") return { ...base, ...i18n.flatten(appVi), ...i18n.flatten(desktopVi) }
   if (locale === "zh") return { ...base, ...i18n.flatten(appZh), ...i18n.flatten(desktopZh) }
   if (locale === "zht") return { ...base, ...i18n.flatten(appZht), ...i18n.flatten(desktopZht) }
   if (locale === "de") return { ...base, ...i18n.flatten(appDe), ...i18n.flatten(desktopDe) }
