@@ -58,6 +58,11 @@ type Config<
     readonly input: Schema.Schema.Type<Input>
     readonly output: Output["Encoded"]
   }) => ReadonlyArray<Content>
+  readonly toModelOutputEffect?: (input: {
+    readonly input: Schema.Schema.Type<Input>
+    readonly output: Output["Encoded"]
+    readonly context: Context
+  }) => Effect.Effect<ReadonlyArray<Content>, ToolFailure>
 }
 
 type Runtime = {
@@ -110,20 +115,30 @@ export function make<
                 ),
               ),
             ),
-            Effect.map(({ output, structured }) => ({
-              structured,
-              content:
-                config.toModelOutput?.({ input, output }).map((part) =>
-                  part.type === "text"
-                    ? { type: "text" as const, text: part.text }
-                    : {
-                        type: "file" as const,
-                        uri: `data:${part.mime};base64,${part.data}`,
-                        mime: part.mime,
-                        name: part.name,
-                      },
-                ) ?? (typeof output === "string" ? [{ type: "text" as const, text: output }] : []),
-            })),
+            Effect.flatMap(({ output, structured }) =>
+              (config.toModelOutputEffect
+                ? config.toModelOutputEffect({ input, output, context })
+                : Effect.succeed(config.toModelOutput?.({ input, output }) ?? [])).pipe(
+                Effect.map((content) => ({
+                  structured,
+                  content:
+                    content.length > 0
+                      ? content.map((part) =>
+                          part.type === "text"
+                            ? { type: "text" as const, text: part.text }
+                            : {
+                                type: "file" as const,
+                                uri: `data:${part.mime};base64,${part.data}`,
+                                mime: part.mime,
+                                name: part.name,
+                              },
+                        )
+                      : typeof output === "string"
+                        ? [{ type: "text" as const, text: output }]
+                        : [],
+                })),
+              ),
+            ),
           ),
         ),
       ),

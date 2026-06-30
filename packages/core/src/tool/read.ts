@@ -5,6 +5,7 @@ import { Effect, Layer, Schema } from "effect"
 import { makeLocationNode } from "../effect/app-node"
 import { FileSystem } from "../filesystem"
 import { Image } from "../image"
+import { InstructionContext } from "../instruction-context"
 import { LocationMutation } from "../location-mutation"
 import { PermissionV2 } from "../permission"
 import { AbsolutePath } from "../schema"
@@ -33,7 +34,43 @@ const layer = Layer.effectDiscard(
     const reader = yield* ReadToolFileSystem.Service
     const mutation = yield* LocationMutation.Service
     const image = yield* Image.Service
+    const instructions = yield* InstructionContext.Service
     const permission = yield* PermissionV2.Service
+
+    const imageOutput = (input: Schema.Schema.Type<typeof Input>, output: typeof Output.Encoded): Tool.Content[] => {
+      if (!("encoding" in output) || output.encoding !== "base64" || !SUPPORTED_IMAGE_MIMES.has(output.mime)) return []
+      return [
+        { type: "text", text: "Image read successfully" },
+        { type: "file", data: output.content, mime: output.mime, name: input.path },
+      ]
+    }
+
+    const textOutput = (output: typeof Output.Encoded) => {
+      return JSON.stringify(output)
+    }
+
+    const modelOutput = Effect.fn("ReadTool.modelOutput")(function* (
+      input: Schema.Schema.Type<typeof Input>,
+      output: typeof Output.Encoded,
+      context: Tool.Context,
+    ) {
+      const media = imageOutput(input, output)
+      const target = yield* mutation.resolve({ path: input.path, kind: "directory" }).pipe(Effect.catch(() => Effect.void))
+      if (!target) return media
+
+      const loaded = yield* instructions
+        .resolveForPath({
+          path: AbsolutePath.make(target.canonical),
+          kind: "entries" in output ? "directory" : "file",
+          sessionID: context.sessionID,
+        })
+        .pipe(Effect.catch(() => Effect.succeed([])))
+      if (loaded.length === 0) return media
+
+      const reminder = `<system-reminder>\n${loaded.map((file) => `Instructions from: ${file.path}\n${file.content}`).join("\n\n")}\n</system-reminder>`
+      if (media.length > 0) return [{ type: "text" as const, text: reminder }, ...media]
+      return [{ type: "text" as const, text: `${reminder}\n\n${textOutput(output)}` }]
+    })
 
     yield* tools
       .register({
@@ -42,14 +79,7 @@ const layer = Layer.effectDiscard(
             "Read a text file or supported image, page through a large UTF-8 text file by line offset, or list a directory page. Relative paths resolve from the current location; absolute paths inside it are accepted, while external absolute paths require external_directory approval.",
           input: Input,
           output: Output,
-          toModelOutput: ({ input, output }) => {
-            if (!("encoding" in output) || output.encoding !== "base64" || !SUPPORTED_IMAGE_MIMES.has(output.mime))
-              return []
-            return [
-              { type: "text", text: "Image read successfully" },
-              { type: "file", data: output.content, mime: output.mime, name: input.path },
-            ]
-          },
+          toModelOutputEffect: ({ input, output, context }) => modelOutput(input, output, context),
           execute: (input, context) => {
             return Effect.gen(function* () {
               const source = {
@@ -113,5 +143,12 @@ const layer = Layer.effectDiscard(
 export const node = makeLocationNode({
   name: "tool/read",
   layer,
-  deps: [ToolRegistry.node, ReadToolFileSystem.node, LocationMutation.node, Image.node, PermissionV2.node],
+  deps: [
+    ToolRegistry.node,
+    ReadToolFileSystem.node,
+    LocationMutation.node,
+    Image.node,
+    InstructionContext.node,
+    PermissionV2.node,
+  ],
 })

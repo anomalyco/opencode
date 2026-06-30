@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect } from "bun:test"
+import fs from "fs/promises"
 import path from "path"
 import { Effect, Exit, Layer, PlatformError } from "effect"
 import { Config } from "@opencode-ai/core/config"
@@ -194,6 +195,44 @@ describe("ReadTool", () => {
         },
       ])
     }),
+  )
+
+  it.effect("includes scoped AGENTS.md instructions in model-visible read output", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => fs.mkdtemp(path.join(process.cwd(), ".tmp-read-instructions-"))),
+      (dir) => Effect.promise(() => fs.rm(dir, { recursive: true, force: true })),
+    ).pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          const file = path.join(dir, "subdir", "nested", "file.ts")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(path.dirname(file), { recursive: true })
+            await fs.writeFile(path.join(dir, "subdir", "AGENTS.md"), "Use subdir rules.")
+          })
+          const registry = yield* ToolRegistry.Service
+
+          const settled = yield* settleTool(registry, {
+            sessionID,
+            ...toolIdentity,
+            call: {
+              type: "tool-call",
+              id: "call-read-scoped-instructions",
+              name: "read",
+              input: { path: path.relative(process.cwd(), file) },
+            },
+          })
+
+          expect(settled.output?.structured).toEqual(readResult)
+          const content = settled.output?.content[0]
+          expect(content?.type).toBe("text")
+          if (content?.type !== "text") return
+          expect(content.text.startsWith("<system-reminder>")).toBe(true)
+          expect(content.text).toContain(
+            `<system-reminder>\nInstructions from: ${path.join(dir, "subdir", "AGENTS.md")}\nUse subdir rules.\n</system-reminder>`,
+          )
+        }),
+      ),
+    ),
   )
 
   it.effect("asks for external_directory approval before reading an external absolute path", () =>
