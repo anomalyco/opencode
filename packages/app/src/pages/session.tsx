@@ -82,7 +82,7 @@ import { Identifier } from "@/utils/id"
 import { diffs as list } from "@/utils/diffs"
 import { Persist, persisted } from "@/utils/persist"
 import { extractPromptFromParts } from "@/utils/prompt"
-import { formatServerError } from "@/utils/server-errors"
+import { formatServerError, isSessionNotFoundError } from "@/utils/server-errors"
 import { legacySessionHref, requireServerKey, selectSessionLineage, sessionHref } from "@/utils/session-route"
 import { useUsageExceededDialogs } from "./session/usage-exceeded-dialogs"
 import { createSessionOwnership } from "./session/session-ownership"
@@ -99,6 +99,15 @@ const sessionViewState = () => ({
   mobileTab: "session" as "session" | "changes",
   changes: "git" as ChangeMode,
 })
+
+function isLocalSessionNotFoundError(error: unknown, sessionID: string) {
+  return error instanceof Error && error.message === `Session not found: ${sessionID}`
+}
+
+function isCurrentSessionNotFoundError(error: unknown, sessionID: string | undefined) {
+  if (!sessionID) return false
+  return isSessionNotFoundError(error, sessionID) || isLocalSessionNotFoundError(error, sessionID)
+}
 
 async function runPromptRollbackMutation<T, R>(input: {
   capturePrompt: () => { current: () => T[]; set: (value: T[]) => void; reset: () => void }
@@ -150,7 +159,7 @@ function SessionRouteErrorBoundary(props: ParentProps<{ sessionID?: string; padd
         settings.general.newLayoutDesigns() ? (
           <SessionRouteFrame padded={props.padded}>
             <SessionPanelFrame newLayout raised={!!props.sessionID}>
-              <ErrorPage error={error} />
+              <SessionErrorFallback error={error} sessionID={props.sessionID} />
             </SessionPanelFrame>
           </SessionRouteFrame>
         ) : (
@@ -161,6 +170,20 @@ function SessionRouteErrorBoundary(props: ParentProps<{ sessionID?: string; padd
       {props.children}
     </ErrorBoundary>
   )
+}
+
+function SessionErrorFallback(props: { error: unknown; sessionID?: string }) {
+  const language = useLanguage()
+  if (isCurrentSessionNotFoundError(props.error, props.sessionID)) {
+    return (
+      <div class="flex-1 min-h-0 overflow-hidden">
+        <div class="h-full px-6 pb-42 -mt-4 flex flex-col items-center justify-center text-center gap-2">
+          <div class="text-14-medium text-text max-w-md">{language.t("session.error.notFound")}</div>
+        </div>
+      </div>
+    )
+  }
+  return <ErrorPage error={props.error} />
 }
 
 function ResolvedTargetSessionRoute() {
@@ -1859,7 +1882,7 @@ export default function Page() {
 
   const sessionErrorFallback = (error: unknown, reset: () => void) => {
     createEffect(on(sessionKey, reset, { defer: true }))
-    return <ErrorPage error={error} />
+    return <SessionErrorFallback error={error} sessionID={params.id} />
   }
 
   const sessionPanelContent = () => (
