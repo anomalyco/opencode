@@ -167,6 +167,101 @@ function selectBedrockMantleLanguageModel(sdk: BundledSDK, modelID: string) {
 
 function custom(dep: CustomDep): Record<string, CustomLoader> {
   return {
+    abacus: Effect.fnUntraced(function* (input: Info) {
+      const env = yield* dep.env()
+      const auth = yield* dep.auth(input.id)
+      const apiKey = input.key ?? env["ABACUS_API_KEY"] ?? (auth?.type === "api" ? auth.key : undefined)
+      const baseURL = input.options?.baseURL ?? Object.values(input.models)[0]?.api.url ?? "https://routellm.abacus.ai/v1"
+
+      return {
+        autoload: !!apiKey,
+        async discoverModels(): Promise<Record<string, Model>> {
+          if (!apiKey) return {}
+          try {
+            const res = await fetch(`${baseURL}/models`, {
+              headers: { Authorization: `Bearer ${apiKey}` },
+            })
+            if (!res.ok) return {}
+            const body = (await res.json()) as {
+              data: Array<{
+                id: string
+                name?: string
+                display_name?: string
+                model_type?: string
+                input_modalities?: string[]
+                output_modalities?: string[]
+                context_length?: number | null
+                max_completion_tokens?: number | null
+                thinking?: boolean
+                input_token_rate?: string
+                output_token_rate?: string
+              }>
+            }
+            if (!body.data?.length) return {}
+
+            const models: Record<string, Model> = {}
+            for (const m of body.data) {
+              if (m.model_type !== "text_generation") continue
+              if (input.models[m.id]) continue
+
+              const name = m.display_name || m.name || m.id
+              const context = m.context_length ?? 128000
+              const output = m.max_completion_tokens ?? 16384
+              const inputRate = m.input_token_rate ? parseFloat(m.input_token_rate) * 1_000_000 : 0
+              const outputRate = m.output_token_rate ? parseFloat(m.output_token_rate) * 1_000_000 : 0
+
+              models[m.id] = {
+                id: ModelV2.ID.make(m.id),
+                providerID: ProviderV2.ID.make("abacus"),
+                name,
+                family: "",
+                api: {
+                  id: m.id,
+                  url: baseURL,
+                  npm: "@ai-sdk/openai-compatible",
+                },
+                status: "active",
+                headers: {},
+                options: {},
+                cost: {
+                  input: Math.round(inputRate * 100) / 100,
+                  output: Math.round(outputRate * 100) / 100,
+                  cache: { read: 0, write: 0 },
+                },
+                limit: { context, output },
+                capabilities: {
+                  temperature: true,
+                  reasoning: m.thinking ?? true,
+                  attachment: true,
+                  toolcall: true,
+                  input: {
+                    text: true,
+                    audio: m.input_modalities?.includes("audio") ?? false,
+                    image: m.input_modalities?.includes("image") ?? true,
+                    video: m.input_modalities?.includes("video") ?? false,
+                    pdf: m.input_modalities?.includes("pdf") ?? false,
+                  },
+                  output: {
+                    text: true,
+                    audio: false,
+                    image: false,
+                    video: false,
+                    pdf: false,
+                  },
+                  interleaved: false,
+                },
+                release_date: "",
+                variants: {},
+              }
+            }
+            return models
+          } catch {
+            return {}
+          }
+        },
+        options: {},
+      }
+    }),
     anthropic: () =>
       Effect.succeed({
         autoload: false,
@@ -1560,14 +1655,15 @@ const layer = Layer.effect(
           mergeProvider(providerID, partial)
         }
 
-        const gitlab = ProviderV2.ID.make("gitlab")
-        if (discoveryLoaders[gitlab] && providers[gitlab] && isProviderAllowed(gitlab)) {
+        for (const [id, loader] of Object.entries(discoveryLoaders)) {
+          const providerID = ProviderV2.ID.make(id)
+          if (!providers[providerID] || !isProviderAllowed(providerID)) continue
           yield* Effect.promise(async () => {
             try {
-              const discovered = await discoveryLoaders[gitlab]()
+              const discovered = await loader()
               for (const [modelID, model] of Object.entries(discovered)) {
-                if (!providers[gitlab].models[modelID]) {
-                  providers[gitlab].models[modelID] = model
+                if (!providers[providerID].models[modelID]) {
+                  providers[providerID].models[modelID] = model
                 }
               }
             } catch (e) {}
