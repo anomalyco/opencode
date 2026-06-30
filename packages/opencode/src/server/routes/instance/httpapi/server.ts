@@ -22,6 +22,7 @@ import { McpAuth } from "@/mcp/auth"
 import { Permission } from "@/permission"
 import { Plugin } from "@/plugin"
 import { PluginPtyEnvironment } from "@/plugin/pty-environment"
+import { InstanceBootstrap } from "@/project/bootstrap"
 import { InstanceStore } from "@/project/instance-store"
 import { Project } from "@/project/project"
 import { Vcs } from "@/project/vcs"
@@ -301,7 +302,7 @@ export function createRoutes(
     ),
     Layer.provide(locationServiceMapLayer),
 
-    Layer.provide(LayerNode.compile(app)),
+    Layer.provide(LayerNode.compile(app, [[InstanceStore.bootstrapNode, InstanceBootstrap.node]])),
   )
 }
 

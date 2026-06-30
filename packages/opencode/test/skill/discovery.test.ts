@@ -1,6 +1,7 @@
 import { describe, expect, beforeAll, afterAll } from "bun:test"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { FSUtil } from "@opencode-ai/core/fs-util"
-import { Effect, Layer } from "effect"
+import { Effect } from "effect"
 import { Discovery } from "../../src/skill/discovery"
 import { Global } from "@opencode-ai/core/global"
 import { Filesystem } from "@/util/filesystem"
@@ -18,7 +19,7 @@ let mutableFiles = ["SKILL.md"]
 
 const fixturePath = path.join(import.meta.dir, "../fixture/skills")
 const cacheDir = path.join(Global.Path.cache, "skills")
-const it = testEffect(Layer.mergeAll(Discovery.defaultLayer, FSUtil.defaultLayer))
+const it = testEffect(LayerNode.compile(LayerNode.group([Discovery.node, FSUtil.node])))
 
 beforeAll(async () => {
   await rm(cacheDir, { recursive: true, force: true })

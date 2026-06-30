@@ -1,6 +1,7 @@
 import { expect } from "bun:test"
 import path from "path"
 import { pathToFileURL } from "url"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Effect, Layer } from "effect"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Global } from "@opencode-ai/core/global"
@@ -11,7 +12,7 @@ import { TuiConfig } from "../../src/config/tui"
 import { TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
-const it = testEffect(Layer.mergeAll(Config.defaultLayer, FSUtil.defaultLayer))
+const it = testEffect(LayerNode.compile(LayerNode.group([Config.node, FSUtil.node])))
 const winIt = process.platform === "win32" ? it.instance : it.instance.skip
 
 const globalConfigFiles = ["opencode.json", "opencode.jsonc", "tui.json", "tui.jsonc"].map((file) =>
