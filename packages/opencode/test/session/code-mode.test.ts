@@ -56,7 +56,7 @@ describe("code mode execute", () => {
     await expect(Effect.runPromise(decode({}))).rejects.toThrow()
   })
 
-  test("describes namespaces only (not per-tool signatures) and the discovery API", () => {
+  test("lists all namespaces, previews tools within budget, and documents discovery", () => {
     const groups = groupByServer(
       {
         github_create_issue: mcpTool("create_issue", () => ""),
@@ -71,8 +71,31 @@ describe("code mode execute", () => {
     expect(description).toContain("tools.describe(path)")
     expect(description).toContain("- github (2 tools)")
     expect(description).toContain("- linear (1 tool)")
-    // The full catalog must NOT be inlined in the prompt.
-    expect(description).not.toContain("create_issue")
+    // Small catalog: individual tools are previewed inline as `<server>.<tool>`.
+    expect(description).toContain("github.create_issue")
+    expect(description).toContain("linear.search")
+    // ...but never full signatures (those come from tools.describe).
+    expect(description).not.toContain("): Promise<")
+  })
+
+  test("falls back to namespaces-only when the catalog exceeds the preview budget", () => {
+    const tools: Record<string, AITool> = {}
+    const longDesc = "performs a meaningful operation against the service with several options"
+    for (let i = 0; i < 60; i++) {
+      tools[`alpha_op_${i}`] = mcpTool(`op_${i}`, () => "", { type: "object", properties: {} })
+      ;(tools[`alpha_op_${i}`] as any).description = longDesc
+    }
+    tools["zeta_only_tool"] = mcpTool("only_tool", () => "")
+    const groups = groupByServer(tools, ["alpha", "zeta"])
+    const description = describeTools(groups)
+
+    // Every namespace is always present, with counts.
+    expect(description).toContain("- alpha (60 tools)")
+    expect(description).toContain("- zeta (1 tool)")
+    // The preview is budget-capped, so the later namespace's tools are not all inlined.
+    expect(description).not.toContain("zeta.only_tool")
+    // Some early tools are still previewed.
+    expect(description).toContain("alpha.op_0")
   })
 
   test("tools.search and tools.describe expose the catalog on demand", async () => {

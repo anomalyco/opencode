@@ -153,9 +153,18 @@ const signatureFor = (entry: CatalogEntry) =>
   `tools${access(entry.server)}${access(entry.local)}(input: ${inputType(entry.tool)}): ${returnType(entry.outputSchema)}`
 
 /**
- * The execute tool description: the calling convention, the discovery API, and a
- * list of namespaces only — never the full tool catalog. Per-tool signatures are
- * fetched on demand with `tools.describe` so the prompt stays small.
+ * Character budget for the inline tool preview in the tool description. All
+ * namespaces are always listed; individual tools are previewed (cheapest first,
+ * server by server) until this many characters of preview lines are used, after
+ * which the remaining namespaces show counts only. This front-loads a useful slice
+ * of the catalog — cutting discovery round-trips — without dumping every tool.
+ */
+const PREVIEW_BUDGET = 2000
+
+/**
+ * The execute tool description: the calling convention, the discovery API, and the
+ * list of namespaces. A budgeted preview of individual tools is inlined; the full
+ * per-tool signatures are still fetched on demand with `tools.describe`.
  */
 export function describe(groups: Map<string, CatalogEntry[]>): string {
   const lines = [
@@ -178,9 +187,21 @@ export function describe(groups: Map<string, CatalogEntry[]>): string {
     lines.push("", "No MCP servers are currently connected.")
     return lines.join("\n")
   }
-  lines.push("", "Available namespaces:")
+  lines.push("", "Available namespaces (use tools.search / tools.describe to explore tools not shown):")
+  let used = 0
+  let previewing = true
   for (const [server, entries] of [...groups].sort(([a], [b]) => a.localeCompare(b))) {
     lines.push(`- ${server} (${entries.length} tool${entries.length === 1 ? "" : "s"})`)
+    if (!previewing) continue
+    for (const entry of entries) {
+      const line = `  - ${entry.path}${entry.description ? ` — ${brief(entry.description, 80)}` : ""}`
+      if (used + line.length > PREVIEW_BUDGET) {
+        previewing = false
+        break
+      }
+      lines.push(line)
+      used += line.length
+    }
   }
   return lines.join("\n")
 }
