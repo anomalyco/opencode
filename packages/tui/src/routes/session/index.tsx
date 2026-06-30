@@ -369,7 +369,7 @@ export function Session() {
         aliases: ["summarize"],
       },
       run: () => {
-        void sdk.api.sessions.compact({ sessionID: route.sessionID })
+        void sdk.api.session.compact({ sessionID: route.sessionID })
         dialog.clear()
       },
     },
@@ -403,7 +403,7 @@ export function Session() {
             dialog.clear()
             return
           }
-          const error = await sdk.api.sessions.stage({ sessionID: route.sessionID, messageID: target }).then(
+          const error = await sdk.api.session.stage({ sessionID: route.sessionID, messageID: target }).then(
             () => undefined,
             (error) => error,
           )
@@ -420,7 +420,7 @@ export function Session() {
       slash: { name: "redo" },
       run: () => {
         void (async () => {
-          const error = await sdk.api.sessions.clear({ sessionID: route.sessionID }).then(
+          const error = await sdk.api.session.clear({ sessionID: route.sessionID }).then(
             () => undefined,
             (error) => error,
           )
@@ -843,7 +843,12 @@ export function Session() {
 
   // snap to bottom when session changes
   createEffect(on(() => route.sessionID, toBottom))
-  createEffect(on(() => route.sessionID, () => setComposer("open", false)))
+  createEffect(
+    on(
+      () => route.sessionID,
+      () => setComposer("open", false),
+    ),
+  )
 
   return (
     <LocationProvider location={location()}>
@@ -913,9 +918,7 @@ export function Session() {
                   onClose={() => setComposer("open", false)}
                 />
                 <Switch>
-                  <Match when={composer.open || !!session()?.parentID}>
-                    {null}
-                  </Match>
+                  <Match when={composer.open || !!session()?.parentID}>{null}</Match>
                   <Match when={permissions().length > 0}>
                     <PermissionPrompt request={permissions()[0]} directory={session()?.location.directory} />
                   </Match>
@@ -1230,7 +1233,7 @@ function RevertMessage(props: {
       onMouseUp={() => {
         if (renderer.getSelection()?.getSelectedText()) return
         void (async () => {
-          const error = await sdk.api.sessions.clear({ sessionID: route.sessionID }).then(
+          const error = await sdk.api.session.clear({ sessionID: route.sessionID }).then(
             () => undefined,
             (error) => error,
           )

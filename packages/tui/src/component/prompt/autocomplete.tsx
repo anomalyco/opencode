@@ -320,7 +320,7 @@ export function Autocomplete(props: {
       if (referenceMatch()) return []
       const { lineRange, baseQuery } = extractLineRange(input.query ?? "")
 
-      const result = await sdk.api.files
+      const result = await sdk.api.file
         .find({
           query: baseQuery,
           limit: 20,

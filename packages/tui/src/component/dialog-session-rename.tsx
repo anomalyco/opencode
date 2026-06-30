@@ -17,7 +17,7 @@ export function DialogSessionRename(props: { sessionID: string; currentTitle?: s
       onConfirm={(value) => {
         const title = value.trim()
         if (!title) return
-        void sdk.api.sessions
+        void sdk.api.session
           .rename({ sessionID: props.sessionID, title })
           .then(() => dialog.clear())
           .catch((error) =>

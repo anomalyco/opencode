@@ -1,5 +1,5 @@
 import { TextAttributes } from "@opentui/core"
-import type { IntegrationsConnectOauthOutput } from "@opencode-ai/client"
+import type { IntegrationConnectOauthOutput } from "@opencode-ai/client"
 import type { ConnectionInfo, IntegrationInfo, IntegrationOAuthMethod } from "@opencode-ai/sdk/v2"
 import { createMemo, createSignal, onCleanup, onMount, Show } from "solid-js"
 import { useClipboard } from "../context/clipboard"
@@ -23,7 +23,7 @@ const INTEGRATION_PRIORITY: Record<string, number> = {
 }
 
 type ConnectMethod = Exclude<IntegrationInfo["methods"][number], { type: "env" }>
-type IntegrationAttempt = IntegrationsConnectOauthOutput["data"]
+type IntegrationAttempt = IntegrationConnectOauthOutput["data"]
 
 export function integrationOptions(list: IntegrationInfo[]) {
   return list.toSorted(
@@ -111,7 +111,7 @@ function manageConnections(
             title: `Disconnect ${connection.label}`,
             value: connection.id,
             onSelect: () => {
-              void sdk.api.credentials
+              void sdk.api.credential
                 .remove({ credentialID: connection.id, location: location(data) })
                 .then(() => disconnected(integration.name, data, dialog, toast))
                 .catch(toast.error)
@@ -159,7 +159,7 @@ function KeyMethod(props: { integration: IntegrationInfo; method: Extract<Connec
       placeholder="API key"
       onConfirm={(key) => {
         if (!key) return
-        void sdk.api.integrations
+        void sdk.api.integration
           .connectKey({
             integrationID: props.integration.id,
             location: location(data),
@@ -194,7 +194,7 @@ function OAuthStarting(props: {
   const toast = useToast()
 
   onMount(() => {
-    void sdk.api.integrations
+    void sdk.api.integration
       .connectOauth({
         integrationID: props.integration.id,
         location: location(data),
@@ -248,7 +248,7 @@ function OAuthAuto(props: { integration: IntegrationInfo; title: string; attempt
   }))
 
   const poll = () => {
-    void sdk.api.integrations
+    void sdk.api.integration
       .attemptStatus({ attemptID: props.attempt.attemptID, location: location(data) })
       .then((result) => {
         const status = result.data
@@ -275,7 +275,7 @@ function OAuthAuto(props: { integration: IntegrationInfo; title: string; attempt
   onCleanup(() => {
     if (timer) clearTimeout(timer)
     if (settled) return
-    void sdk.api.integrations.attemptCancel({ attemptID: props.attempt.attemptID, location: location(data) })
+    void sdk.api.integration.attemptCancel({ attemptID: props.attempt.attemptID, location: location(data) })
   })
 
   return (
@@ -300,7 +300,7 @@ function OAuthCode(props: { integration: IntegrationInfo; title: string; attempt
 
   onCleanup(() => {
     if (settled) return
-    void sdk.api.integrations.attemptCancel({ attemptID: props.attempt.attemptID, location: location(data) })
+    void sdk.api.integration.attemptCancel({ attemptID: props.attempt.attemptID, location: location(data) })
   })
 
   return (
@@ -309,7 +309,7 @@ function OAuthCode(props: { integration: IntegrationInfo; title: string; attempt
       placeholder="Authorization code"
       onConfirm={(code) => {
         if (!code) return
-        void sdk.api.integrations
+        void sdk.api.integration
           .attemptComplete({ attemptID: props.attempt.attemptID, location: location(data), code })
           .then(() => {
             settled = true

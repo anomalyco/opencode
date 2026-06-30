@@ -425,7 +425,7 @@ export function Prompt(props: PromptProps) {
           }, 5000)
 
           if (store.interrupt >= 2) {
-            void sdk.api.sessions.interrupt({
+            void sdk.api.session.interrupt({
               sessionID: props.sessionID,
             })
             setStore("interrupt", 0)
@@ -1012,7 +1012,7 @@ export function Prompt(props: PromptProps) {
       finishMoveProgress = Boolean(move.progress())
       const location = data.location.default()
 
-      const created = await sdk.api.sessions
+      const created = await sdk.api.session
         .create({
           location: directory
             ? { directory, workspaceID }
@@ -1114,20 +1114,20 @@ export function Prompt(props: PromptProps) {
         session = data.session.get(sessionID)
       }
       if (session?.agent !== agent.id) {
-        await sdk.api.sessions.switchAgent({ sessionID, agent: agent.id })
+        await sdk.api.session.switchAgent({ sessionID, agent: agent.id })
       }
       if (
         session?.model?.providerID !== selectedModel.providerID ||
         session.model.id !== selectedModel.modelID ||
         session.model.variant !== variant
       ) {
-        await sdk.api.sessions.switchModel({
+        await sdk.api.session.switchModel({
           sessionID,
           model: { providerID: selectedModel.providerID, id: selectedModel.modelID, variant },
         })
       }
       if (session?.revert) {
-        const error = await sdk.api.sessions.commit({ sessionID }).then(
+        const error = await sdk.api.session.commit({ sessionID }).then(
           () => undefined,
           (error) => error,
         )
@@ -1136,7 +1136,7 @@ export function Prompt(props: PromptProps) {
           return false
         }
       }
-      const error = await sdk.api.sessions
+      const error = await sdk.api.session
         .prompt({
           sessionID,
           prompt: {

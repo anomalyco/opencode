@@ -32,7 +32,7 @@ export function DialogSessionList() {
   const [searchResults] = createResource(search, async (query) => {
     if (!query) return
     const location = data.location.default()
-    const response = await sdk.api.sessions.list({
+    const response = await sdk.api.session.list({
       search: query,
       limit: 50,
       order: "desc",

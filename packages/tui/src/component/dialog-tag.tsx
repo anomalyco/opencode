@@ -17,7 +17,7 @@ export function DialogTag(props: { onSelect?: (value: string) => void }) {
   const [files] = createResource(
     () => [store.filter],
     async () => {
-      const result = await sdk.api.files
+      const result = await sdk.api.file
         .find({
           query: store.filter,
           type: "file",

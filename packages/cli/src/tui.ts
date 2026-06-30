@@ -14,7 +14,7 @@ export function runTui(transport: Transport, reload?: () => Promise<Transport>) 
   return Effect.gen(function* () {
     const options = { baseUrl: transport.url, headers: transport.headers }
     const api = OpenCode.make(options)
-    const directory = yield* Effect.tryPromise(() => api.files.list({ location: { directory: process.cwd() } })).pipe(
+    const directory = yield* Effect.tryPromise(() => api.file.list({ location: { directory: process.cwd() } })).pipe(
       Effect.map((response) => response.location.directory),
       Effect.catch(() =>
         Effect.tryPromise(() => api.location.get()).pipe(Effect.map((response) => response.directory)),

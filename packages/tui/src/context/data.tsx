@@ -554,7 +554,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           return store.session.status[sessionID] ?? "idle"
         },
         async refresh(sessionID: string) {
-          setStore("session", "info", sessionID, mutable(await sdk.api.sessions.get({ sessionID })))
+          setStore("session", "info", sessionID, mutable(await sdk.api.session.get({ sessionID })))
         },
         message: {
           ids(sessionID: string) {
@@ -572,7 +572,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             setStore("session", "message", sessionID, [])
             messageIndex.set(sessionID, new Map())
             const loaded = mutable(
-              (await sdk.api.messages.list({ sessionID, limit: 200, order: "desc" })).data,
+              (await sdk.api.message.list({ sessionID, limit: 200, order: "desc" })).data,
             ).toReversed()
             const live = store.session.message[sessionID] ?? []
             const liveByID = new Map(live.map((message) => [message.id, message]))
@@ -588,7 +588,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             return store.session.permission[sessionID]
           },
           async refresh(sessionID: string) {
-            setStore("session", "permission", sessionID, mutable(await sdk.api.permissions.list({ sessionID })))
+            setStore("session", "permission", sessionID, mutable(await sdk.api.permission.list({ sessionID })))
           },
         },
         question: {
@@ -596,7 +596,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             return store.session.question[sessionID]
           },
           async refresh(sessionID: string) {
-            setStore("session", "question", sessionID, mutable(await sdk.api.questions.list({ sessionID })))
+            setStore("session", "question", sessionID, mutable(await sdk.api.question.list({ sessionID })))
           },
         },
       },
@@ -606,7 +606,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             return store.project.permission[projectID]
           },
           async refresh(projectID: string) {
-            setStore("project", "permission", projectID, mutable(await sdk.api.permissions.listSaved({ projectID })))
+            setStore("project", "permission", projectID, mutable(await sdk.api.permission.listSaved({ projectID })))
           },
         },
       },
@@ -618,7 +618,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           return store.shell[id]
         },
         async refresh(ref?: LocationRef) {
-          const result = await sdk.api.shells.list({ location: locationQuery(ref) })
+          const result = await sdk.api.shell.list({ location: locationQuery(ref) })
           setStore(
             "shell",
             produce((draft) => {
@@ -627,7 +627,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           )
         },
         async remove(id: string) {
-          await sdk.api.shells.remove({ id })
+          await sdk.api.shell.remove({ id })
           setStore("shell", id, undefined!)
         },
       },
@@ -646,7 +646,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             return store.location[locationKey(location ?? defaultLocation())]?.agent
           },
           async refresh(ref?: LocationRef) {
-            const result = await sdk.api.agents.list({ location: locationQuery(ref ?? defaultLocation()) })
+            const result = await sdk.api.agent.list({ location: locationQuery(ref ?? defaultLocation()) })
             const key = locationKey(result.location)
             setStore("location", key, { ...store.location[key], agent: mutable(result.data) })
           },
@@ -656,7 +656,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             return store.location[locationKey(location ?? defaultLocation())]?.command
           },
           async refresh(ref?: LocationRef) {
-            const result = await sdk.api.commands.list({ location: locationQuery(ref ?? defaultLocation()) })
+            const result = await sdk.api.command.list({ location: locationQuery(ref ?? defaultLocation()) })
             const key = locationKey(result.location)
             setStore("location", key, { ...store.location[key], command: mutable(result.data) })
           },
@@ -666,7 +666,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             return store.location[locationKey(location ?? defaultLocation())]?.integration
           },
           async refresh(ref?: LocationRef) {
-            const result = await sdk.api.integrations.list({ location: locationQuery(ref ?? defaultLocation()) })
+            const result = await sdk.api.integration.list({ location: locationQuery(ref ?? defaultLocation()) })
             const key = locationKey(result.location)
             setStore("location", key, { ...store.location[key], integration: mutable(result.data) })
           },
@@ -676,7 +676,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             return store.location[locationKey(location ?? defaultLocation())]?.model
           },
           async refresh(ref?: LocationRef) {
-            const result = await sdk.api.models.list({ location: locationQuery(ref ?? defaultLocation()) })
+            const result = await sdk.api.model.list({ location: locationQuery(ref ?? defaultLocation()) })
             const key = locationKey(result.location)
             setStore("location", key, { ...store.location[key], model: mutable(result.data) })
           },
@@ -686,7 +686,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             return store.location[locationKey(location ?? defaultLocation())]?.provider
           },
           async refresh(ref?: LocationRef) {
-            const result = await sdk.api.providers.list({ location: locationQuery(ref ?? defaultLocation()) })
+            const result = await sdk.api.provider.list({ location: locationQuery(ref ?? defaultLocation()) })
             const key = locationKey(result.location)
             setStore("location", key, { ...store.location[key], provider: mutable(result.data) })
           },
@@ -696,7 +696,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             return store.location[locationKey(location ?? defaultLocation())]?.reference
           },
           async refresh(ref?: LocationRef) {
-            const result = await sdk.api.references.list({ location: locationQuery(ref ?? defaultLocation()) })
+            const result = await sdk.api.reference.list({ location: locationQuery(ref ?? defaultLocation()) })
             const key = locationKey(result.location)
             setStore("location", key, { ...store.location[key], reference: mutable(result.data) })
           },
@@ -706,7 +706,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             return store.location[locationKey(location ?? defaultLocation())]?.skill
           },
           async refresh(ref?: LocationRef) {
-            const result = await sdk.api.skills.list({ location: locationQuery(ref ?? defaultLocation()) })
+            const result = await sdk.api.skill.list({ location: locationQuery(ref ?? defaultLocation()) })
             const key = locationKey(result.location)
             setStore("location", key, { ...store.location[key], skill: mutable(result.data) })
           },
@@ -716,7 +716,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
 
     async function bootstrap() {
       const settled = await Promise.allSettled([
-        sdk.api.sessions
+        sdk.api.session
           .list({
             limit: 50,
             order: "desc",
@@ -732,7 +732,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
               }),
             ),
           ),
-        sdk.api.sessions
+        sdk.api.session
           .active()
           .then((active) =>
             setStore(
