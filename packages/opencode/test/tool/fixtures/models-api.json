@@ -77455,6 +77455,31 @@
           "input": 2.5,
           "output": 10
         }
+      },
+      "command-a-plus-05-2026": {
+        "id": "command-a-plus-05-2026",
+        "name": "Command A Plus",
+        "family": "command-a",
+        "attachment": true,
+        "reasoning": true,
+        "tool_call": true,
+        "temperature": true,
+        "knowledge": "2025-05-01",
+        "release_date": "2026-05-20",
+        "last_updated": "2026-05-20",
+        "modalities": {
+          "input": ["text", "image"],
+          "output": ["text"]
+        },
+        "open_weights": true,
+        "limit": {
+          "context": 128000,
+          "output": 64000
+        },
+        "cost": {
+          "input": 2.5,
+          "output": 10
+        }
       }
     }
   },
