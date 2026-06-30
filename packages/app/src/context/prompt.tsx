@@ -78,7 +78,13 @@ function isPartEqual(partA: ContentPart, partB: ContentPart) {
     case "text":
       return partB.type === "text" && partA.content === partB.content
     case "file":
-      return partB.type === "file" && partA.path === partB.path && isSelectionEqual(partA.selection, partB.selection)
+      return (
+        partB.type === "file" &&
+        partA.path === partB.path &&
+        partA.mime === partB.mime &&
+        partA.filename === partB.filename &&
+        isSelectionEqual(partA.selection, partB.selection)
+      )
     case "agent":
       return partB.type === "agent" && partA.name === partB.name
     case "image":
