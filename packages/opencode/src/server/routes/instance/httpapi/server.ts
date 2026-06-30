@@ -22,7 +22,6 @@ import { McpAuth } from "@/mcp/auth"
 import { Permission } from "@/permission"
 import { Plugin } from "@/plugin"
 import { PluginPtyEnvironment } from "@/plugin/pty-environment"
-import { InstanceBootstrap } from "@/project/bootstrap"
 import { InstanceStore } from "@/project/instance-store"
 import { Project } from "@/project/project"
 import { Vcs } from "@/project/vcs"
@@ -52,7 +51,7 @@ import { Worktree } from "@/worktree"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { MoveSession } from "@opencode-ai/core/control-plane/move-session"
 import { Database } from "@opencode-ai/core/database/database"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { AppNodeBuilderV1 } from "@/effect/app-node-builder-v1"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { httpClient } from "@opencode-ai/core/effect/app-node-platform"
 import { EventV2 } from "@opencode-ai/core/event"
@@ -101,7 +100,7 @@ import { sessionHandlers } from "./handlers/session"
 import { syncHandlers } from "./handlers/sync"
 import { tuiHandlers } from "./handlers/tui"
 import { handlers } from "@opencode-ai/server/handlers"
-import { locationServiceMapLayer } from "@opencode-ai/core/location-services"
+import { buildLocationServiceMap, LocationServiceMap } from "@opencode-ai/core/location-services"
 import { layer as locationLayer } from "@opencode-ai/server/location"
 import { sessionLocationLayer } from "@opencode-ai/server/middleware/session-location"
 import { PtyEnvironment } from "@opencode-ai/server/pty-environment"
@@ -272,6 +271,7 @@ const app = LayerNode.group([
 export function createRoutes(
   corsOptions?: CorsOptions,
 ): Layer.Layer<never, EffectConfig.ConfigError, RouteRequirements> {
+  const locationServiceMap = buildLocationServiceMap()
   return Layer.mergeAll(
     rootApiRoutes,
     eventApiRoutes,
@@ -287,7 +287,7 @@ export function createRoutes(
       corsVaryFix,
       fenceLayer,
       cors(corsOptions),
-      AppNodeBuilder.build(MoveSession.node),
+      AppNodeBuilderV1.build(MoveSession.node, [[LocationServiceMap.node, locationServiceMap]]),
       HttpServer.layerServices,
     ]),
     Layer.provide(Layer.succeed(CorsConfig)(corsOptions)),
@@ -297,13 +297,14 @@ export function createRoutes(
     Layer.provide(locationLayer),
     Layer.provide(PtyEnvironment.layer),
     Layer.provide(
-      AppNodeBuilder.build(SessionV2.node, [[SessionExecution.node, SessionExecutionLocal.node]]).pipe(
-        Layer.provide(locationServiceMapLayer),
-      ),
+      AppNodeBuilderV1.build(SessionV2.node, [
+        [LocationServiceMap.node, locationServiceMap],
+        [SessionExecution.node, SessionExecutionLocal.node],
+      ]),
     ),
-    Layer.provide(locationServiceMapLayer),
+    Layer.provide(locationServiceMap),
 
-    Layer.provide(LayerNode.compile(app, [[InstanceStore.bootstrapNode, InstanceBootstrap.node]])),
+    Layer.provide(AppNodeBuilderV1.build(app, [[LocationServiceMap.node, locationServiceMap]])),
   )
 }
 
