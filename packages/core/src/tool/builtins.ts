@@ -39,7 +39,6 @@ export const node = makeLocationNode({
     GrepTool.node,
     QuestionTool.node,
     ReadTool.node,
-    ReadToolFileSystem.node,
     SkillTool.node,
     TodoWriteTool.node,
     WebFetchTool.node,
