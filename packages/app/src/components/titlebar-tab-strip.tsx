@@ -212,7 +212,7 @@ export function TitlebarTabStrip(props: {
     <div data-slot="titlebar-tabs" class="relative min-w-0">
       <div
         data-slot="titlebar-tabs-scroll"
-        class="flex min-w-0 flex-row items-center gap-1.5 overflow-x-auto no-scrollbar [app-region:no-drag]"
+        class="flex min-w-0 flex-row items-center gap-1.5 overflow-x-auto no-scrollbar [-webkit-app-region:no-drag]"
         ref={scrollRef}
       >
         <DragDropProvider

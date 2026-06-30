@@ -6,6 +6,19 @@
   outline: none;
 }
 
+/* Enable native window drag for Electron on macOS */
+header {
+  -webkit-app-region: drag;
+}
+
+header button,
+header a,
+header input,
+header [role="button"],
+header [role="menuitem"] {
+  -webkit-app-region: no-drag;
+}
+
 [data-slot="titlebar-v2"]
   [data-component="icon-button-v2"][data-variant="ghost-muted"]:is(:focus-visible, [data-state="focus"]):not(
     :disabled
