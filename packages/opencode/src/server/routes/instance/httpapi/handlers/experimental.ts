@@ -36,6 +36,10 @@ export const experimentalHandlers = HttpApiBuilder.group(InstanceHttpApi, "exper
     const background = yield* BackgroundJob.Service
     const flags = yield* RuntimeFlags.Service
 
+    const capabilities = Effect.fn("ExperimentalHttpApi.capabilities")(function* () {
+      return { backgroundSubagents: flags.experimentalBackgroundSubagents }
+    })
+
     const getConsole = Effect.fn("ExperimentalHttpApi.console")(function* () {
       const [state, groups] = yield* Effect.all(
         [
@@ -171,6 +175,7 @@ export const experimentalHandlers = HttpApiBuilder.group(InstanceHttpApi, "exper
     })
 
     return handlers
+      .handle("capabilities", capabilities)
       .handle("console", getConsole)
       .handle("consoleOrgs", listConsoleOrgs)
       .handle("consoleSwitch", switchConsole)

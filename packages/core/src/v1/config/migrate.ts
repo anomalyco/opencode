@@ -6,7 +6,6 @@ import { ConfigMCPV1 } from "./mcp"
 import { ConfigPermissionV1 } from "./permission"
 import { ConfigProviderV1 } from "./provider"
 import { ConfigProviderOptionsV1 } from "./provider-options"
-import { ModelRequest } from "../../model-request"
 
 const keys = new Set([
   "logLevel",
@@ -192,11 +191,7 @@ function migrateProvider(info: ConfigProviderV1.Info) {
 function migrateModel(info: typeof ConfigProviderV1.Model.Type, packageName?: string) {
   const packageID = info.provider?.npm ?? packageName
   const lowerer = ConfigProviderOptionsV1.get(packageID)
-  const ingest = (options: Readonly<Record<string, unknown>>) => {
-    const request = ModelRequest.normalizeAiSdkOptions(packageID, options)
-    return { ...lowerer.request(request.body), ...request.generation, ...request.options }
-  }
-  const request = info.options && ingest(info.options)
+  const request = info.options && lowerer.request(info.options)
   const costs = info.cost && [
     {
       input: info.cost.input,
@@ -241,7 +236,7 @@ function migrateModel(info: typeof ConfigProviderV1.Model.Type, packageName?: st
       info.variants &&
       Object.entries(info.variants).map(([id, options]) => ({
         id,
-        body: ingest(options),
+        body: lowerer.request(options),
       })),
     cost: costs,
     disabled: info.status === "deprecated" ? true : undefined,

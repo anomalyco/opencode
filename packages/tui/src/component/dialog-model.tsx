@@ -1,8 +1,10 @@
-import { createMemo, createSignal } from "solid-js"
+import { createMemo, createSignal, Show } from "solid-js"
+import { RGBA } from "@opentui/core"
 import { useLocal } from "../context/local"
 import { map, pipe, flatMap, entries, filter, sortBy, take } from "remeda"
 import { DialogSelect } from "../ui/dialog-select"
 import { useDialog } from "../ui/dialog"
+import { useTheme } from "../context/theme"
 import { createDialogProviderOptions, DialogProvider } from "./dialog-provider"
 import { DialogVariant } from "./dialog-variant"
 import * as fuzzysort from "fuzzysort"
@@ -38,10 +40,11 @@ export function DialogModel(props: { providerID?: string }) {
             key: item,
             value: { providerID: provider.id, modelID: model.id },
             title: model.name ?? item.modelID,
+            titleSuffix: priceTierView(model.cost),
             description: provider.name,
             category,
             disabled: provider.id === "opencode" && model.id.includes("-nano"),
-            footer: model.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
+            footer: modelPriceFooter(provider.id, model.cost),
             onSelect: () => {
               onSelect(provider.id, model.id)
             },
@@ -73,13 +76,14 @@ export function DialogModel(props: { providerID?: string }) {
           map(([model, info]) => ({
             value: { providerID: provider.id, modelID: model },
             title: info.name ?? model,
+            titleSuffix: priceTierView(info.cost),
             releaseDate: info.release_date,
             description: favorites.some((item) => item.providerID === provider.id && item.modelID === model)
               ? "(Favorite)"
               : undefined,
             category: connected() ? provider.name : undefined,
             disabled: provider.id === "opencode" && model.includes("-nano"),
-            footer: info.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
+            footer: modelPriceFooter(provider.id, info.cost),
             onSelect() {
               onSelect(provider.id, model)
             },
@@ -118,7 +122,10 @@ export function DialogModel(props: { providerID?: string }) {
 
     if (needle) {
       return [
-        ...fuzzysort.go(needle, providerOptions, { keys: ["title", "category"] }).map((x) => x.obj),
+        ...sortModelOptions(
+          fuzzysort.go(needle, providerOptions, { keys: ["title", "category"] }).map((x) => x.obj),
+          false,
+        ),
         ...fuzzysort.go(needle, popularProviders, { keys: ["title"] }).map((x) => x.obj),
       ]
     }
@@ -180,6 +187,79 @@ export function DialogModel(props: { providerID?: string }) {
   )
 }
 
+// Costs are stored as USD per 1M tokens. Trim to at most 2 decimals so prices
+// read as "$1.4" / "$5" / "$0.27" rather than "$1.40" / "$5.00".
+function formatModelPrice(value: number): string {
+  return `$${Math.round(value * 100) / 100}`
+}
+
+// Right-aligned price column shown on each picker row: "$<input> / $<output>"
+// per 1M tokens. opencode's free models keep their "Free" label, and models
+// without a positive input price show no footer.
+export function modelPriceFooter(
+  providerID: string,
+  cost: { input?: number; output?: number } | undefined,
+): string | undefined {
+  const input = cost?.input ?? 0
+  if (input === 0) return providerID === "opencode" ? "Free" : undefined
+  return `${formatModelPrice(input)} / ${formatModelPrice(cost?.output ?? 0)}`
+}
+
+// A coarse 1-4 price tier shown as a "$$·" indicator after the model name.
+// The calculation is a "average" price per token, weighted 2:1 for input vs output. The tiers are defined as follows:
+// Tiers (USD per 1M tokens): x<=1 -> 1, 1<x<=10 -> 2, 10<x<17 -> 3, x>=17 -> 4.
+export function modelPriceTier(cost: { input?: number; output?: number } | undefined): number | undefined {
+  const input = cost?.input ?? 0
+  const output = cost?.output ?? 0
+  if (input === 0 && output === 0) return undefined
+  const x = (2 * input + output) / 2
+  if (x <= 1) return 1
+  if (x <= 10) return 2
+  if (x < 17) return 3
+  return 4
+}
+
+// Renders the tier as filled "$" (colored green->yellow->orange->red by tier)
+// plus dimmed "·" placeholders up to 3, with a trailing "+" for the top tier.
+function PriceTier(props: { tier: number }) {
+  const { theme } = useTheme()
+  const color = createMemo(() => {
+    switch (props.tier) {
+      case 1:
+        return theme.success
+      case 2:
+        return theme.warning
+      case 3:
+        return RGBA.fromValues(
+          (theme.warning.r + theme.error.r) / 2,
+          (theme.warning.g + theme.error.g) / 2,
+          (theme.warning.b + theme.error.b) / 2,
+          1,
+        )
+      default:
+        return theme.error
+    }
+  })
+  const filled = "$".repeat(Math.min(props.tier, 3))
+  const dots = "·".repeat(Math.max(0, 3 - props.tier))
+  return (
+    <>
+      <span style={{ fg: color() }}> {filled}</span>
+      <Show when={dots}>
+        <span style={{ fg: theme.textMuted }}>{dots}</span>
+      </Show>
+      <Show when={props.tier >= 4}>
+        <span style={{ fg: color() }}>+</span>
+      </Show>
+    </>
+  )
+}
+
+function priceTierView(cost: { input?: number; output?: number } | undefined) {
+  const tier = modelPriceTier(cost)
+  return tier ? <PriceTier tier={tier} /> : undefined
+}
+
 export function sortModelOptions<T extends { footer?: string; releaseDate: string | number; title: string }>(
   options: T[],
   newestFirst: boolean,
@@ -188,6 +268,7 @@ export function sortModelOptions<T extends { footer?: string; releaseDate: strin
   return sortBy(
     options,
     (option) => option.footer !== "Free",
+    [(option) => option.releaseDate, "desc"],
     (option) => option.title,
   )
 }

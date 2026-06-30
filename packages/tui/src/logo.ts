@@ -19,3 +19,9 @@ export const wordmark = [
   "██  ██  ██ ██   ██ ██  ██  ██ ██  ██  ██ ██    ██ ██    ██    ██    ██   ██",
   "██      ██ ██   ██ ██      ██ ██      ██  ██████   ██████     ██    ██   ██",
 ]
+
+// Per-line vertical gradient for the wordmark (top → bottom), one color per wordmark line.
+export const wordmarkGradient: Record<"dark" | "light", string[]> = {
+  dark: ["#9F6C45", "#B88557", "#C8A37C", "#DDC7AB", "#EDE3D4"],
+  light: ["#56332D", "#633B30", "#754533", "#915B3D", "#9F6C45"],
+}
