@@ -675,7 +675,9 @@ const layer = Layer.effect(
             Effect.ensuring(cleanup()),
           )
 
-          agentTurnCount.record(1, { gen_ai_operation_name: "invoke_agent" })
+          if (!ctx.needsCompaction) {
+            agentTurnCount.record(1, { gen_ai_operation_name: "invoke_agent" })
+          }
 
           if (ctx.needsCompaction) return "compact"
           if (ctx.blocked || ctx.assistantMessage.error) return "stop"

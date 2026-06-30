@@ -498,8 +498,9 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
           },
           (err) => {
             const duration = (Date.now() - startTime) / 1000
-            toolCallCountTotal.add(1, { gen_ai_tool_name: name, success: "false" })
-            toolCallDurationSeconds.record(duration, { gen_ai_tool_name: name, success: "false" })
+            const errorType = err instanceof Error ? err.name : typeof err
+            toolCallCountTotal.add(1, { gen_ai_tool_name: name, success: "false", "error.type": errorType })
+            toolCallDurationSeconds.record(duration, { gen_ai_tool_name: name, success: "false", "error.type": errorType })
             throw err
           }
         )
