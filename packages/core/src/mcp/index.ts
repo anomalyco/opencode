@@ -1,15 +1,18 @@
 export * as MCP from "./index"
 
 import { McpEvent } from "@opencode-ai/schema/mcp-event"
-import { Cause, Context, Deferred, Effect, Exit, FiberSet, Layer, Schema, Scope } from "effect"
+import { createHash } from "node:crypto"
+import { Cause, Context, Deferred, Effect, Exit, FiberSet, Layer, Schema, Scope, Stream } from "effect"
 import { makeLocationNode } from "../effect/app-node"
 import { Config } from "../config"
 import { ConfigMCP } from "../config/mcp"
+import { Credential } from "../credential"
 import { EventV2 } from "../event"
 import { Integration } from "../integration"
 import { IntegrationConnection } from "../integration/connection"
 import { Location } from "../location"
 import { MCPClient } from "./client"
+import { MCPOAuth } from "./oauth"
 
 export const ServerName = Schema.String.pipe(Schema.brand("MCP.ServerName"))
 export type ServerName = typeof ServerName.Type
@@ -162,8 +165,8 @@ type ServerEntry = {
   scope?: Scope.Closeable
   client?: MCPClient.Connection
   tools?: ReadonlyArray<Tool>
-  readonly integrationID?: Integration.ID
-  readonly connection?: IntegrationConnection.Info
+  // Set when a remote server is registered as an OAuth integration; the credential lives in the global store.
+  integrationID?: Integration.ID
 }
 
 export interface Interface {
@@ -196,6 +199,8 @@ export const layer = Layer.effect(
     const config = yield* Config.Service
     const location = yield* Location.Service
     const events = yield* EventV2.Service
+    const integration = yield* Integration.Service
+    const credentials = yield* Credential.Service
     const root = yield* Scope.make()
     const fork = yield* FiberSet.makeRuntime<never, void, never>()
     yield* Effect.addFinalizer((exit) => Scope.close(root, exit))
@@ -218,6 +223,37 @@ export const layer = Layer.effect(
       }
     }
 
+    // Register every remote server as an OAuth integration so credentials live in the global store
+    // rather than in committed config. Servers that connect anonymously simply never use the method.
+    const registrations: Array<{
+      readonly name: ServerName
+      readonly remote: typeof ConfigMCP.Remote.Type
+      readonly integrationID: Integration.ID
+      readonly methodID: Integration.MethodID
+    }> = []
+    for (const [name, entry] of runtime) {
+      if (entry.config.type !== "remote" || entry.config.oauth === false) continue
+      const remote = entry.config
+      // Key identity on name + url, not url alone: two configs for the same url under different names are
+      // distinct logical servers that may hold different accounts, so they must not share a credential row.
+      const suffix = "mcp_" + createHash("sha1").update(name + "\u0000" + remote.url).digest("hex").slice(0, 16)
+      entry.integrationID = Integration.ID.make(suffix)
+      registrations.push({ name, remote, integrationID: entry.integrationID, methodID: Integration.MethodID.make(suffix) })
+    }
+    if (registrations.length > 0)
+      yield* integration.transform((draft) => {
+        for (const reg of registrations) {
+          draft.update(reg.integrationID, (ref) => {
+            ref.name = reg.name
+          })
+          draft.method.update({
+            integrationID: reg.integrationID,
+            method: { id: reg.methodID, type: "oauth", label: reg.name },
+            authorize: () => MCPOAuth.authorize({ name: reg.name, config: reg.remote, methodID: reg.methodID }),
+          })
+        }
+      })
+
     const requireServer = Effect.fnUntraced(function* (server: ServerName | string) {
       const name = ServerName.make(server)
       const entry = runtime.get(name)
@@ -225,14 +261,67 @@ export const layer = Layer.effect(
       return { name, entry }
     })
 
-    const info = (name: ServerName, entry: ServerEntry) =>
+    const info = (name: ServerName, entry: ServerEntry, connection: IntegrationConnection.Info | undefined) =>
       new ServerInfo({
         name,
         config: entry.config,
         status: entry.status,
         integrationID: entry.integrationID,
-        connection: entry.connection,
+        connection,
       })
+
+    // Builds the connect-time auth provider for a remote OAuth-integration server. The SDK presents and
+    // refreshes stored tokens, persisting refreshes back to the same credential row. The provider never
+    // opens a browser, so an auth-gated connect ends in UnauthorizedError -> needs_auth rather than a redirect.
+    const connectProvider = Effect.fnUntraced(function* (entry: ServerEntry) {
+      if (entry.config.type !== "remote" || !entry.integrationID) return undefined
+      const remote = entry.config
+      const oauth = remote.oauth || undefined
+      const base = {
+        redirectUrl: oauth?.redirect_uri ?? "http://127.0.0.1/callback",
+        scope: oauth?.scope,
+        client: oauth?.client_id ? { id: oauth.client_id, secret: oauth.client_secret } : undefined,
+        // No browser during connect: an auth-gated server surfaces needs_auth instead of opening a browser.
+        onRedirect: () => {},
+      }
+      const stored = yield* credentials.list(entry.integrationID)
+      const found = stored.find((credential) => credential.value.type === "oauth")
+      if (!found || found.value.type !== "oauth")
+        // No stored credential yet: an empty in-memory store still lets the SDK run the auth handshake, which
+        // ends in UnauthorizedError -> needs_auth. Returning no provider instead would let the transport throw
+        // a raw HTTP error, hiding the auth requirement behind a generic failed status. Anonymous servers are
+        // unaffected: tokens() returns undefined, so no auth header is sent and the SDK never calls auth().
+        return MCPOAuth.provider({ ...base, store: MCPOAuth.memoryStore() })
+      const credentialID = found.id
+      const methodID = found.value.methodID
+      let current: Credential.OAuth | undefined = found.value
+      return MCPOAuth.provider({
+        ...base,
+        // Drop a credential the SDK rejected so the next connect cleanly reports needs_auth. Uses the raw
+        // credential service (no integration event) to avoid re-triggering the reconnect subscriber mid-connect.
+        invalidate: async (scope) => {
+          if (scope === "verifier" || scope === "discovery") return
+          current = undefined
+          await Effect.runPromise(credentials.remove(credentialID))
+        },
+        store: {
+          tokens: async () => (current ? MCPOAuth.toTokens(current) : undefined),
+          saveTokens: async (tokens) => {
+            current = MCPOAuth.toCredential({
+              methodID,
+              serverUrl: remote.url,
+              tokens,
+              client: current ? MCPOAuth.clientFromCredential(current) : undefined,
+            })
+            await Effect.runPromise(credentials.update(credentialID, { value: current }))
+          },
+          clientInformation: async () => (current ? MCPOAuth.clientFromCredential(current) : undefined),
+          saveClientInformation: async () => {},
+          codeVerifier: async () => undefined,
+          saveCodeVerifier: async () => {},
+        },
+      })
+    })
 
     const toTool = (server: ServerName, def: MCPClient.ToolDefinition) =>
       new Tool({ server, name: def.name, description: def.description, inputSchema: def.inputSchema })
@@ -284,9 +373,10 @@ export const layer = Layer.effect(
       Effect.gen(function* () {
         const scope = yield* Scope.fork(root)
         entry.scope = scope
+        const authProvider = yield* connectProvider(entry)
         // List tools as part of connect so a failure here marks the server failed rather than
         // leaving it connected with a silently empty tool list and no path to recover.
-        const result = yield* MCPClient.connect(name, entry.config, location.directory).pipe(
+        const result = yield* MCPClient.connect(name, entry.config, location.directory, authProvider).pipe(
           Effect.flatMap((connection) => connection.tools().pipe(Effect.map((defs) => ({ connection, defs })))),
           Scope.provide(scope),
           Effect.exit,
@@ -323,6 +413,31 @@ export const layer = Layer.effect(
       fork(startServer(name, entry))
     }
 
+    // Bring a server online (or back to needs_auth) when its integration's credential changes, so an
+    // OAuth login takes effect without a restart. Only fires for the integrations we registered.
+    const owned = new Set(registrations.map((reg) => reg.integrationID))
+    const reconnect = (integrationID: Integration.ID) =>
+      Effect.gen(function* () {
+        const match = Array.from(runtime).find(([, entry]) => entry.integrationID === integrationID)
+        if (!match) return
+        const [name, entry] = match
+        if (entry.config.disabled) return
+        if (entry.scope) {
+          yield* Scope.close(entry.scope, Exit.void)
+          entry.scope = undefined
+          entry.client = undefined
+          entry.tools = undefined
+        }
+        yield* startServer(name, entry)
+      })
+    fork(
+      events.subscribe(Integration.Event.ConnectionUpdated).pipe(
+        Stream.filter((event) => owned.has(event.data.integrationID)),
+        Stream.runForEach((event) => Effect.sync(() => fork(reconnect(event.data.integrationID)))),
+        Effect.ignore,
+      ),
+    )
+
     const whenAllReady = Effect.forEach(runtime.values(), (entry) => Deferred.await(entry.startup), {
       concurrency: "unbounded",
       discard: true,
@@ -334,8 +449,14 @@ export const layer = Layer.effect(
 
     return Service.of({
       servers: Effect.fn("MCP.servers")(function* () {
-        return Array.from(runtime, ([name, entry]) => info(name, entry)).toSorted((a, b) =>
-          a.name.localeCompare(b.name),
+        const entries = Array.from(runtime).toSorted(([a], [b]) => a.localeCompare(b))
+        return yield* Effect.forEach(entries, ([name, entry]) =>
+          Effect.gen(function* () {
+            const connection = entry.integrationID
+              ? yield* integration.connection.active(entry.integrationID)
+              : undefined
+            return info(name, entry, connection)
+          }),
         )
       }),
       tools: Effect.fn("MCP.tools")(function* () {
@@ -394,4 +515,8 @@ export const layer = Layer.effect(
   }),
 )
 
-export const node = makeLocationNode({ service: Service, layer, deps: [Config.node, Location.node, EventV2.node] })
+export const node = makeLocationNode({
+  service: Service,
+  layer,
+  deps: [Config.node, Location.node, EventV2.node, Integration.node, Credential.node],
+})
