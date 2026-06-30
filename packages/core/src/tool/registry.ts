@@ -21,9 +21,14 @@ export type ExecuteInput = {
 }
 
 export interface Interface {
-  readonly materialize: (permissions?: PermissionV2.Ruleset) => Effect.Effect<Materialization>
+  readonly materialize: (input: MaterializeInput) => Effect.Effect<Materialization>
   /** Internal registration capability exposed publicly only through Tools.Service. */
   readonly register: (tools: Readonly<Record<string, AnyTool>>) => Effect.Effect<void, RegistrationError, Scope.Scope>
+}
+
+export interface MaterializeInput {
+  readonly model: { readonly id: string; readonly provider: string }
+  readonly permissions?: PermissionV2.Ruleset
 }
 
 export interface Materialization {
@@ -102,14 +107,19 @@ const registryLayer = Layer.effect(
           }),
         )
       }),
-      materialize: Effect.fn("ToolRegistry.materialize")(function* (permissions = []) {
+      materialize: Effect.fn("ToolRegistry.materialize")(function* (input) {
         const registrations = new Map(applications.entries())
         for (const [name, entries] of local) {
           const registration = entries.at(-1)?.registration
           if (registration) registrations.set(name, registration)
         }
-        for (const [name, registration] of registrations)
-          if (whollyDisabled(permission(registration.tool, name), permissions)) registrations.delete(name)
+        // OpenAI/GPT models use apply_patch; every other model uses edit and write.
+        const usePatch = input.model.provider.toLowerCase() === "openai" || input.model.id.toLowerCase().includes("gpt")
+        for (const [name, registration] of registrations) {
+          const wrongEditTool = name === "apply_patch" ? !usePatch : (name === "edit" || name === "write") && usePatch
+          if (wrongEditTool || whollyDisabled(permission(registration.tool, name), input.permissions ?? []))
+            registrations.delete(name)
+        }
         return {
           definitions: Array.from(registrations, ([name, registration]) => definition(name, registration.tool)),
           settle: (input) => {

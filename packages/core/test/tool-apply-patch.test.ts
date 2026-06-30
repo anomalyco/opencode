@@ -109,6 +109,9 @@ const call = (patchText: string, id = "call-apply-patch") => ({
   call: { type: "tool-call" as const, id, name: "apply_patch", input: { patchText } },
 })
 
+// apply_patch is only materialized for OpenAI/GPT models.
+const model = { id: "gpt-5", provider: "openai" }
+
 const exists = (target: string) =>
   Effect.promise(() =>
     fs.stat(target).then(
@@ -132,12 +135,15 @@ describe("ApplyPatchTool", () => {
           Effect.andThen(
             withTool(tmp.path, (registry) =>
               Effect.gen(function* () {
-                expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["apply_patch"])
+                expect((yield* toolDefinitions(registry, undefined, model)).map((tool) => tool.name)).toEqual([
+                  "apply_patch",
+                ])
                 const settled = yield* settleTool(
                   registry,
                   call(
                     "*** Begin Patch\n*** Add File: nested/new.txt\n+created\n*** Update File: update.txt\n@@\n-before\n+after\n*** Delete File: remove.txt\n*** End Patch",
                   ),
+                  model,
                 )
                 expect(settled.result).toEqual({
                   type: "text",
@@ -207,6 +213,7 @@ describe("ApplyPatchTool", () => {
                     call(
                       "*** Begin Patch\n*** Add File: created.txt\n+created\n*** Update File: old.txt\n*** Move to: moved.txt\n@@\n-before\n+after\n*** End Patch",
                     ),
+                    model,
                   ),
                 ).toEqual({ type: "error", value: "apply_patch moves are not supported yet" })
                 expect(yield* exists(path.join(tmp.path, "created.txt"))).toBe(false)
@@ -234,6 +241,7 @@ describe("ApplyPatchTool", () => {
                   yield* executeTool(
                     registry,
                     call(`*** Begin Patch\n*** Update File: ${target}\n@@\n-before\n+after\n*** End Patch`),
+                    model,
                   ),
                 ).toMatchObject({ type: "text" })
                 expect(assertions.map((input) => input.action)).toEqual(["external_directory", "edit"])
@@ -270,6 +278,7 @@ describe("ApplyPatchTool", () => {
                     call(
                       `*** Begin Patch\n*** Update File: ${first}\n@@\n-before\n+after\n*** Update File: ${second}\n@@\n-before\n+after\n*** End Patch`,
                     ),
+                    model,
                   ),
                 ).toMatchObject({ type: "text" })
                 expect(assertions.map((input) => input.action)).toEqual(["external_directory", "edit"])
@@ -301,6 +310,7 @@ describe("ApplyPatchTool", () => {
                 call(
                   "*** Begin Patch\n*** Add File: created.txt\n+created\n*** Update File: missing.txt\n@@\n-before\n+after\n*** End Patch",
                 ),
+                model,
               ),
             ).toEqual({ type: "error", value: "Unable to apply patch at missing.txt" })
             expect(yield* exists(path.join(tmp.path, "created.txt"))).toBe(false)
@@ -325,6 +335,7 @@ describe("ApplyPatchTool", () => {
                   yield* executeTool(
                     registry,
                     call("*** Begin Patch\n*** Add File: existing.txt\n+replacement\n*** End Patch"),
+                    model,
                   ),
                 ).toEqual({ type: "error", value: "Unable to apply patch at existing.txt" })
                 expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("sentinel\n")
@@ -350,6 +361,7 @@ describe("ApplyPatchTool", () => {
               yield* executeTool(
                 registry,
                 call("*** Begin Patch\n*** Add File: appeared.txt\n+replacement\n*** End Patch"),
+                model,
               ),
             ).toEqual({ type: "error", value: "Unable to apply patch at appeared.txt" })
             expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("winner\n")
@@ -377,6 +389,7 @@ describe("ApplyPatchTool", () => {
                     yield* executeTool(
                       registry,
                       call("*** Begin Patch\n*** Delete File: first.txt\n*** Delete File: second.txt\n*** End Patch"),
+                      model,
                     ).pipe(Effect.exit),
                   ),
                 ).toBe(true)
@@ -408,6 +421,7 @@ describe("ApplyPatchTool", () => {
               const run = yield* executeTool(
                 registry,
                 call("*** Begin Patch\n*** Delete File: first.txt\n*** Delete File: second.txt\n*** End Patch"),
+                model,
               ).pipe(Effect.forkChild)
               yield* Deferred.await(removeStarted!)
               const interrupt = yield* Fiber.interrupt(run).pipe(Effect.forkChild)
