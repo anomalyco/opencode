@@ -1,6 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Directory } from "@/acp/directory"
 import { Command } from "@/command"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { Provider } from "@/provider/provider"
@@ -83,8 +84,9 @@ const snapshot = (directory: string) => {
 }
 
 const fakeLayer = (calls: string[]) =>
-  Directory.layer.pipe(
-    Layer.provide(
+  LayerNode.compile(Directory.node, [
+    [
+      Directory.loaderNode,
       Layer.succeed(
         Directory.Loader,
         Directory.Loader.of({
@@ -95,8 +97,8 @@ const fakeLayer = (calls: string[]) =>
             }),
         }),
       ),
-    ),
-  )
+    ],
+  ])
 
 describe("ACP directory snapshot", () => {
   it.effect("two concurrent callers share one load", () => {

@@ -1,18 +1,20 @@
 import { SessionV2 } from "@opencode-ai/core/session"
-import { DateTime, Effect } from "effect"
+import { DateTime, Effect, Stream } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import { Api } from "../api"
-import { SessionsCursor } from "../groups/session"
+import { SessionsCursor } from "@opencode-ai/protocol/groups/session"
 import {
   ConflictError,
   InvalidCursorError,
+  MessageNotFoundError,
   ServiceUnavailableError,
   SessionNotFoundError,
   UnknownError,
-} from "../errors"
+} from "@opencode-ai/protocol/errors"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 
 const DefaultSessionsLimit = 50
+const DefaultSessionHistoryLimit = 50
 
 export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handlers) =>
   Effect.gen(function* () {
@@ -72,6 +74,16 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
               model: ctx.payload.model,
               location: ctx.payload.location ?? { directory: AbsolutePath.make(process.cwd()) },
             }),
+          }
+        }),
+      )
+      .handle(
+        "session.active",
+        Effect.fn(function* () {
+          return {
+            data: Object.fromEntries(
+              Array.from(yield* session.active, (sessionID) => [sessionID, { type: "running" as const }]),
+            ),
           }
         }),
       )
@@ -206,6 +218,90 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
         }),
       )
       .handle(
+        "session.revert.stage",
+        Effect.fn(function* (ctx) {
+          return {
+            data: yield* session.revert.stage({ ...ctx.params, ...ctx.payload }).pipe(
+              Effect.catchTag(
+                "Session.NotFoundError",
+                (error) =>
+                  new SessionNotFoundError({
+                    sessionID: error.sessionID,
+                    message: `Session not found: ${error.sessionID}`,
+                  }),
+              ),
+              Effect.catchTag(
+                "Session.MessageNotFoundError",
+                (error) =>
+                  new MessageNotFoundError({
+                    sessionID: error.sessionID,
+                    messageID: error.messageID,
+                    message: `Message not found: ${error.messageID}`,
+                  }),
+              ),
+              Effect.catchTag("Snapshot.Error", (error) => {
+                const ref = `err_${crypto.randomUUID().slice(0, 8)}`
+                return Effect.logError("failed to stage session revert", { cause: error }).pipe(
+                  Effect.andThen(
+                    Effect.fail(
+                      new UnknownError({
+                        message: "Unexpected server error. Check server logs for details.",
+                        ref,
+                      }),
+                    ),
+                  ),
+                )
+              }),
+            ),
+          }
+        }),
+      )
+      .handle(
+        "session.revert.clear",
+        Effect.fn(function* (ctx) {
+          yield* session.revert.clear(ctx.params.sessionID).pipe(
+            Effect.catchTag(
+              "Session.NotFoundError",
+              (error) =>
+                new SessionNotFoundError({
+                  sessionID: error.sessionID,
+                  message: `Session not found: ${error.sessionID}`,
+                }),
+            ),
+            Effect.catchTag("Snapshot.Error", (error) => {
+              const ref = `err_${crypto.randomUUID().slice(0, 8)}`
+              return Effect.logError("failed to clear session revert", { cause: error }).pipe(
+                Effect.andThen(
+                  Effect.fail(
+                    new UnknownError({
+                      message: "Unexpected server error. Check server logs for details.",
+                      ref,
+                    }),
+                  ),
+                ),
+              )
+            }),
+          )
+          return HttpApiSchema.NoContent.make()
+        }),
+      )
+      .handle(
+        "session.revert.commit",
+        Effect.fn(function* (ctx) {
+          yield* session.revert.commit(ctx.params.sessionID).pipe(
+            Effect.catchTag(
+              "Session.NotFoundError",
+              (error) =>
+                new SessionNotFoundError({
+                  sessionID: error.sessionID,
+                  message: `Session not found: ${error.sessionID}`,
+                }),
+            ),
+          )
+          return HttpApiSchema.NoContent.make()
+        }),
+      )
+      .handle(
         "session.context",
         Effect.fn(function* (ctx) {
           return {
@@ -224,16 +320,65 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                   Effect.annotateLogs({ ref, sessionID: error.sessionID, messageID: error.messageID }),
                   Effect.andThen(
                     Effect.fail(
-                      new UnknownError({
-                        message: "Unexpected server error. Check server logs for details.",
-                        ref,
-                      }),
+                      new UnknownError({ message: "Unexpected server error. Check server logs for details.", ref }),
                     ),
                   ),
                 )
               }),
             ),
           }
+        }),
+      )
+      .handle(
+        "session.history",
+        Effect.fn(function* (ctx) {
+          return yield* session
+            .history({
+              sessionID: ctx.params.sessionID,
+              after: ctx.query.after,
+              limit: ctx.query.limit ?? DefaultSessionHistoryLimit,
+            })
+            .pipe(
+              Effect.map((page) => ({
+                data: page.events,
+                hasMore: page.hasMore,
+              })),
+              Effect.catchTag(
+                "Session.NotFoundError",
+                (error) =>
+                  new SessionNotFoundError({
+                    sessionID: error.sessionID,
+                    message: `Session not found: ${error.sessionID}`,
+                  }),
+              ),
+            )
+        }),
+      )
+      .handle(
+        "session.events",
+        Effect.fn((ctx) =>
+          Effect.succeed(
+            session.events({ sessionID: ctx.params.sessionID, after: ctx.query.after }).pipe(Stream.orDie),
+          ),
+        ),
+      )
+      .handle(
+        "session.interrupt",
+        Effect.fn(function* (ctx) {
+          yield* session.interrupt(ctx.params.sessionID)
+          return HttpApiSchema.NoContent.make()
+        }),
+      )
+      .handle(
+        "session.message",
+        Effect.fn(function* (ctx) {
+          const message = yield* session.message(ctx.params)
+          if (message) return { data: message }
+          return yield* new MessageNotFoundError({
+            sessionID: ctx.params.sessionID,
+            messageID: ctx.params.messageID,
+            message: `Message not found: ${ctx.params.messageID}`,
+          })
         }),
       )
   }),

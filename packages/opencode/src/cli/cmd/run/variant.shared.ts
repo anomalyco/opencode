@@ -8,6 +8,7 @@
 // variant and the persisted file.
 import path from "path"
 import { FSUtil } from "@opencode-ai/core/fs-util"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Context, Effect, Layer } from "effect"
 import { makeRuntime } from "@/effect/run-service"
 import { Global } from "@opencode-ai/core/global"
@@ -135,7 +136,7 @@ function state(value: unknown): ModelState {
   }
 }
 
-function createLayer(fs = FSUtil.defaultLayer) {
+function createLayer(fs = AppNodeBuilder.build(FSUtil.node)) {
   return Layer.fresh(
     Layer.effect(
       Service,
@@ -196,7 +197,7 @@ function createLayer(fs = FSUtil.defaultLayer) {
 }
 
 /** @internal Exported for testing. */
-export function createVariantRuntime(fs = FSUtil.defaultLayer): VariantRuntime {
+export function createVariantRuntime(fs = AppNodeBuilder.build(FSUtil.node)): VariantRuntime {
   const runtime = makeRuntime(Service, createLayer(fs))
   return {
     resolveSavedVariant: (model) => runtime.runPromise((svc) => svc.resolveSavedVariant(model)).catch(() => undefined),

@@ -6,6 +6,7 @@ import os from "os"
 import path from "path"
 import { fileURLToPath } from "url"
 import { AISDK } from "@opencode-ai/core/aisdk"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { PluginV2 } from "@opencode-ai/core/plugin"
 import { PluginHost } from "@opencode-ai/core/plugin/host"
@@ -17,7 +18,7 @@ import { PluginTestLayer } from "./fixture"
 const fixtureProvider = new URL("./fixtures/provider-factory.ts", import.meta.url).href
 const fixtureProviderPath = fileURLToPath(fixtureProvider)
 const it = testEffect(PluginTestLayer)
-const itWithAISDK = testEffect(AISDK.locationLayer.pipe(Layer.provideMerge(PluginTestLayer)))
+const itWithAISDK = testEffect(Layer.mergeAll(PluginTestLayer, AppNodeBuilder.build(AISDK.node)))
 
 function npmEntrypoint(entrypoint?: string) {
   return Npm.Service.of({
@@ -51,7 +52,7 @@ describe("DynamicProviderPlugin", () => {
       const aisdk = yield* AISDK.Service
       yield* addPlugin()
       const result = yield* aisdk.runSDK({
-        model: new ModelV2.Info({
+        model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.make("custom"), ModelV2.ID.make("test-model")),
           api: { id: ModelV2.ID.make("test-model"), type: "aisdk", package: fixtureProvider },
         }),
@@ -69,7 +70,7 @@ describe("DynamicProviderPlugin", () => {
       const sdk = { marker: "existing" }
       yield* addPlugin()
       const result = yield* aisdk.runSDK({
-        model: new ModelV2.Info({
+        model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.make("custom"), ModelV2.ID.make("test-model")),
           api: { id: ModelV2.ID.make("test-model"), type: "aisdk", package: fixtureProvider },
         }),
@@ -86,7 +87,7 @@ describe("DynamicProviderPlugin", () => {
       const aisdk = yield* AISDK.Service
       yield* addPlugin()
       const result = yield* aisdk.runSDK({
-        model: new ModelV2.Info({
+        model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.make("custom-provider"), ModelV2.ID.make("test-model")),
           api: { id: ModelV2.ID.make("test-model"), type: "aisdk", package: fixtureProvider },
         }),
@@ -102,7 +103,7 @@ describe("DynamicProviderPlugin", () => {
       const aisdk = yield* AISDK.Service
       yield* addPlugin(npmEntrypoint(fixtureProviderPath))
       const result = yield* aisdk.runSDK({
-        model: new ModelV2.Info({
+        model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.make("npm-provider"), ModelV2.ID.make("test-model")),
           api: { id: ModelV2.ID.make("test-model"), type: "aisdk", package: "fixture-provider" },
         }),
@@ -119,7 +120,7 @@ describe("DynamicProviderPlugin", () => {
       yield* addPlugin(npmEntrypoint())
       const exit = yield* aisdk
         .language(
-          new ModelV2.Info({
+          ModelV2.Info.make({
             ...ModelV2.Info.empty(ProviderV2.ID.make("missing-entrypoint"), ModelV2.ID.make("alias")),
             api: { id: ModelV2.ID.make("alias"), type: "aisdk", package: "fixture-provider" },
           }),
@@ -136,7 +137,7 @@ describe("DynamicProviderPlugin", () => {
       yield* addPlugin()
       const exit = yield* aisdk
         .language(
-          new ModelV2.Info({
+          ModelV2.Info.make({
             ...ModelV2.Info.empty(ProviderV2.ID.make("bad-import"), ModelV2.ID.make("alias")),
             api: { id: ModelV2.ID.make("alias"), type: "aisdk", package: "file:///missing/provider-factory.js" },
           }),
@@ -155,7 +156,7 @@ describe("DynamicProviderPlugin", () => {
       yield* addPlugin(npmEntrypoint(tmp.entrypoint))
       const exit = yield* aisdk
         .language(
-          new ModelV2.Info({
+          ModelV2.Info.make({
             ...ModelV2.Info.empty(ProviderV2.ID.make("missing-factory"), ModelV2.ID.make("alias")),
             api: { id: ModelV2.ID.make("alias"), type: "aisdk", package: "fixture-provider" },
           }),
@@ -172,7 +173,7 @@ describe("DynamicProviderPlugin", () => {
       const aisdk = yield* AISDK.Service
       yield* addPlugin()
       const language = yield* aisdk.language(
-        new ModelV2.Info({
+        ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.make("custom"), ModelV2.ID.make("alias")),
           api: { id: ModelV2.ID.make("test-model-api"), type: "aisdk", package: fixtureProvider },
         }),

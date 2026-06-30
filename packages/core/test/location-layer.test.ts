@@ -1,12 +1,14 @@
 import fs from "fs/promises"
 import path from "path"
 import { describe, expect } from "bun:test"
-import { DateTime, Effect, Equal, Hash, Layer, Schema } from "effect"
-import { Tool } from "@opencode-ai/core/public"
+import { DateTime, Effect, Equal, Hash, Schema } from "effect"
+import { Tool } from "@opencode-ai/core/tool/tool"
 import { define } from "@opencode-ai/plugin/v2/effect"
 import { AgentV2 } from "@opencode-ai/core/agent"
 import { Catalog } from "@opencode-ai/core/catalog"
-import { LocationServiceMap } from "@opencode-ai/core/location-layer"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { LocationServiceMap } from "@opencode-ai/core/location-services"
 import { Location } from "@opencode-ai/core/location"
 import { PluginV2 } from "@opencode-ai/core/plugin"
 import { ModelV2 } from "@opencode-ai/core/model"
@@ -30,36 +32,33 @@ import { Reference } from "../src/reference"
 import { ToolRegistry } from "../src/tool/registry"
 import { ApplicationTools } from "../src/tool/application-tools"
 
-const applicationTools = ApplicationTools.layer
 const it = testEffect(
-  Layer.merge(
-    Layer.mergeAll(applicationTools, Database.defaultLayer, EventV2.defaultLayer),
-    LocationServiceMap.layer.pipe(
-      Layer.provide(applicationTools),
-      Layer.provide(
-        Layer.mergeAll(
-          Project.defaultLayer,
-          EventV2.defaultLayer,
-          Credential.defaultLayer.pipe(Layer.fresh),
-          Npm.defaultLayer,
-          ModelsDev.defaultLayer,
-          FSUtil.defaultLayer,
-          Global.defaultLayer,
-        ),
-      ),
-    ),
-  ),
+  AppNodeBuilder.build(LayerNode.group([ApplicationTools.node, Database.node, EventV2.node, LocationServiceMap.node])),
 )
 
 describe("LocationServiceMap", () => {
-  it.effect("compares equivalent location refs by value", () =>
-    Effect.sync(() => {
-      const directory = AbsolutePath.make("/project")
-      expect(Equal.equals(Location.Ref.make({ directory }), Location.Ref.make({ directory }))).toBe(true)
-      expect(Hash.hash(Location.Ref.make({ directory }))).toBe(
-        Hash.hash(Location.Ref.make({ directory, workspaceID: undefined })),
-      )
-    }),
+  it.live("reuses cached services for constructed and decoded location refs", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((dir) =>
+        Effect.scoped(
+          Effect.gen(function* () {
+            const locations = yield* LocationServiceMap.Service
+            const directory = AbsolutePath.make(dir.path)
+            const constructed = Location.Ref.make({ directory })
+            const decoded = Schema.decodeUnknownSync(Location.Ref)({ directory })
+
+            expect(constructed).toEqual({ directory, workspaceID: undefined })
+            expect(decoded).toEqual(constructed)
+            expect(Equal.equals(constructed, decoded)).toBe(true)
+            expect(Hash.hash(constructed)).toBe(Hash.hash(decoded))
+            expect(yield* locations.contextEffect(constructed)).toBe(yield* locations.contextEffect(decoded))
+          }),
+        ),
+      ),
+    ),
   )
 
   it.live("isolates location state while sharing location policy with catalog", () =>
@@ -97,7 +96,9 @@ describe("LocationServiceMap", () => {
               }
             }).pipe(
               Effect.scoped,
-              Effect.provide(LocationServiceMap.get(Location.Ref.make({ directory: AbsolutePath.make(directory) }))),
+              Effect.provide(
+                LocationServiceMap.Service.get(Location.Ref.make({ directory: AbsolutePath.make(directory) })),
+              ),
             )
 
           const blockedState = yield* update(blocked.path)
@@ -177,7 +178,7 @@ describe("LocationServiceMap", () => {
                 location,
               }),
             ),
-          ).pipe(Effect.provide(LocationServiceMap.get(location)), Effect.flip)
+          ).pipe(Effect.provide(LocationServiceMap.Service.get(location)), Effect.flip)
 
           expect(failure).toMatchObject({
             _tag: "SessionRunnerModel.ModelUnavailableError",
@@ -217,7 +218,7 @@ describe("LocationServiceMap", () => {
           })
         }).pipe(
           Effect.scoped,
-          Effect.provide(LocationServiceMap.get(Location.Ref.make({ directory: AbsolutePath.make(dir.path) }))),
+          Effect.provide(LocationServiceMap.Service.get(Location.Ref.make({ directory: AbsolutePath.make(dir.path) }))),
         ),
       ),
     ),

@@ -16,10 +16,33 @@ export function requireServerKey(segment: string | undefined) {
   return ServerConnection.Key.make(key)
 }
 
+export function legacySessionServer(
+  tabs: readonly { type: "session"; server: ServerConnection.Key; sessionId: string }[],
+  sessionID: string,
+  active: ServerConnection.Key,
+) {
+  const matches = tabs.filter((tab) => tab.sessionId === sessionID)
+  return matches.find((tab) => tab.server === active)?.server ?? (matches.length === 1 ? matches[0]?.server : active)
+}
+
 type SessionParent = { id: string; parentID?: string }
 
-export async function rootSession(session: SessionParent, get: (sessionID: string) => Promise<SessionParent>) {
+export function selectSessionLineage<T extends { session: { id: string } }>(
+  sessionID: string,
+  cached: T | undefined,
+  resolved: T | undefined,
+) {
+  if (cached?.session.id === sessionID) return cached
+  if (resolved?.session.id === sessionID) return resolved
+}
+
+export async function rootSession<T extends SessionParent>(session: T, get: (sessionID: string) => Promise<T>) {
+  const seen = new Set([session.id])
   let current = session
-  while (current.parentID) current = await get(current.parentID)
+  while (current.parentID) {
+    if (seen.has(current.parentID)) throw new Error(`Session parent cycle: ${current.parentID}`)
+    seen.add(current.parentID)
+    current = await get(current.parentID)
+  }
   return current
 }

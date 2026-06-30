@@ -39,7 +39,7 @@ describe("VenicePlugin", () => {
       const aisdk = yield* AISDK.Service
       yield* addPlugin()
       const result = yield* aisdk.runSDK({
-        model: new ModelV2.Info({
+        model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.make("venice"), ModelV2.ID.make("model")),
           api: { id: ModelV2.ID.make("model"), type: "aisdk", package: "test-provider" },
         }),
@@ -56,7 +56,7 @@ describe("VenicePlugin", () => {
       const aisdk = yield* AISDK.Service
       yield* addPlugin()
       const result = yield* aisdk.runSDK({
-        model: new ModelV2.Info({
+        model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.make("custom-venice"), ModelV2.ID.make("model")),
           api: { id: ModelV2.ID.make("model"), type: "aisdk", package: "test-provider" },
         }),
@@ -74,7 +74,7 @@ describe("VenicePlugin", () => {
       const aisdk = yield* AISDK.Service
       yield* addPlugin()
       const similar = yield* aisdk.runSDK({
-        model: new ModelV2.Info({
+        model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.make("venice"), ModelV2.ID.make("model")),
           api: { id: ModelV2.ID.make("model"), type: "aisdk", package: "test-provider" },
         }),
@@ -82,7 +82,7 @@ describe("VenicePlugin", () => {
         options: { name: "venice" },
       })
       const other = yield* aisdk.runSDK({
-        model: new ModelV2.Info({
+        model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.make("venice"), ModelV2.ID.make("model")),
           api: { id: ModelV2.ID.make("model"), type: "aisdk", package: "test-provider" },
         }),
@@ -101,7 +101,7 @@ describe("VenicePlugin", () => {
       const calls: string[] = []
       yield* addPlugin()
       const result = yield* aisdk.runLanguage({
-        model: new ModelV2.Info({
+        model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.make("venice"), ModelV2.ID.make("alias")),
           api: { id: ModelV2.ID.make("alias"), type: "aisdk", package: "test-provider" },
         }),
