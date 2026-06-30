@@ -1,56 +1,65 @@
 import type { FileSelection } from "@/context/file"
+import { Option, Schema, SchemaGetter } from "effect"
 
-export type PromptComment = {
-  path: string
-  selection?: FileSelection
-  comment: string
-  preview?: string
-  origin?: "review" | "file"
-}
+const Origin = Schema.Literals(["review", "file"])
+const SelectionNumber = Schema.Union([Schema.Finite, Schema.FiniteFromString])
+const FileSelectionSchema = Schema.Struct({
+  startLine: SelectionNumber,
+  startChar: SelectionNumber,
+  endLine: SelectionNumber,
+  endChar: SelectionNumber,
+})
+const PromptCommentSchema = Schema.Struct({
+  path: Schema.String,
+  selection: Schema.optional(FileSelectionSchema),
+  comment: Schema.String,
+  preview: Schema.optional(Schema.String),
+  origin: Schema.optional(Origin),
+})
+const CommentMetadataEnvelope = Schema.Struct({
+  opencodeComment: Schema.Struct({
+    path: Schema.String,
+    selection: Schema.optional(Schema.Unknown),
+    comment: Schema.String,
+    preview: Schema.optional(Schema.Unknown),
+    origin: Schema.optional(Schema.Unknown),
+  }),
+})
+const decodeFileSelection = Schema.decodeUnknownOption(FileSelectionSchema)
+const decodePreview = Schema.decodeUnknownOption(Schema.String)
+const decodeOrigin = Schema.decodeUnknownOption(Origin)
+const CommentMetadata = CommentMetadataEnvelope.pipe(
+  Schema.decodeTo(PromptCommentSchema, {
+    decode: SchemaGetter.transform((value) => ({
+      path: value.opencodeComment.path,
+      selection: Option.getOrUndefined(decodeFileSelection(value.opencodeComment.selection)),
+      comment: value.opencodeComment.comment,
+      preview: Option.getOrUndefined(decodePreview(value.opencodeComment.preview)),
+      origin: Option.getOrUndefined(decodeOrigin(value.opencodeComment.origin)),
+    })),
+    encode: SchemaGetter.transform((value) => ({
+      opencodeComment: {
+        path: value.path,
+        selection: value.selection,
+        comment: value.comment,
+        preview: value.preview,
+        origin: value.origin,
+      },
+    })),
+  }),
+)
+const decodeCommentMetadata = Schema.decodeUnknownOption(CommentMetadata)
+const encodeCommentMetadata = Schema.encodeSync(CommentMetadata)
+const decodePromptComment = Schema.decodeUnknownOption(PromptCommentSchema)
 
-function selection(selection: unknown) {
-  if (!selection || typeof selection !== "object") return undefined
-  const startLine = Number((selection as FileSelection).startLine)
-  const startChar = Number((selection as FileSelection).startChar)
-  const endLine = Number((selection as FileSelection).endLine)
-  const endChar = Number((selection as FileSelection).endChar)
-  if (![startLine, startChar, endLine, endChar].every(Number.isFinite)) return undefined
-  return {
-    startLine,
-    startChar,
-    endLine,
-    endChar,
-  } satisfies FileSelection
-}
+export type PromptComment = Schema.Schema.Type<typeof PromptCommentSchema>
 
 export function createCommentMetadata(input: PromptComment) {
-  return {
-    opencodeComment: {
-      path: input.path,
-      selection: input.selection,
-      comment: input.comment,
-      preview: input.preview,
-      origin: input.origin,
-    },
-  }
+  return encodeCommentMetadata(input)
 }
 
 export function readCommentMetadata(value: unknown) {
-  if (!value || typeof value !== "object") return
-  const meta = (value as { opencodeComment?: unknown }).opencodeComment
-  if (!meta || typeof meta !== "object") return
-  const path = (meta as { path?: unknown }).path
-  const comment = (meta as { comment?: unknown }).comment
-  if (typeof path !== "string" || typeof comment !== "string") return
-  const preview = (meta as { preview?: unknown }).preview
-  const origin = (meta as { origin?: unknown }).origin
-  return {
-    path,
-    selection: selection((meta as { selection?: unknown }).selection),
-    comment,
-    preview: typeof preview === "string" ? preview : undefined,
-    origin: origin === "review" || origin === "file" ? origin : undefined,
-  } satisfies PromptComment
+  return Option.getOrUndefined(decodeCommentMetadata(value))
 }
 
 export function formatCommentNote(input: { path: string; selection?: FileSelection; comment: string }) {
@@ -72,17 +81,19 @@ export function parseCommentNote(text: string) {
   if (!match) return
   const start = match[2] ? Number(match[2]) : match[3] ? Number(match[3]) : undefined
   const end = match[2] ? Number(match[2]) : match[4] ? Number(match[4]) : undefined
-  return {
-    path: match[5],
-    selection:
-      start !== undefined && end !== undefined
-        ? {
-            startLine: start,
-            startChar: 0,
-            endLine: end,
-            endChar: 0,
-          }
-        : undefined,
-    comment: match[6],
-  } satisfies PromptComment
+  return Option.getOrUndefined(
+    decodePromptComment({
+      path: match[5],
+      selection:
+        start !== undefined && end !== undefined
+          ? {
+              startLine: start,
+              startChar: 0,
+              endLine: end,
+              endChar: 0,
+            }
+          : undefined,
+      comment: match[6],
+    }),
+  )
 }

@@ -16,6 +16,11 @@ describe("diffs", () => {
     expect(diffs([item])).toEqual([item])
   })
 
+  test("preserves valid array identity", () => {
+    const input = [item]
+    expect(diffs(input)).toBe(input)
+  })
+
   test("wraps a single diff object", () => {
     expect(diffs(item)).toEqual([item])
   })
