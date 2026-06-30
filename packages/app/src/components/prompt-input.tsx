@@ -28,7 +28,7 @@ import {
 } from "@/context/prompt"
 import { useLayout } from "@/context/layout"
 import { useSDK } from "@/context/sdk"
-import { useServerSDK } from "@/context/server-sdk"
+import { useQueryOptions } from "@/context/server-sync"
 import { useSync } from "@/context/sync"
 import { useComments } from "@/context/comments"
 import { Button } from "@opencode-ai/ui/button"
@@ -70,6 +70,8 @@ import { createPromptInputTransientState } from "./prompt-input/transient-state"
 import { showToast } from "@/utils/toast"
 import { ImagePreview } from "@opencode-ai/ui/image-preview"
 import type { ReferenceInfo } from "@opencode-ai/sdk/v2/client"
+import { useQuery } from "@tanstack/solid-query"
+import { pathKey } from "@/utils/path-key"
 
 export type PromptInputState = ReturnType<typeof usePrompt>
 
@@ -200,7 +202,7 @@ const EXAMPLES = [
 
 export const PromptInput: Component<PromptInputProps> = (props) => {
   const sdk = useSDK()
-  const serverSDK = useServerSDK()
+  const queryOptions = useQueryOptions()
 
   const sync = useSync()
   const files = useFile()
@@ -632,23 +634,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     })
   }
 
-  const [references, { refetch: refetchReferences }] = createResource(
-    () => sdk().directory,
-    async () => {
-      try {
-        const result = await sdk().client.v2.reference.list()
-        return result.data?.data ?? []
-      } catch {
-        return []
-      }
-    },
-    { initialValue: [] as ReferenceInfo[] },
-  )
+  const referencesQuery = useQuery(() => queryOptions().references(pathKey(sdk().directory)))
 
   createEffect(() => {
-    const unsubscribe = serverSDK().event.listen((event) => {
-      if (event.details.type === "reference.updated") void refetchReferences()
-    })
+    const unsubscribe = sdk().event.on("reference.updated", () => void referencesQuery.refetch())
     onCleanup(unsubscribe)
   })
 
@@ -656,7 +645,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     reference.source.type === "git" ? reference.source.repository : reference.source.path
 
   const referenceList = createMemo(() =>
-    references()
+    (referencesQuery.data ?? [])
       .filter((reference) => !reference.hidden)
       .map(
         (reference): AtOption => ({
