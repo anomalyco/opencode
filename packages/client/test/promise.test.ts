@@ -22,7 +22,7 @@ test("exposes every standard HTTP API group", () => {
     "skills",
     "events",
     "ptys",
-    "shell",
+    "shells",
     "questions",
     "references",
     "projectCopies",
@@ -39,7 +39,7 @@ test("exposes every standard HTTP API group", () => {
   ])
   expect(Object.keys(client.files)).toEqual(["read", "list", "find"])
   expect(Object.keys(client.ptys)).toEqual(["list", "create", "get", "update", "remove"])
-  expect(Object.keys(client.shell)).toEqual(["list", "create", "get", "output", "remove"])
+  expect(Object.keys(client.shells)).toEqual(["list", "create", "get", "output", "remove"])
   expect(Object.keys(client.project)).toEqual(["current", "directories"])
 })
 
@@ -115,8 +115,8 @@ test("shell list and remove use the public HTTP contract", async () => {
     },
   })
 
-  const result = await client.shell.list({ location: { directory: "/tmp/project" } })
-  await client.shell.remove({ id: shell.id })
+  const result = await client.shells.list({ location: { directory: "/tmp/project" } })
+  await client.shells.remove({ id: shell.id })
 
   expect(result.data).toEqual([shell])
   expect(requests).toEqual([

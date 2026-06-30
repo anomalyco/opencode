@@ -618,7 +618,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           return store.shell[id]
         },
         async refresh(ref?: LocationRef) {
-          const result = await sdk.api.shell.list({ location: locationQuery(ref) })
+          const result = await sdk.api.shells.list({ location: locationQuery(ref) })
           setStore(
             "shell",
             produce((draft) => {
@@ -627,7 +627,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           )
         },
         async remove(id: string) {
-          await sdk.api.shell.remove({ id })
+          await sdk.api.shells.remove({ id })
           setStore("shell", id, undefined!)
         },
       },

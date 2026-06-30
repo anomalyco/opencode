@@ -2829,13 +2829,13 @@ export type PtysRemoveInput = {
 
 export type PtysRemoveOutput = void
 
-export type ShellListInput = {
+export type ShellsListInput = {
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   }["location"]
 }
 
-export type ShellListOutput = {
+export type ShellsListOutput = {
   readonly location: {
     readonly directory: string
     readonly workspaceID?: string
@@ -2858,7 +2858,7 @@ export type ShellListOutput = {
   }>
 }
 
-export type ShellCreateInput = {
+export type ShellsCreateInput = {
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   }["location"]
@@ -2888,7 +2888,7 @@ export type ShellCreateInput = {
   }["metadata"]
 }
 
-export type ShellCreateOutput = {
+export type ShellsCreateOutput = {
   readonly location: {
     readonly directory: string
     readonly workspaceID?: string
@@ -2911,14 +2911,14 @@ export type ShellCreateOutput = {
   }
 }
 
-export type ShellGetInput = {
+export type ShellsGetInput = {
   readonly id: { readonly id: string }["id"]
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   }["location"]
 }
 
-export type ShellGetOutput = {
+export type ShellsGetOutput = {
   readonly location: {
     readonly directory: string
     readonly workspaceID?: string
@@ -2941,7 +2941,7 @@ export type ShellGetOutput = {
   }
 }
 
-export type ShellOutputInput = {
+export type ShellsOutputInput = {
   readonly id: { readonly id: string }["id"]
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
@@ -2960,7 +2960,7 @@ export type ShellOutputInput = {
   }["limit"]
 }
 
-export type ShellOutputOutput = {
+export type ShellsOutputOutput = {
   readonly location: {
     readonly directory: string
     readonly workspaceID?: string
@@ -2974,14 +2974,14 @@ export type ShellOutputOutput = {
   }
 }
 
-export type ShellRemoveInput = {
+export type ShellsRemoveInput = {
   readonly id: { readonly id: string }["id"]
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   }["location"]
 }
 
-export type ShellRemoveOutput = void
+export type ShellsRemoveOutput = void
 
 export type QuestionsListRequestsInput = {
   readonly location?: {
