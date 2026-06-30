@@ -1,8 +1,9 @@
 export * as Catalog from "./catalog"
 
+import { makeLocationNode } from "./effect/app-node"
 import { Array, Context, Effect, Layer, Option, Order, pipe, Schema } from "effect"
+import { Catalog } from "@opencode-ai/schema/catalog"
 import { ModelV2 } from "./model"
-import { ModelRequest } from "./model-request"
 import { ProviderV2 } from "./provider"
 import { EventV2 } from "./event"
 import { Policy } from "./policy"
@@ -18,9 +19,7 @@ export type DefaultModel = { providerID: ProviderV2.ID; modelID: ModelV2.ID }
 
 export const PolicyActions = Schema.Literals(["provider.use"])
 
-export const Event = {
-  Updated: EventV2.define({ type: "catalog.updated", schema: {} }),
-}
+export const Event = Catalog.Event
 
 type Data = {
   providers: Map<ProviderV2.ID, ProviderRecord>
@@ -69,11 +68,11 @@ export const layer = Layer.effect(
     const policy = yield* Policy.Service
     const integrations = yield* Integration.Service
 
-    const available = (provider: ProviderV2.Info, integration: Integration.Info | undefined, connected: boolean) => {
+    const available = (provider: ProviderV2.Info, integration: Integration.Info | undefined) => {
       if (provider.disabled) return false
       if (typeof provider.request.body.apiKey === "string") return true
-      if (connected) return true
-      return !integration
+      if (integration?.connections.length) return true
+      return provider.integrationID === undefined && !integration
     }
 
     const projectModel = (model: ModelV2.Info, provider: ProviderV2.Info) => {
@@ -86,10 +85,11 @@ export const layer = Layer.effect(
               ? { ...model.api, settings: { ...provider.api.settings, ...model.api.settings } }
               : model.api
       const request = {
-        ...ModelRequest.merge({ ...provider.request, generation: {}, options: {} }, model.request),
+        headers: { ...provider.request.headers, ...model.request.headers },
+        body: { ...provider.request.body, ...model.request.body },
         variant: model.request.variant,
       }
-      return new ModelV2.Info({
+      return ModelV2.Info.make({
         ...model,
         api,
         request,
@@ -170,7 +170,7 @@ export const layer = Layer.effect(
     })
     const result: Interface = {
       transform: state.transform,
-      rebuild: state.rebuild,
+      reload: state.reload,
 
       provider: {
         get: Effect.fn("CatalogV2.provider.get")(function* (providerID) {
@@ -183,13 +183,8 @@ export const layer = Layer.effect(
 
         available: Effect.fn("CatalogV2.provider.available")(function* () {
           const active = new Map((yield* integrations.list()).map((integration) => [integration.id, integration]))
-          const connections = yield* integrations.connection.list()
           return (yield* result.provider.all()).filter((provider) =>
-            available(
-              provider,
-              active.get(Integration.ID.make(provider.id)),
-              connections.has(Integration.ID.make(provider.id)),
-            ),
+            available(provider, active.get(provider.integrationID ?? Integration.ID.make(provider.id))),
           )
         }),
       },
@@ -240,6 +235,11 @@ export const layer = Layer.effect(
           const record = state.get().providers.get(providerID)
           if (!record) return
           const provider = record.provider
+
+          // TODO: Remove these provider-specific assumptions once model syncing reliably reports available deployments.
+          if (providerID === ProviderV2.ID.azure || providerID === ProviderV2.ID.make("azure-cognitive-services")) {
+            return
+          }
 
           if (providerID === ProviderV2.ID.opencode) {
             const gpt5Nano = record.models.get(ModelV2.ID.make("gpt-5-nano"))
@@ -297,3 +297,5 @@ export const locationLayer = layer.pipe(
   Layer.provideMerge(Integration.locationLayer),
   Layer.provideMerge(Policy.locationLayer),
 )
+
+export const node = makeLocationNode({ service: Service, layer, deps: [EventV2.node, Policy.node, Integration.node] })

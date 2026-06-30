@@ -1,7 +1,7 @@
-import { define } from "@opencode-ai/plugin/v2/effect"
+import { define } from "./internal"
+import type { ModelV2Info } from "@opencode-ai/sdk/v2/types"
 import { Effect, Stream } from "effect"
-import { ModelV2 } from "../model"
-import { ModelRequest } from "../model-request"
+import { EventV2 } from "../event"
 import { ModelsDev } from "../models-dev"
 import { ProviderV2 } from "../provider"
 
@@ -10,7 +10,7 @@ function released(date: string) {
   return Number.isFinite(time) ? time : 0
 }
 
-function cost(input: ModelsDev.Model["cost"]) {
+function cost(input: ModelsDev.Model["cost"]): ModelV2Info["cost"] {
   const base = {
     input: input?.input ?? 0,
     output: input?.output ?? 0,
@@ -19,39 +19,108 @@ function cost(input: ModelsDev.Model["cost"]) {
       write: input?.cache_write ?? 0,
     },
   }
-  if (!input?.context_over_200k) return [base]
   return [
     base,
-    {
-      tier: {
-        type: "context" as const,
-        size: 200_000,
-      },
-      input: input.context_over_200k.input,
-      output: input.context_over_200k.output,
+    ...(input?.tiers?.map((item) => ({
+      tier: item.tier,
+      input: item.input,
+      output: item.output,
       cache: {
-        read: input.context_over_200k.cache_read ?? 0,
-        write: input.context_over_200k.cache_write ?? 0,
+        read: item.cache_read ?? 0,
+        write: item.cache_write ?? 0,
       },
-    },
+    })) ?? []),
+    ...(input?.context_over_200k
+      ? [
+          {
+            tier: {
+              type: "context" as const,
+              size: 200_000,
+            },
+            input: input.context_over_200k.input,
+            output: input.context_over_200k.output,
+            cache: {
+              read: input.context_over_200k.cache_read ?? 0,
+              write: input.context_over_200k.cache_write ?? 0,
+            },
+          },
+        ]
+      : []),
   ]
 }
 
-function variants(model: ModelsDev.Model, packageName?: string) {
-  return Object.entries(model.experimental?.modes ?? {}).map(([id, item]) => {
-    const request = ModelRequest.normalizeAiSdkOptions(packageName, item.provider?.body ?? {})
-    return {
-      id: ModelV2.VariantID.make(id),
-      headers: { ...(item.provider?.headers ?? {}) },
-      ...request,
-    }
+function mergeCost(base: ModelV2Info["cost"], override: ModelsDev.Model["cost"] | undefined) {
+  if (!override) return base
+  const next = cost(override)
+  const [baseDefault, ...baseTiers] = base
+  const [nextDefault, ...nextTiers] = next
+  const tierKey = (item: ModelV2Info["cost"][number]) => `${item.tier?.type ?? "base"}:${item.tier?.size ?? 0}`
+  const merge = (left: ModelV2Info["cost"][number], right: ModelV2Info["cost"][number]) => ({
+    ...left,
+    ...right,
+    tier: right.tier ?? left.tier,
+    cache: { ...left.cache, ...right.cache },
   })
+  const tiers = new Map(baseTiers.map((item) => [tierKey(item), item]))
+  for (const item of nextTiers) {
+    const current = tiers.get(tierKey(item))
+    tiers.set(tierKey(item), current ? merge(current, item) : item)
+  }
+  return [merge(baseDefault ?? { input: 0, output: 0, cache: { read: 0, write: 0 } }, nextDefault), ...tiers.values()]
+}
+
+function modeName(model: ModelsDev.Model, mode: string) {
+  return `${model.name} ${mode.charAt(0).toUpperCase()}${mode.slice(1)}`
+}
+
+function applyModel(
+  draft: ModelV2Info,
+  model: ModelsDev.Model,
+  input: {
+    readonly name?: string
+    readonly cost?: ModelV2Info["cost"]
+    readonly request?: NonNullable<NonNullable<ModelsDev.Model["experimental"]>["modes"]>[string]["provider"]
+  } = {},
+) {
+  draft.name = input.name ?? model.name
+  draft.family = model.family
+  draft.api = model.provider?.npm
+    ? {
+        id: model.id,
+        type: "aisdk",
+        package: model.provider.npm,
+        url: model.provider.api,
+      }
+    : {
+        id: model.id,
+        type: "native",
+        url: model.provider?.api,
+        settings: {},
+      }
+  draft.capabilities = {
+    tools: model.tool_call,
+    input: [...(model.modalities?.input ?? [])],
+    output: [...(model.modalities?.output ?? [])],
+  }
+  draft.variants = []
+  draft.time.released = released(model.release_date)
+  draft.cost = input.cost ?? cost(model.cost)
+  draft.status = model.status ?? "active"
+  draft.enabled = true
+  draft.limit = {
+    context: model.limit.context,
+    input: model.limit.input,
+    output: model.limit.output,
+  }
+  Object.assign(draft.request.headers, input.request?.headers ?? {})
+  Object.assign(draft.request.body, input.request?.body ?? {})
 }
 
 export const ModelsDevPlugin = define({
   id: "models-dev",
   effect: Effect.fn(function* (ctx) {
     const modelsDev = yield* ModelsDev.Service
+    const events = yield* EventV2.Service
     yield* ctx.integration.transform(
       Effect.fn(function* (integrations) {
         const data = yield* modelsDev.get()
@@ -91,45 +160,23 @@ export const ModelsDevPlugin = define({
           })
 
           for (const model of Object.values(item.models)) {
-            const modelID = ModelV2.ID.make(model.id)
-            catalog.model.update(providerID, modelID, (draft) => {
-              draft.name = model.name
-              draft.family = model.family ? ModelV2.Family.make(model.family) : undefined
-              draft.api = model.provider?.npm
-                ? {
-                    id: draft.api.id,
-                    type: "aisdk",
-                    package: model.provider?.npm,
-                    url: model.provider.api,
-                  }
-                : {
-                    id: draft.api.id,
-                    type: "native",
-                    url: model.provider?.api,
-                    settings: {},
-                  }
-              draft.capabilities = {
-                tools: model.tool_call,
-                input: [...(model.modalities?.input ?? [])],
-                output: [...(model.modalities?.output ?? [])],
-              }
-              draft.variants = variants(model, model.provider?.npm ?? item.npm)
-              draft.time.released = released(model.release_date)
-              draft.cost = cost(model.cost)
-              draft.status = model.status ?? "active"
-              draft.enabled = true
-              draft.limit = {
-                context: model.limit.context,
-                input: model.limit.input,
-                output: model.limit.output,
-              }
-            })
+            const baseCost = cost(model.cost)
+            catalog.model.update(providerID, model.id, (draft) => applyModel(draft, model, { cost: baseCost }))
+            for (const [mode, options] of Object.entries(model.experimental?.modes ?? {})) {
+              catalog.model.update(providerID, `${model.id}-${mode}`, (draft) =>
+                applyModel(draft, model, {
+                  name: modeName(model, mode),
+                  cost: mergeCost(baseCost, options.cost),
+                  request: options.provider,
+                }),
+              )
+            }
           }
         }
       }),
     )
-    yield* ctx.event.subscribe("models-dev.refreshed").pipe(
-      Stream.runForEach(() => ctx.integration.rebuild().pipe(Effect.andThen(ctx.catalog.rebuild()))),
+    yield* events.subscribe(ModelsDev.Event.Refreshed).pipe(
+      Stream.runForEach(() => ctx.integration.reload().pipe(Effect.andThen(ctx.catalog.reload()))),
       Effect.forkScoped({ startImmediately: true }),
     )
   }),

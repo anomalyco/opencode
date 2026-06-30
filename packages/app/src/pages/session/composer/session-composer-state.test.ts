@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { PermissionRequest, QuestionRequest, Session } from "@opencode-ai/sdk/v2/client"
-import { todoState } from "./session-composer-state"
+import { todoDockAtBoundary, todoState } from "./session-composer-state"
 import { sessionPermissionRequest, sessionQuestionRequest } from "./session-request-tree"
 
 const session = (input: { id: string; parentID?: string }) =>
@@ -124,5 +124,15 @@ describe("todoState", () => {
 
   test("clears completed todos when the session is no longer live", () => {
     expect(todoState({ count: 2, done: true, live: false })).toBe("clear")
+  })
+})
+
+describe("todoDockAtBoundary", () => {
+  test("shows active todos when entering a session", () => {
+    expect(todoDockAtBoundary("open")).toBe(true)
+  })
+
+  test("hides completed todos when entering a session", () => {
+    expect(todoDockAtBoundary("close")).toBe(false)
   })
 })

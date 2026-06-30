@@ -89,6 +89,50 @@
   cursor: not-allowed;
 }
 
+/* Danger */
+[data-component="button-v2"][data-variant="danger"] {
+  background-color: var(--v2-background-bg-button-neutral);
+  color: var(--v2-state-fg-danger);
+  box-shadow: var(--v2-elevation-button-neutral);
+}
+
+[data-component="button-v2"][data-variant="danger"]:is(:hover, [data-state="hover"]):not(:disabled) {
+  background-image:
+    linear-gradient(90deg, var(--v2-overlay-simple-overlay-hover) 0%, var(--v2-overlay-simple-overlay-hover) 100%),
+    linear-gradient(90deg, var(--v2-background-bg-button-neutral) 0%, var(--v2-background-bg-button-neutral) 100%);
+}
+
+[data-component="button-v2"][data-variant="danger"]:is(:active, [data-state="pressed"]):not(:disabled) {
+  background-image:
+    linear-gradient(90deg, var(--v2-overlay-simple-overlay-pressed) 0%, var(--v2-overlay-simple-overlay-pressed) 100%),
+    linear-gradient(90deg, var(--v2-background-bg-button-neutral) 0%, var(--v2-background-bg-button-neutral) 100%);
+}
+
+[data-component="button-v2"][data-variant="danger"]:is(:disabled, [data-state="disabled"]) {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Outline */
+[data-component="button-v2"][data-variant="outline"] {
+  background-color: transparent;
+  color: var(--v2-text-text-base);
+  box-shadow: inset 0 0 0 1px var(--v2-border-border-muted);
+}
+
+[data-component="button-v2"][data-variant="outline"]:is(:hover, [data-state="hover"]):not(:disabled) {
+  background-color: var(--v2-overlay-simple-overlay-hover);
+}
+
+[data-component="button-v2"][data-variant="outline"]:is(:active, [data-state="pressed"]):not(:disabled) {
+  background-color: var(--v2-overlay-simple-overlay-pressed);
+}
+
+[data-component="button-v2"][data-variant="outline"]:is(:disabled, [data-state="disabled"]) {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* Contrast */
 [data-component="button-v2"][data-variant="contrast"] {
   background-image:
@@ -132,11 +176,17 @@
   color: var(--v2-text-text-base);
 }
 
-[data-component="button-v2"][data-variant="ghost"]:is(:hover, [data-state="hover"]):not(:disabled) {
+[data-component="button-v2"][data-variant="ghost"]:is(:hover, [data-state="hover"]):not(:disabled):not(
+    [data-expanded]
+  ) {
   background-color: var(--v2-overlay-simple-overlay-hover);
 }
 
 [data-component="button-v2"][data-variant="ghost"]:is(:active, [data-state="pressed"]):not(:disabled) {
+  background-color: var(--v2-overlay-simple-overlay-pressed);
+}
+
+[data-component="button-v2"][data-variant="ghost"]:where([data-expanded]):not(:disabled) {
   background-color: var(--v2-overlay-simple-overlay-pressed);
 }
 
@@ -155,12 +205,23 @@
   color: var(--v2-icon-icon-muted);
 }
 
-[data-component="button-v2"][data-variant="ghost-muted"]:is(:hover, [data-state="hover"]):not(:disabled) {
+[data-component="button-v2"][data-variant="ghost-muted"]:is(:hover, [data-state="hover"]):not(:disabled):not(
+    [data-expanded]
+  ) {
   background-color: var(--v2-overlay-simple-overlay-hover);
 }
 
 [data-component="button-v2"][data-variant="ghost-muted"]:is(:active, [data-state="pressed"]):not(:disabled) {
   background-color: var(--v2-overlay-simple-overlay-pressed);
+}
+
+[data-component="button-v2"][data-variant="ghost-muted"]:where([data-expanded]):not(:disabled) {
+  background-color: var(--v2-overlay-simple-overlay-pressed);
+  color: var(--v2-text-text-base);
+}
+
+[data-component="button-v2"][data-variant="ghost-muted"]:where([data-expanded]):not(:disabled) [data-slot="icon-svg"] {
+  color: var(--v2-icon-icon-base);
 }
 
 [data-component="button-v2"][data-variant="ghost-muted"]:is(:disabled, [data-state="disabled"]) {

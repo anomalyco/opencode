@@ -1,9 +1,8 @@
 import { EOL } from "os"
 import { Effect } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
-import { LocationServiceMap } from "@opencode-ai/core/location-layer"
+import { LocationServiceMap, locationServiceMapLayer } from "@opencode-ai/core/location-services"
 import { Location } from "@opencode-ai/core/location"
-import { PluginBoot } from "@opencode-ai/core/plugin/boot"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { effectCmd } from "../../effect-cmd"
 
@@ -13,7 +12,6 @@ export const V2Command = effectCmd({
   instance: false,
   handler: () =>
     Effect.gen(function* () {
-      yield* PluginBoot.Service.use((service) => service.wait())
       const catalog = yield* Catalog.Service
       const providers = (yield* catalog.provider.available()).sort((a, b) => a.id.localeCompare(b.id))
       const all = (yield* catalog.provider.all()).sort((a, b) => a.id.localeCompare(b.id))
@@ -33,12 +31,12 @@ export const V2Command = effectCmd({
     }).pipe(
       Effect.withSpan("Cli.debug.v2"),
       Effect.provide(
-        LocationServiceMap.get(
+        LocationServiceMap.Service.get(
           Location.Ref.make({
             directory: AbsolutePath.make(process.cwd()),
           }),
         ),
       ),
-      Effect.provide(LocationServiceMap.layer),
+      Effect.provide(locationServiceMapLayer),
     ),
 })

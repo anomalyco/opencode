@@ -36,16 +36,11 @@ describe("ConfigSkillPlugin.Plugin", () => {
 
       yield* ConfigSkillPlugin.Plugin.effect(
         host({
-          location: location({ directory }),
-          path: { ...host().path, home: "/home/test" },
-          skill: SkillV2.Service.of({
-            transform,
-            rebuild: () => Effect.void,
-            sources: () => Effect.succeed(sources),
-            list: () => Effect.succeed([]),
-          }),
+          skill: { transform, reload: () => Effect.void },
         }),
       ).pipe(
+        Effect.provideService(Global.Service, Global.Service.of({ ...Global.make(), home: "/home/test" })),
+        Effect.provideService(Location.Service, Location.Service.of(location({ directory }))),
         Effect.provideService(
           Config.Service,
           Config.Service.of({
@@ -64,21 +59,21 @@ describe("ConfigSkillPlugin.Plugin", () => {
       )
 
       expect(sources).toEqual([
-        new SkillV2.DirectorySource({
+        SkillV2.DirectorySource.make({
           type: "directory",
           path: AbsolutePath.make(path.join("/repo/.opencode", "skill")),
         }),
-        new SkillV2.DirectorySource({
+        SkillV2.DirectorySource.make({
           type: "directory",
           path: AbsolutePath.make(path.join("/repo/.opencode", "skills")),
         }),
-        new SkillV2.DirectorySource({ type: "directory", path: AbsolutePath.make(path.join(directory, "skills")) }),
-        new SkillV2.DirectorySource({
+        SkillV2.DirectorySource.make({ type: "directory", path: AbsolutePath.make(path.join(directory, "skills")) }),
+        SkillV2.DirectorySource.make({
           type: "directory",
           path: AbsolutePath.make(path.join("/home/test", "shared-skills")),
         }),
-        new SkillV2.DirectorySource({ type: "directory", path: AbsolutePath.make("/opt/skills") }),
-        new SkillV2.UrlSource({ type: "url", url: "https://example.test/skills/" }),
+        SkillV2.DirectorySource.make({ type: "directory", path: AbsolutePath.make("/opt/skills") }),
+        SkillV2.UrlSource.make({ type: "url", url: "https://example.test/skills/" }),
       ])
     }),
   )
