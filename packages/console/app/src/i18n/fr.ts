@@ -377,6 +377,8 @@ export const dict = {
   "zen.api.error.userMonthlyLimitReached":
     "Vous avez atteint votre limite de dépense mensuelle de {{amount}} $. Gérez vos limites ici : {{membersUrl}}",
   "zen.api.error.modelDisabled": "Le modèle est désactivé",
+  "zen.api.error.regionNotAllowed":
+    "Ce modèle est hébergé en Chine. Si vous souhaitez utiliser ce modèle, activez-le dans vos paramètres : {{consoleGoUrl}}",
   "zen.api.error.trialEnded":
     "La promotion gratuite de {{model}} est terminée. Vous pouvez continuer à utiliser le modèle en vous abonnant à OpenCode Go - {{link}}",
 
@@ -662,6 +664,9 @@ export const dict = {
     "Utilisez votre solde disponible après avoir atteint les limites d'utilisation",
   "workspace.lite.subscription.selectProvider":
     'Sélectionnez "OpenCode Go" comme fournisseur dans votre configuration opencode pour utiliser les modèles Go.',
+  "workspace.lite.providers.title": "Fournisseurs",
+  "workspace.lite.providers.description": "Contrôlez les fournisseurs utilisés pour le routage.",
+  "workspace.lite.providers.useChina": "Activer les modèles hébergés en Chine",
   "workspace.lite.black.message":
     "Vous êtes actuellement abonné à OpenCode Black ou sur liste d'attente. Veuillez d'abord vous désabonner si vous souhaitez passer à Go.",
   "workspace.lite.other.message":
