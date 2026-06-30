@@ -3,15 +3,18 @@ import { fileURLToPath } from "bun"
 import { useTheme } from "../context/theme"
 import { useDialog } from "../ui/dialog"
 import { useSync } from "../context/sync"
+import { useData } from "../context/data"
 import { For, Match, Switch, Show, createMemo } from "solid-js"
 
 export type DialogStatusProps = {}
 
 export function DialogStatus() {
   const sync = useSync()
+  const data = useData()
   const { theme } = useTheme()
   const dialog = useDialog()
 
+  const mcp = createMemo(() => data.location.mcp.list() ?? [])
   const enabledFormatters = createMemo(() => sync.data.formatter.filter((f) => f.enabled))
 
   const plugins = createMemo(() => {
@@ -50,11 +53,11 @@ export function DialogStatus() {
           esc
         </text>
       </box>
-      <Show when={Object.keys(sync.data.mcp).length > 0} fallback={<text fg={theme.text}>No MCP Servers</text>}>
+      <Show when={mcp().length > 0} fallback={<text fg={theme.text}>No MCP Servers</text>}>
         <box>
-          <text fg={theme.text}>{Object.keys(sync.data.mcp).length} MCP Servers</text>
-          <For each={Object.entries(sync.data.mcp)}>
-            {([key, item]) => (
+          <text fg={theme.text}>{mcp().length} MCP Servers</text>
+          <For each={mcp()}>
+            {(item) => (
               <box flexDirection="row" gap={1}>
                 <text
                   flexShrink={0}
@@ -67,22 +70,20 @@ export function DialogStatus() {
                         needs_auth: theme.warning,
                         needs_client_registration: theme.error,
                       } as Record<string, typeof theme.success>
-                    )[item.status],
+                    )[item.status.status],
                   }}
                 >
                   •
                 </text>
                 <text fg={theme.text} wrapMode="word">
-                  <b>{key}</b>{" "}
+                  <b>{item.name}</b>{" "}
                   <span style={{ fg: theme.textMuted }}>
-                    <Switch fallback={item.status}>
-                      <Match when={item.status === "connected"}>Connected</Match>
-                      <Match when={item.status === "failed" && item}>{(val) => val().error}</Match>
-                      <Match when={item.status === "disabled"}>Disabled in configuration</Match>
-                      <Match when={(item.status as string) === "needs_auth"}>
-                        Needs authentication (run: opencode mcp auth {key})
-                      </Match>
-                      <Match when={(item.status as string) === "needs_client_registration" && item}>
+                    <Switch fallback={item.status.status}>
+                      <Match when={item.status.status === "connected"}>Connected</Match>
+                      <Match when={item.status.status === "failed" && item.status}>{(val) => val().error}</Match>
+                      <Match when={item.status.status === "disabled"}>Disabled in configuration</Match>
+                      <Match when={item.status.status === "needs_auth"}>Needs authentication</Match>
+                      <Match when={item.status.status === "needs_client_registration" && item.status}>
                         {(val) => (val() as { error: string }).error}
                       </Match>
                     </Switch>

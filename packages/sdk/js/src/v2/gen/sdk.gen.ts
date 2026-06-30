@@ -279,6 +279,8 @@ import type {
   V2FsListResponses,
   V2FsReadErrors,
   V2FsReadResponses,
+  V2GenerateTextErrors,
+  V2GenerateTextResponses,
   V2HealthGetErrors,
   V2HealthGetResponses,
   V2IntegrationAttemptCancelErrors,
@@ -297,6 +299,8 @@ import type {
   V2IntegrationListResponses,
   V2LocationGetErrors,
   V2LocationGetResponses,
+  V2McpListErrors,
+  V2McpListResponses,
   V2ModelListErrors,
   V2ModelListResponses,
   V2PermissionRequestListErrors,
@@ -5944,6 +5948,48 @@ export class Model extends HeyApiClient {
   }
 }
 
+export class Generate extends HeyApiClient {
+  /**
+   * Generate text
+   *
+   * Run one stateless model generation at the requested location and return the assistant text. Uses the location's default model when none is specified.
+   */
+  public text<ThrowOnError extends boolean = false>(
+    parameters?: {
+      location?: {
+        directory?: string
+        workspace?: string
+      }
+      prompt?: string
+      model?: ModelRef
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "location" },
+            { in: "body", key: "prompt" },
+            { in: "body", key: "model" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<V2GenerateTextResponses, V2GenerateTextErrors, ThrowOnError>({
+      url: "/api/generate",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Provider2 extends HeyApiClient {
   /**
    * List providers
@@ -6283,6 +6329,30 @@ export class Integration extends HeyApiClient {
   private _attempt?: Attempt
   get attempt(): Attempt {
     return (this._attempt ??= new Attempt({ client: this.client }))
+  }
+}
+
+export class Mcp2 extends HeyApiClient {
+  /**
+   * List MCP servers
+   *
+   * Retrieve configured MCP servers and their connection status.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      location?: {
+        directory?: string
+        workspace?: string
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "location" }] }])
+    return (options?.client ?? this.client).get<V2McpListResponses, V2McpListErrors, ThrowOnError>({
+      url: "/api/mcp",
+      ...options,
+      ...params,
+    })
   }
 }
 
@@ -7233,6 +7303,11 @@ export class V2 extends HeyApiClient {
     return (this._model ??= new Model({ client: this.client }))
   }
 
+  private _generate?: Generate
+  get generate(): Generate {
+    return (this._generate ??= new Generate({ client: this.client }))
+  }
+
   private _provider?: Provider2
   get provider(): Provider2 {
     return (this._provider ??= new Provider2({ client: this.client }))
@@ -7241,6 +7316,11 @@ export class V2 extends HeyApiClient {
   private _integration?: Integration
   get integration(): Integration {
     return (this._integration ??= new Integration({ client: this.client }))
+  }
+
+  private _mcp?: Mcp2
+  get mcp(): Mcp2 {
+    return (this._mcp ??= new Mcp2({ client: this.client }))
   }
 
   private _credential?: Credential

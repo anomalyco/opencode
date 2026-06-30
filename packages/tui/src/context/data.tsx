@@ -3,6 +3,7 @@ import type {
   CommandV2Info,
   IntegrationInfo,
   LocationRef,
+  McpServer,
   ModelV2Info,
   PermissionSavedInfo,
   PermissionV2Request,
@@ -30,6 +31,7 @@ type LocationData = {
   agent?: AgentV2Info[]
   command?: CommandV2Info[]
   integration?: IntegrationInfo[]
+  mcp?: McpServer[]
   model?: ModelV2Info[]
   provider?: ProviderV2Info[]
   reference?: ReferenceInfo[]
@@ -494,6 +496,11 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             result.location.provider.refresh(event.location),
           ])
           break
+        // Authenticating an MCP integration reconnects its server, which emits mcp.status.changed,
+        // so the mcp list refreshes here rather than off integration.updated.
+        case "mcp.status.changed":
+          void result.location.mcp.refresh(event.location)
+          break
       }
     }
 
@@ -645,6 +652,16 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             setStore("location", key, { ...store.location[key], integration: result.data.data })
           },
         },
+        mcp: {
+          list(location?: LocationRef) {
+            return store.location[locationKey(location ?? defaultLocation())]?.mcp
+          },
+          async refresh(ref?: LocationRef) {
+            const result = await sdk.client.v2.mcp.list({ location: locationQuery(ref) }, { throwOnError: true })
+            const key = locationKey(result.data.location)
+            setStore("location", key, { ...store.location[key], mcp: result.data.data })
+          },
+        },
         model: {
           list(location?: LocationRef) {
             return store.location[locationKey(location ?? defaultLocation())]?.model
@@ -711,6 +728,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         result.location.refresh(),
         result.location.agent.refresh(),
         result.location.integration.refresh(),
+        result.location.mcp.refresh(),
         result.location.model.refresh(),
         result.location.provider.refresh(),
         result.location.reference.refresh(),

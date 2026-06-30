@@ -374,6 +374,34 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
   const attention = createTuiAttention({ renderer, config: tuiConfig, kv })
   const clipboard = useClipboard()
 
+  // Toast once when an MCP server enters a failed or needs-auth state so the user knows to act,
+  // without having to open the status panel. Tracking the last alerted status avoids re-toasting
+  // the same problem on every refresh while still re-alerting if the state changes.
+  const mcpAlerted: Record<string, string> = {}
+  createEffect(() => {
+    for (const server of data.location.mcp.list() ?? []) {
+      const status = server.status
+      if (status.status !== "failed" && status.status !== "needs_auth") {
+        delete mcpAlerted[server.name]
+        continue
+      }
+      if (mcpAlerted[server.name] === status.status) continue
+      mcpAlerted[server.name] = status.status
+      if (status.status === "needs_auth")
+        toast.show({
+          variant: "warning",
+          title: "MCP server needs authentication",
+          message: `Connect "${server.name}" to use its tools.`,
+        })
+      else
+        toast.show({
+          variant: "error",
+          title: "MCP server failed to connect",
+          message: `${server.name}: ${status.error}`,
+        })
+    }
+  })
+
   const api = createTuiApi(
     createTuiApiAdapters({
       version: InstallationVersion,
