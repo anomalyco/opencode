@@ -436,7 +436,6 @@ const layer = Layer.effect(
                       ? { type: "unknown", message: failure instanceof Error ? failure.message : String(failure) }
                       : undefined,
                 },
-                { isolateListeners: true },
               )
             }).pipe(
               Effect.catchCause(() => Effect.void),

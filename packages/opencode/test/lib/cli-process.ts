@@ -61,6 +61,7 @@ function forkStderrDrain(stream: ReadableStream<Uint8Array>, into: string[]) {
 function isolatedEnv(home: string): Record<string, string> {
   return {
     OPENCODE_TEST_HOME: home,
+    PWD: home,
     HOME: home,
     XDG_CONFIG_HOME: path.join(home, ".config"),
     XDG_DATA_HOME: path.join(home, ".local/share"),
@@ -220,7 +221,7 @@ export function withCliFixture<A, E>(
       // consumed as the prompt). The old Process.run wrapper defaulted to
       // ignore; ChildProcess.make defaults to pipe, so we set it explicitly.
       const command = ChildProcess.make("bun", ["run", "--conditions=browser", cliEntry, ...args], {
-        cwd: home,
+        cwd: opencodeRoot,
         env: { ...env, ...opts?.env },
         extendEnv: true,
         stdin: "ignore",
@@ -258,6 +259,7 @@ export function withCliFixture<A, E>(
 
     const runArgs = (message: string, opts?: RunOpts) => {
       const argv: string[] = ["run"]
+      if (!opts?.extraArgs?.includes("--attach")) argv.push("--dir", home)
       if (opts?.printLogs) argv.push("--print-logs")
       argv.push("--model", opts?.model ?? testModelID)
       if (opts?.agent) argv.push("--agent", opts.agent)
@@ -288,7 +290,7 @@ export function withCliFixture<A, E>(
       const proc = yield* Effect.acquireRelease(
         Effect.sync(() =>
           Bun.spawn(["bun", "run", "--conditions=browser", cliEntry, ...runArgs(message, opts)], {
-            cwd: home,
+            cwd: opencodeRoot,
             env: { ...process.env, ...env, ...options?.env },
             stdin: "ignore",
             stdout: "pipe",
@@ -329,7 +331,7 @@ export function withCliFixture<A, E>(
       const proc = yield* Effect.acquireRelease(
         Effect.sync(() =>
           Bun.spawn(["bun", "run", "--conditions=browser", cliEntry, ...argv], {
-            cwd: home,
+            cwd: opencodeRoot,
             env: { ...process.env, ...env, ...opts?.env },
             stdout: "pipe",
             stderr: "pipe",
@@ -400,7 +402,7 @@ export function withCliFixture<A, E>(
       const proc = yield* Effect.acquireRelease(
         Effect.sync(() =>
           Bun.spawn(["bun", "run", "--conditions=browser", cliEntry, ...argv], {
-            cwd: opts?.cwd ?? home,
+            cwd: opencodeRoot,
             env: { ...process.env, ...env, ...opts?.env },
             stdin: "pipe",
             stdout: "pipe",

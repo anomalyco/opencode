@@ -652,7 +652,12 @@ describe("session HttpApi", () => {
         })
 
         const wait = yield* request(`/api/session/${session.id}/wait`, { method: "POST", headers })
-        expect(wait.status).toBe(204)
+        expect(wait.status).toBe(503)
+        expect(yield* responseJson(wait)).toEqual({
+          _tag: "ServiceUnavailableError",
+          message: "Session wait is not available yet",
+          service: "session.wait",
+        })
       }),
     { git: true, config: { formatter: false, lsp: false } },
   )

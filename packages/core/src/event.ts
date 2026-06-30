@@ -137,8 +137,6 @@ export interface PublishOptions {
   readonly location?: Location.Ref
   /** Local operational projection committed atomically with a new durable event. Not replayed or serialized. */
   readonly commit?: (seq: number) => Effect.Effect<void>
-  /** Prevent an inline listener failure from blocking delivery to other listeners and subscribers. */
-  readonly isolateListeners?: boolean
 }
 
 export interface Interface {
@@ -384,9 +382,9 @@ export const layerWith = (options?: LayerOptions) =>
         })
       }
 
-      function publishEvent<D extends Definition>(definition: D, event: Payload<D>, options?: PublishOptions) {
+      function publishEvent<D extends Definition>(definition: D, event: Payload<D>, commit?: PublishOptions["commit"]) {
         return Effect.gen(function* () {
-          if (!definition?.durable && options?.commit)
+          if (!definition?.durable && commit)
             return yield* Effect.die(
               new InvalidDurableEventError({
                 type: event.type,
@@ -394,7 +392,7 @@ export const layerWith = (options?: LayerOptions) =>
               }),
             )
           if (definition?.durable) {
-            const committed = yield* commitDurableEvent(definition, event as Payload, undefined, options?.commit)
+            const committed = yield* commitDurableEvent(definition, event as Payload, undefined, commit)
             if (committed) {
               event = {
                 ...event,
@@ -408,7 +406,7 @@ export const layerWith = (options?: LayerOptions) =>
               return event
             }
           }
-          yield* notify(event as Payload, options?.isolateListeners ?? false)
+          yield* notify(event as Payload, false)
           return event
         })
       }
@@ -451,7 +449,7 @@ export const layerWith = (options?: LayerOptions) =>
               ...(location ? { location } : {}),
               data,
             } as Payload<D>,
-            options,
+            options?.commit,
           )
         })
       }
