@@ -949,12 +949,13 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
     bindings: tuiConfig.keybinds.gather("app_exit", ["app.exit"]),
   }))
 
-  event.on("tui.command.execute", (evt, { workspace }) => {
+  const unsubCommandExecute = event.on("tui.command.execute", (evt, { workspace }) => {
     if (workspace !== project.workspace.current()) return
     keymap.dispatchCommand(evt.properties.command)
   })
+  onCleanup(unsubCommandExecute)
 
-  event.on("tui.toast.show", (evt, { workspace }) => {
+  const unsubToastShow = event.on("tui.toast.show", (evt, { workspace }) => {
     if (workspace !== project.workspace.current()) return
     toast.show({
       title: evt.properties.title,
@@ -963,16 +964,18 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       duration: evt.properties.duration,
     })
   })
+  onCleanup(unsubToastShow)
 
-  event.on("tui.session.select", (evt, { workspace }) => {
+  const unsubSessionSelect = event.on("tui.session.select", (evt, { workspace }) => {
     if (workspace !== project.workspace.current()) return
     route.navigate({
       type: "session",
       sessionID: evt.properties.sessionID,
     })
   })
+  onCleanup(unsubSessionSelect)
 
-  event.on("session.deleted", (evt) => {
+  const unsubSessionDeleted = event.on("session.deleted", (evt) => {
     if (route.data.type === "session" && route.data.sessionID === evt.properties.info.id) {
       route.navigate({ type: "home" })
       toast.show({
@@ -981,8 +984,9 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       })
     }
   })
+  onCleanup(unsubSessionDeleted)
 
-  event.on("session.error", (evt, { workspace }) => {
+  const unsubSessionError = event.on("session.error", (evt, { workspace }) => {
     if (workspace !== project.workspace.current()) return
     const error = evt.properties.error
     if (error && typeof error === "object" && error.name === "MessageAbortedError") return
@@ -994,8 +998,9 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       duration: 5000,
     })
   })
+  onCleanup(unsubSessionError)
 
-  event.on("installation.update-available", async (evt) => {
+  const unsubUpdateAvailable = event.on("installation.update-available", async (evt) => {
     console.log("installation.update-available", evt)
     const version = evt.properties.version
 
@@ -1042,6 +1047,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
 
     void exit()
   })
+  onCleanup(unsubUpdateAvailable)
 
   const plugin = createMemo(() => {
     if (!ready()) return
