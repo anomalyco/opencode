@@ -607,6 +607,8 @@ export const dict = {
   "session.tab.unknown": "Unknown Session",
   "session.panel.reviewAndFiles": "Review and files",
   "session.error.notFound": "This session cannot be found",
+  "session.error.notFound.description": "This tab points to a session that no longer exists on this server.",
+  "session.error.notFound.closeTab": "Close Tab",
   "session.error.serverConnection": "Can't connect to this server",
   "session.review.filesChanged": "{{count}} Files Changed",
   "session.review.change.one": "Change",
