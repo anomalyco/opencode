@@ -48,7 +48,7 @@ import { PromptProvider, usePrompt } from "@/context/prompt"
 import { usePlatform } from "@/context/platform"
 import { SDKProvider, useSDK } from "@/context/sdk"
 import { useServerSDK } from "@/context/server-sdk"
-import { ServerConnection, useServer } from "@/context/server"
+import { ServerConnection, serverName, useServer } from "@/context/server"
 import { useSettings } from "@/context/settings"
 import { useSync } from "@/context/sync"
 import { useTabs } from "@/context/tabs"
@@ -180,6 +180,11 @@ function SessionErrorFallback(props: { error: unknown; sessionID?: string; serve
   const language = useLanguage()
   const server = useServer()
   const tabs = useTabs()
+  const displayServer = createMemo(() => {
+    const key = props.serverKey ?? server.key
+    const conn = server.list.find((item) => ServerConnection.key(item) === key)
+    return conn ? serverName(conn) : key
+  })
   const closeTab = () => {
     if (!props.sessionID) return
     tabs.removeSessionTab({ server: props.serverKey ?? server.key, sessionId: props.sessionID })
@@ -196,8 +201,13 @@ function SessionErrorFallback(props: { error: unknown; sessionID?: string; serve
           </div>
           <Show when={props.sessionID}>
             {(sessionID) => (
-              <div class="max-w-full rounded-md border border-border-weaker/50 bg-background-base/40 px-2 py-1 font-mono text-[10px] leading-4 text-text-muted break-all">
-                {sessionID()}
+              <div class="max-w-full flex flex-col items-center gap-1 text-11-regular text-text-weak">
+                <code class="max-w-full rounded-[4px] px-1 py-0.5 font-mono text-[10px] font-medium leading-4 text-text break-all bg-[color-mix(in_oklch,var(--v2-text-text-base)_8%,transparent)]">
+                  {displayServer()}
+                </code>
+                <code class="max-w-full rounded-[4px] px-1 py-0.5 font-mono text-[10px] font-medium leading-4 text-text break-all bg-[color-mix(in_oklch,var(--v2-text-text-base)_8%,transparent)]">
+                  {sessionID()}
+                </code>
               </div>
             )}
           </Show>
