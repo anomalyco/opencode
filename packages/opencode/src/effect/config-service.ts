@@ -16,7 +16,7 @@ export type ServiceClass<Self, Id extends string, Service> = Context.ServiceClas
   /** Provide already-parsed config, useful in tests. */
   readonly layer: (input: Service) => Layer.Layer<Self>
   /** Parse config once from the active Effect ConfigProvider and provide the service. */
-  readonly defaultLayer: Layer.Layer<Self, Config.ConfigError>
+  readonly configLayer: Layer.Layer<Self, Config.ConfigError>
 }
 
 /**
@@ -35,7 +35,7 @@ export type ServiceClass<Self, Id extends string, Service> = Context.ServiceClas
  *   },
  * ) {}
  *
- * const live = ServerAuthConfig.defaultLayer
+ * const live = ServerAuthConfig.configLayer
  * const test = ServerAuthConfig.layer({ password: Option.some("secret"), username: "kit" })
  * ```
  */
@@ -47,7 +47,7 @@ export const Service =
         return Layer.succeed(this, this.of(input))
       }
 
-      static get defaultLayer() {
+      static get configLayer() {
         const tag = this
         return Layer.effect(
           tag,
