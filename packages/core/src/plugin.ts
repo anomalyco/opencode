@@ -149,7 +149,6 @@ export const locationLayer = layer.pipe(
   Layer.provideMerge(CommandV2.locationLayer),
   Layer.provideMerge(Integration.locationLayer),
   Layer.provideMerge(Reference.locationLayer),
-  Layer.provideMerge(SkillV2.locationLayer),
 )
 
 export const node = makeLocationNode({
