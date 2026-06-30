@@ -108,16 +108,16 @@ import type {
   PtysUpdateOutput,
   PtysRemoveInput,
   PtysRemoveOutput,
-  ServerShellListInput,
-  ServerShellListOutput,
-  ServerShellCreateInput,
-  ServerShellCreateOutput,
-  ServerShellGetInput,
-  ServerShellGetOutput,
-  ServerShellOutputInput,
-  ServerShellOutputOutput,
-  ServerShellRemoveInput,
-  ServerShellRemoveOutput,
+  ShellListInput,
+  ShellListOutput,
+  ShellCreateInput,
+  ShellCreateOutput,
+  ShellGetInput,
+  ShellGetOutput,
+  ShellOutputInput,
+  ShellOutputOutput,
+  ShellRemoveInput,
+  ShellRemoveOutput,
   QuestionsListRequestsInput,
   QuestionsListRequestsOutput,
   QuestionsListInput,
@@ -987,9 +987,9 @@ export function make(options: ClientOptions) {
           requestOptions,
         ),
     },
-    "server.shell": {
-      list: (input?: ServerShellListInput, requestOptions?: RequestOptions) =>
-        request<ServerShellListOutput>(
+    shell: {
+      list: (input?: ShellListInput, requestOptions?: RequestOptions) =>
+        request<ShellListOutput>(
           {
             method: "GET",
             path: `/api/shell`,
@@ -1000,8 +1000,8 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
-      create: (input: ServerShellCreateInput, requestOptions?: RequestOptions) =>
-        request<ServerShellCreateOutput>(
+      create: (input: ShellCreateInput, requestOptions?: RequestOptions) =>
+        request<ShellCreateOutput>(
           {
             method: "POST",
             path: `/api/shell`,
@@ -1018,8 +1018,8 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
-      get: (input: ServerShellGetInput, requestOptions?: RequestOptions) =>
-        request<ServerShellGetOutput>(
+      get: (input: ShellGetInput, requestOptions?: RequestOptions) =>
+        request<ShellGetOutput>(
           {
             method: "GET",
             path: `/api/shell/${encodeURIComponent(input.id)}`,
@@ -1030,8 +1030,8 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
-      output: (input: ServerShellOutputInput, requestOptions?: RequestOptions) =>
-        request<ServerShellOutputOutput>(
+      output: (input: ShellOutputInput, requestOptions?: RequestOptions) =>
+        request<ShellOutputOutput>(
           {
             method: "GET",
             path: `/api/shell/${encodeURIComponent(input.id)}/output`,
@@ -1042,8 +1042,8 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
-      remove: (input: ServerShellRemoveInput, requestOptions?: RequestOptions) =>
-        request<ServerShellRemoveOutput>(
+      remove: (input: ShellRemoveInput, requestOptions?: RequestOptions) =>
+        request<ShellRemoveOutput>(
           {
             method: "DELETE",
             path: `/api/shell/${encodeURIComponent(input.id)}`,

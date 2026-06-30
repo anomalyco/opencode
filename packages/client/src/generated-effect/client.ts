@@ -820,7 +820,7 @@ const adaptClient = (raw: RawClient) => ({
   skills: adaptGroup14(raw["server.skill"]),
   events: adaptGroup15(raw["server.event"]),
   ptys: adaptGroup16(raw["server.pty"]),
-  "server.shell": adaptGroup17(raw["server.shell"]),
+  shell: adaptGroup17(raw["server.shell"]),
   questions: adaptGroup18(raw["server.question"]),
   references: adaptGroup19(raw["server.reference"]),
   projectCopies: adaptGroup20(raw["server.projectCopy"]),

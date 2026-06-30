@@ -22,7 +22,7 @@ test("exposes every standard HTTP API group", () => {
     "skills",
     "events",
     "ptys",
-    "server.shell",
+    "shell",
     "questions",
     "references",
     "projectCopies",
@@ -39,6 +39,7 @@ test("exposes every standard HTTP API group", () => {
   ])
   expect(Object.keys(client.files)).toEqual(["read", "list", "find"])
   expect(Object.keys(client.ptys)).toEqual(["list", "create", "get", "update", "remove"])
+  expect(Object.keys(client.shell)).toEqual(["list", "create", "get", "output", "remove"])
   expect(Object.keys(client.project)).toEqual(["current", "directories"])
 })
 
@@ -86,6 +87,41 @@ test("project methods use the public HTTP contract", async () => {
   expect(requests).toEqual([
     "http://localhost:3000/api/project/current?location%5Bworkspace%5D=wrk_test",
     "http://localhost:3000/api/project/proj_test/directories?location%5Bdirectory%5D=%2Ftmp%2Fproject",
+  ])
+})
+
+test("shell list and remove use the public HTTP contract", async () => {
+  const requests: Array<{ method: string; url: string }> = []
+  const shell = {
+    id: "sh_test",
+    status: "running",
+    command: "pwd",
+    cwd: "/tmp/project",
+    shell: "/bin/zsh",
+    file: "/tmp/opencode-shell",
+    metadata: { sessionID: "ses_test" },
+    time: { started: 1_717_171_717_000 },
+  }
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init)
+      requests.push({ method: request.method, url: request.url })
+      if (request.method === "DELETE") return new Response(null, { status: 204 })
+      return Response.json({
+        location: { directory: "/tmp/project", project: { id: "proj_test", directory: "/tmp/project" } },
+        data: [shell],
+      })
+    },
+  })
+
+  const result = await client.shell.list({ location: { directory: "/tmp/project" } })
+  await client.shell.remove({ id: shell.id })
+
+  expect(result.data).toEqual([shell])
+  expect(requests).toEqual([
+    { method: "GET", url: "http://localhost:3000/api/shell?location%5Bdirectory%5D=%2Ftmp%2Fproject" },
+    { method: "DELETE", url: "http://localhost:3000/api/shell/sh_test" },
   ])
 })
 

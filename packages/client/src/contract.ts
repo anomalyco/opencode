@@ -33,6 +33,7 @@ export const groupNames = {
   "server.skill": "skills",
   "server.event": "events",
   "server.pty": "ptys",
+  "server.shell": "shell",
   "server.question": "questions",
   "server.reference": "references",
   "server.project": "project",

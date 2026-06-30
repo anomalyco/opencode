@@ -2829,13 +2829,13 @@ export type PtysRemoveInput = {
 
 export type PtysRemoveOutput = void
 
-export type ServerShellListInput = {
+export type ShellListInput = {
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   }["location"]
 }
 
-export type ServerShellListOutput = {
+export type ShellListOutput = {
   readonly location: {
     readonly directory: string
     readonly workspaceID?: string
@@ -2858,7 +2858,7 @@ export type ServerShellListOutput = {
   }>
 }
 
-export type ServerShellCreateInput = {
+export type ShellCreateInput = {
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   }["location"]
@@ -2888,7 +2888,7 @@ export type ServerShellCreateInput = {
   }["metadata"]
 }
 
-export type ServerShellCreateOutput = {
+export type ShellCreateOutput = {
   readonly location: {
     readonly directory: string
     readonly workspaceID?: string
@@ -2911,14 +2911,14 @@ export type ServerShellCreateOutput = {
   }
 }
 
-export type ServerShellGetInput = {
+export type ShellGetInput = {
   readonly id: { readonly id: string }["id"]
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   }["location"]
 }
 
-export type ServerShellGetOutput = {
+export type ShellGetOutput = {
   readonly location: {
     readonly directory: string
     readonly workspaceID?: string
@@ -2941,7 +2941,7 @@ export type ServerShellGetOutput = {
   }
 }
 
-export type ServerShellOutputInput = {
+export type ShellOutputInput = {
   readonly id: { readonly id: string }["id"]
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
@@ -2960,7 +2960,7 @@ export type ServerShellOutputInput = {
   }["limit"]
 }
 
-export type ServerShellOutputOutput = {
+export type ShellOutputOutput = {
   readonly location: {
     readonly directory: string
     readonly workspaceID?: string
@@ -2974,14 +2974,14 @@ export type ServerShellOutputOutput = {
   }
 }
 
-export type ServerShellRemoveInput = {
+export type ShellRemoveInput = {
   readonly id: { readonly id: string }["id"]
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   }["location"]
 }
 
-export type ServerShellRemoveOutput = void
+export type ShellRemoveOutput = void
 
 export type QuestionsListRequestsInput = {
   readonly location?: {
