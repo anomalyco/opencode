@@ -2,31 +2,33 @@ import { describe, expect, test } from "bun:test"
 import { sortModelOptions } from "../../../../src/component/dialog-model"
 
 describe("sortModelOptions", () => {
-  test("orders provider-scoped model choices by newest release first", () => {
-    const sorted = sortModelOptions(
-      [
-        { title: "GPT 5.2", releaseDate: "2025-12-11" },
-        { title: "GPT 5.4", releaseDate: "2026-03-05" },
-        { title: "GPT 5.1", releaseDate: "2025-11-13" },
-      ],
-      true,
-    )
+  test("orders opencode models before other providers", () => {
+    const sorted = sortModelOptions([
+      { providerID: "openai", providerName: "OpenAI", releaseDate: 3, title: "GPT 5" },
+      { providerID: "opencode", providerName: "OpenCode", releaseDate: 1, title: "Claude Sonnet 4" },
+      { providerID: "anthropic", providerName: "Anthropic", releaseDate: 2, title: "Claude Opus 4" },
+    ])
 
-    expect(sorted.map((model) => model.title)).toEqual(["GPT 5.4", "GPT 5.2", "GPT 5.1"])
+    expect(sorted.map((model) => model.title)).toEqual(["Claude Sonnet 4", "Claude Opus 4", "GPT 5"])
   })
 
-  test("orders regular model choices free-first and then newest-first", () => {
-    const sorted = sortModelOptions(
-      [
-        { title: "GLM 5", releaseDate: "2025-07-28" },
-        { title: "GLM 5.1", releaseDate: "2025-12-09" },
-        { title: "GLM 5.2", releaseDate: "2026-02-16" },
-        { title: "Free old", releaseDate: "2024-01-01", footer: "Free" },
-        { title: "Free new", releaseDate: "2025-01-01", footer: "Free" },
-      ],
-      false,
-    )
+  test("orders provider groups by provider name and models by newest release", () => {
+    const sorted = sortModelOptions([
+      { providerID: "google", providerName: "Google", releaseDate: 5, title: "Gemini 2.5 Pro" },
+      { providerID: "anthropic", providerName: "Anthropic", releaseDate: 4, title: "Claude Sonnet 4" },
+      { providerID: "anthropic", providerName: "Anthropic", releaseDate: 6, title: "Claude Opus 4" },
+      { providerID: "openai", providerName: "OpenAI", releaseDate: 7, title: "GPT 5" },
+    ])
 
-    expect(sorted.map((model) => model.title)).toEqual(["Free new", "Free old", "GLM 5.2", "GLM 5.1", "GLM 5"])
+    expect(sorted.map((model) => model.title)).toEqual(["Claude Opus 4", "Claude Sonnet 4", "Gemini 2.5 Pro", "GPT 5"])
+  })
+
+  test("falls back to title when release dates match within a provider", () => {
+    const sorted = sortModelOptions([
+      { providerID: "anthropic", providerName: "Anthropic", releaseDate: 5, title: "Claude Sonnet 4" },
+      { providerID: "anthropic", providerName: "Anthropic", releaseDate: 5, title: "Claude Opus 4" },
+    ])
+
+    expect(sorted.map((model) => model.title)).toEqual(["Claude Opus 4", "Claude Sonnet 4"])
   })
 })

@@ -24,6 +24,7 @@ const INTEGRATION_PRIORITY: Record<string, number> = {
 
 type ConnectMethod = Exclude<IntegrationInfo["methods"][number], { type: "env" }>
 type IntegrationAttempt = IntegrationConnectOauthOutput["data"]
+type OnIntegrationConnected = (providerID?: string) => void
 
 export function integrationOptions(list: IntegrationInfo[]) {
   return list.toSorted(
@@ -52,7 +53,7 @@ export function connectionSummary(integration: IntegrationInfo) {
     .join(", ")
 }
 
-export function DialogIntegration() {
+export function DialogIntegration(props: { onConnected?: OnIntegrationConnected } = {}) {
   const data = useData()
   const dialog = useDialog()
   const { theme } = useTheme()
@@ -70,8 +71,8 @@ export function DialogIntegration() {
         gutter: connected ? () => <text fg={theme.success}>✓</text> : undefined,
         onSelect: () =>
           credentialConnections(integration).length
-            ? manageConnections(integration, methods, dialog)
-            : selectMethod(integration, methods, dialog),
+            ? manageConnections(integration, methods, dialog, props.onConnected)
+            : selectMethod(integration, methods, dialog, props.onConnected),
       }
     }),
   )
@@ -89,6 +90,7 @@ function manageConnections(
   integration: IntegrationInfo,
   methods: ConnectMethod[],
   dialog: ReturnType<typeof useDialog>,
+  onConnected?: OnIntegrationConnected,
 ) {
   dialog.replace(() => {
     const data = useData()
@@ -103,7 +105,7 @@ function manageConnections(
                 {
                   title: "Add connection",
                   value: "add",
-                  onSelect: () => selectMethod(integration, methods, dialog),
+                  onSelect: () => selectMethod(integration, methods, dialog, onConnected),
                 },
               ]
             : []),
@@ -123,29 +125,43 @@ function manageConnections(
   })
 }
 
-function selectMethod(integration: IntegrationInfo, methods: ConnectMethod[], dialog: ReturnType<typeof useDialog>) {
-  if (methods.length === 1) return openMethod(integration, methods[0], dialog)
+function selectMethod(
+  integration: IntegrationInfo,
+  methods: ConnectMethod[],
+  dialog: ReturnType<typeof useDialog>,
+  onConnected?: OnIntegrationConnected,
+) {
+  if (methods.length === 1) return openMethod(integration, methods[0], dialog, onConnected)
   dialog.replace(() => (
     <DialogSelect
       title={`Connect ${integration.name}`}
       options={methods.map((method) => ({
         title: method.type === "key" ? (method.label ?? "API key") : method.label,
         value: method.type === "key" ? "key" : method.id,
-        onSelect: () => openMethod(integration, method, dialog),
+        onSelect: () => openMethod(integration, method, dialog, onConnected),
       }))}
     />
   ))
 }
 
-function openMethod(integration: IntegrationInfo, method: ConnectMethod, dialog: ReturnType<typeof useDialog>) {
+function openMethod(
+  integration: IntegrationInfo,
+  method: ConnectMethod,
+  dialog: ReturnType<typeof useDialog>,
+  onConnected?: OnIntegrationConnected,
+) {
   if (method.type === "key") {
-    dialog.replace(() => <KeyMethod integration={integration} method={method} />)
+    dialog.replace(() => <KeyMethod integration={integration} method={method} onConnected={onConnected} />)
     return
   }
-  void beginOAuth(integration, method, dialog)
+  void beginOAuth(integration, method, dialog, onConnected)
 }
 
-function KeyMethod(props: { integration: IntegrationInfo; method: Extract<ConnectMethod, { type: "key" }> }) {
+function KeyMethod(props: {
+  integration: IntegrationInfo
+  method: Extract<ConnectMethod, { type: "key" }>
+  onConnected?: OnIntegrationConnected
+}) {
   const data = useData()
   const dialog = useDialog()
   const sdk = useSDK()
@@ -165,7 +181,7 @@ function KeyMethod(props: { integration: IntegrationInfo; method: Extract<Connec
             location: location(data),
             key,
           })
-          .then(() => connected(props.integration.name, data, dialog, toast))
+          .then(() => connected(props.integration, data, dialog, toast, props.onConnected))
           .catch((cause) => setError(message(cause)))
       }}
       description={() => <Show when={error()}>{(value) => <text fg={theme.error}>{value()}</text>}</Show>}
@@ -177,16 +193,20 @@ async function beginOAuth(
   integration: IntegrationInfo,
   method: IntegrationOAuthMethod,
   dialog: ReturnType<typeof useDialog>,
+  onConnected?: OnIntegrationConnected,
 ) {
   const inputs = method.prompts?.length ? await promptInputs(dialog, method.prompts) : {}
   if (inputs === null) return
-  dialog.replace(() => <OAuthStarting integration={integration} method={method} inputs={inputs} />)
+  dialog.replace(() => (
+    <OAuthStarting integration={integration} method={method} inputs={inputs} onConnected={onConnected} />
+  ))
 }
 
 function OAuthStarting(props: {
   integration: IntegrationInfo
   method: IntegrationOAuthMethod
   inputs: Record<string, string>
+  onConnected?: OnIntegrationConnected
 }) {
   const data = useData()
   const dialog = useDialog()
@@ -204,12 +224,22 @@ function OAuthStarting(props: {
       .then((result) => {
         if (result.data.mode === "code") {
           dialog.replace(() => (
-            <OAuthCode integration={props.integration} title={props.method.label} attempt={result.data} />
+            <OAuthCode
+              integration={props.integration}
+              title={props.method.label}
+              attempt={result.data}
+              onConnected={props.onConnected}
+            />
           ))
           return
         }
         dialog.replace(() => (
-          <OAuthAuto integration={props.integration} title={props.method.label} attempt={result.data} />
+          <OAuthAuto
+            integration={props.integration}
+            title={props.method.label}
+            attempt={result.data}
+            onConnected={props.onConnected}
+          />
         ))
       })
       .catch((cause) => {
@@ -221,7 +251,12 @@ function OAuthStarting(props: {
   return <OAuthView title={props.method.label} message="Starting authorization..." />
 }
 
-function OAuthAuto(props: { integration: IntegrationInfo; title: string; attempt: IntegrationAttempt }) {
+function OAuthAuto(props: {
+  integration: IntegrationInfo
+  title: string
+  attempt: IntegrationAttempt
+  onConnected?: OnIntegrationConnected
+}) {
   const data = useData()
   const dialog = useDialog()
   const sdk = useSDK()
@@ -258,7 +293,7 @@ function OAuthAuto(props: { integration: IntegrationInfo; title: string; attempt
         }
         settled = true
         if (status.status === "complete") {
-          void connected(props.integration.name, data, dialog, toast)
+          void connected(props.integration, data, dialog, toast, props.onConnected)
           return
         }
         toast.show({ variant: "error", message: status.status === "failed" ? status.message : "Authorization expired" })
@@ -289,7 +324,12 @@ function OAuthAuto(props: { integration: IntegrationInfo; title: string; attempt
   )
 }
 
-function OAuthCode(props: { integration: IntegrationInfo; title: string; attempt: IntegrationAttempt }) {
+function OAuthCode(props: {
+  integration: IntegrationInfo
+  title: string
+  attempt: IntegrationAttempt
+  onConnected?: OnIntegrationConnected
+}) {
   const data = useData()
   const dialog = useDialog()
   const sdk = useSDK()
@@ -313,7 +353,7 @@ function OAuthCode(props: { integration: IntegrationInfo; title: string; attempt
           .attemptComplete({ attemptID: props.attempt.attemptID, location: location(data), code })
           .then(() => {
             settled = true
-            return connected(props.integration.name, data, dialog, toast)
+            return connected(props.integration, data, dialog, toast, props.onConnected)
           })
           .catch((cause) => setError(message(cause)))
       }}
@@ -407,18 +447,35 @@ async function promptInputs(
 }
 
 async function connected(
-  name: string,
+  integration: IntegrationInfo,
   data: ReturnType<typeof useData>,
   dialog: ReturnType<typeof useDialog>,
   toast: ReturnType<typeof useToast>,
+  onConnected?: OnIntegrationConnected,
 ) {
   await Promise.all([
     data.location.integration.refresh(),
     data.location.model.refresh(),
     data.location.provider.refresh(),
   ])
-  toast.show({ variant: "success", message: `Connected ${name}` })
+  toast.show({ variant: "success", message: `Connected ${integration.name}` })
+  if (onConnected) {
+    onConnected(providerID(data, integration.id))
+    return
+  }
   dialog.clear()
+}
+
+function providerID(data: ReturnType<typeof useData>, integrationID: string) {
+  const models = data.location.model.list() ?? []
+  const matches = (data.location.provider.list() ?? []).filter(
+    (provider) => provider.integrationID === integrationID || provider.id === integrationID,
+  )
+  return (
+    matches.find((provider) =>
+      models.some((model) => model.providerID === provider.id && model.status !== "deprecated"),
+    )?.id ?? matches[0]?.id
+  )
 }
 
 async function disconnected(

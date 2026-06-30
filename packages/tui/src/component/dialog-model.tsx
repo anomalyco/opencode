@@ -1,6 +1,5 @@
 import { createMemo, createSignal } from "solid-js"
 import { useLocal } from "../context/local"
-import { sortBy } from "remeda"
 import { DialogSelect } from "../ui/dialog-select"
 import { useDialog } from "../ui/dialog"
 import { DialogIntegration } from "./dialog-integration"
@@ -62,19 +61,24 @@ export function DialogModel(props: { providerID?: string }) {
       models()
         .filter((model) => model.status !== "deprecated")
         .filter((model) => (props.providerID ? model.providerID === props.providerID : true))
-        .map((model) => ({
-          value: { providerID: model.providerID, modelID: model.id },
-          title: model.name,
-          releaseDate: model.time.released,
-          description: favorites.some((item) => item.providerID === model.providerID && item.modelID === model.id)
-            ? "(Favorite)"
-            : undefined,
-          category: connected() ? (providers().get(model.providerID)?.name ?? model.providerID) : undefined,
-          footer: free(model) ? "Free" : undefined,
-          onSelect() {
-            onSelect(model.providerID, model.id)
-          },
-        }))
+        .map((model) => {
+          const provider = providers().get(model.providerID)
+          return {
+            value: { providerID: model.providerID, modelID: model.id },
+            providerID: model.providerID,
+            providerName: provider?.name ?? model.providerID,
+            title: model.name,
+            releaseDate: model.time.released,
+            description: favorites.some((item) => item.providerID === model.providerID && item.modelID === model.id)
+              ? "(Favorite)"
+              : undefined,
+            category: connected() ? (provider?.name ?? model.providerID) : undefined,
+            footer: free(model) ? "Free" : undefined,
+            onSelect() {
+              onSelect(model.providerID, model.id)
+            },
+          }
+        })
         .filter((option) => {
           if (!showSections) return true
           if (
@@ -89,7 +93,6 @@ export function DialogModel(props: { providerID?: string }) {
             return false
           return true
         }),
-      props.providerID !== undefined,
     )
 
     if (needle) {
@@ -130,7 +133,11 @@ export function DialogModel(props: { providerID?: string }) {
           command: "model.dialog.provider",
           title: connected() ? "Connect integration" : "View all integrations",
           onTrigger() {
-            dialog.replace(() => <DialogIntegration />)
+            dialog.replace(() => (
+              <DialogIntegration
+                onConnected={(providerID) => dialog.replace(() => <DialogModel providerID={providerID} />)}
+              />
+            ))
           },
         },
         {
@@ -151,17 +158,21 @@ export function DialogModel(props: { providerID?: string }) {
   )
 }
 
-export function sortModelOptions<T extends { footer?: string; releaseDate: string | number; title: string }>(
-  options: T[],
-  newestFirst: boolean,
-) {
-  if (newestFirst) return sortBy(options, [(option) => option.releaseDate, "desc"], (option) => option.title)
-  return sortBy(
-    options,
-    (option) => option.footer !== "Free",
-    [(option) => option.releaseDate, "desc"],
-    (option) => option.title,
-  )
+export function sortModelOptions<
+  T extends { providerID?: string; providerName?: string; releaseDate: string | number; title: string },
+>(options: T[]) {
+  return options.toSorted((a, b) => {
+    const provider = Number(a.providerID !== "opencode") - Number(b.providerID !== "opencode")
+    if (provider !== 0) return provider
+
+    const name = (a.providerName ?? "").localeCompare(b.providerName ?? "")
+    if (name !== 0) return name
+
+    const release = Number(b.releaseDate) - Number(a.releaseDate)
+    if (release !== 0) return release
+
+    return a.title.localeCompare(b.title)
+  })
 }
 
 function free(model: { cost: Array<{ input: number }> }) {

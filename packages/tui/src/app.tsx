@@ -748,7 +748,11 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         suggested: !connected(),
         slashName: "connect",
         run: () => {
-          dialog.replace(() => <DialogIntegration />)
+          dialog.replace(() => (
+            <DialogIntegration
+              onConnected={(providerID) => dialog.replace(() => <DialogModel providerID={providerID} />)}
+            />
+          ))
         },
         category: "Integration",
       },
