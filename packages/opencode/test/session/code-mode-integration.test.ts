@@ -138,7 +138,7 @@ describe("code mode integration (real MCP server)", () => {
   test("calls a text tool and unwraps the result envelope", async () => {
     const out = await run("const r = await tools.fixtures.get_text({ name: 'world' }); return r.result")
     expect(out.output).toBe("hello world")
-    expect(out.metadata.toolCalls).toEqual(["fixtures_get_text"])
+    expect(out.metadata.toolCalls).toEqual([{ tool: "fixtures.get_text", status: "completed" }])
     expect(out.attachments).toBeUndefined()
   })
 
@@ -154,7 +154,10 @@ describe("code mode integration (real MCP server)", () => {
       return { total: second.result.sum }
     `)
     expect(JSON.parse(out.output)).toEqual({ total: 13 })
-    expect(out.metadata.toolCalls).toEqual(["fixtures_add", "fixtures_add"])
+    expect(out.metadata.toolCalls).toEqual([
+      { tool: "fixtures.add", status: "completed" },
+      { tool: "fixtures.add", status: "completed" },
+    ])
   })
 
   test("forwards an image as an attachment when the whole result is returned", async () => {
@@ -191,7 +194,7 @@ describe("code mode integration (real MCP server)", () => {
     `)
     expect(out.output).toBe("two shots")
     expect(out.attachments).toHaveLength(2)
-    expect(out.metadata.toolCalls.sort()).toEqual(["fixtures_screenshot", "fixtures_screenshot"])
+    expect(out.metadata.toolCalls.map((c) => c.tool)).toEqual(["fixtures.screenshot", "fixtures.screenshot"])
   })
 
   test("propagates an MCP isError into the program as a catchable error", async () => {

@@ -1758,6 +1758,9 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
         <Match when={display() === "task"}>
           <Task {...toolprops} />
         </Match>
+        <Match when={display() === "execute"}>
+          <Execute {...toolprops} />
+        </Match>
         <Match when={display() === "apply_patch"}>
           <ApplyPatch {...toolprops} />
         </Match>
@@ -2322,6 +2325,75 @@ export function formatCompletedSubagentDetail(toolcalls: number, duration: strin
   return `${formatSubagentToolcalls(toolcalls)} · ${duration}`
 }
 
+type CodeCall = { tool: string; status: "running" | "completed" | "error" }
+
+function codeCalls(value: unknown): CodeCall[] {
+  if (!Array.isArray(value)) return []
+  return value.filter(
+    (call): call is CodeCall =>
+      !!call &&
+      typeof call === "object" &&
+      typeof (call as CodeCall).tool === "string" &&
+      ["running", "completed", "error"].includes((call as CodeCall).status),
+  )
+}
+
+// The code-mode `execute` tool: a header with the run status, a live `↳` line per
+// child tool call (sourced from streamed metadata, not a child session like Task),
+// and the program source on demand.
+function Execute(props: ToolProps) {
+  const { theme, syntax } = useTheme()
+  const isRunning = createMemo(() => props.part.state.status === "running")
+  const calls = createMemo(() => codeCalls(props.metadata.toolCalls))
+  const code = createMemo(() => stringValue(props.input.code) ?? "")
+  const [expanded, setExpanded] = createSignal(false)
+
+  const summary = createMemo(() => {
+    const count = calls().length
+    if (count === 0) return "Execute"
+    return `Execute · ${count} tool call${count === 1 ? "" : "s"}`
+  })
+
+  return (
+    <>
+      <InlineTool
+        icon={props.part.state.status === "completed" ? "✓" : "▶"}
+        spinner={isRunning()}
+        pending="Running code..."
+        complete={summary()}
+        part={props.part}
+        onClick={code() ? () => setExpanded((value) => !value) : undefined}
+      >
+        {summary()}
+      </InlineTool>
+      <For each={calls()}>
+        {(call) => (
+          <box paddingLeft={3}>
+            <text paddingLeft={3} fg={call.status === "error" ? theme.error : theme.textMuted}>
+              ↳ {call.tool}
+              {call.status === "running" ? " …" : call.status === "error" ? " (failed)" : ""}
+            </text>
+          </box>
+        )}
+      </For>
+      <Show when={code()}>
+        <box paddingLeft={3}>
+          <text paddingLeft={3} fg={theme.textMuted}>
+            ↳ {expanded() ? "Hide code" : "View code"}
+          </text>
+        </box>
+      </Show>
+      <Show when={expanded() && code()}>
+        <box paddingLeft={3} paddingTop={1}>
+          <line_number fg={theme.textMuted} minWidth={3} paddingRight={1}>
+            <code conceal={false} fg={theme.text} filetype={filetype("code.ts")} syntaxStyle={syntax()} content={code()} />
+          </line_number>
+        </box>
+      </Show>
+    </>
+  )
+}
+
 function Edit(props: ToolProps) {
   const ctx = use()
   const { theme, syntax } = useTheme()
@@ -2578,6 +2650,7 @@ const toolDisplays = new Set([
   "todowrite",
   "question",
   "skill",
+  "execute",
 ])
 
 export function toolDisplay(tool: string) {

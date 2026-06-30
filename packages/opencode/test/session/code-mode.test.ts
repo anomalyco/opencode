@@ -174,7 +174,7 @@ describe("code mode execute", () => {
 
     expect(seen).toEqual([{ name: "world" }])
     expect(output.output).toBe("HELLO WORLD")
-    expect(output.metadata.toolCalls).toEqual(["greeter_hello"])
+    expect(output.metadata.toolCalls).toEqual([{ tool: "greeter.hello", status: "completed" }])
   })
 
   test("exposes structured content as data and composes multiple calls", async () => {
@@ -199,7 +199,10 @@ describe("code mode execute", () => {
     )
 
     expect(JSON.parse(output.output)).toEqual({ total: 13 })
-    expect(output.metadata.toolCalls).toEqual(["math_add", "math_add"])
+    expect(output.metadata.toolCalls).toEqual([
+      { tool: "math.add", status: "completed" },
+      { tool: "math.add", status: "completed" },
+    ])
   })
 
   test("runs tool calls in parallel with Promise.all", async () => {
@@ -216,7 +219,8 @@ describe("code mode execute", () => {
     )
 
     expect(output.output).toBe("12")
-    expect(output.metadata.toolCalls.sort()).toEqual(["echo_one", "echo_two"])
+    expect(output.metadata.toolCalls.map((c) => c.tool).sort()).toEqual(["echo.one", "echo.two"])
+    expect(output.metadata.toolCalls.every((c) => c.status === "completed")).toBe(true)
   })
 
   test("returns a readable error when the program throws", async () => {
@@ -258,6 +262,38 @@ describe("code mode execute", () => {
     )
 
     expect(asked.map((req: any) => req.permission)).toEqual(["a_tool", "b_tool"])
+  })
+
+  test("streams live per-call metadata as a call starts and finishes", async () => {
+    const snapshots: Array<{ toolCalls: { tool: string; status: string }[] }> = []
+    const recordingCtx: Tool.Context = {
+      ...ctx,
+      metadata: (val: any) => Effect.sync(() => void snapshots.push(val.metadata)),
+    }
+    const tool = await build({ greeter_hello: mcpTool("hello", () => ({ content: [{ type: "text", text: "hi" }] })) })
+
+    await Effect.runPromise(tool.execute({ code: "await tools.greeter.hello({}); return 'done'" }, recordingCtx))
+
+    // The UI sees the call appear as running, then resolve to completed.
+    expect(snapshots).toContainEqual({ toolCalls: [{ tool: "greeter.hello", status: "running" }] })
+    expect(snapshots).toContainEqual({ toolCalls: [{ tool: "greeter.hello", status: "completed" }] })
+  })
+
+  test("marks a failed child call as error in the live metadata", async () => {
+    const snapshots: Array<{ toolCalls: { tool: string; status: string }[] }> = []
+    const recordingCtx: Tool.Context = {
+      ...ctx,
+      metadata: (val: any) => Effect.sync(() => void snapshots.push(val.metadata)),
+    }
+    const tool = await build({
+      bad_tool: mcpTool("tool", () => ({ isError: true, content: [{ type: "text", text: "boom" }] })),
+    })
+
+    await Effect.runPromise(
+      tool.execute({ code: "try { await tools.bad.tool({}) } catch (e) { return 'caught' }" }, recordingCtx),
+    )
+
+    expect(snapshots).toContainEqual({ toolCalls: [{ tool: "bad.tool", status: "error" }] })
   })
 
   test("unit: toEnvelope wraps result and extracts media as attachments", () => {

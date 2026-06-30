@@ -24,8 +24,12 @@ export const Parameters = Schema.Struct({
   }),
 })
 
+/** One child tool call, surfaced live so the UI can render a per-call line that
+ *  updates as the program runs. `tool` is the dotted path (e.g. `github.create_issue`). */
+export type CallEntry = { tool: string; status: "running" | "completed" | "error" }
+
 type Metadata = {
-  toolCalls: string[]
+  toolCalls: CallEntry[]
   error?: boolean
 }
 
@@ -477,24 +481,42 @@ export function define(
       description: describe(groups),
       parameters: Parameters,
       execute: Effect.fn("CodeMode.execute")(function* (params, ctx) {
-        const calls: string[] = []
+        const calls: CallEntry[] = []
+        // Stream the current call list to the UI. Sent on every status change so the
+        // tool part shows each child call appearing and resolving while the program runs.
+        const publish = () =>
+          ctx.metadata({ title: "Code mode", metadata: { toolCalls: calls.map((c) => ({ ...c })) } })
+        const mark = (index: number, status: CallEntry["status"]) =>
+          Effect.suspend(() => {
+            calls[index] = { ...calls[index]!, status }
+            return publish()
+          })
 
         // One host function per MCP tool: gate on permission, dispatch to the native
         // MCP tool, and coerce the result into the { result, attachments? } envelope.
         // A failure (e.g. an MCP isError) fails the Effect, which the interpreter
         // surfaces as a catchable in-program error.
-        const callTool = (key: string, tool: AITool) => (input: unknown) =>
+        const callTool = (entry: CatalogEntry) => (input: unknown) =>
           Effect.gen(function* () {
-            yield* ctx.ask({ permission: key, metadata: {}, patterns: ["*"], always: ["*"] })
-            calls.push(key)
-            const result = yield* Effect.tryPromise({
+            yield* ctx.ask({ permission: entry.key, metadata: {}, patterns: ["*"], always: ["*"] })
+            const index = calls.length
+            calls.push({ tool: entry.path, status: "running" })
+            yield* publish()
+            return yield* Effect.tryPromise({
               try: () =>
                 Promise.resolve(
-                  tool.execute!(input ?? {}, { toolCallId: ctx.callID ?? key, abortSignal: ctx.abort, messages: [] }),
+                  entry.tool.execute!(input ?? {}, {
+                    toolCallId: ctx.callID ?? entry.key,
+                    abortSignal: ctx.abort,
+                    messages: [],
+                  }),
                 ),
               catch: (error) => (error instanceof Error ? error : new Error(String(error))),
-            })
-            return toEnvelope(result)
+            }).pipe(
+              Effect.tap(() => mark(index, "completed")),
+              Effect.tapError(() => mark(index, "error")),
+              Effect.map(toEnvelope),
+            )
           })
 
         // The Rune host-tool tree: per-server namespaces (`tools.<server>.<tool>`)
@@ -514,7 +536,7 @@ export function define(
             namespace = {}
             tools[entry.server] = namespace
           }
-          namespace[entry.local] = callTool(entry.key, entry.tool)
+          namespace[entry.local] = callTool(entry)
         }
 
         const result = yield* Rune.execute({
