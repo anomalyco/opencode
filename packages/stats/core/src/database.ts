@@ -3,7 +3,6 @@ import { drizzle } from "drizzle-orm/planetscale-serverless"
 import { migrate as drizzleMigrate } from "drizzle-orm/planetscale-serverless/migrator"
 import { Config, ConfigProvider, Effect, Layer, Schema } from "effect"
 import * as Context from "effect/Context"
-import * as schema from "./database/schema"
 import { Resource } from "sst/resource"
 
 export const DatabaseUrl = Schema.NonEmptyString.pipe(Schema.brand("DatabaseUrl"))
@@ -32,7 +31,7 @@ export class DatabaseConfig extends Context.Service<DatabaseConfig, DatabaseSett
 }
 
 function makeDrizzle(settings: DatabaseSettings) {
-  return drizzle({ client: new Client({ url: settings.url }), schema })
+  return drizzle({ client: new Client({ url: settings.url }) })
 }
 
 export type Drizzle = ReturnType<typeof makeDrizzle>

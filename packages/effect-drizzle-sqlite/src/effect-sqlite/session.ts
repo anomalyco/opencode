@@ -12,11 +12,9 @@ import type { EffectLoggerShape } from "drizzle-orm/effect-core/logger"
 import type { QueryEffectHKTBase } from "drizzle-orm/effect-core/query-effect"
 import { entityKind } from "drizzle-orm/entity"
 import type { AnyRelations } from "drizzle-orm/relations"
-import type { RelationalQueryMapperConfig } from "drizzle-orm/relations"
 import type { Query } from "drizzle-orm/sql/sql"
-import type { SQLiteAsyncDialect } from "drizzle-orm/sqlite-core/dialect"
-import { SQLiteEffectPreparedQuery, SQLiteEffectSession, SQLiteEffectTransaction } from "../sqlite-core/effect/session"
-import type { SelectedFieldsOrdered } from "drizzle-orm/sqlite-core/query-builders/select.types"
+import type { SQLiteDialect } from "drizzle-orm/sqlite-core/dialect"
+import { SQLiteEffectPreparedQuery, SQLiteEffectSession, SQLiteEffectTransaction } from "drizzle-orm/sqlite-core/effect/session"
 import type { PreparedQueryConfig, SQLiteExecuteMethod, SQLiteTransactionConfig } from "drizzle-orm/sqlite-core/session"
 
 export interface EffectSQLiteQueryEffectHKT extends QueryEffectHKTBase {
@@ -24,24 +22,23 @@ export interface EffectSQLiteQueryEffectHKT extends QueryEffectHKTBase {
   readonly context: never
 }
 
-export type EffectSQLiteRunResult = readonly never[]
+export type EffectSQLiteRunResult = unknown
 
 export interface EffectSQLiteSessionOptions {
   logger: EffectLoggerShape
   cache: EffectCacheShape
-  useJitMappers?: boolean
 }
 
 export class EffectSQLiteSession<TRelations extends AnyRelations> extends SQLiteEffectSession<
-  EffectSQLiteQueryEffectHKT,
   EffectSQLiteRunResult,
+  EffectSQLiteQueryEffectHKT,
   TRelations
 > {
   static override readonly [entityKind]: string = "EffectSQLiteSession"
 
   constructor(
     private client: SqlClient,
-    dialect: SQLiteAsyncDialect,
+    dialect: SQLiteDialect,
     protected relations: TRelations,
     private options: EffectSQLiteSessionOptions,
   ) {
@@ -50,9 +47,10 @@ export class EffectSQLiteSession<TRelations extends AnyRelations> extends SQLite
 
   override prepareQuery<T extends PreparedQueryConfig = PreparedQueryConfig>(
     query: Query,
-    fields: SelectedFieldsOrdered | undefined,
-    executeMethod: SQLiteExecuteMethod,
-    customResultMapper?: (rows: unknown[][], mapColumnValue?: (value: unknown) => unknown) => unknown,
+    mode: "arrays" | "objects" | "raw",
+    _prepare: boolean,
+    executeMethod?: SQLiteExecuteMethod,
+    mapper?: (rows: unknown[]) => unknown,
     queryMetadata?: {
       type: "select" | "update" | "delete" | "insert"
       tables: string[]
@@ -60,55 +58,29 @@ export class EffectSQLiteSession<TRelations extends AnyRelations> extends SQLite
     cacheConfig?: WithCacheConfig,
   ): SQLiteEffectPreparedQuery<T, EffectSQLiteQueryEffectHKT> {
     return new SQLiteEffectPreparedQuery<T, EffectSQLiteQueryEffectHKT>(
-      (params, method) => this.execute(query, params, method),
+      executeMethod,
+      {
+        all: (params) => {
+          const statement = this.client.unsafe(query.sql, params)
+          if (mode === "arrays") return statement.values
+          return statement.withoutTransform
+        },
+        get: (params) => {
+          const statement = this.client.unsafe(query.sql, params)
+          if (mode === "arrays") return statement.values.pipe(Effect.map((rows) => rows[0]))
+          return statement.withoutTransform.pipe(Effect.map((rows) => rows[0]))
+        },
+        values: (params) => this.client.unsafe(query.sql, params).values,
+        run: (params) => this.client.unsafe(query.sql, params).raw,
+      },
       query,
+      mapper,
+      mode,
       this.options.logger,
       this.options.cache,
       queryMetadata,
       cacheConfig,
-      fields,
-      executeMethod,
-      this.options.useJitMappers,
-      customResultMapper,
-      undefined,
-      undefined,
-      this.isInTransaction(),
     )
-  }
-
-  override prepareRelationalQuery<T extends PreparedQueryConfig = PreparedQueryConfig>(
-    query: Query,
-    fields: SelectedFieldsOrdered | undefined,
-    executeMethod: SQLiteExecuteMethod,
-    customResultMapper: (rows: Record<string, unknown>[], mapColumnValue?: (value: unknown) => unknown) => unknown,
-    config: RelationalQueryMapperConfig,
-  ): SQLiteEffectPreparedQuery<T, EffectSQLiteQueryEffectHKT, true> {
-    return new SQLiteEffectPreparedQuery<T, EffectSQLiteQueryEffectHKT, true>(
-      (params, method) => this.execute(query, params, method),
-      query,
-      this.options.logger,
-      this.options.cache,
-      undefined,
-      undefined,
-      fields,
-      executeMethod,
-      this.options.useJitMappers,
-      customResultMapper,
-      true,
-      config,
-      this.isInTransaction(),
-    )
-  }
-
-  private execute(query: Query, params: unknown[], method: SQLiteExecuteMethod | "values") {
-    const statement = this.client.unsafe(query.sql, params)
-    if (method === "values") return statement.values
-    if (method === "get") return statement.withoutTransform.pipe(Effect.map((rows) => rows[0]))
-    return statement.withoutTransform
-  }
-
-  private isInTransaction() {
-    return Effect.serviceOption(this.client.transactionService).pipe(Effect.map((option) => option._tag === "Some"))
   }
 
   private executeTransactionStatement(connection: Effect.Success<SqlClient["reserve"]>, query: string) {
@@ -214,5 +186,5 @@ export class EffectSQLiteTransaction<TRelations extends AnyRelations> extends SQ
     transaction: (
       tx: SQLiteEffectTransaction<EffectSQLiteQueryEffectHKT, EffectSQLiteRunResult, TRelations>,
     ) => Effect.Effect<A, E, R>,
-  ) => Effect.Effect<A, SqlError | E, R> = (tx) => this.session.transaction(tx)
+  ) => Effect.Effect<A, SqlError | E, R> = (tx) => this._.session.transaction(tx)
 }

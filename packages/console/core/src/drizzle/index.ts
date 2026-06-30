@@ -3,18 +3,13 @@ import { Resource } from "@opencode-ai/console-resource"
 export * from "drizzle-orm"
 import { Client } from "@planetscale/database"
 
-import { MySqlTransaction, type MySqlTransactionConfig } from "drizzle-orm/mysql-core"
-import type { PlanetScalePreparedQueryHKT, PlanetscaleQueryResultHKT } from "drizzle-orm/planetscale-serverless"
+import type { MySqlTransactionConfig } from "drizzle-orm/mysql-core"
+import type { PlanetScaleTransaction } from "drizzle-orm/planetscale-serverless"
 import { Context } from "../context"
 import { memo } from "../util/memo"
 
 export namespace Database {
-  export type Transaction = MySqlTransaction<
-    PlanetscaleQueryResultHKT,
-    PlanetScalePreparedQueryHKT,
-    Record<string, never>,
-    any
-  >
+  export type Transaction = PlanetScaleTransaction<Record<string, never>>
 
   const client = memo(() => {
     const result = new Client({
