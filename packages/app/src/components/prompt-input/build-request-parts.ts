@@ -102,9 +102,9 @@ export function buildRequestParts(input: BuildRequestPartsInput) {
     return {
       id: Identifier.ascending("part"),
       type: "file",
-      mime: "text/plain",
+      mime: attachment.mime ?? "text/plain",
       url: `file://${encodeFilePath(path)}${fileQuery(attachment.selection)}`,
-      filename: getFilename(attachment.path),
+      filename: attachment.filename ?? getFilename(attachment.path),
       source: {
         type: "file",
         text: {

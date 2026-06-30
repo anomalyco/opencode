@@ -9,6 +9,7 @@ import type {
   Path,
   PermissionRequest,
   QuestionRequest,
+  ReferenceInfo,
   Session,
   SessionStatus,
   SnapshotFileDiff,
@@ -34,6 +35,7 @@ export type State = {
   status: "loading" | "partial" | "complete"
   agent: Agent[]
   command: Command[]
+  reference: ReferenceInfo[]
   project: string
   projectMeta: ProjectMeta | undefined
   icon: string | undefined

@@ -187,6 +187,7 @@ export function createChildStoreManager(input: {
           const mcpQuery = useQuery(() => ({ ...input.queryOptions.mcp(key), enabled: mcpEnabled() }))
           const lspQuery = useQuery(() => input.queryOptions.lsp(key))
           const providerQuery = useQuery(() => input.queryOptions.providers(key))
+          const referenceQuery = useQuery(() => input.queryOptions.references(key))
 
           const child = createStore<State>({
             project: "",
@@ -210,6 +211,9 @@ export function createChildStoreManager(input: {
             status: "loading" as const,
             agent: [],
             command: [],
+            get reference() {
+              return referenceQuery.isLoading ? [] : (referenceQuery.data ?? [])
+            },
             session: [],
             sessionTotal: 0,
             session_status: {},
