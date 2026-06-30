@@ -2116,3 +2116,34 @@ it.effect("opencode loader keeps paid models when auth exists", () =>
     expect(keyedCount).toBeGreaterThan(0)
   }).pipe(provideMultiInstance),
 )
+
+it.instance(
+  "config-defined custom models allow temperature by default",
+  Effect.gen(function* () {
+    const providers = yield* list
+    const model = providers[ProviderV2.ID.make("brand-new-provider")].models["new-model"]
+    expect(model.capabilities.temperature).toBe(true)
+  }),
+  {
+    config: {
+      provider: {
+        "brand-new-provider": {
+          name: "Brand New",
+          npm: "@ai-sdk/openai-compatible",
+          env: [],
+          api: "https://new-api.com/v1",
+          models: {
+            "new-model": {
+              name: "New Model",
+              tool_call: true,
+              limit: { context: 32000, output: 8000 },
+            },
+          },
+          options: {
+            apiKey: "new-key",
+          },
+        },
+      },
+    },
+  },
+)
