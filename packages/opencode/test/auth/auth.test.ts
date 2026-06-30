@@ -1,12 +1,10 @@
 import { describe, expect } from "bun:test"
-import { Effect, Layer } from "effect"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { Effect } from "effect"
 import { Auth } from "../../src/auth"
-import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { testEffect } from "../lib/effect"
 
-const node = CrossSpawnSpawner.defaultLayer
-
-const it = testEffect(Layer.mergeAll(Auth.defaultLayer, node))
+const it = testEffect(LayerNode.compile(Auth.node))
 
 describe("Auth", () => {
   it.instance("set normalizes trailing slashes in keys", () =>

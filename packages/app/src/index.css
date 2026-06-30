@@ -1,5 +1,7 @@
 @import "@opencode-ai/ui/styles/tailwind";
+@import "@opencode-ai/session-ui/styles";
 @import "@opencode-ai/ui/v2/styles/tailwind.css";
+@import "tw-animate-css";
 
 @font-face {
   font-family: "JetBrainsMono Nerd Font Mono";
@@ -15,45 +17,14 @@
   font-style: normal;
 }
 
+@media (display-mode: standalone) {
+  /* WebKit excludes safe-area insets from dvh in installed apps. */
+  #root {
+    height: 100vh;
+  }
+}
+
 @layer components {
-  @keyframes session-progress-whip {
-    0% {
-      clip-path: inset(0 100% 0 0 round 999px);
-      animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
-    }
-
-    48% {
-      clip-path: inset(0 0 0 0 round 999px);
-      animation-timing-function: cubic-bezier(0.65, 0, 0.35, 1);
-    }
-
-    100% {
-      clip-path: inset(0 0 0 100% round 999px);
-    }
-  }
-
-  [data-component="session-progress"] {
-    position: absolute;
-    inset: 0 0 auto;
-    height: 2px;
-    overflow: hidden;
-    pointer-events: none;
-    opacity: 1;
-    transition: opacity 220ms ease-out;
-  }
-
-  [data-component="session-progress"][data-state="hiding"] {
-    opacity: 0;
-  }
-
-  [data-component="session-progress-bar"] {
-    width: 100%;
-    height: 100%;
-    border-radius: 999px;
-    clip-path: inset(0 100% 0 0 round 999px);
-    will-change: clip-path;
-  }
-
   [data-component="getting-started"] {
     container-type: inline-size;
     container-name: getting-started;
@@ -137,6 +108,45 @@
     }
   }
 
+  .home-session-group-header::before {
+    content: "";
+    position: absolute;
+    top: -12px;
+    left: 0;
+    width: 100%;
+    height: 12px;
+    background: var(--v2-background-bg-base);
+  }
+
+  .home-session-group-header::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    left: 0;
+    width: 100%;
+    height: 16px;
+    pointer-events: none;
+    background: linear-gradient(
+      180deg,
+      var(--v2-background-bg-base) 0%,
+      color-mix(in srgb, var(--v2-background-bg-base) 92.0456%, transparent) 7.93%,
+      color-mix(in srgb, var(--v2-background-bg-base) 84.9947%, transparent) 14.14%,
+      color-mix(in srgb, var(--v2-background-bg-base) 78.6813%, transparent) 19%,
+      color-mix(in srgb, var(--v2-background-bg-base) 72.9394%, transparent) 22.85%,
+      color-mix(in srgb, var(--v2-background-bg-base) 67.6028%, transparent) 26.05%,
+      color-mix(in srgb, var(--v2-background-bg-base) 62.5055%, transparent) 28.95%,
+      color-mix(in srgb, var(--v2-background-bg-base) 57.4815%, transparent) 31.91%,
+      color-mix(in srgb, var(--v2-background-bg-base) 52.3647%, transparent) 35.27%,
+      color-mix(in srgb, var(--v2-background-bg-base) 46.989%, transparent) 39.4%,
+      color-mix(in srgb, var(--v2-background-bg-base) 41.1884%, transparent) 44.65%,
+      color-mix(in srgb, var(--v2-background-bg-base) 34.7969%, transparent) 51.36%,
+      color-mix(in srgb, var(--v2-background-bg-base) 27.6484%, transparent) 59.9%,
+      color-mix(in srgb, var(--v2-background-bg-base) 19.5767%, transparent) 70.62%,
+      color-mix(in srgb, var(--v2-background-bg-base) 10.416%, transparent) 83.87%,
+      transparent 100%
+    );
+  }
+
   [data-slot="titlebar-update-loader"] {
     display: block;
     flex-shrink: 0;
@@ -162,12 +172,65 @@
     }
   }
 
-  @keyframes fade-in {
+  @keyframes home-projects-fade-top {
     from {
-      opacity: 0;
+      visibility: hidden;
     }
     to {
-      opacity: 1;
+      visibility: visible;
+    }
+  }
+
+  @keyframes home-projects-fade-bottom {
+    from {
+      visibility: visible;
+    }
+    to {
+      visibility: hidden;
+    }
+  }
+
+  [data-slot="home-projects-scroll"] {
+    timeline-scope: --home-projects-scroll;
+  }
+
+  [data-slot="home-projects-scroll"]::before,
+  [data-slot="home-projects-scroll"]::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    z-index: 10;
+    height: 16px;
+    pointer-events: none;
+    visibility: hidden;
+  }
+
+  [data-slot="home-projects-scroll"]::before {
+    top: 0;
+    background: linear-gradient(to bottom, var(--v2-background-bg-base), transparent);
+  }
+
+  [data-slot="home-projects-scroll"]::after {
+    bottom: 0;
+    background: linear-gradient(to top, var(--v2-background-bg-base), transparent);
+  }
+
+  @supports (animation-timeline: --home-projects-scroll) and (timeline-scope: --home-projects-scroll) {
+    [data-slot="home-projects-scroll"] .scroll-view__viewport {
+      scroll-timeline: --home-projects-scroll y;
+    }
+
+    [data-slot="home-projects-scroll"]::before {
+      animation: home-projects-fade-top linear both;
+      animation-timeline: --home-projects-scroll;
+      animation-range: 0 0.1px;
+    }
+
+    [data-slot="home-projects-scroll"]::after {
+      animation: home-projects-fade-bottom linear both;
+      animation-timeline: --home-projects-scroll;
+      animation-range: calc(100% - 1.1px) calc(100% - 1px);
     }
   }
 }

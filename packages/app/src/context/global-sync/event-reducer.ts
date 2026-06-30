@@ -17,6 +17,21 @@ import { dropSessionCaches } from "./session-cache"
 import { diffs as list, message as clean } from "@/utils/diffs"
 
 const SKIP_PARTS = new Set(["patch", "step-start", "step-finish"])
+const SESSION_CONTENT_EVENTS = new Set([
+  "session.diff",
+  "todo.updated",
+  "session.status",
+  "message.updated",
+  "message.removed",
+  "message.part.updated",
+  "message.part.removed",
+  "message.part.delta",
+  "permission.asked",
+  "permission.replied",
+  "question.asked",
+  "question.replied",
+  "question.rejected",
+])
 
 export function applyGlobalEvent(input: {
   event: { type: string; properties?: unknown }
@@ -100,8 +115,11 @@ export function applyDirectoryEvent(input: {
   vcsCache?: VcsCache
   setSessionTodo?: (sessionID: string, todos: Todo[] | undefined) => void
   retainedLimit?: number
+  sessionContent?: boolean
+  permission?: State["permission"]
 }) {
   const event = input.event
+  if (input.sessionContent === false && SESSION_CONTENT_EVENTS.has(event.type)) return
   const limit = Math.max(input.store.limit, input.retainedLimit ?? 0)
   switch (event.type) {
     case "server.instance.disposed": {
@@ -117,7 +135,7 @@ export function applyDirectoryEvent(input: {
       }
       const next = input.store.session.slice()
       next.splice(result.index, 0, info)
-      const trimmed = trimSessions(next, { limit, permission: input.store.permission })
+      const trimmed = trimSessions(next, { limit, permission: input.permission ?? input.store.permission })
       input.setStore("session", reconcile(trimmed, { key: "id" }))
       cleanupDroppedSessionCaches(input.store, input.setStore, trimmed, input.setSessionTodo)
       if (!info.parentID) input.setStore("sessionTotal", (value) => value + 1)
@@ -147,7 +165,7 @@ export function applyDirectoryEvent(input: {
       }
       const next = input.store.session.slice()
       next.splice(result.index, 0, info)
-      const trimmed = trimSessions(next, { limit, permission: input.store.permission })
+      const trimmed = trimSessions(next, { limit, permission: input.permission ?? input.store.permission })
       input.setStore("session", reconcile(trimmed, { key: "id" }))
       cleanupDroppedSessionCaches(input.store, input.setStore, trimmed, input.setSessionTodo)
       break

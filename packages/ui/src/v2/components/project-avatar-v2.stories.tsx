@@ -79,20 +79,3 @@ export const AllVariantsUnread = {
     </div>
   ),
 }
-
-export const Loading = {
-  args: {
-    fallback: "O",
-    variant: "orange",
-    loading: true,
-  },
-}
-
-export const LoadingAndUnread = {
-  args: {
-    fallback: "O",
-    variant: "blue",
-    loading: true,
-    unread: true,
-  },
-}
