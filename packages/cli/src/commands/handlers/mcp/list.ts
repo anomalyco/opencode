@@ -16,7 +16,10 @@ export default Runtime.handler(
       process.stdout.write("No MCP servers configured" + EOL)
       return
     }
-    const lines = servers.map((server) => `${icon(server.status)} ${server.name}  ${describe(server.status)}`)
+    const width = Math.max(...servers.map((server) => server.name.length))
+    const lines = servers.map(
+      (server) => `${icon(server.status)} ${server.name.padEnd(width)}  ${describe(server.status)}`,
+    )
     process.stdout.write(lines.join(EOL) + EOL)
   }),
 )
