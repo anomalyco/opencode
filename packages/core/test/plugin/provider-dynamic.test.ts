@@ -6,6 +6,7 @@ import os from "os"
 import path from "path"
 import { fileURLToPath } from "url"
 import { AISDK } from "@opencode-ai/core/aisdk"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { PluginV2 } from "@opencode-ai/core/plugin"
 import { PluginHost } from "@opencode-ai/core/plugin/host"
@@ -17,7 +18,7 @@ import { PluginTestLayer } from "./fixture"
 const fixtureProvider = new URL("./fixtures/provider-factory.ts", import.meta.url).href
 const fixtureProviderPath = fileURLToPath(fixtureProvider)
 const it = testEffect(PluginTestLayer)
-const itWithAISDK = testEffect(AISDK.locationLayer.pipe(Layer.provideMerge(PluginTestLayer)))
+const itWithAISDK = testEffect(Layer.mergeAll(PluginTestLayer, AppNodeBuilder.build(AISDK.node)))
 
 function npmEntrypoint(entrypoint?: string) {
   return Npm.Service.of({

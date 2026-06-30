@@ -408,7 +408,10 @@ export function createLineCommentController<T extends LineCommentShape>(
       selection: formatSelectedLineLabel(range, i18n.t),
       mention: props.mention,
       onInput: note.setDraft,
-      onCancel: note.cancelDraft,
+      onCancel: () => {
+        note.cancelDraft()
+        note.select(null)
+      },
       onSubmit: (comment) => {
         props.onSubmit({ comment, selection: cloneSelectedLineRange(range) })
         note.cancelDraft()
