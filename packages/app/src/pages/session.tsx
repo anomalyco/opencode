@@ -11,8 +11,10 @@ import {
   createMemo,
   createEffect,
   createComputed,
+  createResource,
   on,
   onMount,
+  type ParentProps,
   untrack,
 } from "solid-js"
 import { makeEventListener } from "@solid-primitives/event-listener"
@@ -20,7 +22,7 @@ import { createMediaQuery } from "@solid-primitives/media"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { debounce } from "@solid-primitives/scheduled"
 import { useLocal } from "@/context/local"
-import { selectionFromLines, useFile, type FileSelection, type SelectedLineRange } from "@/context/file"
+import { FileProvider, selectionFromLines, useFile, type FileSelection, type SelectedLineRange } from "@/context/file"
 import { createStore } from "solid-js/store"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Select } from "@opencode-ai/ui/select"
@@ -30,19 +32,25 @@ import { previewSelectedLines } from "@opencode-ai/session-ui/pierre/selection-b
 import { Button } from "@opencode-ai/ui/button"
 import { showToast } from "@/utils/toast"
 import { base64Encode, checksum } from "@opencode-ai/core/util/encode"
-import { useLocation, useNavigate, useSearchParams } from "@solidjs/router"
+import { Navigate, useLocation, useNavigate, useParams, useSearchParams } from "@solidjs/router"
 import { NewSessionView, SessionHeader } from "@/components/session"
-import { useComments } from "@/context/comments"
+import { ErrorPage } from "@/pages/error"
+import { CommentsProvider, useComments } from "@/context/comments"
+import { DirectoryDataProvider } from "@/pages/directory-layout"
 import { useServerSync } from "@/context/server-sync"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
-import { usePrompt } from "@/context/prompt"
+import { ModelsProvider } from "@/context/models"
+import { useNotification } from "@/context/notification"
+import { PermissionProvider } from "@/context/permission"
+import { PromptProvider, usePrompt } from "@/context/prompt"
 import { usePlatform } from "@/context/platform"
-import { useSDK } from "@/context/sdk"
+import { SDKProvider, useSDK } from "@/context/sdk"
 import { useServerSDK } from "@/context/server-sdk"
 import { useSettings } from "@/context/settings"
 import { useSync } from "@/context/sync"
-import { useTerminal } from "@/context/terminal"
+import { useTabs } from "@/context/tabs"
+import { TerminalProvider, useTerminal } from "@/context/terminal"
 import { PromptInput } from "@/components/prompt-input"
 import { useSettingsCommand } from "@/components/settings-dialog"
 import { type FollowupDraft, sendFollowupDraft } from "@/components/prompt-input/submit"
@@ -74,8 +82,8 @@ import { Identifier } from "@/utils/id"
 import { diffs as list } from "@/utils/diffs"
 import { Persist, persisted } from "@/utils/persist"
 import { extractPromptFromParts } from "@/utils/prompt"
-import { formatServerError, isSessionNotFoundError } from "@/utils/server-errors"
-import { legacySessionHref, requireServerKey, sessionHref } from "@/utils/session-route"
+import { formatServerError } from "@/utils/server-errors"
+import { legacySessionHref, requireServerKey, selectSessionLineage, sessionHref } from "@/utils/session-route"
 import { useUsageExceededDialogs } from "./session/usage-exceeded-dialogs"
 import { createSessionOwnership } from "./session/session-ownership"
 
@@ -91,23 +99,6 @@ const sessionViewState = () => ({
   mobileTab: "session" as "session" | "changes",
   changes: "git" as ChangeMode,
 })
-
-function isLocalSessionNotFoundError(error: unknown, sessionID: string) {
-  return error instanceof Error && error.message === `Session not found: ${sessionID}`
-}
-
-function isServerConnectionError(error: unknown) {
-  const message = formatServerError(error).toLowerCase()
-  return [
-    "failed to fetch",
-    "fetch failed",
-    "load failed",
-    "networkerror",
-    "connection refused",
-    "econnrefused",
-    "could not connect",
-  ].some((text) => message.includes(text))
-}
 
 async function runPromptRollbackMutation<T, R>(input: {
   capturePrompt: () => { current: () => T[]; set: (value: T[]) => void; reset: () => void }
@@ -130,6 +121,159 @@ async function runPromptRollbackMutation<T, R>(input: {
       })
       input.fail(error)
     })
+}
+
+export function SessionPage() {
+  return (
+    <SessionProviders>
+      <Page />
+    </SessionProviders>
+  )
+}
+
+export function TargetSessionRoute() {
+  const params = useParams<{ serverKey: string; id: string }>()
+  return (
+    <Show when={`${params.serverKey}\0${params.id}`} keyed>
+      <SessionRouteErrorBoundary sessionID={params.id} padded>
+        <ResolvedTargetSessionRoute />
+      </SessionRouteErrorBoundary>
+    </Show>
+  )
+}
+
+function SessionRouteErrorBoundary(props: ParentProps<{ sessionID?: string; padded?: boolean }>) {
+  const settings = useSettings()
+  return (
+    <ErrorBoundary
+      fallback={(error) =>
+        settings.general.newLayoutDesigns() ? (
+          <SessionRouteFrame padded={props.padded}>
+            <SessionPanelFrame newLayout raised={!!props.sessionID}>
+              <ErrorPage error={error} />
+            </SessionPanelFrame>
+          </SessionRouteFrame>
+        ) : (
+          <ErrorPage error={error} />
+        )
+      }
+    >
+      {props.children}
+    </ErrorBoundary>
+  )
+}
+
+function ResolvedTargetSessionRoute() {
+  const params = useParams<{ serverKey: string; id: string }>()
+  const settings = useSettings()
+  const tabs = useTabs()
+  const sync = useServerSync()
+  const serverKey = createMemo(() => requireServerKey(params.serverKey))
+  const cached = createMemo(() => sync().session.lineage.peek(params.id))
+  const [resolved] = createResource(
+    () => {
+      if (cached()) return
+      return { id: params.id, sync: sync() }
+    },
+    ({ id, sync }) => sync.session.lineage.resolve(id),
+  )
+  const current = createMemo(() => selectSessionLineage(params.id, cached(), resolved()))
+  const directory = createMemo(() => current()?.session.directory)
+  const targetDirectory = () => directory()!
+
+  createEffect(() => {
+    const session = current()
+    if (!session) return
+    tabs.addSessionTab({
+      server: serverKey(),
+      sessionId: session.root.id,
+    })
+  })
+
+  return (
+    <TargetServerScopedProviders directory={directory} sessionID={() => params.id}>
+      <Show when={directory()}>
+        <Show
+          when={settings.general.newLayoutDesigns()}
+          fallback={<Navigate href={legacySessionHref(directory()!, params.id)} />}
+        >
+          <SDKProvider directory={targetDirectory}>
+            <DirectoryDataProvider directory={targetDirectory} server={serverKey}>
+              <TargetSessionPage />
+            </DirectoryDataProvider>
+          </SDKProvider>
+        </Show>
+      </Show>
+    </TargetServerScopedProviders>
+  )
+}
+
+function TargetSessionPage() {
+  const sdk = useSDK()
+  const serverSDK = useServerSDK()
+  return (
+    <Show when={`${serverSDK().scope}\0${sdk().directory}`} keyed>
+      <SessionPage />
+    </Show>
+  )
+}
+
+function TargetServerScopedProviders(
+  props: ParentProps<{ directory?: () => string | undefined; sessionID?: () => string | undefined }>,
+) {
+  return (
+    <PermissionProvider directory={props.directory}>
+      <MarkSessionNotificationsViewed sessionID={props.sessionID} />
+      <ModelsProvider directory={props.directory}>{props.children}</ModelsProvider>
+    </PermissionProvider>
+  )
+}
+
+function MarkSessionNotificationsViewed(props: { sessionID?: () => string | undefined }) {
+  const notification = useNotification()
+  createEffect(() => {
+    const sessionID = props.sessionID?.()
+    if (!notification.ready() || !sessionID) return
+    if (notification.session.unseenCount(sessionID) === 0) return
+    notification.session.markViewed(sessionID)
+  })
+  return null
+}
+
+function SessionProviders(props: ParentProps) {
+  return (
+    <TerminalProvider>
+      <FileProvider>
+        <PromptProvider>
+          <CommentsProvider>{props.children}</CommentsProvider>
+        </PromptProvider>
+      </FileProvider>
+    </TerminalProvider>
+  )
+}
+
+function SessionRouteFrame(props: ParentProps<{ padded?: boolean }>) {
+  return (
+    <div class="relative size-full overflow-hidden flex flex-col" classList={{ "p-2": props.padded }}>
+      {props.children}
+    </div>
+  )
+}
+
+function SessionPanelFrame(props: ParentProps<{ newLayout: boolean; raised?: boolean }>) {
+  return (
+    <div
+      classList={{
+        "flex-1 min-h-0 flex flex-col": true,
+        "bg-v2-background-bg-base": props.newLayout,
+        "bg-background-stronger": !props.newLayout,
+        "rounded-[10px] overflow-hidden": props.newLayout,
+        "shadow-[var(--v2-elevation-raised)]": props.newLayout && props.raised,
+      }}
+    >
+      {props.children}
+    </div>
+  )
 }
 
 export default function Page() {
@@ -1713,31 +1857,9 @@ export default function Page() {
     () => !isDesktop() && settings.general.newLayoutDesigns() && settings.general.mobileTitlebarPosition() === "bottom",
   )
 
-  const sessionErrorText = (error: unknown) => {
-    if (params.id && (isSessionNotFoundError(error, params.id) || isLocalSessionNotFoundError(error, params.id))) {
-      return { title: language.t("session.error.notFound") }
-    }
-    if (isServerConnectionError(error)) {
-      return { title: language.t("session.error.serverConnection"), description: formatServerError(error, language.t) }
-    }
-    return { title: language.t("common.requestFailed"), description: formatServerError(error, language.t) }
-  }
-
   const sessionErrorFallback = (error: unknown, reset: () => void) => {
     createEffect(on(sessionKey, reset, { defer: true }))
-    const text = sessionErrorText(error)
-    return (
-      <div class="flex-1 min-h-0 overflow-hidden">
-        <div class="h-full px-6 pb-42 -mt-4 flex flex-col items-center justify-center text-center gap-2">
-          <div class="text-14-medium text-text max-w-md">{text.title}</div>
-          <Show when={text.description}>
-            {(description) => (
-              <div class="text-12-regular text-text-weak max-w-md whitespace-pre-wrap">{description()}</div>
-            )}
-          </Show>
-        </div>
-      </div>
-    )
+    return <ErrorPage error={error} />
   }
 
   const sessionPanelContent = () => (
@@ -1816,7 +1938,7 @@ export default function Page() {
   )
 
   return (
-    <div class="relative size-full overflow-hidden flex flex-col">
+    <SessionRouteFrame>
       <SessionHeader />
       <div
         class="flex-1 min-h-0 flex flex-col md:flex-row"
@@ -1836,21 +1958,13 @@ export default function Page() {
             width: sessionPanelWidth(),
           }}
         >
-          <div
-            classList={{
-              "flex-1 min-h-0 flex flex-col": true,
-              "bg-v2-background-bg-base": settings.general.newLayoutDesigns(),
-              "bg-background-stronger": !settings.general.newLayoutDesigns(),
-              "rounded-[10px] overflow-hidden": settings.general.newLayoutDesigns(),
-              "shadow-[var(--v2-elevation-raised)]": settings.general.newLayoutDesigns() && !!params.id,
-            }}
-          >
+          <SessionPanelFrame newLayout={settings.general.newLayoutDesigns()} raised={!!params.id}>
             {settings.general.newLayoutDesigns() ? (
               <ErrorBoundary fallback={sessionErrorFallback}>{sessionPanelContent()}</ErrorBoundary>
             ) : (
               sessionPanelContent()
             )}
-          </div>
+          </SessionPanelFrame>
 
           <Show when={desktopReviewOpen()}>
             <div onPointerDown={() => size.start()}>
@@ -1887,6 +2001,6 @@ export default function Page() {
       </div>
 
       <TerminalPanel />
-    </div>
+    </SessionRouteFrame>
   )
 }
