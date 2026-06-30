@@ -65,10 +65,14 @@ describe("code mode execute", () => {
     await expect(Effect.runPromise(decode({}))).rejects.toThrow()
   })
 
-  test("lists all namespaces, previews tools within budget, and documents discovery", () => {
+  test("lists all namespaces, previews tool signatures within budget, and documents discovery", () => {
     const groups = groupByServer(
       {
-        github_create_issue: mcpTool("create_issue", () => ""),
+        github_create_issue: mcpTool("create_issue", () => "", {
+          type: "object",
+          properties: { title: { type: "string" }, body: { type: "string" } },
+          required: ["title"],
+        }),
         github_list_issues: mcpTool("list_issues", () => ""),
         linear_search: mcpTool("search", () => ""),
       },
@@ -78,21 +82,23 @@ describe("code mode execute", () => {
 
     expect(description).toContain("tools.$rune.search(query")
     expect(description).toContain("tools.$rune.describe(path)")
+    // Every namespace is always listed, with counts.
     expect(description).toContain("- github (2 tools)")
     expect(description).toContain("- linear (1 tool)")
-    // Small catalog: individual tools are previewed inline as `<server>.<tool>`.
-    expect(description).toContain("github.create_issue")
-    expect(description).toContain("linear.search")
-    // ...but never full signatures (those come from tools.$rune.describe).
+    // Tools are previewed inline as compact, directly-callable input signatures.
+    expect(description).toContain("tools.github.create_issue(input: { title: string; body?: string })")
+    expect(description).toContain("tools.linear.search(input: object)")
+    // ...but not the full Promise return — that comes from tools.$rune.describe.
     expect(description).not.toContain("): Promise<")
   })
 
   test("falls back to namespaces-only when the catalog exceeds the preview budget", () => {
     const tools: Record<string, AITool> = {}
-    const longDesc = "performs a meaningful operation against the service with several options"
     for (let i = 0; i < 60; i++) {
-      tools[`alpha_op_${i}`] = mcpTool(`op_${i}`, () => "", { type: "object", properties: {} })
-      ;(tools[`alpha_op_${i}`] as any).description = longDesc
+      tools[`alpha_op_${i}`] = mcpTool(`op_${i}`, () => "", {
+        type: "object",
+        properties: { value: { type: "string" }, count: { type: "number" } },
+      })
     }
     tools["zeta_only_tool"] = mcpTool("only_tool", () => "")
     const groups = groupByServer(tools, ["alpha", "zeta"])
@@ -101,10 +107,10 @@ describe("code mode execute", () => {
     // Every namespace is always present, with counts.
     expect(description).toContain("- alpha (60 tools)")
     expect(description).toContain("- zeta (1 tool)")
-    // The preview is budget-capped, so the later namespace's tools are not all inlined.
-    expect(description).not.toContain("zeta.only_tool")
-    // Some early tools are still previewed.
-    expect(description).toContain("alpha.op_0")
+    // The preview is budget-capped, so the later namespace's signatures are not all inlined.
+    expect(description).not.toContain("tools.zeta.only_tool(")
+    // Some early signatures are still previewed.
+    expect(description).toContain("tools.alpha.op_0(")
   })
 
   test("tools.$rune.search and tools.$rune.describe expose the catalog on demand", async () => {

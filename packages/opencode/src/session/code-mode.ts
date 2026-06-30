@@ -156,19 +156,26 @@ const returnType = (outputSchema: JSONSchema7 | undefined) =>
 const signatureFor = (entry: CatalogEntry) =>
   `tools${access(entry.server)}${access(entry.local)}(input: ${inputType(entry.tool)}): ${returnType(entry.outputSchema)}`
 
+/** The compact, directly-callable signature for the inline preview: the call path
+ *  plus its input type, but without the (uniform) `Promise<{ result, attachments? }>`
+ *  return — that full typed form is reserved for `tools.$rune.describe`. */
+const previewSignature = (entry: CatalogEntry) =>
+  `tools${access(entry.server)}${access(entry.local)}(input: ${inputType(entry.tool)})`
+
 /**
- * Character budget for the inline tool preview in the tool description. All
- * namespaces are always listed; individual tools are previewed (cheapest first,
- * server by server) until this many characters of preview lines are used, after
- * which the remaining namespaces show counts only. This front-loads a useful slice
- * of the catalog — cutting discovery round-trips — without dumping every tool.
+ * Character budget for the inline signature preview in the tool description. All
+ * namespaces are always listed; per-tool call signatures are previewed (cheapest
+ * first, server by server) until this many characters are used, after which the
+ * remaining namespaces show counts only. This front-loads a directly-callable slice
+ * of the catalog — cutting discovery round-trips — without dumping every signature.
  */
 const PREVIEW_BUDGET = 2000
 
 /**
  * The execute tool description: the calling convention, the discovery API, and the
- * list of namespaces. A budgeted preview of individual tools is inlined; the full
- * per-tool signatures are still fetched on demand with `tools.$rune.describe`.
+ * list of namespaces. A budgeted preview of per-tool call signatures is inlined; the
+ * full typed signature + schemas are fetched on demand with `tools.$rune.describe`,
+ * and any tool not previewed must be found via `tools.$rune.search` first.
  */
 export function describe(groups: Map<string, CatalogEntry[]>): string {
   const lines = [
@@ -193,14 +200,19 @@ export function describe(groups: Map<string, CatalogEntry[]>): string {
     lines.push("", "No MCP servers are currently connected.")
     return lines.join("\n")
   }
-  lines.push("", "Available namespaces (use tools.$rune.search / tools.$rune.describe to explore tools not shown):")
+  lines.push(
+    "",
+    "Every connected server is listed below with its tool count. A budgeted sample of tool",
+    "signatures is shown inline; any tool not shown must be found with `tools.$rune.search` /",
+    "`tools.$rune.describe` before you call it.",
+  )
   let used = 0
   let previewing = true
   for (const [server, entries] of [...groups].sort(([a], [b]) => a.localeCompare(b))) {
     lines.push(`- ${server} (${entries.length} tool${entries.length === 1 ? "" : "s"})`)
     if (!previewing) continue
     for (const entry of entries) {
-      const line = `  - ${entry.path}${entry.description ? ` — ${brief(entry.description, 80)}` : ""}`
+      const line = `  - ${previewSignature(entry)}`
       if (used + line.length > PREVIEW_BUDGET) {
         previewing = false
         break
