@@ -82,7 +82,8 @@ describe("code mode execute", () => {
 
     expect(description).toContain("tools.$rune.search(query")
     expect(description).toContain("tools.$rune.describe(path)")
-    // Every namespace is always listed, with counts.
+    // Small catalog: the list is comprehensive and says so, with clean counts.
+    expect(description).toContain("This is the COMPLETE list")
     expect(description).toContain("- github (2 tools)")
     expect(description).toContain("- linear (1 tool)")
     // Tools are previewed inline as compact, directly-callable input signatures.
@@ -104,10 +105,11 @@ describe("code mode execute", () => {
     const groups = groupByServer(tools, ["alpha", "zeta"])
     const description = describeTools(groups)
 
-    // Every namespace is always present, with counts.
-    expect(description).toContain("- alpha (60 tools)")
-    expect(description).toContain("- zeta (1 tool)")
-    // The preview is budget-capped, so the later namespace's signatures are not all inlined.
+    // The list states it is partial, and every namespace is still present with its total.
+    expect(description).toContain("This is a PARTIAL list")
+    expect(description).toContain("- alpha (60 tools")
+    // The later namespace is fully truncated, and says so.
+    expect(description).toContain("- zeta (1 tool, none shown)")
     expect(description).not.toContain("tools.zeta.only_tool(")
     // Some early signatures are still previewed.
     expect(description).toContain("tools.alpha.op_0(")

@@ -200,26 +200,50 @@ export function describe(groups: Map<string, CatalogEntry[]>): string {
     lines.push("", "No MCP servers are currently connected.")
     return lines.join("\n")
   }
+  // Select which signatures fit the budget (cheapest first within each server,
+  // servers alphabetical) before emitting, so the list can state exactly how
+  // comprehensive it is — overall and per namespace.
+  const ordered = [...groups].sort(([a], [b]) => a.localeCompare(b))
+  const shown = new Map<string, string[]>()
+  let used = 0
+  let budgetLeft = true
+  let totalTools = 0
+  let totalShown = 0
+  for (const [server, entries] of ordered) {
+    totalTools += entries.length
+    const picked: string[] = []
+    if (budgetLeft) {
+      for (const entry of entries) {
+        const line = `  - ${previewSignature(entry)}`
+        if (used + line.length > PREVIEW_BUDGET) {
+          budgetLeft = false
+          break
+        }
+        picked.push(line)
+        used += line.length
+      }
+    }
+    shown.set(server, picked)
+    totalShown += picked.length
+  }
+
+  const complete = totalShown === totalTools
   lines.push(
     "",
-    "Every connected server is listed below with its tool count. A budgeted sample of tool",
-    "signatures is shown inline; any tool not shown must be found with `tools.$rune.search` /",
-    "`tools.$rune.describe` before you call it.",
+    complete
+      ? "This is the COMPLETE list of available tools — every connected tool is shown below with its call signature. Use `tools.$rune.describe(path)` for a tool's full types."
+      : `This is a PARTIAL list — ${totalShown} of ${totalTools} tools are shown below. Any tool not listed must be found with \`tools.$rune.search\` first; use \`tools.$rune.describe(path)\` for full types.`,
   )
-  let used = 0
-  let previewing = true
-  for (const [server, entries] of [...groups].sort(([a], [b]) => a.localeCompare(b))) {
-    lines.push(`- ${server} (${entries.length} tool${entries.length === 1 ? "" : "s"})`)
-    if (!previewing) continue
-    for (const entry of entries) {
-      const line = `  - ${previewSignature(entry)}`
-      if (used + line.length > PREVIEW_BUDGET) {
-        previewing = false
-        break
-      }
-      lines.push(line)
-      used += line.length
-    }
+  for (const [server, entries] of ordered) {
+    const picked = shown.get(server)!
+    const total = entries.length
+    const count = `${total} tool${total === 1 ? "" : "s"}`
+    // Annotate only when a namespace is not fully shown, so a comprehensive
+    // namespace reads cleanly and a truncated one is unambiguous.
+    const label =
+      picked.length === total ? count : picked.length === 0 ? `${count}, none shown` : `${count}, ${picked.length} shown`
+    lines.push(`- ${server} (${label})`)
+    for (const line of picked) lines.push(line)
   }
   return lines.join("\n")
 }
