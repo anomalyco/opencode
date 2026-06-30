@@ -55,12 +55,10 @@ describe("shell", () => {
   })
 
   test("builds command args per shell family", () => {
-    expect(ShellSelect.args("/bin/sh", "echo hi", "/tmp")).toEqual(["-c", "echo hi"])
-    expect(ShellSelect.args("/usr/bin/fish", "echo hi", "/tmp")).toEqual(["-c", "echo hi"])
-    const zsh = ShellSelect.args("/bin/zsh", "echo hi", "/tmp")
-    expect(zsh[0]).toBe("-l")
-    expect(zsh[1]).toBe("-c")
-    expect(zsh.at(-1)).toBe("/tmp")
+    expect(ShellSelect.args("/bin/sh", "echo hi")).toEqual(["-c", "echo hi"])
+    expect(ShellSelect.args("/usr/bin/fish", "echo hi")).toEqual(["-c", "echo hi"])
+    expect(ShellSelect.args("/bin/zsh", "echo hi")).toEqual(["-c", "echo hi"])
+    expect(ShellSelect.args("/bin/bash", "echo hi")).toEqual(["-c", "echo hi"])
   })
 
   if (process.platform === "win32") {

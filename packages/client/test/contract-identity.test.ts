@@ -3,6 +3,7 @@ import { Schema } from "effect"
 import { AgentV2 } from "@opencode-ai/core/agent"
 import { Location as CoreLocation } from "@opencode-ai/core/location"
 import { ModelV2 } from "@opencode-ai/core/model"
+import { ProjectV2 } from "@opencode-ai/core/project"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { SessionInput as CoreSessionInput } from "@opencode-ai/core/session/input"
 import { SessionMessage as CoreSessionMessage } from "@opencode-ai/core/session/message"
@@ -26,10 +27,14 @@ test("Core and Server reuse the authoritative Schema and Protocol values", () =>
   expect(CoreLocation.Ref).toBe(Location.Ref)
   expect(ModelV2.Ref).toBe(Model.Ref)
   expect(SessionV2.Info).toBe(Session.Info)
+  expect(ProjectV2.Current).toBe(Project.Current)
+  expect(ProjectV2.Directory).toBe(Project.Directory)
+  expect(ProjectV2.Directories).toBe(Project.Directories)
   expect(CoreSessionInput.Admitted).toBe(SessionInput.Admitted)
   expect(CoreSessionMessage.Message).toBe(SessionMessage.Message)
   expect(CorePrompt).toBe(Prompt)
   expect(Api.groups["server.session"].identifier).toBe("server.session")
+  expect(Api.groups["server.project"].identifier).toBe("server.project")
   expect(Object.keys(ClientApi.groups)).toEqual(Object.keys(Api.groups))
   expect(Session.ID.create()).toStartWith("ses_")
   expect(Project.ID.global).toBe("global")

@@ -2,26 +2,32 @@ import { TextAttributes } from "@opentui/core"
 import { DialogSelect, type DialogSelectOption } from "../ui/dialog-select"
 import { createResource, createMemo, createSignal } from "solid-js"
 import { useDialog } from "../ui/dialog"
-import { useSDK } from "../context/sdk"
 import { useTheme } from "../context/theme"
 import { errorMessage } from "../util/error"
+import { useData } from "../context/data"
+import type { LocationRef } from "@opencode-ai/sdk/v2"
 
 export type DialogSkillProps = {
+  location?: LocationRef
   onSelect: (skill: string) => void
 }
 
 export function DialogSkill(props: DialogSkillProps) {
   const dialog = useDialog()
-  const sdk = useSDK()
+  const data = useData()
   const { theme } = useTheme()
   dialog.setSize("large")
 
   const [loadError, setLoadError] = createSignal<unknown>()
 
   const [skills] = createResource(() =>
-    sdk.client.app
-      .skills({}, { throwOnError: true })
-      .then((result) => result.data ?? [])
+    Promise.resolve()
+      .then(async () => {
+        const current = data.location.skill.list(props.location)
+        if (current) return current
+        await data.location.skill.refresh(props.location)
+        return data.location.skill.list(props.location) ?? []
+      })
       // Catch so the rejected resource never reaches the memo below: reading
       // skills() in an errored state re-throws and tears down the dialog.
       .catch((error) => {

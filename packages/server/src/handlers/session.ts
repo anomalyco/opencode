@@ -10,6 +10,7 @@ import {
   ServiceUnavailableError,
   SessionBusyError,
   SessionNotFoundError,
+  SkillNotFoundError,
   UnknownError,
 } from "@opencode-ai/protocol/errors"
 import { AbsolutePath } from "@opencode-ai/core/schema"
@@ -108,6 +109,32 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
         }),
       )
       .handle(
+        "session.fork",
+        Effect.fn(function* (ctx) {
+          return {
+            data: yield* session.fork({ sessionID: ctx.params.sessionID, messageID: ctx.payload.messageID }).pipe(
+              Effect.catchTag(
+                "Session.NotFoundError",
+                (error) =>
+                  new SessionNotFoundError({
+                    sessionID: error.sessionID,
+                    message: `Session not found: ${error.sessionID}`,
+                  }),
+              ),
+              Effect.catchTag(
+                "Session.MessageNotFoundError",
+                (error) =>
+                  new MessageNotFoundError({
+                    sessionID: error.sessionID,
+                    messageID: error.messageID,
+                    message: `Message not found: ${error.messageID}`,
+                  }),
+              ),
+            ),
+          }
+        }),
+      )
+      .handle(
         "session.switchAgent",
         Effect.fn(function* (ctx) {
           yield* session.switchAgent({ sessionID: ctx.params.sessionID, agent: ctx.payload.agent }).pipe(
@@ -186,6 +213,30 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                 ),
               ),
           }
+        }),
+      )
+      .handle(
+        "session.skill",
+        Effect.fn(function* (ctx) {
+          yield* session.skill({
+            sessionID: ctx.params.sessionID,
+            id: ctx.payload.id,
+            skill: ctx.payload.skill,
+            resume: ctx.payload.resume,
+          }).pipe(
+            Effect.catchTag("Session.NotFoundError", (error) =>
+              Effect.fail(
+                new SessionNotFoundError({
+                  sessionID: error.sessionID,
+                  message: `Session not found: ${error.sessionID}`,
+                }),
+              ),
+            ),
+            Effect.catchTag("Session.SkillNotFoundError", (error) =>
+              Effect.fail(new SkillNotFoundError({ skill: error.skill, message: `Skill not found: ${error.skill}` })),
+            ),
+          )
+          return HttpApiSchema.NoContent.make()
         }),
       )
       .handle(

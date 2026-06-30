@@ -12,6 +12,7 @@ import { Commands } from "../commands"
 import { Runtime } from "../../framework/runtime"
 import { Daemon } from "../../services/daemon"
 import { Updater } from "../../services/updater"
+import { randomBytes } from "crypto"
 
 export default Runtime.handler(
   Commands.commands.serve,
@@ -21,18 +22,28 @@ export default Runtime.handler(
         const daemon = yield* Daemon.Service
         const standalonePassword = process.env.OPENCODE_SERVER_PASSWORD
         if (input.stdio) delete process.env.OPENCODE_SERVER_PASSWORD
-        const password = input.stdio ? standalonePassword : yield* daemon.password()
+        const config = input.service ? yield* daemon.config() : {}
+        const password = input.service
+          ? yield* daemon.password()
+          : standalonePassword || randomBytes(32).toString("base64url")
         if (!password) return yield* Effect.fail(new Error("Missing server password"))
-        const address = yield* listen(input.hostname, input.port, password)
+        const hostname = Option.getOrUndefined(input.hostname) ?? config.hostname ?? "127.0.0.1"
+        const port = Option.isSome(input.port)
+          ? input.port
+          : config.port === undefined
+            ? Option.none<number>()
+            : Option.some(config.port)
+        const address = yield* listen(hostname, port, password)
         yield* Effect.tryPromise(() =>
           createOpencodeClient({
             baseUrl: HttpServer.formatAddress(address),
             headers: ServerAuth.headers({ password }),
           }).v2.location.get(undefined, { throwOnError: true }),
         )
-        if (input.register) yield* daemon.register(address)
+        if (input.service) yield* daemon.register(address)
         const url = HttpServer.formatAddress(address)
         console.log(input.stdio ? JSON.stringify({ url }) : `server listening on ${url}`)
+        if (!input.service && !input.stdio && !standalonePassword) console.log(`server password ${password}`)
         const updater = yield* Updater.Service
         yield* updater.check().pipe(Effect.schedule(Schedule.spaced("10 minutes")), Effect.forkScoped)
         return yield* (input.stdio ? waitForStdinClose() : Effect.never)

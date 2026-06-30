@@ -1,11 +1,14 @@
 export * as Agent from "./agent"
 
 import { Schema } from "effect"
+import { define, inventory } from "./event"
 import { optional } from "./schema"
 import { Model } from "./model"
 import { Permission } from "./permission"
 import { Provider } from "./provider"
 import { PositiveInt, statics } from "./schema"
+
+const Updated = define({ type: "agent.updated", schema: {} })
 
 export const ID = Schema.String.pipe(Schema.brand("AgentV2.ID"))
 export type ID = typeof ID.Type
@@ -33,6 +36,20 @@ export const Info = Schema.Struct({
   .pipe(
     statics((schema) => ({
       empty: (id: ID) =>
-        schema.make({ id, request: { headers: {}, body: {} }, mode: "all", hidden: false, permissions: [] }),
+        schema.make({
+          id,
+          request: { headers: {}, body: {} },
+          mode: "all",
+          hidden: false,
+          permissions: [
+            { action: "*", resource: "*", effect: "allow" },
+            { action: "external_directory", resource: "*", effect: "ask" },
+          ],
+        }),
     })),
   )
+
+export const Event = {
+  Updated,
+  Definitions: inventory(Updated),
+}

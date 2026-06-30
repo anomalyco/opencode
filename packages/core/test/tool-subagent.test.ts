@@ -10,7 +10,7 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { AgentV2 } from "@opencode-ai/core/agent"
-import { BackgroundJob } from "@opencode-ai/core/background-job"
+import { Job } from "@opencode-ai/core/job"
 import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { SessionEvent } from "@opencode-ai/core/session/event"
@@ -23,7 +23,7 @@ import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
-import { executeTool, settleTool, toolIdentity } from "./lib/tool"
+import { executeTool, settleTool, testModel, toolIdentity } from "./lib/tool"
 
 const childText = "child final response"
 const childModel = ModelV2.Ref.make({ id: ModelV2.ID.make("child"), providerID: ProviderV2.ID.make("test") })
@@ -95,7 +95,7 @@ const layer = AppNodeBuilder.build(
     LayerNode.group([
       Database.node,
       EventV2.node,
-      BackgroundJob.node,
+      Job.node,
       ToolOutputStore.cleanupNode,
       SessionV2.node,
       SubagentTool.node,
@@ -142,7 +142,9 @@ describe("SubagentTool", () => {
 
           const locations = yield* LocationServiceMap.Service
           const registry = yield* ToolRegistry.Service.pipe(Effect.provide(locations.get(parent.location)))
-          expect((yield* registry.materialize()).definitions.map((tool) => tool.name)).toContain(SubagentTool.name)
+          expect((yield* registry.materialize({ model: testModel })).definitions.map((tool) => tool.name)).toContain(
+            SubagentTool.name,
+          )
           expect(
             yield* executeTool(registry, {
               sessionID: parent.id,
@@ -242,7 +244,7 @@ describe("SubagentTool", () => {
     ),
   )
 
-  it.live("promotes background work and injects one synthetic parent completion", () =>
+  it.live("notifies once when background work completes", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
       (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
@@ -251,7 +253,6 @@ describe("SubagentTool", () => {
         Effect.gen(function* () {
           const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
           const sessions = yield* SessionV2.Service
-          const jobs = yield* BackgroundJob.Service
           const parent = yield* sessions.create({ location })
           yield* withSubagent(parent.location)
           const locations = yield* LocationServiceMap.Service
@@ -270,7 +271,6 @@ describe("SubagentTool", () => {
           const childID = outputSessionID(settled.output?.structured)
           expect(settled.output?.structured).toMatchObject({ status: "running" })
 
-          yield* jobs.promote(childID)
           yield* Effect.yieldNow
           const synthetic = (yield* sessions.context(parent.id)).filter((message) => message.type === "synthetic")
           expect(synthetic).toHaveLength(1)

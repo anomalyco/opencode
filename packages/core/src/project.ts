@@ -17,14 +17,20 @@ export type ID = ProjectSchema.ID
 export const Vcs = ProjectSchema.Vcs
 export type Vcs = ProjectSchema.Vcs
 
+export const Current = ProjectSchema.Current
+export type Current = ProjectSchema.Current
+
+export const Directory = ProjectSchema.Directory
+export type Directory = ProjectSchema.Directory
+
 export class Info extends Schema.Class<Info>("Project.Info")({
   id: ID,
 }) {}
 
-export const DirectoriesInput = ProjectDirectories.ListInput
+export const DirectoriesInput = ProjectSchema.DirectoriesInput
 export type DirectoriesInput = typeof DirectoriesInput.Type
 
-export const Directories = ProjectDirectories.ListOutput
+export const Directories = ProjectSchema.Directories
 export type Directories = typeof Directories.Type
 
 export interface Resolved {

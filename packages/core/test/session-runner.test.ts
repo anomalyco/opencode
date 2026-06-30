@@ -130,7 +130,7 @@ const registry = ToolRegistry.layer.pipe(
   Layer.provide(applications),
   Layer.provide(ToolOutputStore.defaultLayer),
 )
-const agents = AgentV2.layer
+const agents = AgentV2.layer.pipe(Layer.provide(EventV2.defaultLayer))
 const echo = Layer.effectDiscard(
   ToolRegistry.Service.use((registry) =>
     registry.register({

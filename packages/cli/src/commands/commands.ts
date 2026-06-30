@@ -44,18 +44,26 @@ export const Commands = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCO
         Spec.make("restart", { description: "Restart the background server" }),
         Spec.make("status", { description: "Show background server status" }),
         Spec.make("stop", { description: "Stop the background server" }),
-        Spec.make("password", {
-          description: "Get or set the server password",
-          params: { value: Argument.string("value").pipe(Argument.optional) },
+        Spec.make("get", {
+          description: "Get service configuration",
+          params: { key: Argument.string("key").pipe(Argument.optional) },
+        }),
+        Spec.make("set", {
+          description: "Set service configuration",
+          params: { key: Argument.string("key"), value: Argument.string("value") },
+        }),
+        Spec.make("unset", {
+          description: "Unset service configuration",
+          params: { key: Argument.string("key") },
         }),
       ],
     }),
     Spec.make("serve", {
       description: "Start the v2 API server",
       params: {
-        hostname: Flag.string("hostname").pipe(Flag.withDefault("127.0.0.1")),
+        hostname: Flag.string("hostname").pipe(Flag.optional),
         port: Flag.integer("port").pipe(Flag.optional),
-        register: Flag.boolean("register").pipe(Flag.withDefault(false)),
+        service: Flag.boolean("service").pipe(Flag.withDefault(false)),
         stdio: Flag.boolean("stdio").pipe(Flag.withDefault(false)),
       },
     }),

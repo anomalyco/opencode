@@ -41,9 +41,8 @@ export const layer = Layer.effect(
 
     return Service.of({
       register: Effect.fn("ApplicationTools.register")(function* (tools) {
-        const entries = Object.entries(tools)
+        const entries = Tool.registrationEntries(tools)
         if (entries.length === 0) return
-        yield* Effect.forEach(entries, ([name]) => Tool.validateName(name), { discard: true })
         const registrations = entries.map(([name, tool]) => [name, { identity: {}, tool }] as const)
         yield* state.transform((draft) => {
           for (const [name, entry] of registrations) draft.set(name, entry)

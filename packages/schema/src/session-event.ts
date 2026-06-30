@@ -94,6 +94,17 @@ export const Renamed = Event.define({
 })
 export type Renamed = typeof Renamed.Type
 
+export const Forked = Event.define({
+  type: "session.next.forked",
+  ...options,
+  schema: {
+    ...Base,
+    parentID: SessionID,
+    messageID: SessionMessage.ID.pipe(optional),
+  },
+})
+export type Forked = typeof Forked.Type
+
 export const Prompted = Event.define({
   type: "session.next.prompted",
   ...options,
@@ -129,6 +140,20 @@ export const Synthetic = Event.define({
   },
 })
 export type Synthetic = typeof Synthetic.Type
+
+export namespace Skill {
+  export const Activated = Event.define({
+    type: "session.next.skill.activated",
+    ...options,
+    schema: {
+      ...Base,
+      messageID: SessionMessage.ID,
+      name: Schema.String,
+      text: Schema.String,
+    },
+  })
+  export type Activated = typeof Activated.Type
+}
 
 export namespace Shell {
   export const Started = Event.define({
@@ -460,10 +485,12 @@ export const DurableDefinitions = Event.inventory(
   ModelSwitched,
   Moved,
   Renamed,
+  Forked,
   Prompted,
   PromptAdmitted,
   ContextUpdated,
   Synthetic,
+  Skill.Activated,
   Shell.Started,
   Shell.Ended,
   Step.Started,
@@ -492,10 +519,12 @@ export const Definitions = Event.inventory(
   ModelSwitched,
   Moved,
   Renamed,
+  Forked,
   Prompted,
   PromptAdmitted,
   ContextUpdated,
   Synthetic,
+  Skill.Activated,
   Shell.Started,
   Shell.Ended,
   Step.Started,

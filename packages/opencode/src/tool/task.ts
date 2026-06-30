@@ -2,7 +2,7 @@ import * as Tool from "./tool"
 import DESCRIPTION from "./task.txt"
 import { ToolJsonSchema } from "./json-schema"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
-import { BackgroundJob } from "@/background/job"
+import { Job } from "@/job"
 import { Session } from "@/session/session"
 import { SessionID, MessageID } from "../session/schema"
 import { MessageV2 } from "../session/message-v2"
@@ -33,11 +33,11 @@ const BACKGROUND_STARTED = [
   "DO NOT sleep, poll for progress, ask the task for status, or duplicate this task's work — avoid working with the same files or topics it is using.",
   "Work on non-overlapping tasks, or briefly tell the user what you launched and end your response.",
 ].join("\n")
-const BACKGROUND_UPDATED = [
-  "Additional context sent to the running background task.",
+const BACKGROUND_ALREADY_RUNNING = [
+  "The task is already working in the background.",
   "The task is still working in the background. You will be notified automatically when it finishes.",
   "DO NOT sleep, poll for progress, ask the task for status, or duplicate this task's work — avoid working with the same files or topics it is using.",
-  "Work on non-overlapping tasks, or briefly tell the user what you sent and end your response.",
+  "Work on non-overlapping tasks, or briefly tell the user it is still running and end your response.",
 ].join("\n")
 
 const BaseParameterFields = {
@@ -82,7 +82,7 @@ export const TaskTool = Tool.define(
   id,
   Effect.gen(function* () {
     const agent = yield* Agent.Service
-    const background = yield* BackgroundJob.Service
+    const jobs = yield* Job.Service
     const config = yield* Config.Service
     const sessions = yield* Session.Service
     const scope = yield* Scope.Scope
@@ -229,7 +229,7 @@ export const TaskTool = Tool.define(
       })
 
       const notify = Effect.fn("TaskTool.notifyBackgroundResult")(function* (jobID: string) {
-        yield* background.wait({ id: jobID }).pipe(
+        yield* jobs.wait({ id: jobID }).pipe(
           Effect.flatMap((result) => {
             if (result.info?.status === "completed") return inject("completed", result.info.output ?? "")
             if (result.info?.status === "error") return inject("error", result.info.error ?? "")
@@ -239,7 +239,8 @@ export const TaskTool = Tool.define(
         )
       })
 
-      if (yield* background.extend({ id: nextSession.id, run: runTask() })) {
+      const existing = yield* jobs.get(nextSession.id)
+      if (existing?.status === "running") {
         return {
           title: params.description,
           metadata: {
@@ -250,24 +251,17 @@ export const TaskTool = Tool.define(
           output: renderOutput({
             sessionID: nextSession.id,
             state: "running",
-            summary: "Background task updated",
-            text: BACKGROUND_UPDATED,
+            summary: "Background task already running",
+            text: BACKGROUND_ALREADY_RUNNING,
           }),
         }
       }
 
-      const info = yield* background.start({
+      const info = yield* jobs.start({
         id: nextSession.id,
         type: id,
         title: params.description,
         metadata,
-        onPromote: Effect.all([
-          ctx.metadata({
-            title: params.description,
-            metadata: { ...metadata, background: true, jobId: nextSession.id },
-          }),
-          notify(nextSession.id),
-        ]),
         run: runTask().pipe(Effect.onInterrupt(() => ops.cancel(nextSession.id))),
       })
 
@@ -289,6 +283,7 @@ export const TaskTool = Tool.define(
       }
 
       if (runInBackground) {
+        yield* jobs.background(info.id)
         yield* notify(info.id)
         return backgroundResult()
       }
@@ -306,23 +301,27 @@ export const TaskTool = Tool.define(
         }),
         () =>
           Effect.gen(function* () {
-            const result = yield* Effect.raceFirst(
-              background.wait({ id: nextSession.id }).pipe(Effect.map((waited) => waited.info)),
-              background.waitForPromotion(nextSession.id),
-            )
-            if (result?.metadata?.background === true) return backgroundResult()
-            if (result?.status === "error") return yield* Effect.fail(new Error(result.error ?? "Task failed"))
-            if (result?.status === "cancelled") return yield* Effect.fail(new Error("Task cancelled"))
+            const result = yield* jobs.block({ id: nextSession.id, sessionID: ctx.sessionID })
+            if (result?.type === "backgrounded") {
+              yield* ctx.metadata({
+                title: params.description,
+                metadata: { ...metadata, background: true, jobId: nextSession.id },
+              })
+              yield* notify(nextSession.id)
+              return backgroundResult()
+            }
+            if (result?.info.status === "error")
+              return yield* Effect.fail(new Error(result.info.error ?? "Task failed"))
+            if (result?.info.status === "cancelled") return yield* Effect.fail(new Error("Task cancelled"))
             return {
               title: params.description,
               metadata,
-              output: renderOutput({ sessionID: nextSession.id, state: "completed", text: result?.output ?? "" }),
+              output: renderOutput({ sessionID: nextSession.id, state: "completed", text: result?.info.output ?? "" }),
             }
           }),
         (_, exit) =>
           Effect.gen(function* () {
-            if (Exit.hasInterrupts(exit))
-              yield* Effect.all([cancel, background.cancel(nextSession.id)], { discard: true })
+            if (Exit.hasInterrupts(exit)) yield* Effect.all([cancel, jobs.cancel(nextSession.id)], { discard: true })
           }).pipe(
             Effect.ensuring(
               Effect.sync(() => {

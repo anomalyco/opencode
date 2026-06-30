@@ -315,6 +315,10 @@ import type {
   V2ProjectCopyRefreshResponses,
   V2ProjectCopyRemoveErrors,
   V2ProjectCopyRemoveResponses,
+  V2ProjectCurrentErrors,
+  V2ProjectCurrentResponses,
+  V2ProjectDirectoriesErrors,
+  V2ProjectDirectoriesResponses,
   V2ProviderGetErrors,
   V2ProviderGetResponses,
   V2ProviderListErrors,
@@ -347,6 +351,8 @@ import type {
   V2SessionCreateResponses,
   V2SessionEventsErrors,
   V2SessionEventsResponses,
+  V2SessionForkErrors,
+  V2SessionForkResponses,
   V2SessionGetErrors,
   V2SessionGetResponses,
   V2SessionHistoryErrors,
@@ -383,6 +389,8 @@ import type {
   V2SessionRevertCommitResponses,
   V2SessionRevertStageErrors,
   V2SessionRevertStageResponses,
+  V2SessionSkillErrors,
+  V2SessionSkillResponses,
   V2SessionSwitchAgentErrors,
   V2SessionSwitchAgentResponses,
   V2SessionSwitchModelErrors,
@@ -5553,6 +5561,41 @@ export class Session3 extends HeyApiClient {
   }
 
   /**
+   * Fork session
+   *
+   * Create a child session by copying projected history from the parent. When messageID is supplied, copy messages before that boundary.
+   */
+  public fork<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      messageID?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "body", key: "messageID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<V2SessionForkResponses, V2SessionForkErrors, ThrowOnError>({
+      url: "/api/session/{sessionID}/fork",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
    * Switch session agent
    *
    * Switch the agent used by subsequent provider turns.
@@ -5696,6 +5739,45 @@ export class Session3 extends HeyApiClient {
     )
     return (options?.client ?? this.client).post<V2SessionPromptResponses, V2SessionPromptErrors, ThrowOnError>({
       url: "/api/session/{sessionID}/prompt",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Activate skill
+   *
+   * Activate a skill for a session by appending a skill message and resuming execution.
+   */
+  public skill<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      id?: string
+      skill?: string
+      resume?: boolean
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "body", key: "id" },
+            { in: "body", key: "skill" },
+            { in: "body", key: "resume" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<V2SessionSkillResponses, V2SessionSkillErrors, ThrowOnError>({
+      url: "/api/session/{sessionID}/skill",
       ...options,
       ...params,
       headers: {
@@ -6429,6 +6511,67 @@ export class Credential extends HeyApiClient {
         ...options?.headers,
         ...params.headers,
       },
+    })
+  }
+}
+
+export class Project2 extends HeyApiClient {
+  /**
+   * Get current project
+   *
+   * Resolve the project for the requested location.
+   */
+  public current<ThrowOnError extends boolean = false>(
+    parameters?: {
+      location?: {
+        directory?: string
+        workspace?: string
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "location" }] }])
+    return (options?.client ?? this.client).get<V2ProjectCurrentResponses, V2ProjectCurrentErrors, ThrowOnError>({
+      url: "/api/project/current",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * List project directories
+   *
+   * List known local absolute directories for a project.
+   */
+  public directories<ThrowOnError extends boolean = false>(
+    parameters: {
+      projectID: string
+      location?: {
+        directory?: string
+        workspace?: string
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "projectID" },
+            { in: "query", key: "location" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      V2ProjectDirectoriesResponses,
+      V2ProjectDirectoriesErrors,
+      ThrowOnError
+    >({
+      url: "/api/project/{projectID}/directories",
+      ...options,
+      ...params,
     })
   }
 }
@@ -7326,6 +7469,11 @@ export class V2 extends HeyApiClient {
   private _credential?: Credential
   get credential(): Credential {
     return (this._credential ??= new Credential({ client: this.client }))
+  }
+
+  private _project?: Project2
+  get project(): Project2 {
+    return (this._project ??= new Project2({ client: this.client }))
   }
 
   private _permission?: Permission3

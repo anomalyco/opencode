@@ -48,7 +48,7 @@ import { EventV2Bridge } from "@/event-v2-bridge"
 import { Agent } from "../agent/agent"
 import { Skill } from "../skill"
 import { Permission } from "@/permission"
-import { BackgroundJob } from "@/background/job"
+import { Job } from "@/job"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
@@ -325,7 +325,7 @@ export const defaultLayer = Layer.suspend(() =>
       Layer.provide(Skill.defaultLayer),
       Layer.provide(Agent.defaultLayer),
       Layer.provide(Session.defaultLayer),
-      Layer.provide(BackgroundJob.defaultLayer),
+      Layer.provide(Job.defaultLayer),
       Layer.provide(Provider.defaultLayer),
       Layer.provide(LSP.defaultLayer),
       Layer.provide(Instruction.defaultLayer),
@@ -426,7 +426,7 @@ export const node = LayerNode.make({
     Agent.node,
     Skill.node,
     Session.node,
-    BackgroundJob.node,
+    Job.node,
     Provider.node,
     LSP.node,
     Instruction.node,

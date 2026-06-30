@@ -1,6 +1,7 @@
 import { describe, expect } from "bun:test"
-import { Effect, Exit, Scope } from "effect"
+import { Effect, Exit, Fiber, Layer, Scope, Stream } from "effect"
 import { AgentV2 } from "@opencode-ai/core/agent"
+import { EventV2 } from "@opencode-ai/core/event"
 import { Location } from "@opencode-ai/core/location"
 import { AgentPlugin } from "@opencode-ai/core/plugin/agent"
 import { AbsolutePath } from "@opencode-ai/core/schema"
@@ -8,9 +9,32 @@ import { location } from "./fixture/location"
 import { testEffect } from "./lib/effect"
 import { agentHost, host } from "./plugin/host"
 
-const it = testEffect(AgentV2.locationLayer)
+const testLocation = location({ directory: AbsolutePath.make("/project") })
+const locationLayer = Layer.succeed(Location.Service, Location.Service.of(testLocation))
+
+const it = testEffect(
+  AgentV2.locationLayer.pipe(
+    Layer.provideMerge(EventV2.defaultLayer),
+    Layer.provideMerge(locationLayer),
+  ),
+)
 
 describe("AgentV2", () => {
+  it.effect("publishes an updated event after agent changes", () =>
+    Effect.gen(function* () {
+      const agent = yield* AgentV2.Service
+      const events = yield* EventV2.Service
+      const updated = yield* events
+        .subscribe(AgentV2.Event.Updated)
+        .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
+      yield* Effect.yieldNow
+
+      yield* agent.transform((editor) => editor.update(AgentV2.ID.make("reviewer"), () => {}))
+
+      expect(yield* Fiber.join(updated)).toMatchObject([{ location: { directory: testLocation.directory } }])
+    }),
+  )
+
   it.effect("starts without agents", () =>
     Effect.gen(function* () {
       const agent = yield* AgentV2.Service

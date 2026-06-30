@@ -521,7 +521,7 @@ export const layer = Layer.effect(
 
           const cfg = yield* config.get()
           const sh = ShellSelect.preferred(cfg.shell)
-          const args = ShellSelect.args(sh, input.command, cwd)
+          const args = ShellSelect.args(sh, input.command)
           let output = ""
           let aborted = false
 

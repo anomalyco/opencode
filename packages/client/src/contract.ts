@@ -19,23 +19,25 @@ export const ClientApi = makeDefaultApi({
 export const groupNames = {
   "server.health": "health",
   "server.location": "location",
-  "server.agent": "agents",
-  "server.session": "sessions",
-  "server.message": "messages",
-  "server.model": "models",
+  "server.agent": "agent",
+  "server.session": "session",
+  "server.message": "message",
+  "server.model": "model",
   "server.generate": "generate",
-  "server.provider": "providers",
-  "server.integration": "integrations",
-  "server.credential": "credentials",
-  "server.permission": "permissions",
-  "server.fs": "files",
-  "server.command": "commands",
-  "server.skill": "skills",
-  "server.event": "events",
-  "server.pty": "ptys",
-  "server.question": "questions",
-  "server.reference": "references",
-  "server.projectCopy": "projectCopies",
+  "server.provider": "provider",
+  "server.integration": "integration",
+  "server.credential": "credential",
+  "server.permission": "permission",
+  "server.fs": "file",
+  "server.command": "command",
+  "server.skill": "skill",
+  "server.event": "event",
+  "server.pty": "pty",
+  "server.shell": "shell",
+  "server.question": "question",
+  "server.reference": "reference",
+  "server.project": "project",
+  "server.projectCopy": "projectCopy",
 } as const
 
 export const endpointNames = {
@@ -51,4 +53,5 @@ export const endpointNames = {
   "question.request.list": "listRequests",
 } as const
 
-export const omitEndpoints = new Set(["fs.read", "pty.connect", "pty.connectToken"])
+export const promiseOmitEndpoints = new Set(["pty.connect", "pty.connectToken"])
+export const effectOmitEndpoints = new Set(["fs.read", "pty.connect", "pty.connectToken"])

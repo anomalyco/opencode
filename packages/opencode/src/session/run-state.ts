@@ -2,7 +2,7 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { InstanceState } from "@/effect/instance-state"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Runner } from "@/effect/runner"
-import { BackgroundJob } from "@/background/job"
+import { Job } from "@/job"
 import { Effect, Latch, Layer, Scope, Context } from "effect"
 import { Session } from "./session"
 import { SessionID } from "./schema"
@@ -29,7 +29,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Se
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const background = yield* BackgroundJob.Service
+    const jobs = yield* Job.Service
     const status = yield* SessionStatus.Service
 
     const state = yield* InstanceState.make(
@@ -75,7 +75,7 @@ export const layer = Layer.effect(
     })
 
     const cancel = Effect.fn("SessionRunState.cancel")(function* (sessionID: SessionID) {
-      yield* cancelBackgroundJobs(background, sessionID)
+      yield* cancelJobs(jobs, sessionID)
       const data = yield* InstanceState.get(state)
       const existing = data.runners.get(sessionID)
       if (!existing) {
@@ -108,31 +108,25 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer.pipe(
-  Layer.provide(BackgroundJob.defaultLayer),
-  Layer.provide(SessionStatus.defaultLayer),
-)
+export const defaultLayer = layer.pipe(Layer.provide(Job.defaultLayer), Layer.provide(SessionStatus.defaultLayer))
 
-const cancelBackgroundJobs = Effect.fn("SessionRunState.cancelBackgroundJobs")(function* (
-  background: BackgroundJob.Interface,
-  sessionID: SessionID,
-) {
-  const jobs = yield* background.list()
+const cancelJobs = Effect.fn("SessionRunState.cancelJobs")(function* (jobs: Job.Interface, sessionID: SessionID) {
+  const running = yield* jobs.list()
   const pending = new Set<string>([sessionID])
   const cancelled = new Set<string>()
-  const matches = (job: BackgroundJob.Info) => {
+  const matches = (job: Job.Info) => {
     if (job.status !== "running") return false
     if (cancelled.has(job.id)) return false
     if (pending.has(job.id)) return true
     if (typeof job.metadata?.sessionId === "string" && pending.has(job.metadata.sessionId)) return true
     return typeof job.metadata?.parentSessionId === "string" && pending.has(job.metadata.parentSessionId)
   }
-  let batch = jobs.filter(matches)
+  let batch = running.filter(matches)
   while (batch.length > 0) {
     yield* Effect.forEach(
       batch,
       (job) =>
-        background.cancel(job.id).pipe(
+        jobs.cancel(job.id).pipe(
           Effect.tap(() =>
             Effect.sync(() => {
               cancelled.add(job.id)
@@ -143,7 +137,7 @@ const cancelBackgroundJobs = Effect.fn("SessionRunState.cancelBackgroundJobs")(f
         ),
       { concurrency: "unbounded", discard: true },
     )
-    batch = jobs.filter(matches)
+    batch = running.filter(matches)
   }
 })
 
@@ -151,6 +145,6 @@ function busyError(sessionID: SessionID) {
   return new Session.BusyError({ sessionID })
 }
 
-export const node = LayerNode.make({ service: Service, layer: layer, deps: [BackgroundJob.node, SessionStatus.node] })
+export const node = LayerNode.make({ service: Service, layer: layer, deps: [Job.node, SessionStatus.node] })
 
 export * as SessionRunState from "./run-state"

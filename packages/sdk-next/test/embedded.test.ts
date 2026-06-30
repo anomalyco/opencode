@@ -26,54 +26,54 @@ test("embedded client uses the real router and handlers", async () => {
         }),
       })
 
-      const created = yield* opencode.sessions.create({
+      const created = yield* opencode.session.create({
         id: sessionID,
         agent: Agent.ID.make("build"),
         location: Location.Ref.make({ directory: AbsolutePath.make(directory) }),
       })
-      yield* opencode.sessions.switchModel({ sessionID, model })
-      const selected = yield* opencode.sessions.get({ sessionID })
-      const page = yield* opencode.sessions.list({ directory: AbsolutePath.make(directory) })
-      const active = yield* opencode.sessions.active()
-      const admitted = yield* opencode.sessions.prompt({
+      yield* opencode.session.switchModel({ sessionID, model })
+      const selected = yield* opencode.session.get({ sessionID })
+      const page = yield* opencode.session.list({ directory: AbsolutePath.make(directory) })
+      const active = yield* opencode.session.active()
+      const admitted = yield* opencode.session.prompt({
         sessionID,
         prompt: Prompt.make({ text: "Do not run" }),
         resume: false,
       })
-      const context = yield* opencode.sessions.context({ sessionID })
-      const wake = yield* opencode.sessions.prompt({
+      const context = yield* opencode.session.context({ sessionID })
+      const wake = yield* opencode.session.prompt({
         sessionID,
         prompt: Prompt.make({ text: "Promote this input" }),
       })
-      const prompted = yield* opencode.sessions.events({ sessionID }).pipe(
+      const prompted = yield* opencode.session.events({ sessionID }).pipe(
         Stream.filter((event) => event.type === "session.next.prompted" && event.data.messageID === wake.id),
         Stream.runHead,
         Effect.timeout("10 seconds"),
         Effect.map(Option.getOrThrow),
       )
-      const wakeContext = yield* opencode.sessions.context({ sessionID })
-      const event = yield* opencode.sessions
+      const wakeContext = yield* opencode.session.context({ sessionID })
+      const event = yield* opencode.session
         .events({ sessionID })
         .pipe(Stream.take(1), Stream.runHead, Effect.map(Option.getOrUndefined))
       const modelMessage = Option.fromNullishOr(context.find((message) => message.type === "model-switched")).pipe(
         Option.getOrThrow,
       )
-      const message = yield* opencode.sessions.message({ sessionID, messageID: modelMessage.id })
-      yield* opencode.sessions.interrupt({ sessionID })
-      const other = yield* opencode.sessions.create({
+      const message = yield* opencode.session.message({ sessionID, messageID: modelMessage.id })
+      yield* opencode.session.interrupt({ sessionID })
+      const other = yield* opencode.session.create({
         location: Location.Ref.make({ directory: AbsolutePath.make(directory) }),
       })
       const missingSessionID = Session.ID.make(`ses_missing_${crypto.randomUUID()}`)
       const missing = yield* Effect.all(
         [
-          opencode.sessions.events({ sessionID: missingSessionID }).pipe(Stream.runHead, Effect.flip),
-          opencode.sessions.interrupt({ sessionID: missingSessionID }).pipe(Effect.flip),
-          opencode.sessions.message({ sessionID: missingSessionID, messageID: modelMessage.id }).pipe(Effect.flip),
+          opencode.session.events({ sessionID: missingSessionID }).pipe(Stream.runHead, Effect.flip),
+          opencode.session.interrupt({ sessionID: missingSessionID }).pipe(Effect.flip),
+          opencode.session.message({ sessionID: missingSessionID, messageID: modelMessage.id }).pipe(Effect.flip),
         ],
         { concurrency: "unbounded" },
       )
       const missingMessage = yield* Effect.flip(
-        opencode.sessions.message({
+        opencode.session.message({
           sessionID: other.id,
           messageID: modelMessage.id,
         }),
@@ -116,7 +116,7 @@ test("Location-owned runner events reach the ready global client", async () => {
       const opencode = yield* OpenCode.create()
       const connected = yield* Latch.make(false)
       const prompted = yield* Deferred.make<OpenCodeEvent>()
-      yield* opencode.events.subscribe().pipe(
+      yield* opencode.event.subscribe().pipe(
         Stream.runForEach((event) =>
           event.type === "server.connected"
             ? connected.open
@@ -127,11 +127,11 @@ test("Location-owned runner events reach the ready global client", async () => {
         Effect.forkScoped,
       )
       yield* connected.await
-      yield* opencode.sessions.create({
+      yield* opencode.session.create({
         id: sessionID,
         location: Location.Ref.make({ directory: AbsolutePath.make(directory) }),
       })
-      yield* opencode.sessions.prompt({ sessionID, prompt: Prompt.make({ text: "Observe this input" }) })
+      yield* opencode.session.prompt({ sessionID, prompt: Prompt.make({ text: "Observe this input" }) })
 
       const event = yield* Deferred.await(prompted).pipe(Effect.timeout("4 seconds"))
       expect(event.durable).toEqual(expect.objectContaining({ aggregateID: sessionID, seq: expect.any(Number) }))
@@ -167,14 +167,14 @@ test("independent embedded hosts do not share live notifications", async () => {
               : Effect.void,
         )
 
-      yield* first.events.subscribe().pipe(observe(firstReady, firstEvent), Effect.forkScoped)
-      yield* second.events.subscribe().pipe(observe(secondReady, secondEvent), Effect.forkScoped)
+      yield* first.event.subscribe().pipe(observe(firstReady, firstEvent), Effect.forkScoped)
+      yield* second.event.subscribe().pipe(observe(secondReady, secondEvent), Effect.forkScoped)
       yield* Effect.all([firstReady.await, secondReady.await], { discard: true })
-      yield* first.sessions.create({
+      yield* first.session.create({
         id: sessionID,
         location: Location.Ref.make({ directory: AbsolutePath.make(directory) }),
       })
-      yield* first.sessions.switchAgent({ sessionID, agent: Agent.ID.make("plan") })
+      yield* first.session.switchAgent({ sessionID, agent: Agent.ID.make("plan") })
 
       yield* firstEvent.await.pipe(Effect.timeout("2 seconds"))
       expect(Option.isNone(yield* secondEvent.await.pipe(Effect.timeoutOption("100 millis")))).toBe(true)
@@ -197,7 +197,7 @@ test("embedded client is available as a Layer service", async () => {
     const created = await Effect.runPromise(
       Effect.gen(function* () {
         const opencode = yield* OpenCode.Service
-        return yield* opencode.sessions.create({
+        return yield* opencode.session.create({
           id: sessionID,
           location: Location.Ref.make({ directory: AbsolutePath.make(directory) }),
         })

@@ -6,11 +6,9 @@ import { Runtime } from "../../../framework/runtime"
 import { Daemon } from "../../../services/daemon"
 
 export default Runtime.handler(
-  Commands.commands.service.commands.password,
-  Effect.fn("cli.service.password")(function* (input) {
+  Commands.commands.service.commands.get,
+  Effect.fn("cli.service.get")(function* (input) {
     const daemon = yield* Daemon.Service
-    const value = Option.getOrUndefined(input.value)
-    if (value !== undefined) yield* daemon.stop()
-    process.stdout.write((yield* daemon.password(value)) + EOL)
+    process.stdout.write((yield* daemon.get(Option.getOrUndefined(input.key))) + EOL)
   }),
 )

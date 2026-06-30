@@ -1,3 +1,4 @@
+import { OpenCode } from "@opencode-ai/client"
 import { createOpencodeClient } from "@opencode-ai/sdk/v2"
 import type { V2Event } from "@opencode-ai/sdk/v2"
 
@@ -92,6 +93,9 @@ export function createFetch(override?: FetchHandler, events?: ReturnType<typeof 
     if (url.pathname === "/experimental/capabilities") return json({ backgroundSubagents: false })
     if (url.pathname === "/path") return json({ home: "", state: "", config: "", worktree, directory })
     if (url.pathname === "/api/location") return json({ directory, project: { id: "proj_test", directory: worktree } })
+    if (url.pathname === "/api/project/current") return json({ id: "proj_test", directory: worktree })
+    if (url.pathname === "/api/project/proj_test/directories") return json([{ directory: worktree }])
+    if (url.pathname === "/api/shell") return json({ data: [] })
     if (url.pathname === "/api/session") return json({ data: [], cursor: {} })
     if (url.pathname === "/api/session/active") return json({ data: {} })
     if (
@@ -103,7 +107,6 @@ export function createFetch(override?: FetchHandler, events?: ReturnType<typeof 
         location: { directory, project: { id: "proj_test", directory: worktree } },
         data: [],
       })
-    if (url.pathname === "/project/current") return json({ id: "proj_test" })
     if (url.pathname === "/api/reference")
       return json({ location: { directory, project: { id: "proj_test", directory } }, data: [] })
     if (url.pathname === "/provider") return json({ all: [], default: {}, connected: [] })
@@ -116,4 +119,8 @@ export function createFetch(override?: FetchHandler, events?: ReturnType<typeof 
 
 export function createClient(fetch: typeof globalThis.fetch) {
   return createOpencodeClient({ baseUrl: "http://test", fetch })
+}
+
+export function createApi(fetch: typeof globalThis.fetch) {
+  return OpenCode.make({ baseUrl: "http://test", fetch })
 }

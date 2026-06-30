@@ -2,19 +2,27 @@ export * as ShellTool from "./shell"
 
 import path from "path"
 import { ToolFailure } from "@opencode-ai/llm"
-import { Effect, Layer, Schema } from "effect"
+import { Effect, Layer, Schema, Scope } from "effect"
 import { FSUtil } from "../fs-util"
+import { Job } from "../job"
 import { LocationMutation } from "../location-mutation"
+import { LocationServiceMap } from "../location-service-map"
 import { PermissionV2 } from "../permission"
 import { PositiveInt } from "../schema"
+import { SessionV2 } from "../session"
+import { SessionSchema } from "../session/schema"
 import { Shell } from "../shell"
-import { Tool } from "./tool"
-import { Tools } from "./tools"
+import { Tool, type Content } from "./tool"
+import { ApplicationTools } from "./application-tools"
+import { makeGlobalNode } from "../effect/app-node"
 
 export const name = "shell"
 export const DEFAULT_TIMEOUT_MS = 2 * 60 * 1_000
 export const MAX_TIMEOUT_MS = 10 * 60 * 1_000
 export const MAX_CAPTURE_BYTES = 1024 * 1024
+
+const BACKGROUND_STARTED =
+  "The command is running in the background. You will be notified automatically when it completes. DO NOT sleep, poll, or proactively check on its progress."
 
 export const Input = Schema.Struct({
   command: Schema.String.annotate({ description: "Shell command string to execute" }),
@@ -26,6 +34,10 @@ export const Input = Schema.Struct({
     .annotate({
       description: `Timeout in milliseconds. Defaults to ${DEFAULT_TIMEOUT_MS} and may not exceed ${MAX_TIMEOUT_MS}.`,
     }),
+  background: Schema.Boolean.pipe(Schema.optional).annotate({
+    description:
+      "Run the command in the background and return immediately. You will be notified when it completes. DO NOT poll its progress.",
+  }),
 })
 
 const StructuredOutput = Schema.Struct({
@@ -37,12 +49,14 @@ const StructuredOutput = Schema.Struct({
 const Output = Schema.Struct({
   ...StructuredOutput.fields,
   output: Schema.String,
+  status: Schema.Literals(["completed", "running"]).pipe(Schema.optional),
   warnings: Schema.Array(Schema.String).pipe(Schema.optional),
 })
 
 type Output = typeof Output.Type
 
-const modelOutput = (output: Output) => {
+const modelOutput = (output: Output): string | undefined => {
+  if (output.status === "running") return undefined
   const warnings = output.warnings?.length
     ? `\n\nWarnings:\n${output.warnings.map((warning) => `- ${warning}`).join("\n")}`
     : ""
@@ -60,9 +74,8 @@ const modelOutput = (output: Output) => {
 // TODO: Restore PowerShell and cmd-specific invocation/path handling on Windows.
 // TODO: Add plugin shell.env environment augmentation once V2 plugin hooks exist.
 // TODO: Add durable/live progress metadata streaming for long-running commands once V2 tool invocation progress context is wired.
-// TODO: Persist background job status and define restart recovery before exposing remote observation.
-// TODO: Re-add model-facing background launch only with owner-bound get/wait/cancel tools and completion delivery.
-// TODO: Add HTTP background-job observation only after durable status, restart recovery, and authorization are defined.
+// TODO: Persist job status and define restart recovery before exposing remote observation.
+// TODO: Add HTTP job observation only after durable status, restart recovery, and authorization are defined.
 // TODO: Revisit process-group cleanup and platform coverage with shell-specific tests if current AppProcess semantics do not fully cover it.
 // TODO: Revisit binary output handling if stdout/stderr decoding is text-only.
 // TODO: Stream full shell output into managed storage while retaining only a bounded in-memory preview.
@@ -83,16 +96,48 @@ const externalCommandDirectories = (command: string, cwd: string) => {
 
 export const layer = Layer.effectDiscard(
   Effect.gen(function* () {
-    const tools = yield* Tools.Service
-    const mutation = yield* LocationMutation.Service
-    const fs = yield* FSUtil.Service
-    const shell = yield* Shell.Service
-    const permission = yield* PermissionV2.Service
+    const tools = yield* ApplicationTools.Service
+    const sessions = yield* SessionV2.Service
+    const jobs = yield* Job.Service
+    const locations = yield* LocationServiceMap.Service
+    const scope = yield* Scope.Scope
+    const fsUtil = yield* FSUtil.Service
+
+    const notifyWhenDone = Effect.fn("ShellTool.notifyWhenDone")(function* (
+      sessionID: SessionSchema.ID,
+      callID: string,
+      command: string,
+    ) {
+      yield* jobs.wait({ id: callID }).pipe(
+        Effect.flatMap((result) => {
+          const state =
+            result.info?.status === "completed"
+              ? "completed"
+              : result.info?.status === "error"
+                ? "error"
+                : result.info?.status === "cancelled"
+                  ? "cancelled"
+                  : undefined
+          if (state === undefined) return Effect.void
+          const text =
+            state === "completed"
+              ? (result.info!.output ?? "")
+              : state === "error"
+                ? (result.info!.error ?? "Command failed")
+                : "Command cancelled"
+          return sessions.synthetic({
+            sessionID,
+            text: `<shell id="${callID}" state="${state}" command="${command}">\n${text}\n</shell>`,
+          })
+        }),
+        Effect.forkIn(scope, { startImmediately: true }),
+      )
+    })
 
     yield* tools
       .register({
         [name]: Tool.make({
-          description: `Execute one shell command string with the host user's filesystem, process, and network authority. The active Location is the default working directory. Relative workdir values resolve from that Location. External workdir values require external_directory approval; best-effort command-argument path warnings are advisory only. Timeout values are milliseconds (default: ${DEFAULT_TIMEOUT_MS}; maximum: ${MAX_TIMEOUT_MS}). Uses the configured shell when set; otherwise uses /bin/sh on POSIX and COMSPEC or cmd.exe on Windows.`,
+          description: `Execute one shell command string with the host user's filesystem, process, and network authority. The active Location is the default working directory. Relative workdir values resolve from that Location. External workdir values require external_directory approval; best-effort command-argument path warnings are advisory only. Timeout values are milliseconds (default: ${DEFAULT_TIMEOUT_MS}; maximum: ${MAX_TIMEOUT_MS}). Uses the configured shell when set; otherwise uses /bin/sh on POSIX and COMSPEC or cmd.exe on Windows. Background mode (background=true) launches the command asynchronously and returns immediately; you are notified when it finishes.`,
           input: Input,
           output: Output,
           structured: StructuredOutput,
@@ -101,76 +146,132 @@ export const layer = Layer.effectDiscard(
             ...(output.exit === undefined ? {} : { exit: output.exit }),
             ...(output.timeout === undefined ? {} : { timeout: output.timeout }),
           }),
-          toModelOutput: ({ output }) => [
-            { type: "text", text: output.output },
-            { type: "text", text: modelOutput(output) },
-          ],
+          toModelOutput: ({ output }) => {
+            const parts: Content[] = [{ type: "text", text: output.output }]
+            const model = modelOutput(output)
+            if (model) parts.push({ type: "text", text: model })
+            return parts
+          },
           execute: (input, context) =>
             Effect.gen(function* () {
-              const source = {
-                type: "tool" as const,
-                messageID: context.assistantMessageID,
-                callID: context.toolCallID,
-              }
-              const target = yield* mutation.resolve({ path: input.workdir ?? ".", kind: "directory" })
-              const external = target.externalDirectory
-              if (external)
+              const parent = yield* sessions
+                .get(context.sessionID)
+                .pipe(Effect.mapError(() => new ToolFailure({ message: `Session not found: ${context.sessionID}` })))
+              return yield* Effect.gen(function* () {
+                const mutation = yield* LocationMutation.Service
+                const shell = yield* Shell.Service
+                const permission = yield* PermissionV2.Service
+                const source = {
+                  type: "tool" as const,
+                  messageID: context.assistantMessageID,
+                  callID: context.toolCallID,
+                }
+                const target = yield* mutation.resolve({ path: input.workdir ?? ".", kind: "directory" })
+                const external = target.externalDirectory
+                if (external)
+                  yield* permission.assert({
+                    ...LocationMutation.externalDirectoryPermission(external),
+                    sessionID: context.sessionID,
+                    agent: context.agent,
+                    source,
+                  })
+                const warnings = externalCommandDirectories(input.command, target.canonical).map(
+                  (directory) =>
+                    `Command argument references external directory ${path.join(directory, "*").replaceAll("\\", "/")}. Shell runs with host-user filesystem, process, and network authority; this scan is advisory only.`,
+                )
                 yield* permission.assert({
-                  ...LocationMutation.externalDirectoryPermission(external),
+                  action: name,
+                  resources: [input.command],
+                  save: [input.command],
                   sessionID: context.sessionID,
                   agent: context.agent,
                   source,
                 })
-              const warnings = externalCommandDirectories(input.command, target.canonical).map(
-                (directory) =>
-                  `Command argument references external directory ${path.join(directory, "*").replaceAll("\\", "/")}. Shell runs with host-user filesystem, process, and network authority; this scan is advisory only.`,
-              )
-              yield* permission.assert({
-                action: name,
-                resources: [input.command],
-                save: [input.command],
-                sessionID: context.sessionID,
-                agent: context.agent,
-                source,
-              })
 
-              if ((yield* fs.stat(target.canonical)).type !== "Directory")
-                return yield* Effect.fail(new Error(`Working directory is not a directory: ${target.canonical}`))
+                if ((yield* fsUtil.stat(target.canonical)).type !== "Directory")
+                  return yield* Effect.fail(new Error(`Working directory is not a directory: ${target.canonical}`))
 
-              // Delegate spawning, combined-output capture, timeout, and exit tracking to the Shell
-              // service. The full output is captured to a file; we read a bounded page for the model
-              // and point the agent at the file when it overflows the model cap.
-              const timeout = input.timeout ?? DEFAULT_TIMEOUT_MS
-              const info = yield* shell.create({
-                command: input.command,
-                cwd: target.canonical,
-                timeout,
-                metadata: { sessionID: context.sessionID },
-              })
-              const final = yield* shell.wait(info.id)
-              const page = yield* shell.output(info.id, { limit: MAX_CAPTURE_BYTES })
+                const timeout = input.timeout ?? DEFAULT_TIMEOUT_MS
 
-              if (final.status === "timeout") {
+                if (input.background === true) {
+                  const run = Effect.fn("ShellTool.run")(function* () {
+                    const info = yield* shell.create({
+                      command: input.command,
+                      cwd: target.canonical,
+                      timeout,
+                      metadata: { sessionID: context.sessionID },
+                    })
+                    return yield* Effect.gen(function* () {
+                      const final = yield* shell.wait(info.id)
+                      const page = yield* shell.output(info.id, { limit: MAX_CAPTURE_BYTES })
+
+                      if (final.status === "timeout")
+                        return `Command exceeded timeout of ${timeout} ms. Retry with a larger timeout if the command is expected to take longer.`
+
+                      const truncated = page.size > page.cursor
+                      const body = page.output || "(no output)"
+                      const notice = truncated ? `\n\n[output truncated; full output saved to: ${final.file}]` : ""
+                      return `${body}${notice}`
+                    }).pipe(Effect.onInterrupt(() => shell.remove(info.id).pipe(Effect.ignore)))
+                  })
+
+                  const info = yield* jobs.start({
+                    id: context.toolCallID,
+                    type: name,
+                    title: input.command,
+                    metadata: { sessionID: context.sessionID },
+                    run: run(),
+                  })
+                  yield* jobs.background(info.id)
+                  yield* notifyWhenDone(context.sessionID, context.toolCallID, input.command)
+                  return {
+                    output: BACKGROUND_STARTED,
+                    truncated: false,
+                    status: "running" as const,
+                    ...(warnings.length ? { warnings } : {}),
+                  }
+                }
+
+                const info = yield* shell.create({
+                  command: input.command,
+                  cwd: target.canonical,
+                  timeout,
+                  metadata: { sessionID: context.sessionID },
+                })
+                const final = yield* shell.wait(info.id)
+                const page = yield* shell.output(info.id, { limit: MAX_CAPTURE_BYTES })
+
+                if (final.status === "timeout") {
+                  return {
+                    exit: final.exit,
+                    output: `Command exceeded timeout of ${timeout} ms. Retry with a larger timeout if the command is expected to take longer.`,
+                    truncated: false,
+                    timeout: true,
+                    status: "completed" as const,
+                    ...(warnings.length ? { warnings } : {}),
+                  }
+                }
+
+                const truncated = page.size > page.cursor
+                const body = page.output || "(no output)"
+                const notice = truncated ? `\n\n[output truncated; full output saved to: ${final.file}]` : ""
                 return {
-                  output: `Command exceeded timeout of ${timeout} ms. Retry with a larger timeout if the command is expected to take longer.`,
-                  truncated: false,
-                  timeout: true,
+                  exit: final.exit,
+                  output: `${body}${notice}`,
+                  truncated,
+                  status: "completed" as const,
                   ...(warnings.length ? { warnings } : {}),
                 }
-              }
-
-              const truncated = page.size > page.cursor
-              const body = page.output || "(no output)"
-              const notice = truncated ? `\n\n[output truncated; full output saved to: ${final.file}]` : ""
-              return {
-                exit: final.exit,
-                output: `${body}${notice}`,
-                truncated,
-                ...(warnings.length ? { warnings } : {}),
-              }
+              }).pipe(Effect.provide(locations.get(parent.location)))
             }).pipe(Effect.mapError(() => new ToolFailure({ message: `Unable to execute command: ${input.command}` }))),
         }),
       })
       .pipe(Effect.orDie)
   }),
 )
+
+export const node = makeGlobalNode({
+  name: "shell-tool",
+  layer,
+  deps: [ApplicationTools.node, SessionV2.node, Job.node, LocationServiceMap.node, FSUtil.node],
+})

@@ -1,8 +1,7 @@
 export * as BuiltInTools from "./builtins"
 
 import { makeLocationNode } from "../effect/app-node"
-import { Layer } from "effect"
-import { ShellTool } from "./shell"
+import { Context, Layer } from "effect"
 import { ApplyPatchTool } from "./apply-patch"
 import { EditTool } from "./edit"
 import { GlobTool } from "./glob"
@@ -16,7 +15,6 @@ import { WebFetchTool } from "./webfetch"
 import { WebSearchTool } from "./websearch"
 import { WriteTool } from "./write"
 import { FSUtil } from "../fs-util"
-import { Shell } from "../shell"
 import { Location } from "../location"
 import { LocationMutation } from "../location-mutation"
 import { FileMutation } from "../file-mutation"
@@ -28,6 +26,8 @@ import { SkillV2 } from "../skill"
 import { SessionTodo } from "../session/todo"
 import { ToolRegistry } from "./registry"
 import { httpClient } from "../effect/app-node-platform"
+
+export class Service extends Context.Service<Service, Record<string, never>>()("@opencode/v2/BuiltInTools") {}
 
 /**
  * Composes only the shipped Location-scoped built-in tool transforms.
@@ -42,9 +42,8 @@ import { httpClient } from "../effect/app-node-platform"
  * repo_clone, repo_overview, plan_exit, and Rune/code mode. Keep MCP and plugin
  * transforms separate from this static built-in list.
  */
-export const locationLayer = Layer.mergeAll(
+const registrations = Layer.mergeAll(
   ApplyPatchTool.layer,
-  ShellTool.layer,
   EditTool.layer,
   GlobTool.layer,
   GrepTool.layer,
@@ -57,13 +56,14 @@ export const locationLayer = Layer.mergeAll(
   WriteTool.layer,
 )
 
+export const locationLayer = Layer.succeed(Service, Service.of({})).pipe(Layer.provideMerge(registrations))
+
 export const node = makeLocationNode({
-  name: "built-in-tools",
+  service: Service,
   layer: locationLayer,
   deps: [
     ToolRegistry.toolsNode,
     FSUtil.node,
-    Shell.node,
     Location.node,
     LocationMutation.node,
     FileMutation.node,

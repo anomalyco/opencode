@@ -3,6 +3,7 @@ export * as AgentV2 from "./agent"
 import { makeLocationNode } from "./effect/app-node"
 import { Array, Context, Effect, Layer, Types } from "effect"
 import { Agent } from "@opencode-ai/schema/agent"
+import { EventV2 } from "./event"
 import { State } from "./state"
 
 export const ID = Agent.ID
@@ -13,6 +14,8 @@ export const Color = Agent.Color
 
 export const Info = Agent.Info
 export type Info = Agent.Info
+
+export const Event = Agent.Event
 
 export interface Selection {
   readonly id: ID
@@ -45,6 +48,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/v2
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
+    const events = yield* EventV2.Service
     const state = State.create<Data, Draft>({
       initial: () => ({ agents: new Map() }),
       draft: (draft) => ({
@@ -63,6 +67,7 @@ export const layer = Layer.effect(
           draft.agents.delete(id)
         },
       }),
+      finalize: () => events.publish(Event.Updated, {}).pipe(Effect.asVoid),
     })
     const selectable = (agent: Info | undefined) =>
       agent && agent.mode !== "subagent" && !agent.hidden ? agent : undefined
@@ -108,4 +113,4 @@ export const layer = Layer.effect(
 
 export const locationLayer = layer
 
-export const node = makeLocationNode({ service: Service, layer, deps: [] })
+export const node = makeLocationNode({ service: Service, layer, deps: [EventV2.node] })

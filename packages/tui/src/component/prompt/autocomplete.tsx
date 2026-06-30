@@ -320,29 +320,26 @@ export function Autocomplete(props: {
       if (referenceMatch()) return []
       const { lineRange, baseQuery } = extractLineRange(input.query ?? "")
 
-      // Get files from SDK
-      const result = await sdk.client.v2.fs.find({
-        query: baseQuery,
-        limit: "20",
-        location: {
-          directory: input.location?.directory,
-          workspace: input.location?.workspaceID ?? project.workspace.current(),
-        },
-      })
+      const result = await sdk.api.file
+        .find({
+          query: baseQuery,
+          limit: 20,
+          location: {
+            directory: input.location?.directory,
+            workspace: input.location?.workspaceID ?? project.workspace.current(),
+          },
+        })
+        .catch(() => undefined)
 
       const options: AutocompleteOption[] = []
 
       // Add file options. Trust the order returned by fff (frecency, fuzzy
       // score, filename bonus, etc. are already factored in).
-      if (!result.error && result.data) {
+      if (result) {
         const width = props.anchor().width - 4
         options.push(
-          ...result.data.data.map((item): AutocompleteOption => {
-            const { filename, part } = createFilePart(
-              item,
-              path.join(result.data.location.directory, item.path),
-              lineRange,
-            )
+          ...result.data.map((item): AutocompleteOption => {
+            const { filename, part } = createFilePart(item, path.join(result.location.directory, item.path), lineRange)
             return {
               display: Locale.truncateMiddle(filename, width),
               value: filename,
@@ -446,15 +443,31 @@ export function Autocomplete(props: {
 
   const commands = createMemo((): AutocompleteOption[] => {
     const results: AutocompleteOption[] = [...slashes()]
+    const commandNames = new Set<string>()
 
-    for (const serverCommand of sync.data.command) {
-      if (serverCommand.source === "skill") continue
-      const label = serverCommand.source === "mcp" ? ":mcp" : ""
+    for (const serverCommand of data.location.command.list(location()) ?? []) {
+      commandNames.add(serverCommand.name)
       results.push({
-        display: "/" + serverCommand.name + label,
+        display: "/" + serverCommand.name,
         description: serverCommand.description,
         onSelect: () => {
           const newText = "/" + serverCommand.name + " "
+          const cursor = props.input().logicalCursor
+          props.input().deleteRange(0, 0, cursor.row, cursor.col)
+          props.input().insertText(newText)
+          props.input().cursorOffset = Bun.stringWidth(newText)
+        },
+      })
+    }
+
+    for (const skill of data.location.skill
+      .list(location())
+      ?.filter((skill) => skill.slash === true && !commandNames.has(skill.name)) ?? []) {
+      results.push({
+        display: "/" + skill.name,
+        description: skill.description,
+        onSelect: () => {
+          const newText = "/" + skill.name + " "
           const cursor = props.input().logicalCursor
           props.input().deleteRange(0, 0, cursor.row, cursor.col)
           props.input().insertText(newText)

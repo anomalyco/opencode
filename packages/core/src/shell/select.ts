@@ -163,37 +163,10 @@ function info(file: string): Item {
   }
 }
 
-export function args(file: string, command: string, cwd: string) {
+export function args(file: string, command: string) {
   const n = name(file)
   if (n === "nu" || n === "fish") return ["-c", command]
-  if (n === "zsh") {
-    return [
-      "-l",
-      "-c",
-      `
-        [[ -f ~/.zshenv ]] && source ~/.zshenv >/dev/null 2>&1 || true
-        [[ -f "\${ZDOTDIR:-$HOME}/.zshrc" ]] && source "\${ZDOTDIR:-$HOME}/.zshrc" >/dev/null 2>&1 || true
-        cd -- "$1"
-        eval ${JSON.stringify(command)}
-      `,
-      "opencode",
-      cwd,
-    ]
-  }
-  if (n === "bash") {
-    return [
-      "-l",
-      "-c",
-      `
-        shopt -s expand_aliases
-        [[ -f ~/.bashrc ]] && source ~/.bashrc >/dev/null 2>&1 || true
-        cd -- "$1"
-        eval ${JSON.stringify(command)}
-      `,
-      "opencode",
-      cwd,
-    ]
-  }
+  if (n === "zsh" || n === "bash") return ["-c", command]
   if (n === "cmd") return ["/c", command]
   if (ps(file)) return ["-NoProfile", "-Command", command]
   return ["-c", command]

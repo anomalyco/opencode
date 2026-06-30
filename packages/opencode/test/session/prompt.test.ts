@@ -11,7 +11,7 @@ import path from "path"
 import { fileURLToPath } from "url"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { Agent as AgentSvc } from "../../src/agent/agent"
-import { BackgroundJob } from "@/background/job"
+import { Job } from "@/job"
 import { Command } from "../../src/command"
 import { Config } from "@/config/config"
 import { LSP } from "@/lsp/lsp"
@@ -183,7 +183,7 @@ function makePrompt(input?: { mcpInstructions?: MCP.ServerInstructions[]; proces
     lsp,
     makeMcp(input?.mcpInstructions),
     FSUtil.defaultLayer,
-    BackgroundJob.defaultLayer,
+    Job.defaultLayer,
     status,
     Database.defaultLayer,
     EventV2Bridge.defaultLayer,

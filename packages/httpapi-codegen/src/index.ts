@@ -9,10 +9,15 @@ export type InputField = {
   readonly source: "params" | "query" | "headers" | "payload"
 }
 
+export type OperationInputField = {
+  readonly name: string
+  readonly source: InputField["source"] | "wildcard"
+}
+
 export type Operation = {
   readonly group: string
   readonly name: string
-  readonly input: ReadonlyArray<InputField>
+  readonly input: ReadonlyArray<OperationInputField>
   readonly inputMode: "none" | "optional" | "required"
   readonly success: "value" | "void" | "stream"
   readonly errors: ReadonlyArray<string>
@@ -66,6 +71,10 @@ type Slot = {
   readonly name: string
   readonly schema: Schema.Top
 }
+
+type PromiseInputField =
+  | (InputField & { readonly optional: boolean })
+  | { readonly name: string; readonly source: "wildcard"; readonly optional: false }
 
 const resolveHttpApiStatus = SchemaAST.resolveAt<number>("httpApiStatus")
 const resolveHttpApiEncoding = SchemaAST.resolveAt<HttpApiSchema.Encoding>("~httpApiEncoding")
@@ -246,7 +255,7 @@ export function emitPromise(
     for (const endpoint of group.endpoints) assertPromiseEndpoint(endpoint)
   }
   return {
-    operations: operations(groups),
+    operations: promiseOperations(groups),
     files: [
       { path: "types.ts", content: renderPromiseTypes(groups, options?.outputTypes) },
       {
@@ -255,7 +264,7 @@ export function emitPromise(
       },
       {
         path: "client.ts",
-        content: renderPromiseClient(groups).replace("let next: ReadableStreamReadResult<Uint8Array>", "let next"),
+        content: normalizePromiseClientContent(renderPromiseClient(groups), groups),
       },
       {
         path: "index.ts",
@@ -285,11 +294,11 @@ function assertPromiseEndpoint(endpoint: Endpoint) {
     ) {
       throw new GenerationError({ reason: `Unsupported Promise stream: ${name}` })
     }
-  } else if (
-    !HttpApiSchema.isNoContent(success.ast) &&
-    (resolveHttpApiEncoding(success.ast)?._tag ?? "Json") !== "Json"
-  ) {
-    throw new GenerationError({ reason: `Unsupported Promise success encoding: ${name}` })
+  } else if (!HttpApiSchema.isNoContent(success.ast)) {
+    const encoding = resolveHttpApiEncoding(success.ast)?._tag ?? "Json"
+    if (encoding !== "Json" && encoding !== "Uint8Array") {
+      throw new GenerationError({ reason: `Unsupported Promise success encoding: ${name}` })
+    }
   }
   for (const error of endpoint.errors) {
     if (declaredErrorFields(error.schema) === undefined) {
@@ -303,6 +312,16 @@ function assertPromiseEndpoint(endpoint: Endpoint) {
 
 function operations(groups: ReadonlyArray<Group>) {
   return groups.flatMap((group) => group.endpoints.map((endpoint) => endpoint.operation))
+}
+
+function promiseOperations(groups: ReadonlyArray<Group>) {
+  return groups.flatMap((group) =>
+    group.endpoints.map((endpoint) => ({
+      ...endpoint.operation,
+      input: promiseInput(endpoint).map(({ name, source }) => ({ name, source })),
+      inputMode: promiseInputMode(endpoint),
+    })),
+  )
 }
 
 function renderEffectFiles(groups: ReadonlyArray<Group>): Output["files"] {
@@ -457,8 +476,9 @@ function renderPromiseTypes(
           headers: endpoint.headers,
           payload: endpoint.payloads[0],
         }
-        const input = endpoint.input
+        const input = promiseInput(endpoint)
           .map((field) => {
+            if (field.source === "wildcard") return `readonly ${JSON.stringify(field.name)}: string`
             const schema = schemas[field.source]
             if (schema === undefined)
               throw new GenerationError({ reason: `Missing input schema: ${prefix}.${field.name}` })
@@ -476,7 +496,7 @@ function renderPromiseTypes(
               : successSchema,
           )
         return [
-          ...(endpoint.operation.inputMode === "none" ? [] : [`export type ${prefix}Input = { ${input} }`]),
+          ...(promiseInputMode(endpoint) === "none" ? [] : [`export type ${prefix}Input = { ${input} }`]),
           `export type ${prefix}Output = ${endpoint.unwrapData ? `(${success})["data"]` : success}`,
         ]
       }),
@@ -493,19 +513,19 @@ function renderPromiseClient(groups: ReadonlyArray<Group>) {
   const imports = groups.flatMap((group) =>
     group.endpoints.flatMap((endpoint) => {
       const prefix = promiseTypePrefix(group.identifier, endpoint.operation.name)
-      return [...(endpoint.operation.inputMode === "none" ? [] : [`${prefix}Input`]), `${prefix}Output`]
+      return [...(promiseInputMode(endpoint) === "none" ? [] : [`${prefix}Input`]), `${prefix}Output`]
     }),
   )
   const fields = groups.map((group) => {
     const methods = group.endpoints.map((endpoint) => {
       const prefix = promiseTypePrefix(group.identifier, endpoint.operation.name)
+      const inputMode = promiseInputMode(endpoint)
       const argument =
-        endpoint.operation.inputMode === "none"
+        inputMode === "none"
           ? "requestOptions?: RequestOptions"
-          : `input${endpoint.operation.inputMode === "optional" ? "?" : ""}: ${prefix}Input, requestOptions?: RequestOptions`
-      const path = promisePath(endpoint.endpoint.path, endpoint.input)
-      const access = (name: string) =>
-        `input${endpoint.operation.inputMode === "optional" ? "?." : ""}[${JSON.stringify(name)}]`
+          : `input${inputMode === "optional" ? "?" : ""}: ${prefix}Input, requestOptions?: RequestOptions`
+      const path = promisePath(endpoint.endpoint.path, endpoint.input, promiseWildcardInput(endpoint))
+      const access = (name: string) => `input${inputMode === "optional" ? "?." : ""}[${JSON.stringify(name)}]`
       const part = (source: InputField["source"]) => {
         const inputs = endpoint.input.filter((field) => field.source === source)
         return inputs.length === 0
@@ -518,7 +538,7 @@ function renderPromiseClient(groups: ReadonlyArray<Group>) {
         endpoint.payloads.length === 0 ? undefined : `body: ${part("payload")}`,
       ].filter((value): value is string => value !== undefined)
       const declaredStatuses = [...new Set(endpoint.errors.map((error) => error.status))]
-      const descriptor = `{ method: ${JSON.stringify(endpoint.endpoint.method)}, path: ${path}${parts.length === 0 ? "" : `, ${parts.join(", ")}`}, successStatus: ${resolveHttpApiStatus(endpoint.successes[0].ast) ?? 200}, declaredStatuses: [${declaredStatuses.join(", ")}], empty: ${endpoint.operation.success === "void"} }`
+      const descriptor = `{ method: ${JSON.stringify(endpoint.endpoint.method)}, path: ${path}${parts.length === 0 ? "" : `, ${parts.join(", ")}`}, successStatus: ${resolveHttpApiStatus(endpoint.successes[0].ast) ?? 200}, declaredStatuses: [${declaredStatuses.join(", ")}], empty: ${endpoint.operation.success === "void"}${isBinarySchema(endpoint.successes[0]) ? ", binary: true" : ""} }`
       if (endpoint.operation.success === "stream") {
         const success = endpoint.successes[0]
         if (!isStreamSchema(success) || success._tag !== "StreamSse" || success.sseMode !== "data") {
@@ -583,10 +603,67 @@ function structuralType(schema: Schema.Top) {
     .replaceAll("Schema.Json", "JsonValue")
 }
 
-function promisePath(path: string, input: ReadonlyArray<InputField>) {
-  if (path.includes("*")) throw new GenerationError({ reason: `Unsupported Promise path wildcard: ${path}` })
+function normalizePromiseClientContent(content: string, groups: ReadonlyArray<Group>) {
+  const endpoints = groups.flatMap((group) => group.endpoints)
+  const usesBinary = endpoints.some((endpoint) => isBinarySchema(endpoint.successes[0]))
+  const usesWildcard = endpoints.some((endpoint) => promiseWildcardInput(endpoint) !== undefined)
+
+  const sseReady = replaceOne(content, "let next: ReadableStreamReadResult<Uint8Array>", "let next")
+  const binaryReady = usesBinary
+    ? replaceOne(
+        replaceOne(sseReady, "readonly empty: boolean\n}", "readonly empty: boolean\n  readonly binary?: true\n}"),
+        "if (descriptor.empty) {",
+        "if (descriptor.binary) return new Uint8Array(await response.arrayBuffer()) as A\n    if (descriptor.empty) {",
+      )
+    : sseReady
+  return usesWildcard
+    ? replaceOne(
+        binaryReady,
+        "function appendQuery(params: URLSearchParams, key: string, value: unknown): void {",
+        'function encodePath(value: string): string {\n  return value.split("/").map(encodeURIComponent).join("/")\n}\n\nfunction appendQuery(params: URLSearchParams, key: string, value: unknown): void {',
+      )
+    : binaryReady
+}
+
+function replaceOne(input: string, search: string, replacement: string) {
+  if (!input.includes(search))
+    throw new GenerationError({ reason: `Missing Promise client template marker: ${search}` })
+  return input.replace(search, replacement)
+}
+
+function promiseInput(endpoint: Endpoint): ReadonlyArray<PromiseInputField> {
+  const wildcard = promiseWildcardInput(endpoint)
+  if (wildcard === undefined) return endpoint.input
+  return [...endpoint.input, wildcard]
+}
+
+function promiseInputMode(endpoint: Endpoint): Operation["inputMode"] {
+  const input = promiseInput(endpoint)
+  if (input.length === 0) return "none"
+  return input.every((field) => field.optional) ? "optional" : "required"
+}
+
+function promiseWildcardInput(endpoint: Endpoint): PromiseInputField | undefined {
+  if (!endpoint.endpoint.path.includes("*")) return undefined
+  if (endpoint.endpoint.path.indexOf("*") !== endpoint.endpoint.path.lastIndexOf("*")) {
+    throw new GenerationError({ reason: `Unsupported Promise path wildcard: ${endpoint.endpoint.path}` })
+  }
+  if (!endpoint.endpoint.path.endsWith("*")) {
+    throw new GenerationError({ reason: `Unsupported Promise path wildcard: ${endpoint.endpoint.path}` })
+  }
+  const name = endpoint.input.some((field) => field.name === "path") ? "wildcard" : "path"
+  return { name, source: "wildcard", optional: false }
+}
+
+function isBinarySchema(schema: Schema.Top) {
+  return (resolveHttpApiEncoding(schema.ast)?._tag ?? "Json") === "Uint8Array"
+}
+
+function promisePath(path: string, input: ReadonlyArray<InputField>, wildcard?: PromiseInputField) {
   const fields = new Set(input.filter((field) => field.source === "params").map((field) => field.name))
-  const segments = path.split(/(:[A-Za-z_][A-Za-z0-9_]*)/g).filter(Boolean)
+  const segments = (wildcard === undefined ? path : path.slice(0, -1))
+    .split(/(:[A-Za-z_][A-Za-z0-9_]*)/g)
+    .filter(Boolean)
   const template = segments
     .map((segment) => {
       if (!segment.startsWith(":")) return segment.replaceAll("`", "\\`")
@@ -595,7 +672,7 @@ function promisePath(path: string, input: ReadonlyArray<InputField>) {
       return `\${encodeURIComponent(input.${name})}`
     })
     .join("")
-  return `\`${template}\``
+  return `\`${template}${wildcard === undefined ? "" : `\${encodePath(input.${wildcard.name})}`}\``
 }
 
 function uniqueModule(base: string, index: number, modules: ReadonlySet<string>) {

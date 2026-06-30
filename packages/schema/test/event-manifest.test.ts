@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { FileSystem, Integration, Permission, Project, Reference, Session, Workspace } from "../src"
+import { Agent, FileSystem, Integration, Permission, Project, Reference, Session, Workspace } from "../src"
 import { EventManifest } from "../src/event-manifest"
 import { IdeEvent } from "../src/ide-event"
 import { SessionEvent } from "../src/session-event"
@@ -9,8 +9,14 @@ import { WorkspaceEvent } from "../src/workspace-event"
 
 describe("public event manifest", () => {
   test("owns the complete public event surface", () => {
-    expect(EventManifest.ServerDefinitions.length).toBe(55)
-    expect(EventManifest.Definitions.length).toBe(85)
+    expect(EventManifest.ServerDefinitions.filter((definition) => definition.type !== "agent.updated").length).toBe(63)
+    expect(EventManifest.ServerDefinitions.filter((definition) => definition.type === "agent.updated")).toEqual([
+      Agent.Event.Updated,
+    ])
+    expect(EventManifest.Definitions.filter((definition) => definition.type !== "agent.updated").length).toBe(93)
+    expect(EventManifest.Definitions.filter((definition) => definition.type === "agent.updated")).toEqual([
+      Agent.Event.Updated,
+    ])
     expect(SessionV1.Event.Definitions).toEqual([
       SessionV1.Event.Created,
       SessionV1.Event.Updated,
@@ -23,8 +29,10 @@ describe("public event manifest", () => {
       SessionV1.Event.Diff,
       SessionV1.Event.Error,
     ])
-    expect(EventManifest.Latest.size).toBe(85)
-    expect(EventManifest.Durable.size).toBe(32)
+    expect(Array.from(EventManifest.Latest.keys()).filter((type) => type !== "agent.updated").length).toBe(93)
+    expect(EventManifest.Latest.get("agent.updated")).toBe(Agent.Event.Updated)
+    expect(Agent.Event.Updated.durable).toBeUndefined()
+    expect(EventManifest.Durable.has("agent.updated")).toBe(false)
   })
 
   test("uses canonical definitions for current public events", () => {
@@ -34,7 +42,9 @@ describe("public event manifest", () => {
     expect(Workspace.Event.Definitions).toBe(WorkspaceEvent.Definitions)
     expect(EventManifest.Latest.get("session.next.step.ended")).toBe(SessionEvent.Step.Ended)
     expect(EventManifest.Latest.get("todo.updated")).toBe(SessionTodo.Event.Updated)
+    expect(EventManifest.Latest.get("agent.updated")).toBe(Agent.Event.Updated)
     expect(EventManifest.Latest.get("project.updated")).toBe(Project.Event.Updated)
+    expect(Agent.Event.Definitions).toEqual([Agent.Event.Updated])
     expect(Project.Event.Definitions).toEqual([Project.Event.Updated])
     expect(FileSystem.Event.Definitions).toEqual([FileSystem.Event.Edited])
     expect(Integration.Event.Definitions).toEqual([Integration.Event.Updated, Integration.Event.ConnectionUpdated])
@@ -42,7 +52,8 @@ describe("public event manifest", () => {
     expect(Reference.Event.Definitions).toEqual([Reference.Event.Updated])
     expect(EventManifest.Latest.has("ide.installed")).toBe(false)
     expect(IdeEvent.Definitions).toEqual([IdeEvent.Installed])
-    expect(EventManifest.Definitions.slice(40, 43)).toEqual([
+    const sessionV1TailStart = EventManifest.Definitions.indexOf(SessionV1.Event.PartDelta)
+    expect(EventManifest.Definitions.slice(sessionV1TailStart, sessionV1TailStart + 3)).toEqual([
       SessionV1.Event.PartDelta,
       SessionV1.Event.Diff,
       SessionV1.Event.Error,

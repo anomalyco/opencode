@@ -60,7 +60,7 @@ const permission = Layer.succeed(
   }),
 )
 const registry = ToolRegistry.defaultLayer.pipe(Layer.provide(permission))
-const agents = AgentV2.layer
+const agents = AgentV2.layer.pipe(Layer.provide(EventV2.defaultLayer))
 const model = OpenAIChat.route
   .with({
     endpoint: { baseURL: "https://api.openai.com/v1" },

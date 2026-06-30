@@ -76,7 +76,7 @@ export const Plugin = define({
             ? pathToFileURL(ref.package).href
             : (yield* npm.add(ref.package)).entrypoint
           if (!entrypoint) return
-
+          yield* Effect.log({ msg: "loading plugin", id: ref.package, entrypoint })
           const mod = yield* Effect.promise(() => import(entrypoint))
           const value = (yield* Schema.decodeUnknownEffect(PluginModule)(mod)).default
           const plugin = "effect" in value ? value : PluginPromise.fromPromise(value)
@@ -86,6 +86,6 @@ export const Plugin = define({
           })
         }).pipe(Effect.ignoreCause)
       }
-    }).pipe(Effect.forkScoped({ startImmediately: true }))
+    })
   }),
 })

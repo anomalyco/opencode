@@ -65,6 +65,14 @@ export const System = Schema.Struct({
   text: Schema.String,
 }).annotate({ identifier: "Session.Message.System" })
 
+export interface Skill extends Schema.Schema.Type<typeof Skill> {}
+export const Skill = Schema.Struct({
+  ...Base,
+  type: Schema.Literal("skill"),
+  name: Schema.String,
+  text: Schema.String,
+}).annotate({ identifier: "Session.Message.Skill" })
+
 export interface Shell extends Schema.Schema.Type<typeof Shell> {}
 export const Shell = Schema.Struct({
   ...Base,
@@ -203,11 +211,12 @@ export const Message = Schema.Union([
   User,
   Synthetic,
   System,
+  Skill,
   Shell,
   Assistant,
   Compaction,
 ])
   .pipe(Schema.toTaggedUnion("type"))
   .annotate({ identifier: "Session.Message" })
-export type Message = AgentSwitched | ModelSwitched | User | Synthetic | System | Shell | Assistant | Compaction
+export type Message = AgentSwitched | ModelSwitched | User | Synthetic | System | Skill | Shell | Assistant | Compaction
 export type Type = Message["type"]

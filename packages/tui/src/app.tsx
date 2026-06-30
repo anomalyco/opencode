@@ -76,6 +76,7 @@ import {
   useOpencodeKeymap,
 } from "./keymap"
 
+import type { OpenCodeClient } from "@opencode-ai/client"
 import type { OpencodeClient } from "@opencode-ai/sdk/v2"
 import { DialogVariant } from "./component/dialog-variant"
 import { createTuiAttention } from "./attention"
@@ -135,7 +136,8 @@ const appBindingCommands = [
 
 export type TuiInput = {
   client: OpencodeClient
-  reload?: () => Promise<OpencodeClient>
+  api: OpenCodeClient
+  reload?: () => Promise<{ client: OpencodeClient; api: OpenCodeClient }>
   args: Args
   config: TuiConfig.Resolved
   onSnapshot?: () => Promise<string[]>
@@ -290,7 +292,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                   >
                                     <TuiConfigProvider config={input.config}>
                                       <PluginRuntimeProvider value={pluginRuntime}>
-                                        <SDKProvider client={input.client} reload={input.reload}>
+                                        <SDKProvider client={input.client} api={input.api} reload={input.reload}>
                                           <ProjectProvider>
                                             <SyncProvider>
                                               <DataProvider>

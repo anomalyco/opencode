@@ -3,7 +3,7 @@ export * as EventV2 from "./event"
 import { Cause, Context, Effect, Layer, Option, PubSub, Queue, Schema, Stream } from "effect"
 import { Event } from "@opencode-ai/schema/event"
 import type { Data, Definition, Payload } from "@opencode-ai/schema/event"
-import { and, asc, eq, gt, inArray } from "drizzle-orm"
+import { and, asc, eq, gt, inArray, sql } from "drizzle-orm"
 import { Database } from "./database/database"
 import { EventSequenceTable, EventTable } from "./event/sql"
 import { Location } from "./location"
@@ -29,6 +29,22 @@ export const latestSequence = Effect.fn("EventV2.latestSequence")(function* (
     .get()
     .pipe(Effect.orDie)
   return row?.seq ?? -1
+})
+
+export const reserveSequence = Effect.fn("EventV2.reserveSequence")(function* (
+  db: Database.Interface["db"],
+  aggregateID: string,
+  seq: number,
+) {
+  yield* db
+    .insert(EventSequenceTable)
+    .values([{ aggregate_id: aggregateID, seq }])
+    .onConflictDoUpdate({
+      target: EventSequenceTable.aggregate_id,
+      set: { seq: sql`max(${EventSequenceTable.seq}, ${seq})` },
+    })
+    .run()
+    .pipe(Effect.orDie)
 })
 
 export type SerializedEvent = {
@@ -327,7 +343,7 @@ export const layerWith = (options?: LayerOptions) =>
                             .onConflictDoUpdate({
                               target: EventSequenceTable.aggregate_id,
                               set: {
-                                seq,
+                                seq: sql`max(${EventSequenceTable.seq}, ${seq})`,
                                 ...(input?.ownerID && row?.ownerID == null ? { owner_id: input.ownerID } : {}),
                               },
                             })

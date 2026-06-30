@@ -8,7 +8,7 @@
 
 ```bash
 # From packages/cli: local V2 TUI
-termctrl start opencode-v2-dev --host opentui --cols 112 --rows 34 -- bun dev --standalone
+termctrl start opencode-v2-dev --host opentui --cols 112 --rows 34 -- bun dev
 
 # Released legacy TUI behavior reference
 termctrl start opencode-legacy --host opentui --cols 112 --rows 34 -- bunx opencode-ai@latest
@@ -23,12 +23,12 @@ termctrl save opencode-legacy --format png --out /tmp/opencode/legacy.png
 ## Interactive debugging
 
 - This package is the V2 CLI adapter. Run its `dev` script when testing the TUI; do not use the repository-root `bun dev`, which launches the legacy `packages/opencode` CLI.
-- Run commands from `packages/cli`. Use `bun dev --standalone` for most debugging so the TUI starts with a private V2 server instead of depending on the background service.
+- Run commands from `packages/cli`. Use `bun dev` for most debugging so the TUI starts with a private V2 server.
 - Use `termctrl` for interactive checks instead of starting the TUI as a blocking foreground process. It provides a real PTY, handles OpenTUI's host handshake, and can save reviewable screenshots.
 - Use a dedicated session name and do not reuse or kill an unrelated session.
 
 ```bash
-termctrl start opencode-v2-dev --host opentui --cols 112 --rows 34 -- bun dev --standalone
+termctrl start opencode-v2-dev --host opentui --cols 112 --rows 34 -- bun dev
 termctrl wait opencode-v2-dev "Ask anything" --timeout 20000
 termctrl show opencode-v2-dev
 ```
@@ -56,7 +56,7 @@ termctrl show opencode-v2-dev
 ```
 
 - Source changes may require restarting the process. Use `termctrl restart opencode-v2-dev` rather than assuming the running TUI reloaded the change.
-- To exercise background-service behavior, omit `--standalone`. Service lifecycle commands are available through `bun dev service start`, `bun dev service status`, and `bun dev service stop`.
+- To exercise background-service behavior, use `bun dev service start`, `bun dev service status`, and `bun dev service stop`.
 - Always clean up the Terminal Control session when the check is complete:
 
 ```bash
@@ -85,7 +85,7 @@ bun dev api <operationId> --param key=value
 
 ```bash
 termctrl start opencode-v2-debug --host opentui --cols 112 --rows 34 -- \
-  bun run --inspect=ws://localhost:6499/ src/index.ts --standalone
+  bun run --inspect=ws://localhost:6499/ src/index.ts
 ```
 
 - Use `--inspect-wait` or `--inspect-brk` when execution must pause until the debugger attaches.

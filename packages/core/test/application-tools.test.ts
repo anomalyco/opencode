@@ -70,17 +70,14 @@ describe("ApplicationTools", () => {
     }),
   )
 
-  it.effect("exposes narrow scoped Location registration and validates names", () =>
+  it.effect("exposes narrow scoped Location registration and sanitizes names", () =>
     Effect.gen(function* () {
       const tools: Tools.Interface = yield* Tools.Service
       const registry = yield* ToolRegistry.Service
       const scope = yield* Scope.make()
 
-      yield* tools.register({ location_tool: contextual([]) }).pipe(Scope.provide(scope))
-      expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["location_tool"])
-      expect(yield* Effect.flip(tools.register({ "invalid name": contextual([]) }))).toBeInstanceOf(
-        Tool.RegistrationError,
-      )
+      yield* tools.register({ "location.tool/search": contextual([]) }).pipe(Scope.provide(scope))
+      expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["location_tool_search"])
 
       yield* Scope.close(scope, Exit.void)
       expect(yield* toolDefinitions(registry)).toEqual([])

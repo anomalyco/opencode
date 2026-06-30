@@ -15,6 +15,7 @@ import {
   ServiceUnavailableError,
   SessionBusyError,
   SessionNotFoundError,
+  SkillNotFoundError,
   UnknownError,
 } from "../errors"
 import { Agent } from "@opencode-ai/schema/agent"
@@ -171,6 +172,23 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
         ),
     )
     .add(
+      HttpApiEndpoint.post("session.fork", "/api/session/:sessionID/fork", {
+        params: { sessionID: Session.ID },
+        payload: Schema.Struct({ messageID: SessionMessage.ID.pipe(Schema.optional) }),
+        success: Schema.Struct({ data: Session.Info }),
+        error: [SessionNotFoundError, MessageNotFoundError],
+      })
+        .middleware(sessionLocationMiddleware)
+        .annotateMerge(
+          OpenApi.annotations({
+            identifier: "v2.session.fork",
+            summary: "Fork session",
+            description:
+              "Create a child session by copying projected history from the parent. When messageID is supplied, copy messages before that boundary.",
+          }),
+        ),
+    )
+    .add(
       HttpApiEndpoint.post("session.switchAgent", "/api/session/:sessionID/agent", {
         params: { sessionID: Session.ID },
         payload: Schema.Struct({ agent: Agent.ID }),
@@ -236,6 +254,26 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
             identifier: "v2.session.prompt",
             summary: "Send message",
             description: "Durably admit one session input and schedule agent-loop execution unless resume is false.",
+          }),
+        ),
+    )
+    .add(
+      HttpApiEndpoint.post("session.skill", "/api/session/:sessionID/skill", {
+        params: { sessionID: Session.ID },
+        payload: Schema.Struct({
+          id: SessionMessage.ID.pipe(Schema.optional),
+          skill: Schema.String,
+          resume: Schema.Boolean.pipe(Schema.optional),
+        }),
+        success: HttpApiSchema.NoContent,
+        error: [SessionNotFoundError, SkillNotFoundError],
+      })
+        .middleware(sessionLocationMiddleware)
+        .annotateMerge(
+          OpenApi.annotations({
+            identifier: "v2.session.skill",
+            summary: "Activate skill",
+            description: "Activate a skill for a session by appending a skill message and resuming execution.",
           }),
         ),
     )

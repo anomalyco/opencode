@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import path from "path"
-import { Effect, Layer, Stream } from "effect"
+import { DateTime, Effect, Layer, Stream } from "effect"
 import { AgentV2 } from "@opencode-ai/core/agent"
 import { asc, eq } from "drizzle-orm"
 import { Database } from "@opencode-ai/core/database/database"
@@ -20,6 +20,7 @@ import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionInput } from "@opencode-ai/core/session/input"
 import { SessionEvent } from "@opencode-ai/core/session/event"
+import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { WorkspaceV2 } from "@opencode-ai/core/workspace"
@@ -128,6 +129,94 @@ describe("SessionV2.create", () => {
       expect(yield* Effect.flip(session.create({ parentID: missing, title: "child" }))).toEqual(
         new SessionV2.NotFoundError({ sessionID: missing }),
       )
+    }),
+  )
+
+  it.effect("forks a session by replaying a durable fork event into copied projected rows", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionV2.Service
+      const events = yield* EventV2.Service
+      const { db } = yield* Database.Service
+      const parent = yield* session.create({ location, title: "Parent" })
+      const admitted = yield* session.prompt({
+        sessionID: parent.id,
+        prompt: Prompt.make({ text: "First" }),
+        resume: false,
+      })
+      yield* SessionInput.promoteSteers(db, events, parent.id, Number.MAX_SAFE_INTEGER)
+      yield* events.publish(SessionEvent.Synthetic, {
+        sessionID: parent.id,
+        messageID: SessionMessage.ID.create(),
+        timestamp: yield* DateTime.now,
+        text: "parent note",
+      })
+
+      const forked = yield* session.fork({ sessionID: parent.id })
+      const parentContext = yield* session.context(parent.id)
+      const forkContext = yield* session.context(forked.id)
+      const history = yield* session.history({ sessionID: forked.id, limit: 10 })
+
+      expect(forked).toMatchObject({ parentID: parent.id, title: "Parent (fork #1)" })
+      expect(forkContext).toMatchObject([
+        { type: "user", text: "First" },
+        { type: "synthetic", text: "parent note", sessionID: forked.id },
+      ])
+      expect(forkContext.map((message) => message.id)).not.toEqual(parentContext.map((message) => message.id))
+      expect(history.events).toHaveLength(1)
+      expect(history.events[0]).toMatchObject({
+        type: "session.next.forked",
+        durable: { seq: 0 },
+        data: { sessionID: forked.id, parentID: parent.id },
+      })
+      expect(yield* SessionInput.find(db, forkContext[0]!.id)).toMatchObject({
+        sessionID: forked.id,
+        prompt: { text: "First" },
+        promotedSeq: 2,
+      })
+
+      yield* session.prompt({ sessionID: parent.id, prompt: Prompt.make({ text: "Parent changed" }), resume: false })
+      yield* SessionInput.promoteSteers(db, events, parent.id, Number.MAX_SAFE_INTEGER)
+      yield* session.prompt({ sessionID: forked.id, prompt: Prompt.make({ text: "Child continues" }), resume: false })
+      yield* SessionInput.promoteSteers(db, events, forked.id, Number.MAX_SAFE_INTEGER)
+
+      expect((yield* session.context(parent.id)).map((message) => message.type)).toEqual(["user", "synthetic", "user"])
+      expect((yield* session.context(forked.id)).map((message) => message.type)).toEqual(["user", "synthetic", "user"])
+      expect((yield* session.context(forked.id)).at(-1)).toMatchObject({ text: "Child continues" })
+      expect((yield* session.history({ sessionID: forked.id, limit: 10 })).events.map((event) => event.durable?.seq)).toEqual([
+        0,
+        4,
+        5,
+      ])
+      expect(yield* SessionInput.find(db, admitted.id)).toMatchObject({ sessionID: parent.id })
+    }),
+  )
+
+  it.effect("forks before the selected boundary message", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionV2.Service
+      const events = yield* EventV2.Service
+      const { db } = yield* Database.Service
+      const parent = yield* session.create({ location })
+      const first = yield* session.prompt({
+        sessionID: parent.id,
+        prompt: Prompt.make({ text: "First" }),
+        resume: false,
+      })
+      yield* SessionInput.promoteSteers(db, events, parent.id, Number.MAX_SAFE_INTEGER)
+      const second = yield* session.prompt({
+        sessionID: parent.id,
+        prompt: Prompt.make({ text: "Second" }),
+        resume: false,
+      })
+      yield* SessionInput.promoteSteers(db, events, parent.id, Number.MAX_SAFE_INTEGER)
+
+      const forked = yield* session.fork({ sessionID: parent.id, messageID: second.id })
+
+      const context = yield* session.context(forked.id)
+      const history = yield* session.history({ sessionID: forked.id, limit: 10 })
+      expect(context).toMatchObject([{ text: "First" }])
+      expect(context[0]?.id).not.toBe(first.id)
+      expect(history.events[0]).toMatchObject({ data: { messageID: second.id } })
     }),
   )
 
@@ -355,7 +444,6 @@ describe("SessionV2.create", () => {
         )
 
       expect(yield* unavailable(session.shell({ sessionID: created.id, command: "pwd" }))).toBe("shell")
-      expect(yield* unavailable(session.skill({ sessionID: created.id, skill: "review" }))).toBe("skill")
     }),
   )
 

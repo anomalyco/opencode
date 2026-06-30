@@ -120,8 +120,6 @@ describe("LocationServiceMap", () => {
           expect(blockedState.providers.some((provider) => provider.id === ProviderV2.ID.make("test"))).toBe(false)
           expect(blockedState.tools.map((tool) => tool.name).sort()).toEqual([
             "application_context",
-            "apply_patch",
-            "bash",
             "edit",
             "glob",
             "grep",
@@ -137,8 +135,6 @@ describe("LocationServiceMap", () => {
           expect(allowedState.providers.some((provider) => provider.id === ProviderV2.ID.make("test"))).toBe(true)
           expect(allowedState.tools.map((tool) => tool.name).sort()).toEqual([
             "application_context",
-            "apply_patch",
-            "bash",
             "edit",
             "glob",
             "grep",

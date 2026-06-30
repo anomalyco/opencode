@@ -1,6 +1,6 @@
 import { Account } from "@/account/account"
 import { Agent } from "@/agent/agent"
-import { BackgroundJob } from "@/background/job"
+import { Job } from "@/job"
 import { Config } from "@/config/config"
 import { InstanceState } from "@/effect/instance-state"
 import { RuntimeFlags } from "@/effect/runtime-flags"
@@ -33,7 +33,7 @@ export const experimentalHandlers = HttpApiBuilder.group(InstanceHttpApi, "exper
     const registry = yield* ToolRegistry.Service
     const worktreeSvc = yield* Worktree.Service
     const sessions = yield* Session.Service
-    const background = yield* BackgroundJob.Service
+    const jobs = yield* Job.Service
     const flags = yield* RuntimeFlags.Service
 
     const capabilities = Effect.fn("ExperimentalHttpApi.capabilities")(function* () {
@@ -159,15 +159,7 @@ export const experimentalHandlers = HttpApiBuilder.group(InstanceHttpApi, "exper
       params: { sessionID: SessionID }
     }) {
       if (!flags.experimentalBackgroundSubagents) return false
-      const jobs = (yield* background.list()).filter(
-        (job) =>
-          job.type === "task" &&
-          job.status === "running" &&
-          job.metadata?.parentSessionId === ctx.params.sessionID &&
-          job.metadata.background !== true,
-      )
-      const promoted = yield* Effect.forEach(jobs, (job) => background.promote(job.id), { concurrency: "unbounded" })
-      return promoted.some((job) => job !== undefined)
+      return (yield* jobs.backgroundAll({ sessionID: ctx.params.sessionID, type: "task" })).length > 0
     })
 
     const resource = Effect.fn("ExperimentalHttpApi.resource")(function* () {

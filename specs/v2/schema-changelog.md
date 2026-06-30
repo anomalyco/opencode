@@ -690,7 +690,7 @@ Affected schema:
 Change:
 
 - Remove the optional `background` bash parameter and process-local background settlement shape from the shipped tool.
-- Retain the internal `BackgroundJob` prototype for a later integration slice.
+- Retain the internal `Job` prototype for a later integration slice.
 
 Reason:
 

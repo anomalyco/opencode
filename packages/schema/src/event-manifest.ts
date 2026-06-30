@@ -1,5 +1,6 @@
 export * as EventManifest from "./event-manifest"
 
+import { Agent } from "./agent"
 import { Catalog } from "./catalog"
 import { Durable } from "./durable-event-manifest"
 import { Event } from "./event"
@@ -41,6 +42,7 @@ const foundationDefinitions = Event.inventory(
   ...ModelsDev.Event.Definitions,
   ...Integration.Event.Definitions,
   ...Catalog.Event.Definitions,
+  ...Agent.Event.Definitions,
   ...coreDefinitions,
 )
 

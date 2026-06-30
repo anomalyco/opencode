@@ -7,26 +7,28 @@ test("exposes every standard HTTP API group", () => {
   expect(Object.keys(client)).toEqual([
     "health",
     "location",
-    "agents",
-    "sessions",
-    "messages",
-    "models",
+    "agent",
+    "session",
+    "message",
+    "model",
     "generate",
-    "providers",
-    "integrations",
-    "credentials",
-    "permissions",
-    "files",
-    "commands",
-    "skills",
-    "events",
-    "ptys",
-    "questions",
-    "references",
-    "projectCopies",
+    "provider",
+    "integration",
+    "credential",
+    "project",
+    "permission",
+    "file",
+    "command",
+    "skill",
+    "event",
+    "pty",
+    "shell",
+    "question",
+    "reference",
+    "projectCopy",
   ])
-  expect(Object.keys(client.messages)).toEqual(["list"])
-  expect(Object.keys(client.integrations)).toEqual([
+  expect(Object.keys(client.message)).toEqual(["list"])
+  expect(Object.keys(client.integration)).toEqual([
     "list",
     "get",
     "connectKey",
@@ -35,11 +37,95 @@ test("exposes every standard HTTP API group", () => {
     "attemptComplete",
     "attemptCancel",
   ])
-  expect(Object.keys(client.files)).toEqual(["list", "find"])
-  expect(Object.keys(client.ptys)).toEqual(["list", "create", "get", "update", "remove"])
+  expect(Object.keys(client.file)).toEqual(["read", "list", "find"])
+  expect(Object.keys(client.pty)).toEqual(["list", "create", "get", "update", "remove"])
+  expect(Object.keys(client.shell)).toEqual(["list", "create", "get", "output", "remove"])
+  expect(Object.keys(client.project)).toEqual(["current", "directories"])
 })
 
-test("sessions.get returns the wire projection", async () => {
+test("file.read returns binary content from the public HTTP contract", async () => {
+  let request: Request | undefined
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async (input) => {
+      request = input instanceof Request ? input : new Request(input)
+      return new Response(new Uint8Array([104, 105]))
+    },
+  })
+
+  const content = await client.file.read({
+    path: "src/a b#c.ts",
+    location: { directory: "/tmp/project" },
+  })
+
+  expect(Array.from(content)).toEqual([104, 105])
+  expect(request?.url).toBe(
+    "http://localhost:3000/api/fs/read/src/a%20b%23c.ts?location%5Bdirectory%5D=%2Ftmp%2Fproject",
+  )
+})
+
+test("project methods use the public HTTP contract", async () => {
+  const requests: string[] = []
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async (input) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url
+      requests.push(url)
+      if (url.includes("/directories")) return Response.json([])
+      return Response.json({ id: "proj_test", directory: "/tmp/project" })
+    },
+  })
+
+  const current = await client.project.current({ location: { workspace: "wrk_test" } })
+  const directories = await client.project.directories({
+    projectID: current.id,
+    location: { directory: current.directory },
+  })
+
+  expect(current).toEqual({ id: "proj_test", directory: "/tmp/project" })
+  expect(directories).toEqual([])
+  expect(requests).toEqual([
+    "http://localhost:3000/api/project/current?location%5Bworkspace%5D=wrk_test",
+    "http://localhost:3000/api/project/proj_test/directories?location%5Bdirectory%5D=%2Ftmp%2Fproject",
+  ])
+})
+
+test("shell list and remove use the public HTTP contract", async () => {
+  const requests: Array<{ method: string; url: string }> = []
+  const shell = {
+    id: "sh_test",
+    status: "running",
+    command: "pwd",
+    cwd: "/tmp/project",
+    shell: "/bin/zsh",
+    file: "/tmp/opencode-shell",
+    metadata: { sessionID: "ses_test" },
+    time: { started: 1_717_171_717_000 },
+  }
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init)
+      requests.push({ method: request.method, url: request.url })
+      if (request.method === "DELETE") return new Response(null, { status: 204 })
+      return Response.json({
+        location: { directory: "/tmp/project", project: { id: "proj_test", directory: "/tmp/project" } },
+        data: [shell],
+      })
+    },
+  })
+
+  const result = await client.shell.list({ location: { directory: "/tmp/project" } })
+  await client.shell.remove({ id: shell.id })
+
+  expect(result.data).toEqual([shell])
+  expect(requests).toEqual([
+    { method: "GET", url: "http://localhost:3000/api/shell?location%5Bdirectory%5D=%2Ftmp%2Fproject" },
+    { method: "DELETE", url: "http://localhost:3000/api/shell/sh_test" },
+  ])
+})
+
+test("session.get returns the wire projection", async () => {
   const client = OpenCode.make({
     baseUrl: "http://localhost:3000",
     fetch: async (input) => {
@@ -50,12 +136,12 @@ test("sessions.get returns the wire projection", async () => {
     },
   })
 
-  const result = await client.sessions.get({ sessionID: "ses_test" })
+  const result = await client.session.get({ sessionID: "ses_test" })
 
   expect(result.time.created).toBe(1_717_171_717_000)
 })
 
-test("events.subscribe exposes the Promise event stream wire projection", async () => {
+test("event.subscribe exposes the Promise event stream wire projection", async () => {
   const client = OpenCode.make({
     baseUrl: "http://localhost:3000",
     fetch: async () =>
@@ -66,19 +152,19 @@ test("events.subscribe exposes the Promise event stream wire projection", async 
       ),
   })
   const events = []
-  for await (const event of client.events.subscribe()) events.push(event)
+  for await (const event of client.event.subscribe()) events.push(event)
 
   expect(events).toEqual([{ id: "evt_connected", type: "server.connected", data: {} }, modelSwitchedEvent])
   expect(events[1]?.type === "session.next.model.switched" && events[1].data.timestamp).toBe(1_717_171_717_000)
 })
 
-test("events.subscribe terminates on malformed Promise SSE data", async () => {
+test("event.subscribe terminates on malformed Promise SSE data", async () => {
   const client = OpenCode.make({
     baseUrl: "http://localhost:3000",
     fetch: async () => new Response("data: {not-json}\n\n", { headers: { "content-type": "text/event-stream" } }),
   })
 
-  await expect(client.events.subscribe()[Symbol.asyncIterator]().next()).rejects.toMatchObject({
+  await expect(client.event.subscribe()[Symbol.asyncIterator]().next()).rejects.toMatchObject({
     name: "ClientError",
     reason: "MalformedResponse",
   })
@@ -113,31 +199,31 @@ test("session methods use the public HTTP contract", async () => {
     },
   })
 
-  const page = await client.sessions.list({ limit: 10, order: "desc" })
-  const active = await client.sessions.active()
-  const created = await client.sessions.create({ location: { directory: "/tmp/project" } })
-  await client.sessions.switchAgent({ sessionID: "ses_test", agent: "build" })
-  await client.sessions.switchModel({
+  const page = await client.session.list({ limit: 10, order: "desc" })
+  const active = await client.session.active()
+  const created = await client.session.create({ location: { directory: "/tmp/project" } })
+  await client.session.switchAgent({ sessionID: "ses_test", agent: "build" })
+  await client.session.switchModel({
     sessionID: "ses_test",
     model: { id: "claude", providerID: "anthropic" },
   })
-  const admitted = await client.sessions.prompt({
+  const admitted = await client.session.prompt({
     sessionID: "ses_test",
     prompt: { text: "Hello" },
     resume: false,
   })
-  await client.sessions.compact({ sessionID: "ses_test" })
-  await client.sessions.wait({ sessionID: "ses_test" })
-  const context = await client.sessions.context({ sessionID: "ses_test" })
-  const history = await client.sessions.history({ sessionID: "ses_test", after: 0, limit: 1 })
+  await client.session.compact({ sessionID: "ses_test" })
+  await client.session.wait({ sessionID: "ses_test" })
+  const context = await client.session.context({ sessionID: "ses_test" })
+  const history = await client.session.history({ sessionID: "ses_test", after: 0, limit: 1 })
   const historyAfter = history.data.at(-1)?.durable?.seq
   const historyNext = history.hasMore
-    ? await client.sessions.history({ sessionID: "ses_test", after: historyAfter, limit: 2 })
+    ? await client.session.history({ sessionID: "ses_test", after: historyAfter, limit: 2 })
     : undefined
   const events = []
-  for await (const event of client.sessions.events({ sessionID: "ses_test", after: 0 })) events.push(event)
-  await client.sessions.interrupt({ sessionID: "ses_test" })
-  const message = await client.sessions.message({ sessionID: "ses_test", messageID: "msg_model" })
+  for await (const event of client.session.events({ sessionID: "ses_test", after: 0 })) events.push(event)
+  await client.session.interrupt({ sessionID: "ses_test" })
+  const message = await client.session.message({ sessionID: "ses_test", messageID: "msg_model" })
 
   expect(page.cursor.next).toBe("next")
   expect(active).toEqual({ ses_test: { type: "running" } })
@@ -180,14 +266,14 @@ test("middleware errors remain declared client errors", async () => {
   })
 
   try {
-    await client.sessions.create({})
+    await client.session.create({})
     throw new Error("Expected request to fail")
   } catch (error) {
     expect(isUnauthorizedError(error)).toBe(true)
   }
 })
 
-test("sessions.history decodes SessionNotFoundError", async () => {
+test("session.history decodes SessionNotFoundError", async () => {
   const client = OpenCode.make({
     baseUrl: "http://localhost:3000",
     fetch: async () =>
@@ -198,7 +284,7 @@ test("sessions.history decodes SessionNotFoundError", async () => {
   })
 
   try {
-    await client.sessions.history({ sessionID: "ses_missing" })
+    await client.session.history({ sessionID: "ses_missing" })
     throw new Error("Expected request to fail")
   } catch (error) {
     expect(isSessionNotFoundError(error)).toBe(true)

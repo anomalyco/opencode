@@ -124,6 +124,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
       },
       "session.next.moved": () => Effect.void,
       "session.next.renamed": () => Effect.void,
+      "session.next.forked": () => Effect.void,
       "session.next.prompted": (event) => {
         return adapter.appendMessage(
           SessionMessage.User.make({
@@ -154,6 +155,17 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
             text: event.data.text,
             id: event.data.messageID,
             type: "synthetic",
+            time: { created: event.data.timestamp },
+          }),
+        )
+      },
+      "session.next.skill.activated": (event) => {
+        return adapter.appendMessage(
+          SessionMessage.Skill.make({
+            id: event.data.messageID,
+            type: "skill",
+            name: event.data.name,
+            text: event.data.text,
             time: { created: event.data.timestamp },
           }),
         )
