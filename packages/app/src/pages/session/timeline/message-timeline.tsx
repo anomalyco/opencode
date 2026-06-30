@@ -736,8 +736,9 @@ export function MessageTimeline(props: {
     if (!sessionID() || parentID()) return
     setTitle({ editing: true, draft: titleLabel() ?? "" })
     requestAnimationFrame(() => {
-      titleRef?.focus()
-      titleRef?.select()
+      if (!titleRef) return
+      titleRef.focus()
+      titleRef.select()
     })
   }
 
@@ -1357,7 +1358,7 @@ export function MessageTimeline(props: {
               "w-full": true,
               "pb-4": true,
               "pr-3": true,
-              "pl-4": settings.general.newLayoutDesigns(),
+              "pl-2": settings.general.newLayoutDesigns(),
               "pl-2 md:pl-4": !settings.general.newLayoutDesigns(),
               "md:max-w-200 md:mx-auto 2xl:max-w-[1000px]": props.centered && !settings.general.newLayoutDesigns(),
             }}
@@ -1369,7 +1370,7 @@ export function MessageTimeline(props: {
                   "pr-3": !settings.general.newLayoutDesigns(),
                 }}
               >
-                <div class="flex items-center min-w-0 grow-1">
+                <div class="flex items-center min-w-0 flex-1 w-full">
                   <Show when={parentID()}>
                     <button
                       type="button"
@@ -1393,8 +1394,13 @@ export function MessageTimeline(props: {
                       fallback={
                         <h1
                           data-slot="session-title-child"
-                          class="text-14-medium text-text-strong truncate grow-1 min-w-0"
-                          onDblClick={openTitleEditor}
+                          classList={{
+                            "text-14-medium text-text-strong truncate": true,
+                            "w-fit rounded-[6px] px-2 py-1 hover:bg-v2-overlay-simple-overlay-hover":
+                              settings.general.newLayoutDesigns(),
+                            "grow-1 min-w-0": !settings.general.newLayoutDesigns(),
+                          }}
+                          onClick={openTitleEditor}
                         >
                           {childTitle()}
                         </h1>
@@ -1408,10 +1414,10 @@ export function MessageTimeline(props: {
                         value={title.draft}
                         disabled={titleMutation.isPending}
                         classList={{
-                          "text-14-medium text-text-strong grow-1 min-w-0 pl-1 -ml-1": true,
-                          "h-6 leading-4 rounded-[3px] focus:shadow-none focus:outline focus:outline-1 focus:outline-offset-[-1px] focus:outline-v2-border-border-focus":
+                          "text-14-medium text-text-strong block": true,
+                          "w-full flex-1 grow-1 min-w-0 pl-1 -ml-1 rounded-[6px]": !settings.general.newLayoutDesigns(),
+                          "field-sizing-content self-start rounded-[6px] px-2 py-1 ":
                             settings.general.newLayoutDesigns(),
-                          "rounded-[6px]": !settings.general.newLayoutDesigns(),
                         }}
                         style={{
                           "--inline-input-shadow": settings.general.newLayoutDesigns()

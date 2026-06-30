@@ -13,6 +13,9 @@ import type { Session } from "@opencode-ai/sdk/v2"
 import { canOpenTabRename, forwardTabRef } from "./titlebar-tab-gesture"
 import "./titlebar-tab-nav.css"
 
+// MouseEvent.button uses 1 for the middle/wheel button.
+const MIDDLE_MOUSE_BUTTON = 1
+
 export function TabNavItem(props: {
   ref?: Ref<HTMLDivElement>
   href: string
@@ -184,7 +187,12 @@ export function TabNavItem(props: {
       data-dragging={props.dragging}
       data-pressed={props.pressed}
       onMouseDown={(event) => {
-        if (event.button !== 1) return
+        if (event.button !== MIDDLE_MOUSE_BUTTON) return
+        event.preventDefault()
+        event.stopPropagation()
+      }}
+      onAuxClick={(event) => {
+        if (event.button !== MIDDLE_MOUSE_BUTTON) return
         closeTab(event)
       }}
     >
@@ -302,7 +310,12 @@ export function DraftTabItem(props: {
       class="group relative flex h-7 w-full min-w-0 flex-row items-center gap-1.5 overflow-hidden rounded-[6px] bg-[var(--tab-bg)] px-1.5 [container-type:inline-size] whitespace-nowrap [--tab-bg:var(--v2-background-bg-deep)] hover:[--tab-bg:var(--v2-background-bg-layer-02)] has-[>a:focus-visible]:[--tab-bg:var(--v2-background-bg-layer-02)] data-[active='true']:[--tab-bg:var(--v2-background-bg-layer-02)] data-[dragging='true']:[--tab-bg:var(--v2-background-bg-layer-02)] data-[pressed='true']:[--tab-bg:var(--v2-background-bg-layer-02)] data-[editing='true']:[--tab-bg:var(--v2-background-bg-layer-02)]"
       classList={{ invisible: props.hidden }}
       onMouseDown={(event) => {
-        if (event.button !== 1) return
+        if (event.button !== MIDDLE_MOUSE_BUTTON) return
+        event.preventDefault()
+        event.stopPropagation()
+      }}
+      onAuxClick={(event) => {
+        if (event.button !== MIDDLE_MOUSE_BUTTON) return
         closeTab(event)
       }}
     >

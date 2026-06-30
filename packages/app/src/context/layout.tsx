@@ -78,6 +78,7 @@ export type LocalProject = Partial<Project> & { worktree: string; expanded: bool
 export type HomeProjectSelection = { server: ServerConnection.Key; directory?: string }
 
 export type ReviewDiffStyle = "unified" | "split"
+export type ReviewPanelSource = "context-button" | "other"
 
 export type LayoutRoute =
   | { type: "home" }
@@ -304,6 +305,9 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         },
       }),
     )
+    const [ephemeral, setEphemeral] = createStore({
+      reviewPanelSource: "other" as ReviewPanelSource,
+    })
 
     const MAX_SESSION_KEYS = 50
     const PENDING_MESSAGE_TTL_MS = 2 * 60 * 1000
@@ -780,6 +784,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         const s = createMemo(() => store.sessionView[key()] ?? { scroll: {} })
         const terminalOpened = createMemo(() => store.terminal?.opened ?? false)
         const reviewPanelOpened = createMemo(() => store.review?.panelOpened ?? DEFAULT_REVIEW_PANEL_OPENED)
+        const reviewPanelSource = createMemo(() => (reviewPanelOpened() ? ephemeral.reviewPanelSource : "other"))
 
         function setTerminalOpened(next: boolean) {
           const current = store.terminal
@@ -793,16 +798,26 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           setStore("terminal", "opened", next)
         }
 
-        function setReviewPanelOpened(next: boolean) {
+        function setReviewPanelOpened(next: boolean, source: ReviewPanelSource) {
+          const nextSource = next ? source : "other"
           const current = store.review
           if (!current) {
-            setStore("review", { diffStyle: "split" as ReviewDiffStyle, panelOpened: next })
+            batch(() => {
+              setStore("review", { diffStyle: "split" as ReviewDiffStyle, panelOpened: next })
+              setEphemeral("reviewPanelSource", nextSource)
+            })
             return
           }
 
           const value = current.panelOpened ?? DEFAULT_REVIEW_PANEL_OPENED
-          if (value === next) return
-          setStore("review", "panelOpened", next)
+          if (value === next) {
+            if (ephemeral.reviewPanelSource !== nextSource) setEphemeral("reviewPanelSource", nextSource)
+            return
+          }
+          batch(() => {
+            setStore("review", "panelOpened", next)
+            setEphemeral("reviewPanelSource", nextSource)
+          })
         }
 
         return {
@@ -838,14 +853,15 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           },
           reviewPanel: {
             opened: reviewPanelOpened,
-            open() {
-              setReviewPanelOpened(true)
+            source: reviewPanelSource,
+            open(source: ReviewPanelSource = "other") {
+              setReviewPanelOpened(true, source)
             },
             close() {
-              setReviewPanelOpened(false)
+              setReviewPanelOpened(false, "other")
             },
             toggle() {
-              setReviewPanelOpened(!reviewPanelOpened())
+              setReviewPanelOpened(!reviewPanelOpened(), "other")
             },
           },
           review: {

@@ -26,7 +26,7 @@ function openSessionContext(args: {
   layout: ReturnType<typeof useLayout>
   tabs: ReturnType<ReturnType<typeof useLayout>["tabs"]>
 }) {
-  if (!args.view.reviewPanel.opened()) args.view.reviewPanel.open()
+  args.view.reviewPanel.open(args.view.reviewPanel.opened() ? "other" : "context-button")
   if (args.layout.fileTree.opened() && args.layout.fileTree.tab() !== "all") args.layout.fileTree.setTab("all")
   void args.tabs.open("context")
   args.tabs.setActive("context")
@@ -64,16 +64,25 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
   const cost = createMemo(() => {
     return usd().format(info()?.cost ?? 0)
   })
+  const contextVisible = createMemo(() => view().reviewPanel.opened() && tabState.activeTab() === "context")
+  const hasOtherTabs = createMemo(() =>
+    tabs()
+      .all()
+      .some((tab) => tab !== "context" && tab !== "review"),
+  )
 
   const openContext = () => {
     if (!params.id) return
 
-    if (tabState.activeTab() === "context") {
+    const sessionView = view()
+    if (contextVisible()) {
       tabs().close("context")
+      if (sessionView.reviewPanel.source() === "context-button" && !hasOtherTabs()) sessionView.reviewPanel.close()
       return
     }
+
     openSessionContext({
-      view: view(),
+      view: sessionView,
       layout,
       tabs: tabs(),
     })
@@ -81,7 +90,20 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
 
   const circle = () => (
     <div class="flex items-center justify-center">
-      <ProgressCircle size={16} strokeWidth={2} percentage={context()?.usage ?? 0} />
+      <ProgressCircle
+        size={16}
+        strokeWidth={2}
+        percentage={context()?.usage ?? 0}
+        style={
+          variant() === "indicator"
+            ? {
+                "--progress-circle-background": "var(--v2-background-bg-layer-04, var(--border-weak-base))",
+                "--progress-circle-background-overlay": "var(--v2-overlay-simple-overlay-pressed, transparent)",
+                "--progress-circle-progress": "var(--v2-icon-icon-base, var(--icon-base))",
+              }
+            : undefined
+        }
+      />
     </div>
   )
   const circleV2 = () => (
@@ -119,10 +141,10 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
 
   return (
     <Show when={params.id}>
-      <Tooltip value={tooltipValue()} placement={props.placement ?? "top"}>
-        <Switch>
-          <Match when={variant() === "indicator"}>{circle()}</Match>
-          <Match when={buttonAppearance() === "v2"}>
+      <Switch>
+        <Match when={variant() === "indicator"}>{circle()}</Match>
+        <Match when={buttonAppearance() === "v2"}>
+          <Tooltip value={tooltipValue()} placement={props.placement ?? "top"}>
             <IconButtonV2
               type="button"
               variant="ghost-muted"
@@ -131,8 +153,10 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
               onClick={openContext}
               aria-label={language.t("context.usage.view")}
             />
-          </Match>
-          <Match when={true}>
+          </Tooltip>
+        </Match>
+        <Match when={true}>
+          <Tooltip value={tooltipValue()} placement={props.placement ?? "top"}>
             <Button
               type="button"
               variant="ghost"
@@ -142,9 +166,9 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
             >
               {circle()}
             </Button>
-          </Match>
-        </Switch>
-      </Tooltip>
+          </Tooltip>
+        </Match>
+      </Switch>
     </Show>
   )
 }
