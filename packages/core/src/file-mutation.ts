@@ -1,5 +1,6 @@
 export * as FileMutation from "./file-mutation"
 
+import { makeLocationNode } from "./effect/app-node"
 import { Context, Effect, Layer, Schema } from "effect"
 import { dirname } from "path"
 import { KeyedMutex } from "./effect/keyed-mutex"
@@ -191,6 +192,8 @@ function sameBytes(left: Uint8Array, right: Uint8Array) {
 }
 
 export const locationLayer = layer
+
+export const node = makeLocationNode({ service: Service, layer, deps: [FSUtil.node] })
 
 /**
  * Deferred until the corresponding V2 integrations exist.

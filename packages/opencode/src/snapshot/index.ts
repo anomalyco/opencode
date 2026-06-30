@@ -9,6 +9,7 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Hash } from "@opencode-ai/core/util/hash"
 import { Config } from "@/config/config"
 import { Global } from "@opencode-ai/core/global"
+import { Info } from "@opencode-ai/schema/file-diff"
 
 export const Patch = Schema.Struct({
   hash: Schema.String,
@@ -16,16 +17,7 @@ export const Patch = Schema.Struct({
 })
 export type Patch = typeof Patch.Type
 
-export const FileDiff = Schema.Struct({
-  // Optional because legacy/imported `summary_diffs` on disk may omit
-  // file details and patch text. Required Schema rejected the whole
-  // session response and broke session loading on Desktop.
-  file: Schema.optional(Schema.String),
-  patch: Schema.optional(Schema.String),
-  additions: Schema.Finite,
-  deletions: Schema.Finite,
-  status: Schema.optional(Schema.Literals(["added", "deleted", "modified"])),
-}).annotate({ identifier: "SnapshotFileDiff" })
+export const FileDiff = Info
 export type FileDiff = typeof FileDiff.Type
 
 const prune = "7.days"
@@ -54,7 +46,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Snapshot") {}
 
-export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | Config.Service> = Layer.effect(
+const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | Config.Service> = Layer.effect(
   Service,
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
@@ -82,7 +74,9 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
 
         const args = (cmd: string[]) => ["--git-dir", state.gitdir, "--work-tree", state.worktree, ...cmd]
 
-        const feed = (list: string[]) => list.join("\0") + "\0"
+        const encodeNulTerminatedPaths = (files: string[]) => files.join("\0") + "\0"
+        const encodeTopLevelLiteralPathspecs = (files: string[]) =>
+          encodeNulTerminatedPaths(files.map((file) => `:(top,literal)${file}`))
 
         const git = Effect.fnUntraced(
           function* (cmd: string[], opts?: { cwd?: string; env?: Record<string, string>; stdin?: string }) {
@@ -107,6 +101,8 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
 
         const ignore = Effect.fnUntraced(function* (files: string[]) {
           if (!files.length) return new Set<string>()
+          // check-ignore treats a leading colon as pathspec magic but accepts and echoes a protective ./ prefix.
+          const checkIgnorePaths = files.map((item) => (item.startsWith(":") ? `./${item}` : item))
           const check = yield* git(
             [
               ...quote,
@@ -120,12 +116,17 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
               "-z",
             ],
             {
-              cwd: state.directory,
-              stdin: feed(files),
+              cwd: state.worktree,
+              stdin: encodeNulTerminatedPaths(checkIgnorePaths),
             },
           )
           if (check.code !== 0 && check.code !== 1) return new Set<string>()
-          return new Set(check.text.split("\0").filter(Boolean))
+          return new Set(
+            check.text
+              .split("\0")
+              .filter(Boolean)
+              .map((item) => (item.startsWith("./:") ? item.slice(2) : item)),
+          )
         })
 
         const drop = Effect.fnUntraced(function* (files: string[]) {
@@ -136,8 +137,8 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
               ...args(["rm", "--cached", "-f", "--ignore-unmatch", "--pathspec-from-file=-", "--pathspec-file-nul"]),
             ],
             {
-              cwd: state.directory,
-              stdin: feed(files),
+              cwd: state.worktree,
+              stdin: encodeTopLevelLiteralPathspecs(files),
             },
           )
         })
@@ -147,8 +148,8 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
           const result = yield* git(
             [...cfg, ...args(["add", "--all", "--sparse", "--pathspec-from-file=-", "--pathspec-file-nul"])],
             {
-              cwd: state.directory,
-              stdin: feed(files),
+              cwd: state.worktree,
+              stdin: encodeTopLevelLiteralPathspecs(files),
             },
           )
           if (result.code === 0) return
@@ -238,7 +239,7 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
               git([...quote, ...args(["diff-files", "--name-only", "-z", "--", "."])], {
                 cwd: state.directory,
               }),
-              git([...quote, ...args(["ls-files", "--others", "--exclude-standard", "-z", "--", "."])], {
+              git([...quote, ...args(["ls-files", "--full-name", "--others", "--exclude-standard", "-z", "--", "."])], {
                 cwd: state.directory,
               }),
             ],
@@ -277,7 +278,7 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
             (yield* Effect.all(
               allow.map((item) =>
                 fs
-                  .stat(path.join(state.directory, item))
+                  .stat(path.join(state.worktree, item))
                   .pipe(Effect.catch(() => Effect.void))
                   .pipe(
                     Effect.map((stat) => {
@@ -797,12 +798,10 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
   }),
 )
 
-export const defaultLayer = layer.pipe(
-  Layer.provide(AppProcess.defaultLayer),
-  Layer.provide(FSUtil.defaultLayer),
-  Layer.provide(Config.defaultLayer),
-)
-
-export const node = LayerNode.make(layer, [FSUtil.node, AppProcess.node, Config.node])
+export const node = LayerNode.make({
+  service: Service,
+  layer: layer,
+  deps: [FSUtil.node, AppProcess.node, Config.node],
+})
 
 export * as Snapshot from "."

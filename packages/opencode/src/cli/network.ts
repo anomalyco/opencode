@@ -37,6 +37,22 @@ export type NetworkOptions = InferredOptionTypes<typeof options>
 export function withNetworkOptions<T>(yargs: Argv<T>) {
   return yargs.options(options)
 }
+
+export function hasArg(name: string) {
+  return networkArgs().some((arg) => arg === name || arg.startsWith(name + "="))
+}
+
+function hasBooleanArg(name: string) {
+  return networkArgs().some(
+    (arg) => arg === name || arg === name + "=true" || arg === name + "=false" || arg === "--no-" + name.slice(2),
+  )
+}
+
+function networkArgs() {
+  const separator = process.argv.indexOf("--")
+  return process.argv.slice(2, separator === -1 ? undefined : separator)
+}
+
 export const resolveNetworkOptions = Effect.fn("Cli.resolveNetworkOptions")(function* (args: NetworkOptions) {
   const { Config } = yield* Effect.promise(() => import("@/config/config"))
   const config = yield* Config.Service.use((cfg) => cfg.getGlobal())
@@ -44,10 +60,10 @@ export const resolveNetworkOptions = Effect.fn("Cli.resolveNetworkOptions")(func
 })
 
 export function resolveNetworkOptionsNoConfig(args: NetworkOptions, config?: ConfigV1.Info) {
-  const portExplicitlySet = process.argv.includes("--port")
-  const hostnameExplicitlySet = process.argv.includes("--hostname")
-  const mdnsExplicitlySet = process.argv.includes("--mdns")
-  const mdnsDomainExplicitlySet = process.argv.includes("--mdns-domain")
+  const portExplicitlySet = hasArg("--port")
+  const hostnameExplicitlySet = hasArg("--hostname")
+  const mdnsExplicitlySet = hasBooleanArg("--mdns")
+  const mdnsDomainExplicitlySet = hasArg("--mdns-domain")
   const mdns = mdnsExplicitlySet ? args.mdns : (config?.server?.mdns ?? args.mdns)
   const mdnsDomain = mdnsDomainExplicitlySet ? args["mdns-domain"] : (config?.server?.mdnsDomain ?? args["mdns-domain"])
   const port = portExplicitlySet ? args.port : (config?.server?.port ?? args.port)

@@ -1,5 +1,6 @@
 export * as BuiltInTools from "./builtins"
 
+import { makeLocationNode } from "../effect/app-node"
 import { Layer } from "effect"
 import { BashTool } from "./bash"
 import { ApplyPatchTool } from "./apply-patch"
@@ -42,3 +43,22 @@ export const locationLayer = Layer.mergeAll(
   WebSearchTool.layer.pipe(Layer.provide(WebSearchTool.defaultConfigLayer)),
   WriteTool.layer,
 )
+
+export const node = makeLocationNode({
+  name: "built-in-tools",
+  layer: Layer.empty,
+  deps: [
+    ApplyPatchTool.node,
+    BashTool.node,
+    EditTool.node,
+    GlobTool.node,
+    GrepTool.node,
+    QuestionTool.node,
+    ReadTool.node,
+    SkillTool.node,
+    TodoWriteTool.node,
+    WebFetchTool.node,
+    WebSearchTool.node,
+    WriteTool.node,
+  ],
+})
