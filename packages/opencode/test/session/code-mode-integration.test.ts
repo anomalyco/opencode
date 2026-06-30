@@ -162,6 +162,22 @@ describe("code mode integration (real MCP server)", () => {
     expect(out.attachments).toEqual([{ type: "file", mime: "image/png", url: `data:image/png;base64,${PNG}` }])
   })
 
+  test("an attachment's bytes are readable and routable in code, not opaque", async () => {
+    // The data: URL carrying the base64 payload is an ordinary string in the
+    // sandbox: the program can inspect it (and thus route it into another tool).
+    const out = await run(`
+      const shot = await tools.fixtures.screenshot({})
+      const url = shot.attachments[0].url
+      return { result: { mime: shot.attachments[0].mime, isDataUrl: url.startsWith('data:'), bytes: url.length } }
+    `)
+    expect(JSON.parse(out.output)).toEqual({
+      mime: "image/png",
+      isDataUrl: true,
+      bytes: `data:image/png;base64,${PNG}`.length,
+    })
+    expect(out.attachments).toBeUndefined()
+  })
+
   test("drops media when only .result is returned", async () => {
     const out = await run("const r = await tools.fixtures.screenshot({}); return { result: 'captured' }")
     expect(out.output).toBe("captured")
