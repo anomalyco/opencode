@@ -526,4 +526,25 @@ EOF`
       expect(yield* readText(target)).toBe(`He said "hi"\nsome${emDash}dash\nend\n`)
     }),
   )
+
+  it.instance("matches with NFC/NFD Unicode differences", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const { ctx } = makeCtx()
+      const target = path.join(test.directory, "nfc-nfd.txt")
+      // e with acute accent in NFD form (e + combining acute)
+      const nfd = "re\u0301sume\u0301"
+      // Same word in NFC form (single codepoint precomposed)
+      const nfc = "r\u00E9sum\u00E9"
+      // File uses NFD form
+      yield* writeText(target, `before\n${nfd}\nafter\n`)
+
+      // Patch uses NFC form — should match via NFC normalized pass
+      const patchText = `*** Begin Patch\n*** Update File: nfc-nfd.txt\n@@\n-${nfc}\n+caf\u00E9\n*** End Patch`
+
+      yield* execute({ patchText }, ctx)
+      // Result uses the replacement from the patch (NFC)
+      expect(yield* readText(target)).toBe(`before\ncaf\u00E9\nafter\n`)
+    }),
+  )
 })
