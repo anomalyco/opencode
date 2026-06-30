@@ -25,7 +25,7 @@ const Handlers = Runtime.handlers(Commands, {
 })
 
 Runtime.run(Commands, Handlers, { version: "local" }).pipe(
-  Effect.provide(Daemon.defaultLayer),
+  Effect.provide(Daemon.layer),
   Effect.provide(NodeServices.layer),
   Effect.scoped,
   NodeRuntime.runMain,

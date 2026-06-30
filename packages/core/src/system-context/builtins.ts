@@ -43,14 +43,8 @@ const builtIns = Layer.effectDiscard(
   }),
 )
 
-export const layer = Layer.mergeAll(builtIns, InstructionContext.layer).pipe(
-  Layer.provideMerge(SystemContextRegistry.layer),
-)
-
-export const locationLayer = layer
-
 export const node = makeLocationNode({
   name: "system-context-builtins",
-  layer,
+  layer: builtIns,
   deps: [Location.node, SystemContextRegistry.node, InstructionContext.node, FSUtil.node, Global.node],
 })
