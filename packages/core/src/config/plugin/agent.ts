@@ -60,7 +60,6 @@ export const Plugin = define({
         const configuredDefault = Config.latest(documents, "default_agent")
         if (configuredDefault !== undefined) draft.default(AgentV2.ID.make(configuredDefault))
         for (const current of draft.list()) {
-          yield* Effect.log({ msg: "applying permissions", id: current.id, permissions: global })
           draft.update(current.id, (agent) => agent.permissions.push(...global))
         }
 
