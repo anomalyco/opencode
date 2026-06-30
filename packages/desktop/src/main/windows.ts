@@ -2,13 +2,14 @@ import windowState from "electron-window-state"
 import { resolveThemeVariant } from "@opencode-ai/ui/theme/resolve"
 import type { DesktopTheme } from "@opencode-ai/ui/theme/types"
 import oc2ThemeJson from "../../../ui/src/theme/themes/oc-2.json"
+import { randomUUID } from "node:crypto"
 import { app, BrowserWindow, dialog, net, nativeImage, nativeTheme, protocol } from "electron"
 import { dirname, isAbsolute, join, relative, resolve } from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import type { TitlebarTheme } from "../preload/types"
 import { exportDebugLogs, write as writeLog } from "./logging"
 import { getStore } from "./store"
-import { PINCH_ZOOM_ENABLED_KEY } from "./store-keys"
+import { PINCH_ZOOM_ENABLED_KEY, WINDOW_IDS_KEY } from "./store-keys"
 import { createUnresponsiveSampler } from "./unresponsive"
 
 const root = dirname(fileURLToPath(import.meta.url))
@@ -42,14 +43,22 @@ let relaunchHandler = () => {
   app.relaunch()
   app.exit(0)
 }
+let appQuitting = false
+let lastFocusedWindowID: string | undefined
 const titlebarThemes = new WeakMap<BrowserWindow, Partial<TitlebarTheme>>()
 const pinchZoomEnabled = new WeakMap<BrowserWindow, boolean>()
+const windowIDs = new WeakMap<BrowserWindow, string>()
+const windowsByID = new Map<string, BrowserWindow>()
 const titlebarHeight = 40
 const maxZoomLevel = 10
 const minZoomLevel = 0.2
 
 export function setRelaunchHandler(handler: () => void) {
   relaunchHandler = handler
+}
+
+export function setAppQuitting() {
+  appQuitting = true
 }
 
 export function setBackgroundColor(color: string) {
@@ -111,13 +120,31 @@ export function getPinchZoomEnabled() {
   return getStore().get(PINCH_ZOOM_ENABLED_KEY) === true
 }
 
+export function getWindowID(win: BrowserWindow) {
+  return windowIDs.get(win)
+}
+
+export function getLastFocusedWindow() {
+  const focused = BrowserWindow.getFocusedWindow()
+  if (focused) return focused
+  if (!lastFocusedWindowID) return null
+  const win = windowsByID.get(lastFocusedWindowID)
+  if (!win || win.isDestroyed()) return null
+  return win
+}
+
+export function restoreMainWindows() {
+  const ids = readWindowIDs()
+  return (ids.length ? ids : [randomUUID()]).map((id) => createMainWindow(id))
+}
+
 export function setDockIcon() {
   if (process.platform !== "darwin") return
   const icon = nativeImage.createFromPath(join(iconsDir(), "dock.png"))
   if (!icon.isEmpty()) app.dock?.setIcon(icon)
 }
 
-export function createMainWindow() {
+export function createMainWindow(id: string = randomUUID()) {
   const state = windowState({
     defaultWidth: 1280,
     defaultHeight: 800,
@@ -155,8 +182,10 @@ export function createMainWindow() {
     },
   })
 
+  registerWindow(win, id)
+
   allowRendererPermissions(win)
-  wireWindowRecovery(win, "main")
+  wireWindowRecovery(win, id)
 
   win.webContents.session.webRequest.onBeforeSendHeaders((details, callback) => {
     const { requestHeaders } = details
@@ -179,6 +208,41 @@ export function createMainWindow() {
   })
 
   return win
+}
+
+function registerWindow(win: BrowserWindow, id: string) {
+  windowIDs.set(win, id)
+  windowsByID.set(id, win)
+  persistWindowID(id)
+
+  win.on("focus", () => {
+    lastFocusedWindowID = id
+  })
+  win.on("closed", () => {
+    windowsByID.delete(id)
+    if (lastFocusedWindowID === id) lastFocusedWindowID = windowsByID.keys().next().value
+    if (!appQuitting) removeWindowID(id)
+  })
+}
+
+function readWindowIDs() {
+  const value = getStore().get(WINDOW_IDS_KEY)
+  if (!Array.isArray(value)) return []
+  return value.filter((id): id is string => typeof id === "string" && id.length > 0)
+}
+
+function writeWindowIDs(ids: string[]) {
+  getStore().set(WINDOW_IDS_KEY, [...new Set(ids)])
+}
+
+function persistWindowID(id: string) {
+  const ids = readWindowIDs()
+  if (ids.includes(id)) return
+  writeWindowIDs([...ids, id])
+}
+
+function removeWindowID(id: string) {
+  writeWindowIDs(readWindowIDs().filter((item) => item !== id))
 }
 
 export function registerRendererProtocol() {

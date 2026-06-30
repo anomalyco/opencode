@@ -73,6 +73,7 @@ const api: ElectronAPI = {
   storeLength: (name) => ipcRenderer.invoke("store-length", name),
 
   getWindowCount: () => ipcRenderer.invoke("get-window-count"),
+  getWindowID: () => ipcRenderer.invoke("get-window-id"),
   onMenuCommand: (cb) => {
     const handler = (_: unknown, id: string) => cb(id)
     ipcRenderer.on("menu-command", handler)
