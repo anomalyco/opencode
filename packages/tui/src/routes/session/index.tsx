@@ -413,12 +413,6 @@ export function Session() {
     dialog.clear()
   }
 
-  function toBottom() {
-    setTimeout(() => {
-      if (!scroll || scroll.isDestroyed) return
-      scroll.scrollTo(scroll.scrollHeight)
-    }, 50)
-  }
 
   const local = useLocal()
 
@@ -619,7 +613,6 @@ export function Session() {
             messageID: message.id,
           })
           .then(() => {
-            toBottom()
           })
         const parts = sync.data.part[message.id]
         prompt?.set(
@@ -1139,8 +1132,6 @@ export function Session() {
     }
   })
 
-  // snap to bottom when session changes
-  createEffect(on(() => route.sessionID, toBottom))
 
   return (
     <LocationProvider location={location()}>
@@ -1302,7 +1293,7 @@ export function Session() {
                     session_id={route.sessionID}
                     visible={visible()}
                     disabled={disabled()}
-                    on_submit={toBottom}
+                    on_submit={() => {}}
                     ref={bind}
                   >
                     <Prompt
@@ -1310,7 +1301,6 @@ export function Session() {
                       ref={bind}
                       disabled={disabled()}
                       onSubmit={() => {
-                        toBottom()
                       }}
                       sessionID={route.sessionID}
                       right={<pluginRuntime.Slot name="session_prompt_right" session_id={route.sessionID} />}
