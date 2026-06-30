@@ -1,4 +1,5 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { makeGlobalNode, Node } from "@opencode-ai/core/effect/app-node"
 import { GlobalBus } from "@/bus/global"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { WorkspaceContext } from "@/control-plane/workspace-context"
@@ -8,7 +9,6 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Context, Deferred, Duration, Effect, Exit, Layer, Scope } from "effect"
 import { type InstanceContext } from "./instance-context"
 import { InstanceBootstrap } from "./bootstrap-service"
-import { InstanceBootstrap as InstanceBootstrapGraph } from "./bootstrap"
 import * as Project from "./project"
 
 export interface LoadInput {
@@ -204,10 +204,12 @@ export const layer: Layer.Layer<Service, never, Project.Service | InstanceBootst
 
 export const defaultLayer = layer.pipe(Layer.provide(Project.defaultLayer))
 
-export const node = LayerNode.make({
+export const bootstrapNode = LayerNode.unbound(InstanceBootstrap.Service, Node.tags.values.global)
+
+export const node = makeGlobalNode({
   service: Service,
   layer: layer,
-  deps: [Project.node, InstanceBootstrapGraph.node],
+  deps: [Project.node, bootstrapNode],
 })
 
 export * as InstanceStore from "./instance-store"

@@ -368,6 +368,8 @@ export const dict = {
   "zen.api.error.userMonthlyLimitReached":
     "월간 지출 한도인 ${{amount}}에 도달했습니다. 한도 관리를 여기서 하세요: {{membersUrl}}",
   "zen.api.error.modelDisabled": "모델이 비활성화되었습니다",
+  "zen.api.error.regionNotAllowed":
+    "이 모델은 중국에서 호스팅됩니다. 이 모델을 사용하려면 설정에서 활성화하세요: {{consoleGoUrl}}",
   "zen.api.error.trialEnded":
     "{{model}}의 무료 프로모션이 종료되었습니다. OpenCode Go를 구독하면 모델을 계속 사용할 수 있습니다 - {{link}}",
 
@@ -646,6 +648,9 @@ export const dict = {
   "workspace.lite.subscription.useBalance": "사용 한도 도달 후에는 보유 잔액 사용",
   "workspace.lite.subscription.selectProvider":
     'Go 모델을 사용하려면 opencode 설정에서 "OpenCode Go"를 공급자로 선택하세요.',
+  "workspace.lite.providers.title": "공급자",
+  "workspace.lite.providers.description": "라우팅에 사용할 공급자를 제어합니다.",
+  "workspace.lite.providers.useChina": "중국에서 호스팅되는 모델 활성화",
   "workspace.lite.black.message":
     "현재 OpenCode Black을 구독 중이거나 대기 명단에 등록되어 있습니다. Go로 전환하려면 먼저 구독을 취소해 주세요.",
   "workspace.lite.other.message":

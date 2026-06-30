@@ -356,6 +356,7 @@ export const dict = {
     "您的工作区已达到每月支出限额 ${{amount}}。请在此处管理您的限额：{{billingUrl}}",
   "zen.api.error.userMonthlyLimitReached": "您已达到每月支出限额 ${{amount}}。请在此处管理您的限额：{{membersUrl}}",
   "zen.api.error.modelDisabled": "模型已禁用",
+  "zen.api.error.regionNotAllowed": "该模型部署在中国。如果你想使用该模型，请在设置中启用它：{{consoleGoUrl}}",
   "zen.api.error.trialEnded": "{{model}} 的限免活动已结束。您可以订阅 OpenCode Go 继续使用该模型 - {{link}}",
 
   "black.meta.title": "OpenCode Black | 访问全球顶尖编程模型",
@@ -631,6 +632,9 @@ export const dict = {
   "workspace.lite.subscription.useBalance": "达到使用限额后使用您的可用余额",
   "workspace.lite.subscription.selectProvider":
     "在你的 opencode 配置中选择「OpenCode Go」作为提供商，即可使用 Go 模型。",
+  "workspace.lite.providers.title": "提供商",
+  "workspace.lite.providers.description": "控制用于路由的提供商。",
+  "workspace.lite.providers.useChina": "启用部署在中国的模型",
   "workspace.lite.black.message": "您当前已订阅 OpenCode Black 或在候补名单中。如需切换到 Go，请先取消订阅。",
   "workspace.lite.other.message": "此工作区中的另一位成员已经订阅了 OpenCode Go。每个工作区只有一名成员可以订阅。",
   "workspace.lite.promo.description":
