@@ -1,10 +1,10 @@
-import { afterEach, describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, spyOn, test } from "bun:test"
 import { NodeFileSystem } from "@effect/platform-node"
 import { Effect, Layer, Logger } from "effect"
 import fs from "fs/promises"
 import os from "os"
 import path from "path"
-import { fileLogger } from "../../src/observability/logging"
+import { fileLogger, stderrLogger } from "../../src/observability/logging"
 import { resource } from "../../src/observability/otlp"
 
 const otelResourceAttributes = process.env.OTEL_RESOURCE_ATTRIBUTES
@@ -106,4 +106,41 @@ test("file logger flattens nested objects", async () => {
   expect(line).toContain('tags="[\\\"api\\\",\\\"test\\\"]"')
   expect(line).toContain("session.id=session-1")
   expect(line).not.toContain("request={")
+})
+describe("stderr logger", () => {
+  const originalLevel = process.env.OPENCODE_LOG_LEVEL
+  afterEach(() => {
+    if (originalLevel === undefined) delete process.env.OPENCODE_LOG_LEVEL
+    else process.env.OPENCODE_LOG_LEVEL = originalLevel
+  })
+
+  const capture = (level: string) => {
+    process.env.OPENCODE_LOG_LEVEL = level
+    const writes: Array<string> = []
+    const spy = spyOn(process.stderr, "write").mockImplementation((chunk: string | Uint8Array) => {
+      writes.push(typeof chunk === "string" ? chunk : Buffer.from(chunk).toString())
+      return true
+    })
+    return Effect.gen(function* () {
+      yield* Effect.logInfo("info-line")
+      yield* Effect.logError("error-line")
+    })
+      .pipe(Effect.provide(Logger.layer([stderrLogger])), Effect.scoped, Effect.runPromise)
+      .then(() => {
+        spy.mockRestore()
+        return writes.join("")
+      })
+  }
+
+  test("drops records below OPENCODE_LOG_LEVEL", async () => {
+    const output = await capture("ERROR")
+    expect(output).not.toContain("info-line")
+    expect(output).toContain("error-line")
+  })
+
+  test("keeps records at or above OPENCODE_LOG_LEVEL", async () => {
+    const output = await capture("INFO")
+    expect(output).toContain("info-line")
+    expect(output).toContain("error-line")
+  })
 })

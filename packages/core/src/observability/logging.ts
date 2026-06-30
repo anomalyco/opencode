@@ -1,4 +1,4 @@
-import { Formatter, Logger, type LogLevel } from "effect"
+import { Formatter, Logger, LogLevel } from "effect"
 import path from "path"
 import { Global } from "../global"
 import { runID } from "./shared"
@@ -51,7 +51,14 @@ export function fileLogger(file = path.join(Global.Path.log, "opencode.log"), id
   return Logger.toFile(formatter(id), file, { flag: "a" })
 }
 
-const stderrLogger = Logger.make((options) => process.stderr.write(formatter().log(options) + "\n"))
+export const stderrLogger = Logger.make((options) => {
+  // The minimum-log-level FiberRef set by `observability.ts` is not always
+  // honored by the context that emits these logs (e.g. the worker started by
+  // `opencode github run`), so `OPENCODE_LOG_LEVEL` had no effect on stderr
+  // output. Re-apply the threshold here so the stderr logger always respects it.
+  if (LogLevel.isGreaterThanOrEqualTo(options.logLevel, minimumLogLevel()))
+    process.stderr.write(formatter().log(options) + "\n")
+})
 
 export function minimumLogLevel() {
   const value = process.env.OPENCODE_LOG_LEVEL?.toUpperCase()
