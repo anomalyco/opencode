@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { Parameters, define, describe as describeTools, formatValue, groupByServer, toolResultValue } from "@/session/code-mode"
+import { Parameters, define, describe as describeTools, formatValue, groupByServer, toEnvelope } from "@/session/code-mode"
+import type { Tool as MCPToolDef } from "@modelcontextprotocol/sdk/types.js"
 import { Agent } from "@/agent/agent"
 import { Tool } from "@/tool/tool"
 import * as Truncate from "@/tool/truncate"
@@ -43,9 +44,9 @@ const layer = Layer.mergeAll(
 
 // Derive sanitized server namespaces from the catalog keys, mirroring how
 // session/tools.ts passes `Object.keys(mcp.clients()).map(sanitize)`.
-function build(mcpTools: Record<string, AITool>, servers?: string[]) {
+function build(mcpTools: Record<string, AITool>, defs: Record<string, MCPToolDef> = {}, servers?: string[]) {
   const names = servers ?? [...new Set(Object.keys(mcpTools).map((key) => key.split("_")[0]!))]
-  return Effect.runPromise(define(mcpTools, names).pipe(Effect.flatMap(Tool.init), Effect.provide(layer)))
+  return Effect.runPromise(define(mcpTools, defs, names).pipe(Effect.flatMap(Tool.init), Effect.provide(layer)))
 }
 
 describe("code mode execute", () => {
@@ -97,7 +98,9 @@ describe("code mode execute", () => {
     )
     const desc = JSON.parse(described.output)
     expect(desc.path).toBe("github.create_issue")
-    expect(desc.signature).toBe("tools.github.create_issue({ title: string; body?: string })")
+    expect(desc.signature).toBe(
+      "tools.github.create_issue(input: { title: string; body?: string }): Promise<{ result: unknown; attachments?: Attachment[] }>",
+    )
 
     const missing = await Effect.runPromise(tool.execute({ code: "return await tools.describe('github.nope')" }, ctx))
     expect(JSON.parse(missing.output).error.code).toBe("tool_not_found")
@@ -126,7 +129,7 @@ describe("code mode execute", () => {
     })
 
     const output = await Effect.runPromise(
-      tool.execute({ code: "const r = await tools.greeter.hello({ name: 'world' }); return r.toUpperCase()" }, ctx),
+      tool.execute({ code: "const r = await tools.greeter.hello({ name: 'world' }); return r.result.toUpperCase()" }, ctx),
     )
 
     expect(seen).toEqual([{ name: "world" }])
@@ -147,8 +150,8 @@ describe("code mode execute", () => {
         {
           code: `
             const first = await tools.math.add({ a: 1, b: 2 })
-            const second = await tools.math.add({ a: first.sum, b: 10 })
-            return { total: second.sum }
+            const second = await tools.math.add({ a: first.result.sum, b: 10 })
+            return { total: second.result.sum }
           `,
         },
         ctx,
@@ -167,7 +170,7 @@ describe("code mode execute", () => {
 
     const output = await Effect.runPromise(
       tool.execute(
-        { code: "const [a, b] = await Promise.all([tools.echo.one({}), tools.echo.two({})]); return a + b" },
+        { code: "const [a, b] = await Promise.all([tools.echo.one({}), tools.echo.two({})]); return a.result + b.result" },
         ctx,
       ),
     )
@@ -217,12 +220,71 @@ describe("code mode execute", () => {
     expect(asked.map((req: any) => req.permission)).toEqual(["a_tool", "b_tool"])
   })
 
-  test("unit: toolResultValue and formatValue", () => {
-    expect(toolResultValue({ structuredContent: { x: 1 }, content: [] })).toEqual({ x: 1 })
-    expect(toolResultValue({ content: [{ type: "text", text: "hi" }] })).toBe("hi")
-    expect(toolResultValue("raw")).toBe("raw")
+  test("unit: toEnvelope wraps result and extracts media as attachments", () => {
+    expect(toEnvelope({ structuredContent: { x: 1 }, content: [] })).toEqual({ result: { x: 1 } })
+    expect(toEnvelope({ content: [{ type: "text", text: "hi" }] })).toEqual({ result: "hi" })
+    expect(toEnvelope("raw")).toEqual({ result: "raw" })
+
+    // image/audio blocks become data-URL file attachments; text stays in result
+    expect(
+      toEnvelope({
+        content: [
+          { type: "text", text: "see image" },
+          { type: "image", data: "AAAA", mimeType: "image/png" },
+        ],
+      }),
+    ).toEqual({
+      result: "see image",
+      attachments: [{ type: "file", mime: "image/png", url: "data:image/png;base64,AAAA" }],
+    })
+
+    // media-only result has an undefined result but still surfaces the attachment
+    expect(toEnvelope({ content: [{ type: "image", data: "BBBB", mimeType: "image/jpeg" }] })).toEqual({
+      result: undefined,
+      attachments: [{ type: "file", mime: "image/jpeg", url: "data:image/jpeg;base64,BBBB" }],
+    })
+  })
+
+  test("unit: formatValue", () => {
     expect(formatValue("text")).toBe("text")
     expect(formatValue({ a: 1 })).toBe(JSON.stringify({ a: 1 }, null, 2))
     expect(formatValue(undefined)).toBe("undefined")
+  })
+
+  test("describe shows the structured return type when the tool declares an outputSchema", async () => {
+    const tools = { weather_current: mcpTool("current", () => "", { type: "object", properties: { city: { type: "string" } } }) }
+    const defs: Record<string, MCPToolDef> = {
+      weather_current: {
+        name: "current",
+        inputSchema: { type: "object", properties: { city: { type: "string" } } },
+        outputSchema: { type: "object", properties: { tempC: { type: "number" }, summary: { type: "string" } }, required: ["tempC"] },
+      } as any,
+    }
+    const tool = await build(tools, defs)
+    const described = await Effect.runPromise(tool.execute({ code: "return await tools.describe('weather.current')" }, ctx))
+    const desc = JSON.parse(described.output)
+    expect(desc.signature).toBe(
+      "tools.weather.current(input: { city?: string }): Promise<{ result: { tempC: number; summary?: string }; attachments?: Attachment[] }>",
+    )
+    expect(desc.outputSchema).toBeDefined()
+  })
+
+  test("forwards attachments from a returned tool result and drops them when only .result is returned", async () => {
+    const tool = await build({
+      shot_take: mcpTool("take", () => ({
+        content: [{ type: "image", data: "PNGDATA", mimeType: "image/png" }],
+        structuredContent: { name: "shot.png" },
+      })),
+    })
+
+    const forwarded = await Effect.runPromise(tool.execute({ code: "return await tools.shot.take({})" }, ctx))
+    expect(forwarded.attachments).toEqual([{ type: "file", mime: "image/png", url: "data:image/png;base64,PNGDATA" }])
+    expect(JSON.parse(forwarded.output)).toEqual({ name: "shot.png" })
+
+    const suppressed = await Effect.runPromise(
+      tool.execute({ code: "const r = await tools.shot.take({}); return { result: r.result }" }, ctx),
+    )
+    expect(suppressed.attachments).toBeUndefined()
+    expect(JSON.parse(suppressed.output)).toEqual({ name: "shot.png" })
   })
 })

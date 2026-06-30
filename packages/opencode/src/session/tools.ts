@@ -99,7 +99,11 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   const codeModeTool =
     flags.experimentalCodeMode && Object.keys(mcpTools).length > 0
       ? yield* Tool.init(
-          yield* CodeModeTool.define(mcpTools, Object.keys(yield* mcp.clients()).map(McpCatalog.sanitize)),
+          yield* CodeModeTool.define(
+            mcpTools,
+            yield* mcp.defs(),
+            Object.keys(yield* mcp.clients()).map(McpCatalog.sanitize),
+          ),
         )
       : undefined
   const registryTools = yield* registry.tools({
