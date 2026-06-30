@@ -1,12 +1,13 @@
 import { createStore } from "solid-js/store"
 import { createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
-import { useRenderer } from "@opentui/solid"
-import type { TextareaRenderable } from "@opentui/core"
+import { useRenderer, useTerminalDimensions } from "@opentui/solid"
+import type { ScrollBoxRenderable, TextareaRenderable } from "@opentui/core"
 import { selectedForeground, tint, useTheme } from "../../context/theme"
 import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
 import { useSDK } from "../../context/sdk"
 import { SplitBorder } from "../../ui/border"
 import { useTuiConfig } from "../../config"
+import { getScrollAcceleration } from "../../util/scroll"
 import { useBindings, useOpencodeModeStack } from "../../keymap"
 
 const QUESTION_MODE = "question"
@@ -17,6 +18,8 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
   const renderer = useRenderer()
   const tuiConfig = useTuiConfig()
   const modeStack = useOpencodeModeStack()
+  const dimensions = useTerminalDimensions()
+  const scrollAcceleration = createMemo(() => getScrollAcceleration(tuiConfig))
 
   const questions = createMemo(() => props.request.questions)
   const single = createMemo(() => questions().length === 1 && questions()[0]?.multiple !== true)
@@ -28,9 +31,39 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
     custom: [] as string[],
     selected: 0,
     editing: false,
+    minimized: false,
   })
 
   let textarea: TextareaRenderable | undefined
+  let scroll: ScrollBoxRenderable | undefined
+
+  // As the custom answer grows while typing, keep its newest line visible by
+  // scrolling the pane to the bottom. Driven by content changes only (not cursor
+  // changes), since scrolling moves the cursor and would otherwise feed back into
+  // a scroll loop. Double-deferred so a multi-line change (e.g. a large paste) has
+  // its new height reflected in scrollHeight before we scroll to the bottom.
+  const followCursor = () => {
+    if (!scroll) return
+    requestAnimationFrame(() => requestAnimationFrame(() => scroll?.scrollTo(scroll.scrollHeight)))
+  }
+
+  // Cap the open pane at the full terminal height. Since the pane can be
+  // minimized, there's no need to reserve headroom; past this the body scrolls.
+  const maxPaneHeight = createMemo(() => Math.max(8, dimensions().height))
+
+  // Escape minimizes the open pane; from the minimized state Escape rejects the
+  // question (the old dismiss behavior). Enter/click restores it.
+  function escapeQuestion() {
+    if (!store.minimized) {
+      setStore("minimized", true)
+      return
+    }
+    reject()
+  }
+
+  function restore() {
+    setStore("minimized", false)
+  }
 
   const question = createMemo(() => questions()[store.tab])
   const confirm = createMemo(() => !single() && store.tab === questions().length)
@@ -44,6 +77,42 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
     if (!value) return false
     return store.answers[store.tab]?.includes(value) ?? false
   })
+
+  // Estimate the rendered height of the scrollable body for the current tab so
+  // the pane can size to content and only switch to scroll mode once it would
+  // exceed the cap. Width drives text wrapping; this is an approximation, the
+  // scrollbox handles any under/over-estimate gracefully.
+  const wrap = (text: string, width: number) => {
+    if (!text) return 0
+    const usable = Math.max(1, width)
+    return text.split("\n").reduce((lines, line) => lines + Math.max(1, Math.ceil(line.length / usable)), 0)
+  }
+  const bodyHeight = createMemo(() => {
+    const width = Math.max(10, dimensions().width - 8)
+    if (confirm()) {
+      // "Review" heading + each question's "header: answer" line, which wraps.
+      return questions().reduce((lines, q, i) => {
+        const answer = store.answers[i]?.join(", ") || "(not answered)"
+        return lines + wrap(`${q.header}: ${answer}`, width)
+      }, 1)
+    }
+    let lines = wrap((question()?.question ?? "") + (multi() ? " (select all that apply)" : ""), width)
+    for (const opt of options()) {
+      lines += wrap(opt.label, width - 4)
+      lines += wrap(opt.description ?? "", width - 4)
+    }
+    if (custom()) {
+      lines += 1 // "Type your own answer" row
+      // The custom-answer textarea grows unbounded; account for its current
+      // content so the pane switches to scroll mode as the answer gets tall.
+      if (store.editing) lines += Math.max(1, wrap(input(), width - 4))
+      else if (input()) lines += wrap(input(), width - 4)
+    }
+    return lines
+  })
+  // Header (tabs) + footer + paddings consume roughly this many rows.
+  const chromeHeight = createMemo(() => (single() ? 0 : 2) + 4)
+  const scrollable = createMemo(() => bodyHeight() + chromeHeight() > maxPaneHeight())
 
   function submit() {
     const answers = questions().map((_, i) => store.answers[i] ?? [])
@@ -211,6 +280,30 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
     const total = opts.length + (custom() ? 1 : 0)
     const max = Math.min(total, 9)
 
+    const exit = tuiConfig.keybinds.get("app.exit")
+
+    if (store.minimized) {
+      return {
+        mode: QUESTION_MODE,
+        enabled: !store.editing,
+        commands: [
+          {
+            name: "app.exit",
+            title: "Reject question",
+            category: "Question",
+            run() {
+              reject()
+            },
+          },
+        ],
+        bindings: [
+          { key: "return", desc: "Restore question", group: "Question", cmd: () => restore() },
+          { key: "escape", desc: "Reject question", group: "Question", cmd: () => escapeQuestion() },
+          ...exit,
+        ],
+      }
+    }
+
     return {
       mode: QUESTION_MODE,
       enabled: !store.editing,
@@ -250,8 +343,8 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
         ...(confirm()
           ? [
               { key: "return", desc: "Submit answer", group: "Question", cmd: () => submit() },
-              { key: "escape", desc: "Reject question", group: "Question", cmd: () => reject() },
-              ...tuiConfig.keybinds.get("app.exit"),
+              { key: "escape", desc: "Minimize question", group: "Question", cmd: () => escapeQuestion() },
+              ...exit,
             ]
           : [
               ...Array.from({ length: max }, (_, index) => ({
@@ -278,23 +371,195 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
               { key: "down", desc: "Next answer", group: "Question", cmd: () => moveTo((store.selected + 1) % total) },
               { key: "j", desc: "Next answer", group: "Question", cmd: () => moveTo((store.selected + 1) % total) },
               { key: "return", desc: "Select answer", group: "Question", cmd: () => selectOption() },
-              { key: "escape", desc: "Reject question", group: "Question", cmd: () => reject() },
-              ...tuiConfig.keybinds.get("app.exit"),
+              { key: "escape", desc: "Minimize question", group: "Question", cmd: () => escapeQuestion() },
+              ...exit,
             ]),
       ],
     }
   })
 
+  const minimizedSummary = createMemo(() => {
+    const n = questions().length
+    if (n === 1) return "1 pending question"
+    return `${n} pending questions`
+  })
+
+  const body = () => (
+    <>
+      <Show when={!confirm()}>
+        <box paddingLeft={1} gap={1}>
+          <box>
+            <text fg={theme.text}>
+              {question()?.question}
+              {multi() ? " (select all that apply)" : ""}
+            </text>
+          </box>
+          <box>
+            <For each={options()}>
+              {(opt, i) => {
+                const active = () => i() === store.selected
+                const picked = () => store.answers[store.tab]?.includes(opt.label) ?? false
+                return (
+                  <box
+                    onMouseOver={() => moveTo(i())}
+                    onMouseDown={() => moveTo(i())}
+                    onMouseUp={() => {
+                      if (renderer.getSelection()?.getSelectedText()) return
+                      selectOption()
+                    }}
+                  >
+                    <box flexDirection="row">
+                      <box backgroundColor={active() ? theme.backgroundElement : undefined} paddingRight={1}>
+                        <text fg={active() ? tint(theme.textMuted, theme.secondary, 0.6) : theme.textMuted}>
+                          {`${i() + 1}.`}
+                        </text>
+                      </box>
+                      <box backgroundColor={active() ? theme.backgroundElement : undefined}>
+                        <text fg={active() ? theme.secondary : picked() ? theme.success : theme.text}>
+                          {multi() ? `[${picked() ? "✓" : " "}] ${opt.label}` : opt.label}
+                        </text>
+                      </box>
+                      <Show when={!multi()}>
+                        <text fg={theme.success}>{picked() ? " ✓" : ""}</text>
+                      </Show>
+                    </box>
+
+                    <box paddingLeft={3}>
+                      <text fg={theme.textMuted}>{opt.description}</text>
+                    </box>
+                  </box>
+                )
+              }}
+            </For>
+            <Show when={custom()}>
+              <box
+                onMouseOver={() => moveTo(options().length)}
+                onMouseDown={() => moveTo(options().length)}
+                onMouseUp={() => {
+                  if (renderer.getSelection()?.getSelectedText()) return
+                  selectOption()
+                }}
+              >
+                <box flexDirection="row">
+                  <box backgroundColor={other() ? theme.backgroundElement : undefined} paddingRight={1}>
+                    <text fg={other() ? tint(theme.textMuted, theme.secondary, 0.6) : theme.textMuted}>
+                      {`${options().length + 1}.`}
+                    </text>
+                  </box>
+                  <box backgroundColor={other() ? theme.backgroundElement : undefined}>
+                    <text fg={other() ? theme.secondary : customPicked() ? theme.success : theme.text}>
+                      {multi() ? `[${customPicked() ? "✓" : " "}] Type your own answer` : "Type your own answer"}
+                    </text>
+                  </box>
+
+                  <Show when={!multi()}>
+                    <text fg={theme.success}>{customPicked() ? " ✓" : ""}</text>
+                  </Show>
+                </box>
+                <Show when={store.editing}>
+                  <box paddingLeft={3}>
+                    <textarea
+                      ref={(val: TextareaRenderable) => {
+                        textarea = val
+                        val.traits = { status: "ANSWER" }
+                        queueMicrotask(() => {
+                          val.focus()
+                          val.gotoLineEnd()
+                          followCursor()
+                        })
+                      }}
+                      initialValue={input()}
+                      placeholder="Type your own answer"
+                      placeholderColor={theme.textMuted}
+                      minHeight={1}
+                      textColor={theme.text}
+                      focusedTextColor={theme.text}
+                      cursorColor={theme.primary}
+                      onContentChange={followCursor}
+                    />
+                  </box>
+                </Show>
+                <Show when={!store.editing && input()}>
+                  <box paddingLeft={3}>
+                    <text fg={theme.textMuted}>{input()}</text>
+                  </box>
+                </Show>
+              </box>
+            </Show>
+          </box>
+        </box>
+      </Show>
+
+      <Show when={confirm() && !single()}>
+        <box paddingLeft={1}>
+          <text fg={theme.text}>Review</text>
+        </box>
+        <For each={questions()}>
+          {(q, index) => {
+            const value = () => store.answers[index()]?.join(", ") ?? ""
+            const answered = () => Boolean(value())
+            return (
+              <box paddingLeft={1}>
+                <text>
+                  <span style={{ fg: theme.textMuted }}>{q.header}:</span>{" "}
+                  <span style={{ fg: answered() ? theme.text : theme.error }}>
+                    {answered() ? value() : "(not answered)"}
+                  </span>
+                </text>
+              </box>
+            )
+          }}
+        </For>
+      </Show>
+    </>
+  )
+
   return (
-    <box
-      backgroundColor={theme.backgroundPanel}
-      border={["left"]}
-      borderColor={theme.accent}
-      customBorderChars={SplitBorder.customBorderChars}
+    <Show
+      when={!store.minimized}
+      fallback={
+        <box
+          backgroundColor={theme.backgroundPanel}
+          border={["left"]}
+          borderColor={theme.accent}
+          customBorderChars={SplitBorder.customBorderChars}
+          flexDirection="row"
+          flexShrink={0}
+          gap={2}
+          paddingLeft={2}
+          paddingRight={3}
+          paddingTop={1}
+          paddingBottom={1}
+          justifyContent="space-between"
+          onMouseUp={() => {
+            if (renderer.getSelection()?.getSelectedText()) return
+            restore()
+          }}
+        >
+          <box flexDirection="row" gap={1}>
+            <text fg={theme.accent}>{"▣"}</text>
+            <text fg={theme.text}>{minimizedSummary()}</text>
+          </box>
+          <box flexDirection="row" gap={2}>
+            <text fg={theme.text}>
+              enter <span style={{ fg: theme.textMuted }}>restore</span>
+            </text>
+            <text fg={theme.text}>
+              esc <span style={{ fg: theme.textMuted }}>reject</span>
+            </text>
+          </box>
+        </box>
+      }
     >
-      <box gap={1} paddingLeft={1} paddingRight={3} paddingTop={1} paddingBottom={1}>
+      <box
+        backgroundColor={theme.backgroundPanel}
+        border={["left"]}
+        borderColor={theme.accent}
+        customBorderChars={SplitBorder.customBorderChars}
+        maxHeight={scrollable() ? maxPaneHeight() : undefined}
+      >
         <Show when={!single()}>
-          <box flexDirection="row" gap={1} paddingLeft={1}>
+          <box flexShrink={0} flexDirection="row" gap={1} paddingLeft={2} paddingRight={3} paddingTop={1} flexWrap="wrap">
             <For each={questions()}>
               {(q, index) => {
                 const isActive = () => index() === store.tab
@@ -351,164 +616,63 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
             </box>
           </box>
         </Show>
-
-        <Show when={!confirm()}>
-          <box paddingLeft={1} gap={1}>
-            <box>
-              <text fg={theme.text}>
-                {question()?.question}
-                {multi() ? " (select all that apply)" : ""}
-              </text>
+        <Show
+          when={scrollable()}
+          fallback={
+            <box flexShrink={0} gap={1} paddingLeft={1} paddingRight={3} paddingTop={1} paddingBottom={1}>
+              {body()}
             </box>
-            <box>
-              <For each={options()}>
-                {(opt, i) => {
-                  const active = () => i() === store.selected
-                  const picked = () => store.answers[store.tab]?.includes(opt.label) ?? false
-                  return (
-                    <box
-                      onMouseOver={() => moveTo(i())}
-                      onMouseDown={() => moveTo(i())}
-                      onMouseUp={() => {
-                        if (renderer.getSelection()?.getSelectedText()) return
-                        selectOption()
-                      }}
-                    >
-                      <box flexDirection="row">
-                        <box backgroundColor={active() ? theme.backgroundElement : undefined} paddingRight={1}>
-                          <text fg={active() ? tint(theme.textMuted, theme.secondary, 0.6) : theme.textMuted}>
-                            {`${i() + 1}.`}
-                          </text>
-                        </box>
-                        <box backgroundColor={active() ? theme.backgroundElement : undefined}>
-                          <text fg={active() ? theme.secondary : picked() ? theme.success : theme.text}>
-                            {multi() ? `[${picked() ? "✓" : " "}] ${opt.label}` : opt.label}
-                          </text>
-                        </box>
-                        <Show when={!multi()}>
-                          <text fg={theme.success}>{picked() ? " ✓" : ""}</text>
-                        </Show>
-                      </box>
-
-                      <box paddingLeft={3}>
-                        <text fg={theme.textMuted}>{opt.description}</text>
-                      </box>
-                    </box>
-                  )
-                }}
-              </For>
-              <Show when={custom()}>
-                <box
-                  onMouseOver={() => moveTo(options().length)}
-                  onMouseDown={() => moveTo(options().length)}
-                  onMouseUp={() => {
-                    if (renderer.getSelection()?.getSelectedText()) return
-                    selectOption()
-                  }}
-                >
-                  <box flexDirection="row">
-                    <box backgroundColor={other() ? theme.backgroundElement : undefined} paddingRight={1}>
-                      <text fg={other() ? tint(theme.textMuted, theme.secondary, 0.6) : theme.textMuted}>
-                        {`${options().length + 1}.`}
-                      </text>
-                    </box>
-                    <box backgroundColor={other() ? theme.backgroundElement : undefined}>
-                      <text fg={other() ? theme.secondary : customPicked() ? theme.success : theme.text}>
-                        {multi() ? `[${customPicked() ? "✓" : " "}] Type your own answer` : "Type your own answer"}
-                      </text>
-                    </box>
-
-                    <Show when={!multi()}>
-                      <text fg={theme.success}>{customPicked() ? " ✓" : ""}</text>
-                    </Show>
-                  </box>
-                  <Show when={store.editing}>
-                    <box paddingLeft={3}>
-                      <textarea
-                        ref={(val: TextareaRenderable) => {
-                          textarea = val
-                          val.traits = { status: "ANSWER" }
-                          queueMicrotask(() => {
-                            val.focus()
-                            val.gotoLineEnd()
-                          })
-                        }}
-                        initialValue={input()}
-                        placeholder="Type your own answer"
-                        placeholderColor={theme.textMuted}
-                        minHeight={1}
-                        maxHeight={6}
-                        textColor={theme.text}
-                        focusedTextColor={theme.text}
-                        cursorColor={theme.primary}
-                      />
-                    </box>
-                  </Show>
-                  <Show when={!store.editing && input()}>
-                    <box paddingLeft={3}>
-                      <text fg={theme.textMuted}>{input()}</text>
-                    </box>
-                  </Show>
-                </box>
-              </Show>
-            </box>
-          </box>
-        </Show>
-
-        <Show when={confirm() && !single()}>
-          <box paddingLeft={1}>
-            <text fg={theme.text}>Review</text>
-          </box>
-          <For each={questions()}>
-            {(q, index) => {
-              const value = () => store.answers[index()]?.join(", ") ?? ""
-              const answered = () => Boolean(value())
-              return (
-                <box paddingLeft={1}>
-                  <text>
-                    <span style={{ fg: theme.textMuted }}>{q.header}:</span>{" "}
-                    <span style={{ fg: answered() ? theme.text : theme.error }}>
-                      {answered() ? value() : "(not answered)"}
-                    </span>
-                  </text>
-                </box>
-              )
+          }
+        >
+          <scrollbox
+            ref={(r: ScrollBoxRenderable) => (scroll = r)}
+            flexShrink={1}
+            scrollAcceleration={scrollAcceleration()}
+            verticalScrollbarOptions={{
+              trackOptions: {
+                backgroundColor: theme.background,
+                foregroundColor: theme.borderActive,
+              },
             }}
-          </For>
+          >
+            <box gap={1} paddingLeft={1} paddingRight={3} paddingTop={1} paddingBottom={1}>
+              {body()}
+            </box>
+          </scrollbox>
         </Show>
-      </box>
-      <box
-        flexDirection="row"
-        flexShrink={0}
-        gap={1}
-        paddingLeft={2}
-        paddingRight={3}
-        paddingBottom={1}
-        justifyContent="space-between"
-      >
-        <box flexDirection="row" gap={2}>
-          <Show when={!single()}>
+        <box
+          flexDirection="row"
+          flexShrink={0}
+          gap={1}
+          paddingLeft={2}
+          paddingRight={3}
+          paddingBottom={1}
+          justifyContent="space-between"
+        >
+          <box flexDirection="row" gap={2}>
+            <Show when={!single()}>
+              <text fg={theme.text}>
+                {"⇆"} <span style={{ fg: theme.textMuted }}>tab</span>
+              </text>
+            </Show>
+            <Show when={!confirm()}>
+              <text fg={theme.text}>
+                {"↑↓"} <span style={{ fg: theme.textMuted }}>select</span>
+              </text>
+            </Show>
             <text fg={theme.text}>
-              {"⇆"} <span style={{ fg: theme.textMuted }}>tab</span>
+              enter{" "}
+              <span style={{ fg: theme.textMuted }}>
+                {confirm() ? "submit" : multi() ? "toggle" : single() ? "submit" : "confirm"}
+              </span>
             </text>
-          </Show>
-          <Show when={!confirm()}>
-            <text fg={theme.text}>
-              {"↑↓"} <span style={{ fg: theme.textMuted }}>select</span>
-            </text>
-          </Show>
-          <text fg={theme.text}>
-            enter{" "}
-            <span style={{ fg: theme.textMuted }}>
-              {confirm() ? "submit" : multi() ? "toggle" : single() ? "submit" : "confirm"}
-            </span>
-          </text>
 
-          <text fg={theme.text}>
-            esc <span style={{ fg: theme.textMuted }}>dismiss</span>
-          </text>
+            <text fg={theme.text}>
+              esc <span style={{ fg: theme.textMuted }}>minimize</span>
+            </text>
+          </box>
         </box>
       </box>
-    </box>
+    </Show>
   )
 }
