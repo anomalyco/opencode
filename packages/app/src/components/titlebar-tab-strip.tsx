@@ -87,6 +87,7 @@ function SessionTabSlot(props: {
       ref={sortable.ref}
       data-titlebar-tab-slot
       data-tab-key={props.id}
+      data-active={props.active()}
       class="relative flex w-56 min-w-7 max-w-56 flex-shrink"
       classList={{ hidden: !session() && !missingSession() }}
     >
@@ -143,6 +144,7 @@ function DraftTabSlot(props: {
       ref={sortable.ref}
       data-titlebar-tab-slot
       data-tab-key={props.id}
+      data-active={props.active()}
       class="relative flex w-56 min-w-7 max-w-56 flex-shrink"
     >
       <DraftTabItem

@@ -11260,7 +11260,7 @@
                       "type": "string"
                     },
                     "data": {
-                      "$ref": "#/components/schemas/SessionDurableEvent1"
+                      "$ref": "#/components/schemas/SessionDurableEventStream"
                     }
                   },
                   "required": ["id", "event", "data"],
@@ -23732,7 +23732,7 @@
         "required": ["data", "hasMore"],
         "additionalProperties": false
       },
-      "SessionDurableEvent1": {
+      "SessionDurableEventStream": {
         "type": "string",
         "contentSchema": {
           "$ref": "#/components/schemas/SessionDurableEvent"
@@ -23975,7 +23975,7 @@
         "required": ["id", "type", "data"],
         "additionalProperties": false
       },
-      "V2Event1": {
+      "V2Event": {
         "anyOf": [
           {
             "$ref": "#/components/schemas/Models-devRefreshed"
@@ -24243,10 +24243,10 @@
           }
         ]
       },
-      "V2Event": {
+      "V2EventStream": {
         "type": "string",
         "contentSchema": {
-          "$ref": "#/components/schemas/V2Event1"
+          "$ref": "#/components/schemas/V2Event"
         },
         "contentMediaType": "application/json"
       },
