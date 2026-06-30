@@ -196,7 +196,7 @@ function SessionErrorFallback(props: { error: unknown; sessionID?: string; serve
           </div>
           <Show when={props.sessionID}>
             {(sessionID) => (
-              <div class="max-w-full rounded-md border border-border-weaker bg-background-base px-2.5 py-1.5 font-mono text-11-regular text-text-weak break-all">
+              <div class="max-w-full rounded-md border border-border-weaker/50 bg-background-base/40 px-2 py-1 font-mono text-[10px] leading-4 text-text-muted break-all">
                 {sessionID()}
               </div>
             )}
