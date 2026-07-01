@@ -109,7 +109,7 @@ function key(item: Data) {
   }
 }
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const account = yield* Account.Service
@@ -360,16 +360,6 @@ export const layer = Layer.effect(
 
     return Service.of({ init, url, request, create, remove })
   }),
-)
-
-export const defaultLayer = layer.pipe(
-  Layer.provide(EventV2Bridge.defaultLayer),
-  Layer.provide(Account.defaultLayer),
-  Layer.provide(Config.defaultLayer),
-  Layer.provide(Database.defaultLayer),
-  Layer.provide(FetchHttpClient.layer),
-  Layer.provide(Provider.defaultLayer),
-  Layer.provide(Session.defaultLayer),
 )
 
 export const node = LayerNode.make({

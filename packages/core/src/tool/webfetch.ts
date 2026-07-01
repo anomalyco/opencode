@@ -115,7 +115,7 @@ const convert = (content: string, contentType: string, format: Format) => {
   return content
 }
 
-export const layer = Layer.effectDiscard(
+const layer = Layer.effectDiscard(
   Effect.gen(function* () {
     const tools = yield* Tools.Service
     const http = yield* HttpClient.HttpClient

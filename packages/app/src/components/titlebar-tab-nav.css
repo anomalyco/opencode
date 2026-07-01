@@ -21,7 +21,7 @@
   position: relative;
 }
 
-[data-titlebar-tab-slot]:not(:first-child)::before {
+[data-titlebar-tab-slot]:not(:first-child):not([data-active="true"])::before {
   content: "";
   position: absolute;
   top: 8px;
@@ -30,6 +30,10 @@
   height: 12px;
   border-radius: 9999px;
   background: var(--v2-background-bg-layer-02);
+}
+
+[data-titlebar-tab-slot][data-active="true"] + [data-titlebar-tab-slot]::before {
+  display: none;
 }
 
 [data-titlebar-tab] [data-slot="tab-close"]::before {

@@ -31,6 +31,7 @@ function SessionTabSlot(props: {
   onClose: () => void
 }) {
   const tabs = useTabs()
+  const language = useLanguage()
   const sortable = useSortable({
     get id() {
       return props.id
@@ -50,6 +51,7 @@ function SessionTabSlot(props: {
     ({ id, ctx }) => ctx.sync.session.resolve(id).catch(() => undefined),
   )
   const session = createMemo(() => cachedSession() ?? loadedSession())
+  const missingSession = createMemo(() => !!props.serverCtx() && !loadedSession.loading && !session())
   let prefetched = false
 
   createEffect(() => {
@@ -85,8 +87,9 @@ function SessionTabSlot(props: {
       ref={sortable.ref}
       data-titlebar-tab-slot
       data-tab-key={props.id}
+      data-active={props.active()}
       class="relative flex w-56 min-w-7 max-w-56 flex-shrink"
-      classList={{ hidden: !session() }}
+      classList={{ hidden: !session() && !missingSession() }}
     >
       <TabNavItem
         ref={(el) => {
@@ -95,6 +98,7 @@ function SessionTabSlot(props: {
         href={tabHref(props.tab)}
         server={props.tab.server}
         session={session}
+        fallbackTitle={missingSession() ? language.t("session.tab.unknown") : undefined}
         onTitleChange={(title) => {
           const value = session()
           const ctx = props.serverCtx()
@@ -140,6 +144,7 @@ function DraftTabSlot(props: {
       ref={sortable.ref}
       data-titlebar-tab-slot
       data-tab-key={props.id}
+      data-active={props.active()}
       class="relative flex w-56 min-w-7 max-w-56 flex-shrink"
     >
       <DraftTabItem

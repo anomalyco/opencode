@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "1.17.11",
+  "version": "1.17.12",
   "name": "@opencode-ai/core",
   "type": "module",
   "license": "MIT",
@@ -121,7 +121,7 @@
     "npm-package-arg": "13.0.2",
     "semver": "^7.6.3",
     "turndown": "7.2.0",
-    "venice-ai-sdk-provider": "2.0.2",
+    "venice-ai-sdk-provider": "2.1.1",
     "which": "6.0.1",
     "xdg-basedir": "5.1.0",
     "zod": "catalog:"

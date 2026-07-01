@@ -55,7 +55,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Command") {}
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const config = yield* Config.Service
@@ -170,12 +170,6 @@ export const layer = Layer.effect(
 
     return Service.of({ get, list })
   }),
-)
-
-export const defaultLayer = layer.pipe(
-  Layer.provide(Config.defaultLayer),
-  Layer.provide(MCP.defaultLayer),
-  Layer.provide(Skill.defaultLayer),
 )
 
 export const node = LayerNode.make({ service: Service, layer: layer, deps: [Config.node, MCP.node, Skill.node] })

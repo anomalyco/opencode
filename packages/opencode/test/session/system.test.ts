@@ -1,4 +1,5 @@
 import { describe, expect } from "bun:test"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Effect, Layer } from "effect"
 import type { Agent } from "../../src/agent/agent"
 import { NamedError } from "@opencode-ai/core/util/error"
@@ -6,7 +7,6 @@ import { Skill } from "../../src/skill"
 import { Permission } from "../../src/permission"
 import { SystemPrompt } from "../../src/session/system"
 import { MCP } from "../../src/mcp"
-import { LocationServiceMap, locationServiceMapLayer } from "@opencode-ai/core/location-services"
 import { testEffect } from "../lib/effect"
 
 const skills: Skill.Info[] = [
@@ -43,9 +43,9 @@ const build: Agent.Info = {
 }
 
 const it = testEffect(
-  SystemPrompt.layer.pipe(
-    Layer.provide(locationServiceMapLayer),
-    Layer.provide(
+  LayerNode.compile(SystemPrompt.node, [
+    [
+      MCP.node,
       Layer.mock(MCP.Service, {
         instructions: () =>
           Effect.succeed([
@@ -61,8 +61,9 @@ const it = testEffect(
             },
           ]),
       }),
-    ),
-    Layer.provide(
+    ],
+    [
+      Skill.node,
       Layer.succeed(
         Skill.Service,
         Skill.Service.of({
@@ -77,8 +78,8 @@ const it = testEffect(
           available: () => Effect.succeed(skills),
         }),
       ),
-    ),
-  ),
+    ],
+  ]),
 )
 
 describe("session.system", () => {
