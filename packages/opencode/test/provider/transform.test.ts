@@ -2313,7 +2313,7 @@ describe("ProviderTransform.message - strip openai metadata when store=false", (
     expect(result[0].content[1].providerOptions?.copilot?.reasoningEffort).toBe("medium")
   })
 
-  test("also strips GitHub Copilot itemId from the legacy openai namespace for sessions predating the copilot-namespace fix", () => {
+  test("leaves a stray openai namespace on a Copilot model untouched, since Copilot's Responses model only reads the copilot namespace", () => {
     const copilotModel = {
       ...openaiModel,
       id: "github-copilot/gpt-5.5",
@@ -2341,7 +2341,7 @@ describe("ProviderTransform.message - strip openai metadata when store=false", (
 
     const result = ProviderTransform.message(msgs, copilotModel, { store: false }) as any[]
 
-    expect(result[0].content[0].providerOptions?.openai?.itemId).toBeUndefined()
+    expect(result[0].content[0].providerOptions?.openai?.itemId).toBe("msg_456")
   })
 
   test("preserves metadata for openai package when store is true", () => {
