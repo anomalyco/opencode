@@ -111,10 +111,6 @@ const baseLayer = Layer.effect(
   }),
 )
 
-export const layer = baseLayer.pipe(Layer.provide(FileSystemSearch.locationLayer), Layer.provide(FSUtil.defaultLayer))
-
-export const locationLayer = layer
-
 export const node = makeLocationNode({
   service: Service,
   layer: baseLayer,
