@@ -2,6 +2,7 @@ import { query } from "@solidjs/router"
 
 export const modelCatalogSourceUrl = "https://models.dev/catalog.json"
 export const modelCatalogPricingUrl = "https://models.dev/api.json"
+export const modelCatalogLabSourceUrl = "https://models.dev/labs"
 
 export type ModelCatalogCost = {
   input: number
@@ -57,11 +58,12 @@ export type ModelCatalog = {
 
 export const getModelCatalog = query(async () => {
   "use server"
-  const [models, pricing] = await Promise.all([
+  const [models, pricing, labs] = await Promise.all([
     fetchCatalogPayload(modelCatalogSourceUrl),
     fetchCatalogPayload(modelCatalogPricingUrl),
+    fetchLabCatalogPayload(modelCatalogLabSourceUrl),
   ])
-  return buildModelCatalog(models, pricing)
+  return buildModelCatalog(models, pricing, labs)
 }, "getModelCatalog")
 
 export function findModelCatalogEntry(catalog: ModelCatalog, model: string, lab?: string) {
@@ -113,9 +115,9 @@ export function catalogSlug(value: string) {
     .replace(/-{2,}/g, "-")
 }
 
-function buildModelCatalog(payload: unknown, pricingPayload?: unknown): ModelCatalog {
+function buildModelCatalog(payload: unknown, pricingPayload?: unknown, labPayload?: unknown): ModelCatalog {
   const costs = readCatalogCosts(pricingPayload)
-  const labDescriptions = readCatalogLabDescriptions(payload, pricingPayload)
+  const labDescriptions = readCatalogLabDescriptions(payload, pricingPayload, labPayload)
   const models = readCatalogModels(payload)
     .flatMap(readModelCatalogEntry)
     .map((model) => ({
@@ -191,7 +193,8 @@ function readCatalogLabDescriptions(...payloads: unknown[]) {
     if (!description) return
     const id = stringValue(value.id) ?? fallbackId
     const name = stringValue(value.name)
-    const keys = [id, name]
+    const title = stringValue(value.title)
+    const keys = [id, name, title]
     keys.forEach((key) => {
       if (!key) return
       descriptions.set(catalogLabSlug(key), description)
@@ -224,6 +227,21 @@ async function fetchCatalogPayload(url: string) {
   return fetch(url)
     .then((response): Promise<unknown> => (response.ok ? (response.json() as Promise<unknown>) : Promise.resolve()))
     .catch(() => undefined)
+}
+
+async function fetchLabCatalogPayload(url: string) {
+  return fetch(url)
+    .then((response) => (response.ok ? response.text() : Promise.resolve("")))
+    .then(readLabSearchIndex)
+    .catch(() => undefined)
+}
+
+function readLabSearchIndex(html: string) {
+  const match = /<script[^>]*id=["']search-index["'][^>]*>([\s\S]*?)<\/script>/.exec(html)
+  if (!match) return undefined
+  const parsed = JSON.parse(match[1]) as unknown
+  if (!Array.isArray(parsed)) return undefined
+  return parsed.filter((item) => isRecord(item) && item.type === "lab")
 }
 
 function readCatalogCosts(payload: unknown) {

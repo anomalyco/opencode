@@ -144,7 +144,11 @@ export default function StatsLab() {
                   <LabOverview lab={data()} data={stats() ?? null} />
                   <LabUsageSection lab={data()} data={stats() ?? null} />
                   <LabModelsSection lab={data()} usage={stats()?.models ?? []} />
-                  <LabRelatedSection lab={data()} labs={catalog()?.labs ?? []} market={homeStats()?.market["2M"] ?? []} />
+                  <LabRelatedSection
+                    lab={data()}
+                    labs={catalog()?.labs ?? []}
+                    market={homeStats()?.market["2M"] ?? []}
+                  />
                 </>
               )}
             </Show>
@@ -338,11 +342,7 @@ function LabUsageSection(props: { lab: ModelCatalogLab; data: StatsLabData | nul
 
   return (
     <section id="usage" data-section="model-panel">
-      <SectionHeading
-        href="#usage"
-        title={i18n.t("nav.usage")}
-        description={i18n.t("lab.usageDescription")}
-      />
+      <SectionHeading href="#usage" title={i18n.t("nav.usage")} description={i18n.t("lab.usageDescription")} />
       <Show
         when={usage().some((item) => item.tokens > 0)}
         fallback={<LabEmptyState title={i18n.t("lab.noUsageTitle")} description={i18n.t("lab.noUsageDescription")} />}
@@ -370,10 +370,7 @@ function LabUsageSection(props: { lab: ModelCatalogLab; data: StatsLabData | nul
                     preserveAspectRatio="none"
                     aria-hidden="true"
                   >
-                    <Show
-                      when={activeLineBreak()}
-                      fallback={<path data-slot="lab-usage-line-base" d={path()} />}
-                    >
+                    <Show when={activeLineBreak()} fallback={<path data-slot="lab-usage-line-base" d={path()} />}>
                       {(lineBreak) => (
                         <>
                           <defs>
@@ -472,6 +469,12 @@ function LabUsageSection(props: { lab: ModelCatalogLab; data: StatsLabData | nul
                       </span>
                       <b>{formatTokens(active.point.tokens)}</b>
                     </p>
+                    <p>
+                      <span data-slot="tooltip-label">
+                        <i data-kind="users" /> {i18n.t("model.uniqueUsers")}
+                      </span>
+                      <b>{formatUsers(active.point.users)}</b>
+                    </p>
                   </div>
                 )
               }}
@@ -509,7 +512,11 @@ function LabModelsSection(props: { lab: ModelCatalogLab; usage: LabUsageModelEnt
         </button>
       </div>
       <div data-slot="lab-model-pattern" aria-hidden="true" />
-      <div data-component="lab-model-table" role="table" aria-label={i18n.t("lab.modelsTitle", { lab: props.lab.name })}>
+      <div
+        data-component="lab-model-table"
+        role="table"
+        aria-label={i18n.t("lab.modelsTitle", { lab: props.lab.name })}
+      >
         <div data-slot="lab-model-table-track">
           <div data-slot="lab-model-table-head" role="row">
             <span data-column="model" role="columnheader">
@@ -533,11 +540,7 @@ function LabModelsSection(props: { lab: ModelCatalogLab; usage: LabUsageModelEnt
           </div>
           <For each={props.lab.models}>
             {(model) => (
-              <LabModelRow
-                model={model}
-                usage={usageBySlug().get(model.slug)}
-                onTooltipChange={setActiveTooltip}
-              />
+              <LabModelRow model={model} usage={usageBySlug().get(model.slug)} onTooltipChange={setActiveTooltip} />
             )}
           </For>
         </div>
@@ -635,9 +638,7 @@ function LabModelTooltip(props: { state: LabModelTooltipState }) {
           </span>
           <strong>{props.state.model.name}</strong>
         </div>
-        <p>
-          {props.state.model.description ?? "Recent OpenCode Go usage, share, context, and output limits."}
-        </p>
+        <p>{props.state.model.description ?? "Recent OpenCode Go usage, share, context, and output limits."}</p>
       </div>
       <div data-slot="tooltip-divider" />
       <div data-slot="lab-model-tooltip-metrics">
@@ -668,9 +669,7 @@ function LabRelatedSection(props: { lab: ModelCatalogLab; labs: ModelCatalogLab[
     <section id="related-labs" data-section="model-panel" data-variant="lab-related">
       <SectionHeading href="#related-labs" title="Related labs" description="Explore more." />
       <div data-component="lab-related-list">
-        <For each={related()}>
-          {(entry) => <LabRelatedCard entry={entry} />}
-        </For>
+        <For each={related()}>{(entry) => <LabRelatedCard entry={entry} />}</For>
       </div>
     </section>
   )
@@ -766,7 +765,7 @@ function relatedLabStats(labs: ModelCatalogLab[], market: MarketDay[]) {
 }
 
 function labRelatedDescription(lab: ModelCatalogLab) {
-  return lab.description ?? `OpenCode Go usage across ${lab.name} models, recent token volume, and model limits.`
+  return lab.description ?? ""
 }
 
 function relatedTone(share: number) {

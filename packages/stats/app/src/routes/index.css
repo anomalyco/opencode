@@ -3827,15 +3827,24 @@
   background: var(--stats-bar-idle);
 }
 
-[data-page="stats"] [data-component="lab-related-card"][data-tone="high"] [data-slot="lab-related-usage"] b[data-active="true"] {
+[data-page="stats"]
+  [data-component="lab-related-card"][data-tone="high"]
+  [data-slot="lab-related-usage"]
+  b[data-active="true"] {
   background: #198b43;
 }
 
-[data-page="stats"] [data-component="lab-related-card"][data-tone="mid"] [data-slot="lab-related-usage"] b[data-active="true"] {
+[data-page="stats"]
+  [data-component="lab-related-card"][data-tone="mid"]
+  [data-slot="lab-related-usage"]
+  b[data-active="true"] {
   background: #d69a00;
 }
 
-[data-page="stats"] [data-component="lab-related-card"][data-tone="low"] [data-slot="lab-related-usage"] b[data-active="true"] {
+[data-page="stats"]
+  [data-component="lab-related-card"][data-tone="low"]
+  [data-slot="lab-related-usage"]
+  b[data-active="true"] {
   background: #b82d35;
 }
 
@@ -4209,7 +4218,7 @@
 
 [data-page="stats"] [data-component="model-usage-chart"][data-variant="lab-usage"] [data-component="chart-tooltip"] {
   z-index: 6;
-  top: clamp(12px, calc(var(--lab-usage-user-y) * 1% - 38px), calc(100% - 92px));
+  top: clamp(12px, calc(var(--lab-usage-user-y) * 1% - 46px), calc(100% - 108px));
   width: 192px;
   min-width: 192px;
   background: var(--stats-bg);
@@ -4231,7 +4240,7 @@
 
 [data-page="stats"] [data-component="model-usage-chart"][data-variant="lab-usage"] [data-component="chart-tooltip"] p {
   height: 16px;
-  margin: 8px 0;
+  margin: 4px 0;
 }
 
 [data-page="stats"]
@@ -4239,6 +4248,13 @@
   [data-component="chart-tooltip"]
   i[data-kind="tokens"] {
   background: var(--lab-usage-active);
+}
+
+[data-page="stats"]
+  [data-component="model-usage-chart"][data-variant="lab-usage"]
+  [data-component="chart-tooltip"]
+  i[data-kind="users"] {
+  background: var(--lab-usage-line);
 }
 
 [data-page="stats"] [data-component="model-peer-list"] {
