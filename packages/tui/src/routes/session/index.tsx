@@ -2342,52 +2342,47 @@ function executeCalls(value: unknown): ExecuteCall[] {
 function Execute(props: ToolProps) {
   const ctx = use()
   const { theme } = useTheme()
-  const isRunning = createMemo(() => props.part.state.status === "running")
+  const isLoading = createMemo(() => props.part.state.status === "pending" || props.part.state.status === "running")
   const calls = createMemo(() => executeCalls(props.metadata.toolCalls))
   const output = createMemo(() => stripAnsi(props.output?.trim() ?? ""))
   const hasRuntimeError = createMemo(() => props.metadata.error === true)
   const outputPreview = createMemo(() => collapseToolOutput(output(), 4, 4 * Math.max(20, ctx.width - 6)).output)
   const showOutput = createMemo(() => output() && (hasRuntimeError() || calls().length === 0))
+  const detailPadding = 3 + INLINE_TOOL_ICON_WIDTH
 
-  const summary = createMemo(() => {
-    const count = calls().length
-    if (count === 0) return "execute"
-    return `execute · ${formatSubagentToolcalls(count)}`
-  })
-
-  const complete = createMemo(() => (props.part.state.status === "pending" ? false : summary()))
+  const complete = createMemo(() => (props.part.state.status === "pending" ? false : "execute"))
 
   return (
     <>
       <InlineTool
         icon={props.part.state.status === "completed" && !hasRuntimeError() ? "✓" : props.part.state.status === "error" || hasRuntimeError() ? "✗" : "│"}
         color={hasRuntimeError() ? theme.error : undefined}
-        spinner={isRunning()}
-        pending="Executing..."
+        spinner={isLoading()}
+        pending="execute"
         complete={complete()}
         part={props.part}
       >
-        {summary()}
+        execute
       </InlineTool>
       <For each={calls()}>
         {(call) => {
           const args = input(call.input ?? {})
           return (
-            <box paddingLeft={3}>
-              <text paddingLeft={3} fg={call.status === "error" ? theme.error : theme.textMuted}>
+            <box paddingLeft={detailPadding}>
+              <text fg={call.status === "error" ? theme.error : theme.textMuted}>
                 ↳ {call.tool}
                 {args ? ` ${args}` : ""}
-                {call.status === "running" ? " …" : call.status === "error" ? " (failed)" : ""}
+                {call.status === "error" ? " (failed)" : ""}
               </text>
             </box>
           )
         }}
       </For>
       <Show when={showOutput()}>
-        <box paddingLeft={3}>
+        <box paddingLeft={detailPadding}>
           <For each={outputPreview().split("\n")}>
             {(line, index) => (
-              <text paddingLeft={3} fg={hasRuntimeError() ? theme.error : theme.textMuted}>
+              <text fg={hasRuntimeError() ? theme.error : theme.textMuted}>
                 {index() === 0 ? "↳ " : "  "}
                 {line}
               </text>
