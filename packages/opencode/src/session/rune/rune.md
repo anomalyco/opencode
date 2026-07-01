@@ -120,7 +120,9 @@ Returns `{ path, description, signature, input, output? }` for one tool. **Every
 TypeScript — no raw JSON Schema is ever surfaced to the model.**
 
 - **Compact signature + detailed TS types.** `signature` is the one-line call form, e.g.
-  `tools.github.create_issue(input: { title: string; body?: string }): Promise<{ result: unknown; attachments?: Attachment[] }>`.
+  `tools.github.create_issue(input: { title: string; body?: string }): Promise<Result<unknown>>`,
+  where `type Result<T> = { result: T; attachments?: Attachment[] }` is defined once in the tool
+  description prose so signatures stay short.
   `input` (and `output`, when the server declares an `outputSchema`) are the *detailed* types
   rendered by `renderType` in pretty mode: an indented block with `/** … */` JSDoc on described
   fields and literal unions for enums. This carries everything the raw JSON Schema used to —
@@ -138,10 +140,32 @@ TypeScript — no raw JSON Schema is ever surfaced to the model.**
   `any`/`object`, and depth is capped. (Rune's own Effect-schema renderer in `rune/tool.ts`,
   `renderSchema`, is separate and has known gaps — no `$ref` cycle guard, and unions containing
   a number collapse to `number`; code mode does not use it.)
-- **Return type shown ahead of the call.** Every tool resolves to the uniform envelope
-  `{ result, attachments? }`, surfaced in `signature`. `result` is typed `unknown` unless the
-  server declares a structured `outputSchema` (many MCP servers return text, in which case
-  `result` is a plain string).
+- **Return type shown ahead of the call — in the preview too.** Every tool resolves to
+  `Result<T>`, where `T` is the structured `outputSchema` when the server declares one, else
+  `unknown`. The `T` is surfaced not just by `describe` but in the budgeted inline preview in the
+  tool description (`tools.x.y(input: …): Result<T>`), so the model sees a tool's result shape
+  without a discovery round-trip.   `unknown` is deliberate — an untyped result has no guaranteed
+  shape (many MCP servers return plain text), so the prose directs the model to inspect it (e.g.
+  `return` it) before assuming fields, rather than pretending a shape we can't verify.
+
+## Attachments are opaque handles — bytes never enter the sandbox
+
+A tool's media (image/audio/resource content blocks) becomes an `attachments` array on the
+result envelope, but the program only ever sees an **opaque handle**, not the bytes:
+`type Attachment = { type: 'file'; id: string; mime: string; filename?: string; bytes?: number }`.
+The real bytes (a base64 `data:` URL) are kept host-side in a per-execution `attachmentTable`
+keyed by `id` (`code-mode.ts`); the handle carries only metadata. The program can inspect
+`mime`/`bytes`, **propagate** a handle (return it under `attachments` to show the user), or
+**drop** it — but it cannot read or re-emit the contents. On `return`, each propagated handle is
+resolved back to its real attachment via the table; a fabricated or stale handle resolves to
+nothing and is dropped.
+
+This is a deliberate divergence from the prior art we studied (both expose the base64 directly
+and lean on prompt guidance plus output truncation). Making the handle opaque means a careless
+`return`/log **cannot** dump a base64 blob back into the conversation — the leak is structurally
+impossible rather than merely discouraged. The trade-off: a program can no longer read attachment
+bytes to route them into another tool's input; if that need arises it would be an explicit host
+call (e.g. a `readAttachment(handle)`), not the always-on default. Not implemented yet.
 
 ## Path handling — separator-tolerant
 
@@ -152,7 +176,18 @@ resolve to the same tool. A slash-vs-dot mismatch previously made `describe` sil
 (returning a soft error the model then destructured into `{}`); normalizing the separator
 removes that whole failure mode.
 
-## Errors are soft, with "did you mean" — never thrown
+## Tool-call errors throw; discovery errors are soft
+
+A **tool call** that fails (an MCP `isError`, a transport failure, or a call to a path that
+doesn't exist) throws inside the program, so the model uses ordinary `try`/`catch` — the same
+control flow it already writes for any async call. We deliberately do *not* wrap results in an
+`{ ok, error }` value: a uniform success envelope (`{ result, attachments? }`) plus normal
+exceptions is simpler to reason about and to type than forcing every call site to branch on a
+discriminated union. An uncaught tool error fails the whole `execute` run and is reported back.
+
+The **discovery helpers** are the exception — see below.
+
+## Discovery errors are soft, with "did you mean" — never thrown
 
 `tools.$rune.search` and `tools.$rune.describe` never throw. An unknown `describe(path)`
 returns `{ error: { code: 'tool_not_found', message, suggestions } }`. Suggestions come from a

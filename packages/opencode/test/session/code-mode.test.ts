@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import {
   Parameters,
+  attachmentTable,
   define,
   describe as describeTools,
   formatValue,
@@ -87,10 +88,13 @@ describe("code mode execute", () => {
     expect(description).toContain("This is the COMPLETE list")
     expect(description).toContain("- github (2 tools)")
     expect(description).toContain("- linear (1 tool)")
-    // Tools are previewed inline as compact, directly-callable input signatures.
-    expect(description).toContain("tools.github.create_issue(input: { title: string; body?: string })")
-    expect(description).toContain("tools.linear.search(input: object)")
-    // ...but not the full Promise return — that comes from tools.$rune.describe.
+    // Tools are previewed inline as directly-callable signatures that now include the
+    // awaited return type (Result<T>) so the model sees the result shape up front.
+    expect(description).toContain("tools.github.create_issue(input: { title: string; body?: string }): Result<unknown>")
+    expect(description).toContain("tools.linear.search(input: object): Result<unknown>")
+    // The Result<T> envelope alias is defined once in the prose.
+    expect(description).toContain("type Result<T> = { result: T; attachments?: Attachment[] }")
+    // ...but the preview drops the uniform Promise<…> wrapper — that full form comes from describe.
     expect(description).not.toContain("): Promise<")
   })
 
@@ -143,7 +147,7 @@ describe("code mode execute", () => {
     const desc = JSON.parse(described.output)
     expect(desc.path).toBe("github.create_issue")
     expect(desc.signature).toBe(
-      "tools.github.create_issue(input: { title: string; body?: string }): Promise<{ result: unknown; attachments?: Attachment[] }>",
+      "tools.github.create_issue(input: { title: string; body?: string }): Promise<Result<unknown>>",
     )
     expect(described.metadata.toolCalls).toEqual([
       { tool: "$rune.describe", status: "completed", input: { path: "github.create_issue" } },
@@ -357,29 +361,43 @@ describe("code mode execute", () => {
     expect(snapshots).toContainEqual({ toolCalls: [{ tool: "bad.tool", status: "error", input: { reason: "test" } }] })
   })
 
-  test("unit: toEnvelope wraps result and extracts media as attachments", () => {
-    expect(toEnvelope({ structuredContent: { x: 1 }, content: [] })).toEqual({ result: { x: 1 } })
-    expect(toEnvelope({ content: [{ type: "text", text: "hi" }] })).toEqual({ result: "hi" })
-    expect(toEnvelope("raw")).toEqual({ result: "raw" })
+  test("unit: toEnvelope wraps result and extracts media as opaque attachment handles", () => {
+    const table = attachmentTable()
+    expect(toEnvelope({ structuredContent: { x: 1 }, content: [] }, table.seal)).toEqual({ result: { x: 1 } })
+    expect(toEnvelope({ content: [{ type: "text", text: "hi" }] }, table.seal)).toEqual({ result: "hi" })
+    expect(toEnvelope("raw", table.seal)).toEqual({ result: "raw" })
 
-    // image/audio blocks become data-URL file attachments; text stays in result
-    expect(
-      toEnvelope({
+    // image/audio blocks become OPAQUE handles (mime/bytes, NO url/data); text stays in result
+    const withImage = toEnvelope(
+      {
         content: [
           { type: "text", text: "see image" },
           { type: "image", data: "AAAA", mimeType: "image/png" },
         ],
-      }),
-    ).toEqual({
-      result: "see image",
-      attachments: [{ type: "file", mime: "image/png", url: "data:image/png;base64,AAAA" }],
+      },
+      table.seal,
+    )
+    expect(withImage.result).toBe("see image")
+    expect(withImage.attachments).toEqual([{ type: "file", id: "att_1", mime: "image/png", bytes: 3 }])
+    // The handle exposes no bytes, but resolves back to the real attachment host-side.
+    expect((withImage.attachments![0] as any).url).toBeUndefined()
+    expect(table.resolve(withImage.attachments![0])).toEqual({
+      type: "file",
+      mime: "image/png",
+      url: "data:image/png;base64,AAAA",
     })
 
-    // media-only result has an undefined result but still surfaces the attachment
-    expect(toEnvelope({ content: [{ type: "image", data: "BBBB", mimeType: "image/jpeg" }] })).toEqual({
-      result: undefined,
-      attachments: [{ type: "file", mime: "image/jpeg", url: "data:image/jpeg;base64,BBBB" }],
-    })
+    // media-only result: undefined result, still surfaces the handle
+    const mediaOnly = toEnvelope({ content: [{ type: "image", data: "BBBB", mimeType: "image/jpeg" }] }, table.seal)
+    expect(mediaOnly.result).toBeUndefined()
+    expect(mediaOnly.attachments).toEqual([{ type: "file", id: "att_2", mime: "image/jpeg", bytes: 3 }])
+  })
+
+  test("unit: attachmentTable resolve drops fabricated or stale handles", () => {
+    const table = attachmentTable()
+    expect(table.resolve({ type: "file", id: "att_999", mime: "image/png" })).toBeUndefined()
+    expect(table.resolve({ type: "file" })).toBeUndefined()
+    expect(table.resolve("nope")).toBeUndefined()
   })
 
   test("unit: formatValue", () => {
@@ -414,7 +432,7 @@ describe("code mode execute", () => {
     const described = await Effect.runPromise(tool.execute({ code: "return await tools.$rune.describe('weather.current')" }, ctx))
     const desc = JSON.parse(described.output)
     expect(desc.signature).toBe(
-      "tools.weather.current(input: { city?: string }): Promise<{ result: { tempC: number; summary?: string }; attachments?: Attachment[] }>",
+      "tools.weather.current(input: { city?: string }): Promise<Result<{ tempC: number; summary?: string }>>",
     )
     // describe now returns the return shape as pretty TypeScript, not raw JSON Schema.
     expect(desc.output).toBe("{\n  tempC: number\n  summary?: string\n}")
@@ -662,6 +680,37 @@ describe("renderType", () => {
     } as any
     expect(renderType(schema, { pretty: true })).toBe(
       "{\n  /**\n   * The search query.\n   * Supports globs.\n   *\n   * Examples: *.ts\n   */\n  query: string\n}",
+    )
+  })
+
+  test("emits JSDoc tags for schema constraints TypeScript can't express", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        when: { type: "string", format: "date-time", default: "now", description: "start time" },
+        legacy: { type: "boolean", deprecated: true },
+        tags: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 5 },
+      },
+      required: ["when"],
+    } as any
+    expect(renderType(schema, { pretty: true })).toBe(
+      [
+        "{",
+        "  /**",
+        "   * start time",
+        '   * @default "now"',
+        "   * @format date-time",
+        "   */",
+        "  when: string",
+        "  /** @deprecated */",
+        "  legacy?: boolean",
+        "  /**",
+        "   * @minItems 1",
+        "   * @maxItems 5",
+        "   */",
+        "  tags?: string[]",
+        "}",
+      ].join("\n"),
     )
   })
 

@@ -34,14 +34,23 @@ type Metadata = {
 }
 
 /**
- * A model-facing attachment: the same shape used for both child tool results and
- * the program's final `return`, and identical to a session `FilePart` (minus the
- * ids), so it lowers 1:1 into `Tool.ExecuteResult.attachments`.
+ * A real attachment: identical to a session `FilePart` (minus the ids) and carrying
+ * the actual bytes (`url`, often a base64 `data:` URL), so it lowers 1:1 into
+ * `Tool.ExecuteResult.attachments`. This never crosses into the sandbox — the program
+ * only ever sees the opaque {@link AttachmentHandle}.
  */
 export type Attachment = NonNullable<Tool.ExecuteResult["attachments"]>[number]
 
+/**
+ * The opaque, model-facing view of an attachment: metadata only, no bytes. A program
+ * can inspect `mime`/`filename`/`bytes`, propagate the handle (return it to show the
+ * user) or drop it, but can NOT read or leak the contents — so a stray `return`/log
+ * can never dump a base64 blob back into the conversation.
+ */
+export type AttachmentHandle = { type: "file"; id: string; mime: string; filename?: string; bytes?: number }
+
 /** The envelope every tool call resolves to, and the shape a program should `return`. */
-export type Envelope = { result: unknown; attachments?: Attachment[] }
+export type Envelope = { result: unknown; attachments?: AttachmentHandle[] }
 
 const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/
 const SEARCH = "search"
@@ -220,19 +229,38 @@ export function renderType(
   return "any"
 }
 
+/** Schema constraints that a TypeScript type can't express natively but a model
+ *  benefits from, surfaced as JSDoc tags (`@default`, `@format`, `@deprecated`, …). */
+function docTags(schema: JSONSchema7 | boolean | undefined): string[] {
+  if (!schema || typeof schema === "boolean") return []
+  // `deprecated` is a later JSON-Schema draft than the `ai` JSONSchema7 type models.
+  const s = schema as JSONSchema7 & { deprecated?: boolean }
+  const tags: string[] = []
+  if (s.deprecated === true) tags.push("@deprecated")
+  if (s.default !== undefined) {
+    try {
+      tags.push(`@default ${JSON.stringify(s.default)}`)
+    } catch {
+      // unserializable default: skip rather than emit a broken tag
+    }
+  }
+  if (typeof s.format === "string") tags.push(`@format ${s.format}`)
+  if (typeof s.minItems === "number") tags.push(`@minItems ${s.minItems}`)
+  if (typeof s.maxItems === "number") tags.push(`@maxItems ${s.maxItems}`)
+  return tags
+}
+
 /**
- * Format a schema `description` as a JSDoc comment at the given indent, preserving
- * multi-line text (a single line stays `/** … *\/`; multiple lines become a `*`-prefixed
- * block). `*\/` is neutralized so a description can't close the comment early, and blank
- * leading/trailing/edge lines are trimmed. Returns "" (with a trailing newline when
- * non-empty) so callers can prepend it directly to the field line.
+ * Format a schema `description` plus `tags` as a JSDoc comment at the given indent,
+ * preserving multi-line text (a single line stays `/** … *\/`; multiple lines become a
+ * `*`-prefixed block). `*\/` is neutralized so nothing can close the comment early, and
+ * blank leading/trailing lines are trimmed. Returns "" (else a trailing newline) so
+ * callers can prepend it directly to the field line.
  */
-function jsdoc(description: string | undefined, pad: string): string {
-  if (!description) return ""
-  const lines = description
-    .replaceAll("*/", "* /")
-    .split("\n")
-    .map((line) => line.replace(/\s+$/, ""))
+function jsdoc(description: string | undefined, tags: string[], pad: string): string {
+  const lines = [...(description ? description.split("\n") : []), ...tags].map((line) =>
+    line.replaceAll("*/", "* /").replace(/\s+$/, ""),
+  )
   while (lines.length > 0 && lines[0]!.trim() === "") lines.shift()
   while (lines.length > 0 && lines[lines.length - 1]!.trim() === "") lines.pop()
   if (lines.length === 0) return ""
@@ -265,7 +293,7 @@ function renderObject(
   }
 
   const pad = "  ".repeat(depth + 1)
-  const lines = names.map((name) => `${jsdoc(props[name]?.description, pad)}${pad}${field(name)}`)
+  const lines = names.map((name) => `${jsdoc(props[name]?.description, docTags(props[name]), pad)}${pad}${field(name)}`)
   if (indexType) lines.push(`${pad}[key: string]: ${indexType}`)
   return `{\n${lines.join("\n")}\n${"  ".repeat(depth)}}`
 }
@@ -280,19 +308,23 @@ function inputType(tool: AITool): string {
   }
 }
 
-/** The return type the model sees for any tool: the structured `outputSchema` (when
- *  the MCP server declares one) wrapped in the result envelope, else `unknown`. */
-const returnType = (outputSchema: JSONSchema7 | undefined) =>
-  `Promise<{ result: ${outputSchema ? renderType(outputSchema) : "unknown"}; attachments?: Attachment[] }>`
+/** The `T` in `Result<T>`: the structured `outputSchema` (when the MCP server declares
+ *  one), else `unknown` — an untyped result has no guaranteed shape and must be inspected,
+ *  not assumed. `Result<T>` itself is defined once in the tool description prose. */
+const resultType = (outputSchema: JSONSchema7 | undefined) => (outputSchema ? renderType(outputSchema) : "unknown")
+
+/** The full, awaited call type shown by `tools.$rune.describe`. */
+const returnType = (outputSchema: JSONSchema7 | undefined) => `Promise<Result<${resultType(outputSchema)}>>`
 
 const signatureFor = (entry: CatalogEntry) =>
   `tools${access(entry.server)}${access(entry.local)}(input: ${inputType(entry.tool)}): ${returnType(entry.outputSchema)}`
 
-/** The compact, directly-callable signature for the inline preview: the call path
- *  plus its input type, but without the (uniform) `Promise<{ result, attachments? }>`
- *  return — that full typed form is reserved for `tools.$rune.describe`. */
+/** The directly-callable signature for the inline preview. Unlike the full `describe`
+ *  form it drops the uniform `Promise<…>` wrapper (calls are always awaited) but DOES
+ *  show the awaited `Result<T>` — so the model sees each tool's return shape without a
+ *  discovery round-trip. */
 const previewSignature = (entry: CatalogEntry) =>
-  `tools${access(entry.server)}${access(entry.local)}(input: ${inputType(entry.tool)})`
+  `tools${access(entry.server)}${access(entry.local)}(input: ${inputType(entry.tool)}): Result<${resultType(entry.outputSchema)}>`
 
 /**
  * Character budget for the inline signature preview in the tool description. All
@@ -317,16 +349,24 @@ export function describe(groups: Map<string, CatalogEntry[]>): string {
     "from your MCP servers):",
     "- `await tools.$rune.search(query, { namespace?, limit? })` -> `{ items: [{ path, description }], total }`",
     "- `await tools.$rune.describe(path)` -> `{ path, description, signature, input, output? }` (types as TypeScript)",
-    "- Call a tool by its path: `await tools.<server>.<tool>(input)`. Each resolves to `{ result, attachments? }`.",
     "",
-    "Every tool call and your final `return` use the same envelope: `{ result, attachments? }`.",
-    "`result` is the structured data; `attachments` are media as `{ type: 'file', mime, url }` — ordinary",
-    "values you can read and route (e.g. feed one tool's attachment into another tool's input). Whichever",
-    "attachments you return are shown to the user as media; only `result` becomes text, so nothing in the",
-    "sandbox (attachment bytes included) re-enters the conversation unless you put it in `result`.",
+    "Call a tool by its path: `await tools.<server>.<tool>(input)`. Every call — and your final `return` —",
+    "uses the same envelope: `type Result<T> = { result: T; attachments?: Attachment[] }`. The signatures",
+    "below (and `tools.$rune.describe`) show each tool's `T` as its return type.",
     "",
-    "Compose multiple calls in one program and `return` the final value — intermediate results stay in the",
-    "sandbox and never re-enter the conversation. Use `tools.$rune.search('', { namespace })` to list a namespace.",
+    "`result` (the `T`) is the tool's own payload. It is typed `unknown` unless the server declares an output",
+    "schema — an `unknown` result has NO guaranteed shape, so inspect it (e.g. `return` it to see it, or read",
+    "it defensively) before assuming any fields.",
+    "",
+    "`attachments` are files a tool produced (an image, a document, …), given to you as references you hold",
+    "but don't read inline: `type Attachment = { type: 'file'; mime: string; filename?: string; bytes?: number }`.",
+    "To actually SEE a file — e.g. look at a screenshot before deciding your next step — include it in what you",
+    "`return` (e.g. `return { result: summary, attachments: shot.attachments }`): returned attachments come back",
+    "into the conversation as real viewable images/files, so both YOU (on your next turn) and the user can see",
+    "them. Omit an attachment to discard it. You route whole attachment handles; you don't read their raw bytes.",
+    "",
+    "Only what you `return` re-enters the conversation — `result` becomes text; everything else in the sandbox",
+    "stays there. Compose multiple calls in one program and `return` the final value. Use `tools.$rune.search('', { namespace })` to list a namespace.",
   ]
   if (groups.size === 0) {
     lines.push("", "No MCP servers are currently connected.")
@@ -388,15 +428,69 @@ const lastSegment = (uri: string) => {
 
 const dataUrl = (mime: string, base64: string) => `data:${mime};base64,${base64}`
 
+/** Decoded byte length of a `data:` URL's base64 payload, or undefined for a
+ *  non-data URL (e.g. an external `resource_link`) whose size we don't know. */
+function dataUrlBytes(url: string): number | undefined {
+  if (!url.startsWith("data:")) return undefined
+  const comma = url.indexOf(",")
+  if (comma === -1) return undefined
+  const base64 = url.slice(comma + 1)
+  if (base64.length === 0) return 0
+  const padding = base64.endsWith("==") ? 2 : base64.endsWith("=") ? 1 : 0
+  return Math.max(0, Math.floor((base64.length * 3) / 4) - padding)
+}
+
+/** Functions for converting between real attachments and the opaque handles the
+ *  sandbox sees. See {@link attachmentTable}. */
+export type AttachmentTable = {
+  /** Register a real attachment, returning the opaque handle to hand to the program. */
+  seal: (attachment: Attachment) => AttachmentHandle
+  /** Resolve a handle the program returned back to its real attachment, or undefined
+   *  if it isn't one this table issued (a fabricated or stale handle is dropped). */
+  resolve: (handle: unknown) => Attachment | undefined
+}
+
+/**
+ * A per-execution table that keeps real attachment bytes host-side and only ever
+ * exposes opaque handles to the sandbox. The bytes never enter the program's context,
+ * so a program cannot read or accidentally re-emit them; on `return`, a propagated
+ * handle is looked up here to recover the real attachment for the user.
+ */
+export function attachmentTable(): AttachmentTable {
+  const real = new Map<string, Attachment>()
+  let seq = 0
+  return {
+    seal(attachment) {
+      const id = `att_${++seq}`
+      real.set(id, attachment)
+      const bytes = dataUrlBytes(attachment.url)
+      return {
+        type: "file",
+        id,
+        mime: attachment.mime,
+        ...(attachment.filename ? { filename: attachment.filename } : {}),
+        ...(bytes !== undefined ? { bytes } : {}),
+      }
+    },
+    resolve(handle) {
+      if (!handle || typeof handle !== "object") return undefined
+      const id = (handle as Record<string, unknown>).id
+      return typeof id === "string" ? real.get(id) : undefined
+    },
+  }
+}
+
 /**
  * Reduce an MCP tool result to the `{ result, attachments? }` envelope. `result`
  * is the structured content (or joined text); media blocks (image/audio/resource)
- * become attachments. Lenient — never throws on unexpected shapes.
+ * become opaque attachment handles via `seal` (the bytes stay host-side). Lenient —
+ * never throws on unexpected shapes.
  */
-export function toEnvelope(result: unknown): Envelope {
+export function toEnvelope(result: unknown, seal: AttachmentTable["seal"]): Envelope {
   if (result === null || typeof result !== "object") return { result }
   const record = result as { structuredContent?: unknown; content?: unknown }
-  const attachments: Attachment[] = []
+  const attachments: AttachmentHandle[] = []
+  const push = (attachment: Attachment) => attachments.push(seal(attachment))
   const text: string[] = []
   const content = Array.isArray(record.content) ? record.content : []
   for (const item of content) {
@@ -409,7 +503,7 @@ export function toEnvelope(result: unknown): Envelope {
       case "image":
       case "audio":
         if (typeof block.data === "string" && typeof block.mimeType === "string") {
-          attachments.push({ type: "file", mime: block.mimeType, url: dataUrl(block.mimeType, block.data) })
+          push({ type: "file", mime: block.mimeType, url: dataUrl(block.mimeType, block.data) })
         }
         break
       case "resource": {
@@ -418,7 +512,7 @@ export function toEnvelope(result: unknown): Envelope {
           const mime = typeof res.mimeType === "string" ? res.mimeType : "application/octet-stream"
           const uri = typeof res.uri === "string" ? res.uri : undefined
           if (typeof res.blob === "string") {
-            attachments.push({ type: "file", mime, url: dataUrl(mime, res.blob), filename: uri ? lastSegment(uri) : undefined })
+            push({ type: "file", mime, url: dataUrl(mime, res.blob), filename: uri ? lastSegment(uri) : undefined })
           } else if (typeof res.text === "string") {
             text.push(res.text)
           }
@@ -427,7 +521,7 @@ export function toEnvelope(result: unknown): Envelope {
       }
       case "resource_link":
         if (typeof block.uri === "string") {
-          attachments.push({
+          push({
             type: "file",
             mime: typeof block.mimeType === "string" ? block.mimeType : "application/octet-stream",
             url: block.uri,
@@ -461,21 +555,22 @@ export function formatValue(value: unknown): string {
   }
 }
 
-const isAttachment = (value: unknown): value is Attachment => {
-  if (!value || typeof value !== "object") return false
-  const a = value as Record<string, unknown>
-  return a.type === "file" && typeof a.mime === "string" && typeof a.url === "string"
-}
-
 /**
- * Lower the program's return value into model-facing output + attachments. The
- * value is treated as a `{ result, attachments? }` envelope when it has a `result`
- * key; otherwise the whole value is the result. Attachments are model-curated.
+ * Lower the program's return value into model-facing output + attachments. The value
+ * is treated as a `{ result, attachments? }` envelope when it has a `result` key;
+ * otherwise the whole value is the result. Attachments are model-curated: each returned
+ * handle is resolved back to its real bytes via `resolve`; anything that isn't a handle
+ * this run issued is dropped.
  */
-export function fromReturn(value: unknown): { output: string; attachments?: Attachment[] } {
+export function fromReturn(
+  value: unknown,
+  resolve: AttachmentTable["resolve"],
+): { output: string; attachments?: Attachment[] } {
   if (value !== null && typeof value === "object" && "result" in value) {
     const env = value as { result: unknown; attachments?: unknown }
-    const attachments = Array.isArray(env.attachments) ? env.attachments.filter(isAttachment) : []
+    const attachments = Array.isArray(env.attachments)
+      ? env.attachments.map(resolve).filter((a): a is Attachment => a !== undefined)
+      : []
     return attachments.length > 0
       ? { output: formatValue(env.result), attachments }
       : { output: formatValue(env.result) }
@@ -623,6 +718,9 @@ export function define(
       parameters: Parameters,
       execute: Effect.fn("CodeMode.execute")(function* (params, ctx) {
         const calls: CallEntry[] = []
+        // Real attachment bytes stay in this table for the life of the call; the sandbox
+        // only ever handles opaque references to them (see attachmentTable).
+        const files = attachmentTable()
         // Stream the current call list to the UI. Sent on every status change so the
         // tool part shows each child call appearing and resolving while the program runs.
         const publish = (error?: boolean) =>
@@ -662,7 +760,7 @@ export function define(
                 ),
               catch: (error) => (error instanceof Error ? error : new Error(String(error))),
             }).pipe(
-              Effect.map(toEnvelope),
+              Effect.map((raw) => toEnvelope(raw, files.seal)),
             ))
           })
 
@@ -698,7 +796,7 @@ export function define(
         })
 
         if (result.ok) {
-          const { output, attachments } = fromReturn(result.value)
+          const { output, attachments } = fromReturn(result.value, files.resolve)
           return {
             title: "execute",
             metadata: { toolCalls: calls },
