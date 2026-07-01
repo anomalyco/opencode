@@ -242,7 +242,7 @@ export async function handler(
         signal: input.request.signal,
       })
 
-      if (providerInfo.id.startsWith("console.")) {
+      if (providerInfo.id.startsWith("console.") || providerInfo.id.startsWith("console-go.")) {
         const resEndpointId = res.headers.get("x-opencode-endpoint-id")
         const resEndpointModelId = res.headers.get("x-opencode-upstream-model-id")
         if (resEndpointId && resEndpointModelId)

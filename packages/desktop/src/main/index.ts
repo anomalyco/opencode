@@ -159,6 +159,7 @@ const main = Effect.gen(function* () {
     wslServers.stopAll()
   }
   const relaunch = () => {
+    setAppQuitting()
     void stopSidecars().finally(() => {
       app.relaunch()
       app.exit(0)
@@ -234,6 +235,7 @@ const main = Effect.gen(function* () {
 
   for (const signal of ["SIGINT", "SIGTERM"] as const) {
     process.on(signal, () => {
+      setAppQuitting()
       void stopSidecars().finally(() => app.exit(0))
     })
   }
