@@ -17,7 +17,7 @@ import {
 import type { UpdaterState } from "@opencode-ai/app/updater"
 import * as Sentry from "@sentry/solid"
 import type { AsyncStorage } from "@solid-primitives/storage"
-import { MemoryRouter } from "@solidjs/router"
+import { createMemoryHistory, MemoryRouter, type BaseRouterProps } from "@solidjs/router"
 import { createEffect, createMemo, createResource, createSignal, onCleanup, onMount, Show } from "solid-js"
 import { render } from "solid-js/web"
 import pkg from "../../package.json"
@@ -63,6 +63,7 @@ const [updaterState, setUpdaterState] = createSignal<UpdaterState>({ status: "di
 void window.api.updater.subscribe(setUpdaterState)
 
 const deepLinkEvent = "opencode:deep-link"
+const lastActiveUrlKey = "opencode.desktop.last-active-url"
 
 const emitDeepLinks = (urls: string[]) => {
   if (urls.length === 0) return
@@ -75,6 +76,30 @@ const emitDeepLinks = (urls: string[]) => {
 const listenForDeepLinks = () => {
   void window.api.consumeInitialDeepLinks().then((urls) => emitDeepLinks(urls))
   return window.api.onDeepLink((urls) => emitDeepLinks(urls))
+}
+
+function getLastActiveUrl() {
+  if (typeof localStorage !== "object") return "/"
+  try {
+    const value = localStorage.getItem(lastActiveUrlKey)
+    if (value?.startsWith("/") && !value.startsWith("//")) return value
+  } catch {}
+  return "/"
+}
+
+function setLastActiveUrl(value: string) {
+  if (typeof localStorage !== "object") return
+  try {
+    localStorage.setItem(lastActiveUrlKey, value)
+  } catch {}
+}
+
+function DesktopMemoryRouter(props: BaseRouterProps) {
+  const history = createMemoryHistory()
+  const initialUrl = getLastActiveUrl()
+  if (initialUrl !== "/") history.set({ value: initialUrl, replace: true, scroll: false })
+  onCleanup(history.listen(setLastActiveUrl))
+  return <MemoryRouter {...props} history={history} />
 }
 
 const createPlatform = (): Platform => {
@@ -367,7 +392,7 @@ render(() => {
       <Show when={ready()} fallback={splash}>
         <Show when={effectiveDefaultServer()} keyed>
           {(key) => (
-            <AppInterface defaultServer={key} servers={servers()} router={MemoryRouter}>
+            <AppInterface defaultServer={key} servers={servers()} router={DesktopMemoryRouter}>
               <Inner />
             </AppInterface>
           )}

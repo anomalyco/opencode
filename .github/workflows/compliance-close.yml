@@ -34,10 +34,48 @@ jobs:
 
             const now = Date.now();
             const twoHours = 2 * 60 * 60 * 1000;
+            const orgMemberAssociations = new Set(['OWNER', 'MEMBER']);
+            const agentLogin = 'opencode-agent[bot]';
+            const { data: file } = await github.rest.repos.getContent({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              path: '.github/TEAM_MEMBERS',
+              ref: 'dev',
+            });
+            const teamMembers = new Set(
+              Buffer.from(file.content, 'base64')
+                .toString()
+                .split('\n')
+                .map((line) => line.trim().toLowerCase())
+                .filter(Boolean)
+            );
+
+            function isExempt(item) {
+              const login = item.user?.login?.toLowerCase();
+              return (
+                login === agentLogin ||
+                orgMemberAssociations.has(item.author_association) ||
+                (login && teamMembers.has(login))
+              );
+            }
 
             for (const item of items) {
               const isPR = !!item.pull_request;
               const kind = isPR ? 'PR' : 'issue';
+              const login = item.user?.login;
+
+              if (isExempt(item)) {
+                core.info(`Skipping ${kind} #${item.number}; author ${login || 'unknown'} is exempt`);
+                try {
+                  await github.rest.issues.removeLabel({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: item.number,
+                    name: 'needs:compliance',
+                  });
+                } catch (e) {}
+                continue;
+              }
 
               const { data: comments } = await github.rest.issues.listComments({
                 owner: context.repo.owner,

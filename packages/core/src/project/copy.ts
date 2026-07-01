@@ -5,7 +5,7 @@ import path from "path"
 import { AbsolutePath } from "../schema"
 import { FSUtil } from "../fs-util"
 import { Git } from "../git"
-import { makeLocationNode } from "../effect/node"
+import { makeLocationNode } from "../effect/app-node"
 import { Project } from "../project"
 import { ProjectDirectories } from "./directories"
 import { makeGitWorktreeStrategy } from "./copy-strategies"
@@ -125,7 +125,7 @@ export const refreshAfterBoot = Effect.gen(function* () {
   )
 })
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service

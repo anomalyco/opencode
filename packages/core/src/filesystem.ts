@@ -1,6 +1,6 @@
 export * as FileSystem from "./filesystem"
 
-import { makeLocationNode } from "./effect/node"
+import { makeLocationNode } from "./effect/app-node"
 import path from "path"
 import { Context, Effect, Layer, Schema } from "effect"
 import { FSUtil } from "./fs-util"
@@ -110,10 +110,6 @@ const baseLayer = Layer.effect(
     })
   }),
 )
-
-export const layer = baseLayer.pipe(Layer.provide(FileSystemSearch.locationLayer), Layer.provide(FSUtil.defaultLayer))
-
-export const locationLayer = layer
 
 export const node = makeLocationNode({
   service: Service,

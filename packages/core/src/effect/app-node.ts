@@ -11,4 +11,4 @@ export type LocationNode<A, E = never> = LayerNode.Node<A, E, (typeof tags.value
 export const makeGlobalNode = tags.make("global")
 export const makeLocationNode = tags.make("location")
 
-export * as Node from "./node"
+export * as Node from "./app-node"

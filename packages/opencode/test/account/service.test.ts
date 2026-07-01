@@ -1,4 +1,6 @@
 import { expect } from "bun:test"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { httpClient } from "@opencode-ai/core/effect/app-node-platform"
 import { Duration, Effect, Layer, Option, Schema } from "effect"
 import { sql } from "drizzle-orm"
 import { HttpClient, HttpClientError, HttpClientResponse } from "effect/unstable/http"
@@ -25,15 +27,16 @@ const truncate = Layer.effectDiscard(
     yield* db.run(sql`DELETE FROM account_state`)
     yield* db.run(sql`DELETE FROM account`)
   }),
-).pipe(Layer.provide(Database.defaultLayer))
+)
+const truncateNode = LayerNode.make({ name: "truncate-account", layer: truncate, deps: [Database.node] })
 
-const it = testEffect(Layer.merge(AccountRepo.defaultLayer, truncate))
+const it = testEffect(LayerNode.compile(LayerNode.group([AccountRepo.node, truncateNode])))
 
 const insideEagerRefreshWindow = Duration.toMillis(Duration.minutes(1))
 const outsideEagerRefreshWindow = Duration.toMillis(Duration.minutes(10))
 
 const live = (client: HttpClient.HttpClient) =>
-  Account.layer.pipe(Layer.provide(Layer.succeed(HttpClient.HttpClient, client)))
+  LayerNode.compile(Account.node, [[httpClient, Layer.succeed(HttpClient.HttpClient, client)]])
 
 const json = (req: Parameters<typeof HttpClientResponse.fromWeb>[0], body: unknown, status = 200) =>
   HttpClientResponse.fromWeb(

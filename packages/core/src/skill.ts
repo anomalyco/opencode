@@ -1,6 +1,6 @@
 export * as SkillV2 from "./skill"
 
-import { makeLocationNode } from "./effect/node"
+import { makeLocationNode } from "./effect/app-node"
 import path from "path"
 import { Context, Effect, Layer, Schema, Types } from "effect"
 import { Skill } from "@opencode-ai/schema/skill"
@@ -53,7 +53,7 @@ export interface Interface extends State.Transformable<Draft> {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Skill") {}
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const discovery = yield* SkillDiscovery.Service
@@ -128,7 +128,5 @@ export const layer = Layer.effect(
     })
   }),
 )
-
-export const locationLayer = layer.pipe(Layer.provide(SkillDiscovery.defaultLayer))
 
 export const node = makeLocationNode({ service: Service, layer, deps: [SkillDiscovery.node, FSUtil.node] })

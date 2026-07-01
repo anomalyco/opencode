@@ -1,6 +1,6 @@
 export * as AISDK from "./aisdk"
 
-import { makeLocationNode } from "./effect/node"
+import { makeLocationNode } from "./effect/app-node"
 import type { LanguageModelV3 } from "@ai-sdk/provider"
 import { Cause, Context, Effect, Layer, Schema, Scope } from "effect"
 import { ModelV2 } from "./model"
@@ -233,5 +233,3 @@ export const locationLayer = Layer.effect(
 )
 
 export const node = makeLocationNode({ service: Service, layer: locationLayer, deps: [] })
-
-export const defaultLayer = locationLayer

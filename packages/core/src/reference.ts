@@ -1,6 +1,6 @@
 export * as Reference from "./reference"
 
-import { makeLocationNode } from "./effect/node"
+import { makeLocationNode } from "./effect/app-node"
 import { Context, Effect, Layer, Scope, Types } from "effect"
 import { Reference } from "@opencode-ai/schema/reference"
 import { Global } from "./global"
@@ -40,7 +40,7 @@ export interface Interface extends State.Transformable<Draft> {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Reference") {}
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const global = yield* Global.Service

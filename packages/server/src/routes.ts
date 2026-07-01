@@ -1,7 +1,7 @@
 import { Database } from "@opencode-ai/core/database/database"
-import { LayerNode, LayerNodeTree } from "@opencode-ai/core/effect/layer-node"
-import { httpClient } from "@opencode-ai/core/effect/layer-node-platform"
-import { NodeBuild } from "@opencode-ai/core/effect/node-build"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { httpClient } from "@opencode-ai/core/effect/app-node-platform"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { EventV2 } from "@opencode-ai/core/event"
 import { Credential } from "@opencode-ai/core/credential"
 import { PermissionSaved } from "@opencode-ai/core/permission/saved"
@@ -39,19 +39,17 @@ const applicationServices = LayerNode.group([
 export function createRoutes(password?: string) {
   return makeRoutes(
     password
-      ? ServerAuth.Config.layer({ username: "opencode", password: Option.some(password) })
-      : ServerAuth.Config.defaultLayer,
+      ? ServerAuth.Config.configLayer({ username: "opencode", password: Option.some(password) })
+      : ServerAuth.Config.layer,
   )
 }
 
 export function createEmbeddedRoutes() {
-  return makeRoutes(ServerAuth.Config.layer({ username: "opencode", password: Option.none() }))
+  return makeRoutes(ServerAuth.Config.configLayer({ username: "opencode", password: Option.none() }))
 }
 
 function makeRoutes<AuthError, AuthServices>(auth: Layer.Layer<ServerAuth.Config, AuthError, AuthServices>) {
-  const serviceLayer = NodeBuild.build(
-    LayerNodeTree.bind(applicationServices, SessionExecution.node, SessionExecutionLocal.node),
-  )
+  const serviceLayer = AppNodeBuilder.build(applicationServices, [[SessionExecution.node, SessionExecutionLocal.node]])
 
   return HttpApiBuilder.layer(Api, { openapiPath: "/openapi.json" }).pipe(
     Layer.provide(handlers),

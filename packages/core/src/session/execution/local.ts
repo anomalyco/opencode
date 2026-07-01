@@ -1,6 +1,6 @@
 import { Cause, Effect, Layer } from "effect"
 import { LocationServiceMap } from "../../location-service-map"
-import { makeGlobalNode } from "../../effect/node"
+import { makeGlobalNode } from "../../effect/app-node"
 import { SessionRunCoordinator } from "../run-coordinator"
 import { SessionRunner } from "../runner"
 import { SessionSchema } from "../schema"
@@ -8,7 +8,7 @@ import { SessionStore } from "../store"
 import { SessionExecution } from "../execution"
 
 /** Current-process routing for implicit-local Locations. Future remote placement belongs here. */
-export const layer = Layer.effect(
+const layer = Layer.effect(
   SessionExecution.Service,
   Effect.gen(function* () {
     const store = yield* SessionStore.Service
@@ -36,8 +36,6 @@ export const layer = Layer.effect(
     })
   }),
 )
-
-export const defaultLayer = layer.pipe(Layer.provide(SessionStore.defaultLayer))
 
 export const node = makeGlobalNode({
   service: SessionExecution.Service,

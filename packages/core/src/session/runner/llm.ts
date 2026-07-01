@@ -36,8 +36,8 @@ import { createLLMEventPublisher } from "./publish-llm-event"
 import { toLLMMessages } from "./to-llm-message"
 import { MAX_STEPS_PROMPT } from "./max-steps"
 import { Snapshot } from "../../snapshot"
-import { makeLocationNode } from "../../effect/node"
-import { llmClient } from "../../effect/layer-node-platform"
+import { makeLocationNode } from "../../effect/app-node"
+import { llmClient } from "../../effect/app-node-platform"
 
 /**
  * Runs one durable coding-agent Session until it settles.
@@ -89,7 +89,7 @@ import { llmClient } from "../../effect/layer-node-platform"
  * explicit loop starts the next provider turn after local settlement. Configured agent step limits bound the loop.
  */
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const events = yield* EventV2.Service
@@ -405,8 +405,6 @@ export const layer = Layer.effect(
     })
   }),
 )
-
-export const defaultLayer = layer
 
 export const node = makeLocationNode({
   service: Service,

@@ -16,7 +16,7 @@ import type {
   SessionMessageAssistantTool,
   SessionV2Info,
   SkillV2Info,
-  V2Event1,
+  V2Event,
 } from "@opencode-ai/sdk/v2"
 import { createStore, produce } from "solid-js/store"
 import { createSimpleContext } from "./helper"
@@ -121,7 +121,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
       },
     }
 
-    function handleEvent(event: V2Event1) {
+    function handleEvent(event: V2Event) {
       switch (event.type) {
         case "catalog.updated":
           void Promise.all([
@@ -408,7 +408,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           ...event,
           data: event.properties,
           location: { directory: metadata.directory, workspaceID: metadata.workspace },
-        } as V2Event1)
+        } as V2Event)
       })
       onCleanup(unsub)
     })
