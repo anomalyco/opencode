@@ -34,13 +34,23 @@ function cookie(locale: Locale) {
   return `oc_locale=${encodeURIComponent(locale)}; Path=/; Max-Age=31536000; SameSite=Lax`
 }
 
-const DIR: Record<Locale, string> = {
-  ar: "rtl",
+const RTL_LOCALES: Record<string, "rtl"> = {
+  ar: "rtl",  // Arabic
+  ckb: "rtl", // Central Kurdish / Sorani
+  dv: "rtl",  // Divehi / Maldivian
+  fa: "rtl",  // Persian / Farsi
+  he: "rtl",  // Hebrew
+  prs: "rtl", // Dari (Afghan Persian)
+  ps: "rtl",  // Pashto
+  sd: "rtl",  // Sindhi
+  ug: "rtl",  // Uyghur
+  ur: "rtl",  // Urdu
+  yi: "rtl",  // Yiddish
 }
 const DIR_DEFAULT = "ltr"
 
 function localeDir(locale: Locale) {
-  return DIR[locale] ?? DIR_DEFAULT
+  return RTL_LOCALES[locale] ?? DIR_DEFAULT
 }
 
 const LOCALES: readonly Locale[] = [
