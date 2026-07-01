@@ -7,7 +7,7 @@ import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstab
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { Installation } from "../../src/installation"
 import { InstallationChannel } from "@opencode-ai/core/installation/version"
-import { AppProcess } from "@opencode-ai/core/process"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { testEffect } from "../lib/effect"
 
 const encoder = new TextEncoder()
@@ -60,10 +60,9 @@ function testLayer(
     layer: mockSpawner(spawnHandler),
     deps: [],
   })
-  const appProcessNode = makeGlobalNode({ service: AppProcess.Service, layer: AppProcess.layer, deps: [spawnerNode] })
   return LayerNode.compile(Installation.node, [
     [httpClient, mockHttpClient(httpHandler)],
-    [AppProcess.node, appProcessNode],
+    [CrossSpawnSpawner.node, spawnerNode],
   ])
 }
 
