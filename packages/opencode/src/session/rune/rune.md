@@ -76,6 +76,22 @@ not cumulative. (Code mode overrides `maxDataBytes`→10MB, `timeoutMs`→30s.)
   spread, optional chaining, template literals, conditionals, switch, loops, `for...of`,
   try/catch, ternary, `in`, logical assignment, bitwise ops, `await`, `Promise.all`.
 
+## JavaScript semantics (parity with JS, so defensive code doesn't crash)
+
+Reading a value behaves like JS even when a key/name is absent — it yields `undefined` rather
+than throwing, so idiomatic defensive code (`a?.b ?? c`, feature detection, merges) works:
+
+- **Unknown property reads yield `undefined`.** `"s".foo`, `(5).foo`, `[1,2].foo`, and
+  `obj.missing` are all `undefined` — including under `?.` (which only guards `null`/`undefined`
+  receivers). MCP results are often JSON *strings*, so `result?.field ?? result` reads the field
+  when present and falls back to the raw string otherwise instead of crashing. (Only the method
+  *allowlist* still errors — e.g. calling an unsupported `arr.splice(...)` gives a rewrite hint.)
+- **`typeof undeclaredIdentifier` is `"undefined"`**, never a reference error, so
+  `typeof x !== "undefined"` guards are safe. (A bare `x` reference still throws.)
+- **`{ ...null }` / `{ ...undefined }` is a no-op**, so `{ ...maybeOpts, override }` merges work
+  when the operand is absent.
+- **Builtin coercions are valid array callbacks**: `filter(Boolean)`, `map(String)`, `map(Number)`.
+
 ## What is missing
 
 - **`Date`** — no dates or time.

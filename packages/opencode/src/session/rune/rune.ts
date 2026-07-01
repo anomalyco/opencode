@@ -1662,7 +1662,14 @@ class Interpreter<R> {
 
   private evaluateUnaryExpression(node: AstNode): Effect.Effect<unknown, unknown, R> {
     const operator = getString(node, "operator")
-    return Effect.map(this.evaluateExpression(getNode(node, "argument")), (value) => {
+    const argument = getNode(node, "argument")
+    // `typeof undeclaredIdentifier` is `"undefined"` in JS (never a ReferenceError), so
+    // feature-detection guards like `typeof x !== "undefined"` don't crash. Short-circuit before
+    // evaluating the argument; a declared-but-TDZ binding still falls through to the normal throw.
+    if (operator === "typeof" && argument.type === "Identifier" && !this.resolveBinding(getString(argument, "name"))) {
+      return Effect.succeed("undefined")
+    }
+    return Effect.map(this.evaluateExpression(argument), (value) => {
       if (containsRuntimeReference(value)) {
         throw new InterpreterRuntimeError("Unary operators require data values in Rune.", node, "InvalidDataValue")
       }
@@ -2072,10 +2079,17 @@ class Interpreter<R> {
     }
 
     const callback = args[0]
-    if (!(callback instanceof RuneFunction)) {
-      throw new InterpreterRuntimeError(`Array.${name} expects an arrow function callback.`, node)
+    if (!(callback instanceof RuneFunction) && !(callback instanceof CoercionFunction)) {
+      throw new InterpreterRuntimeError(`Array.${name} expects a function callback.`, node)
     }
     const self = this
+    // Accept a user arrow function or a builtin coercion callable (Boolean/String/Number), so the
+    // idioms `filter(Boolean)` / `map(String)` / `map(Number)` work as in JS. Coercions are
+    // synchronous; only RuneFunctions can await tool calls.
+    const apply = (callbackArgs: Array<unknown>): Effect.Effect<unknown, unknown, R> =>
+      callback instanceof CoercionFunction
+        ? Effect.succeed(invokeCoercion(callback, callbackArgs, node, self.limits))
+        : self.invokeFunction(callback, callbackArgs)
     return Effect.gen(function*() {
       // Iterate a snapshot taken at call time so a callback that mutates the array can't
       // self-extend the loop — matching JS, where elements appended during iteration are not visited.
@@ -2083,13 +2097,13 @@ class Interpreter<R> {
       switch (name) {
         case "map": {
           const values: Array<unknown> = []
-          for (const [index, item] of items.entries()) values.push(yield* self.invokeFunction(callback, [item, index, items]))
+          for (const [index, item] of items.entries()) values.push(yield* apply([item, index, items]))
           return boundedCollection(values)
         }
         case "flatMap": {
           const values: Array<unknown> = []
           for (const [index, item] of items.entries()) {
-            const mapped = yield* self.invokeFunction(callback, [item, index, items])
+            const mapped = yield* apply([item, index, items])
             if (Array.isArray(mapped)) values.push(...mapped)
             else values.push(mapped)
             boundedCollection(values)
@@ -2099,32 +2113,32 @@ class Interpreter<R> {
         case "filter": {
           const values: Array<unknown> = []
           for (const [index, item] of items.entries()) {
-            if (yield* self.invokeFunction(callback, [item, index, items])) values.push(item)
+            if (yield* apply([item, index, items])) values.push(item)
           }
           return boundedCollection(values)
         }
         case "find":
           for (const [index, item] of items.entries()) {
-            if (yield* self.invokeFunction(callback, [item, index, items])) return item
+            if (yield* apply([item, index, items])) return item
           }
           return undefined
         case "findIndex":
           for (const [index, item] of items.entries()) {
-            if (yield* self.invokeFunction(callback, [item, index, items])) return index
+            if (yield* apply([item, index, items])) return index
           }
           return -1
         case "some":
           for (const [index, item] of items.entries()) {
-            if (yield* self.invokeFunction(callback, [item, index, items])) return true
+            if (yield* apply([item, index, items])) return true
           }
           return false
         case "every":
           for (const [index, item] of items.entries()) {
-            if (!(yield* self.invokeFunction(callback, [item, index, items]))) return false
+            if (!(yield* apply([item, index, items]))) return false
           }
           return true
         case "forEach":
-          for (const [index, item] of items.entries()) yield* self.invokeFunction(callback, [item, index, items])
+          for (const [index, item] of items.entries()) yield* apply([item, index, items])
           return undefined
         case "reduce": {
           let accumulator: unknown
@@ -2138,7 +2152,7 @@ class Interpreter<R> {
             start = 1
           }
           for (let index = start; index < items.length; index += 1) {
-            accumulator = yield* self.invokeFunction(callback, [accumulator, items[index], index, items])
+            accumulator = yield* apply([accumulator, items[index], index, items])
           }
           return accumulator
         }
@@ -2154,18 +2168,18 @@ class Interpreter<R> {
             start = items.length - 2
           }
           for (let index = start; index >= 0; index -= 1) {
-            accumulator = yield* self.invokeFunction(callback, [accumulator, items[index], index, items])
+            accumulator = yield* apply([accumulator, items[index], index, items])
           }
           return accumulator
         }
         case "findLast":
           for (let index = items.length - 1; index >= 0; index -= 1) {
-            if (yield* self.invokeFunction(callback, [items[index], index, items])) return items[index]
+            if (yield* apply([items[index], index, items])) return items[index]
           }
           return undefined
         case "findLastIndex":
           for (let index = items.length - 1; index >= 0; index -= 1) {
-            if (yield* self.invokeFunction(callback, [items[index], index, items])) return index
+            if (yield* apply([items[index], index, items])) return index
           }
           return -1
       }
@@ -2227,7 +2241,10 @@ class Interpreter<R> {
 
         if (property.type === "SpreadElement") {
           const spread = yield* self.evaluateExpression(getNode(property, "argument"))
-          if (spread === null || typeof spread !== "object" || Array.isArray(spread) || isRuntimeReference(spread)) {
+          // JS treats `{ ...null }` / `{ ...undefined }` as a no-op, so the common
+          // `{ ...maybeOpts, override }` merge works when the operand is absent.
+          if (spread === null || spread === undefined) continue
+          if (typeof spread !== "object" || Array.isArray(spread) || isRuntimeReference(spread)) {
             throw new InterpreterRuntimeError("Object spread requires a data object in Rune.", property, "InvalidDataValue")
           }
           for (const [key, value] of Object.entries(spread)) {
@@ -2436,12 +2453,17 @@ class Interpreter<R> {
         if (typeof key === "number") return new ComputedValue(objectValue[key])
         if (typeof key === "string" && /^\d+$/.test(key)) return new ComputedValue(objectValue[Number(key)])
         if (typeof key === "string" && stringMethods.has(key)) return new IntrinsicReference(objectValue, key)
-        throw new InterpreterRuntimeError(`String property '${String(key)}' is not available in Rune.`, propertyNode)
+        // Unknown property on a string reads as `undefined`, matching JS (`"x".foo === undefined`),
+        // instead of throwing — so defensive access like `result?.login ?? result` on a JSON-string
+        // tool result doesn't crash. (Optional chaining only guards null/undefined receivers, so a
+        // real string still reaches here.) Only the method allowlist above yields callables.
+        return new ComputedValue(undefined)
       }
 
       if (typeof objectValue === "number") {
         if (typeof key === "string" && numberMethods.has(key)) return new IntrinsicReference(objectValue, key)
-        throw new InterpreterRuntimeError(`Number property '${String(key)}' is not available in Rune.`, propertyNode)
+        // Unknown property on a number reads as `undefined`, matching JS, rather than throwing.
+        return new ComputedValue(undefined)
       }
 
       // Number / String expose a small allowlist of statics; everything else stays opaque.
@@ -2475,7 +2497,10 @@ class Interpreter<R> {
               [supportedSyntaxMessage],
             )
           }
-          throw new InterpreterRuntimeError(`Array property '${String(key)}' is not available in Rune.`, propertyNode)
+          // Unknown property on an array reads as `undefined`, matching JS (`[1,2].foo === undefined`),
+          // instead of throwing — so defensive access under optional chaining behaves as expected. The
+          // retryable-method hint above still fires for real methods we don't support (e.g. splice).
+          return new ComputedValue(undefined)
         }
         return { target: objectValue, key }
       }
