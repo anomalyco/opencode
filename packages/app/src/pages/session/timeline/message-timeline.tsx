@@ -813,10 +813,6 @@ export function MessageTimeline(props: {
     const session = sync().session.get(sessionID)
     if (!session) return false
 
-    const sessions = (sync().data.session ?? []).filter((s) => !s.parentID && !s.time?.archived)
-    const index = sessions.findIndex((s) => s.id === sessionID)
-    const nextSession = index === -1 ? undefined : (sessions[index + 1] ?? sessions[index - 1])
-
     const result = await sdk()
       .client.session.delete({ sessionID })
       .then((x) => x.data)
@@ -858,7 +854,13 @@ export function MessageTimeline(props: {
       }
     }
 
-    navigateAfterSessionRemoval(sessionID, session.parentID, nextSession?.id)
+    const nextSession = params.serverKey
+      ? undefined
+      : (() => {
+          const sessions = (sync().data.session ?? []).filter((s) => !s.parentID && !s.time?.archived)
+          const index = sessions.findIndex((s) => s.id === sessionID)
+          return index === -1 ? undefined : (sessions[index + 1] ?? sessions[index - 1])
+        })()
 
     sync().set(
       produce((draft) => {
@@ -869,7 +871,21 @@ export function MessageTimeline(props: {
     for (const id of removed) {
       sync().session.evict(id)
     }
+    if (params.serverKey) {
+      notifySessionTabsRemoved({
+        server: requireServerKey(params.serverKey),
+        directory: sdk().directory,
+        sessionIDs: [...removed],
+      })
+      if (params.id === sessionID) {
+        if (session.parentID) navigate(sessionHref(requireServerKey(params.serverKey), session.parentID))
+        else navigate("/")
+      }
+      return true
+    }
+
     notifySessionTabsRemoved({ directory: sdk().directory, sessionIDs: [...removed] })
+    navigateAfterSessionRemoval(sessionID, session.parentID, nextSession?.id)
     return true
   }
 
