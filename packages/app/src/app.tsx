@@ -31,20 +31,19 @@ import { Dynamic } from "solid-js/web"
 import { CommandProvider, useCommand, type CommandOption } from "@/context/command"
 import { CommentsProvider } from "@/context/comments"
 import { FileProvider } from "@/context/file"
-import { ServerSDKProvider, useServerSDK } from "@/context/server-sdk"
-import { ServerSyncProvider, useServerSync } from "@/context/server-sync"
+import { ServerSDKProvider } from "@/context/server-sdk"
+import { ServerSyncProvider } from "@/context/server-sync"
 import { GlobalProvider, useGlobal } from "@/context/global"
 import { HighlightsProvider } from "@/context/highlights"
 import { LanguageProvider, type Locale, useLanguage } from "@/context/language"
 import { LayoutProvider } from "@/context/layout"
 import { ModelsProvider } from "@/context/models"
-import { NotificationProvider, useNotification } from "@/context/notification"
+import { NotificationProvider } from "@/context/notification"
 import { PermissionProvider } from "@/context/permission"
 import { usePlatform } from "@/context/platform"
 import { PromptProvider } from "@/context/prompt"
 import { ServerConnection, ServerProvider, serverName, useServer } from "@/context/server"
 import { SettingsProvider, useSettings } from "@/context/settings"
-import { TerminalProvider } from "@/context/terminal"
 import { TabsProvider, useTabs, type DraftTab } from "@/context/tabs"
 import { SDKProvider, useSDK } from "@/context/sdk"
 import { WslServersProvider } from "@/wsl/context"
@@ -53,16 +52,9 @@ import LegacyLayout from "@/pages/layout"
 import NewLayout from "@/pages/layout-new"
 import { ErrorPage } from "./pages/error"
 import { useCheckServerHealth } from "./utils/server-health"
-import {
-  legacySessionHref,
-  legacySessionServer,
-  requireServerKey,
-  selectSessionLineage,
-  sessionHref,
-} from "./utils/session-route"
-import { isSessionNotFoundError } from "./utils/server-errors"
+import { legacySessionServer, requireServerKey, sessionHref } from "./utils/session-route"
 
-import Session from "@/pages/session"
+import { SessionPage, TargetSessionRoute as TargetSessionRouteContent } from "@/pages/session"
 import { NewHome, LegacyHome } from "@/pages/home"
 
 const NewSession = lazy(() => import("@/pages/new-session"))
@@ -96,11 +88,7 @@ const SessionRoute = () => {
     tabs.newDraft({ server: server.key, directory: sdk().directory }, search.prompt)
   })
 
-  return (
-    <SessionProviders>
-      <Session />
-    </SessionProviders>
-  )
+  return <SessionPage />
 }
 
 const TargetSessionRoute = () => {
@@ -115,72 +103,9 @@ const TargetSessionRoute = () => {
     <Show when={requireServerKey(params.serverKey)} keyed>
       <ServerSDKProvider server={conn}>
         <ServerSyncProvider server={conn}>
-          <ResolvedTargetSessionRoute />
+          <TargetSessionRouteContent />
         </ServerSyncProvider>
       </ServerSDKProvider>
-    </Show>
-  )
-}
-
-function ResolvedTargetSessionRoute() {
-  const params = useParams<{ serverKey: string; id: string }>()
-  const settings = useSettings()
-  const tabs = useTabs()
-  const sync = useServerSync()
-  const serverKey = createMemo(() => requireServerKey(params.serverKey))
-  const cached = createMemo(() => sync().session.lineage.peek(params.id))
-  const [resolved] = createResource(
-    () => {
-      if (cached()) return
-      return { id: params.id, server: serverKey(), sync: sync() }
-    },
-    ({ id, server, sync }) =>
-      sync.session.lineage.resolve(id).catch((error) => {
-        if (isSessionNotFoundError(error, id)) tabs.removeSessionTab({ server, sessionId: id })
-        throw error
-      }),
-  )
-  const current = createMemo(() => selectSessionLineage(params.id, cached(), resolved()))
-  const directory = createMemo(() => current()?.session.directory)
-  const targetDirectory = () => directory()!
-
-  createEffect(() => {
-    const session = current()
-    if (!session) return
-    tabs.addSessionTab({
-      server: serverKey(),
-      sessionId: session.root.id,
-    })
-  })
-
-  return (
-    <TargetServerScopedProviders directory={directory} sessionID={() => params.id}>
-      <Show when={!!current() || resolved.state !== "errored"} fallback={<ErrorPage error={resolved.error} />}>
-        <Show when={directory()}>
-          <Show
-            when={settings.general.newLayoutDesigns()}
-            fallback={<Navigate href={legacySessionHref(directory()!, params.id)} />}
-          >
-            <SDKProvider directory={targetDirectory}>
-              <DirectoryDataProvider directory={targetDirectory} server={serverKey}>
-                <TargetSessionPage />
-              </DirectoryDataProvider>
-            </SDKProvider>
-          </Show>
-        </Show>
-      </Show>
-    </TargetServerScopedProviders>
-  )
-}
-
-function TargetSessionPage() {
-  const sdk = useSDK()
-  const serverSDK = useServerSDK()
-  return (
-    <Show when={`${serverSDK().scope}\0${sdk().directory}`} keyed>
-      <SessionProviders>
-        <Session />
-      </SessionProviders>
     </Show>
   )
 }
@@ -232,7 +157,7 @@ function ResolvedDraftRoute(props: { draft: DraftTab }) {
     <Show when={`${props.draft.server}\0${props.draft.directory}`} keyed>
       <ServerSDKProvider server={conn}>
         <ServerSyncProvider server={conn}>
-          <TargetServerScopedProviders directory={directory}>
+          <DraftServerScopedProviders directory={directory}>
             <SDKProvider directory={directory}>
               <DirectoryDataProvider directory={directory} server={serverKey}>
                 <DraftProviders>
@@ -240,7 +165,7 @@ function ResolvedDraftRoute(props: { draft: DraftTab }) {
                 </DraftProviders>
               </DirectoryDataProvider>
             </SDKProvider>
-          </TargetServerScopedProviders>
+          </DraftServerScopedProviders>
         </ServerSyncProvider>
       </ServerSDKProvider>
     </Show>
@@ -365,35 +290,11 @@ function NewAppLayout(props: ParentProps) {
   )
 }
 
-function TargetServerScopedProviders(props: ServerScopedShellProps) {
+function DraftServerScopedProviders(props: ParentProps<{ directory?: () => string | undefined }>) {
   return (
     <PermissionProvider directory={props.directory}>
-      <MarkSessionNotificationsViewed sessionID={props.sessionID} />
       <ModelsProvider directory={props.directory}>{props.children}</ModelsProvider>
     </PermissionProvider>
-  )
-}
-
-function MarkSessionNotificationsViewed(props: { sessionID?: () => string | undefined }) {
-  const notification = useNotification()
-  createEffect(() => {
-    const sessionID = props.sessionID?.()
-    if (!notification.ready() || !sessionID) return
-    if (notification.session.unseenCount(sessionID) === 0) return
-    notification.session.markViewed(sessionID)
-  })
-  return null
-}
-
-function SessionProviders(props: ParentProps) {
-  return (
-    <TerminalProvider>
-      <FileProvider>
-        <PromptProvider>
-          <CommentsProvider>{props.children}</CommentsProvider>
-        </PromptProvider>
-      </FileProvider>
-    </TerminalProvider>
   )
 }
 

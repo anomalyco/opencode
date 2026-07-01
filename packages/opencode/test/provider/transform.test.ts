@@ -613,6 +613,84 @@ describe("ProviderTransform.providerOptions", () => {
     })
   })
 
+  test("forces reasoning for custom OpenAI package models with explicit effort", () => {
+    const model = createModel({
+      providerID: "meta",
+      api: {
+        id: "muse-spark",
+        url: "https://api.ai.meta.com/v1",
+        npm: "@ai-sdk/openai",
+      },
+    })
+
+    expect(ProviderTransform.providerOptions(model, { reasoningEffort: "xhigh", reasoningSummary: "auto" })).toEqual({
+      openai: { forceReasoning: true, reasoningEffort: "xhigh", reasoningSummary: "auto" },
+    })
+  })
+
+  test("forces reasoning for OpenAI package models marked reasoning-capable", () => {
+    expect(ProviderTransform.providerOptions(createModel(), { store: false })).toEqual({
+      openai: { forceReasoning: true, store: false },
+    })
+  })
+
+  test("forces reasoning for explicit effort even when model is not marked reasoning-capable", () => {
+    const model = createModel({
+      capabilities: {
+        temperature: true,
+        reasoning: false,
+        attachment: true,
+        toolcall: true,
+        input: { text: true, audio: false, image: true, video: false, pdf: false },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+    })
+
+    expect(ProviderTransform.providerOptions(model, { reasoningEffort: "xhigh" })).toEqual({
+      openai: { forceReasoning: true, reasoningEffort: "xhigh" },
+    })
+  })
+
+  test("forces reasoning for Azure OpenAI models with explicit effort", () => {
+    const model = createModel({
+      providerID: "azure",
+      api: {
+        id: "custom-gpt-5-deployment",
+        url: "https://azure.openai.example.com/openai/v1",
+        npm: "@ai-sdk/azure",
+      },
+    })
+
+    expect(ProviderTransform.providerOptions(model, { reasoningEffort: "xhigh" })).toEqual({
+      openai: { forceReasoning: true, reasoningEffort: "xhigh" },
+      azure: { forceReasoning: true, reasoningEffort: "xhigh" },
+    })
+  })
+
+  test("forces reasoning for Bedrock Mantle OpenAI models with explicit effort", () => {
+    const model = createModel({
+      providerID: "amazon-bedrock",
+      api: {
+        id: "openai.gpt-5-custom",
+        url: "https://bedrock-mantle.us-east-2.api.aws/openai/v1",
+        npm: "@ai-sdk/amazon-bedrock/mantle",
+      },
+    })
+
+    expect(ProviderTransform.providerOptions(model, { reasoningEffort: "xhigh" })).toEqual({
+      openai: { forceReasoning: true, reasoningEffort: "xhigh" },
+    })
+  })
+
+  test("overrides forceReasoning false when reasoning should be forced", () => {
+    expect(
+      ProviderTransform.providerOptions(createModel(), { forceReasoning: false, reasoningEffort: "xhigh" }),
+    ).toEqual({
+      openai: { forceReasoning: true, reasoningEffort: "xhigh" },
+    })
+  })
+
   test("uses gateway model provider slug for gateway models", () => {
     const model = createModel({
       providerID: "vercel",
@@ -707,7 +785,7 @@ describe("ProviderTransform.providerOptions", () => {
     })
 
     expect(ProviderTransform.providerOptions(model, { reasoningEffort: "medium" })).toEqual({
-      openai: { reasoningEffort: "medium" },
+      openai: { forceReasoning: true, reasoningEffort: "medium" },
     })
   })
 
@@ -2266,6 +2344,82 @@ describe("ProviderTransform.message - strip openai metadata when store=false", (
     expect(result[0].providerOptions?.openai?.otherOption).toBe("root-value")
     expect(result[0].content[0].providerOptions?.openai?.itemId).toBeUndefined()
     expect(result[0].content[0].providerOptions?.openai?.reasoningEncryptedContent).toBe("encrypted")
+  })
+
+  test("strips GitHub Copilot itemId from the copilot namespace, preserving other copilot options", () => {
+    const copilotModel = {
+      ...openaiModel,
+      id: "github-copilot/gpt-5.5",
+      providerID: "github-copilot",
+      api: {
+        id: "gpt-5.5",
+        url: "https://api.githubcopilot.com",
+        npm: "@ai-sdk/github-copilot",
+      },
+    }
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "reasoning",
+            text: "thinking...",
+            providerOptions: {
+              copilot: { itemId: "rs_123", reasoningEncryptedContent: "encrypted" },
+            },
+          },
+          {
+            // The stale itemId on tool-call parts is what Copilot echoes back as the
+            // `function_call` item `id`, which is what the upstream connection rejects.
+            type: "tool-call",
+            toolCallId: "call_1",
+            toolName: "bash",
+            input: { command: "ls" },
+            providerOptions: {
+              copilot: { itemId: "fc_456", reasoningEffort: "medium" },
+            },
+          },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, copilotModel, { store: false }) as any[]
+
+    expect(result[0].content[0].providerOptions?.copilot?.itemId).toBeUndefined()
+    expect(result[0].content[0].providerOptions?.copilot?.reasoningEncryptedContent).toBe("encrypted")
+    expect(result[0].content[1].providerOptions?.copilot?.itemId).toBeUndefined()
+    expect(result[0].content[1].providerOptions?.copilot?.reasoningEffort).toBe("medium")
+  })
+
+  test("leaves a stray openai namespace on a Copilot model untouched, since Copilot's Responses model only reads the copilot namespace", () => {
+    const copilotModel = {
+      ...openaiModel,
+      id: "github-copilot/gpt-5.5",
+      providerID: "github-copilot",
+      api: {
+        id: "gpt-5.5",
+        url: "https://api.githubcopilot.com",
+        npm: "@ai-sdk/github-copilot",
+      },
+    }
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "text",
+            text: "Hello",
+            providerOptions: {
+              openai: { itemId: "msg_456" },
+            },
+          },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, copilotModel, { store: false }) as any[]
+
+    expect(result[0].content[0].providerOptions?.openai?.itemId).toBe("msg_456")
   })
 
   test("preserves metadata for openai package when store is true", () => {

@@ -1,9 +1,9 @@
-import { Match, Show, Switch, createMemo } from "solid-js"
-import { Tooltip, type TooltipProps } from "@opencode-ai/ui/tooltip"
+import { Match, Show, Switch, createMemo, type ComponentProps, type JSX } from "solid-js"
 import { ProgressCircle } from "@opencode-ai/ui/progress-circle"
 import { ProgressCircleV2 } from "@opencode-ai/ui/v2/progress-circle-v2"
 import { Button } from "@opencode-ai/ui/button"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
+import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 
 import { useFile } from "@/context/file"
 import { useLayout } from "@/context/layout"
@@ -18,7 +18,16 @@ import { createSessionTabs } from "@/pages/session/helpers"
 interface SessionContextUsageProps {
   variant?: "button" | "indicator"
   buttonAppearance?: "default" | "v2"
-  placement?: TooltipProps["placement"]
+  placement?: ComponentProps<typeof TooltipV2>["placement"]
+}
+
+function ContextTooltipRow(props: { name: JSX.Element; value: JSX.Element }) {
+  return (
+    <div class="flex min-w-0 items-center gap-4">
+      <span class="shrink-0 text-v2-text-text-muted">{props.name}</span>
+      <span class="ml-auto min-w-0 truncate text-right text-v2-text-text-base">{props.value}</span>
+    </div>
+  )
 }
 
 function openSessionContext(args: {
@@ -113,38 +122,22 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
   )
 
   const tooltipValue = () => (
-    <div>
-      <Show when={tokens()}>
-        {(value) => (
-          <div class="flex items-center gap-2">
-            <span class="text-text-invert-strong">
-              {getSessionTokenTotal(value())?.toLocaleString(language.intl())}
-            </span>
-            <span class="text-text-invert-base">{language.t("context.usage.tokens")}</span>
-          </div>
-        )}
-      </Show>
-      <Show when={context()}>
-        {(ctx) => (
-          <div class="flex items-center gap-2">
-            <span class="text-text-invert-strong">{ctx().usage ?? 0}%</span>
-            <span class="text-text-invert-base">{language.t("context.usage.usage")}</span>
-          </div>
-        )}
-      </Show>
-      <div class="flex items-center gap-2">
-        <span class="text-text-invert-strong">{cost()}</span>
-        <span class="text-text-invert-base">{language.t("context.usage.cost")}</span>
-      </div>
+    <div class="flex w-[120px] flex-col gap-2">
+      <ContextTooltipRow name={language.t("context.usage.cost")} value={cost()} />
+      <ContextTooltipRow name={language.t("context.usage.usage")} value={`${context()?.usage ?? 0}%`} />
+      <ContextTooltipRow
+        name={language.t("context.usage.tokens")}
+        value={getSessionTokenTotal(tokens())?.toLocaleString(language.intl()) ?? "0"}
+      />
     </div>
   )
 
   return (
     <Show when={params.id}>
-      <Switch>
-        <Match when={variant() === "indicator"}>{circle()}</Match>
-        <Match when={buttonAppearance() === "v2"}>
-          <Tooltip value={tooltipValue()} placement={props.placement ?? "top"}>
+      <TooltipV2 value={tooltipValue()} placement={props.placement ?? "top"} shift={-8}>
+        <Switch>
+          <Match when={variant() === "indicator"}>{circle()}</Match>
+          <Match when={buttonAppearance() === "v2"}>
             <IconButtonV2
               type="button"
               variant="ghost-muted"
@@ -153,10 +146,8 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
               onClick={openContext}
               aria-label={language.t("context.usage.view")}
             />
-          </Tooltip>
-        </Match>
-        <Match when={true}>
-          <Tooltip value={tooltipValue()} placement={props.placement ?? "top"}>
+          </Match>
+          <Match when={true}>
             <Button
               type="button"
               variant="ghost"
@@ -166,9 +157,9 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
             >
               {circle()}
             </Button>
-          </Tooltip>
-        </Match>
-      </Switch>
+          </Match>
+        </Switch>
+      </TooltipV2>
     </Show>
   )
 }

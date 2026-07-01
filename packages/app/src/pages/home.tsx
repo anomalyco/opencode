@@ -671,7 +671,7 @@ function HomeProjectColumn(props: {
       class="mt-6 flex min-h-0 min-w-0 flex-col gap-4 overflow-hidden lg:mt-14 lg:pt-[52px]"
       aria-label={props.language.t("home.projects")}
     >
-      <div class="flex h-7 min-w-0 shrink-0 items-center justify-between pl-1.5">
+      <div class="flex h-7 min-w-0 shrink-0 items-center justify-between pl-1.5 pr-3">
         <div class={HOME_SECTION_LABEL}>{props.language.t("home.projects")}</div>
         <Show when={global.servers.list().length === 1}>
           <TooltipV2 placement="bottom" value={props.language.t("home.project.add")}>
@@ -697,7 +697,7 @@ function HomeProjectColumn(props: {
             </div>
           }
         >
-          <div class="flex min-w-0 flex-col gap-1 pr-3">
+          <div class="flex min-w-0 flex-col gap-4 pr-3">
             <For each={global.servers.list()}>
               {(item) => {
                 const key = ServerConnection.key(item)
