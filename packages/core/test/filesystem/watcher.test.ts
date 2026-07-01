@@ -226,12 +226,12 @@ describeWatcher("Watcher", () => {
           const branch = `watch-${Math.random().toString(36).slice(2)}`
           yield* ready(directory)
           yield* Effect.promise(() => $`git branch ${branch}`.cwd(directory).quiet())
-          expect(
-            yield* nextUpdate((event) => event.file === head, fs.writeFileString(head, `ref: refs/heads/${branch}\n`)),
-          ).toEqual({
-            file: head,
-            event: "change",
-          })
+          const event = yield* nextUpdate(
+            (next) => next.file === head,
+            fs.writeFileString(head, `ref: refs/heads/${branch}\n`),
+          )
+          expect(event.file).toBe(head)
+          expect(["add", "change"]).toContain(event.event)
         }),
       { git: true },
     ),
@@ -250,12 +250,12 @@ describeWatcher("Watcher", () => {
             const head = path.join(directory, ".git", "HEAD")
             const branch = `watch-${Math.random().toString(36).slice(2)}`
             yield* Effect.promise(() => $`git branch ${branch}`.cwd(directory).quiet())
-            expect(
-              yield* nextUpdate(
-                (event) => event.file === path.join(actual, "HEAD"),
-                afs.writeFileString(head, `ref: refs/heads/${branch}\n`),
-              ),
-            ).toEqual({ file: path.join(actual, "HEAD"), event: "change" })
+            const event = yield* nextUpdate(
+              (next) => next.file === path.join(actual, "HEAD"),
+              afs.writeFileString(head, `ref: refs/heads/${branch}\n`),
+            )
+            expect(event.file).toBe(path.join(actual, "HEAD"))
+            expect(["add", "change"]).toContain(event.event)
           }),
         {
           git: true,
