@@ -1,4 +1,5 @@
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
+import { Database } from "@opencode-ai/core/database/database"
 import { Agent } from "@/agent/agent"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { EventV2Bridge } from "@/event-v2-bridge"
@@ -48,6 +49,7 @@ const tryParseJson = (text: string) =>
 export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", (handlers) =>
   Effect.gen(function* () {
     const session = yield* Session.Service
+    const database = yield* Database.Service
     const shareSvc = yield* SessionShare.Service
     const promptSvc = yield* SessionPrompt.Service
     const revertSvc = yield* SessionRevert.Service
@@ -128,7 +130,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
           limit: ctx.query.limit,
           before: ctx.query.before,
           after: ctx.query.after,
-        }),
+        }).pipe(Effect.provideService(Database.Service, database)),
       )
       if (!page.cursor) return page.items
 
