@@ -1268,7 +1268,8 @@ export function providerOptions(model: Provider.Model, options: { [x: string]: a
     model.api.npm === "@ai-sdk/azure" ||
     model.api.npm === "@ai-sdk/amazon-bedrock/mantle"
   const normalized =
-    usesOpenAIReasoningGate && options.reasoningEffort !== undefined && options.forceReasoning === undefined
+    usesOpenAIReasoningGate &&
+    (model.capabilities.reasoning || options.reasoningEffort !== undefined || options.reasoningSummary !== undefined)
       ? { ...options, forceReasoning: true }
       : options
 

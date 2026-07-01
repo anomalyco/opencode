@@ -628,6 +628,30 @@ describe("ProviderTransform.providerOptions", () => {
     })
   })
 
+  test("forces reasoning for OpenAI package models marked reasoning-capable", () => {
+    expect(ProviderTransform.providerOptions(createModel(), { store: false })).toEqual({
+      openai: { forceReasoning: true, store: false },
+    })
+  })
+
+  test("forces reasoning for explicit effort even when model is not marked reasoning-capable", () => {
+    const model = createModel({
+      capabilities: {
+        temperature: true,
+        reasoning: false,
+        attachment: true,
+        toolcall: true,
+        input: { text: true, audio: false, image: true, video: false, pdf: false },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+    })
+
+    expect(ProviderTransform.providerOptions(model, { reasoningEffort: "xhigh" })).toEqual({
+      openai: { forceReasoning: true, reasoningEffort: "xhigh" },
+    })
+  })
+
   test("forces reasoning for Azure OpenAI models with explicit effort", () => {
     const model = createModel({
       providerID: "azure",
@@ -659,11 +683,11 @@ describe("ProviderTransform.providerOptions", () => {
     })
   })
 
-  test("preserves explicit forceReasoning override", () => {
+  test("overrides forceReasoning false when reasoning should be forced", () => {
     expect(
       ProviderTransform.providerOptions(createModel(), { forceReasoning: false, reasoningEffort: "xhigh" }),
     ).toEqual({
-      openai: { forceReasoning: false, reasoningEffort: "xhigh" },
+      openai: { forceReasoning: true, reasoningEffort: "xhigh" },
     })
   })
 
