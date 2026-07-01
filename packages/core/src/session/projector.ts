@@ -566,12 +566,6 @@ const layer = Layer.effectDiscard(
           timeCreated: event.data.timestamp,
           promotedSeq: event.durable.seq,
         })
-        yield* db
-          .update(SessionTable)
-          .set({ time_updated: DateTime.toEpochMillis(event.data.timestamp) })
-          .where(eq(SessionTable.id, event.data.sessionID))
-          .run()
-          .pipe(Effect.orDie)
         yield* run(db, event)
       }),
     )
