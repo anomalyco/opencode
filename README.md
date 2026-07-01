@@ -1,6 +1,6 @@
 <h1 align="center">
 This repo solves the Home and End keys not working
-<h1> 
+</h1> 
 <br>
 
 <p align="center">
