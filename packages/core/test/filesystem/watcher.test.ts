@@ -37,7 +37,7 @@ function provide(directory: string, vcs?: Location.Interface["vcs"]) {
     AppNodeBuilder.build(Watcher.node, [
       [Config.node, configLayer],
       [Location.node, locationLayer],
-    ]).pipe(Layer.provide(flagsLayer)),
+    ]),
   )
 }
 
