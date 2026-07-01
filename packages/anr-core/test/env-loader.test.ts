@@ -133,6 +133,16 @@ describe("findEnvFiles", () => {
 })
 
 describe("loadANRConfig", () => {
+  // loadANRConfig() loads env files into the shared process.env and never
+  // unsets keys. Without clearing between tests, a prior fixture (e.g. GovCloud)
+  // leaks AWS_REGION/OPENCODE_AWS_REGION into the next test, so the commercial
+  // case reads a stale region. Clear stale keys before each case so every test
+  // observes only its own fixture. (Also guards against the runner's ambient
+  // AWS_REGION on developer machines.)
+  beforeEach(() => {
+    clearStaleEnv()
+  })
+
   test("parses GovCloud env file correctly", async () => {
     const envPath = join(TMP, "project/.opencode/.env.govcloud")
     writeEnv(join(TMP, "project/.opencode"), ".env.govcloud", GOVCLOUD_ENV)
