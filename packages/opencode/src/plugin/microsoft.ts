@@ -6,7 +6,16 @@ import { InstallationVersion } from "@opencode-ai/core/installation/version"
 // Microsoft Entra ID / Microsoft Account OAuth2/OIDC endpoints.
 // Tenant is substituted at runtime: common | organizations | consumers | {tenant-id}
 const MICROSOFT_LOGIN_HOST = "https://login.microsoftonline.com"
-const DEFAULT_TENANT = "common"
+
+// Default to the OneInfo Consulting Azure AD tenant.
+// Override via tenant option or env var for other tenants.
+const COMPANY_TENANT = "3219b5f9-900d-4608-80c8-7cd86886de3"
+const DEFAULT_TENANT = COMPANY_TENANT
+
+// Public client registered in the OneInfo Consulting Azure AD tenant.
+// Override via MICROSOFT_CLIENT_ID env var or clientId option.
+const CLIENT_ID = "cb06d541-ed31-4195-b7ff-d2b50084da6f"
+
 const DEFAULT_SCOPES = "openid email profile offline_access"
 
 // Microsoft requires the redirect_uri to match exactly what was registered in
@@ -39,9 +48,9 @@ interface MicrosoftAuthPluginOptions {
   redirectUri?: string
 }
 
-interface MicrosoftConfig {
+export interface MicrosoftConfig {
   tenant: string
-  clientId: string | undefined
+  clientId: string
   scopes: string
   redirectUri: string
 }
@@ -49,7 +58,7 @@ interface MicrosoftConfig {
 function getConfig(options: MicrosoftAuthPluginOptions = {}): MicrosoftConfig {
   return {
     tenant: options.tenant ?? DEFAULT_TENANT,
-    clientId: options.clientId ?? process.env["MICROSOFT_CLIENT_ID"],
+    clientId: options.clientId ?? process.env["MICROSOFT_CLIENT_ID"] ?? CLIENT_ID,
     scopes: options.scopes ?? DEFAULT_SCOPES,
     redirectUri: options.redirectUri ?? REDIRECT_URI,
   }
@@ -60,7 +69,7 @@ interface PkceCodes {
   challenge: string
 }
 
-async function generatePKCE(): Promise<PkceCodes> {
+export async function generatePKCE(): Promise<PkceCodes> {
   const verifier = generateRandomString(64)
   const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier))
   return { verifier, challenge: base64UrlEncode(hash) }
@@ -78,7 +87,7 @@ function base64UrlEncode(buffer: ArrayBuffer): string {
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "")
 }
 
-function generateState(): string {
+export function generateState(): string {
   return base64UrlEncode(crypto.getRandomValues(new Uint8Array(32)).buffer)
 }
 
@@ -221,6 +230,7 @@ export function buildAuthorizeUrl(
     code_challenge: pkce.challenge,
     code_challenge_method: "S256",
     state,
+    prompt: "select_account",
   })
   return `${tenantUrl(tenant, "/oauth2/v2.0/authorize")}?${params.toString()}`
 }
@@ -237,7 +247,7 @@ async function exchangeCodeForTokens(
       grant_type: "authorization_code",
       code,
       redirect_uri: config.redirectUri,
-      client_id: config.clientId!,
+      client_id: config.clientId,
       code_verifier: pkce.verifier,
     }).toString(),
   })
@@ -258,7 +268,7 @@ async function refreshAccessToken(
     body: new URLSearchParams({
       grant_type: "refresh_token",
       refresh_token: refreshToken,
-      client_id: config.clientId!,
+      client_id: config.clientId,
       scope: config.scopes,
     }).toString(),
   })
@@ -276,7 +286,7 @@ export async function requestDeviceCode(config: MicrosoftConfig): Promise<Device
     method: "POST",
     headers: authHeaders(),
     body: new URLSearchParams({
-      client_id: config.clientId!,
+      client_id: config.clientId,
       scope: config.scopes,
     }).toString(),
   })
@@ -325,7 +335,7 @@ export async function pollDeviceCodeToken(
       headers: authHeaders(),
       body: new URLSearchParams({
         grant_type: "urn:ietf:params:oauth:grant-type:device_code",
-        client_id: config.clientId!,
+        client_id: config.clientId,
         device_code: device.device_code,
       }).toString(),
     })
@@ -462,7 +472,7 @@ let pendingOAuth: PendingOAuth | undefined
 // (created once and reused) can access the per-request config.
 let pendingOAuthConfig: MicrosoftConfig | undefined
 
-async function startOAuthServer(): Promise<{ port: number; redirectUri: string }> {
+export async function startOAuthServer(): Promise<{ port: number; redirectUri: string }> {
   if (oauthServer) return { port: OAUTH_PORT, redirectUri: REDIRECT_URI }
 
   const server = createServer((req, res) => {
@@ -559,14 +569,14 @@ function resetPendingOAuth() {
   pendingOAuthConfig = undefined
 }
 
-function stopOAuthServer() {
+export function stopOAuthServer() {
   if (oauthServer) {
     oauthServer.close(() => console.log("microsoft oauth server stopped"))
     oauthServer = undefined
   }
 }
 
-function waitForOAuthCallback(
+export function waitForOAuthCallback(
   pkce: PkceCodes,
   state: string,
   config: MicrosoftConfig,
@@ -613,17 +623,15 @@ interface RefreshResult {
 
 // --- Plugin ---
 
-const CLIENT_ID_MISSING_MESSAGE =
-  "Microsoft client ID is required. " +
-  "Set MICROSOFT_CLIENT_ID environment variable or pass `clientId` in plugin options. " +
-  "Register an Azure AD app (public client/native) at " +
-  "https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/CreateApplicationBlade " +
-  "with redirect URI: " +
-  REDIRECT_URI
-
 function requireClientId(config: MicrosoftConfig): string {
   if (!config.clientId) {
-    throw new Error(CLIENT_ID_MISSING_MESSAGE)
+    throw new Error(
+      "Microsoft client ID is required. " +
+      "Set MICROSOFT_CLIENT_ID environment variable or pass `clientId` in plugin options. " +
+      "Register an Azure AD app (public client/native) at " +
+      "https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/CreateApplicationBlade " +
+      "with redirect URI: " + REDIRECT_URI,
+    )
   }
   return config.clientId
 }
@@ -725,7 +733,7 @@ export async function MicrosoftAuthPlugin(
               config.tenant,
               pkce,
               state,
-              config.clientId!,
+              config.clientId,
               config.scopes,
             )
 

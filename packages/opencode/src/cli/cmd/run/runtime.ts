@@ -21,6 +21,7 @@ import { createRuntimeLifecycle } from "./runtime.lifecycle"
 import { trace } from "./trace"
 import { cycleVariant, formatModelLabel, resolveSavedVariant, resolveVariant, saveVariant } from "./variant.shared"
 import type { LocalReplayAnchor, LocalReplayRow, RunInput, RunPrompt, RunProvider, StreamCommit } from "./types"
+import { enforceMicrosoftLogin } from "@/cli/login-gate"
 
 /** @internal Exported for testing */
 export { pickVariant, resolveVariant } from "./variant.shared"
@@ -179,6 +180,11 @@ async function resolveExitTitle(
 // Files only attach on the first prompt turn -- after that, includeFiles
 // flips to false so subsequent turns don't re-send attachments.
 async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDeps = {}): Promise<void> {
+  // ═══════════════════════════════════════════════════════════════════
+  // Login gate: force Microsoft Entra ID auth before proceeding.
+  await enforceMicrosoftLogin()
+  // ═══════════════════════════════════════════════════════════════════
+
   const start = performance.now()
   const log = trace()
   const tuiConfigTask = resolveRunTuiConfig()

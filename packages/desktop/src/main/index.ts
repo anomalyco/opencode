@@ -27,6 +27,7 @@ import {
   type SidecarListener,
 } from "./server"
 import { setupAutoUpdater, showUpdaterDialog } from "./updater"
+import { enforceDesktopLogin } from "./login-gate"
 import {
   createMainWindow,
   registerRendererProtocol,
@@ -346,6 +347,8 @@ const main = Effect.gen(function* () {
   }).pipe(forwardInitializationFailure(serverReady), Effect.forkChild)
 
   yield* Fiber.await(loadingTask)
+
+  yield* Effect.promise(() => enforceDesktopLogin(url, password))
 
   mainWindow = createMainWindow()
   if (mainWindow) {
