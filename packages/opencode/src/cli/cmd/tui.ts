@@ -142,10 +142,6 @@ export const TuiThreadCommand = cmd({
       .option("demo", {
         type: "boolean",
         hidden: true,
-      })
-      .option("variant", {
-        type: "string",
-        describe: "model variant (provider-specific reasoning effort, e.g., high, max, minimal)",
       }),
   handler: async (args) => {
     if (args.replay === true) {
@@ -172,7 +168,6 @@ export const TuiThreadCommand = cmd({
         session: args.session,
         fork: args.fork,
         model: args.model,
-        variant: args.variant,
         agent: args.agent,
         prompt: args.prompt,
         replay: noReplay ? false : undefined,
@@ -213,12 +208,14 @@ export const TuiThreadCommand = cmd({
         return
       }
       const cwd = Filesystem.resolve(process.cwd())
-      // TUI handler runs outside effectCmd, so the Instance ALS context that
-      // Provider.Service.list needs isn't established. Provide it here. The
-      // worker spawned below sets up its own.
-      const pick = await bootstrap(cwd, (ctx) => Provider.resolveSelection(args.model, args.variant, ctx))
-      const model = pick.model
-      const variant = pick.variant
+      // Resolving `--model free` requires Provider.Service.list, which needs the
+      // Instance ALS context the effectCmd wrapper would normally provide. The
+      // TUI handler runs outside it, so bootstrap it here only for `free`; any
+      // other model is passed through directly to avoid the load/dispose cost.
+      const model =
+        args.model === "free"
+          ? (await bootstrap(cwd, (ctx) => Provider.resolveSelection(args.model, ctx))).model
+          : args.model
 
       const worker = new Worker(file)
       const client = Rpc.client<typeof rpc>(worker)
@@ -298,7 +295,6 @@ export const TuiThreadCommand = cmd({
               sessionID: args.session,
               agent: args.agent,
               model,
-              variant,
               prompt,
               fork: args.fork,
               auto: args.auto || args.yolo || args["dangerously-skip-permissions"],

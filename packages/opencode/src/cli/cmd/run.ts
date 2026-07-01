@@ -210,10 +210,6 @@ export const RunCommand = effectCmd({
         type: "number",
         describe: "port for the local server (defaults to random port if no value provided)",
       })
-      .option("variant", {
-        type: "string",
-        describe: "model variant (provider-specific reasoning effort, e.g., high, max, minimal)",
-      })
       .option("thinking", {
         type: "boolean",
         describe: "show thinking blocks",
@@ -274,6 +270,7 @@ export const RunCommand = effectCmd({
       const interactive = args.mini
       const auto = args.auto || args.yolo || args["dangerously-skip-permissions"]
       const thinking = interactive ? (args.thinking ?? true) : (args.thinking ?? false)
+      const resolved = await Provider.resolveSelection(args.model, localInstance)
       const die = (message: string): never => {
         UI.error(message)
         process.exit(1)
@@ -837,8 +834,6 @@ export const RunCommand = effectCmd({
             const error = await completed
             if (error) process.exitCode = 1
           }
-          const resolved = await Provider.resolveSelection(args.model, args.variant, localInstance)
-
           if (args.command) {
             const result = await client.session.command({
               sessionID,
@@ -846,7 +841,6 @@ export const RunCommand = effectCmd({
               model: resolved.model,
               command: args.command,
               arguments: message,
-              variant: resolved.variant,
             })
             if (result.error) {
               if (!emit("error", { error: result.error })) UI.error(formatRunError(result.error))
@@ -862,7 +856,6 @@ export const RunCommand = effectCmd({
             sessionID,
             agent,
             model,
-            variant: resolved.variant,
             parts: [...files, { type: "text", text: message }],
           })
           if (result.error) {
@@ -874,7 +867,7 @@ export const RunCommand = effectCmd({
           return
         }
 
-        const model = pick(args.model)
+        const model = pick(resolved.model)
         const { runInteractiveMode } = await import("./run/runtime")
         try {
           await runInteractiveMode({
@@ -887,7 +880,7 @@ export const RunCommand = effectCmd({
             replayLimit: args["replay-limit"],
             agent,
             model,
-            variant: args.variant,
+            variant: undefined,
             files,
             initialInput,
             createSession: createFreshSession,
@@ -902,7 +895,7 @@ export const RunCommand = effectCmd({
       }
 
       if (interactive && !args.attach && !args.session && !args.continue) {
-        const model = pick(args.model)
+        const model = pick(resolved.model)
         const { runInteractiveLocalMode } = await import("./run/runtime")
         const fetchFn = (async (input: RequestInfo | URL, init?: RequestInit) => {
           const { Server } = await import("@/server/server")
@@ -923,7 +916,7 @@ export const RunCommand = effectCmd({
             createSession: createFreshSession,
             agent: args.agent,
             model,
-            variant: args.variant,
+            variant: undefined,
             replay,
             replayLimit: args["replay-limit"],
             files,
@@ -969,7 +962,6 @@ type MiniCommandInput = {
   session?: string
   fork?: boolean
   model?: string
-  variant?: string
   agent?: string
   prompt?: string
   replay?: boolean
@@ -998,7 +990,6 @@ export async function runMini(input: MiniCommandInput) {
     username: input.username,
     dir: input.directory,
     port: undefined,
-    variant: input.variant,
     thinking: undefined,
     mini: true,
     interactive: false,

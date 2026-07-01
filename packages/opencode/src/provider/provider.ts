@@ -1,4 +1,5 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import os from "os"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import fuzzysort from "fuzzysort"
@@ -1964,7 +1965,6 @@ export function sort<T extends { id: string }>(models: T[]) {
 }
 
 const FREE = "free"
-export const ANY = "any"
 
 export function isFree(model: Model) {
   // Structural filter only: any opencode model whose every cost dimension is
@@ -1982,17 +1982,9 @@ export function isFree(model: Model) {
   )
 }
 
-function freeVariants(model: Model) {
-  return Object.keys(model.variants ?? {})
-    .toSorted()
-    .filter((item) => item !== "default")
-}
-
-const { runPromise } = makeRuntime(Service, defaultLayer)
-
-export async function resolveSelection(model?: string, variant?: string, instance?: InstanceContext) {
-  if (!model) return { model, variant }
-  if (model !== FREE) return { model, variant }
+export async function resolveSelection(model?: string, instance?: InstanceContext) {
+  if (!model) return { model }
+  if (model !== FREE) return { model }
   // Service.list() requires InstanceRef in the Effect fiber. Callers from plain
   // async code (run.ts handler post-await, thread.ts bootstrap callback) have no
   // current fiber, so we provide it explicitly when given. Tests run inside an
@@ -2009,16 +2001,8 @@ export async function resolveSelection(model?: string, variant?: string, instanc
     throw new Error(
       `No free opencode models found. The opencode provider must be configured (set OPENCODE_API_KEY) and at least one model in its catalog must have all costs set to 0.`,
     )
-  const value =
-    variant === ANY
-      ? (() => {
-          const choices = freeVariants(pick)
-          return choices[Math.floor(Math.random() * choices.length)]
-        })()
-      : variant
   return {
     model: `${pick.providerID}/${pick.id}`,
-    variant: value,
   }
 }
 
@@ -2035,5 +2019,7 @@ export const node = LayerNode.make({
   layer: layer,
   deps: [FSUtil.node, Config.node, Auth.node, Env.node, Plugin.node, ModelsDev.node, RuntimeFlags.node],
 })
+
+const { runPromise } = makeRuntime(Service, AppNodeBuilder.build(node))
 
 export * as Provider from "./provider"

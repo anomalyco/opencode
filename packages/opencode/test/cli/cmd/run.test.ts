@@ -5,13 +5,11 @@ import { Provider } from "../../../src/provider/provider"
 const seen = {
   prompt: [] as any[],
   command: [] as any[],
-  variant: [] as any[],
 }
 
 function setup() {
-  spyOn(Provider, "resolveSelection").mockImplementation(async (model, variant) => ({
+  spyOn(Provider, "resolveSelection").mockImplementation(async (model) => ({
     model: model === "free" ? "opencode/freebie" : model,
-    variant: variant === "any" ? "high" : variant,
   }))
   spyOn(SDK, "createOpencodeClient").mockImplementation(
     () =>
@@ -31,12 +29,10 @@ function setup() {
           create: async () => ({ data: { id: "session-1" } }),
           prompt: async (input: any) => {
             seen.prompt.push(input)
-            seen.variant.push(input.variant)
             return {}
           },
           command: async (input: any) => {
             seen.command.push(input)
-            seen.variant.push(input.variant)
             return {}
           },
         },
@@ -49,7 +45,6 @@ describe("run command", () => {
     mock.restore()
     seen.prompt.length = 0
     seen.command.length = 0
-    seen.variant.length = 0
   })
 
   async function call(extra?: Record<string, unknown>) {
@@ -81,7 +76,6 @@ describe("run command", () => {
         password: undefined,
         dir: undefined,
         port: undefined,
-        variant: undefined,
         thinking: false,
         "dangerously-skip-permissions": false,
         "--": [],
@@ -106,12 +100,5 @@ describe("run command", () => {
 
     expect(seen.command).toHaveLength(1)
     expect(seen.command[0].model).toBe("opencode/freebie")
-  })
-
-  test("passes the resolved any variant to sessions", async () => {
-    await call({ variant: "any" })
-
-    expect(seen.prompt).toHaveLength(1)
-    expect(seen.variant[0]).toBe("high")
   })
 })

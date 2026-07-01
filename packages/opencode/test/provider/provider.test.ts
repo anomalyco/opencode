@@ -84,42 +84,9 @@ const paid = (providers: Record<string, { models: Record<string, { cost: { input
 
 const languageBaseURL = (language: unknown) => (language as { config: { baseURL: string } }).config.baseURL
 
-function free(model: { cost: { input: number; output: number; cache: { read: number; write: number } } }) {
-  return (
-    model.cost.input === 0 && model.cost.output === 0 && model.cost.cache.read === 0 && model.cost.cache.write === 0
-  )
-}
-
 afterEach(() => {
   mock.restore()
 })
-
-const freeConfig = {
-  provider: {
-    opencode: {
-      whitelist: ["alpha-free", "plain-free"],
-      options: { apiKey: "test-api-key" },
-      models: {
-        "alpha-free": {
-          name: "Alpha Free",
-          reasoning: true,
-          cost: { input: 0, output: 0, cache_read: 0, cache_write: 0 },
-          limit: { context: 128000, output: 4096 },
-          variants: {
-            low: { effort: "low" },
-            high: { effort: "high" },
-          },
-        },
-        "plain-free": {
-          name: "Plain Free",
-          reasoning: false,
-          cost: { input: 0, output: 0, cache_read: 0, cache_write: 0 },
-          limit: { context: 128000, output: 4096 },
-        },
-      },
-    },
-  },
-}
 
 const it = testEffect(LayerNode.compile(LayerNode.group([Provider.node, Env.node, Plugin.node])))
 const experimentalModels = testEffect(providerLayer({ enableExperimentalModels: true }))
@@ -444,84 +411,14 @@ it.instance(
   },
 )
 
-it.instance(
-  "resolveSelection picks a variant from the chosen free model",
-  Effect.gen(function* () {
-    const providers = yield* list
-    const provider = providers[ProviderV2.ID.opencode]
-    const models = Provider.sort(Object.values(provider.models).filter(free))
-    const index = models.findIndex((item) => String(item.id) === "alpha-free")
-    const choices = Object.keys(provider.models["alpha-free"].variants ?? {}).toSorted()
-
-    expect(index).toBeGreaterThanOrEqual(0)
-    expect(choices.length).toBeGreaterThan(0)
-
-    let count = 0
-    spyOn(Math, "random").mockImplementation(() => {
-      count += 1
-      if (count === 1) return (index + 0.1) / models.length
-      return (choices.length - 1 + 0.1) / choices.length
-    })
-
-    const result = yield* Effect.promise(() => Provider.resolveSelection("free", "any"))
-
-    expect(result.model).toBe("opencode/alpha-free")
-    expect(result.variant).toBe(choices.at(-1))
-  }),
-  { config: freeConfig },
-)
-
-it.instance(
-  "resolveSelection keeps explicit variants unchanged",
-  Effect.gen(function* () {
-    const providers = yield* list
-    const provider = providers[ProviderV2.ID.opencode]
-    const models = Provider.sort(Object.values(provider.models).filter(free))
-    const index = models.findIndex((item) => String(item.id) === "alpha-free")
-
-    expect(index).toBeGreaterThanOrEqual(0)
-
-    spyOn(Math, "random").mockReturnValue((index + 0.1) / models.length)
-
-    const result = yield* Effect.promise(() => Provider.resolveSelection("free", "max"))
-
-    expect(result.model).toBe("opencode/alpha-free")
-    expect(result.variant).toBe("max")
-  }),
-  { config: freeConfig },
-)
-
-it.instance(
-  "resolveSelection falls back to no variant when the chosen free model has none",
-  Effect.gen(function* () {
-    const providers = yield* list
-    const provider = providers[ProviderV2.ID.opencode]
-    const models = Provider.sort(Object.values(provider.models).filter(free))
-    const index = models.findIndex((item) => String(item.id) === "plain-free")
-
-    expect(index).toBeGreaterThanOrEqual(0)
-    expect(provider.models["plain-free"].variants ?? {}).toEqual({})
-
-    spyOn(Math, "random").mockReturnValue((index + 0.1) / models.length)
-
-    const result = yield* Effect.promise(() => Provider.resolveSelection("free", "any"))
-
-    expect(result.model).toBe("opencode/plain-free")
-    expect(result.variant).toBeUndefined()
-  }),
-  { config: freeConfig },
-)
-
 test("resolveSelection passes through when model is undefined", async () => {
-  const result = await Provider.resolveSelection(undefined, "any")
+  const result = await Provider.resolveSelection(undefined)
   expect(result.model).toBeUndefined()
-  expect(result.variant).toBe("any")
 })
 
 test("resolveSelection short-circuits with an explicit non-free model", async () => {
-  const result = await Provider.resolveSelection("opencode/big-pickle", "any")
+  const result = await Provider.resolveSelection("opencode/big-pickle")
   expect(result.model).toBe("opencode/big-pickle")
-  expect(result.variant).toBe("any")
 })
 
 it.instance(
