@@ -283,6 +283,26 @@ function normalizeMessages(
     })
   }
 
+  // The @ai-sdk/openai-compatible SDK unconditionally extracts both `reasoning_content`
+  // and `reasoning` fields from API responses into typed reasoning content parts (see
+  // convert-to-openai-compatible-chat-messages.ts). On follow-up turns it then
+  // re-serializes any reasoning parts back as `reasoning_content` in the request body.
+  // For custom deployments (e.g. ollama) that return a `reasoning` field but do not
+  // accept `reasoning_content` back in message history, this causes API errors.
+  // When `interleaved` is not explicitly configured as an object with a field name,
+  // strip reasoning parts here so the SDK never sends them back on subsequent turns.
+  if (
+    model.api.npm === "@ai-sdk/openai-compatible" &&
+    !(typeof model.capabilities.interleaved === "object" && model.capabilities.interleaved.field)
+  ) {
+    msgs = msgs.map((msg) => {
+      if (msg.role !== "assistant" || !Array.isArray(msg.content)) return msg
+      const filtered = msg.content.filter((part: any) => part.type !== "reasoning")
+      if (filtered.length === msg.content.length) return msg
+      return { ...msg, content: filtered }
+    })
+  }
+
   if (
     typeof model.capabilities.interleaved === "object" &&
     model.capabilities.interleaved.field &&
