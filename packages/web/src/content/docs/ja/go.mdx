@@ -49,8 +49,8 @@ OpenCode Goをサブスクライブできるのは、1つのワークスペー�
 
 現在のモデルリストには以下が含まれます：
 
+- **GLM-5.2**
 - **GLM-5.1**
-- **GLM-5**
 - **Kimi K2.7 Code**
 - **Kimi K2.6**
 - **MiMo-V2.5**
@@ -75,14 +75,14 @@ OpenCode Goには以下の制限が含まれています：
 - **週間の制限** — 30ドル分の利用
 - **月間の制限** — 60ドル分の利用
 
-制限はドル単位で定義されています。つまり、実際のリクエスト数は使用するモデルによって異なります。DeepSeek V4 Flashのような安価なモデルではより多くのリクエストが可能ですが、GLM-5.1のような高コストのモデルではリクエスト数が少なくなります。
+制限はドル単位で定義されています。つまり、実際のリクエスト数は使用するモデルによって異なります。DeepSeek V4 Flashのような安価なモデルではより多くのリクエストが可能ですが、GLM-5.2のような高コストのモデルではリクエスト数が少なくなります。
 
 以下の表は、一般的なGoの利用パターンに基づいた推定リクエスト数を示しています：
 
 | Model             | 5時間あたりのリクエスト数 | 週間リクエスト数 | 月間リクエスト数 |
 | ----------------- | ------------------------- | ---------------- | ---------------- |
+| GLM-5.2           | 880                       | 2,150            | 4,300            |
 | GLM-5.1           | 880                       | 2,150            | 4,300            |
-| GLM-5             | 1,150                     | 2,880            | 5,750            |
 | Kimi K2.6         | 1,150                     | 2,880            | 5,750            |
 | Kimi K2.7 Code    | 1,350                     | 4,630            | 9,250            |
 | MiMo-V2.5         | 30,100                    | 75,200           | 150,400          |
@@ -97,8 +97,8 @@ OpenCode Goには以下の制限が含まれています：
 
 推定値は、観測された平均的なリクエストパターンに基づいています：
 
-- GLM-5/5.1 — リクエストあたり 入力 700トークン、キャッシュ 52,000トークン、出力 150トークン
-- Kimi K2.7/K2.6 — リクエストあたり 入力 870トークン、キャッシュ 55,000トークン、出力 200トークン
+- GLM-5.2/5.1 — リクエストあたり 入力 700トークン、キャッシュ 52,000トークン、出力 150トークン
+- Kimi K2.7 Code/K2.6 — リクエストあたり 入力 870トークン、キャッシュ 55,000トークン、出力 200トークン
 - DeepSeek V4 Pro — リクエストあたり 入力 750トークン、キャッシュ 82,000トークン、出力 290トークン
 - DeepSeek V4 Flash — リクエストあたり 入力 790トークン、キャッシュ 68,000トークン、出力 280トークン
 - MiniMax M3 — リクエストあたり 入力 510トークン、キャッシュ 56,000トークン、出力 190トークン
@@ -113,8 +113,8 @@ OpenCode Goには以下の制限が含まれています：
 
 | Model                        | Input | Output | Cached Read | Cached Write |
 | ---------------------------- | ----- | ------ | ----------- | ------------ |
+| GLM-5.2                      | $1.40 | $4.40  | $0.26       | -            |
 | GLM-5.1                      | $1.40 | $4.40  | $0.26       | -            |
-| GLM-5                        | $1.00 | $3.20  | $0.20       | -            |
 | Kimi K2.7 Code               | $0.95 | $4.00  | $0.19       | -            |
 | Kimi K2.6                    | $0.95 | $4.00  | $0.16       | -            |
 | MiMo V2.5                    | $0.14 | $0.28  | $0.0028     | -            |
@@ -152,9 +152,9 @@ Zen残高にクレジットがある場合は、コンソールで**Use balance*
 
 | Model             | Model ID          | Endpoint                                         | AI SDK Package              |
 | ----------------- | ----------------- | ------------------------------------------------ | --------------------------- |
+| GLM-5.2           | glm-5.2           | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | GLM-5.1           | glm-5.1           | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| GLM-5             | glm-5             | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| Kimi K2.7         | kimi-k2.7         | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| Kimi K2.7 Code    | kimi-k2.7-code    | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Kimi K2.6         | kimi-k2.6         | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Pro   | deepseek-v4-pro   | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Flash | deepseek-v4-flash | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |

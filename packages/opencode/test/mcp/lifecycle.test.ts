@@ -1,6 +1,8 @@
 import path from "node:path"
+import { pathToFileURL } from "node:url"
 import { expect, mock, beforeEach } from "bun:test"
-import { ToolListChangedNotificationSchema } from "@modelcontextprotocol/sdk/types.js"
+import { ListRootsRequestSchema, ToolListChangedNotificationSchema } from "@modelcontextprotocol/sdk/types.js"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Cause, Effect, Exit } from "effect"
 import type { MCP as MCPNS } from "../../src/mcp/index"
 import { testEffect } from "../lib/effect"
@@ -12,10 +14,12 @@ import { TestInstance } from "../fixture/fixture"
 interface MockClientState {
   capabilities: { tools?: object; prompts?: object; resources?: object }
   capabilitiesShouldThrow: boolean
+  instructions?: string
   tools: Array<{ name: string; description?: string; inputSchema: object; outputSchema?: object }>
   listToolsCalls: number
   listPromptsCalls: number
   listResourcesCalls: number
+  listResourceTemplatesCalls: number
   getPromptTimeout?: number
   readResourceTimeout?: number
   requestCalls: number
@@ -25,6 +29,7 @@ interface MockClientState {
   listResourcesShouldFail: boolean
   prompts: Array<{ name: string; description?: string }>
   resources: Array<{ name: string; uri: string; description?: string }>
+  resourceTemplates: Array<{ name: string; uriTemplate: string; description?: string }>
   toolPages: Record<
     string,
     {
@@ -37,7 +42,13 @@ interface MockClientState {
     string,
     { resources: Array<{ name: string; uri: string; description?: string }>; nextCursor?: string }
   >
+  resourceTemplatePages: Record<
+    string,
+    { resourceTemplates: Array<{ name: string; uriTemplate: string; description?: string }>; nextCursor?: string }
+  >
   closed: boolean
+  clientOptions?: { capabilities?: { roots?: { listChanged?: boolean } } }
+  requestHandlers: Map<unknown, (...args: any[]) => Promise<any>>
   notificationHandlers: Map<unknown, (...args: any[]) => any>
 }
 
@@ -64,6 +75,7 @@ function getOrCreateClientState(name?: string): MockClientState {
       listToolsCalls: 0,
       listPromptsCalls: 0,
       listResourcesCalls: 0,
+      listResourceTemplatesCalls: 0,
       requestCalls: 0,
       listToolsShouldFail: false,
       listToolsError: "listTools failed",
@@ -71,10 +83,13 @@ function getOrCreateClientState(name?: string): MockClientState {
       listResourcesShouldFail: false,
       prompts: [],
       resources: [],
+      resourceTemplates: [],
       toolPages: {},
       promptPages: {},
       resourcePages: {},
+      resourceTemplatePages: {},
       closed: false,
+      requestHandlers: new Map(),
       notificationHandlers: new Map(),
     }
     clientStates.set(key, state)
@@ -149,8 +164,10 @@ void mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
     _state!: MockClientState
     transport: any
 
-    constructor(_opts: any) {
+    constructor(_info: any, options?: MockClientState["clientOptions"]) {
       clientCreateCount++
+      this._state = getOrCreateClientState(lastCreatedClientName)
+      this._state.clientOptions = options
     }
 
     async connect(transport: { start: () => Promise<void> }) {
@@ -160,6 +177,10 @@ void mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
       this._state = getOrCreateClientState(lastCreatedClientName)
     }
 
+    setRequestHandler(schema: unknown, handler: (...args: any[]) => Promise<any>) {
+      this._state.requestHandlers.set(schema, handler)
+    }
+
     setNotificationHandler(schema: unknown, handler: (...args: any[]) => any) {
       this._state?.notificationHandlers.set(schema, handler)
     }
@@ -167,6 +188,10 @@ void mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
     getServerCapabilities() {
       if (this._state?.capabilitiesShouldThrow) throw new Error("capability discovery failed")
       return this._state?.capabilities
+    }
+
+    getInstructions() {
+      return this._state?.instructions
     }
 
     async listTools(params?: { cursor?: string }) {
@@ -214,6 +239,13 @@ void mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
       return { resources: this._state?.resources ?? [] }
     }
 
+    async listResourceTemplates(params?: { cursor?: string }) {
+      if (this._state) this._state.listResourceTemplatesCalls++
+      const page = this._state?.resourceTemplatePages[params === undefined ? "initial" : (params.cursor ?? "")]
+      if (page) return page
+      return { resourceTemplates: this._state?.resourceTemplates ?? [] }
+    }
+
     async getPrompt(_params: unknown, options?: { timeout?: number }) {
       if (this._state) this._state.getPromptTimeout = options?.timeout
       return { messages: [] }
@@ -244,12 +276,34 @@ beforeEach(() => {
 const { MCP } = await import("../../src/mcp/index")
 const { McpOAuthCallback } = await import("../../src/mcp/oauth-callback")
 
-const it = testEffect(MCP.defaultLayer)
+const it = testEffect(LayerNode.compile(MCP.node))
 
 function statusName(status: Record<string, MCPNS.Status> | MCPNS.Status, server: string) {
   if ("status" in status) return status.status
   return status[server]?.status
 }
+
+it.instance(
+  "advertises and lists the instance directory as its root",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        const { directory } = yield* TestInstance
+        lastCreatedClientName = "roots"
+        yield* mcp.add("roots", { type: "local", command: ["echo", "test"] })
+
+        const state = getOrCreateClientState("roots")
+        expect(state.clientOptions?.capabilities?.roots).toEqual({})
+        expect(state.clientOptions?.capabilities?.roots?.listChanged).toBeUndefined()
+
+        const handler = state.requestHandlers.get(ListRootsRequestSchema)
+        expect(handler).toBeDefined()
+        const result = yield* Effect.promise(() => handler?.() ?? Promise.reject(new Error("roots handler missing")))
+        expect(result).toEqual({ roots: [{ uri: pathToFileURL(directory).href }] })
+      }),
+    ),
+  { config: { mcp: {} } },
+)
 
 it.instance(
   "local mcp cwd resolves relative paths against instance directory",
@@ -300,6 +354,60 @@ it.instance(
 )
 
 it.instance(
+  "instructions() returns connected server instructions with tool names",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "guide-server"
+        const serverState = getOrCreateClientState("guide-server")
+        serverState.instructions = "Use lookup before mutate."
+
+        yield* mcp.add("guide-server", {
+          type: "local",
+          command: ["echo", "test"],
+        })
+
+        expect(yield* mcp.instructions()).toContainEqual({
+          name: "guide-server",
+          instructions: "Use lookup before mutate.",
+          tools: ["guide-server_test_tool"],
+        })
+      }),
+    ),
+  { config: { mcp: {} } },
+)
+
+it.instance(
+  "instructions() omits empty and disconnected server instructions",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "temporary-server"
+        getOrCreateClientState("temporary-server").instructions = "Temporary guidance."
+
+        yield* mcp.add("temporary-server", {
+          type: "local",
+          command: ["echo", "test"],
+        })
+        yield* mcp.disconnect("temporary-server")
+
+        lastCreatedClientName = "blank-server"
+        getOrCreateClientState("blank-server").instructions = "   "
+
+        yield* mcp.add("blank-server", {
+          type: "local",
+          command: ["echo", "test"],
+        })
+
+        const instructions = yield* mcp.instructions()
+        expect(instructions.some((item) => item.name === "temporary-server")).toBe(false)
+        expect(instructions.some((item) => item.name === "blank-server")).toBe(false)
+      }),
+    ),
+  { config: { mcp: {} } },
+)
+
+it.instance(
   "follows cursors when listing tools, prompts, and resources",
   () =>
     MCP.Service.use((mcp: MCPNS.Interface) =>
@@ -321,6 +429,13 @@ it.instance(
           initial: { resources: [{ name: "resource-one", uri: "test://one" }], nextCursor: "resources-2" },
           "resources-2": { resources: [{ name: "resource-two", uri: "test://two" }] },
         }
+        serverState.resourceTemplatePages = {
+          initial: {
+            resourceTemplates: [{ name: "template-one", uriTemplate: "test://one/{id}" }],
+            nextCursor: "resource-templates-2",
+          },
+          "resource-templates-2": { resourceTemplates: [{ name: "template-two", uriTemplate: "test://two/{id}" }] },
+        }
 
         yield* mcp.add("paged-server", {
           type: "local",
@@ -329,10 +444,15 @@ it.instance(
 
         expect(Object.keys(yield* mcp.tools())).toEqual(["paged-server_tool-one", "paged-server_tool-two"])
         expect(Object.keys(yield* mcp.prompts())).toEqual(["paged-server:prompt-one", "paged-server:prompt-two"])
-        expect(Object.keys(yield* mcp.resources())).toEqual(["paged-server:resource-one", "paged-server:resource-two"])
+        expect(Object.keys(yield* mcp.resources())).toEqual(["paged-server:test://one", "paged-server:test://two"])
+        expect(Object.keys(yield* mcp.resourceTemplates())).toEqual([
+          "paged-server:test://one/{id}",
+          "paged-server:test://two/{id}",
+        ])
         expect(serverState.listToolsCalls).toBe(2)
         expect(serverState.listPromptsCalls).toBe(2)
         expect(serverState.listResourcesCalls).toBe(2)
+        expect(serverState.listResourceTemplatesCalls).toBe(2)
       }),
     ),
   { config: { mcp: {} } },
@@ -764,7 +884,10 @@ it.instance(
       Effect.gen(function* () {
         lastCreatedClientName = "resource-server"
         const serverState = getOrCreateClientState("resource-server")
-        serverState.resources = [{ name: "my-resource", uri: "file:///test.txt", description: "A test resource" }]
+        serverState.resources = [
+          { name: "my-resource", uri: "file:///test.txt", description: "A test resource" },
+          { name: "my-resource", uri: "ui://component-state", description: "A second resource with same name" },
+        ]
 
         yield* mcp.add("resource-server", {
           type: "local",
@@ -772,10 +895,10 @@ it.instance(
         })
 
         const resources = yield* mcp.resources()
-        expect(Object.keys(resources).length).toBe(1)
-        const key = Object.keys(resources)[0]
-        expect(key).toContain("resource-server")
-        expect(key).toContain("my-resource")
+        expect(Object.keys(resources)).toEqual([
+          "resource-server:file:///test.txt",
+          "resource-server:ui://component-state",
+        ])
       }),
     ),
   {
@@ -831,7 +954,7 @@ it.instance(
         expect(statusName(result.status, "resource-only-server")).toBe("connected")
         expect(serverState.listToolsCalls).toBe(0)
         expect(Object.keys(yield* mcp.tools())).toHaveLength(0)
-        expect(Object.keys(yield* mcp.resources())).toEqual(["resource-only-server:docs"])
+        expect(Object.keys(yield* mcp.resources())).toEqual(["resource-only-server:docs://readme"])
         expect(serverState.listResourcesCalls).toBe(1)
         expect(serverState.listPromptsCalls).toBe(0)
       }),

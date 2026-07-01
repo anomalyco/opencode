@@ -1,20 +1,12 @@
 export * as IntegrationConnection from "./connection"
 
-import { Schema } from "effect"
-import { Credential } from "../credential"
+import { Connection } from "@opencode-ai/schema/connection"
 
-export class CredentialInfo extends Schema.Class<CredentialInfo>("Connection.CredentialInfo")({
-  type: Schema.Literal("credential"),
-  id: Credential.ID,
-  label: Schema.String,
-}) {}
+export const CredentialInfo = Connection.CredentialInfo
+export type CredentialInfo = Connection.CredentialInfo
 
-export class EnvInfo extends Schema.Class<EnvInfo>("Connection.EnvInfo")({
-  type: Schema.Literal("env"),
-  name: Schema.String,
-}) {}
+export const EnvInfo = Connection.EnvInfo
+export type EnvInfo = Connection.EnvInfo
 
-export const Info = Schema.Union([CredentialInfo, EnvInfo])
-  .pipe(Schema.toTaggedUnion("type"))
-  .annotate({ identifier: "Connection.Info" })
-export type Info = typeof Info.Type
+export const Info = Connection.Info
+export type Info = Connection.Info
