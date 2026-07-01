@@ -16,7 +16,7 @@ const testLocation = location({ directory: AbsolutePath.make("/project") })
 const locationLayer = Layer.succeed(Location.Service, Location.Service.of(testLocation))
 
 const it = testEffect(
-  AppNodeBuilder.build(LayerNode.group([AgentV2.node, Location.node]), [
+  AppNodeBuilder.build(LayerNode.group([AgentV2.node, EventV2.node, Location.node]), [
     [Location.node, locationLayer],
   ]) as unknown as Layer.Layer<unknown, never>,
 )

@@ -13,8 +13,10 @@ import { Integration } from "@opencode-ai/core/integration"
 import { Location } from "@opencode-ai/core/location"
 import { Npm } from "@opencode-ai/core/npm"
 import { PluginV2 } from "@opencode-ai/core/plugin"
+import { PluginRuntime } from "@opencode-ai/core/plugin/runtime"
 import { Reference } from "@opencode-ai/core/reference"
 import { SkillV2 } from "@opencode-ai/core/skill"
+import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { Effect, Layer } from "effect"
 import { tempLocationLayer } from "../fixture/location"
 
@@ -42,8 +44,10 @@ export const PluginTestLayer = AppNodeBuilder.build(
     Catalog.node,
     CommandV2.node,
     Integration.node,
+    PluginRuntime.node,
     Reference.node,
     SkillV2.node,
+    ToolRegistry.toolsNode,
   ]),
   [
     [Location.node, tempLocationLayer],
