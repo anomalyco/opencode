@@ -144,9 +144,15 @@ if (!skipInstall) {
   // correctly; the default linker layout breaks node-gyp on Windows runners.
   const linkerFlag = process.platform === "win32" ? ["--linker", "hoisted"] : []
   await $`bun install --cwd ${workspaceRoot} --frozen-lockfile ${linkerFlag}`
-  await $`bun install --os="*" --cpu="*" @opentui/core@${pkg.dependencies["@opentui/core"]}`
-  await $`bun install --os="*" --cpu="*" @parcel/watcher@${pkg.dependencies["@parcel/watcher"]}`
-  await $`bun install --os="*" --cpu="*" @ff-labs/fff-bun@${pkg.dependencies["@ff-labs/fff-bun"]}`
+
+  // Single-platform smoke builds only need current-platform deps.
+  // Cross-platform prefetch installs can invoke native postinstall scripts
+  // (for example tree-sitter-powershell) and fail on Windows CI.
+  if (!singleFlag) {
+    await $`bun install --os="*" --cpu="*" @opentui/core@${pkg.dependencies["@opentui/core"]}`
+    await $`bun install --os="*" --cpu="*" @parcel/watcher@${pkg.dependencies["@parcel/watcher"]}`
+    await $`bun install --os="*" --cpu="*" @ff-labs/fff-bun@${pkg.dependencies["@ff-labs/fff-bun"]}`
+  }
 }
 for (const item of targets) {
   const name = [

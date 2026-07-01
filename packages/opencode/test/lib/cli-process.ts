@@ -205,7 +205,14 @@ export function withCliFixture<A, E>(
 
     const spawn = Effect.fn("opencode.spawn")(function* (args: string[], opts?: SpawnOpts) {
       const start = Date.now()
-      const timeoutMs = opts?.timeoutMs ?? 30_000
+      // On GitHub runners these subprocess integration tests can take
+      // substantially longer under load; if the harness times out, the
+      // AppProcessError fallback maps it to exitCode -1 and masks real intent.
+      const timeoutMs =
+        opts?.timeoutMs ??
+        (process.env.GITHUB_ACTIONS === "true" || process.env.CI === "true"
+          ? 90_000
+          : 30_000)
       // stdin: "ignore" so the child doesn't see a piped stdin and block
       // on `Bun.stdin.text()` (see src/cli/cmd/run.ts — non-TTY stdin is
       // consumed as the prompt). The old Process.run wrapper defaulted to
