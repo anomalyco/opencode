@@ -260,7 +260,9 @@ export function Prompt(props: PromptProps) {
     if (!props.sessionID) return
     const session = sync.session.get(props.sessionID)
     const msg = sync.data.message[props.sessionID] ?? []
-    const last = msg.findLast((item): item is AssistantMessage => item.role === "assistant" && item.tokens.output > 0)
+    const last = msg.findLast(
+      (item): item is AssistantMessage => item.role === "assistant" && item.tokens.output > 0 && !item.summary,
+    )
     if (!last) return
 
     const tokens =
