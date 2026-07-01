@@ -2,8 +2,8 @@ import { Provider } from "@opencode-ai/schema/provider"
 import { Location } from "@opencode-ai/schema/location"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
-import { ProviderNotFoundError, ServiceUnavailableError } from "../errors"
-import { LocationQuery, locationQueryOpenApi } from "./location"
+import { ProviderNotFoundError, ServiceUnavailableError } from "../errors.js"
+import { LocationQuery, locationQueryOpenApi } from "./location.js"
 
 export const ProviderGroup = HttpApiGroup.make("server.provider")
   .add(

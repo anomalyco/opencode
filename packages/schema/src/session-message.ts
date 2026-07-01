@@ -55,6 +55,7 @@ export const Synthetic = Schema.Struct({
   ...Base,
   sessionID: SessionID,
   text: Schema.String,
+  description: Schema.String.pipe(optional),
   type: Schema.Literal("synthetic"),
 }).annotate({ identifier: "Session.Message.Synthetic" })
 

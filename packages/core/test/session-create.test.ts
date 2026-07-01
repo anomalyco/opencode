@@ -8,6 +8,7 @@ import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventV2 } from "@opencode-ai/core/event"
 import { EventTable } from "@opencode-ai/core/event/sql"
+import { Job } from "@opencode-ai/core/job"
 import { Location } from "@opencode-ai/core/location"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProjectV2 } from "@opencode-ai/core/project"
@@ -173,11 +174,9 @@ describe("SessionV2.create", () => {
       expect((yield* session.context(parent.id)).map((message) => message.type)).toEqual(["user", "synthetic", "user"])
       expect((yield* session.context(forked.id)).map((message) => message.type)).toEqual(["user", "synthetic", "user"])
       expect((yield* session.context(forked.id)).at(-1)).toMatchObject({ text: "Child continues" })
-      expect((yield* session.history({ sessionID: forked.id, limit: 10 })).events.map((event) => event.durable?.seq)).toEqual([
-        0,
-        4,
-        5,
-      ])
+      expect(
+        (yield* session.history({ sessionID: forked.id, limit: 10 })).events.map((event) => event.durable?.seq),
+      ).toEqual([0, 4, 5])
       expect(yield* SessionInput.find(db, admitted.id)).toMatchObject({ sessionID: parent.id })
     }),
   )

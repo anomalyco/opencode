@@ -6,8 +6,8 @@ import { Project } from "@opencode-ai/schema/project"
 import { Session } from "@opencode-ai/schema/session"
 import { Context, Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
-import { PermissionNotFoundError, SessionNotFoundError } from "../errors"
-import { LocationQuery, locationQueryOpenApi } from "./location"
+import { PermissionNotFoundError, SessionNotFoundError } from "../errors.js"
+import { LocationQuery, locationQueryOpenApi } from "./location.js"
 
 export const makePermissionGroup = <
   LocationId extends HttpApiMiddleware.AnyId,

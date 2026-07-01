@@ -122,6 +122,66 @@ test("completes exploration groups when another row follows", () => {
   ])
 })
 
+test("hides synthetic messages without descriptions", () => {
+  const messages: SessionMessage[] = [
+    assistant("assistant-1", [{ type: "tool", id: "read-1", name: "read", state: pending(), time: { created: 1 } }]),
+    {
+      type: "synthetic",
+      id: "synthetic-1",
+      sessionID: "session-1",
+      text: "internal context",
+      time: { created: 2 },
+    },
+    assistant("assistant-2", [{ type: "tool", id: "grep-1", name: "grep", state: pending(), time: { created: 3 } }]),
+  ]
+
+  expect(reduceSessionRows(messages)).toEqual([
+    {
+      type: "group",
+      kind: "exploration",
+      pending: [],
+      completed: false,
+      refs: [
+        { messageID: "assistant-1", partID: "read-1" },
+        { messageID: "assistant-2", partID: "grep-1" },
+      ],
+    },
+  ])
+})
+
+test("renders synthetic messages with descriptions", () => {
+  const messages: SessionMessage[] = [
+    assistant("assistant-1", [{ type: "tool", id: "read-1", name: "read", state: pending(), time: { created: 1 } }]),
+    {
+      type: "synthetic",
+      id: "synthetic-1",
+      sessionID: "session-1",
+      text: "internal context",
+      description: "Explicit notice",
+      time: { created: 2 },
+    },
+    assistant("assistant-2", [{ type: "tool", id: "grep-1", name: "grep", state: pending(), time: { created: 3 } }]),
+  ]
+
+  expect(reduceSessionRows(messages)).toEqual([
+    {
+      type: "group",
+      kind: "exploration",
+      pending: [],
+      completed: true,
+      refs: [{ messageID: "assistant-1", partID: "read-1" }],
+    },
+    { type: "message", messageID: "synthetic-1" },
+    {
+      type: "group",
+      kind: "exploration",
+      pending: [],
+      completed: false,
+      refs: [{ messageID: "assistant-2", partID: "grep-1" }],
+    },
+  ])
+})
+
 function assistant(id: string, content: SessionMessageAssistant["content"]): SessionMessageAssistant {
   return {
     type: "assistant",

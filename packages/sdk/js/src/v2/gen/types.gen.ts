@@ -59,6 +59,7 @@ export type Event =
   | EventPermissionV2Replied
   | EventPluginAdded
   | EventProjectDirectoriesUpdated
+  | EventSkillUpdated
   | EventFileWatcherUpdated
   | EventPtyCreated
   | EventPtyUpdated
@@ -888,6 +889,7 @@ export type GlobalEvent = {
           sessionID: string
           messageID: string
           text: string
+          description?: string
         }
       }
     | {
@@ -1289,6 +1291,13 @@ export type GlobalEvent = {
         type: "project.directories.updated"
         properties: {
           projectID: string
+        }
+      }
+    | {
+        id: string
+        type: "skill.updated"
+        properties: {
+          [key: string]: unknown
         }
       }
     | {
@@ -2902,6 +2911,7 @@ export type V2Event =
   | PermissionV2Replied
   | PluginAdded
   | ProjectDirectoriesUpdated
+  | SkillUpdated
   | FileWatcherUpdated
   | PtyCreated
   | PtyUpdated
@@ -3410,6 +3420,7 @@ export type SyncEventSessionNextSynthetic = {
       sessionID: string
       messageID: string
       text: string
+      description?: string
     }
   }
 }
@@ -3989,6 +4000,7 @@ export type SessionMessageSynthetic = {
   }
   sessionID: string
   text: string
+  description?: string
   type: "synthetic"
 }
 
@@ -4296,6 +4308,7 @@ export type SessionNextSynthetic = {
     sessionID: string
     messageID: string
     text: string
+    description?: string
   }
 }
 
@@ -5506,6 +5519,23 @@ export type ProjectDirectoriesUpdated = {
   }
 }
 
+export type SkillUpdated = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "skill.updated"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    [key: string]: unknown
+  }
+}
+
 export type FileWatcherUpdated = {
   id: string
   metadata?: {
@@ -6319,6 +6349,7 @@ export type EventSessionNextSynthetic = {
     sessionID: string
     messageID: string
     text: string
+    description?: string
   }
 }
 
@@ -6756,6 +6787,14 @@ export type EventProjectDirectoriesUpdated = {
   type: "project.directories.updated"
   properties: {
     projectID: string
+  }
+}
+
+export type EventSkillUpdated = {
+  id: string
+  type: "skill.updated"
+  properties: {
+    [key: string]: unknown
   }
 }
 

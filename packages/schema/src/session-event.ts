@@ -137,6 +137,7 @@ export const Synthetic = Event.define({
     ...Base,
     messageID: SessionMessage.ID,
     text: Schema.String,
+    description: Schema.String.pipe(optional),
   },
 })
 export type Synthetic = typeof Synthetic.Type

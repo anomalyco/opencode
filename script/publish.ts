@@ -38,6 +38,9 @@ await prepareReleaseFiles()
 console.log("\n=== schema ===\n")
 await $`bun ./packages/schema/script/publish.ts`
 
+console.log("\n=== protocol ===\n")
+await $`bun ./packages/protocol/script/publish.ts`
+
 console.log("\n=== cli ===\n")
 await $`bun ./packages/cli/script/publish.ts`
 

@@ -51,7 +51,9 @@ const layer = Layer.effect(
           return SystemContext.empty
         const available = permitted
           .flatMap((skill) =>
-            skill.description === undefined ? [] : [{ name: skill.name, description: skill.description }],
+            skill.description === undefined || skill.autoinvoke === false
+              ? []
+              : [{ name: skill.name, description: skill.description }],
           )
           .toSorted((a, b) => a.name.localeCompare(b.name))
         return SystemContext.make({

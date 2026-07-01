@@ -2,7 +2,7 @@ import { $ } from "bun"
 import { describe, expect } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
-import { ConfigProvider, Deferred, Duration, Effect, Fiber, Layer, Option, Stream } from "effect"
+import { Deferred, Duration, Effect, Fiber, Layer, Option, Stream } from "effect"
 import { Config } from "@opencode-ai/core/config"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
@@ -25,13 +25,6 @@ const configLayer = Layer.succeed(
   Config.Service,
   Config.Service.of({
     entries: () => Effect.succeed([]),
-  }),
-)
-
-const flagsLayer = ConfigProvider.layer(
-  ConfigProvider.fromUnknown({
-    OPENCODE_EXPERIMENTAL_FILEWATCHER: "true",
-    OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: "false",
   }),
 )
 

@@ -2,8 +2,8 @@ import { Model } from "@opencode-ai/schema/model"
 import { Location } from "@opencode-ai/schema/location"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
-import { ServiceUnavailableError } from "../errors"
-import { LocationQuery, locationQueryOpenApi } from "./location"
+import { ServiceUnavailableError } from "../errors.js"
+import { LocationQuery, locationQueryOpenApi } from "./location.js"
 
 export const ModelGroup = HttpApiGroup.make("server.model")
   .add(

@@ -710,6 +710,7 @@
     },
     "packages/protocol": {
       "name": "@opencode-ai/protocol",
+      "version": "1.17.11",
       "dependencies": {
         "@opencode-ai/schema": "workspace:*",
         "effect": "catalog:",
@@ -718,6 +719,7 @@
         "@tsconfig/bun": "catalog:",
         "@types/bun": "catalog:",
         "@typescript/native-preview": "catalog:",
+        "typescript": "catalog:",
       },
     },
     "packages/schema": {

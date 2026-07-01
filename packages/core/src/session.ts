@@ -39,6 +39,7 @@ import { Revert } from "@opencode-ai/schema/revert"
 import { FSUtil } from "./fs-util"
 import { SessionDurable } from "@opencode-ai/schema/durable-event-manifest"
 import { SkillV2 } from "./skill"
+import { Job } from "./job"
 
 export const RevertState = Revert.State
 export type RevertState = Revert.State
@@ -191,9 +192,14 @@ export interface Interface {
   ) => Effect.Effect<void, NotFoundError | BusyError | MessageDecodeError | OperationUnavailableError>
   readonly wait: (id: SessionSchema.ID) => Effect.Effect<void, NotFoundError>
   readonly active: Effect.Effect<ReadonlySet<SessionSchema.ID>>
+  readonly background: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError>
   readonly resume: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError | SessionRunner.RunError>
   readonly interrupt: (sessionID: SessionSchema.ID) => Effect.Effect<void>
-  readonly synthetic: (input: { sessionID: SessionSchema.ID; text: string }) => Effect.Effect<void, NotFoundError>
+  readonly synthetic: (input: {
+    sessionID: SessionSchema.ID
+    text: string
+    description?: string
+  }) => Effect.Effect<void, NotFoundError>
   readonly revert: {
     readonly stage: (input: {
       sessionID: SessionSchema.ID
@@ -217,6 +223,7 @@ const layer = Layer.effect(
     const execution = yield* SessionExecution.Service
     const store = yield* SessionStore.Service
     const locations = yield* LocationServiceMap.Service
+    const jobs = yield* Job.Service
     const scope = yield* Scope.Scope
     const decodeMessage = Schema.decodeUnknownEffect(SessionMessage.Message)
     const isDurableSessionEvent = Schema.is(SessionEvent.Durable)
@@ -512,6 +519,22 @@ const layer = Layer.effect(
         yield* execution.awaitIdle(sessionID)
       }),
       active: execution.active,
+      background: Effect.fn("V2Session.background")(function* (sessionID) {
+        yield* result.get(sessionID)
+        const backgrounded = yield* jobs.backgroundAll({ sessionID })
+        if (backgrounded.length === 0) return
+        yield* result.synthetic({
+          sessionID,
+          text: [
+            "User requested that active blocking work be moved to the background.",
+            "",
+            "Backgrounded work:",
+            ...backgrounded.map((job) => `- ${job.type}: ${job.title && job.title.length > 0 ? job.title : job.id}`),
+            "",
+            "The backgrounded work is still unfinished. Move on to other work if you can. If there is nothing else useful to do, finish your response. Do not wait, sleep, poll, or report the backgrounded work as complete until a later completion notification is added to the conversation.",
+          ].join("\n"),
+        })
+      }),
       resume: Effect.fn("V2Session.resume")(function* (sessionID) {
         yield* result.get(sessionID)
         yield* execution.resume(sessionID)
@@ -523,6 +546,7 @@ const layer = Layer.effect(
           messageID: SessionMessage.ID.create(),
           timestamp: yield* DateTime.now,
           text: input.text,
+          description: input.description,
         })
         yield* execution.resume(input.sessionID).pipe(Effect.ignore, Effect.forkIn(scope, { startImmediately: true }), Effect.asVoid)
       }),
@@ -578,6 +602,7 @@ export const node = makeGlobalNode({
   service: Service,
   layer: layer.pipe(Layer.orDie),
   deps: [
+    Job.node,
     Database.node,
     EventV2.node,
     ProjectV2.node,

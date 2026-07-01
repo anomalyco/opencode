@@ -29,7 +29,7 @@ export async function spawnWslSidecar(
     'PATH=$(awk -v RS=: -v ORS=: \'$0 !~ /^\\/mnt\\//\' <<<"$PATH" | sed "s/:$//")',
     "export PATH",
     "export WSLENV=",
-    "export OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER=true",
+    "export OPENCODE_DISABLE_FILEWATCHER=true",
     "export OPENCODE_CLIENT=desktop",
     `export OPENCODE_SERVER_USERNAME=${shellEscape(username)}`,
     `export OPENCODE_SERVER_PASSWORD=${shellEscape(password)}`,

@@ -163,6 +163,9 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         case "agent.updated":
           void result.location.agent.refresh(event.location)
           break
+        case "skill.updated":
+          void result.location.skill.refresh(event.location)
+          break
         case "session.next.agent.switched":
           if (store.session.info[event.data.sessionID])
             setStore("session", "info", event.data.sessionID, "agent", event.data.agent)
@@ -248,6 +251,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
               type: "synthetic",
               sessionID: event.data.sessionID,
               text: event.data.text,
+              description: event.data.description,
               time: { created: event.data.timestamp },
             })
           })

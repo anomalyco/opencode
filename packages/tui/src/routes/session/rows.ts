@@ -119,7 +119,9 @@ export function createSessionRows(sessionID: Accessor<string>) {
     data.on("session.next.prompt.admitted", message),
     data.on("session.next.prompted", message),
     data.on("session.next.context.updated", message),
-    data.on("session.next.synthetic", message),
+    data.on("session.next.synthetic", (event) => {
+      if (event.data.sessionID === sessionID() && event.data.description?.trim()) appendMessage(event.data.messageID)
+    }),
     data.on("session.next.shell.started", message),
     data.on("session.next.agent.switched", message),
     data.on("session.next.model.switched", message),
@@ -160,6 +162,7 @@ export function createSessionRows(sessionID: Accessor<string>) {
 export function reduceSessionRows(messages: SessionMessage[]) {
   return messages.reduce<SessionRow[]>((rows, message) => {
     if (message.type !== "assistant") {
+      if (message.type === "synthetic" && !message.description?.trim()) return rows
       completePrevious(rows)
       rows.push({ type: "message", messageID: message.id })
       return rows

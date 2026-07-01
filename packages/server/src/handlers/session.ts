@@ -3,7 +3,6 @@ import { DateTime, Effect, Stream } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import { Api } from "../api"
 import { SessionsCursor } from "@opencode-ai/protocol/groups/session"
-import { Job } from "@opencode-ai/core/job"
 import {
   ConflictError,
   InvalidCursorError,
@@ -22,7 +21,6 @@ const DefaultSessionHistoryLimit = 50
 export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handlers) =>
   Effect.gen(function* () {
     const session = yield* SessionV2.Service
-    const jobs = yield* Job.Service
 
     return handlers
       .handle(
@@ -486,7 +484,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.background",
         Effect.fn(function* (ctx) {
-          yield* session.get(ctx.params.sessionID).pipe(
+          yield* session.background(ctx.params.sessionID).pipe(
             Effect.catchTag("Session.NotFoundError", (error) =>
               Effect.fail(
                 new SessionNotFoundError({
@@ -496,32 +494,6 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
               ),
             ),
           )
-          const backgrounded = yield* jobs.backgroundAll({ sessionID: ctx.params.sessionID })
-          if (backgrounded.length > 0)
-            yield* session
-              .synthetic({
-                sessionID: ctx.params.sessionID,
-                text: [
-                  "User requested that active blocking work be moved to the background.",
-                  "",
-                  "Backgrounded work:",
-                  ...backgrounded.map(
-                    (job) => `- ${job.type}: ${job.title && job.title.length > 0 ? job.title : job.id}`,
-                  ),
-                  "",
-                  "The backgrounded work is still unfinished. Move on to other work if you can. If there is nothing else useful to do, finish your response. Do not wait, sleep, poll, or report the backgrounded work as complete until a later completion notification is added to the conversation.",
-                ].join("\n"),
-              })
-              .pipe(
-                Effect.catchTag("Session.NotFoundError", (error) =>
-                  Effect.fail(
-                    new SessionNotFoundError({
-                      sessionID: error.sessionID,
-                      message: `Session not found: ${error.sessionID}`,
-                    }),
-                  ),
-                ),
-              )
           return HttpApiSchema.NoContent.make()
         }),
       )

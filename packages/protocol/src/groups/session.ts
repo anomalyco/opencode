@@ -17,7 +17,7 @@ import {
   SessionNotFoundError,
   SkillNotFoundError,
   UnknownError,
-} from "../errors"
+} from "../errors.js"
 import { Agent } from "@opencode-ai/schema/agent"
 import { Model } from "@opencode-ai/schema/model"
 import { Location } from "@opencode-ai/schema/location"

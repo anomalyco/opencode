@@ -1250,13 +1250,14 @@ function SessionSwitchMessageV2(props: { message: SessionMessage }) {
 function SessionNoticeMessageV2(props: { message: SessionMessage }) {
   const { theme } = useTheme()
   const text = () => {
-    if (props.message.type === "system" || props.message.type === "synthetic") return props.message.text
+    if (props.message.type === "system") return "Instructions updated"
+    if (props.message.type === "synthetic") return props.message.description ?? ""
     return ""
   }
   return (
-    <box paddingLeft={3}>
-      <text fg={theme.textMuted}>{text()}</text>
-    </box>
+    <InlineToolRow icon="◈" color={theme.textMuted} pending="Notice" complete={true}>
+      {text()}
+    </InlineToolRow>
   )
 }
 
