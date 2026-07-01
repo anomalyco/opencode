@@ -510,3 +510,52 @@ Alternatively, you can add something like this to your [AGENTS.md](/docs/rules/)
 ```md title="AGENTS.md"
 If you are unsure how to do something, use `gh_grep` to search code examples from GitHub.
 ```
+
+---
+
+### Composio
+
+Add the [Composio MCP server](https://composio.dev) to connect agents to 1000+ apps with managed auth and tool-calling (Gmail, Slack, GitHub, Linear).
+
+```json title="opencode.json" {4-8}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "composio": {
+      "type": "remote",
+      "url": "https://connect.composio.dev/mcp",
+      "oauth": {}
+    }
+  }
+}
+```
+
+After adding the configuration, authenticate with Composio:
+
+```bash
+opencode mcp auth composio
+```
+
+This will open a browser window to complete the OAuth flow and connect OpenCode to your Composio account.
+
+Once authenticated, you can use Composio tools in your prompts to work with your apps. You'll be asked to connect an app the first time you use it.
+
+Prompts can chain tools across several apps in one go. A few examples:
+
+```txt "use composio"
+Create a Linear issue for the bug in this file, assign it to me, and set it to high priority. use composio
+```
+
+```txt "use composio"
+Summarize the changes on this branch and post the summary to #eng-updates in Slack. use composio
+```
+
+```txt "use composio"
+Find this week's Sentry alert emails in Gmail and turn them into a triage checklist in Notion. use composio
+```
+
+To have the agent reach for Composio by default, add something like this to your [AGENTS.md](/docs/rules/).
+
+```md title="AGENTS.md"
+When a task reaches outside the codebase — email, chat, issues, docs, or calendars — handle it directly with `composio` tools instead of handing it back to me.
+```
