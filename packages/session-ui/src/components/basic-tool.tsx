@@ -25,6 +25,7 @@ const isTriggerTitle = (val: any): val is TriggerTitle => {
 export interface BasicToolProps {
   icon: IconProps["name"]
   trigger: TriggerTitle | JSX.Element | ((open: Accessor<boolean>) => JSX.Element)
+  meta?: string
   children?: JSX.Element
   status?: string
   hideDetails?: boolean
@@ -244,6 +245,11 @@ export function BasicTool(props: BasicToolProps) {
             <Match when={true}>{props.trigger as JSX.Element}</Match>
           </Switch>
         </div>
+        <Show when={props.meta}>
+          <span data-slot="basic-tool-tool-meta" class="text-12-regular text-text-weak cursor-default whitespace-nowrap">
+            {props.meta}
+          </span>
+        </Show>
       </div>
       <Show when={hasChildren() && !props.hideDetails && !props.locked && !pending()}>
         <Collapsible.Arrow />

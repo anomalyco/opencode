@@ -163,6 +163,19 @@
     color: var(--v2-text-text-muted);
   }
 
+  [data-slot="basic-tool-tool-meta"] {
+    flex-shrink: 0;
+    margin-left: auto;
+    font-family: var(--font-family-sans);
+    font-variant-numeric: tabular-nums;
+    font-size: 12px;
+    font-style: normal;
+    font-weight: var(--font-weight-regular);
+    line-height: var(--line-height-small);
+    letter-spacing: var(--letter-spacing-normal);
+    color: var(--v2-text-text-weak);
+  }
+
   [data-slot="basic-tool-tool-action"] {
     display: inline-flex;
     align-items: center;
@@ -260,7 +273,8 @@ body:not([data-new-layout]) {
 
     [data-slot="basic-tool-tool-subtitle"],
     [data-slot="basic-tool-tool-subtitle"].clickable:hover,
-    [data-slot="basic-tool-tool-arg"] {
+    [data-slot="basic-tool-tool-arg"],
+    [data-slot="basic-tool-tool-meta"] {
       color: var(--text-base);
     }
   }

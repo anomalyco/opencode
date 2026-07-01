@@ -16,6 +16,7 @@ export interface ToolErrorCardProps extends Omit<ComponentProps<typeof Card>, "c
   onOpenChange?: (open: boolean) => void
   subtitle?: string
   href?: string
+  meta?: string
 }
 
 export function ToolErrorCard(props: ToolErrorCardProps) {
@@ -35,6 +36,7 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
     "onOpenChange",
     "subtitle",
     "href",
+    "meta",
   ])
   const setOpen = (value: boolean) => {
     if (props.open === undefined) setState("open", value)
@@ -119,6 +121,11 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
                   </div>
                 </div>
               </div>
+              <Show when={split.meta}>
+                <span data-slot="basic-tool-tool-meta" class="text-12-regular text-text-weak cursor-default whitespace-nowrap">
+                  {split.meta}
+                </span>
+              </Show>
             </div>
             <Collapsible.Arrow />
           </div>
