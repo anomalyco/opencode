@@ -226,7 +226,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
               text: event.data.prompt.text,
               files: event.data.prompt.files,
               agents: event.data.prompt.agents,
-              metadata: event.data.delivery === "queue" ? { queued: true } : undefined,
+              metadata: { queued: true },
               time: { created: event.data.timestamp },
             })
           })

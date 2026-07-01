@@ -778,7 +778,7 @@ test("settles pending tools when a live failure arrives", async () => {
   }
 })
 
-test("renders admitted prompts immediately and clears queued marker when promoted", async () => {
+test("renders admitted prompts immediately with queued marker and clears when promoted", async () => {
   const events = createEventStream()
   const calls = createFetch(undefined, events)
   let sync!: ReturnType<typeof useData>
@@ -817,7 +817,7 @@ test("renders admitted prompts immediately and clears queued marker when promote
         messageID: "msg_user_1",
         timestamp: 0,
         prompt: { text: "hello" },
-        delivery: "queue",
+        delivery: "steer",
       },
     })
     await wait(() => sync.session.message.list("session-1")?.length === 1)
@@ -832,7 +832,7 @@ test("renders admitted prompts immediately and clears queued marker when promote
         messageID: "msg_user_1",
         timestamp: 0,
         prompt: { text: "hello" },
-        delivery: "queue",
+        delivery: "steer",
       },
     })
 

@@ -1354,7 +1354,7 @@ function UserMessage(props: { message: SessionMessageUser }) {
         >
           <text fg={theme.text}>{props.message.text}</text>
           <Show when={props.message.metadata?.queued === true}>
-            <text fg={theme.warning}>Queued</text>
+            <text fg={theme.textMuted}>queued</text>
           </Show>
           <Show when={files().length}>
             <box
