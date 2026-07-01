@@ -58,6 +58,49 @@ import { animate } from "motion"
 import { useLocation } from "@solidjs/router"
 import { attached, inline, kind } from "./message-file"
 import { readPartText } from "./message-part-text"
+import { toolMeta, type ToolMetaInput } from "./tool-meta"
+import { formatMessageStamp, handleCopyResponseClick } from "./message-actions"
+
+function toolMetaInput(part: ToolPart, now: number): ToolMetaInput {
+  const state = part.state
+  if (state.status === "pending") return { status: state.status, now }
+  if (state.status === "running") return { status: state.status, start: state.time.start, now }
+  if (state.status === "completed") return { status: state.status, start: state.time.start, end: state.time.end, now }
+  if (state.metadata?.interrupted === true) return { status: "interrupted" as const, start: state.time.start, now }
+  return { status: state.status, start: state.time.start, end: state.time.end, now }
+}
+
+function toolPartMetadata(part: ToolPart, fallback: Record<string, any>) {
+  const state = part.state
+  if (state.status === "pending") return fallback
+  return state.metadata ?? fallback
+}
+
+function toolPartError(part: ToolPart) {
+  const state = part.state
+  if (state.status !== "error") return undefined
+  return state.error
+}
+
+function toolPartOutput(part: ToolPart) {
+  const state = part.state
+  if (state.status !== "completed") return undefined
+  return state.output
+}
+
+function createToolMeta(part: () => ToolPart, i18n: UiI18n) {
+  const [now, setNow] = createSignal(Date.now())
+
+  createEffect(() => {
+    const status = part().state.status
+    if (status !== "pending" && status !== "running") return
+    setNow(Date.now())
+    const interval = setInterval(() => setNow(Date.now()), 1000)
+    onCleanup(() => clearInterval(interval))
+  })
+
+  return createMemo(() => toolMeta(i18n, toolMetaInput(part(), now())))
+}
 
 async function writeClipboard(text: string): Promise<boolean> {
   const body = typeof document === "undefined" ? undefined : document.body
@@ -1016,6 +1059,7 @@ export function ContextToolGroup(props: { parts: ToolPart[]; busy?: boolean; onS
           <Index each={props.parts}>
             {(partAccessor) => {
               const trigger = createMemo(() => contextToolTrigger(partAccessor(), i18n))
+              const meta = createToolMeta(partAccessor, i18n)
               const running = createMemo(
                 () => partAccessor().state.status === "pending" || partAccessor().state.status === "running",
               )
@@ -1040,6 +1084,14 @@ export function ContextToolGroup(props: { parts: ToolPart[]; busy?: boolean; onS
                           </div>
                         </div>
                       </div>
+                      <Show when={meta()}>
+                        <span
+                          data-slot="basic-tool-tool-meta"
+                          class="text-12-regular text-text-weak cursor-default whitespace-nowrap"
+                        >
+                          {meta()}
+                        </span>
+                      </Show>
                     </div>
                   </div>
                 </div>
@@ -1084,12 +1136,10 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
     const match = data.store.provider?.all?.get(providerID)
     return match?.models?.[modelID]?.name ?? modelID
   })
-  const timefmt = createMemo(() => new Intl.DateTimeFormat(i18n.locale(), { timeStyle: "short" }))
-
   const stamp = createMemo(() => {
     const created = props.message.time?.created
     if (typeof created !== "number") return ""
-    return timefmt().format(created)
+    return formatMessageStamp(i18n.locale(), created)
   })
 
   const metaHead = createMemo(() => {
@@ -1307,6 +1357,7 @@ export interface ToolProps {
   onContentRendered?: () => void
   forceOpen?: boolean
   locked?: boolean
+  meta?: string
 }
 
 export type ToolComponent = Component<ToolProps>
@@ -1383,8 +1434,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
   const emptyMetadata: Record<string, any> = {}
 
   const input = () => part().state?.input ?? emptyInput
-  // @ts-expect-error
-  const partMetadata = () => part().state?.metadata ?? emptyMetadata
+  const partMetadata = () => toolPartMetadata(part(), emptyMetadata)
   const taskId = createMemo(() => {
     if (part().tool !== "task") return
     const value = partMetadata().sessionId
@@ -1404,12 +1454,13 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
   const render = createMemo(() => ToolRegistry.render(part().tool) ?? GenericTool)
   const controlledOpen = () => (props.onToolOpenChange ? (props.toolOpen ?? props.defaultOpen) : undefined)
   const handleToolOpenChange = (open: boolean) => props.onToolOpenChange?.(open)
+  const meta = createToolMeta(part, i18n)
 
   return (
     <Show when={!hideQuestion()}>
       <div data-component="tool-part-wrapper" data-timeline-part-id={part().id}>
         <Switch>
-          <Match when={part().state.status === "error" && (part().state as any).error}>
+          <Match when={toolPartError(part())}>
             {(error) => {
               const cleaned = error().replace("Error: ", "")
               if (part().tool === "question" && cleaned.includes("dismissed this question")) {
@@ -1431,6 +1482,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
                   onOpenChange={props.onToolOpenChange ? handleToolOpenChange : undefined}
                   subtitle={taskSubtitle()}
                   href={taskHref()}
+                  meta={meta()}
                 />
               )
             }}
@@ -1442,8 +1494,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
               tool={part().tool}
               sessionID={part().sessionID}
               metadata={partMetadata()}
-              // @ts-expect-error
-              output={part().state.output}
+              output={toolPartOutput(part())}
               status={part().state.status}
               hideDetails={props.hideDetails}
               defaultOpen={props.defaultOpen}
@@ -1452,6 +1503,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
               deferContent={props.deferToolContent}
               virtualizeDiff={props.virtualizeDiff}
               onContentRendered={props.onContentRendered}
+              meta={meta()}
             />
           </Match>
         </Switch>
@@ -1519,9 +1571,10 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
 
   const meta = createMemo(() => {
     if (props.message.role !== "assistant") return ""
-    const agent = (props.message as AssistantMessage).agent
+    const message = props.message as AssistantMessage
     const items = [
-      agent ? agent[0]?.toUpperCase() + agent.slice(1) : "",
+      formatMessageStamp(i18n.locale(), message.time.created),
+      message.agent ? message.agent[0]?.toUpperCase() + message.agent.slice(1) : "",
       model(),
       duration(),
       interrupted() ? i18n.t("ui.message.interrupted") : "",
@@ -1576,7 +1629,7 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
                 size="normal"
                 variant="ghost"
                 onMouseDown={(e) => e.preventDefault()}
-                onClick={handleCopy}
+                onClick={(event) => handleCopyResponseClick(event, () => void handleCopy())}
                 aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
               />
             </Tooltip>
@@ -1874,6 +1927,7 @@ ToolRegistry.register({
         triggerHref={href()}
         clickable={clickable()}
         onTriggerClick={navigate}
+        meta={props.meta}
       />
     )
   },
@@ -2431,6 +2485,6 @@ ToolRegistry.register({
       </div>
     )
 
-    return <BasicTool icon="brain" status={props.status} trigger={trigger()} hideDetails />
+    return <BasicTool icon="brain" status={props.status} trigger={trigger()} hideDetails meta={props.meta} />
   },
 })
