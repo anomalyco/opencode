@@ -1687,6 +1687,7 @@ function ToolPart(props: { part: SessionMessageAssistantTool }) {
     if (ctx.showDetails()) return false
     if (runningShell()) return false
     if (props.part.state.status !== "completed") return false
+    if (display() === "shell") return false
     return true
   })
 

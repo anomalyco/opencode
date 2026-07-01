@@ -148,6 +148,12 @@ const call = (input: typeof ShellTool.Input.Type, id = "call-shell") => ({
 const isWindows = process.platform === "win32"
 const cwdCommand = isWindows ? "(Get-Location).Path; Start-Sleep -Milliseconds 100" : "pwd"
 const helloCommand = isWindows ? "[Console]::Out.Write('hello'); Start-Sleep -Milliseconds 100" : "printf hello"
+const stderrCommand = isWindows
+  ? "[Console]::Error.Write('stderr only'); Start-Sleep -Milliseconds 100"
+  : "printf 'stderr only' >&2"
+const mixedOutputCommand = isWindows
+  ? "[Console]::Out.Write('stdout'); Start-Sleep -Milliseconds 50; [Console]::Error.Write('stderr'); Start-Sleep -Milliseconds 100"
+  : "printf stdout; sleep 0.05; printf stderr >&2"
 const idleCommand = isWindows ? "Start-Sleep -Seconds 60" : "sleep 60"
 const bodyExitCommand = isWindows
   ? "[Console]::Out.Write('body'); Start-Sleep -Milliseconds 100; exit 7"
@@ -224,6 +230,29 @@ describe("ShellTool", () => {
               }),
             ),
           ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
+    ),
+  )
+
+  it.live("captures stderr-only and mixed stdout/stderr output", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        return withSession(tmp.path, (registry) =>
+          Effect.gen(function* () {
+            const stderr = yield* settleTool(registry, call({ command: stderrCommand }, "call-stderr"))
+            expect(stderr.output?.structured).toMatchObject({ exit: 0, truncated: false })
+            expect(stderr.output?.content[0]).toEqual({ type: "text", text: "stderr only" })
+
+            const mixed = yield* settleTool(registry, call({ command: mixedOutputCommand }, "call-mixed"))
+            expect(mixed.output?.structured).toMatchObject({ exit: 0, truncated: false })
+            const output = mixed.output?.content[0]?.type === "text" ? mixed.output.content[0].text : ""
+            expect(output).toContain("stdout")
+            expect(output).toContain("stderr")
+          }),
         )
       },
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
