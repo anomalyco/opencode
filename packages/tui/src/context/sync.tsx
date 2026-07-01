@@ -610,32 +610,56 @@ export const {
         },
         async sync(sessionID: string) {
           if (fullSyncedSessions.has(sessionID)) return
-          const [session, messages, todo, diff] = await Promise.all([
-            sdk.client.session.get({ sessionID }, { throwOnError: true }),
-            sdk.client.session.messages({ sessionID, limit: INITIAL_PAGE_SIZE }),
-            sdk.client.session.todo({ sessionID }),
-            sdk.client.session.diff({ sessionID }),
-          ])
-          const olderCursor = (messages.response?.headers.get("x-next-cursor") as string | null | undefined) ?? null
-          setStore(
-            produce((draft) => {
-              const match = search(draft.session, sessionID, (s) => s.id)
-              if (match.found) draft.session[match.index] = session.data!
-              if (!match.found) draft.session.splice(match.index, 0, session.data!)
-              draft.todo[sessionID] = todo.data ?? []
-              const infos: (typeof draft.message)[string] = []
-              for (const message of messages.data ?? []) {
-                infos.push(message.info)
-                draft.part[message.info.id] = message.parts
-              }
-              infos.sort(compareMessage)
-              draft.message[sessionID] = infos
-              draft.session_diff[sessionID] = diff.data ?? []
-              draft.messageOlderCursor[sessionID] = olderCursor
-              draft.messageNewerCursor[sessionID] = null
-            }),
-          )
-          if (!olderCursor) fullSyncedSessions.add(sessionID)
+          const hydration = { messages: new Set<string>(), parts: new Set<string>() }
+          hydratingSessions.set(sessionID, hydration)
+          try {
+            const [session, messages, todo, diff] = await Promise.all([
+              sdk.client.session.get({ sessionID }, { throwOnError: true }),
+              sdk.client.session.messages({ sessionID, limit: INITIAL_PAGE_SIZE }),
+              sdk.client.session.todo({ sessionID }),
+              sdk.client.session.diff({ sessionID }),
+            ])
+            const olderCursor = (messages.response?.headers.get("x-next-cursor") as string | null | undefined) ?? null
+            setStore(
+              produce((draft) => {
+                const match = search(draft.session, sessionID, (s) => s.id)
+                if (match.found) draft.session[match.index] = session.data!
+                if (!match.found) draft.session.splice(match.index, 0, session.data!)
+                draft.todo[sessionID] = todo.data ?? []
+                if (messages.data) {
+                  const existing = draft.message[sessionID] ?? []
+                  const infos: (typeof draft.message)[string] = []
+                  const hydratedIDs = new Set<string>()
+                  for (const message of messages.data) {
+                    hydratedIDs.add(message.info.id)
+                    const current = existing.find((item) => item.id === message.info.id)
+                    if (current) {
+                      infos.push(current)
+                      continue
+                    }
+                    if (hydration.messages.has(message.info.id)) continue
+                    infos.push(message.info)
+                    draft.part[message.info.id] = message.parts
+                  }
+                  for (const message of existing) {
+                    if (hydratedIDs.has(message.id)) continue
+                    infos.push(message)
+                  }
+                  while (infos.length > INITIAL_PAGE_SIZE) {
+                    const evicted = infos.shift()
+                    if (evicted) delete draft.part[evicted.id]
+                  }
+                  draft.message[sessionID] = infos.sort(compareMessage)
+                  draft.messageOlderCursor[sessionID] = olderCursor
+                  draft.messageNewerCursor[sessionID] = null
+                }
+                draft.session_diff[sessionID] = diff.data ?? []
+              }),
+            )
+            if (!olderCursor) fullSyncedSessions.add(sessionID)
+          } finally {
+            hydratingSessions.delete(sessionID)
+          }
         },
         async loadOlderMessages(sessionID: string) {
           const cursor = store.messageOlderCursor[sessionID]

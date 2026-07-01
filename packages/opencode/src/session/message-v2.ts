@@ -105,6 +105,7 @@ function hydrate(rows: (typeof MessageTable.$inferSelect)[]) {
   const partByMessage = new Map<string, Part[]>()
   return Effect.gen(function* () {
     if (ids.length > 0) {
+      const { db } = yield* Database.Service
       const partRows = yield* db
         .select()
         .from(PartTable)
@@ -442,22 +443,25 @@ export const page = Effect.fn("MessageV2.page")(function* (input: {
     : after
       ? and(eq(MessageTable.session_id, input.sessionID), newer(after))
       : eq(MessageTable.session_id, input.sessionID)
-  const rows = yield* Database.use((db) =>
-    db
-      .select()
-      .from(MessageTable)
-      .where(where)
-      .orderBy(
-        after ? asc(MessageTable.time_created) : desc(MessageTable.time_created),
-        after ? asc(MessageTable.id) : desc(MessageTable.id),
-      )
-      .limit(input.limit + 1)
-      .all(),
-  )
-  if (rows.length === 0) {
-    const row = yield* Database.use((db) =>
-      db.select({ id: SessionTable.id }).from(SessionTable).where(eq(SessionTable.id, input.sessionID)).get(),
+  const { db } = yield* Database.Service
+  const rows = yield* db
+    .select()
+    .from(MessageTable)
+    .where(where)
+    .orderBy(
+      after ? asc(MessageTable.time_created) : desc(MessageTable.time_created),
+      after ? asc(MessageTable.id) : desc(MessageTable.id),
     )
+    .limit(input.limit + 1)
+    .all()
+    .pipe(Effect.orDie)
+  if (rows.length === 0) {
+    const row = yield* db
+      .select({ id: SessionTable.id })
+      .from(SessionTable)
+      .where(eq(SessionTable.id, input.sessionID))
+      .get()
+      .pipe(Effect.orDie)
     if (!row) return yield* new NotFoundError({ message: `Session not found: ${input.sessionID}` })
     return {
       items: [] as WithParts[],
