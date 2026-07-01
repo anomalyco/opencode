@@ -92,11 +92,14 @@ export function DialogModelCtx(props: { providerID: string; modelID: string }) {
     return ` · ${fmtGB(m.freeMb)}/${fmtGB(m.totalMb)} GB ${m.label} free`
   })
 
-  async function apply(ctx_size: number) {
+  function apply(ctx_size: number) {
     if (busy()) return
     setBusy(true)
-    try {
-      const res = await sdk.client.local.model.setCtxSize(
+    // Close immediately so the UI feels responsive; the model reload is slow.
+    dialog.clear()
+    toast.show({ variant: "info", message: `Context set to ${fmtCtxK(ctx_size)} — reloading model…` })
+    sdk.client.local.model
+      .setCtxSize(
         {
           providerID: props.providerID,
           modelID: props.modelID,
@@ -105,23 +108,20 @@ export function DialogModelCtx(props: { providerID: string; modelID: string }) {
         },
         { throwOnError: true },
       )
-      if (res.data === false) {
-        toast.show({ variant: "error", message: "Provider not found or has no base URL" })
-        return
-      }
-      await sync.refreshProviders()
-      // The local backend reloads the model to apply a new context window.
-      toast.show({
-        variant: "info",
-        message: `Context set to ${fmtCtxK(ctx_size)} — reloading model…`,
+      .then((res) => {
+        if (res.data === false) {
+          toast.show({ variant: "error", message: "Provider not found or has no base URL" })
+          return
+        }
+        void sync.refreshProviders()
       })
-      dialog.clear()
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
-      toast.show({ variant: "error", message: `Failed to set context size: ${msg}` })
-    } finally {
-      setBusy(false)
-    }
+      .catch((e: unknown) => {
+        const msg = e instanceof Error ? e.message : String(e)
+        toast.show({ variant: "error", message: `Failed to set context size: ${msg}` })
+      })
+      .finally(() => {
+        setBusy(false)
+      })
   }
 
   return (

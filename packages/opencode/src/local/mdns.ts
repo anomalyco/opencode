@@ -171,10 +171,10 @@ async function runWithConcurrency<T>(tasks: Array<() => Promise<T>>, limit: numb
 // path; LAN probing is only a bounded fallback for machines that do not
 // advertise.
 const LAN_PORTS = [8080, 8081, 1234, 11434, 11435]
-const LAN_PROBE_TIMEOUT_MS = 200
+const LAN_PROBE_TIMEOUT_MS = 50
 // Must cover .1-.254 with enough workers to reach high addresses such as .219
 // before the HTTP scan returns to /connect.
-const LAN_SCAN_BUDGET_MS = 3_500
+const LAN_SCAN_BUDGET_MS = 1_000
 const LAN_SCAN_CONCURRENCY = 192
 
 async function tcpConnects(host: string, port: number): Promise<boolean> {
@@ -270,7 +270,8 @@ export async function scanMDNSOnly(timeoutMs = 4000): Promise<LocalLlamaSwapServ
 }
 
 export async function scanLlamaSwap(
-  timeoutMs = 4000,
+  timeoutMs = 1000,
+  probeModels = true,
 ): Promise<Array<LocalLlamaSwapService & { models: string[]; defaultModel: string | null; online: boolean }>> {
   const raw: LocalLlamaSwapService[] = []
 
@@ -329,6 +330,10 @@ export async function scanLlamaSwap(
     seenNames.add(hit.name.toLowerCase())
     seenHostPorts.add(key)
     raw.push(hit)
+  }
+
+  if (!probeModels) {
+    return raw.map((svc) => ({ ...svc, models: [], defaultModel: null, online: true }))
   }
 
   return Promise.all(

@@ -68,7 +68,7 @@ function baseURLHost(baseURL: string | undefined): string {
 // Providers not found in the scan are left untouched — they may be offline.
 const syncLocalProviders = Effect.gen(function* () {
   const configSvc = yield* Config.Service
-  const discovered = yield* Effect.promise(() => scanLlamaSwap(4000))
+  const discovered = yield* Effect.promise(() => scanLlamaSwap(1000, false))
   const online = discovered.filter((svc) => svc.online)
 
   if (online.length === 0) {

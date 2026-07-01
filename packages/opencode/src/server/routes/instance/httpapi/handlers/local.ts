@@ -95,7 +95,7 @@ export const localHandlers = HttpApiBuilder.group(InstanceHttpApi, "local", (han
         }
       }
 
-      const discovered = yield* Effect.promise<Awaited<ReturnType<typeof scanLlamaSwap>>>(() => scanLlamaSwap(3500))
+      const discovered = yield* Effect.promise<Awaited<ReturnType<typeof scanLlamaSwap>>>(() => scanLlamaSwap(1000, false))
 
       // Index mDNS/localhost results by normalised baseURL.
       const byURL = new Map<
