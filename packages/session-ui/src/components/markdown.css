@@ -35,8 +35,8 @@
     font-size: 17px;
     color: var(--v2-text-text-base);
     font-weight: 600;
-    margin-top: 0px;
-    margin-bottom: 24px;
+    margin-top: 28px;
+    margin-bottom: 12px;
     line-height: var(--line-height-large);
   }
 
@@ -44,8 +44,8 @@
     font-size: 15px;
     color: var(--v2-text-text-base);
     font-weight: 600;
-    margin-top: 0px;
-    margin-bottom: 24px;
+    margin-top: 24px;
+    margin-bottom: 10px;
     line-height: var(--line-height-large);
   }
 
@@ -53,8 +53,8 @@
     font-size: 13px;
     color: var(--v2-text-text-base);
     font-weight: var(--font-weight-medium);
-    margin-top: 0px;
-    margin-bottom: 24px;
+    margin-top: 20px;
+    margin-bottom: 8px;
     line-height: var(--line-height-large);
   }
 
@@ -64,8 +64,8 @@
     font-size: 13px;
     color: var(--v2-text-text-muted);
     font-weight: var(--font-weight-medium);
-    margin-top: 0px;
-    margin-bottom: 24px;
+    margin-top: 20px;
+    margin-bottom: 8px;
     line-height: var(--line-height-large);
   }
 
@@ -145,7 +145,7 @@
   /* Blockquotes */
   blockquote {
     border-left: 0.5px solid var(--v2-border-border-base);
-    margin: 1.5rem 0;
+    margin: 1rem 0;
     padding-left: 0.5rem;
     color: var(--v2-text-text-muted);
     font-style: normal;
@@ -155,7 +155,7 @@
   hr {
     border: none;
     height: 0;
-    margin: 40px 0;
+    margin: 32px 0;
   }
 
   .shiki {
@@ -213,7 +213,7 @@
 
   pre {
     margin-top: 12px;
-    margin-bottom: 32px;
+    margin-bottom: 24px;
     overflow: auto;
 
     scrollbar-width: none;
@@ -253,7 +253,7 @@
   table {
     width: 100%;
     border-collapse: collapse;
-    margin: 24px 0;
+    margin: 16px 0;
     font-size: var(--font-size-base);
     display: block;
     overflow-x: auto;
