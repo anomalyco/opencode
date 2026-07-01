@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import { Rune } from "@/session/rune/rune"
+import { ToolRuntime } from "@/session/rune/tool-runtime"
 
 // Runs a Rune program with no host tools and returns the ExecuteResult. These tests pin the
 // JS-parity fixes for the "99% of ordinary defensive JavaScript just works" goal: cases where
@@ -96,6 +97,42 @@ describe("H4: typeof on an undeclared identifier is 'undefined'", () => {
   test("referencing an undeclared identifier outside typeof still throws", async () => {
     const err = await error(`return foo + 1`)
     expect(err.message).toContain("foo")
+  })
+})
+
+describe("H1: NaN/Infinity flow as intermediates and normalize to null at the boundary", () => {
+  test("guards run instead of the program crashing on a transient NaN", async () => {
+    expect(await value(`return parseInt("abc") || 0`)).toBe(0)
+    expect(await value(`const x = Number("abc"); return Number.isNaN(x) ? 0 : x`)).toBe(0)
+    expect(await value(`const o = {}; o.count = (o.count || 0) + 1; return o.count`)).toBe(1)
+    // average of an empty list, guarded — the classic divide-by-zero that used to throw pre-guard
+    expect(await value(`const a = []; return a.length ? a.reduce((s,x)=>s+x,0)/a.length : 0`)).toBe(0)
+  })
+
+  test("a non-finite value becomes null when it leaves the sandbox", async () => {
+    expect(await value(`return 5/0`)).toBeNull()
+    expect(await value(`return 0/0`)).toBeNull()
+    expect(await value(`return Math.max()`)).toBeNull()
+    // nested, too — normalization walks the returned structure
+    expect(await value(`return { a: Number("x"), b: 2, c: [1/0] }`)).toEqual({ a: null, b: 2, c: [null] })
+  })
+
+  test("NaN and Infinity are usable identifiers and inspectable in-sandbox", async () => {
+    expect(await value(`return Number.isNaN(NaN)`)).toBe(true)
+    expect(await value(`return Infinity > 1e9`)).toBe(true)
+    expect(await value(`return Number.isFinite(1/0)`)).toBe(false)
+    expect(await value(`return [3,1,2].reduce((a,b)=>Math.max(a,b), -Infinity)`)).toBe(3)
+    // JSON.stringify inside the sandbox matches JS: non-finite serializes to null
+    expect(await value(`return JSON.stringify({ x: Number("z") })`)).toBe('{"x":null}')
+  })
+
+  test("copyOut normalizes non-finite numbers to null (the shared return + tool-arg boundary)", () => {
+    // Tool-call arguments funnel through copyOut too, so this one function pins both boundaries.
+    expect(ToolRuntime.copyOut(NaN)).toBeNull()
+    expect(ToolRuntime.copyOut(Infinity)).toBeNull()
+    expect(ToolRuntime.copyOut(-Infinity)).toBeNull()
+    expect(ToolRuntime.copyOut(42)).toBe(42)
+    expect(ToolRuntime.copyOut({ a: NaN, b: [Infinity, 1] })).toEqual({ a: null, b: [null, 1] })
   })
 })
 

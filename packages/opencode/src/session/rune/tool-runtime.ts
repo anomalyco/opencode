@@ -60,14 +60,17 @@ export const copyIn = (value: unknown, label: string, limits?: DataLimits, depth
   if (limits && depth > limits.maxValueDepth) {
     throw new ToolRuntimeError("InvalidDataValue", `${label} exceeds the maximum value depth of ${limits.maxValueDepth}.`)
   }
-  if (value === null || value === undefined || typeof value === "string" || typeof value === "boolean") {
-    return value
-  }
-
-  if (typeof value === "number") {
-    if (!Number.isFinite(value)) {
-      throw new ToolRuntimeError("InvalidDataValue", `${label} contains a non-finite number.`)
-    }
+  if (
+    value === null ||
+    value === undefined ||
+    typeof value === "string" ||
+    typeof value === "boolean" ||
+    // NaN/Infinity are allowed to exist as in-sandbox intermediates (matching real JS and a real
+    // engine) so defensive guards like `Number.isNaN(x)` / `parseInt(x) || 0` can run. They are
+    // normalized to `null` when the value leaves the sandbox — see copyOut — exactly as
+    // JSON.stringify already does at any tool boundary.
+    typeof value === "number"
+  ) {
     return value
   }
 
@@ -111,6 +114,13 @@ export const copyIn = (value: unknown, label: string, limits?: DataLimits, depth
 }
 
 export const copyOut = (value: unknown): unknown => {
+  // Normalize non-finite numbers to null as the value crosses out of the sandbox (final return
+  // and tool-call arguments both funnel through here), matching JSON semantics — NaN/Infinity
+  // have no JSON representation, so JSON.stringify would produce null anyway.
+  if (typeof value === "number" && !Number.isFinite(value)) {
+    return null
+  }
+
   if (Array.isArray(value)) {
     return value.map(copyOut)
   }

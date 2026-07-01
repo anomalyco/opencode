@@ -1002,6 +1002,10 @@ class Interpreter<R> {
     globalScope.set("Array", { mutable: false, value: new GlobalNamespace("Array") })
     globalScope.set("parseInt", { mutable: false, value: new CoercionFunction("parseInt") })
     globalScope.set("parseFloat", { mutable: false, value: new CoercionFunction("parseFloat") })
+    // Non-finite numbers flow as ordinary values inside the sandbox (normalized to null at the
+    // boundary — see copyOut), so their global bindings must exist too, e.g. `reduce(max, -Infinity)`.
+    globalScope.set("NaN", { mutable: false, value: NaN })
+    globalScope.set("Infinity", { mutable: false, value: Infinity })
   }
 
   run(program: ProgramNode): Effect.Effect<unknown, unknown, R> {

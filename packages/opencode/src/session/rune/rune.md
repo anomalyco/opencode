@@ -91,6 +91,10 @@ than throwing, so idiomatic defensive code (`a?.b ?? c`, feature detection, merg
 - **`{ ...null }` / `{ ...undefined }` is a no-op**, so `{ ...maybeOpts, override }` merges work
   when the operand is absent.
 - **Builtin coercions are valid array callbacks**: `filter(Boolean)`, `map(String)`, `map(Number)`.
+- **`NaN`/`Infinity` flow as ordinary values** (and are bindable identifiers), so `Number(x)` /
+  `parseInt(x) || 0` / averages / counters don't crash mid-expression — guards like
+  `Number.isNaN(x)` get to run. A non-finite number is normalized to `null` only when it crosses
+  out of the sandbox (final `return` or a tool argument), exactly as `JSON.stringify` would.
 
 ## What is missing
 
@@ -106,7 +110,8 @@ than throwing, so idiomatic defensive code (`a?.b ?? c`, feature detection, merg
   rejected as `UnsupportedSyntax`.
 - **`Symbol`, `BigInt`** — none.
 - **Partial built-ins** — e.g. `JSON.stringify` ignores replacers; `Array.from` takes no
-  map fn; `NaN`/`Infinity` are not valid data values.
+  map fn. (`NaN`/`Infinity` are usable in-sandbox but serialize to `null` at the boundary — see
+  JavaScript semantics above.)
 - **No I/O** — no fetch, fs, timers, env, or any ambient capability. The only outside
   contact is host `tools`.
 
