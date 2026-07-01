@@ -1554,7 +1554,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                         }
                       >
                         <MenuV2
-                          gutter={4}
+                          gutter={6}
                           modal={false}
                           placement="top-start"
                           onOpenChange={(open) => setStore("variantOpen", open)}
