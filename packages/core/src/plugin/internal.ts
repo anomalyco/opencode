@@ -149,7 +149,7 @@ const layer = Layer.effectDiscard(
         // Embedder-contributed plugins are added last so they layer over config.
         for (const plugin of sdkPlugins.all()) yield* add(plugin)
       }),
-    ).pipe(Effect.withSpan("PluginInternal.boot"))
+    ).pipe(Effect.withSpan("PluginInternal.boot"), Effect.forkScoped({ startImmediately: true }))
   }),
 )
 
