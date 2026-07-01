@@ -106,6 +106,7 @@ describe("SessionRunnerModel", () => {
         {
           id: ModelV2.VariantID.make("high"),
           headers: { "x-variant": "high" },
+          providerOptions: { openai: { reasoningEffort: "high" } },
           body: {
             store: false,
             service_tier: "priority",
@@ -138,6 +139,9 @@ describe("SessionRunnerModel", () => {
         service_tier: "priority",
         temperature: 0.2,
         reasoning: { effort: "high" },
+      })
+      expect(resolved.route.defaults.providerOptions).toEqual({
+        openai: { store: false, reasoningEffort: "high" },
       })
     }),
   )

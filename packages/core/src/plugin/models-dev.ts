@@ -70,25 +70,75 @@ function mergeCost(base: ModelV2Info["cost"], override: ModelsDev.Model["cost"] 
   return [merge(baseDefault ?? { input: 0, output: 0, cache: { read: 0, write: 0 } }, nextDefault), ...tiers.values()]
 }
 
-function reasoningVariants(model: ModelsDev.Model, packageName: string | undefined): ModelV2Info["variants"] {
-  const result = new Map<ModelV2.VariantID, ModelV2Info["variants"][number]>()
-  if (packageName === "@ai-sdk/openai" || packageName === "@ai-sdk/openai-compatible") {
-    const option = model.reasoning_options?.find((option) => option.type === "effort")
-    for (const value of option?.values ?? []) {
-      const id = value === null ? "none" : value
-      if (typeof id !== "string") continue
-      const variantID = ModelV2.VariantID.make(id)
-      result.set(variantID, {
-        id: variantID,
-        headers: {},
-        body:
-          packageName === "@ai-sdk/openai"
-            ? { include: ["reasoning.encrypted_content"], reasoning: { effort: id, summary: "auto" } }
-            : { reasoning_effort: id },
-      })
+const OPENAI_INCLUDE_ENCRYPTED_REASONING = ["reasoning.encrypted_content"]
+
+function reasoningVariants(provider: ModelsDev.Provider, model: ModelsDev.Model): ModelV2Info["variants"] {
+  const npm = model.provider?.npm ?? provider.npm
+  const options = model.reasoning_options ?? []
+  const effort = options.find((option) => option.type === "effort")
+  if (effort?.type === "effort") {
+    return effort.values.flatMap((value) => {
+      const raw: unknown = value
+      const id = raw === null ? "none" : typeof raw === "string" ? raw : undefined
+      if (id === undefined) return []
+      const providerOptions = providerOptionsForEffort(npm, id)
+      return providerOptions ? [{ id, headers: {}, body: {}, providerOptions }] : []
+    })
+  }
+
+  const budget = options.find((option) => option.type === "budget_tokens")
+  if (budget?.type === "budget_tokens") return budgetVariants(npm, budget)
+
+  // Toggle-only reasoning is intentionally left for a follow-up because V1 has
+  // provider/model-specific behavior like MiniMax M3 adaptive thinking and
+  // Qwen/GLM enable_thinking request shapes in packages/opencode.
+  return []
+}
+
+function providerOptionsForEffort(npm: string | undefined, effort: string): ProviderV2.ProviderOptions | undefined {
+  if (npm === "@openrouter/ai-sdk-provider") return { openrouter: { reasoning: { effort } } }
+  if (npm === "@ai-sdk/anthropic" || npm === "@ai-sdk/google-vertex/anthropic") {
+    return { anthropic: { thinking: { type: "adaptive" }, effort } }
+  }
+  if (npm === "@ai-sdk/google" || npm === "@ai-sdk/google-vertex") {
+    return { gemini: { thinkingConfig: { includeThoughts: true, thinkingLevel: effort } } }
+  }
+  if (npm === "@ai-sdk/azure") return { openai: { reasoningEffort: effort }, azure: { reasoningEffort: effort } }
+  if (npm === "@ai-sdk/openai") {
+    return {
+      openai: {
+        reasoningEffort: effort,
+        reasoningSummary: "auto",
+        include: OPENAI_INCLUDE_ENCRYPTED_REASONING,
+      },
     }
   }
-  return [...result.values()]
+  if (npm === "@ai-sdk/openai-compatible") return { openai: { reasoningEffort: effort } }
+}
+
+function budgetVariants(
+  npm: string | undefined,
+  option: Extract<NonNullable<ModelsDev.Model["reasoning_options"]>[number], { type: "budget_tokens" }>,
+): ModelV2Info["variants"] {
+  const max = option.max
+  const high = option.max === undefined ? Math.max(option.min ?? 0, 16_000) : Math.min(Math.max(option.min ?? 0, 16_000), option.max)
+  return [
+    { id: "high", budget: high },
+    ...(max === undefined || max === high ? [] : [{ id: "max", budget: max }]),
+  ].flatMap((item) => {
+    const providerOptions = providerOptionsForBudget(npm, item.budget)
+    return providerOptions ? [{ id: item.id, headers: {}, body: {}, providerOptions }] : []
+  })
+}
+
+function providerOptionsForBudget(npm: string | undefined, budget: number): ProviderV2.ProviderOptions | undefined {
+  if (npm === "@openrouter/ai-sdk-provider") return { openrouter: { reasoning: { max_tokens: budget } } }
+  if (npm === "@ai-sdk/anthropic" || npm === "@ai-sdk/google-vertex/anthropic") {
+    return { anthropic: { thinking: { type: "enabled", budgetTokens: budget } } }
+  }
+  if (npm === "@ai-sdk/google" || npm === "@ai-sdk/google-vertex") {
+    return { gemini: { thinkingConfig: { includeThoughts: true, thinkingBudget: budget } } }
+  }
 }
 
 function modeName(model: ModelsDev.Model, mode: string) {
@@ -193,7 +243,7 @@ export const ModelsDevPlugin = define({
 
           for (const model of Object.values(item.models)) {
             const baseCost = cost(model.cost)
-            const variants = reasoningVariants(model, model.provider?.npm ?? item.npm)
+            const variants = reasoningVariants(item, model)
             catalog.model.update(providerID, model.id, (draft) => applyModel(draft, model, { cost: baseCost, variants }))
             for (const [mode, options] of Object.entries(model.experimental?.modes ?? {})) {
               catalog.model.update(providerID, `${model.id}-${mode}`, (draft) =>

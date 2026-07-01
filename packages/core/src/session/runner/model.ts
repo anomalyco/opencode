@@ -96,6 +96,7 @@ const withDefaults = (model: ModelV2.Info, route: AnyRoute) => {
     provider: model.providerID,
     endpoint: model.api.url === undefined ? undefined : { baseURL: model.api.url },
     headers: model.request.headers,
+    providerOptions: model.request.providerOptions,
     http: { body: httpBody },
     limits: { context: model.limit.context, output: model.limit.output },
   })
@@ -120,6 +121,12 @@ export const withVariant = (
       ? produce(model, (draft) => {
           Object.assign(draft.request.headers, variant.headers)
           Object.assign(draft.request.body, variant.body)
+          if (variant.providerOptions !== undefined) {
+            draft.request.providerOptions = ProviderV2.mergeProviderOptions(
+              draft.request.providerOptions,
+              variant.providerOptions,
+            )
+          }
         })
       : model,
   )

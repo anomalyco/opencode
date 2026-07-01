@@ -4077,6 +4077,12 @@ export type LocationInfo = {
   }
 }
 
+export type ProviderOptions = {
+  [key: string]: {
+    [key: string]: unknown
+  }
+}
+
 export type ProviderRequest = {
   headers: {
     [key: string]: string
@@ -4084,6 +4090,7 @@ export type ProviderRequest = {
   body: {
     [key: string]: unknown
   }
+  providerOptions?: ProviderOptions
 }
 
 export type AgentColor = string | "primary" | "secondary" | "accent" | "success" | "warning" | "error" | "info"
@@ -5106,6 +5113,7 @@ export type ModelV2Info = {
     body: {
       [key: string]: unknown
     }
+    providerOptions?: ProviderOptions
     variant?: string
   }
   variants: Array<{
@@ -5116,6 +5124,7 @@ export type ModelV2Info = {
     body: {
       [key: string]: unknown
     }
+    providerOptions?: ProviderOptions
   }>
   time: {
     released: number

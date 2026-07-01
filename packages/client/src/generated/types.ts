@@ -153,6 +153,7 @@ export type AgentListOutput = {
     readonly request: {
       readonly headers: { readonly [x: string]: string }
       readonly body: { readonly [x: string]: JsonValue }
+      readonly providerOptions?: { readonly [x: string]: { readonly [x: string]: JsonValue } }
     }
     readonly system?: string
     readonly description?: string
@@ -2147,12 +2148,14 @@ export type ModelListOutput = {
     readonly request: {
       readonly headers: { readonly [x: string]: string }
       readonly body: { readonly [x: string]: JsonValue }
+      readonly providerOptions?: { readonly [x: string]: { readonly [x: string]: JsonValue } }
       readonly variant?: string
     }
     readonly variants: ReadonlyArray<{
       readonly id: string
       readonly headers: { readonly [x: string]: string }
       readonly body: { readonly [x: string]: JsonValue }
+      readonly providerOptions?: { readonly [x: string]: { readonly [x: string]: JsonValue } }
     }>
     readonly time: { readonly released: number }
     readonly cost: ReadonlyArray<{
@@ -2211,6 +2214,7 @@ export type ProviderListOutput = {
     readonly request: {
       readonly headers: { readonly [x: string]: string }
       readonly body: { readonly [x: string]: JsonValue }
+      readonly providerOptions?: { readonly [x: string]: { readonly [x: string]: JsonValue } }
     }
   }>
 }
@@ -2244,6 +2248,7 @@ export type ProviderGetOutput = {
     readonly request: {
       readonly headers: { readonly [x: string]: string }
       readonly body: { readonly [x: string]: JsonValue }
+      readonly providerOptions?: { readonly [x: string]: { readonly [x: string]: JsonValue } }
     }
   }
 }

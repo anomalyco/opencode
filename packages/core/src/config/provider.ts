@@ -7,6 +7,7 @@ import { ModelV2 } from "../model"
 export class Request extends Schema.Class<Request>("ConfigV2.Provider.Request")({
   headers: Schema.Record(Schema.String, Schema.String).pipe(Schema.optional),
   body: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
+  providerOptions: ProviderV2.ProviderOptions.pipe(Schema.optional),
 }) {}
 
 class Cache extends Schema.Class<Cache>("ConfigV2.Model.Cost.Cache")({
