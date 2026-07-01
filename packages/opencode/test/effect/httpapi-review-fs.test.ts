@@ -11,16 +11,16 @@ import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
+import { AppNodeBuilderV1 } from "@/effect/app-node-builder-v1"
 import { forceEnableForAcp, reset, setClientWriteTextFileSupported } from "@/acp/review-mode"
 import { SessionID, MessageID } from "@/session/schema"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 
-// Mirrors HttpApiApp.createRoutes: compile(app) + ReviewFs.defaultLayer on top.
-const httpAppLayer = LayerNode.compile(LayerNode.group([FSUtil.node, ToolRegistry.node])).pipe(
-  Layer.provide(ReviewFs.defaultLayer),
-  Layer.provide(Ripgrep.defaultLayer),
-  Layer.provide(CrossSpawnSpawner.defaultLayer),
+// Mirrors HttpApiApp.createRoutes: AppNodeBuilderV1.build(app) + ReviewFs.defaultLayer on top.
+const httpAppLayer = AppNodeBuilderV1.build(
+  LayerNode.group([FSUtil.node, ToolRegistry.node, CrossSpawnSpawner.node, Ripgrep.node]),
+  [[FSUtil.node, ReviewFs.node]],
 )
 
 const it = testEffect(httpAppLayer)
