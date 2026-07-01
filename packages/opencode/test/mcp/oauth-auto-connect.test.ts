@@ -99,6 +99,10 @@ void mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
       return serverCapabilities
     }
 
+    getInstructions(): string | undefined {
+      return undefined
+    }
+
     async listTools() {
       listToolsCalls++
       return { tools: [{ name: "test_tool", inputSchema: { type: "object", properties: {} } }] }
