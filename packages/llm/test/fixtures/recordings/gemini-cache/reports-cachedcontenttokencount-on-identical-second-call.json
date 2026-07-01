@@ -21,7 +21,7 @@
         "headers": {
           "content-type": "text/event-stream"
         },
-        "body": ""
+        "body": "data: {\"candidates\":[{\"content\":{\"role\":\"model\",\"parts\":[{\"text\":\"Hi.\"}]},\"finishReason\":\"STOP\"}],\"usageMetadata\":{\"promptTokenCount\":1200,\"candidatesTokenCount\":2,\"totalTokenCount\":1202}}\n\n"
       }
     },
     {
@@ -39,7 +39,7 @@
         "headers": {
           "content-type": "text/event-stream"
         },
-        "body": ""
+        "body": "data: {\"candidates\":[{\"content\":{\"role\":\"model\",\"parts\":[{\"text\":\"Hi.\"}]},\"finishReason\":\"STOP\"}],\"usageMetadata\":{\"cachedContentTokenCount\":1100,\"promptTokenCount\":1200,\"candidatesTokenCount\":2,\"totalTokenCount\":1202}}\n\n"
       }
     }
   ]

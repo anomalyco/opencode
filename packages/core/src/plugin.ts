@@ -1,5 +1,6 @@
 export * as PluginV2 from "./plugin"
 
+import { makeLocationNode } from "./effect/app-node"
 import { Context, Deferred, Effect, Exit, Layer, Scope } from "effect"
 import type { Plugin as PluginRuntime } from "@opencode-ai/plugin/v2/effect"
 import { Plugin } from "@opencode-ai/schema/plugin"
@@ -27,7 +28,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Plugin") {}
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const events = yield* EventV2.Service
@@ -148,5 +149,19 @@ export const locationLayer = layer.pipe(
   Layer.provideMerge(CommandV2.locationLayer),
   Layer.provideMerge(Integration.locationLayer),
   Layer.provideMerge(Reference.locationLayer),
-  Layer.provideMerge(SkillV2.locationLayer),
 )
+
+export const node = makeLocationNode({
+  service: Service,
+  layer,
+  deps: [
+    EventV2.node,
+    AgentV2.node,
+    AISDK.node,
+    Catalog.node,
+    CommandV2.node,
+    Integration.node,
+    Reference.node,
+    SkillV2.node,
+  ],
+})

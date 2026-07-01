@@ -1,8 +1,9 @@
 import { describe, test, expect } from "bun:test"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
-import { NodeFileSystem } from "@effect/platform-node"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { filesystem } from "@opencode-ai/core/effect/app-node-platform"
 import { FSUtil } from "@opencode-ai/core/fs-util"
-import { Effect, FileSystem, Layer } from "effect"
+import { Effect, FileSystem } from "effect"
 import { Truncate } from "@/tool/truncate"
 import { Config } from "@/config/config"
 import { Identifier } from "../../src/id/id"
@@ -15,15 +16,12 @@ import { TestConfig } from "../fixture/config"
 const FIXTURES_DIR = path.join(import.meta.dir, "fixtures")
 const ROOT = path.resolve(import.meta.dir, "..", "..")
 
-const it = testEffect(Layer.mergeAll(Truncate.defaultLayer, NodeFileSystem.layer, FSUtil.defaultLayer))
+const it = testEffect(LayerNode.compile(LayerNode.group([Truncate.node, FSUtil.node, filesystem])))
 
 const configuredLayer = (cfg: ConfigV1.Info) =>
-  Layer.mergeAll(
-    Truncate.defaultLayer,
-    NodeFileSystem.layer,
-    FSUtil.defaultLayer,
-    TestConfig.layer({ get: () => Effect.succeed(cfg) }),
-  )
+  LayerNode.compile(LayerNode.group([Truncate.node, FSUtil.node, filesystem, Config.node]), [
+    [Config.node, TestConfig.layer({ get: () => Effect.succeed(cfg) })],
+  ])
 const configuredIt = (cfg: ConfigV1.Info) => testEffect(configuredLayer(cfg))
 
 describe("Truncate", () => {

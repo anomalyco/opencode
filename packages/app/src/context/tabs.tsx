@@ -51,7 +51,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
     const fallback = server.key
     const [store, setStore, _, ready] = persisted(
       {
-        ...Persist.global("tabs"),
+        ...Persist.window("tabs"),
         migrate: (value: unknown) => {
           if (!Array.isArray(value)) return value
           return value.map((tab) => {
@@ -62,7 +62,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       },
       createStore<Tab[]>([]),
     )
-    const [recent, setRecent, , recentReady] = persisted(Persist.global("tabs.recent"), createStore<RecentTab>({}))
+    const [recent, setRecent, , recentReady] = persisted(Persist.window("tabs.recent"), createStore<RecentTab>({}))
 
     const params = useParams()
     const navigate = useNavigate()
@@ -138,12 +138,14 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
         const next = { type: "session" as const, ...tab }
         const existing = store.find((item) => tabKey(item) === tabKey(next))
         if (existing) return existing
-        setStore(
-          produce((tabs) => {
-            if (tabs.some((item) => tabKey(item) === tabKey(next))) return
-            tabs.push(next)
-          }),
-        )
+        void startTransition(() => {
+          setStore(
+            produce((tabs) => {
+              if (tabs.some((item) => tabKey(item) === tabKey(next))) return
+              tabs.push(next)
+            }),
+          )
+        })
         return next
       },
       reorder(keys: string[]) {
@@ -163,27 +165,29 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       },
       newDraft(draft: Omit<DraftTab, "type" | "draftID">, prompt?: string) {
         const draftID = uuid()
-        setStore(
-          produce((tabs) => {
-            tabs.push({ type: "draft", draftID, ...draft })
-          }),
-        )
-        navigate(prompt ? `${draftHref(draftID)}&prompt=${encodeURIComponent(prompt)}` : draftHref(draftID))
+        void startTransition(() => {
+          setStore(
+            produce((tabs) => {
+              tabs.push({ type: "draft", draftID, ...draft })
+            }),
+          )
+          navigate(prompt ? `${draftHref(draftID)}&prompt=${encodeURIComponent(prompt)}` : draftHref(draftID))
+        })
       },
       updateDraft(draftID: string, draft: Partial<Omit<DraftTab, "type" | "draftID">>) {
-        setStore(
-          (tab) => tab.type === "draft" && tab.draftID === draftID,
-          produce((tab) => Object.assign(tab, draft)),
-        )
+        void startTransition(() => {
+          setStore(
+            (tab) => tab.type === "draft" && tab.draftID === draftID,
+            produce((tab) => Object.assign(tab, draft)),
+          )
+        })
       },
       promoteDraft(draftID: string, session: Omit<SessionTab, "type">) {
-        // We're viewing this draft when /new-session?draftId=… points at it. Promoting
-        // replaces the draft tab with a session tab, so the draft route would stop resolving
-        // and fall back home. Navigate to the new session first so we leave /new-session
-        // before the draft is removed from the store.
+        // Keep the replacement and navigation atomic so /new-session never renders
+        // after its backing draft tab has been removed from the store.
         const active = location.pathname === "/new-session" && location.query.draftId === draftID
         const next = { type: "session" as const, ...session }
-        startTransition(() => {
+        void startTransition(() => {
           setStore(
             produce((tabs) => {
               const index = tabs.findIndex((tab) => tab.type === "draft" && tab.draftID === draftID)
