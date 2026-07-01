@@ -26,7 +26,7 @@ export const Parameters = Schema.Struct({
 
 /** One child tool call, surfaced live so the UI can render a per-call line that
  *  updates as the program runs. `tool` is the dotted path (e.g. `github.create_issue`). */
-export type CallEntry = { tool: string; status: "running" | "completed" | "error" }
+export type CallEntry = { tool: string; status: "running" | "completed" | "error"; input?: Record<string, unknown> }
 
 type Metadata = {
   toolCalls: CallEntry[]
@@ -67,9 +67,20 @@ const brief = (text: string | undefined, max = 120) => {
   return line.length > max ? line.slice(0, max - 1) + "…" : line
 }
 
+function displayInput(input: unknown): Record<string, unknown> | undefined {
+  if (input === null || input === undefined) return
+  if (typeof input === "object" && !Array.isArray(input)) {
+    const value = input as Record<string, unknown>
+    if (Object.keys(value).length > 0) return value
+    return
+  }
+  return { input }
+}
+
 /** Re-join accessed segments into the flat catalog key (`server_tool`). The
- *  server/tool split is cosmetic, so both `tools.a.b` and `tools["a.b"]` resolve. */
-const toKey = (segments: readonly string[]) => segments.join("_").replaceAll(".", "_")
+ *  server/tool split is cosmetic, so `tools.a.b`, `tools["a.b"]`, `a/b`, and `a_b`
+ *  all resolve to the same key — the model never has to guess the separator. */
+const toKey = (segments: readonly string[]) => segments.join("_").replace(/[./]/g, "_")
 
 /**
  * Group the flat `server_tool` catalog into per-server namespaces. `servers` are
@@ -379,12 +390,17 @@ function searchTextFor(entry: CatalogEntry): string {
   return parts.join("\n").toLowerCase()
 }
 
-/** Split a query into lowercased search terms, dropping empties and the `*` wildcard. */
+/**
+ * Split a query into lowercased search terms. camelCase boundaries are split
+ * (`resolveLibrary` -> `resolve library`) and `_ - . /` are treated as separators,
+ * so `resolve-library-id`, `resolveLibraryId`, and `resolve library id` all tokenize
+ * alike. Empties and the `*` wildcard are dropped.
+ */
 const tokenize = (query: string) =>
   query
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
     .toLowerCase()
-    .split(/[^a-z0-9_-]+/)
-    .map((term) => term.trim())
+    .split(/[^a-z0-9]+/)
     .filter((term) => term.length > 0 && term !== "*")
 
 /**
@@ -453,11 +469,14 @@ export function define(
     if (typeof path !== "string") return { error: { code: "invalid_path", message: "describe expects a tool path string." } }
     const entry = byKey.get(toKey([path]))
     if (!entry) {
-      const segment = path.split(/[._]/)[0] ?? ""
-      const suggestions = catalog
-        .filter((item) => item.server === segment || item.path.includes(path))
-        .slice(0, 5)
-        .map((item) => item.path)
+      // Fuzzy "did you mean": rank the leaf name within its namespace, then fall
+      // back to a global search. Split only on namespace separators (`. _ /`) so a
+      // hyphenated tool name (e.g. `resolve-library-id`) stays one searchable leaf.
+      const segments = path.split(/[._/]+/).filter((s) => s.length > 0)
+      const leaf = segments.at(-1) ?? path
+      const namespace = segments.length > 1 ? segments[0] : undefined
+      const scoped = namespace ? rankTools(index, leaf, namespace, 5).items : []
+      const suggestions = (scoped.length > 0 ? scoped : rankTools(index, leaf, undefined, 5).items).map((i) => i.path)
       return { error: { code: "tool_not_found", message: `No tool at '${path}'.`, suggestions } }
     }
     let inputSchema: unknown
@@ -491,6 +510,17 @@ export function define(
             calls[index] = { ...calls[index]!, status }
             return publish()
           })
+        const tracked = <A, E, R>(tool: string, input: unknown, effect: Effect.Effect<A, E, R>) =>
+          Effect.gen(function* () {
+            const index = calls.length
+            const childInput = displayInput(input)
+            calls.push({ tool, status: "running", ...(childInput ? { input: childInput } : {}) })
+            yield* publish()
+            return yield* effect.pipe(
+              Effect.tap(() => mark(index, "completed")),
+              Effect.tapError(() => mark(index, "error")),
+            )
+          })
 
         // One host function per MCP tool: gate on permission, dispatch to the native
         // MCP tool, and coerce the result into the { result, attachments? } envelope.
@@ -499,10 +529,7 @@ export function define(
         const callTool = (entry: CatalogEntry) => (input: unknown) =>
           Effect.gen(function* () {
             yield* ctx.ask({ permission: entry.key, metadata: {}, patterns: ["*"], always: ["*"] })
-            const index = calls.length
-            calls.push({ tool: entry.path, status: "running" })
-            yield* publish()
-            return yield* Effect.tryPromise({
+            return yield* tracked(entry.path, input, Effect.tryPromise({
               try: () =>
                 Promise.resolve(
                   entry.tool.execute!(input ?? {}, {
@@ -513,10 +540,8 @@ export function define(
                 ),
               catch: (error) => (error instanceof Error ? error : new Error(String(error))),
             }).pipe(
-              Effect.tap(() => mark(index, "completed")),
-              Effect.tapError(() => mark(index, "error")),
               Effect.map(toEnvelope),
-            )
+            ))
           })
 
         // The Rune host-tool tree: per-server namespaces (`tools.<server>.<tool>`)
@@ -525,8 +550,13 @@ export function define(
         // approve any child call.
         const tools: HostTools = {
           [RUNE_NS]: {
-            [SEARCH]: (query: unknown, options: unknown) => Effect.succeed(search(query, options)),
-            [DESCRIBE]: (path: unknown) => Effect.succeed(describeTool(path)),
+            [SEARCH]: (query: unknown, options: unknown) =>
+              tracked(
+                "$rune.search",
+                { query, ...(typeof options === "object" && options !== null && !Array.isArray(options) ? options : {}) },
+                Effect.succeed(search(query, options)),
+              ),
+            [DESCRIBE]: (path: unknown) => tracked("$rune.describe", { path }, Effect.succeed(describeTool(path))),
           },
         }
         for (const entry of catalog) {

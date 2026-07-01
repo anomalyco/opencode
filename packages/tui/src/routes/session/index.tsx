@@ -2325,26 +2325,29 @@ export function formatCompletedSubagentDetail(toolcalls: number, duration: strin
   return `${formatSubagentToolcalls(toolcalls)} · ${duration}`
 }
 
-type ExecuteCall = { tool: string; status: "running" | "completed" | "error" }
+type ExecuteCall = { tool: string; status: "running" | "completed" | "error"; input?: Record<string, unknown> }
 
 function executeCalls(value: unknown): ExecuteCall[] {
   if (!Array.isArray(value)) return []
-  return value.filter(
-    (call): call is ExecuteCall =>
-      !!call &&
-      typeof call === "object" &&
-      typeof (call as ExecuteCall).tool === "string" &&
-      ["running", "completed", "error"].includes((call as ExecuteCall).status),
-  )
+  return value.flatMap((call) => {
+    const item = recordValue(call)
+    const tool = stringValue(item?.tool)
+    const status = stringValue(item?.status)
+    if (!tool || !status || !["running", "completed", "error"].includes(status)) return []
+    return [{ tool, status: status as ExecuteCall["status"], input: recordValue(item?.input) }]
+  })
 }
 
 // The `execute` tool streams child tool calls through metadata, not a child session like Task.
 function Execute(props: ToolProps) {
-  const { theme, syntax } = useTheme()
+  const ctx = use()
+  const { theme } = useTheme()
   const isRunning = createMemo(() => props.part.state.status === "running")
   const calls = createMemo(() => executeCalls(props.metadata.toolCalls))
-  const code = createMemo(() => stringValue(props.input.code) ?? "")
-  const [expanded, setExpanded] = createSignal(false)
+  const output = createMemo(() => stripAnsi(props.output?.trim() ?? ""))
+  const hasRuntimeError = createMemo(() => props.metadata.error === true)
+  const outputPreview = createMemo(() => collapseToolOutput(output(), 4, 4 * Math.max(20, ctx.width - 6)).output)
+  const showOutput = createMemo(() => output() && (hasRuntimeError() || calls().length === 0))
 
   const summary = createMemo(() => {
     const count = calls().length
@@ -2357,37 +2360,39 @@ function Execute(props: ToolProps) {
   return (
     <>
       <InlineTool
-        icon={props.part.state.status === "completed" ? "✓" : props.part.state.status === "error" ? "✗" : "│"}
+        icon={props.part.state.status === "completed" && !hasRuntimeError() ? "✓" : props.part.state.status === "error" || hasRuntimeError() ? "✗" : "│"}
+        color={hasRuntimeError() ? theme.error : undefined}
         spinner={isRunning()}
         pending="Executing..."
         complete={complete()}
         part={props.part}
-        onClick={code() ? () => setExpanded((value) => !value) : undefined}
       >
         {summary()}
       </InlineTool>
       <For each={calls()}>
-        {(call) => (
-          <box paddingLeft={3}>
-            <text paddingLeft={3} fg={call.status === "error" ? theme.error : theme.textMuted}>
-              ↳ {call.tool}
-              {call.status === "running" ? " …" : call.status === "error" ? " (failed)" : ""}
-            </text>
-          </box>
-        )}
+        {(call) => {
+          const args = input(call.input ?? {})
+          return (
+            <box paddingLeft={3}>
+              <text paddingLeft={3} fg={call.status === "error" ? theme.error : theme.textMuted}>
+                ↳ {call.tool}
+                {args ? ` ${args}` : ""}
+                {call.status === "running" ? " …" : call.status === "error" ? " (failed)" : ""}
+              </text>
+            </box>
+          )
+        }}
       </For>
-      <Show when={code()}>
-        <box paddingLeft={3} onMouseUp={() => setExpanded((value) => !value)}>
-          <text paddingLeft={3} fg={theme.textMuted}>
-            ↳ {expanded() ? "hide code" : "view code"}
-          </text>
-        </box>
-      </Show>
-      <Show when={expanded() && code()}>
-        <box paddingLeft={3} paddingTop={1}>
-          <line_number fg={theme.textMuted} minWidth={3} paddingRight={1}>
-            <code conceal={false} fg={theme.text} filetype={filetype("code.ts")} syntaxStyle={syntax()} content={code()} />
-          </line_number>
+      <Show when={showOutput()}>
+        <box paddingLeft={3}>
+          <For each={outputPreview().split("\n")}>
+            {(line, index) => (
+              <text paddingLeft={3} fg={hasRuntimeError() ? theme.error : theme.textMuted}>
+                {index() === 0 ? "↳ " : "  "}
+                {line}
+              </text>
+            )}
+          </For>
         </box>
       </Show>
     </>

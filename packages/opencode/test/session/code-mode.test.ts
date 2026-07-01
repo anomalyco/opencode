@@ -132,6 +132,9 @@ describe("code mode execute", () => {
     const search = JSON.parse(searched.output)
     expect(search.total).toBe(2)
     expect(search.items.map((i: any) => i.path).sort()).toEqual(["github.create_issue", "github.list_issues"])
+    expect(searched.metadata.toolCalls).toEqual([
+      { tool: "$rune.search", status: "completed", input: { query: "issue", namespace: "github" } },
+    ])
 
     const described = await Effect.runPromise(
       tool.execute({ code: "return await tools.$rune.describe('github.create_issue')" }, ctx),
@@ -141,9 +144,34 @@ describe("code mode execute", () => {
     expect(desc.signature).toBe(
       "tools.github.create_issue(input: { title: string; body?: string }): Promise<{ result: unknown; attachments?: Attachment[] }>",
     )
+    expect(described.metadata.toolCalls).toEqual([
+      { tool: "$rune.describe", status: "completed", input: { path: "github.create_issue" } },
+    ])
 
     const missing = await Effect.runPromise(tool.execute({ code: "return await tools.$rune.describe('github.nope')" }, ctx))
     expect(JSON.parse(missing.output).error.code).toBe("tool_not_found")
+    expect(missing.metadata.toolCalls).toEqual([
+      { tool: "$rune.describe", status: "completed", input: { path: "github.nope" } },
+    ])
+  })
+
+  test("describe resolves a tool path regardless of separator (dot, slash, or underscore)", async () => {
+    const tool = await build({ "context7_resolve-library-id": mcpTool("resolve-library-id", () => "") })
+    for (const path of ["context7.resolve-library-id", "context7/resolve-library-id", "context7_resolve-library-id"]) {
+      const described = await Effect.runPromise(tool.execute({ code: `return await tools.$rune.describe(${JSON.stringify(path)})` }, ctx))
+      expect(JSON.parse(described.output).path).toBe("context7.resolve-library-id")
+    }
+  })
+
+  test("describe suggests the real tool for a mistyped path (did-you-mean)", async () => {
+    const tool = await build({ "context7_resolve-library-id": mcpTool("resolve-library-id", () => "") })
+    // Wrong leaf within the right namespace falls back to a namespace-scoped search.
+    const missing = await Effect.runPromise(
+      tool.execute({ code: "return await tools.$rune.describe('context7/resolve-library')" }, ctx),
+    )
+    const error = JSON.parse(missing.output).error
+    expect(error.code).toBe("tool_not_found")
+    expect(error.suggestions).toContain("context7.resolve-library-id")
   })
 
   test("groups multi-underscore server names by longest matching prefix", () => {
@@ -174,7 +202,7 @@ describe("code mode execute", () => {
 
     expect(seen).toEqual([{ name: "world" }])
     expect(output.output).toBe("HELLO WORLD")
-    expect(output.metadata.toolCalls).toEqual([{ tool: "greeter.hello", status: "completed" }])
+    expect(output.metadata.toolCalls).toEqual([{ tool: "greeter.hello", status: "completed", input: { name: "world" } }])
   })
 
   test("exposes structured content as data and composes multiple calls", async () => {
@@ -200,8 +228,8 @@ describe("code mode execute", () => {
 
     expect(JSON.parse(output.output)).toEqual({ total: 13 })
     expect(output.metadata.toolCalls).toEqual([
-      { tool: "math.add", status: "completed" },
-      { tool: "math.add", status: "completed" },
+      { tool: "math.add", status: "completed", input: { a: 1, b: 2 } },
+      { tool: "math.add", status: "completed", input: { a: 3, b: 10 } },
     ])
   })
 
@@ -265,22 +293,54 @@ describe("code mode execute", () => {
   })
 
   test("streams live per-call metadata as a call starts and finishes", async () => {
-    const snapshots: Array<{ toolCalls: { tool: string; status: string }[] }> = []
+    const snapshots: Array<{ toolCalls: { tool: string; status: string; input?: Record<string, unknown> }[] }> = []
     const recordingCtx: Tool.Context = {
       ...ctx,
       metadata: (val: any) => Effect.sync(() => void snapshots.push(val.metadata)),
     }
     const tool = await build({ greeter_hello: mcpTool("hello", () => ({ content: [{ type: "text", text: "hi" }] })) })
 
-    await Effect.runPromise(tool.execute({ code: "await tools.greeter.hello({}); return 'done'" }, recordingCtx))
+    await Effect.runPromise(tool.execute({ code: "await tools.greeter.hello({ name: 'Ada' }); return 'done'" }, recordingCtx))
 
     // The UI sees the call appear as running, then resolve to completed.
-    expect(snapshots).toContainEqual({ toolCalls: [{ tool: "greeter.hello", status: "running" }] })
-    expect(snapshots).toContainEqual({ toolCalls: [{ tool: "greeter.hello", status: "completed" }] })
+    expect(snapshots).toContainEqual({ toolCalls: [{ tool: "greeter.hello", status: "running", input: { name: "Ada" } }] })
+    expect(snapshots).toContainEqual({ toolCalls: [{ tool: "greeter.hello", status: "completed", input: { name: "Ada" } }] })
+  })
+
+  test("streams discovery helpers with the same per-call metadata shape", async () => {
+    const snapshots: Array<{ toolCalls: { tool: string; status: string; input?: Record<string, unknown> }[] }> = []
+    const recordingCtx: Tool.Context = {
+      ...ctx,
+      metadata: (val: any) => Effect.sync(() => void snapshots.push(val.metadata)),
+    }
+    const tool = await build({ github_create_issue: mcpTool("create_issue", () => "") })
+
+    await Effect.runPromise(
+      tool.execute(
+        {
+          code: `
+            await tools.$rune.search('issue', { namespace: 'github' })
+            await tools.$rune.describe('github.create_issue')
+            return 'done'
+          `,
+        },
+        recordingCtx,
+      ),
+    )
+
+    expect(snapshots).toContainEqual({
+      toolCalls: [{ tool: "$rune.search", status: "running", input: { query: "issue", namespace: "github" } }],
+    })
+    expect(snapshots).toContainEqual({
+      toolCalls: [
+        { tool: "$rune.search", status: "completed", input: { query: "issue", namespace: "github" } },
+        { tool: "$rune.describe", status: "completed", input: { path: "github.create_issue" } },
+      ],
+    })
   })
 
   test("marks a failed child call as error in the live metadata", async () => {
-    const snapshots: Array<{ toolCalls: { tool: string; status: string }[] }> = []
+    const snapshots: Array<{ toolCalls: { tool: string; status: string; input?: Record<string, unknown> }[] }> = []
     const recordingCtx: Tool.Context = {
       ...ctx,
       metadata: (val: any) => Effect.sync(() => void snapshots.push(val.metadata)),
@@ -290,10 +350,10 @@ describe("code mode execute", () => {
     })
 
     await Effect.runPromise(
-      tool.execute({ code: "try { await tools.bad.tool({}) } catch (e) { return 'caught' }" }, recordingCtx),
+      tool.execute({ code: "try { await tools.bad.tool({ reason: 'test' }) } catch (e) { return 'caught' }" }, recordingCtx),
     )
 
-    expect(snapshots).toContainEqual({ toolCalls: [{ tool: "bad.tool", status: "error" }] })
+    expect(snapshots).toContainEqual({ toolCalls: [{ tool: "bad.tool", status: "error", input: { reason: "test" } }] })
   })
 
   test("unit: toEnvelope wraps result and extracts media as attachments", () => {

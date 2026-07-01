@@ -133,12 +133,13 @@ describe("code mode integration (real MCP server)", () => {
     const out = await run("return await tools.$rune.search('screenshot')")
     const result = JSON.parse(out.output)
     expect(result.items.map((i: any) => i.path)).toContain("fixtures.screenshot")
+    expect(out.metadata.toolCalls).toEqual([{ tool: "$rune.search", status: "completed", input: { query: "screenshot" } }])
   })
 
   test("calls a text tool and unwraps the result envelope", async () => {
     const out = await run("const r = await tools.fixtures.get_text({ name: 'world' }); return r.result")
     expect(out.output).toBe("hello world")
-    expect(out.metadata.toolCalls).toEqual([{ tool: "fixtures.get_text", status: "completed" }])
+    expect(out.metadata.toolCalls).toEqual([{ tool: "fixtures.get_text", status: "completed", input: { name: "world" } }])
     expect(out.attachments).toBeUndefined()
   })
 
@@ -155,8 +156,8 @@ describe("code mode integration (real MCP server)", () => {
     `)
     expect(JSON.parse(out.output)).toEqual({ total: 13 })
     expect(out.metadata.toolCalls).toEqual([
-      { tool: "fixtures.add", status: "completed" },
-      { tool: "fixtures.add", status: "completed" },
+      { tool: "fixtures.add", status: "completed", input: { a: 1, b: 2 } },
+      { tool: "fixtures.add", status: "completed", input: { a: 3, b: 10 } },
     ])
   })
 
