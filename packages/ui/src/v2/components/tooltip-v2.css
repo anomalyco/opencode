@@ -1,3 +1,7 @@
+[data-component="tooltip-v2-trigger"] {
+  display: flex;
+}
+
 [data-component="tooltip-v2"] {
   box-sizing: border-box;
   display: inline-flex;
@@ -6,8 +10,8 @@
   padding: 5px 6px;
   gap: 6px;
 
-  background: var(--background-bg-layer-01);
-  box-shadow: var(--elevation-floating);
+  background: var(--v2-background-bg-layer-01);
+  box-shadow: var(--v2-elevation-floating);
   border-radius: 4px;
 
   font-style: normal;
@@ -15,7 +19,7 @@
   font-size: 11px;
   line-height: 12px;
   letter-spacing: 0.05px;
-  color: var(--text-text-base);
+  color: var(--v2-text-text-base);
   font-variant-numeric: tabular-nums;
   font-variation-settings: "slnt" 0;
 
@@ -49,5 +53,12 @@
   to {
     opacity: 0;
     transform: scale(0.96);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-component="tooltip-v2"],
+  [data-component="tooltip-v2"][data-closed] {
+    animation: none;
   }
 }

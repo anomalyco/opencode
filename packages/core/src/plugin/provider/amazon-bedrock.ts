@@ -1,6 +1,6 @@
 import { Effect } from "effect"
 import type { LanguageModelV3 } from "@ai-sdk/provider"
-import { PluginV2 } from "../../plugin"
+import { define } from "../internal"
 import { ProviderV2 } from "../../provider"
 
 type MantleSDK = {
@@ -59,11 +59,11 @@ function selectMantleModel(sdk: MantleSDK, modelID: string) {
   return sdk.responses(modelID)
 }
 
-export const AmazonBedrockPlugin = PluginV2.define({
-  id: PluginV2.ID.make("amazon-bedrock"),
-  effect: Effect.gen(function* () {
-    return {
-      "catalog.transform": Effect.fn(function* (evt) {
+export const AmazonBedrockPlugin = define({
+  id: "amazon-bedrock",
+  effect: Effect.fn(function* (ctx) {
+    yield* ctx.catalog.transform(
+      Effect.fn(function* (evt) {
         for (const item of evt.provider.list()) {
           if (item.provider.api.type !== "aisdk") continue
           if (item.provider.api.package !== "@ai-sdk/amazon-bedrock") continue
@@ -77,7 +77,9 @@ export const AmazonBedrockPlugin = PluginV2.define({
           })
         }
       }),
-      "aisdk.sdk": Effect.fn(function* (evt) {
+    )
+    yield* ctx.aisdk.sdk(
+      Effect.fn(function* (evt) {
         if (!["@ai-sdk/amazon-bedrock", "@ai-sdk/amazon-bedrock/mantle"].includes(evt.package)) return
         const options = { ...evt.options }
         const profile = typeof options.profile === "string" ? options.profile : process.env.AWS_PROFILE
@@ -108,7 +110,9 @@ export const AmazonBedrockPlugin = PluginV2.define({
         const mod = yield* Effect.promise(() => import("@ai-sdk/amazon-bedrock"))
         evt.sdk = mod.createAmazonBedrock(options)
       }),
-      "aisdk.language": Effect.fn(function* (evt) {
+    )
+    yield* ctx.aisdk.language(
+      Effect.fn(function* (evt) {
         if (evt.model.providerID !== ProviderV2.ID.amazonBedrock) return
         if (evt.model.api.type === "aisdk" && evt.model.api.package === "@ai-sdk/amazon-bedrock/mantle") {
           evt.language = selectMantleModel(evt.sdk, evt.model.api.id)
@@ -117,6 +121,6 @@ export const AmazonBedrockPlugin = PluginV2.define({
         const region = typeof evt.options.region === "string" ? evt.options.region : process.env.AWS_REGION
         evt.language = evt.sdk.languageModel(resolveModelID(evt.model.api.id, region))
       }),
-    }
+    )
   }),
 })

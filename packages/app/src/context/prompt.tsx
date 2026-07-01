@@ -1,12 +1,18 @@
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import { checksum } from "@opencode-ai/core/util/encode"
+import { base64Encode, checksum } from "@opencode-ai/core/util/encode"
 import { useParams, useSearchParams } from "@solidjs/router"
-import { batch, createMemo, createRoot, getOwner, onCleanup } from "solid-js"
+import { batch, createMemo, createRoot, getOwner, onCleanup, type Accessor } from "solid-js"
 import { createStore, type SetStoreFunction } from "solid-js/store"
 import type { FileSelection } from "@/context/file"
 import { Persist, persisted } from "@/utils/persist"
 import { useServerSDK } from "./server-sdk"
 import type { ServerScope } from "@/utils/server-scope"
+import { useSDK } from "./sdk"
+import { useTabs, type Tab } from "./tabs"
+import { ServerConnection } from "./server"
+import { requireServerKey } from "@/utils/session-route"
+import { useSettings } from "./settings"
+import type { FilePartSource } from "@opencode-ai/sdk/v2/client"
 
 interface PartBase {
   content: string
@@ -22,6 +28,10 @@ export interface FileAttachmentPart extends PartBase {
   type: "file"
   path: string
   selection?: FileSelection
+  mime?: string
+  filename?: string
+  url?: string
+  source?: FilePartSource
 }
 
 export interface AgentPart extends PartBase {
@@ -68,7 +78,13 @@ function isPartEqual(partA: ContentPart, partB: ContentPart) {
     case "text":
       return partB.type === "text" && partA.content === partB.content
     case "file":
-      return partB.type === "file" && partA.path === partB.path && isSelectionEqual(partA.selection, partB.selection)
+      return (
+        partB.type === "file" &&
+        partA.path === partB.path &&
+        partA.mime === partB.mime &&
+        partA.filename === partB.filename &&
+        isSelectionEqual(partA.selection, partB.selection)
+      )
     case "agent":
       return partB.type === "agent" && partA.name === partB.name
     case "image":
@@ -164,6 +180,15 @@ type PromptStore = {
 
 type Scope = { draftID: string } | { dir: string; id?: string }
 
+export function selectPromptTab(tabs: Tab[], scope: Scope, server: ServerConnection.Key) {
+  if ("draftID" in scope) return tabs.find((tab) => tab.type === "draft" && tab.draftID === scope.draftID)
+  if (!scope.id) return
+  return (
+    tabs.find((tab) => tab.type === "session" && tab.server === server && tab.sessionId === scope.id) ??
+    ({ type: "session", server, sessionId: scope.id } satisfies Tab)
+  )
+}
+
 function scopeKey(scope: Scope) {
   if ("draftID" in scope) return `draft:${scope.draftID}`
   return `${scope.dir}:${scope.id ?? WORKSPACE_KEY}`
@@ -180,13 +205,19 @@ function promptTarget(serverScope: ServerScope, scope: Scope) {
   return Persist.serverScoped(serverScope, scope.dir, scope.id, "prompt", [legacy])
 }
 
-function createPromptSession(serverScope: ServerScope, scope: Scope) {
+export function createPromptSession(serverScope: ServerScope, scope: Scope) {
   const [store, setStore, _, ready] = persisted(
     promptTarget(serverScope, scope),
     createStore<PromptStore>(promptStore()),
   )
 
   return { ready, ...createPromptStateValue(store, setStore) }
+}
+
+export function createPromptReady(session: Accessor<PromptSession>) {
+  return Object.defineProperty(() => session().ready(), "promise", {
+    get: () => session().ready.promise,
+  }) as (() => boolean) & { readonly promise: Promise<unknown> | undefined }
 }
 
 function promptStore(): PromptStore {
@@ -202,7 +233,7 @@ function promptStore(): PromptStore {
 function createPromptStateValue(store: PromptStore, setStore: SetStoreFunction<PromptStore>) {
   const actions = createPromptActions(setStore)
 
-  return {
+  const value = {
     current: () => store.prompt,
     cursor: createMemo(() => store.cursor),
     dirty: () => !isPromptEqual(store.prompt, DEFAULT_PROMPT),
@@ -239,25 +270,36 @@ function createPromptStateValue(store: PromptStore, setStore: SetStoreFunction<P
     },
     set: actions.set,
     reset: actions.reset,
+    capture: () => value,
   }
+  return value
 }
 
 export function createPromptState() {
   const [store, setStore] = createStore<PromptStore>(promptStore())
   const ready = Object.assign(() => true, { promise: Promise.resolve(true) })
   return {
-    ready: () => ready,
+    ready,
     ...createPromptStateValue(store, setStore),
   }
 }
+
+export const createTabPromptState = (
+  tabs: ReturnType<typeof useTabs>,
+  tab: Tab,
+  ...args: Parameters<typeof createPromptSession>
+) => tabs.state(tab, "prompt", () => createPromptSession(...args))
 
 export const { use: usePrompt, provider: PromptProvider } = createSimpleContext({
   name: "Prompt",
   gate: false,
   init: () => {
-    const params = useParams()
+    const params = useParams<{ serverKey?: string; id?: string }>()
+    const sdk = useSDK()
     const [search] = useSearchParams<{ draftId?: string }>()
     const serverSDK = useServerSDK()
+    const tabs = useTabs()
+    const settings = useSettings()
     const cache = new Map<string, PromptCacheEntry>()
 
     const disposeAll = () => {
@@ -280,7 +322,16 @@ export const { use: usePrompt, provider: PromptProvider } = createSimpleContext(
     }
 
     const owner = getOwner()
+    const serverKey = () =>
+      params.serverKey ? requireServerKey(params.serverKey) : ServerConnection.key(serverSDK().server)
+    const scope = () =>
+      search.draftId ? { draftID: search.draftId } : { dir: base64Encode(sdk().directory), id: params.id }
     const load = (scope: Scope) => {
+      const current = settings.general.newLayoutDesigns() ? selectPromptTab(tabs.store, scope, serverKey()) : undefined
+      if (current) {
+        return createTabPromptState(tabs, current, serverSDK().scope, scope)
+      }
+
       const key = scopeKey(scope)
       const existing = cache.get(key)
       if (existing) {
@@ -302,13 +353,13 @@ export const { use: usePrompt, provider: PromptProvider } = createSimpleContext(
       return entry.value
     }
 
-    const session = createMemo(() =>
-      load(search.draftId ? { draftID: search.draftId } : { dir: params.dir!, id: params.id }),
-    )
+    const session = createMemo(() => load(scope()))
     const pick = (scope?: Scope) => (scope ? load(scope) : session())
+    const ready = createPromptReady(session)
 
     return {
-      ready: () => session().ready,
+      ready,
+      capture: (scope?: Scope) => pick(scope).capture(),
       current: () => session().current(),
       cursor: () => session().cursor(),
       dirty: () => session().dirty(),
