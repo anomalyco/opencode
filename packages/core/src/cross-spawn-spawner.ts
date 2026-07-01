@@ -268,24 +268,43 @@ export const make = Effect.gen(function* () {
     Effect.callback<readonly [NodeChildProcess.ChildProcess, ExitSignal], PlatformError.PlatformError>((resume) => {
       const signal = Deferred.makeUnsafe<readonly [code: number | null, signal: NodeJS.Signals | null]>()
       const proc = launch(command.command, command.args, opts)
-      let end = false
-      let exit: readonly [code: number | null, signal: NodeJS.Signals | null] | undefined
+      let resumed = false
+      let resolved = false
+      let exitTuple: readonly [code: number | null, signal: NodeJS.Signals | null] | undefined
+      let closeTuple: readonly [code: number | null, signal: NodeJS.Signals | null] | undefined
+
+      const resolveOnce = (tuple: readonly [code: number | null, signal: NodeJS.Signals | null]) => {
+        if (resolved) return
+        resolved = true
+        Deferred.doneUnsafe(signal, Exit.succeed(tuple))
+      }
+
       proc.on("error", (err) => {
-        resume(Effect.fail(toPlatformError("spawn", err, command)))
+        if (resolved) return
+        if (!resumed) {
+          resumed = true
+          resume(Effect.fail(toPlatformError("spawn", err, command)))
+        }
       })
-      proc.on("exit", (...args) => {
-        exit = args
+      proc.on("exit", (code, sig) => {
+        exitTuple = [code, sig]
+        resolveOnce(exitTuple)
       })
-      proc.on("close", (...args) => {
-        if (end) return
-        end = true
-        Deferred.doneUnsafe(signal, Exit.succeed(exit ?? args))
+      proc.on("close", (code, sig) => {
+        closeTuple = [code, sig]
+        resolveOnce(exitTuple ?? closeTuple)
       })
       proc.on("spawn", () => {
+        if (resumed) return
+        resumed = true
         resume(Effect.succeed([proc, signal]))
       })
       return Effect.sync(() => {
-        proc.kill("SIGTERM")
+        try {
+          proc.kill("SIGTERM")
+        } catch {
+          // no-op: process may have already exited
+        }
       })
     })
 
