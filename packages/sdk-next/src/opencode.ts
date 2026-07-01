@@ -44,7 +44,7 @@ export const create = Effect.fn("OpenCode.create")(function* () {
     // `PluginContext`, so `ctx.agent.transform` and every other hook behave exactly
     // as they do for a config-discovered plugin. Define agent profiles here at
     // startup, then select one per Session with `sessions.create({ agent })`.
-    plugin: plugins.register,
+    plugin: Object.assign(plugins.register, client.plugin),
   }
 })
 

@@ -5,6 +5,8 @@ import path from "path"
 import { Context, Effect, Layer, Schema } from "effect"
 import { FSUtil } from "./fs-util"
 import { Location } from "./location"
+import { Project } from "./project"
+import { AbsolutePath } from "./schema"
 
 export const Kind = Schema.Literals(["file", "directory"])
 export type Kind = typeof Kind.Type
@@ -143,7 +145,12 @@ export const layer = Layer.effect(
               action: "external_directory",
               directory: externalDirectory,
               resource: externalResource,
-              save: externalResource,
+              save: slash(
+                path.join(
+                  (yield* Project.root(fs, AbsolutePath.make(externalDirectory))) ?? externalDirectory,
+                  "*",
+                ),
+              ),
             }
           : undefined,
       } satisfies Target

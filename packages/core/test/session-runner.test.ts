@@ -24,6 +24,7 @@ import { Snapshot } from "@opencode-ai/core/snapshot"
 import { ContextSnapshotDecodeError } from "@opencode-ai/core/session/error"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionCompaction } from "@opencode-ai/core/session/compaction"
+import { SessionTitle } from "@opencode-ai/core/session/title"
 import { SessionInput } from "@opencode-ai/core/session/input"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { Prompt } from "@opencode-ai/core/session/prompt"
@@ -232,6 +233,7 @@ const config = Layer.succeed(
 )
 const runner = SessionRunnerLLM.layer.pipe(
   Layer.provide(SessionCompaction.layer),
+  Layer.provide(SessionTitle.layer),
   Layer.provide(Snapshot.noopLayer),
   Layer.provide(Database.defaultLayer),
   Layer.provide(SessionStore.defaultLayer),

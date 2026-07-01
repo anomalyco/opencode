@@ -98,4 +98,22 @@ export const entriesForRunner = Effect.fn("SessionHistory.entriesForRunner")(fun
   )
 })
 
+/** Returns the session's sole user message, or `undefined` once a second one exists. */
+export const firstUserMessageIfOnly = Effect.fn("SessionHistory.firstUserMessageIfOnly")(function* (
+  db: DatabaseService,
+  sessionID: SessionSchema.ID,
+) {
+  const rows = yield* db
+    .select()
+    .from(SessionMessageTable)
+    .where(and(eq(SessionMessageTable.session_id, sessionID), eq(SessionMessageTable.type, "user")))
+    .orderBy(asc(SessionMessageTable.seq))
+    .limit(2)
+    .all()
+    .pipe(Effect.orDie)
+  if (rows.length !== 1) return undefined
+  const message = yield* decodeMessageRow(rows[0]).pipe(Effect.catch(() => Effect.succeed(undefined)))
+  return message?.type === "user" ? message : undefined
+})
+
 export * as SessionHistory from "./history"

@@ -230,6 +230,40 @@ describe("WriteTool", () => {
     ),
   )
 
+  it.live("saves external directory approval at the nearest project directory", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => Promise.all([tmpdir(), tmpdir()])),
+      ([active, outside]) => {
+        reset()
+        const repo = path.join(outside.path, "repo")
+        const nested = path.join(repo, "packages", "app")
+        const target = path.join(nested, "external.txt")
+        return Effect.promise(() =>
+          Promise.all([fs.mkdir(path.join(repo, ".git"), { recursive: true }), fs.mkdir(nested, { recursive: true })]),
+        ).pipe(
+          Effect.andThen(
+            withTool(active.path, (registry) => executeTool(registry, call({ path: target, content: "external" }))),
+          ),
+          Effect.andThen(
+            Effect.gen(function* () {
+              const canonicalRepo = yield* Effect.promise(() => fs.realpath(repo))
+              const canonicalNested = yield* Effect.promise(() => fs.realpath(nested))
+              expect(assertions[0]).toMatchObject({
+                action: "external_directory",
+                resources: [path.join(canonicalNested, "*").replaceAll("\\", "/")],
+                save: [path.join(canonicalRepo, "*").replaceAll("\\", "/")],
+              })
+            }),
+          ),
+        )
+      },
+      ([active, outside]) =>
+        Effect.promise(() =>
+          Promise.all([active[Symbol.asyncDispose](), outside[Symbol.asyncDispose]()]).then(() => undefined),
+        ),
+    ),
+  )
+
   it.live("does not write when external_directory or edit approval is denied", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => Promise.all([tmpdir(), tmpdir()])),

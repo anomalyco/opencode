@@ -169,6 +169,21 @@ export type AgentListOutput = {
   }>
 }
 
+export type PluginListInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
+
+export type PluginListOutput = {
+  readonly location: {
+    readonly directory: string
+    readonly workspaceID?: string
+    readonly project: { readonly id: string; readonly directory: string }
+  }
+  readonly data: ReadonlyArray<{ readonly id: string }>
+}
+
 export type SessionListInput = {
   readonly workspace?: {
     readonly workspace?: string | undefined

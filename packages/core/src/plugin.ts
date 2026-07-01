@@ -21,12 +21,15 @@ import { ToolRegistry } from "./tool/registry"
 
 export const ID = Plugin.ID
 export type ID = typeof ID.Type
+export const Info = Plugin.Info
+export type Info = Plugin.Info
 export const Event = Plugin.Event
 
 export interface Interface {
   readonly add: (id: ID, effect: PluginDefinition["effect"]) => Effect.Effect<void>
   readonly remove: (id: ID) => Effect.Effect<void>
   readonly wait: (id: ID) => Effect.Effect<void>
+  readonly list: () => Effect.Effect<Info[]>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Plugin") {}
@@ -139,6 +142,9 @@ export const layer = Layer.effect(
       add,
       remove,
       wait,
+      list: Effect.fn("Plugin.list")(function* () {
+        return Array.from(active.keys()).map((id) => ({ id }))
+      }),
     })
     host = yield* PluginHost.make(service)
     return service

@@ -20,6 +20,7 @@ export const groupNames = {
   "server.health": "health",
   "server.location": "location",
   "server.agent": "agent",
+  "server.plugin": "plugin",
   "server.session": "session",
   "server.message": "message",
   "server.model": "model",

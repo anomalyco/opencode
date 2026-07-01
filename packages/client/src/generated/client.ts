@@ -4,6 +4,8 @@ import type {
   LocationGetOutput,
   AgentListInput,
   AgentListOutput,
+  PluginListInput,
+  PluginListOutput,
   SessionListInput,
   SessionListOutput,
   SessionCreateInput,
@@ -302,6 +304,20 @@ export function make(options: ClientOptions) {
           {
             method: "GET",
             path: `/api/agent`,
+            query: { location: input?.["location"] },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+    },
+    plugin: {
+      list: (input?: PluginListInput, requestOptions?: RequestOptions) =>
+        request<PluginListOutput>(
+          {
+            method: "GET",
+            path: `/api/plugin`,
             query: { location: input?.["location"] },
             successStatus: 200,
             declaredStatuses: [401, 400],

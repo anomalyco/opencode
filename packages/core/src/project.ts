@@ -40,6 +40,17 @@ export interface Resolved {
   readonly vcs?: Vcs
 }
 
+// Keep this filesystem-only; permission checks use it and should not execute VCS commands.
+export const root = Effect.fn("Project.root")(function* (
+  fs: FSUtil.Interface,
+  input: AbsolutePath,
+) {
+  return yield* fs.up({ targets: [".git"], start: input }).pipe(
+    Effect.map((matches) => matches[0] ? AbsolutePath.make(path.dirname(matches[0])) : undefined),
+    Effect.catch(() => Effect.succeed(undefined)),
+  )
+})
+
 export interface Interface {
   readonly directories: (input: DirectoriesInput) => Effect.Effect<Directories>
   readonly resolve: (input: AbsolutePath) => Effect.Effect<Resolved>

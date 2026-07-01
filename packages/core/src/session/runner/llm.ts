@@ -30,6 +30,7 @@ import { SessionHistory } from "../history"
 import { SessionInput } from "../input"
 import { SessionSchema } from "../schema"
 import { SessionStore } from "../store"
+import { SessionTitle } from "../title"
 import { type RunError, Service } from "./index"
 import { SessionRunnerModel } from "./model"
 import { createLLMEventPublisher } from "./publish-llm-event"
@@ -107,6 +108,12 @@ export const layer = Layer.effect(
     const snapshots = yield* Snapshot.Service
     const db = (yield* Database.Service).db
     const compaction = yield* SessionCompaction.Service
+    const title = yield* SessionTitle.Service
+    // Title generation is a side effect of the first turn; it must not delay turn continuation.
+    // Tracked per process so repeated wakes before the second user message arrives don't
+    // re-fire a redundant LLM call; `SessionTitle` itself is idempotent based on durable history.
+    const titleAttempted = new Set<SessionSchema.ID>()
+    const forkTitle = yield* FiberSet.makeRuntime<never, void, never>()
     const getSession = Effect.fn("SessionRunner.getSession")(function* (sessionID: SessionSchema.ID) {
       const session = yield* store.get(sessionID)
       if (!session) return yield* Effect.die(`Session not found: ${sessionID}`)
@@ -394,6 +401,12 @@ export const layer = Layer.effect(
         let step = 1
         while (needsContinuation) {
           const result = yield* runTurn(input.sessionID, promotion, step)
+          // Steer/queue promotion inside runTurn has already made the pending input a visible
+          // user message by this point, so the first-user-message check below is reliable.
+          if (!titleAttempted.has(input.sessionID)) {
+            titleAttempted.add(input.sessionID)
+            forkTitle(title.generateForFirstPrompt(yield* getSession(input.sessionID)).pipe(Effect.ignore))
+          }
           needsContinuation = result.needsContinuation
           step = result.step + 1
           promotion = "steer"
@@ -428,6 +441,7 @@ export const node = makeLocationNode({
     ReferenceGuidance.node,
     McpGuidance.node,
     SessionCompaction.node,
+    SessionTitle.node,
     Snapshot.node,
     Database.node,
   ],
