@@ -212,10 +212,16 @@ export const TuiThreadCommand = cmd({
       // Instance ALS context the effectCmd wrapper would normally provide. The
       // TUI handler runs outside it, so bootstrap it here only for `free`; any
       // other model is passed through directly to avoid the load/dispose cost.
-      const model =
-        args.model === "free"
-          ? (await bootstrap(cwd, (ctx) => Provider.resolveSelection(args.model, ctx))).model
-          : args.model
+      let model = args.model
+      if (args.model === "free") {
+        try {
+          model = (await bootstrap(cwd, (ctx) => Provider.resolveSelection(args.model, ctx))).model
+        } catch (error) {
+          UI.error(error instanceof Error ? error.message : String(error))
+          process.exitCode = 1
+          return
+        }
+      }
 
       const worker = new Worker(file)
       const client = Rpc.client<typeof rpc>(worker)

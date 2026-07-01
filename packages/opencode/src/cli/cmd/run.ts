@@ -270,11 +270,23 @@ export const RunCommand = effectCmd({
       const interactive = args.mini
       const auto = args.auto || args.yolo || args["dangerously-skip-permissions"]
       const thinking = interactive ? (args.thinking ?? true) : (args.thinking ?? false)
-      const resolved = await Provider.resolveSelection(args.model, localInstance)
       const die = (message: string): never => {
         UI.error(message)
         process.exit(1)
       }
+      if (args.attach && args.model === "free") {
+        die(
+          "--model free is not supported with --attach; specify a concrete model id (e.g., --model opencode/mimo-v2.5-free)",
+        )
+      }
+      const resolved = await (async () => {
+        if (args.attach) return { model: args.model }
+        try {
+          return await Provider.resolveSelection(args.model, localInstance)
+        } catch (error) {
+          return die(error instanceof Error ? error.message : String(error))
+        }
+      })()
       const dieInteractive = (error: unknown): never => {
         if (error instanceof Error && error.message === INTERACTIVE_INPUT_ERROR) {
           die(error.message)
