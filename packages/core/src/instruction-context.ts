@@ -19,7 +19,7 @@ class File extends Schema.Class<File>("InstructionContext.File")({
 const Files = Schema.Array(File)
 const key = SystemContext.Key.make("core/instructions")
 
-export const layer = Layer.effectDiscard(
+const layer = Layer.effectDiscard(
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
     const global = yield* Global.Service

@@ -57,7 +57,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ProjectDirectories") {}
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const db = (yield* Database.Service).db
@@ -155,5 +155,4 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(Database.defaultLayer))
 export const node = makeGlobalNode({ service: Service, layer: layer, deps: [Database.node] })

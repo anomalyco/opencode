@@ -1006,8 +1006,8 @@ function HomeSessionLeading(props: {
       <Show when={hasOpenTab()}>
         <span
           aria-hidden="true"
-          class="pointer-events-none absolute top-1/2 h-[7px] w-[3px] -translate-y-1/2 rounded-[2px] bg-v2-background-bg-layer-04"
-          style={{ right: "calc(100% + 5px)" }}
+          class="pointer-events-none absolute top-1/2 h-3 w-0.5 -translate-y-1/2 rounded-[2px] bg-v2-background-bg-layer-04"
+          style={{ right: "calc(100% + 4px)" }}
         />
       </Show>
       <SessionTabAvatar
@@ -1163,13 +1163,7 @@ function HomeSessionSearch(props: {
             </div>
           </div>
         </Show>
-        <label
-          class="relative z-20 flex h-9 w-full items-center gap-2 rounded-[6px] bg-v2-background-bg-layer-02 py-1 pl-3 pr-2 text-v2-icon-icon-muted transition-[background-color,box-shadow] duration-[120ms] ease-in-out"
-          classList={{
-            "focus-within:shadow-[0_0_0_0.5px_var(--v2-border-border-focus),var(--v2-elevation-raised)]": !props.open,
-            "shadow-[0_0_0_0.5px_var(--v2-border-border-focus)]": props.open,
-          }}
-        >
+        <label class="relative z-20 flex h-9 w-full items-center gap-2 rounded-[6px] bg-v2-background-bg-layer-02/60 py-1 pl-3 pr-2 text-v2-icon-icon-muted transition-[background-color,box-shadow] duration-[120ms] ease-in-out hover:bg-v2-background-bg-layer-02">
           <IconV2 name="magnifying-glass" />
           <input
             ref={input}

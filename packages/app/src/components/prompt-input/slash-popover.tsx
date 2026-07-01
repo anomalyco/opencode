@@ -7,6 +7,16 @@ import { getDirectory, getFilename } from "@opencode-ai/core/util/path"
 
 export type AtOption =
   | { type: "agent"; name: string; display: string }
+  | {
+      type: "resource"
+      name: string
+      uri: string
+      client: string
+      display: string
+      description?: string
+      mime?: string
+    }
+  | { type: "reference"; name: string; path: string; display: string; description: string }
   | { type: "file"; path: string; display: string; recent?: boolean }
 
 export interface SlashCommand {
@@ -99,6 +109,94 @@ export const PromptPopover: Component<PromptPopoverProps> = (props) => {
                         >
                           @{item.name}
                         </span>
+                      </button>
+                    )
+                  }
+
+                  if (item.type === "resource") {
+                    return (
+                      <button
+                        class="w-full flex items-center gap-x-2 px-2 py-0.5"
+                        classList={{
+                          "rounded-[4px]": props.newLayoutDesigns,
+                          "rounded-md": !props.newLayoutDesigns,
+                          "bg-v2-overlay-simple-overlay-hover": props.newLayoutDesigns && props.atActive === key,
+                          "bg-surface-raised-base-hover": !props.newLayoutDesigns && props.atActive === key,
+                        }}
+                        onClick={() => props.onAtSelect(item)}
+                        onPointerMove={() => props.setAtActive(key)}
+                      >
+                        <FileIcon node={{ path: item.uri, type: "file" }} class="shrink-0 size-4" />
+                        <div
+                          class="flex items-center min-w-0"
+                          classList={{
+                            "text-[13px] leading-[calc(var(--font-size-base)*1.8)] tracking-[-0.04px] [font-weight:440]":
+                              props.newLayoutDesigns,
+                            "text-14-regular": !props.newLayoutDesigns,
+                          }}
+                        >
+                          <span
+                            class="text-text-strong whitespace-nowrap"
+                            classList={{ "text-v2-text-text-base": props.newLayoutDesigns }}
+                          >
+                            @{item.name}
+                          </span>
+                          <Show when={item.description}>
+                            {(description) => (
+                              <span
+                                class="whitespace-nowrap truncate min-w-0 ml-2"
+                                classList={{
+                                  "text-v2-text-text-muted": props.newLayoutDesigns,
+                                  "text-text-weak": !props.newLayoutDesigns,
+                                }}
+                              >
+                                {description()}
+                              </span>
+                            )}
+                          </Show>
+                        </div>
+                      </button>
+                    )
+                  }
+
+                  if (item.type === "reference") {
+                    return (
+                      <button
+                        class="w-full flex items-center gap-x-2 px-2 py-0.5"
+                        classList={{
+                          "rounded-[4px]": props.newLayoutDesigns,
+                          "rounded-md": !props.newLayoutDesigns,
+                          "bg-v2-overlay-simple-overlay-hover": props.newLayoutDesigns && props.atActive === key,
+                          "bg-surface-raised-base-hover": !props.newLayoutDesigns && props.atActive === key,
+                        }}
+                        onClick={() => props.onAtSelect(item)}
+                        onPointerMove={() => props.setAtActive(key)}
+                      >
+                        <FileIcon node={{ path: item.path, type: "directory" }} class="shrink-0 size-4" />
+                        <div
+                          class="flex items-center min-w-0"
+                          classList={{
+                            "text-[13px] leading-[calc(var(--font-size-base)*1.8)] tracking-[-0.04px] [font-weight:440]":
+                              props.newLayoutDesigns,
+                            "text-14-regular": !props.newLayoutDesigns,
+                          }}
+                        >
+                          <span
+                            class="text-text-strong whitespace-nowrap"
+                            classList={{ "text-v2-text-text-base": props.newLayoutDesigns }}
+                          >
+                            @{item.name}
+                          </span>
+                          <span
+                            class="whitespace-nowrap truncate min-w-0 ml-2"
+                            classList={{
+                              "text-v2-text-text-muted": props.newLayoutDesigns,
+                              "text-text-weak": !props.newLayoutDesigns,
+                            }}
+                          >
+                            {item.description}
+                          </span>
+                        </div>
                       </button>
                     )
                   }
