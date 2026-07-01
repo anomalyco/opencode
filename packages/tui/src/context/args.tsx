@@ -2,7 +2,6 @@ import { createSimpleContext } from "./helper"
 
 export interface Args {
   model?: string
-  variant?: string
   agent?: string
   prompt?: string
   continue?: boolean
