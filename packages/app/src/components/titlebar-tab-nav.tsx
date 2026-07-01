@@ -71,11 +71,6 @@ export function TabNavItem(props: {
     const home = serverCtx()?.sync.data.path.home
     return home ? session.directory.replace(home, "~") : session.directory
   })
-  const branch = createMemo(() => {
-    const session = props.session()
-    if (!session) return
-    return serverCtx()?.sync.child(session.directory, { bootstrap: false })[0].vcs?.branch
-  })
   // Only label the server when multiple servers are connected.
   const serverLabel = createMemo(() => {
     if (global.servers.list().length <= 1) return
@@ -322,7 +317,6 @@ export function TabNavItem(props: {
         projectName: projectName(),
         title: props.session()?.title,
         path: previewPath(),
-        branch: branch(),
         serverName: serverLabel(),
       }}
     />
