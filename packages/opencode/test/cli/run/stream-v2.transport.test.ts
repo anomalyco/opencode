@@ -205,7 +205,7 @@ describe("V2 mini transport", () => {
     await transport.close()
   })
 
-  test("inlines local text files and directories before current prompt admission", async () => {
+  test("sends local file and directory mentions as structured prompt files", async () => {
     await using tmp = await tmpdir()
     const filePath = path.join(tmp.path, "note.ts")
     const directoryPath = path.join(tmp.path, "docs")
@@ -289,34 +289,32 @@ describe("V2 mini transport", () => {
       includeFiles: true,
     })
 
-    expect(request?.prompt?.text).toContain("Review @note.ts and @docs")
-    expect(request?.prompt?.text).toContain(
-      `Called the Read tool with the following input: ${JSON.stringify({ filePath: filePath })}`,
-    )
-    expect(request?.prompt?.text).toContain("1: export const answer = 42")
-    expect(request?.prompt?.text).toContain("<type>directory</type>")
-    expect(request?.prompt?.text).toContain("README.md")
-    expect(request?.prompt?.files).toBeUndefined()
+    expect(request?.prompt?.text).toBe("Review @note.ts and @docs")
+    expect(request?.prompt?.files).toEqual([
+      {
+        uri: pathToFileURL(filePath).href,
+        name: "note.ts",
+        source: { start: 7, end: 15, text: "@note.ts" },
+      },
+      {
+        uri: pathToFileURL(`${directoryPath}${path.sep}`).href,
+        name: "docs",
+        source: { start: 20, end: 25, text: "@docs" },
+      },
+    ])
     await transport.close()
   })
 
-  test("reads attached file mentions through the remote server", async () => {
+  test("sends attached file mentions as structured prompt files without reading them", async () => {
     const events = feed()
     events.push(connected())
     const client = sdk({ streams: [events] })
     const ui = footer()
-    const remoteRead = spyOn(client.file, "read").mockImplementation((input) => {
-      expect(input).toEqual({ directory: "/remote/project", path: "note.ts" })
-      return ok({ type: "text" as const, content: "remote sentinel\n" })
-    })
-    const remoteList = spyOn(client.file, "list").mockImplementation((input) => {
-      expect(input).toEqual({ directory: "/remote/project", path: "docs" })
-      return ok([{ name: "README.md", path: "docs/README.md", absolute: "/remote/project/docs/README.md", type: "file" as const, ignored: false }])
-    })
+    const remoteRead = spyOn(client.file, "read")
+    const remoteList = spyOn(client.file, "list")
     const transport = await createSessionTransport({
       sdk: client,
       directory: "/remote/project",
-      localFilesystem: false,
       sessionID: "ses_1",
       thinking: false,
       limits: () => ({}),
@@ -387,16 +385,25 @@ describe("V2 mini transport", () => {
       includeFiles: true,
     })
 
-    expect(remoteRead).toHaveBeenCalled()
-    expect(remoteList).toHaveBeenCalled()
-    expect(request?.prompt?.text).toContain("remote sentinel")
-    expect(request?.prompt?.text).toContain("README.md")
-    expect(request?.prompt?.text).not.toContain("Read tool failed")
-    expect(request?.prompt?.files).toBeUndefined()
+    expect(remoteRead).not.toHaveBeenCalled()
+    expect(remoteList).not.toHaveBeenCalled()
+    expect(request?.prompt?.text).toBe("Review @note.ts and @docs")
+    expect(request?.prompt?.files).toEqual([
+      {
+        uri: "file:///remote/project/note.ts",
+        name: "note.ts",
+        source: { start: 7, end: 15, text: "@note.ts" },
+      },
+      {
+        uri: "file:///remote/project/docs",
+        name: "docs",
+        source: { start: 20, end: 25, text: "@docs" },
+      },
+    ])
     await transport.close()
   })
 
-  test("converts local media mentions into data URL attachments before current prompt admission", async () => {
+  test("sends local media mentions as structured prompt files", async () => {
     await using tmp = await tmpdir()
     const filePath = path.join(tmp.path, "diagram.png")
     await Bun.write(filePath, Uint8Array.of(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00))
@@ -470,14 +477,13 @@ describe("V2 mini transport", () => {
       includeFiles: true,
     })
 
-    expect(request?.prompt?.text).toContain(
-      `Called the Read tool with the following input: ${JSON.stringify({ filePath: filePath })}`,
-    )
+    expect(request?.prompt?.text).toBe("Review @diagram.png")
     expect(request?.prompt?.files).toEqual([
-      expect.objectContaining({
+      {
         name: "diagram.png",
-        uri: expect.stringMatching(/^data:image\/png;base64,/),
-      }),
+        uri: pathToFileURL(filePath).href,
+        source: { start: 7, end: 19, text: "@diagram.png" },
+      },
     ])
     await transport.close()
   })

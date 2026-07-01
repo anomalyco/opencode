@@ -1,6 +1,3 @@
-import { readdir, stat } from "node:fs/promises"
-import path from "path"
-import { fileURLToPath } from "node:url"
 import type {
   OpencodeClient,
   PermissionRequest,
@@ -14,7 +11,6 @@ import type {
   V2Event,
 } from "@opencode-ai/sdk/v2"
 import { blockerStatus, pickBlockerView } from "./session-data"
-import { authoredPromptText } from "./session.shared"
 import { writeSessionOutput } from "./stream"
 import type {
   FooterApi,
@@ -28,8 +24,6 @@ import type {
   RunProvider,
   StreamCommit,
 } from "./types"
-import { FSUtil } from "@opencode-ai/core/fs-util"
-import { isImageAttachment, isPdfAttachment, sniffAttachmentMime } from "@/util/media"
 
 type Trace = {
   write(type: string, data?: unknown): void
@@ -38,7 +32,6 @@ type Trace = {
 type StreamInput = {
   sdk: OpencodeClient
   directory?: string
-  localFilesystem?: boolean
   sessionID: string
   thinking: boolean
   replay?: boolean
@@ -115,12 +108,6 @@ type State = {
 }
 
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" })
-const DEFAULT_READ_LIMIT = 2000
-const MAX_LINE_LENGTH = 2000
-const MAX_LINE_SUFFIX = `... (line truncated to ${MAX_LINE_LENGTH} chars)`
-const MAX_BYTES = 50 * 1024
-const MAX_BYTES_LABEL = `${MAX_BYTES / 1024} KB`
-const SAMPLE_BYTES = 4096
 
 export function formatUnknownError(error: unknown): string {
   if (typeof error === "string") return error
@@ -284,12 +271,6 @@ async function prepareFile(file: RunFilePart) {
   return { text: `<file name="${file.filename}">\n${content}\n</file>` }
 }
 
-function isBinaryContent(bytes: Uint8Array) {
-  if (bytes.length === 0) return false
-  if (bytes.includes(0)) return true
-  return bytes.reduce((count, byte) => count + Number(byte < 9 || (byte > 13 && byte < 32)), 0) / bytes.length > 0.3
-}
-
 function promptFileSource(part: PromptFilePart) {
   if (!part.source?.text) return
   return {
@@ -299,337 +280,8 @@ function promptFileSource(part: PromptFilePart) {
   }
 }
 
-function isResourcePromptFile(part: PromptFilePart) {
-  return part.source?.type === "resource"
-}
-
-function promptFilePage(url: URL) {
-  const start = url.searchParams.get("start")
-  if (!start) return
-  const offset = Number.parseInt(start, 10)
-  if (!Number.isFinite(offset) || offset < 1) return
-  const endValue = url.searchParams.get("end")
-  if (!endValue) return { offset }
-  const end = Number.parseInt(endValue, 10)
-  if (!Number.isFinite(end) || end < offset) return { offset }
-  return { offset, limit: end - (offset - 1) }
-}
-
-function readArgs(filePath: string, page?: { offset?: number; limit?: number }) {
-  return {
-    filePath,
-    ...(page?.offset === undefined ? {} : { offset: page.offset }),
-    ...(page?.limit === undefined ? {} : { limit: page.limit }),
-  }
-}
-
-function readCall(filePath: string, page?: { offset?: number; limit?: number }) {
-  return `Called the Read tool with the following input: ${JSON.stringify(readArgs(filePath, page))}`
-}
-
-function readFailure(filePath: string, message: string) {
-  return `Read tool failed to read ${filePath} with the following error: ${message}`
-}
-
 function streamPartKey(messageID: string, partID: string) {
   return `${messageID}\u0000${partID}`
-}
-
-function decodeTextDataUrl(uri: string) {
-  if (!uri.startsWith("data:")) return
-  const comma = uri.indexOf(",")
-  if (comma === -1) return
-  const meta = uri.slice(5, comma)
-  const mime = meta.split(";")[0]?.toLowerCase() ?? ""
-  if (mime !== "text/plain" && !mime.startsWith("text/")) return
-  const body = uri.slice(comma + 1)
-  if (meta.toLowerCase().includes(";base64")) return Buffer.from(body, "base64").toString("utf8")
-  return decodeURIComponent(body)
-}
-
-async function sampleFile(filePath: string) {
-  const file = Bun.file(filePath)
-  return new Uint8Array(await file.slice(0, SAMPLE_BYTES).arrayBuffer())
-}
-
-async function readLocalDirectory(filePath: string, page?: { offset?: number; limit?: number }) {
-  const entries = await Promise.all(
-    (await readdir(filePath, { withFileTypes: true })).map(async (entry) => {
-      if (entry.isDirectory()) return entry.name + "/"
-      if (entry.isFile()) return entry.name
-      if (!entry.isSymbolicLink()) return
-      const target = await stat(path.join(filePath, entry.name)).catch(() => undefined)
-      if (!target) return
-      return target.isDirectory() ? entry.name + "/" : entry.name
-    }),
-  ).then((items) => items.filter((item): item is string => Boolean(item)).sort((a, b) => a.localeCompare(b)))
-  const offset = page?.offset ?? 1
-  const limit = page?.limit ?? DEFAULT_READ_LIMIT
-  const start = offset - 1
-  const sliced = entries.slice(start, start + limit)
-  const truncated = start + sliced.length < entries.length
-  return [
-    `<path>${filePath}</path>`,
-    `<type>directory</type>`,
-    `<entries>`,
-    sliced.join("\n"),
-    truncated
-      ? `\n(Showing ${sliced.length} of ${entries.length} entries. Use 'offset' parameter to read beyond entry ${offset + sliced.length})`
-      : `\n(${entries.length} entries)`,
-    `</entries>`,
-  ].join("\n")
-}
-
-async function readLocalTextFile(filePath: string, page?: { offset?: number; limit?: number }) {
-  const offset = page?.offset ?? 1
-  const limit = page?.limit ?? DEFAULT_READ_LIMIT
-  const reader = Bun.file(filePath).stream().getReader()
-  const decoder = new TextDecoder("utf-8")
-  const lines: string[] = []
-  let pending = ""
-  let discard = false
-  let count = 0
-  let bytes = 0
-  let cut = false
-  let more = false
-  let done = false
-
-  const append = (input: string) => {
-    if (done) return
-    count += 1
-    if (count < offset) return
-    if (lines.length >= limit) {
-      more = true
-      return
-    }
-
-    const line = input.length > MAX_LINE_LENGTH ? input.slice(0, MAX_LINE_LENGTH) + MAX_LINE_SUFFIX : input
-    const size = Buffer.byteLength(line, "utf-8") + (lines.length > 0 ? 1 : 0)
-    if (bytes + size <= MAX_BYTES) {
-      lines.push(line)
-      bytes += size
-      return
-    }
-
-    cut = true
-    more = true
-    done = true
-  }
-
-  const consume = (input: string) => {
-    let text = input
-    while (true) {
-      const index = text.indexOf("\n")
-      if (index === -1) {
-        if (!discard) {
-          pending += text
-          if (pending.length > MAX_LINE_LENGTH) {
-            pending = pending.slice(0, MAX_LINE_LENGTH + 1)
-            discard = true
-          }
-        }
-        return
-      }
-
-      const current = pending + (discard ? "" : text.slice(0, index))
-      pending = ""
-      discard = false
-      text = text.slice(index + 1)
-      append(current.endsWith("\r") ? current.slice(0, -1) : current)
-      if (done) return
-    }
-  }
-
-  while (!done) {
-    const next = await reader.read()
-    if (next.done) break
-    if (next.value.includes(0)) throw new Error(`Cannot read binary file: ${filePath}`)
-    consume(decoder.decode(next.value, { stream: true }))
-  }
-
-  if (!done) {
-    const tail = decoder.decode()
-    if (!discard) pending += tail
-    if (pending) append(pending.endsWith("\r") ? pending.slice(0, -1) : pending)
-  }
-
-  if (count < offset && !(count === 0 && offset === 1)) {
-    throw new Error(`Offset ${offset} is out of range for this file (${count} lines)`)
-  }
-
-  const last = offset + lines.length - 1
-  const next = last + 1
-  let output = [`<path>${filePath}</path>`, `<type>file</type>`, "<content>\n"].join("\n")
-  output += lines.map((line, index) => `${index + offset}: ${line}`).join("\n")
-  if (cut) {
-    output += `\n\n(Output capped at ${MAX_BYTES_LABEL}. Showing lines ${offset}-${last}. Use offset=${next} to continue.)`
-  } else if (more) {
-    output += `\n\n(Showing lines ${offset}-${last} of ${count}. Use offset=${next} to continue.)`
-  } else {
-    output += `\n\n(End of file - total ${count} lines)`
-  }
-  output += "\n</content>"
-  return output
-}
-
-function formatRemoteTextFile(filePath: string, content: string, page?: { offset?: number; limit?: number }) {
-  const offset = page?.offset ?? 1
-  const limit = page?.limit ?? DEFAULT_READ_LIMIT
-  const lines = content.replaceAll("\r\n", "\n").replaceAll("\r", "\n").split("\n")
-  if (lines.at(-1) === "") lines.pop()
-  if (lines.length < offset && !(lines.length === 0 && offset === 1)) {
-    throw new Error(`Offset ${offset} is out of range for this file (${lines.length} lines)`)
-  }
-
-  const out: string[] = []
-  let bytes = 0
-  let cut = false
-  for (const line of lines.slice(offset - 1, offset - 1 + limit)) {
-    const next = line.length > MAX_LINE_LENGTH ? line.slice(0, MAX_LINE_LENGTH) + MAX_LINE_SUFFIX : line
-    const size = Buffer.byteLength(next, "utf-8") + (out.length > 0 ? 1 : 0)
-    if (bytes + size > MAX_BYTES) {
-      cut = true
-      break
-    }
-    out.push(next)
-    bytes += size
-  }
-
-  const last = offset + out.length - 1
-  const next = last + 1
-  const more = cut || offset - 1 + out.length < lines.length
-  let output = [`<path>${filePath}</path>`, `<type>file</type>`, "<content>\n"].join("\n")
-  output += out.map((line, index) => `${index + offset}: ${line}`).join("\n")
-  if (cut) {
-    output += `\n\n(Output capped at ${MAX_BYTES_LABEL}. Showing lines ${offset}-${last}. Use offset=${next} to continue.)`
-  } else if (more) {
-    output += `\n\n(Showing lines ${offset}-${last} of ${lines.length}. Use offset=${next} to continue.)`
-  } else {
-    output += `\n\n(End of file - total ${lines.length} lines)`
-  }
-  output += "\n</content>"
-  return output
-}
-
-function fileApiPath(directory: string | undefined, filePath: string) {
-  if (!directory || !path.isAbsolute(filePath)) return filePath
-  const relative = path.relative(directory, filePath)
-  if (!relative) return "."
-  if (!relative.startsWith("..") && !path.isAbsolute(relative)) return relative
-  return filePath
-}
-
-async function readRemoteDirectory(input: StreamInput, filePath: string, page?: { offset?: number; limit?: number }) {
-  const response = await input.sdk.file.list({ directory: input.directory, path: fileApiPath(input.directory, filePath) })
-  if (response.error) throw new Error(formatUnknownError(response.error))
-  const entries = (response.data ?? [])
-    .map((entry) => (entry.type === "directory" ? entry.name + "/" : entry.name))
-    .sort((a, b) => a.localeCompare(b))
-  const offset = page?.offset ?? 1
-  const limit = page?.limit ?? DEFAULT_READ_LIMIT
-  const start = offset - 1
-  const sliced = entries.slice(start, start + limit)
-  const truncated = start + sliced.length < entries.length
-  return [
-    `<path>${filePath}</path>`,
-    `<type>directory</type>`,
-    `<entries>`,
-    sliced.join("\n"),
-    truncated
-      ? `\n(Showing ${sliced.length} of ${entries.length} entries. Use 'offset' parameter to read beyond entry ${offset + sliced.length})`
-      : `\n(${entries.length} entries)`,
-    `</entries>`,
-  ].join("\n")
-}
-
-async function readRemoteFile(input: StreamInput, part: PromptFilePart, filePath: string, page?: { offset?: number; limit?: number }) {
-  const response = await input.sdk.file.read({ directory: input.directory, path: fileApiPath(input.directory, filePath) })
-  if (response.error) throw new Error(formatUnknownError(response.error))
-  const data = response.data
-  if (!data) throw new Error(`File not found: ${filePath}`)
-  if (data.type === "binary") {
-    const mime = data.mimeType ?? FSUtil.mimeType(filePath)
-    if (isImageAttachment(mime) || isPdfAttachment(mime)) {
-      return {
-        text: [readCall(filePath)],
-        attachment: {
-          uri: `data:${mime};base64,${data.content}`,
-          mime,
-          name: part.filename,
-          source: promptFileSource(part),
-        },
-      }
-    }
-    throw new Error(`Cannot read binary file: ${filePath}`)
-  }
-  return { text: [readCall(filePath, page), formatRemoteTextFile(filePath, data.content, page)] }
-}
-
-async function prepareRemotePromptFilePart(input: StreamInput, part: PromptFilePart, filePath: string, page?: { offset?: number; limit?: number }) {
-  const source = promptFileSource(part)
-  try {
-    const prepared =
-      part.mime === "application/x-directory"
-        ? { text: [readCall(filePath, page), await readRemoteDirectory(input, filePath, page)] }
-        : await readRemoteFile(input, part, filePath, page)
-    return prepared
-  } catch (error) {
-    return {
-      text: [readFailure(filePath, error instanceof Error ? error.message : String(error))],
-    }
-  }
-}
-
-async function preparePromptFilePart(input: StreamInput, part: PromptFilePart) {
-  const source = promptFileSource(part)
-  const decoded = decodeTextDataUrl(part.url)
-  if (decoded !== undefined) {
-    return { text: [readCall(part.filename ?? part.url), decoded] }
-  }
-  if (isResourcePromptFile(part) || !URL.canParse(part.url) || new URL(part.url).protocol !== "file:") {
-    return { attachment: { uri: part.url, mime: part.mime, name: part.filename, source } }
-  }
-
-  const url = new URL(part.url)
-  const page = promptFilePage(url)
-  url.hash = ""
-  url.search = ""
-  const filePath = fileURLToPath(url)
-  if (input.localFilesystem === false) return prepareRemotePromptFilePart(input, part, filePath, page)
-
-  try {
-    if ((await stat(filePath)).isDirectory()) {
-      return {
-        text: [readCall(filePath, page), await readLocalDirectory(filePath, page)],
-      }
-    }
-
-    const sample = await sampleFile(filePath)
-    const mime = sniffAttachmentMime(sample, FSUtil.mimeType(filePath))
-    if (isImageAttachment(mime) || isPdfAttachment(mime)) {
-      const bytes = await Bun.file(filePath).arrayBuffer()
-      return {
-        text: [readCall(filePath)],
-        attachment: {
-          uri: `data:${mime};base64,${Buffer.from(bytes).toString("base64")}`,
-          mime,
-          name: part.filename,
-          source,
-        },
-      }
-    }
-    if (isBinaryContent(sample)) {
-      throw new Error(`Cannot read binary file: ${filePath}`)
-    }
-
-    return {
-      text: [readCall(filePath, page), await readLocalTextFile(filePath, page)],
-    }
-  } catch (error) {
-    return {
-      text: [readFailure(filePath, error instanceof Error ? error.message : String(error))],
-    }
-  }
 }
 
 async function resolveSelectedModel(input: StreamInput, next: Pick<SessionTurnInput, "model" | "variant" | "signal">) {
@@ -745,7 +397,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       if (!render || state.messageIDs.has(message.id)) return
       state.messageIDs.add(message.id)
       if (reuseVisibleWait && waiting) return
-      write([{ kind: "user", source: "system", text: authoredPromptText(message.text), phase: "start", messageID: message.id }])
+      write([{ kind: "user", source: "system", text: message.text, phase: "start", messageID: message.id }])
       return
     }
     if (message.type !== "assistant") return
@@ -1112,12 +764,20 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
         )
 
       const prepared = await Promise.all((next.includeFiles ? next.files : []).map(prepareFile))
-      const promptFiles = await Promise.all(
-        next.prompt.parts.flatMap((part) => (part.type === "file" ? [preparePromptFilePart(input, part)] : [])),
+      const promptFiles = next.prompt.parts.flatMap((part) =>
+        part.type === "file"
+          ? [
+              {
+                uri: part.url,
+                name: part.filename,
+                source: promptFileSource(part),
+              },
+            ]
+          : [],
       )
       const attachments = [
         ...prepared.flatMap((file) => (file.attachment ? [file.attachment] : [])),
-        ...promptFiles.flatMap((file) => (file.attachment ? [file.attachment] : [])),
+        ...promptFiles,
       ]
       const agents = next.prompt.parts.flatMap((part) =>
         part.type === "agent"
@@ -1164,7 +824,6 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
               text: [
                 next.prompt.text,
                 ...prepared.flatMap((file) => (file.text ? [file.text] : [])),
-                ...promptFiles.flatMap((file) => ("text" in file ? file.text : [])),
               ].join("\n\n"),
               files: attachments.length ? attachments : undefined,
               agents: agents.length ? agents : undefined,

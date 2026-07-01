@@ -1024,7 +1024,6 @@ export const RunCommand = effectCmd({
             variant: args.variant,
             files,
             initialInput,
-            localFilesystem: !args.attach,
             createSession: createFreshSession,
             thinking,
             backgroundSubagents: flags.experimentalBackgroundSubagents,

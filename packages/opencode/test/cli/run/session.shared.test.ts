@@ -251,13 +251,8 @@ describe("run session shared", () => {
     expect(sessionVariant(session, model)).toBe("minimal")
   })
 
-  test("restores current prompt history from authored text and file references", async () => {
+  test("restores current prompt history from stored text and file references", async () => {
     const client = new OpencodeClient()
-    const expanded = [
-      "Review @note.ts",
-      `Called the Read tool with the following input: ${JSON.stringify({ filePath: "/tmp/note.ts" })}`,
-      "<path>/tmp/note.ts</path>\n<type>file</type>\n<content>\n1: export const answer = 42\n\n(End of file - total 1 lines)\n</content>",
-    ].join("\n\n")
     spyOn(client.v2.session, "messages").mockImplementation(() =>
       Promise.resolve({
         data: {
@@ -265,8 +260,15 @@ describe("run session shared", () => {
             {
               id: "msg_prompt",
               type: "user",
-              text: expanded,
-              files: [],
+              text: "Review @note.ts",
+              files: [
+                {
+                  uri: "file:///tmp/note.ts",
+                  mime: "text/plain",
+                  name: "note.ts",
+                  source: { start: 7, end: 15, text: "@note.ts" },
+                },
+              ],
               agents: [],
               time: { created: 1 },
             },

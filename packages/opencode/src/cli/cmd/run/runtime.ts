@@ -50,7 +50,6 @@ type RunRuntimeInput = {
   createSession?: (ctx: BootContext, input: CreateSessionInput) => Promise<ResolvedSession>
   files: RunInput["files"]
   initialInput?: string
-  localFilesystem: boolean
   thinking: boolean
   backgroundSubagents: boolean
   replay?: boolean
@@ -486,7 +485,6 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
         providers: () => state.providers,
         footer,
         trace: log,
-        localFilesystem: input.localFilesystem,
       })
       if (footer.isClosed) {
         await handle.close()
@@ -747,7 +745,6 @@ export async function runInteractiveLocalMode(input: RunLocalInput): Promise<voi
   return runInteractiveRuntime({
     files: input.files,
     initialInput: input.initialInput,
-    localFilesystem: true,
     thinking: input.thinking,
     backgroundSubagents: input.backgroundSubagents,
     replay: input.replay,
@@ -797,7 +794,6 @@ export async function runInteractiveMode(
     {
       files: input.files,
       initialInput: input.initialInput,
-      localFilesystem: input.localFilesystem ?? true,
       thinking: input.thinking,
       backgroundSubagents: input.backgroundSubagents,
       replay: input.replay,
