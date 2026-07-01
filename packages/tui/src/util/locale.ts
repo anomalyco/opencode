@@ -14,6 +14,14 @@ export function datetime(input: number): string {
   return `${localTime} · ${localDate}`
 }
 
+export function datetimeFull(input: number): string {
+  const date = new Date(input)
+  return date.toLocaleString(undefined, {
+    dateStyle: "medium",
+    timeStyle: "medium",
+  })
+}
+
 export function todayTimeOrDateTime(input: number): string {
   const date = new Date(input)
   const now = new Date()
