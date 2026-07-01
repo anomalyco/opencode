@@ -52,6 +52,7 @@ import { ThemeProvider, useTheme } from "./context/theme"
 import { Home } from "./routes/home"
 import { Session } from "./routes/session"
 import { GridView } from "./routes/grid"
+import { CellEventBusProvider } from "./routes/grid/cell-event-bus"
 import { PromptHistoryProvider } from "./component/prompt/history"
 import { FrecencyProvider } from "./component/prompt/frecency"
 import { PromptStashProvider } from "./component/prompt/stash"
@@ -1129,7 +1130,9 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
               </Show>
             </Match>
             <Match when={route.data.type === "grid"}>
-              <GridView />
+              <CellEventBusProvider>
+                <GridView />
+              </CellEventBusProvider>
             </Match>
           </Switch>
           {plugin()}
