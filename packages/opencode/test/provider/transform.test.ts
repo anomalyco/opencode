@@ -1715,7 +1715,10 @@ describe("ProviderTransform.message - surrogate sanitization", () => {
     api: {
       id: "test-model",
       url: "https://api.test.com",
-      npm: "@ai-sdk/openai-compatible",
+      // Use @ai-sdk/openai so reasoning parts are preserved for sanitization assertions.
+      // The surrogate sanitization logic is provider-agnostic; @ai-sdk/openai-compatible
+      // is tested separately for its reasoning-strip behaviour.
+      npm: "@ai-sdk/openai",
     },
     name: "Test Model",
     capabilities: {
@@ -4738,5 +4741,139 @@ describe("ProviderTransform.providerOptions - ai-gateway-provider", () => {
     // which @ai-sdk/openai-compatible never reads, silently dropping reasoningEffort.
     const result = ProviderTransform.providerOptions(createModel(), { reasoningEffort: "high" })
     expect(result).toEqual({ openaiCompatible: { reasoningEffort: "high" } })
+  })
+})
+
+describe("ProviderTransform.message - openai-compatible reasoning strip", () => {
+  // The @ai-sdk/openai-compatible SDK unconditionally extracts both `reasoning_content`
+  // and `reasoning` fields from API responses into typed reasoning content parts.
+  // On follow-up turns it re-serialises those parts back as `reasoning_content` in the
+  // request body. Custom deployments (e.g. ollama running qwen3) return a `reasoning`
+  // field but do not accept `reasoning_content` back in message history, causing API
+  // errors that break multi-turn conversations.
+  // When `interleaved` is not explicitly configured as an object with a field name,
+  // opencode strips the reasoning parts before the SDK ever sees them so that
+  // `reasoning_content` is never injected into subsequent requests.
+
+  const createModel = (interleaved: any) =>
+    ({
+      id: "ollama-server/qwen3.6-35b",
+      providerID: "ollama-server",
+      api: {
+        id: "qwen3.6-35b",
+        url: "http://localhost:11434/v1",
+        npm: "@ai-sdk/openai-compatible",
+      },
+      name: "Qwen3.6-35B",
+      capabilities: {
+        temperature: true,
+        reasoning: true,
+        attachment: false,
+        toolcall: true,
+        input: { text: true, audio: false, image: false, video: false, pdf: false },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved,
+      },
+      cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+      limit: { context: 122880, output: 32768 },
+      status: "active",
+      options: {},
+      headers: {},
+      release_date: "",
+    }) as any
+
+  const msgsWithReasoning = [
+    {
+      role: "assistant",
+      content: [
+        { type: "reasoning", text: "Let me think about this..." },
+        { type: "text", text: "The answer is 42." },
+      ],
+    },
+  ] as any[]
+
+  test("strips reasoning parts when interleaved is false", () => {
+    const result = ProviderTransform.message(msgsWithReasoning, createModel(false), {})
+    expect(result[0].content).toEqual([{ type: "text", text: "The answer is 42." }])
+    // No providerOptions set means the SDK will not inject reasoning_content
+    expect(result[0].providerOptions?.openaiCompatible?.reasoning_content).toBeUndefined()
+  })
+
+  test("strips reasoning parts when interleaved is true (no field configured)", () => {
+    const result = ProviderTransform.message(msgsWithReasoning, createModel(true), {})
+    expect(result[0].content).toEqual([{ type: "text", text: "The answer is 42." }])
+  })
+
+  test("leaves non-reasoning parts intact when stripping", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "Thinking..." },
+          { type: "text", text: "Part one." },
+          { type: "tool-call", toolCallId: "call-1", toolName: "bash", input: { command: "ls" } },
+          { type: "reasoning", text: "More thinking..." },
+          { type: "text", text: "Part two." },
+        ],
+      },
+    ] as any[]
+    const result = ProviderTransform.message(msgs, createModel(false), {})
+    expect(result[0].content).toEqual([
+      { type: "text", text: "Part one." },
+      { type: "tool-call", toolCallId: "call-1", toolName: "bash", input: { command: "ls" } },
+      { type: "text", text: "Part two." },
+    ])
+  })
+
+  test("uses interleaved path when field is configured - serialises into providerOptions instead of stripping", () => {
+    // When interleaved: { field: "reasoning" } is set the existing interleaved block
+    // runs: reasoning parts are removed from content and the text is placed in
+    // providerOptions.openaiCompatible.reasoning so the API receives the correct field.
+    const result = ProviderTransform.message(msgsWithReasoning, createModel({ field: "reasoning" }), {})
+    expect(result[0].content).toEqual([{ type: "text", text: "The answer is 42." }])
+    expect(result[0].providerOptions?.openaiCompatible?.reasoning).toBe("Let me think about this...")
+  })
+
+  test("uses interleaved path for reasoning_content field", () => {
+    const result = ProviderTransform.message(msgsWithReasoning, createModel({ field: "reasoning_content" }), {})
+    expect(result[0].content).toEqual([{ type: "text", text: "The answer is 42." }])
+    expect(result[0].providerOptions?.openaiCompatible?.reasoning_content).toBe("Let me think about this...")
+  })
+
+  test("does not affect other providers: @ai-sdk/openai leaves reasoning unchanged", () => {
+    const openaiModel = createModel(false)
+    openaiModel.api = { id: "gpt-4", url: "https://api.openai.com", npm: "@ai-sdk/openai" }
+    const result = ProviderTransform.message(msgsWithReasoning, openaiModel, {})
+    expect(result[0].content).toEqual([
+      { type: "reasoning", text: "Let me think about this..." },
+      { type: "text", text: "The answer is 42." },
+    ])
+  })
+
+  test("does not strip for messages without reasoning parts (no-op)", () => {
+    const msgs = [
+      { role: "assistant", content: [{ type: "text", text: "Plain response." }] },
+    ] as any[]
+    const result = ProviderTransform.message(msgs, createModel(false), {})
+    expect(result[0].content).toEqual([{ type: "text", text: "Plain response." }])
+  })
+
+  test("user messages are not affected", () => {
+    const msgs = [
+      {
+        role: "user",
+        content: [{ type: "text", text: "Hello" }],
+      },
+      {
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "Thinking..." },
+          { type: "text", text: "Hi there." },
+        ],
+      },
+    ] as any[]
+    const result = ProviderTransform.message(msgs, createModel(false), {})
+    expect(result[0].content).toEqual([{ type: "text", text: "Hello" }])
+    expect(result[1].content).toEqual([{ type: "text", text: "Hi there." }])
   })
 })
