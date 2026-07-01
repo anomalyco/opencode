@@ -63,11 +63,9 @@ const [updaterState, setUpdaterState] = createSignal<UpdaterState>({ status: "di
 void window.api.updater.subscribe(setUpdaterState)
 
 const deepLinkEvent = "opencode:deep-link"
-const lastActiveUrlKey = "opencode.desktop.last-active-url"
 
 type DesktopWindowState = {
   id?: string
-  migrateGlobalWindowState: boolean
 }
 
 const emitDeepLinks = (urls: string[]) => {
@@ -87,12 +85,10 @@ function windowLastActiveUrlKey(windowID: string) {
   return `opencode.desktop.window.${windowID}.last-active-url`
 }
 
-function getLastActiveUrl(windowID: string, migrateGlobalWindowState: boolean) {
+function getLastActiveUrl(windowID: string) {
   if (typeof localStorage !== "object") return "/"
   try {
-    const value =
-      localStorage.getItem(windowLastActiveUrlKey(windowID)) ??
-      (migrateGlobalWindowState ? localStorage.getItem(lastActiveUrlKey) : null)
+    const value = localStorage.getItem(windowLastActiveUrlKey(windowID))
     if (value?.startsWith("/") && !value.startsWith("//")) return value
   } catch {}
   return "/"
@@ -105,9 +101,9 @@ function setLastActiveUrl(windowID: string, value: string) {
   } catch {}
 }
 
-function DesktopMemoryRouter(props: BaseRouterProps & { windowID: string; migrateGlobalWindowState: boolean }) {
+function DesktopMemoryRouter(props: BaseRouterProps & { windowID: string }) {
   const history = createMemoryHistory()
-  const initialUrl = getLastActiveUrl(props.windowID, props.migrateGlobalWindowState)
+  const initialUrl = getLastActiveUrl(props.windowID)
   if (initialUrl !== "/") history.set({ value: initialUrl, replace: true, scroll: false })
   onCleanup(history.listen((value) => setLastActiveUrl(props.windowID, value)))
   return <MemoryRouter {...props} history={history} />
@@ -173,7 +169,6 @@ const createPlatform = (windowState: DesktopWindowState): Platform => {
     os,
     version: pkg.version,
     windowID: windowState.id,
-    migrateGlobalWindowState: windowState.migrateGlobalWindowState,
 
     async openDirectoryPickerDialog(opts) {
       return window.api.openDirectoryPicker({
@@ -349,13 +344,7 @@ function DesktopRoot(props: { windowState: DesktopWindowState }) {
 
   const [defaultServer] = createResource(() => platform.getDefaultServer?.())
   const [locale] = createResource(loadLocale)
-  const router = (props: BaseRouterProps) => (
-    <DesktopMemoryRouter
-      {...props}
-      windowID={platform.windowID ?? "browser"}
-      migrateGlobalWindowState={platform.migrateGlobalWindowState === true}
-    />
-  )
+  const router = (props: BaseRouterProps) => <DesktopMemoryRouter {...props} windowID={platform.windowID ?? "browser"} />
 
   function handleClick(e: MouseEvent) {
     const link = (e.target as HTMLElement).closest("a.external-link") as HTMLAnchorElement | null
@@ -443,13 +432,8 @@ render(() => {
   const [windowState] = createResource(async () => {
     const api = window.api as typeof window.api & {
       getWindowID?: () => Promise<string>
-      getWindowMigrateGlobalState?: () => Promise<boolean>
     }
-    const id = await api.getWindowID?.()
-    return {
-      id,
-      migrateGlobalWindowState: id ? await (api.getWindowMigrateGlobalState?.() ?? false) : false,
-    }
+    return { id: await api.getWindowID?.() }
   })
 
   return (

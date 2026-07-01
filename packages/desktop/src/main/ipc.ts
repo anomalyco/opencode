@@ -12,7 +12,6 @@ import { getStore } from "./store"
 import {
   getPinchZoomEnabled,
   getWindowID,
-  getWindowMigrateGlobalState,
   setPinchZoomEnabled,
   setTitlebar,
   updateTitlebar,
@@ -203,12 +202,6 @@ export function registerIpcHandlers(deps: Deps) {
     const id = getWindowID(win)
     if (!id) throw new Error("Window ID not found")
     return id
-  })
-
-  ipcMain.handle("get-window-migrate-global-state", (event: IpcMainInvokeEvent) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
-    if (!win) return false
-    return getWindowMigrateGlobalState(win)
   })
 
   ipcMain.handle("get-window-focused", (event: IpcMainInvokeEvent) => {

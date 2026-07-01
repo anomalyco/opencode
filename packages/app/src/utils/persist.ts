@@ -519,11 +519,9 @@ function resolveTarget(target: PersistTarget, platform: Platform): PersistTarget
   if (target.scope !== "window") return target
   if (platform.platform === "desktop" && !platform.windowID) return { ...target, storage: GLOBAL_STORAGE }
   const windowID = platform.platform === "desktop" ? (platform.windowID ?? "browser") : "browser"
-  const shouldMigrate = platform.platform !== "desktop" || platform.migrateGlobalWindowState === true
   return {
     ...target,
     storage: windowStorage(windowID),
-    legacyStorageNames: shouldMigrate ? [GLOBAL_STORAGE, ...(target.legacyStorageNames ?? [])] : target.legacyStorageNames,
   }
 }
 
