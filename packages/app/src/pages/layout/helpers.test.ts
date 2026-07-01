@@ -82,9 +82,12 @@ describe("layout deep links", () => {
       directory: "/tmp/demo",
       prompt: "hello world",
     })
+    expect(parseNewSessionDeepLink("opencode://new-session?prompt=hello%20world")).toEqual({
+      prompt: "hello world",
+    })
   })
 
-  test("ignores new-session deep links without directory", () => {
+  test("ignores empty new-session deep links", () => {
     expect(parseNewSessionDeepLink("opencode://new-session")).toBeUndefined()
     expect(parseNewSessionDeepLink("opencode://new-session?directory=")).toBeUndefined()
   })
@@ -94,8 +97,9 @@ describe("layout deep links", () => {
       "opencode://new-session?directory=/a",
       "opencode://open-project?directory=/b",
       "opencode://new-session?directory=/c&prompt=ship%20it",
+      "opencode://new-session?prompt=use%20current",
     ])
-    expect(result).toEqual([{ directory: "/a" }, { directory: "/c", prompt: "ship it" }])
+    expect(result).toEqual([{ directory: "/a" }, { directory: "/c", prompt: "ship it" }, { prompt: "use current" }])
   })
 
   test("drains global deep links once", () => {

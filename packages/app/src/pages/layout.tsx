@@ -1263,8 +1263,10 @@ export default function LegacyLayout(props: ParentProps) {
     }
 
     for (const link of collectNewSessionDeepLinks(urls)) {
-      void openProject(link.directory, false)
-      const slug = base64Encode(link.directory)
+      const directory = link.directory ?? currentDir()
+      if (!directory) continue
+      void openProject(directory, false)
+      const slug = base64Encode(directory)
       if (link.prompt) {
         setSessionHandoff(SessionStateKey.from(server.scope(), SessionRouteKey.fromLegacy(slug)), {
           prompt: link.prompt,

@@ -1,3 +1,8 @@
+export type NewSessionDeepLink = {
+  directory?: string
+  prompt?: string
+}
+
 export const deepLinkEvent = "opencode:deep-link"
 
 const parseUrl = (input: string) => {
@@ -19,13 +24,14 @@ export const parseDeepLink = (input: string) => {
   return directory
 }
 
-export const parseNewSessionDeepLink = (input: string) => {
+export const parseNewSessionDeepLink = (input: string): NewSessionDeepLink | undefined => {
   const url = parseUrl(input)
   if (!url) return
   if (url.hostname !== "new-session") return
-  const directory = url.searchParams.get("directory")
-  if (!directory) return
+  const directory = url.searchParams.get("directory") || undefined
   const prompt = url.searchParams.get("prompt") || undefined
+  if (!directory && !prompt) return
+  if (!directory) return { prompt }
   if (!prompt) return { directory }
   return { directory, prompt }
 }
@@ -34,7 +40,7 @@ export const collectOpenProjectDeepLinks = (urls: string[]) =>
   urls.map(parseDeepLink).filter((directory): directory is string => !!directory)
 
 export const collectNewSessionDeepLinks = (urls: string[]) =>
-  urls.map(parseNewSessionDeepLink).filter((link): link is { directory: string; prompt?: string } => !!link)
+  urls.map(parseNewSessionDeepLink).filter((link): link is NewSessionDeepLink => !!link)
 
 type OpenCodeWindow = Window & {
   __OPENCODE__?: {
