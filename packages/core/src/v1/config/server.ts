@@ -15,5 +15,8 @@ export const Server = Schema.Struct({
   cors: Schema.optional(Schema.mutable(Schema.Array(Schema.String))).annotate({
     description: "Additional domains to allow for CORS",
   }),
+  attach: Schema.optional(Schema.String).annotate({
+    description: "URL of a running opencode server to attach the TUI to by default",
+  }),
 }).annotate({ identifier: "ServerConfig" })
 export type Server = Schema.Schema.Type<typeof Server>

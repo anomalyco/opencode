@@ -7,6 +7,7 @@ import { UI } from "@/cli/ui"
 import { errorMessage } from "@opencode-ai/tui/util/error"
 import { withTimeout } from "@/util/timeout"
 import { withNetworkOptions, resolveNetworkOptionsNoConfig, hasArg } from "@/cli/network"
+import { AppRuntime } from "@/effect/app-runtime"
 import { Filesystem } from "@/util/filesystem"
 import type { GlobalEvent } from "@opencode-ai/sdk/v2"
 import type { EventSource } from "@opencode-ai/tui/context/sdk"
@@ -20,6 +21,18 @@ declare global {
 }
 
 type RpcClient = ReturnType<typeof Rpc.client<typeof rpc>>
+type AutoAttachTarget =
+  | { type: "attach"; url: string; headers?: RequestInit["headers"] }
+  | { type: "embedded" }
+  | { type: "fatal"; message: string }
+type AutoAttachFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+type AutoAttachSpawn = (input: { hostname: string; port: number; shutdownAfterLastClient: boolean }) => Promise<void> | void
+
+const AUTO_ATTACH_HEALTH_PATH = "/global/health"
+const AUTO_ATTACH_TIMEOUT_MS = 1000
+const AUTO_ATTACH_STARTUP_ATTEMPTS = 60
+const AUTO_ATTACH_STARTUP_DELAY_MS = 500
+const networkOptionNames = ["--port", "--hostname", "--mdns", "--mdns-domain", "--cors"]
 
 function createWorkerFetch(client: RpcClient): typeof fetch {
   const fn = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
@@ -67,6 +80,145 @@ export function resolveThreadDirectory(project?: string, envPWD = process.env.PW
   const root = Filesystem.resolve(envPWD ?? cwd)
   if (project) return Filesystem.resolve(path.isAbsolute(project) ? project : path.join(root, project))
   return Filesystem.resolve(cwd)
+}
+
+export function hasExplicitNetworkOptions(argv = process.argv) {
+  return argv.some((arg) => networkOptionNames.some((name) => arg === name || arg.startsWith(`${name}=`)))
+}
+
+export async function resolveAutoAttachTarget(input: {
+  url?: string
+  headers?: RequestInit["headers"]
+  fetch?: AutoAttachFetch
+  spawn?: AutoAttachSpawn
+  timeoutMs?: number
+  startupAttempts?: number
+  startupDelayMs?: number
+  argv?: string[]
+}): Promise<AutoAttachTarget> {
+  if (hasExplicitNetworkOptions(input.argv)) return { type: "embedded" }
+  if (input.url === undefined) return { type: "embedded" }
+
+  const attach = input.url.trim()
+  if (!attach) return { type: "fatal", message: "server.attach must be a valid URL" }
+
+  let base: URL
+  try {
+    base = new URL(attach)
+  } catch {
+    return { type: "fatal", message: "server.attach must be a valid URL" }
+  }
+
+  const target = await resolveAutoAttachHealth(attach, base, input)
+  if (target.type !== "unreachable") return target
+
+  const local = localAutoAttachServer(base)
+  if (!local) return { type: "fatal", message: "server.attach target is unreachable" }
+
+  try {
+    await (input.spawn ?? spawnAutoAttachServer)({ ...local, shutdownAfterLastClient: true })
+  } catch (error) {
+    return { type: "fatal", message: `Failed to start server.attach target: ${errorMessage(error)}` }
+  }
+
+  return waitForAutoAttachHealth(attach, base, input)
+}
+
+async function resolveAutoAttachHealth(
+  attach: string,
+  base: URL,
+  input: {
+    headers?: RequestInit["headers"]
+    fetch?: AutoAttachFetch
+    timeoutMs?: number
+  },
+): Promise<AutoAttachTarget | { type: "unreachable" }> {
+  const response = await requestAutoAttachHealth(base, input).catch(() => undefined)
+  if (response === undefined) return { type: "unreachable" }
+
+  if (response.status === 401 || response.status === 403) {
+    return { type: "fatal", message: "server.attach authentication failed" }
+  }
+  if (!response.ok) {
+    return { type: "fatal", message: `server.attach health check failed with HTTP ${response.status}` }
+  }
+
+  const body = await response.json().catch(() => undefined)
+  if (typeof body !== "object" || body === null || !("healthy" in body) || body.healthy !== true) {
+    return { type: "fatal", message: "server.attach target is not a healthy opencode server" }
+  }
+
+  return { type: "attach", url: attach, headers: input.headers }
+}
+
+async function requestAutoAttachHealth(
+  base: URL,
+  input: {
+    headers?: RequestInit["headers"]
+    fetch?: AutoAttachFetch
+    timeoutMs?: number
+  },
+) {
+  return (input.fetch ?? fetch)(new URL(AUTO_ATTACH_HEALTH_PATH, base), {
+    headers: input.headers,
+    signal: AbortSignal.timeout(input.timeoutMs ?? AUTO_ATTACH_TIMEOUT_MS),
+  })
+}
+
+function localAutoAttachServer(base: URL) {
+  const hostname = base.hostname.replace(/^\[|\]$/g, "")
+  if (!["localhost", "127.0.0.1", "0.0.0.0", "::1"].includes(hostname)) return
+
+  const port = Number(base.port)
+  if (!Number.isInteger(port) || port <= 0 || port > 65535) return
+
+  return { hostname, port }
+}
+
+function spawnAutoAttachServer(input: { hostname: string; port: number; shutdownAfterLastClient: boolean }) {
+  const compiled = path.basename(process.execPath).replace(/\.exe$/, "") !== "bun"
+  Bun.spawn(
+    [
+      process.execPath,
+      ...(compiled ? [] : [Bun.main]),
+      "serve",
+      "--hostname",
+      input.hostname,
+      "--port",
+      String(input.port),
+      ...(input.shutdownAfterLastClient ? ["--shutdown-after-last-client"] : []),
+    ],
+    {
+      stdin: "ignore",
+      stdout: "ignore",
+      stderr: "ignore",
+    },
+  ).unref()
+}
+
+async function waitForAutoAttachHealth(
+  attach: string,
+  base: URL,
+  input: {
+    headers?: RequestInit["headers"]
+    fetch?: AutoAttachFetch
+    timeoutMs?: number
+    startupAttempts?: number
+    startupDelayMs?: number
+  },
+): Promise<AutoAttachTarget> {
+  for (const _ of Array.from({ length: input.startupAttempts ?? AUTO_ATTACH_STARTUP_ATTEMPTS })) {
+    await new Promise((resolve) => setTimeout(resolve, input.startupDelayMs ?? AUTO_ATTACH_STARTUP_DELAY_MS))
+    const target = await resolveAutoAttachHealth(attach, base, input)
+    if (target.type !== "unreachable") return target
+  }
+
+  return { type: "fatal", message: "Failed to start server.attach target" }
+}
+
+async function globalConfig() {
+  const { Config } = await import("@/config/config")
+  return AppRuntime.runPromise(Config.Service.use((cfg) => cfg.getGlobal()))
 }
 
 export const TuiThreadCommand = cmd({
@@ -198,7 +350,6 @@ export const TuiThreadCommand = cmd({
       // Resolve relative --project paths from PWD, then use the real cwd after
       // chdir so the thread and worker share the same directory key.
       const next = resolveThreadDirectory(args.project)
-      const file = await target()
       try {
         process.chdir(next)
       } catch {
@@ -206,6 +357,57 @@ export const TuiThreadCommand = cmd({
         return
       }
       const cwd = Filesystem.resolve(process.cwd())
+      const prompt = await input(args.prompt)
+      const config = await TuiConfig.get()
+      const attach = hasExplicitNetworkOptions()
+        ? { type: "embedded" as const }
+        : await resolveAutoAttachTarget({
+            url: (await globalConfig()).server?.attach,
+            headers: ServerAuth.headers(),
+          })
+      if (attach.type === "fatal") {
+        UI.error(attach.message)
+        process.exitCode = 1
+        return
+      }
+      if (attach.type === "attach") {
+        try {
+          await validateSession({
+            url: attach.url,
+            directory: cwd,
+            headers: attach.headers,
+            sessionID: args.session,
+          })
+        } catch (error) {
+          UI.error(errorMessage(error))
+          process.exitCode = 1
+          return
+        }
+
+        const { Effect } = await import("effect")
+        const { run } = await import("../tui/layer")
+        const { createLegacyTuiPluginHost } = await import("@/plugin/tui/runtime")
+        await Effect.runPromise(
+          run({
+            url: attach.url,
+            config,
+            pluginHost: createLegacyTuiPluginHost(),
+            directory: cwd,
+            headers: attach.headers,
+            args: {
+              continue: args.continue,
+              sessionID: args.session,
+              agent: args.agent,
+              model: args.model,
+              prompt,
+              fork: args.fork,
+            },
+          }),
+        )
+        return
+      }
+
+      const file = await target()
 
       const worker = new Worker(file)
       const client = Rpc.client<typeof rpc>(worker)
@@ -222,9 +424,6 @@ export const TuiThreadCommand = cmd({
         await withTimeout(client.call("shutdown", undefined), 5000).catch(() => {})
         worker.terminate()
       }
-
-      const prompt = await input(args.prompt)
-      const config = await TuiConfig.get()
 
       const network = resolveNetworkOptionsNoConfig(args)
       const external = hasArg("--port") || hasArg("--hostname") || network.mdns === true
@@ -302,4 +501,3 @@ export const TuiThreadCommand = cmd({
     process.exit(0)
   },
 })
-// scratch

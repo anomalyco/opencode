@@ -166,6 +166,41 @@ async function openPtySocket(listener: Awaited<ReturnType<typeof startListener>>
   }
 }
 
+async function openGlobalEvent(listener: Awaited<ReturnType<typeof startListener>>) {
+  const abort = new AbortController()
+  const response = await fetch(new URL("/global/event", listener.url), {
+    headers: { authorization: authorization() },
+    signal: abort.signal,
+  })
+  expect(response.status).toBe(200)
+  const reader = response.body?.getReader()
+  if (!reader) throw new Error("global event response has no body")
+  const first = await withTimeout(reader.read(), 5_000, "timed out waiting for global event stream")
+  if (first.done || !first.value) throw new Error("global event stream closed before first event")
+  expect(new TextDecoder().decode(first.value)).toContain("server.connected")
+
+  let closed = false
+  return {
+    close: async () => {
+      if (closed) return
+      closed = true
+      await reader.cancel().catch(() => undefined)
+      abort.abort()
+    },
+  }
+}
+
+async function expectPending(promise: Promise<void>, duration: number, label: string) {
+  let resolved = false
+  await Promise.race([
+    promise.then(() => {
+      resolved = true
+    }),
+    new Promise((resolve) => setTimeout(resolve, duration)),
+  ])
+  if (resolved) throw new Error(label)
+}
+
 describe("HttpApi Server.listen", () => {
   testPty("serves HTTP routes and upgrades PTY websocket through Server.listen", async () => {
     await using tmp = await tmpdir({ config: { formatter: false, lsp: false } })
@@ -282,6 +317,44 @@ describe("HttpApi Server.listen", () => {
     await expect(
       fetch(new URL(PtyPaths.shells, listener.url), { headers: { authorization: authorization() } }),
     ).rejects.toThrow()
+  })
+
+  test("shutdownAfterLastClient waits for the last global event client", async () => {
+    const listener = await Server.listen({
+      hostname: "127.0.0.1",
+      port: 0,
+      shutdownAfterLastClient: { initialGraceMs: 1_000, lastClientGraceMs: 80 },
+    })
+    const idle = listener.idle
+    if (!idle) throw new Error("listener did not expose idle promise")
+    const first = await openGlobalEvent(listener)
+    const second = await openGlobalEvent(listener)
+    try {
+      await expectPending(idle, 120, "listener idled while clients were connected")
+      await first.close()
+      await expectPending(idle, 120, "listener idled before the last client disconnected")
+      await second.close()
+      await withTimeout(idle, 2_000, "timed out waiting for last-client idle")
+    } finally {
+      await first.close()
+      await second.close()
+      await stop(listener, "timed out cleaning up last-client listener").catch(() => undefined)
+    }
+  })
+
+  test("shutdownAfterLastClient idles when no global event client connects", async () => {
+    const listener = await Server.listen({
+      hostname: "127.0.0.1",
+      port: 0,
+      shutdownAfterLastClient: { initialGraceMs: 50, lastClientGraceMs: 50 },
+    })
+    const idle = listener.idle
+    if (!idle) throw new Error("listener did not expose idle promise")
+    try {
+      await withTimeout(idle, 2_000, "timed out waiting for initial idle")
+    } finally {
+      await stop(listener, "timed out cleaning up initial-idle listener").catch(() => undefined)
+    }
   })
 
   test("default in-process handler does not emit Effect HTTP response logs", async () => {

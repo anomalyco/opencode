@@ -5,11 +5,12 @@ import { EventV2 } from "@opencode-ai/core/event"
 import { Installation } from "@/installation"
 import { disposeAllInstancesAndEmitGlobalDisposed } from "@/server/global-lifecycle"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
-import { Effect, Queue, Schema } from "effect"
+import { Effect, Option, Queue, Schema } from "effect"
 import * as Stream from "effect/Stream"
 import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import * as Sse from "effect/unstable/encoding/Sse"
+import { ClientLifecycle } from "../client-lifecycle"
 import { RootHttpApi } from "../api"
 import { GlobalUpgradeInput } from "../groups/global"
 
@@ -30,7 +31,13 @@ function parseBody(body: string) {
   }
 }
 
-function eventResponse() {
+function releaseOnRequestClose(request: HttpServerRequest.HttpServerRequest, release: Effect.Effect<void>) {
+  const source = request.source as { once?: (event: "close", handler: () => void) => void }
+  if (typeof source.once !== "function") return
+  source.once("close", () => Effect.runFork(release))
+}
+
+function eventResponse(release: Effect.Effect<void>) {
   return Effect.gen(function* () {
     yield* Effect.logInfo("global event connected")
     const events = Stream.callback<GlobalBusEvent>((queue) => {
@@ -51,7 +58,12 @@ function eventResponse() {
         Stream.map(eventData),
         Stream.pipeThroughChannel(Sse.encode()),
         Stream.encodeText,
-        Stream.ensuring(Effect.logInfo("global event disconnected")),
+        Stream.ensuring(
+          Effect.gen(function* () {
+            yield* Effect.logInfo("global event disconnected")
+            yield* release
+          }),
+        ),
       ),
       {
         contentType: "text/event-stream",
@@ -75,8 +87,11 @@ export const globalHandlers = HttpApiBuilder.group(RootHttpApi, "global", (handl
       return { healthy: true as const, version: InstallationVersion }
     })
 
-    const event = Effect.fn("GlobalHttpApi.event")(function* () {
-      return yield* eventResponse()
+    const event = Effect.fn("GlobalHttpApi.event")(function* (ctx: { request: HttpServerRequest.HttpServerRequest }) {
+      const lifecycle = yield* Effect.serviceOption(ClientLifecycle.Service)
+      const release = Option.isSome(lifecycle) ? yield* lifecycle.value.acquire : Effect.void
+      releaseOnRequestClose(ctx.request, release)
+      return yield* eventResponse(release)
     })
 
     const configGet = Effect.fn("GlobalHttpApi.configGet")(function* () {

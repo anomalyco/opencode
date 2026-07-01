@@ -8,6 +8,7 @@ import { OpenApi } from "effect/unstable/httpapi"
 import { createServer } from "node:http"
 import { MDNS } from "./mdns"
 import { HttpApiApp } from "./routes/instance/httpapi/server"
+import { ClientLifecycle } from "./routes/instance/httpapi/client-lifecycle"
 import { disposeMiddleware } from "./routes/instance/httpapi/lifecycle"
 import { WebSocketTracker } from "./routes/instance/httpapi/websocket-tracker"
 import { PublicApi } from "./routes/instance/httpapi/public"
@@ -22,6 +23,7 @@ export type Listener = {
   port: number
   url: URL
   stop: (close?: boolean) => Promise<void>
+  idle?: Promise<void>
 }
 
 type ServerApp = {
@@ -34,15 +36,18 @@ type ListenOptions = CorsOptions & {
   hostname: string
   mdns?: boolean
   mdnsDomain?: string
+  shutdownAfterLastClient?: boolean | ClientLifecycle.Options
 }
 type ListenerState = {
   scope: Scope.Scope
   server: Context.Service.Shape<typeof HttpServer.HttpServer>
   http: ListenerServer
   websockets: WebSocketTracker.Interface
+  lifecycle: ClientLifecycle.Interface
 }
-type EffectListener = Omit<Listener, "stop"> & {
+type EffectListener = Omit<Listener, "idle" | "stop"> & {
   stop: (close?: boolean) => Effect.Effect<void>
+  idle?: Effect.Effect<void>
 }
 
 interface ListenerServer {
@@ -77,6 +82,7 @@ export async function listen(opts: ListenOptions): Promise<Listener> {
     port: listener.port,
     url: listener.url,
     stop: (close?: boolean) => Effect.runPromiseExit(listener.stop(close)).then(() => undefined),
+    ...(listener.idle ? { idle: Effect.runPromise(listener.idle) } : {}),
   }
 }
 
@@ -93,6 +99,7 @@ const listenEffect: (opts: ListenOptions) => Effect.Effect<EffectListener, unkno
       port: address.port,
       url: listenerUrl,
       stop: yield* makeStop(state, unpublishMdns, listenerUrl),
+      ...(opts.shutdownAfterLastClient ? { idle: state.lifecycle.idle } : {}),
     }
   },
 )
@@ -103,6 +110,7 @@ function listenerLayer(opts: ListenOptions, port: number) {
     disableLogger: true,
     disableListenLog: true,
   }).pipe(
+    Layer.provideMerge(ClientLifecycle.layer(opts.shutdownAfterLastClient)),
     Layer.provideMerge(AppNodeBuilder.build(WebSocketTracker.node)),
     Layer.provideMerge(serverLayer({ port, hostname: opts.hostname })),
     // Install a fresh `ConfigProvider` per listener so `Config.string(...)`
@@ -132,6 +140,7 @@ function startListener(opts: ListenOptions, port: number) {
         server: Context.get(ctx, HttpServer.HttpServer),
         http: Context.get(ctx, ListenerServerService),
         websockets: Context.get(ctx, WebSocketTracker.Service),
+        lifecycle: Context.get(ctx, ClientLifecycle.Service),
       }),
     ),
   )

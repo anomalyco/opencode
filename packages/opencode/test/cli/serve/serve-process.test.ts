@@ -9,6 +9,7 @@ import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { HttpClient } from "effect/unstable/http"
 import { cliIt } from "../../lib/cli-process"
+import { withTimeout } from "../../../src/util/timeout"
 
 describe("opencode serve (subprocess)", () => {
   // Smoke test: server starts, binds a port, and /global/health responds.
@@ -54,6 +55,32 @@ describe("opencode serve (subprocess)", () => {
         // Bun reports the exit code; SIGTERM-killed processes return non-null
         // (typically 143 on POSIX). We just require resolution within a sane
         // window — anything else means the kill didn't take.
+        expect(typeof code === "number" || code === null).toBe(true)
+      }),
+    60_000,
+  )
+
+  cliIt.live(
+    "exits after the last global event client disconnects when requested",
+    ({ opencode }) =>
+      Effect.gen(function* () {
+        const server = yield* opencode.serve({ extraArgs: ["--shutdown-after-last-client"] })
+        const abort = new AbortController()
+        const response = yield* Effect.promise(() => fetch(`${server.url}/global/event`, { signal: abort.signal }))
+        expect(response.status).toBe(200)
+        const reader = response.body?.getReader()
+        if (!reader) throw new Error("global event response has no body")
+        const first = yield* Effect.promise(() =>
+          withTimeout(reader.read(), 5_000, "timed out waiting for global event stream"),
+        )
+        if (first.done || !first.value) throw new Error("global event stream closed before first event")
+        expect(new TextDecoder().decode(first.value)).toContain("server.connected")
+
+        yield* Effect.promise(() => reader.cancel().catch(() => undefined))
+        abort.abort()
+        const code = yield* Effect.promise(() =>
+          withTimeout(server.exited, 10_000, "timed out waiting for self-managed serve exit"),
+        )
         expect(typeof code === "number" || code === null).toBe(true)
       }),
     60_000,
