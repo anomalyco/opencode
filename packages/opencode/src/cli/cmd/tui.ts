@@ -207,7 +207,11 @@ export const TuiThreadCommand = cmd({
       }
       const cwd = Filesystem.resolve(process.cwd())
 
-      const worker = new Worker(file)
+      // Pass the current process env to the worker. Bun (and Node worker_threads without SHARE_ENV) snapshot
+      // a worker's env at PROCESS START, so an env var set programmatically before the TUI launches — e.g.
+      // OPENCODE_CONFIG_DIR or an augmented PATH from a wrapper/launcher — is otherwise absent in this worker,
+      // which runs the server: env-derived config and PATH-resolved LSP spawns then silently break.
+      const worker = new Worker(file, { env: { ...process.env } } as WorkerOptions)
       const client = Rpc.client<typeof rpc>(worker)
       const reload = () => {
         client.call("reload", undefined).catch(() => {})
