@@ -17,6 +17,8 @@
 // delayed idle from an older turn cannot complete a newer busy turn.
 import type { Event, GlobalEvent, OpencodeClient } from "@opencode-ai/sdk/v2"
 import { Context, Deferred, Effect, Exit, Layer, Scope, Stream } from "effect"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { makeGlobalNode } from "@opencode-ai/core/effect/app-node"
 import { makeRuntime } from "@/effect/run-service"
 import {
   blockerStatus,
@@ -1450,7 +1452,10 @@ function createLayer(input: StreamInput) {
 // The transport is single-turn: only one runPromptTurn() call can be active
 // at a time. The prompt queue enforces this from above.
 export async function createSessionTransport(input: StreamInput): Promise<SessionTransport> {
-  const runtime = makeRuntime(Service, createLayer(input))
+  const runtime = makeRuntime(
+    Service,
+    AppNodeBuilder.build(makeGlobalNode({ service: Service, layer: createLayer(input), deps: [] })),
+  )
   await runtime.runPromise(() => Effect.void)
 
   return {
