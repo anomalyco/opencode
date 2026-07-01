@@ -30,9 +30,9 @@ jobs:
       matrix:
         settings:
           - name: linux
-            host: blacksmith-4vcpu-ubuntu-2404
+            host: ubuntu-latest
           - name: windows
-            host: blacksmith-4vcpu-windows-2025
+            host: windows-latest
     runs-on: ${{ matrix.settings.host }}
     defaults:
       run:
@@ -83,9 +83,9 @@ jobs:
       matrix:
         settings:
           - name: linux
-            host: blacksmith-4vcpu-ubuntu-2404
+            host: ubuntu-latest
           - name: windows
-            host: blacksmith-4vcpu-windows-2025
+            host: windows-latest
     runs-on: ${{ matrix.settings.host }}
     env:
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.playwright-browsers
@@ -165,9 +165,9 @@ jobs:
       matrix:
         settings:
           - name: linux-x64
-            host: blacksmith-4vcpu-ubuntu-2404
+            host: ubuntu-latest
           - name: windows-x64
-            host: blacksmith-4vcpu-windows-2025
+            host: windows-latest
           - name: darwin-arm64
             host: macos-latest
     runs-on: ${{ matrix.settings.host }}
@@ -222,7 +222,7 @@ jobs:
   config-layer-smoke:
     name: config-layer-smoke
     continue-on-error: true
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     defaults:
       run:
         shell: bash
@@ -256,7 +256,7 @@ jobs:
   upgrade-smoke:
     name: upgrade-smoke
     continue-on-error: true
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     defaults:
       run:
         shell: bash
@@ -309,7 +309,7 @@ jobs:
   desktop-smoke:
     name: desktop-smoke (linux)
     continue-on-error: true
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     defaults:
       run:
         shell: bash
