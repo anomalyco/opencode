@@ -9,6 +9,7 @@ import { Context, Effect, Layer } from "effect"
 import { resolve } from "@opencode-ai/tui/config"
 import { TuiConfig } from "@/config/tui"
 import { makeRuntime } from "@/effect/run-service"
+import { loadRunProviders } from "./catalog.shared"
 import { reusePendingTask } from "./runtime.shared"
 import { resolveCurrentSession, sessionHistory } from "./session.shared"
 import type { RunDiffStyle, RunInput, RunPrompt, RunProvider, RunTuiConfig } from "./types"
@@ -95,20 +96,7 @@ const layer = Layer.effect(
       directory: string,
       model: RunInput["model"],
     ) {
-      const connected = yield* Effect.promise(() =>
-        sdk.config
-          .providers({ directory })
-          .then((item) => item.data?.providers)
-          .catch(() => undefined),
-      )
-      const providers = yield* Effect.promise(() =>
-        connected
-          ? Promise.resolve(connected)
-          : sdk.provider
-              .list()
-              .then((item) => item.data?.all ?? [])
-              .catch(() => []),
-      )
+      const providers = yield* Effect.promise(() => loadRunProviders(sdk, directory))
       const limits = Object.fromEntries(
         providers.flatMap((provider) =>
           Object.entries(provider.models ?? {}).flatMap(([modelID, info]) => {

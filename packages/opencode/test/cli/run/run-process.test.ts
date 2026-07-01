@@ -294,17 +294,70 @@ describe("opencode run (non-interactive subprocess)", () => {
 
   cliIt.concurrent(
     "continues a current session with projected history",
-    ({ llm, opencode }) =>
+    ({ home, llm, opencode }) =>
       Effect.gen(function* () {
+        const env = { OPENCODE_DB: `${home}/run-continue.sqlite` }
         yield* llm.text("first response")
-        const first = yield* opencode.run("first prompt")
+        const first = yield* opencode.run("first prompt", { env })
         opencode.expectExit(first, 0)
 
         yield* llm.text("second response")
-        const second = yield* opencode.run("second prompt", { extraArgs: ["--continue"] })
+        const second = yield* opencode.run("second prompt", { env, extraArgs: ["--continue"] })
         opencode.expectExit(second, 0)
         expect(second.stdout).toBe("second response\n")
-        expect(JSON.stringify(yield* llm.inputs)).toContain("first prompt")
+        expect(JSON.stringify((yield* llm.inputs).at(-1))).toContain("first prompt")
+      }),
+    60_000,
+  )
+
+  cliIt.concurrent(
+    "forks the latest current session for --continue",
+    ({ home, llm, opencode }) =>
+      Effect.gen(function* () {
+        const env = { OPENCODE_DB: `${home}/run-fork-continue.sqlite` }
+        yield* llm.text("first response")
+        const first = yield* opencode.run("first prompt", { env, format: "json" })
+        opencode.expectExit(first, 0)
+        const firstSessionID = opencode.parseJsonEvents(first.stdout)[0]?.sessionID
+        expect(typeof firstSessionID).toBe("string")
+
+        yield* llm.text("forked response")
+        const second = yield* opencode.run("second prompt", {
+          env,
+          format: "json",
+          extraArgs: ["--continue", "--fork"],
+        })
+
+        opencode.expectExit(second, 0)
+        const secondSessionID = String(opencode.parseJsonEvents(second.stdout)[0]?.sessionID)
+        expect(secondSessionID).not.toBe(String(firstSessionID))
+        expect(JSON.stringify((yield* llm.inputs).at(-1))).toContain("first prompt")
+      }),
+    60_000,
+  )
+
+  cliIt.concurrent(
+    "forks a current session selected by --session",
+    ({ home, llm, opencode }) =>
+      Effect.gen(function* () {
+        const env = { OPENCODE_DB: `${home}/run-fork-session.sqlite` }
+        yield* llm.text("first response")
+        const first = yield* opencode.run("first prompt", { env, format: "json" })
+        opencode.expectExit(first, 0)
+        const firstSessionID = opencode.parseJsonEvents(first.stdout)[0]?.sessionID
+        expect(typeof firstSessionID).toBe("string")
+
+        yield* llm.text("forked response")
+        const second = yield* opencode.run("second prompt", {
+          env,
+          format: "json",
+          extraArgs: ["--session", String(firstSessionID), "--fork"],
+        })
+
+        opencode.expectExit(second, 0)
+        const secondSessionID = String(opencode.parseJsonEvents(second.stdout)[0]?.sessionID)
+        expect(secondSessionID).not.toBe(String(firstSessionID))
+        expect(JSON.stringify((yield* llm.inputs).at(-1))).toContain("first prompt")
       }),
     60_000,
   )

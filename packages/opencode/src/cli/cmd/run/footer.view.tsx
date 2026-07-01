@@ -520,7 +520,7 @@ export function RunFooterView(props: RunFooterViewProps) {
 
   useBindings(() => ({
     mode: OPENCODE_BASE_MODE,
-    enabled: active().type === "prompt" && route().type === "composer" && foregroundSubagents(),
+    enabled: active().type === "prompt" && route().type === "composer" && foregroundSubagents() && !!props.onBackground,
     priority: 1,
     commands: [
       {

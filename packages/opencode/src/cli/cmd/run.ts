@@ -26,6 +26,7 @@ import { createOpencodeClient, type OpencodeClient, type ToolPart } from "@openc
 import { FormatError, FormatUnknownError } from "../error"
 import { INTERACTIVE_INPUT_ERROR, resolveInteractiveStdin } from "./run/runtime.stdin"
 import { isImageAttachment, isPdfAttachment } from "@/util/media"
+import { loadRunAgents } from "./run/catalog.shared"
 
 type ModelInput = Parameters<OpencodeClient["session"]["prompt"]>[0]["model"]
 
@@ -167,10 +168,6 @@ export const RunCommand = effectCmd({
       .option("fork", {
         describe: "fork the session before continuing (requires --continue or --session)",
         type: "boolean",
-      })
-      .option("share", {
-        type: "boolean",
-        describe: "share the session",
       })
       .option("model", {
         type: "string",
@@ -419,8 +416,7 @@ export const RunCommand = effectCmd({
               pattern: "*",
             },
           ]
-      const currentPrompt =
-        !interactive && !args.command && !args.fork && fileInputs.every((file) => !file.isDirectory)
+      const currentPrompt = !interactive && !args.command && fileInputs.every((file) => !file.isDirectory)
 
       const inlineFiles = interactive || currentPrompt
       for (const file of fileInputs) {
@@ -474,90 +470,122 @@ export const RunCommand = effectCmd({
         return message.slice(0, 50) + (message.length > 50 ? "..." : "")
       }
 
-      async function session(sdk: OpencodeClient): Promise<SessionInfo | undefined> {
-        if (args.session) {
-          if (interactive || currentPrompt) {
-            const response = await sdk.v2.session.get({ sessionID: args.session }).catch(() => undefined)
-            const current = response?.data?.data
-            if (!current) {
-              UI.error("Session not found")
-              process.exit(1)
-            }
-            const transcript = await transcriptKind(sdk, current.id)
-            if (interactive && transcript === "legacy") {
-              throw new Error("Mini cannot resume a legacy Session transcript")
-            }
-            if (interactive && args.fork) {
-              throw new Error("Fork is not yet available for current Session transcripts")
-            }
-            return {
-              id: current.id,
-              title: current.title,
-              directory: current.location.directory,
-              current: transcript !== "legacy",
-            }
-          }
+      async function currentSession(sdk: OpencodeClient, sessionID: string): Promise<SessionInfo | undefined> {
+        const listed = await sdk.v2.session
+          .list({
+            directory: await current(sdk),
+            limit: 50,
+            order: "desc",
+          })
+          .then((result) => result.data?.data.find((item) => item.id === sessionID))
+          .catch(() => undefined)
+        const selected =
+          listed ??
+          (await sdk.v2.session
+            .get({ sessionID })
+            .then((result) => result.data?.data)
+            .catch(() => undefined))
+        const legacy =
+          selected ??
+          (await sdk.session
+            .get({ sessionID })
+            .then((result) => result.data)
+            .catch(() => undefined))
+        const transcript = await transcriptKind(sdk, legacy?.id ?? sessionID)
+        if (!legacy && transcript === "empty") {
+          return
+        }
+        if (interactive && transcript === "legacy") {
+          throw new Error("Mini cannot resume a legacy Session transcript")
+        }
 
-          const current = await sdk.session
-            .get({
-              sessionID: args.session,
-            })
-            .catch(() => undefined)
+        return {
+          id: legacy?.id ?? sessionID,
+          title: legacy?.title,
+          directory: legacy ? ("location" in legacy ? legacy.location.directory : legacy.directory) : await current(sdk),
+          current: transcript !== "legacy",
+        }
+      }
 
-          if (!current?.data) {
-            UI.error("Session not found")
-            process.exit(1)
-          }
-          if (!interactive) await requireLegacyTranscript(sdk, current.data.id)
-
-          if (args.fork) {
-            const forked = await sdk.session.fork({
-              sessionID: args.session,
-            })
-            const id = forked.data?.id
-            if (!id) {
-              return
-            }
-
-            return {
-              id,
-              title: forked.data?.title ?? current.data.title,
-              directory: forked.data?.directory ?? current.data.directory,
-              current: false,
-            }
-          }
-
+      async function forkSession(sdk: OpencodeClient, session: SessionInfo): Promise<SessionInfo | undefined> {
+        if (session.current !== false) {
+          const forked = await sdk.v2.session.fork(
+            { sessionID: session.id, messageID: undefined },
+            { throwOnError: true },
+          )
+          await waitForFork(sdk, session.id, forked.data.data.id)
           return {
-            id: current.data.id,
-            title: current.data.title,
-            directory: current.data.directory,
-            current: false,
+            id: forked.data.data.id,
+            title: forked.data.data.title,
+            directory: forked.data.data.location.directory,
+            current: true,
           }
         }
 
-        const base = args.continue
-          ? interactive || currentPrompt
-            ? await currentRootSession(sdk)
-            : (await sdk.session.list()).data?.find((item) => !item.parentID)
-          : undefined
-        if (base && !interactive && !currentPrompt) await requireLegacyTranscript(sdk, base.id)
+        const forked = await sdk.session.fork({
+          sessionID: session.id,
+        })
+        const id = forked.data?.id
+        if (!id) {
+          return
+        }
 
-        if (base && args.fork) {
-          if (interactive) throw new Error("Fork is not yet available for current Session transcripts")
-          const forked = await sdk.session.fork({
-            sessionID: base.id,
-          })
-          const id = forked.data?.id
-          if (!id) {
+        return {
+          id,
+          title: forked.data?.title ?? session.title,
+          directory: forked.data?.directory ?? session.directory,
+          current: false,
+        }
+      }
+
+      async function waitForFork(sdk: OpencodeClient, parentID: string, sessionID: string) {
+        const parentHasMessages = await sdk.v2.session
+          .messages({ sessionID: parentID, limit: 1 })
+          .then((result) => (result.data?.data.length ?? 0) > 0)
+          .catch(() => false)
+        if (!parentHasMessages) {
+          return
+        }
+
+        const deadline = Date.now() + 3000
+        while (Date.now() < deadline) {
+          const forkedHasMessages = await sdk.v2.session
+            .messages({ sessionID, limit: 1 })
+            .then((result) => (result.data?.data.length ?? 0) > 0)
+            .catch(() => false)
+          if (forkedHasMessages) {
             return
           }
 
-          return {
-            id,
-            title: forked.data?.title ?? base.title,
-            directory: forked.data?.directory ?? base.directory,
-            current: false,
+          await Bun.sleep(25)
+        }
+      }
+
+      async function session(sdk: OpencodeClient): Promise<SessionInfo | undefined> {
+        if (args.session) {
+          const current = await currentSession(sdk, args.session)
+          if (!current) {
+            UI.error("Session not found")
+            process.exit(1)
           }
+          if (!interactive && !currentPrompt && current.current !== false) {
+            throw new Error("This operation is not available for a current Session transcript")
+          }
+
+          if (args.fork) {
+            return forkSession(sdk, current)
+          }
+
+          return current
+        }
+
+        const base = args.continue ? await currentRootSession(sdk) : undefined
+        if (base && !interactive && !currentPrompt && base.current !== false) {
+          throw new Error("This operation is not available for a current Session transcript")
+        }
+
+        if (base && args.fork) {
+          return forkSession(sdk, base)
         }
 
         if (base) {
@@ -604,55 +632,29 @@ export const RunCommand = effectCmd({
       }
 
       async function currentRootSession(sdk: OpencodeClient): Promise<SessionInfo | undefined> {
-        // Current list pagination is creation-ordered; legacy projection preserves the product's updated root selection.
-        const root = (await sdk.session.list({ roots: true, limit: 1 })).data?.[0]
+        const response = await sdk.v2.session.list({
+          directory: await current(sdk),
+          limit: 50,
+          order: "desc",
+        })
+        const root = (response.data?.data ?? [])
+          .filter((session) => !session.parentID)
+          .toSorted((a, b) => b.time.updated - a.time.updated)[0]
         if (!root) return
-        const transcript = await transcriptKind(sdk, root.id)
-        if (interactive && transcript === "legacy") throw new Error("Mini cannot resume a legacy Session transcript")
-        const response = await sdk.v2.session.get({ sessionID: root.id })
-        const current = response.data?.data
-        if (!current) return
-        return {
-          id: current.id,
-          title: current.title,
-          directory: current.location.directory,
-          current: transcript !== "legacy",
-        }
+        return currentSession(sdk, root.id)
       }
 
       async function transcriptKind(sdk: OpencodeClient, sessionID: string) {
-        const [legacy, current] = await Promise.all([
-          sdk.session.messages({ sessionID, limit: 1 }).then((result) => (result.data?.length ?? 0) > 0),
-          sdk.v2.session.messages({ sessionID, limit: 1 }).then((result) => (result.data?.data.length ?? 0) > 0),
-        ])
-        if (legacy && current) throw new Error("Session contains mixed legacy and current transcripts")
-        if (legacy) return "legacy" as const
-        if (current) return "current" as const
-        return "empty" as const
-      }
-
-      async function currentTranscript(sdk: OpencodeClient, sessionID: string) {
-        return (await transcriptKind(sdk, sessionID)) !== "legacy"
-      }
-
-      async function requireLegacyTranscript(sdk: OpencodeClient, sessionID: string) {
-        if ((await transcriptKind(sdk, sessionID)) !== "current") return
-        throw new Error("This operation is not available for a current Session transcript")
-      }
-
-      async function share(sdk: OpencodeClient, sessionID: string) {
-        const cfg = await sdk.config.get()
-        if (!cfg.data) return
-        if (cfg.data.share !== "auto" && !flags.autoShare && !args.share) return
-        const res = await sdk.session.share({ sessionID }).catch((error) => {
-          if (error instanceof Error && error.message.includes("disabled")) {
-            UI.println(UI.Style.TEXT_DANGER_BOLD + "!  " + error.message)
-          }
-          return { error }
-        })
-        if (!res.error && "data" in res && res.data?.share?.url) {
-          UI.println(UI.Style.TEXT_INFO_BOLD + "~  " + res.data.share.url)
+        const current = await sdk.v2.session.messages({ sessionID, limit: 1 }).then((result) => (result.data?.data.length ?? 0) > 0)
+        if (current) {
+          const legacy = await sdk.session.messages({ sessionID, limit: 1 }).then((result) => (result.data?.length ?? 0) > 0)
+          if (legacy) throw new Error("Session contains mixed legacy and current transcripts")
+          return "current" as const
         }
+
+        const legacy = await sdk.session.messages({ sessionID, limit: 1 }).then((result) => (result.data?.length ?? 0) > 0)
+        if (legacy) return "legacy" as const
+        return "empty" as const
       }
 
       async function createFreshSession(
@@ -678,7 +680,6 @@ export const RunCommand = effectCmd({
         }
         if (name) await sdk.v2.session.rename({ sessionID: id, title: name })
 
-        void share(sdk, id).catch(() => {})
         return {
           id,
           title: name ?? created.title,
@@ -690,8 +691,8 @@ export const RunCommand = effectCmd({
           return directory ?? root
         }
 
-        const next = await sdk.path
-          .get()
+        const next = await sdk.v2.location
+          .get(undefined, { throwOnError: true })
           .then((x) => x.data?.directory)
           .catch(() => undefined)
         if (next) {
@@ -732,10 +733,7 @@ export const RunCommand = effectCmd({
         if (!args.agent) return undefined
         const name = args.agent
 
-        const modes = await sdk.app
-          .agents(undefined, { throwOnError: true })
-          .then((x) => x.data ?? [])
-          .catch(() => undefined)
+        const modes = await loadRunAgents(sdk, await current(sdk)).catch(() => undefined)
 
         if (!modes) {
           UI.println(
@@ -746,7 +744,7 @@ export const RunCommand = effectCmd({
           return undefined
         }
 
-        const agent = modes.find((a) => a.name === name)
+        const agent = modes.find((item) => item.name === name)
         if (!agent) {
           UI.println(
             UI.Style.TEXT_WARNING_BOLD + "!",
@@ -933,8 +931,6 @@ export const RunCommand = effectCmd({
         // Validate agent if specified
         const agent = await pickAgent(client)
 
-        await share(client, sessionID)
-
         if (!interactive) {
           if (currentPrompt && sess.current !== false) {
             const model = pick(args.model)
@@ -1016,7 +1012,7 @@ export const RunCommand = effectCmd({
             directory: cwd,
             sessionID,
             sessionTitle: sess.title,
-            resume: Boolean(args.session || args.continue) && !args.fork,
+            resume: Boolean(args.session || args.continue),
             replay,
             replayLimit: args["replay-limit"],
             agent,
@@ -1053,7 +1049,6 @@ export const RunCommand = effectCmd({
             fetch: fetchFn,
             resolveAgent: localAgent,
             session,
-            share,
             createSession: createFreshSession,
             agent: args.agent,
             model,
@@ -1120,7 +1115,6 @@ export async function runMini(input: MiniCommandInput) {
     continue: input.continue,
     session: input.session,
     fork: input.fork,
-    share: undefined,
     model: input.model,
     agent: input.agent,
     format: "default",

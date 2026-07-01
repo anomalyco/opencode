@@ -15,6 +15,7 @@
 import { createOpencodeClient } from "@opencode-ai/sdk/v2"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { MessageID } from "@/session/schema"
+import { loadRunAgents, loadRunCommands } from "./catalog.shared"
 import { createRunDemo } from "./demo"
 import { resolveModelInfo, resolveRunTuiConfig, resolveSessionInfo } from "./runtime.boot"
 import { createRuntimeLifecycle } from "./runtime.lifecycle"
@@ -62,7 +63,6 @@ type RunLocalInput = {
   fetch: typeof globalThis.fetch
   resolveAgent: () => Promise<string | undefined>
   session: (sdk: RunInput["sdk"]) => Promise<{ id: string; title?: string } | undefined>
-  share: (sdk: RunInput["sdk"], sessionID: string) => Promise<void>
   createSession?: CreateSession
   agent: RunInput["agent"]
   model: RunInput["model"]
@@ -354,10 +354,6 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
         })
       return true
     },
-    onBackground: () => {
-      if (!hasSession(input, state)) return
-      void ctx.sdk.experimental.session.background({ sessionID: state.sessionID }).catch(() => {})
-    },
     onSubagentSelect: (sessionID) => {
       state.selectSubagent?.(sessionID)
       log?.write("subagent.select", {
@@ -376,18 +372,12 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
     }
 
     const [agents, resources, commands] = await Promise.all([
-      ctx.sdk.app
-        .agents({ directory: ctx.directory })
-        .then((x) => x.data ?? [])
-        .catch(() => []),
+      loadRunAgents(ctx.sdk, ctx.directory).catch(() => []),
       ctx.sdk.experimental.resource
         .list({ directory: ctx.directory })
         .then((x) => Object.values(x.data ?? {}))
         .catch(() => []),
-      ctx.sdk.command
-        .list({ directory: ctx.directory })
-        .then((x) => x.data ?? [])
-        .catch(() => []),
+      loadRunCommands(ctx.sdk, ctx.directory).catch(() => []),
     ])
     if (footer.isClosed) {
       return
@@ -760,7 +750,6 @@ export async function runInteractiveLocalMode(input: RunLocalInput): Promise<voi
           throw new Error("Session not found")
         }
 
-        void input.share(sdk, next.id).catch(() => {})
         return {
           sessionID: next.id,
           sessionTitle: next.title,
