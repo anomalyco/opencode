@@ -1,6 +1,8 @@
 import { Effect, FileSystem, Layer, Option } from "effect"
 import * as PlatformError from "effect/PlatformError"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { makeGlobalNode } from "@opencode-ai/core/effect/app-node"
+import { filesystem } from "@opencode-ai/core/effect/app-node-platform"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { ReviewOverlay } from "@opencode-ai/core/review-overlay"
 
@@ -38,7 +40,7 @@ function overlayFileStat(content: string): FileSystem.File.Info {
   }
 }
 
-export const layer = Layer.effect(
+const reviewLayer = Layer.effect(
   FSUtil.Service,
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
@@ -134,14 +136,16 @@ export const layer = Layer.effect(
       writeWithDirs,
     })
   }),
-).pipe(Layer.provide(FSUtil.defaultLayer))
+)
 
-export const defaultLayer = layer
-
-export const node = LayerNode.make({
-  name: "ReviewFs",
-  layer,
-  deps: [FSUtil.node],
+export const node = makeGlobalNode({
+  service: FSUtil.Service,
+  layer: reviewLayer.pipe(Layer.provide(LayerNode.compile(FSUtil.node))),
+  deps: [filesystem],
 })
+
+export const defaultLayer = LayerNode.compile(node)
+
+export const layer = defaultLayer
 
 export * as ReviewFs from "./review-fs-layer"

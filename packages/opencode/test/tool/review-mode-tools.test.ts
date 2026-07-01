@@ -2,11 +2,13 @@ import { afterEach, describe, expect } from "bun:test"
 import path from "path"
 import fs from "fs/promises"
 import { Effect, Layer } from "effect"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EditTool } from "../../src/tool/edit"
 import { WriteTool } from "../../src/tool/write"
 import { ApplyPatchTool } from "../../src/tool/apply_patch"
 import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { LSP } from "@/lsp/lsp"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Format } from "../../src/format"
 import { Agent } from "../../src/agent/agent"
 import { EventV2Bridge } from "../../src/event-v2-bridge"
@@ -34,13 +36,8 @@ const baseCtx = {
   ask: () => Effect.void,
 }
 
-const layer = Layer.mergeAll(
-  LSP.defaultLayer,
-  ReviewFs.defaultLayer,
-  Format.defaultLayer,
-  EventV2Bridge.defaultLayer,
-  Truncate.defaultLayer,
-  Agent.defaultLayer,
+const layer = LayerNode.compile(
+  LayerNode.group([LSP.node, ReviewFs.node, Format.node, EventV2Bridge.node, Truncate.node, Agent.node]),
 )
 
 const it = testEffect(layer)
@@ -157,7 +154,9 @@ describe("review mode tools", () => {
 // when ToolRegistry injects the plain FSUtil layer, so this exercises the real
 // path that ACP prompts go through.
 const registryIt = testEffect(
-  Layer.mergeAll(ToolRegistry.defaultLayer, CrossSpawnSpawner.defaultLayer).pipe(Layer.provide(Ripgrep.defaultLayer)),
+  LayerNode.compile(LayerNode.group([ToolRegistry.node, CrossSpawnSpawner.node, Ripgrep.node]), [
+    [FSUtil.node, ReviewFs.node],
+  ]),
 )
 
 describe("review mode via ToolRegistry", () => {

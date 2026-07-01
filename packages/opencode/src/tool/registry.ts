@@ -43,7 +43,6 @@ import { Todo } from "../session/todo"
 import { LSP } from "@/lsp/lsp"
 import { Instruction } from "../session/instruction"
 import { FSUtil } from "@opencode-ai/core/fs-util"
-import { ReviewFs } from "@/effect/review-fs-layer"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Agent } from "../agent/agent"
 import { Skill } from "../skill"
@@ -422,7 +421,7 @@ function isJsonSchemaObject(value: unknown): value is Record<string, unknown> {
 
 export const node = LayerNode.make({
   service: Service,
-  layer: layer.pipe(Layer.provide(ReviewFs.defaultLayer)),
+  layer,
   deps: [
     Config.node,
     Plugin.node,
