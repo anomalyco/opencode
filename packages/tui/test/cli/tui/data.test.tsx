@@ -780,7 +780,13 @@ test("settles pending tools when a live failure arrives", async () => {
 
 test("renders admitted prompts immediately with queued marker and clears when promoted", async () => {
   const events = createEventStream()
-  const calls = createFetch(undefined, events)
+  const calls = createFetch((url) => {
+    if (url.pathname === "/api/session/session-1/message")
+      return json({
+        data: [{ id: "msg_user_1", type: "user", text: "hello", time: { created: 0 } }],
+        cursor: {},
+      })
+  }, events)
   let sync!: ReturnType<typeof useData>
   let ready!: () => void
   const mounted = new Promise<void>((resolve) => {
@@ -824,6 +830,9 @@ test("renders admitted prompts immediately with queued marker and clears when pr
     const admitted = sync.session.message.list("session-1")?.[0]
     expect(admitted).toMatchObject({ id: "msg_user_1", type: "user", text: "hello", metadata: { queued: true } })
 
+    await sync.session.message.refresh("session-1")
+    expect(sync.session.message.list("session-1")?.[0]?.metadata?.queued).toBeUndefined()
+
     emitEvent(events, {
       id: "evt_prompted_1",
       type: "session.next.prompted",
@@ -836,7 +845,7 @@ test("renders admitted prompts immediately with queued marker and clears when pr
       },
     })
 
-    await wait(() => sync.session.message.list("session-1")?.[0]?.metadata?.queued !== true)
+    await wait(() => received.at(-1) === "session.next.prompted")
     expect(received.slice(-2)).toEqual(["session.next.prompt.admitted", "session.next.prompted"])
     unsubscribe()
     const message = sync.session.message.list("session-1")?.[0]
