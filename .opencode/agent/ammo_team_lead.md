@@ -311,8 +311,6 @@ Before running ANY tool, ask yourself:
 |-------|-------------|
 | `ooda` | Complex decisions, rapidly changing situations |
 | `cynefin` | Categorize problem complexity before choosing approach |
-| `sixhats` | Need multiple perspectives on a decision |
-| `eisenhower` | Prioritize tasks by urgency/importance |
 | `rice` | Prioritize features/work items objectively |
 | `moscow` | Define scope (must/should/could/won't) |
 | `retro` | Sprint retrospectives, reflection |

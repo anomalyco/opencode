@@ -575,17 +575,22 @@ export async function main(argv?: string[]) {
   // Parse --env-file before ANR init so the config loader can use it
   const envIdx = process.argv.indexOf("--env-file")
   let envFile = envIdx !== -1 ? process.argv[envIdx + 1] : undefined
+  const skipANRAuth = process.env.OPENCODE_ANR_SKIP_AUTH === "1"
 
   if (anrMode) {
+    if (skipANRAuth) {
+      process.stderr.write("[ANR] Skipping authentication/telemetry initialization via OPENCODE_ANR_SKIP_AUTH=1\n")
+    } else {
     // If no --env-file flag, show picker (or auto-select if only one)
-    if (!envFile) {
-      envFile = await selectEnvFile()
+      if (!envFile) {
+        envFile = await selectEnvFile()
+      }
+
+      // Clear stale env vars before loading new config
+      clearStaleEnv()
+
+      await initializeANR(envFile)
     }
-
-    // Clear stale env vars before loading new config
-    clearStaleEnv()
-
-    await initializeANR(envFile)
   }
 
   const args = argv ?? hideBin(process.argv)

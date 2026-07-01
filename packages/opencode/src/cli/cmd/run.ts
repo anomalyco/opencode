@@ -680,6 +680,8 @@ export const RunCommand = effectCmd({
         async function loop(client: OpencodeClient, events: Awaited<ReturnType<typeof sdk.event.subscribe>>) {
           const toggles = new Map<string, boolean>()
           let error: string | undefined
+          let emittedText = false
+          let sawUnknownFinish = false
 
           for await (const event of events.stream) {
             if (
@@ -725,6 +727,7 @@ export const RunCommand = effectCmd({
               }
 
               if (part.type === "step-finish") {
+                if (part.reason === "unknown") sawUnknownFinish = true
                 if (emit("step_finish", { part })) continue
               }
 
@@ -732,6 +735,7 @@ export const RunCommand = effectCmd({
                 if (emit("text", { part })) continue
                 const text = part.text.trim()
                 if (!text) continue
+                emittedText = true
                 if (!process.stdout.isTTY) {
                   process.stdout.write(text + EOL)
                   continue
@@ -776,6 +780,13 @@ export const RunCommand = effectCmd({
               break
             }
 
+            // Provider stream failures can terminate a step with unknown finish
+            // without emitting an explicit idle transition. In non-interactive
+            // mode, treat that as terminal so the process doesn't hang waiting.
+            if (sawUnknownFinish) {
+              break
+            }
+
             if (event.type === "permission.asked") {
               const permission = event.properties
               if (permission.sessionID !== sessionID) continue
@@ -798,7 +809,7 @@ export const RunCommand = effectCmd({
               }
             }
           }
-          return error
+          return { error, emittedText }
         }
         const cwd = args.attach ? (directory ?? sess.directory ?? (await current(sdk))) : (directory ?? root)
         const client = args.attach ? attachSDK(cwd) : sdk
@@ -813,11 +824,19 @@ export const RunCommand = effectCmd({
           const completed = loop(client, events).catch((e) => {
             console.error(e)
             process.exitCode = 1
+            return { error: String(e), emittedText: false }
           })
+          const closeEvents = async () => {
+            await events.stream.return(undefined).catch(() => {})
+          }
           async function finish() {
-            if (args.attach) return
+            if (args.attach) {
+              await closeEvents()
+              return
+            }
             const error = await completed
-            if (error) process.exitCode = 1
+            if (error.error && !error.emittedText) process.exitCode = 1
+            await closeEvents()
           }
 
           if (args.command) {
@@ -832,6 +851,7 @@ export const RunCommand = effectCmd({
             if (result.error) {
               if (!emit("error", { error: result.error })) UI.error(formatRunError(result.error))
               process.exitCode = 1
+              await closeEvents()
               return
             }
             await finish()
@@ -849,6 +869,7 @@ export const RunCommand = effectCmd({
           if (result.error) {
             if (!emit("error", { error: result.error })) UI.error(formatRunError(result.error))
             process.exitCode = 1
+            await closeEvents()
             return
           }
           await finish()

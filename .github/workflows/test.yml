@@ -188,6 +188,9 @@ jobs:
       - name: Setup Bun
         uses: ./.github/actions/setup-bun
 
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
       - name: Build single-platform CLI
         run: bun run ./packages/opencode/script/build.ts --single --skip-embed-web-ui
         env:
@@ -240,6 +243,9 @@ jobs:
       - name: Setup Bun
         uses: ./.github/actions/setup-bun
 
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
       - name: Build single-platform CLI
         run: bun run ./packages/opencode/script/build.ts --single --skip-embed-web-ui
         env:
@@ -273,6 +279,9 @@ jobs:
 
       - name: Setup Bun
         uses: ./.github/actions/setup-bun
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
 
       - name: Install previous released opencode
         run: |

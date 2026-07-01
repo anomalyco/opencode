@@ -191,7 +191,8 @@ for (const file of agentFiles) {
 try {
   const proc = Bun.spawnSync([BIN, "agent", "list"], {
     cwd: ROOT,
-    env: { ...process.env, OPENCODE_FLAVOR: "anr" },
+    // Validate ANR flavor config loading, but bypass interactive auth in CI.
+    env: { ...process.env, OPENCODE_FLAVOR: "anr", OPENCODE_ANR_SKIP_AUTH: "1" },
     stdout: "pipe",
     stderr: "pipe",
   })
