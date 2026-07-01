@@ -332,7 +332,9 @@ function SessionPanelFrame(props: ParentProps<{ newLayout: boolean; raised?: boo
   )
 }
 
-export default function Page() {
+export default function Page(props: { sessionID?: string; mode?: "full" | "cell" } = {}) {
+  const effectiveSessionID = createMemo(() => props.sessionID ?? params.id)
+  const isCellMode = () => props.mode === "cell"
   const serverSync = useServerSync()
   const layout = useLayout()
   const local = useLocal()
@@ -358,7 +360,7 @@ export default function Page() {
   createEffect(() => {
     if (!prompt.ready()) return
     untrack(() => {
-      if (params.id) return
+      if (effectiveSessionID()) return
       const text = searchParams.prompt
       if (!text) return
       prompt.set([{ type: "text", content: text, start: 0, end: text.length }], text.length)
@@ -380,7 +382,7 @@ export default function Page() {
   const composer = createSessionComposerController()
   const inputController = createPromptInputController({
     sessionKey,
-    sessionID: () => params.id,
+    sessionID: () => effectiveSessionID(),
     queryOptions: serverSync().queryOptions,
   })
 
@@ -388,7 +390,7 @@ export default function Page() {
 
   createEffect(
     on(
-      () => params.id,
+      () => effectiveSessionID(),
       (id, prev) => {
         if (!id) return
         if (prev) return
@@ -463,9 +465,9 @@ export default function Page() {
     if (!view().reviewPanel.opened()) view().reviewPanel.open()
   }
 
-  const info = createMemo(() => (params.id ? sync().session.get(params.id) : undefined))
+  const info = createMemo(() => (effectiveSessionID() ? sync().session.get(effectiveSessionID()) : undefined))
   const isChildSession = createMemo(() => !!info()?.parentID)
-  const diffs = createMemo(() => (params.id ? list(sync().data.session_diff[params.id]) : []))
+  const diffs = createMemo(() => (effectiveSessionID() ? list(sync().data.session_diff[effectiveSessionID()]) : []))
   const canReview = createMemo(() => !!sync().project)
   const reviewTab = createMemo(() => isDesktop())
   const tabState = createSessionTabs({
@@ -478,7 +480,7 @@ export default function Page() {
   const activeTab = tabState.activeTab
   const activeFileTab = tabState.activeFileTab
   const revertMessageID = createMemo(() => info()?.revert?.messageID)
-  const timeline = createTimelineModel({ sessionID: () => params.id, revertMessageID })
+  const timeline = createTimelineModel({ sessionID: () => effectiveSessionID(), revertMessageID })
   const historyLoading = timeline.history.loading
   const historyMore = timeline.history.more
   const lastUserMessage = timeline.lastUserMessage
@@ -509,7 +511,7 @@ export default function Page() {
 
   createEffect(
     on(
-      () => ({ dir: sdk().directory, id: params.id }),
+      () => ({ dir: sdk().directory, id: effectiveSessionID() }),
       (next, prev) => {
         if (!prev) return
         if (next.dir === prev.dir && next.id === prev.id) return
@@ -764,7 +766,7 @@ export default function Page() {
   createEffect(
     on(
       () => {
-        const id = params.id
+        const id = effectiveSessionID()
         return [
           sdk().directory,
           id,
@@ -785,7 +787,7 @@ export default function Page() {
           todoFrame = undefined
           todoTimer = window.setTimeout(() => {
             todoTimer = undefined
-            if (sdk().directory !== dir || params.id !== id) return
+            if (sdk().directory !== dir || effectiveSessionID() !== id) return
             untrack(() => {
               void sync().session.todo(id, cached ? { force: true } : undefined)
             })
@@ -963,7 +965,7 @@ export default function Page() {
 
   createEffect(
     on(
-      () => sync().data.session_status[params.id ?? ""]?.type,
+      () => sync().data.session_status[effectiveSessionID() ?? ""]?.type,
       (next, prev) => {
         if (next !== "idle" || prev === undefined || prev === "idle") return
         refreshVcs()
@@ -1238,7 +1240,7 @@ export default function Page() {
   })
 
   createEffect(() => {
-    const id = params.id
+    const id = effectiveSessionID()
     if (!id) return
 
     if (!wantsReview()) return
@@ -1258,7 +1260,7 @@ export default function Page() {
         diffTimer = undefined
         if (!wants) return
 
-        const id = params.id
+        const id = effectiveSessionID()
         if (!id) return
         if (!untrack(() => sync().data.session_diff[id] !== undefined)) return
 
@@ -1308,7 +1310,7 @@ export default function Page() {
   })
   createEffect(
     on(
-      () => params.id,
+      () => effectiveSessionID(),
       (id, previous) => {
         if (!id || !previous || id === previous) return
         if (location.hash || store.messageId || ui.pendingMessage) return
@@ -1442,7 +1444,7 @@ export default function Page() {
     fillFrame = requestAnimationFrame(() => {
       fillFrame = undefined
 
-      if (!params.id || !messagesReady()) return
+      if (!effectiveSessionID() || !messagesReady()) return
       if (autoScroll.userScrolled() || historyLoading()) return
 
       const el = scroller
@@ -1458,7 +1460,7 @@ export default function Page() {
     on(
       () =>
         [
-          params.id,
+          effectiveSessionID(),
           messagesReady(),
           historyMore(),
           historyLoading(),
@@ -1509,13 +1511,13 @@ export default function Page() {
   const busy = (sessionID: string) => sync().data.session_working(sessionID)
 
   const queuedFollowups = createMemo(() => {
-    const id = params.id
+    const id = effectiveSessionID()
     if (!id) return emptyFollowups
     return followup.items[id] ?? emptyFollowups
   })
 
   const editingFollowup = createMemo(() => {
-    const id = params.id
+    const id = effectiveSessionID()
     if (!id) return
     return followup.edit[id]
   })
@@ -1551,14 +1553,14 @@ export default function Page() {
     followupMutation.isPending && followupMutation.variables?.sessionID === sessionID
 
   const sendingFollowup = createMemo(() => {
-    const id = params.id
+    const id = effectiveSessionID()
     if (!id) return
     if (!followupBusy(id)) return
     return followupMutation.variables?.id
   })
 
   const queueEnabled = createMemo(() => {
-    const id = params.id
+    const id = effectiveSessionID()
     if (!id) return false
     return settings.general.followup() === "queue" && busy(id) && !composer.blocked() && !isChildSession()
   })
@@ -1601,7 +1603,7 @@ export default function Page() {
   }
 
   const editFollowup = (id: string) => {
-    const sessionID = params.id
+    const sessionID = effectiveSessionID()
     if (!sessionID) return
     if (followupBusy(sessionID)) return
 
@@ -1618,7 +1620,7 @@ export default function Page() {
   }
 
   const clearFollowupEdit = () => {
-    const id = params.id
+    const id = effectiveSessionID()
     if (!id) return
     setFollowup("edit", id, undefined)
   }
@@ -1654,7 +1656,7 @@ export default function Page() {
 
   const restoreMutation = useMutation(() => ({
     mutationFn: async (id: string) => {
-      const sessionID = params.id
+      const sessionID = effectiveSessionID()
       if (!sessionID) return
 
       const client = sdk().client
@@ -1694,7 +1696,7 @@ export default function Page() {
   }
 
   const restore = (id: string) => {
-    if (!params.id || reverting()) return
+    if (!effectiveSessionID() || reverting()) return
     return restoreMutation.mutateAsync(id)
   }
 
@@ -1709,7 +1711,7 @@ export default function Page() {
   const actions = { revert }
 
   createEffect(() => {
-    const sessionID = params.id
+    const sessionID = effectiveSessionID()
     if (!sessionID) return
 
     const item = queuedFollowups()[0]
@@ -1748,7 +1750,7 @@ export default function Page() {
 
   const { clearMessageHash, scrollToMessage } = useSessionHashScroll({
     sessionKey,
-    sessionID: () => params.id,
+    sessionID: () => effectiveSessionID(),
     messagesReady,
     visibleUserMessages,
     historyMore,
@@ -1774,7 +1776,7 @@ export default function Page() {
 
   createEffect(
     on(
-      () => params.id,
+      () => effectiveSessionID(),
       (id) => {
         if (!id) requestAnimationFrame(() => inputRef?.focus())
       },
@@ -1801,7 +1803,7 @@ export default function Page() {
     const controller = createSessionComposerRegionController({
       state: composer,
       sessionKey,
-      sessionID: () => params.id,
+      sessionID: () => effectiveSessionID(),
       prompt,
       ready: () => !store.deferRender && messagesReady(),
       centered,
@@ -1810,11 +1812,11 @@ export default function Page() {
         onToggle: () => view().todoCollapsed.set(!view().todoCollapsed.get()),
       },
       followup: () =>
-        params.id && !isChildSession()
+        effectiveSessionID() && !isChildSession()
           ? {
               items: followupDock(),
               sending: sendingFollowup(),
-              onSend: (id) => void sendFollowup(params.id!, id, { manual: true }),
+              onSend: (id) => void sendFollowup(effectiveSessionID()!, id, { manual: true }),
               onEdit: editFollowup,
             }
           : undefined,
@@ -1864,7 +1866,7 @@ export default function Page() {
             shouldQueue={queueEnabled}
             onQueue={queueFollowup}
             onAbort={() => {
-              const id = params.id
+              const id = effectiveSessionID()
               if (!id) return
               setFollowup("paused", id, true)
             }}
@@ -1915,18 +1917,18 @@ export default function Page() {
 
   const sessionErrorFallback = (error: unknown, reset: () => void) => {
     createEffect(on(sessionKey, reset, { defer: true }))
-    return <SessionErrorFallback error={error} sessionID={params.id} />
+    return <SessionErrorFallback error={error} sessionID={effectiveSessionID()} />
   }
 
   const sessionPanelContent = () => (
     <>
       {sessionSync() ?? ""}
-      <Show when={!isDesktop() && !!params.id && settings.general.newLayoutDesigns() && !mobileTabsBottom()}>
+      <Show when={!isDesktop() && !!effectiveSessionID() && settings.general.newLayoutDesigns() && !mobileTabsBottom()}>
         {mobileTabs(true)}
       </Show>
       <div class="flex-1 min-h-0 overflow-hidden">
         <Switch>
-          <Match when={params.id && mobileChanges()}>
+          <Match when={effectiveSessionID() && mobileChanges()}>
             <div class="relative h-full overflow-hidden">
               {reviewContent({
                 diffStyle: "unified",
@@ -1940,8 +1942,8 @@ export default function Page() {
               })}
             </div>
           </Match>
-          <Match when={params.id}>
-            <Show when={messagesReady() ? params.id : undefined} keyed>
+          <Match when={effectiveSessionID()}>
+            <Show when={messagesReady() ? effectiveSessionID() : undefined} keyed>
               {(_id) => (
                 <MessageTimeline
                   actions={actions}
@@ -1988,21 +1990,23 @@ export default function Page() {
         </Switch>
       </div>
 
-      <Show when={(params.id || !newSessionDesign()) && !mobileChanges()}>{(_) => composerRegion()}</Show>
-      <Show when={!!params.id && mobileTabsBottom()}>{mobileTabs(true, true)}</Show>
+      <Show when={(effectiveSessionID() || !newSessionDesign()) && !mobileChanges()}>{(_) => composerRegion()}</Show>
+      <Show when={!!effectiveSessionID() && mobileTabsBottom()}>{mobileTabs(true, true)}</Show>
     </>
   )
 
   return (
     <SessionRouteFrame>
-      <SessionHeader />
+      <Show when={!isCellMode()}>
+        <SessionHeader sessionID={effectiveSessionID()} />
+      </Show>
       <div
         class="flex-1 min-h-0 flex flex-col md:flex-row"
         classList={{
           "gap-2 p-2": settings.general.newLayoutDesigns(),
         }}
       >
-        <Show when={!isDesktop() && !!params.id && !settings.general.newLayoutDesigns()}>{mobileTabs()}</Show>
+        <Show when={!isDesktop() && !!effectiveSessionID() && !settings.general.newLayoutDesigns()}>{mobileTabs()}</Show>
 
         <div
           classList={{
@@ -2014,7 +2018,7 @@ export default function Page() {
             width: sessionPanelWidth(),
           }}
         >
-          <SessionPanelFrame newLayout={settings.general.newLayoutDesigns()} raised={!!params.id}>
+          <SessionPanelFrame newLayout={settings.general.newLayoutDesigns()} raised={!!effectiveSessionID()}>
             {settings.general.newLayoutDesigns() ? (
               <ErrorBoundary fallback={sessionErrorFallback}>{sessionPanelContent()}</ErrorBoundary>
             ) : (

@@ -21,6 +21,7 @@ import { useSettings } from "@/context/settings"
 import { useSync } from "@/context/sync"
 import { useTerminal } from "@/context/terminal"
 import { focusTerminalById } from "@/pages/session/helpers"
+import { GridToggle } from "./grid-toggle"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { messageAgentColor } from "@/utils/agent"
 import { decode64 } from "@/utils/base64"
@@ -135,7 +136,8 @@ const showRequestError = (language: ReturnType<typeof useLanguage>, err: unknown
   })
 }
 
-export function SessionHeader() {
+export function SessionHeader(props: { sessionID?: string } = {}) {
+  const effectiveSessionID = createMemo(() => props.sessionID ?? params.id)
   const layout = useLayout()
   const command = useCommand()
   const server = useServer()
@@ -447,6 +449,9 @@ export function SessionHeader() {
                       <Tooltip placement="bottom" value={language.t("status.popover.trigger")}>
                         <StatusPopover />
                       </Tooltip>
+                    </Show>
+                    <Show when={projectDirectory()}>
+                      <GridToggle dir={projectDirectory()} />
                     </Show>
                     <TooltipKeybind
                       title={language.t("command.terminal.toggle")}

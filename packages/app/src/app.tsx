@@ -48,6 +48,7 @@ import { TabsProvider, useTabs, type DraftTab } from "@/context/tabs"
 import { SDKProvider, useSDK } from "@/context/sdk"
 import { WslServersProvider } from "@/wsl/context"
 import DirectoryLayout, { DirectoryDataProvider } from "@/pages/directory-layout"
+import { SessionGrid } from "@/components/session"
 import LegacyLayout from "@/pages/layout"
 import NewLayout from "@/pages/layout-new"
 import { ErrorPage } from "./pages/error"
@@ -88,7 +89,8 @@ const SessionRoute = () => {
     tabs.newDraft({ server: server.key, directory: sdk().directory }, search.prompt)
   })
 
-  return <SessionPage />
+  const dir = createMemo(() => sdk().directory ?? "")
+  return <SessionGrid dir={dir()} primaryId={params.id} />
 }
 
 const TargetSessionRoute = () => {

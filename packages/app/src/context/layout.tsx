@@ -78,6 +78,16 @@ export type LocalProject = Partial<Project> & { worktree: string; expanded: bool
 export type HomeProjectSelection = { server: ServerConnection.Key; directory?: string }
 
 export type ReviewDiffStyle = "unified" | "split"
+
+export type GridMode = 1 | 2 | 3 | 4 | 6 | 8
+
+export type GridCell = {
+  id: string
+  sessionID: string
+  directory?: string
+  mode: "full" | "cell"
+  label: string
+}
 export type ReviewPanelSource = "context-button" | "other"
 
 export type LayoutRoute =
@@ -295,6 +305,9 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         mobileSidebar: {
           opened: false,
         },
+        gridMode: {} as Record<string, GridMode>,
+        gridCells: {} as Record<string, GridCell[]>,
+        gridActive: {} as Record<string, string>,
         sessionTabs: {} as Record<string, SessionTabs>,
         sessionView: {} as Record<string, SessionView>,
         handoff: {
@@ -734,6 +747,62 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         },
         toggle() {
           setStore("mobileSidebar", "opened", (x) => !x)
+        },
+      },
+      grid: {
+        mode(directory: string) {
+          return createMemo(() => store.gridMode[directory] ?? 1)
+        },
+        setMode(directory: string, mode: GridMode) {
+          setStore("gridMode", directory, mode)
+          if (mode === 1) {
+            const current = store.gridCells[directory] ?? []
+            if (current.length > 0) setStore("gridCells", directory, [])
+            if (store.gridActive[directory]) setStore("gridActive", directory, undefined as unknown as string)
+          }
+        },
+        active(directory: string) {
+          return createMemo(() => store.gridActive[directory])
+        },
+        setActive(directory: string, id: string) {
+          setStore("gridActive", directory, id)
+        },
+        cells(directory: string) {
+          return createMemo(() => store.gridCells[directory] ?? [])
+        },
+        cellsByID(directory: string) {
+          return createMemo(() => (store.gridCells[directory] ?? []).map((c) => c.sessionID))
+        },
+        setCells(directory: string, cells: GridCell[]) {
+          setStore("gridCells", directory, cells)
+        },
+        addCell(directory: string, sessionID: string, opts?: { directory?: string; label?: string }) {
+          const current = store.gridCells[directory] ?? []
+          if (current.some((c) => c.sessionID === sessionID)) return
+          const cell: GridCell = {
+            id: `${sessionID}-${Date.now()}`,
+            sessionID,
+            directory: opts?.directory ?? directory,
+            mode: "cell",
+            label: opts?.label ?? "",
+          }
+          setStore("gridCells", directory, [...current, cell])
+        },
+        removeCell(directory: string, sessionID: string) {
+          const current = store.gridCells[directory] ?? []
+          setStore(
+            "gridCells",
+            directory,
+            current.filter((c) => c.sessionID !== sessionID),
+          )
+        },
+        updateCell(directory: string, sessionID: string, patch: Partial<GridCell>) {
+          const current = store.gridCells[directory] ?? []
+          setStore(
+            "gridCells",
+            directory,
+            current.map((c) => (c.sessionID === sessionID ? { ...c, ...patch } : c)),
+          )
         },
       },
       pendingMessage: {
