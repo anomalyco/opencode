@@ -116,6 +116,7 @@ export function createSessionRows(sessionID: Accessor<string>) {
     if (event.data.sessionID === sessionID()) appendMessage(event.data.messageID)
   }
   const subscriptions = [
+    data.on("session.next.prompt.admitted", message),
     data.on("session.next.prompted", message),
     data.on("session.next.context.updated", message),
     data.on("session.next.synthetic", message),

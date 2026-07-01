@@ -1353,6 +1353,9 @@ function UserMessage(props: { message: SessionMessageUser }) {
           flexShrink={0}
         >
           <text fg={theme.text}>{props.message.text}</text>
+          <Show when={props.message.metadata?.queued === true}>
+            <text fg={theme.warning}>Queued</text>
+          </Show>
           <Show when={files().length}>
             <box
               flexDirection="row"

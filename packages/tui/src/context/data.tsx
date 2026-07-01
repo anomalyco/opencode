@@ -194,6 +194,19 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         case "session.next.prompted": {
           setStore("session", "status", event.data.sessionID, "running")
           message.update(event.data.sessionID, (draft, index) => {
+            const position = index.get(event.data.messageID)
+            const existing = position === undefined ? undefined : draft[position]
+            if (existing?.type === "user") {
+              existing.text = event.data.prompt.text
+              existing.files = event.data.prompt.files
+              existing.agents = event.data.prompt.agents
+              existing.time.created = event.data.timestamp
+              if (existing.metadata?.queued === true) {
+                delete existing.metadata.queued
+                if (Object.keys(existing.metadata).length === 0) existing.metadata = undefined
+              }
+              return
+            }
             message.append(draft, index, {
               id: event.data.messageID,
               type: "user",
@@ -206,6 +219,17 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           break
         }
         case "session.next.prompt.admitted":
+          message.update(event.data.sessionID, (draft, index) => {
+            message.append(draft, index, {
+              id: event.data.messageID,
+              type: "user",
+              text: event.data.prompt.text,
+              files: event.data.prompt.files,
+              agents: event.data.prompt.agents,
+              metadata: event.data.delivery === "queue" ? { queued: true } : undefined,
+              time: { created: event.data.timestamp },
+            })
+          })
           break
         case "session.next.context.updated":
           message.update(event.data.sessionID, (draft, index) => {
@@ -590,12 +614,12 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             return position === undefined ? undefined : messages?.[position]
           },
           async refresh(sessionID: string) {
+            const live = [...(store.session.message[sessionID] ?? [])]
             setStore("session", "message", sessionID, [])
             messageIndex.set(sessionID, new Map())
             const loaded = mutable(
               (await sdk.api.message.list({ sessionID, limit: 200, order: "desc" })).data,
             ).toReversed()
-            const live = store.session.message[sessionID] ?? []
             const liveByID = new Map(live.map((message) => [message.id, message]))
             const messages = [...loaded.map((message) => liveByID.get(message.id) ?? message), ...live]
               .filter((message, index, messages) => messages.findIndex((item) => item.id === message.id) === index)

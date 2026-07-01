@@ -778,7 +778,7 @@ test("settles pending tools when a live failure arrives", async () => {
   }
 })
 
-test("renders admitted prompts only after they become model-visible", async () => {
+test("renders admitted prompts immediately and clears queued marker when promoted", async () => {
   const events = createEventStream()
   const calls = createFetch(undefined, events)
   let sync!: ReturnType<typeof useData>
@@ -817,10 +817,12 @@ test("renders admitted prompts only after they become model-visible", async () =
         messageID: "msg_user_1",
         timestamp: 0,
         prompt: { text: "hello" },
-        delivery: "steer",
+        delivery: "queue",
       },
     })
-    expect(sync.session.message.list("session-1") ?? []).toEqual([])
+    await wait(() => sync.session.message.list("session-1")?.length === 1)
+    const admitted = sync.session.message.list("session-1")?.[0]
+    expect(admitted).toMatchObject({ id: "msg_user_1", type: "user", text: "hello", metadata: { queued: true } })
 
     emitEvent(events, {
       id: "evt_prompted_1",
@@ -830,17 +832,18 @@ test("renders admitted prompts only after they become model-visible", async () =
         messageID: "msg_user_1",
         timestamp: 0,
         prompt: { text: "hello" },
-        delivery: "steer",
+        delivery: "queue",
       },
     })
 
-    await wait(() => sync.session.message.list("session-1")?.length === 1)
+    await wait(() => sync.session.message.list("session-1")?.[0]?.metadata?.queued !== true)
     expect(received.slice(-2)).toEqual(["session.next.prompt.admitted", "session.next.prompted"])
     unsubscribe()
     const message = sync.session.message.list("session-1")?.[0]
     expect(message?.type).toBe("user")
     if (message?.type !== "user") return
     expect(message).toMatchObject({ id: "msg_user_1", text: "hello" })
+    expect(message.metadata?.queued).toBeUndefined()
     expect(sync.session.message.ids("session-1")).toEqual(["msg_user_1"])
     expect(sync.session.message.ids("missing")).toEqual([])
     expect(sync.session.message.get("session-1", "msg_user_1")).toBe(message)
