@@ -1,6 +1,7 @@
 import { NodeHttpServer } from "@effect/platform-node"
 import { Credential } from "@opencode-ai/core/credential"
 import { PermissionSaved } from "@opencode-ai/core/permission/saved"
+import { Global } from "@opencode-ai/core/global"
 import { Context, Layer, Option, Schedule } from "effect"
 import * as Effect from "effect/Effect"
 import { HttpRouter, HttpServer } from "effect/unstable/http"
@@ -17,6 +18,7 @@ import { randomBytes } from "crypto"
 export default Runtime.handler(
   Commands.commands.serve,
   Effect.fn("cli.serve")(function* (input) {
+    if (input.service) yield* Effect.sync(() => process.chdir(Global.Path.home))
     return yield* Effect.scoped(
       Effect.gen(function* () {
         const daemon = yield* Daemon.Service
