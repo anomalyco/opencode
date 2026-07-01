@@ -113,9 +113,7 @@ function configurationValue(settings: unknown, section?: string) {
   return result ?? null
 }
 
-// TypeScript's built-in LSP pushes diagnostics aggressively on first open.
-// We seed the push cache on the very first publish so waitForFreshPush can
-// resolve immediately instead of waiting for a second debounced push.
+// Seed the push cache on the first publish so waitForFreshPush resolves without waiting for a second debounced push.
 function shouldSeedDiagnosticsOnFirstPush(serverID: string) {
   return serverID === "typescript"
 }
@@ -126,6 +124,8 @@ export async function create(input: {
   root: string
   directory: string
   instance: InstanceContext
+  // Fired debounced per path (latest-wins) with the deduped push+pull merge; empty means cleared. `path` is absolute.
+  onDiagnostics?: (input: { path: string; diagnostics: Diagnostic[] }) => void
 }) {
   const instance = input.instance
 
@@ -144,12 +144,28 @@ export async function create(input: {
   const diagnosticListeners = new Set<(input: { path: string; serverID: string }) => void>()
   const mergedDiagnostics = (filePath: string) =>
     dedupeDiagnostics([...(pushDiagnostics.get(filePath) ?? []), ...(pullDiagnostics.get(filePath) ?? [])])
+  // Coalesce rapid push/pull updates per path into one emit per DIAGNOSTICS_DEBOUNCE_MS window so a typing burst yields one event.
+  const diagnosticEmitTimers = new Map<string, ReturnType<typeof setTimeout>>()
+  const scheduleDiagnosticsEmit = (filePath: string) => {
+    if (!input.onDiagnostics) return
+    const existing = diagnosticEmitTimers.get(filePath)
+    if (existing) clearTimeout(existing)
+    diagnosticEmitTimers.set(
+      filePath,
+      setTimeout(() => {
+        diagnosticEmitTimers.delete(filePath)
+        input.onDiagnostics?.({ path: filePath, diagnostics: mergedDiagnostics(filePath) })
+      }, DIAGNOSTICS_DEBOUNCE_MS),
+    )
+  }
   const updatePushDiagnostics = (filePath: string, next: Diagnostic[]) => {
     pushDiagnostics.set(filePath, next)
     for (const listener of diagnosticListeners) listener({ path: filePath, serverID: input.serverID })
+    scheduleDiagnosticsEmit(filePath)
   }
   const updatePullDiagnostics = (filePath: string, next: Diagnostic[]) => {
     pullDiagnostics.set(filePath, next)
+    scheduleDiagnosticsEmit(filePath)
   }
   const emitRegistrationChange = () => {
     for (const listener of [...registrationListeners]) listener()
@@ -245,6 +261,16 @@ export async function create(input: {
           },
           publishDiagnostics: {
             versionSupport: false,
+          },
+          completion: {
+            dynamicRegistration: true,
+            completionItem: {
+              snippetSupport: true,
+              insertReplaceSupport: true,
+              documentationFormat: ["markdown", "plaintext"],
+              labelDetailsSupport: true,
+            },
+            contextSupport: true,
           },
         },
       },
@@ -551,16 +577,21 @@ export async function create(input: {
       return connection
     },
     notify: {
-      async open(request: { path: string }) {
+      async open(request: { path: string; buffer?: { text: string; version: number } }) {
         request.path = Filesystem.normalizePath(
           path.isAbsolute(request.path) ? request.path : path.resolve(input.directory, request.path),
         )
-        const text = await Filesystem.readText(request.path)
+        // An editor buffer overlays disk (caller owns the version) while edit mode is active; on didClose the server reverts to disk-backed analysis. Without a buffer we keep the disk-read + auto-increment path.
+        const text = request.buffer ? request.buffer.text : await Filesystem.readText(request.path)
         const extension = path.extname(request.path)
         const languageId = LANGUAGE_EXTENSIONS[extension] ?? "plaintext"
 
         const document = files[request.path]
         if (document !== undefined) {
+          // Editor owns versions; ignore stale/duplicate (<= stored) to avoid didChange rejections from strict servers.
+          if (request.buffer && request.buffer.version <= document.version) {
+            return document.version
+          }
           // Do not wipe diagnostics on didChange. Some servers (e.g. clangd) only
           // re-emit diagnostics when the content actually changes, so clearing
           // here would lose errors for no-op touchFile calls. Let the server's
@@ -574,7 +605,7 @@ export async function create(input: {
             ],
           })
 
-          const next = document.version + 1
+          const next = request.buffer ? request.buffer.version : document.version + 1
           files[request.path] = { version: next, text }
           await connection.sendNotification("textDocument/didChange", {
             textDocument: {
@@ -608,16 +639,31 @@ export async function create(input: {
 
         pushDiagnostics.delete(request.path)
         pullDiagnostics.delete(request.path)
+        const initialVersion = request.buffer ? request.buffer.version : 0
         await connection.sendNotification("textDocument/didOpen", {
           textDocument: {
             uri: pathToFileURL(request.path).href,
             languageId,
-            version: 0,
+            version: initialVersion,
             text,
           },
         })
-        files[request.path] = { version: 0, text }
-        return 0
+        files[request.path] = { version: initialVersion, text }
+        return initialVersion
+      },
+      async close(request: { path: string }) {
+        request.path = Filesystem.normalizePath(
+          path.isAbsolute(request.path) ? request.path : path.resolve(input.directory, request.path),
+        )
+        if (files[request.path] === undefined) return
+        await connection.sendNotification("textDocument/didClose", {
+          textDocument: {
+            uri: pathToFileURL(request.path).href,
+          },
+        })
+        delete files[request.path]
+        pushDiagnostics.delete(request.path)
+        pullDiagnostics.delete(request.path)
       },
     },
     get diagnostics() {
@@ -638,6 +684,8 @@ export async function create(input: {
       await waitForFullDiagnostics({ path: normalizedPath, version: request.version, after: request.after })
     },
     async shutdown() {
+      for (const timer of diagnosticEmitTimers.values()) clearTimeout(timer)
+      diagnosticEmitTimers.clear()
       connection.end()
       connection.dispose()
       await Process.stop(input.server.process)

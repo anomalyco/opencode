@@ -99,7 +99,20 @@ export const FilePaths = {
   list: "/file",
   content: "/file/content",
   status: "/file/status",
+  write: "/file/write",
 } as const
+
+export const FileWritePayload = Schema.Struct({
+  content: Schema.String,
+  expectedSha: Schema.optional(Schema.String),
+})
+
+export const FileWriteResult = Schema.Struct({
+  path: Schema.String,
+  written: Schema.Boolean,
+  conflict: Schema.optional(Schema.Boolean),
+  sha: Schema.optional(Schema.String),
+}).annotate({ identifier: "FileWriteResult" })
 
 export const FileApi = HttpApi.make("file")
   .add(
@@ -163,6 +176,18 @@ export const FileApi = HttpApi.make("file")
             identifier: "file.status",
             summary: "Get file status",
             description: "Get the git status of all files in the project.",
+          }),
+        ),
+        HttpApiEndpoint.put("write", FilePaths.write, {
+          query: FileQuery,
+          payload: FileWritePayload,
+          success: described(FileWriteResult, "Write result"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "file.write",
+            summary: "Write file",
+            description:
+              "Write content to a file in the project, with optional conflict detection.",
           }),
         ),
       )

@@ -69,6 +69,7 @@ export type Event =
   | EventQuestionV2Rejected
   | EventTodoUpdated
   | EventLspUpdated
+  | EventLspDiagnostics
   | EventPermissionAsked
   | EventPermissionReplied
   | EventTuiPromptAppend2
@@ -668,6 +669,14 @@ export type Todo = {
    * Priority level of the task: high, medium, low
    */
   priority: string
+}
+
+export type Diagnostic = {
+  range: Range
+  severity?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  message: string
+  source?: string
+  code?: string | number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
 }
 
 export type SessionStatus =
@@ -1371,6 +1380,14 @@ export type GlobalEvent = {
         type: "lsp.updated"
         properties: {
           [key: string]: unknown
+        }
+      }
+    | {
+        id: string
+        type: "lsp.diagnostics"
+        properties: {
+          path: string
+          diagnostics: Array<Diagnostic>
         }
       }
     | {
@@ -2295,6 +2312,13 @@ export type File = {
   status: "added" | "deleted" | "modified"
 }
 
+export type FileWriteResult = {
+  path: string
+  written: boolean
+  conflict?: boolean
+  sha?: string
+}
+
 export type Path = {
   home: string
   state: string
@@ -2954,6 +2978,14 @@ export type ProjectCopyError = {
 
 export type EffectHttpApiErrorForbidden = {
   _tag: "Forbidden"
+}
+
+export type Diagnostic1 = {
+  range: Range
+  severity?: number | "NaN" | "Infinity" | "-Infinity"
+  message: string
+  source?: string
+  code?: string | number | "NaN" | "Infinity" | "-Infinity"
 }
 
 export type EventTuiPromptAppend2 = {
@@ -6851,6 +6883,15 @@ export type EventLspUpdated = {
   }
 }
 
+export type EventLspDiagnostics = {
+  id: string
+  type: "lsp.diagnostics"
+  properties: {
+    path: string
+    diagnostics: Array<Diagnostic1>
+  }
+}
+
 export type EventPermissionAsked = {
   id: string
   type: "permission.asked"
@@ -8076,6 +8117,38 @@ export type FileStatusResponses = {
 
 export type FileStatusResponse = FileStatusResponses[keyof FileStatusResponses]
 
+export type FileWriteData = {
+  body?: {
+    content: string
+    expectedSha?: string
+  }
+  path?: never
+  query: {
+    directory?: string
+    workspace?: string
+    path: string
+  }
+  url: "/file/write"
+}
+
+export type FileWriteErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type FileWriteError = FileWriteErrors[keyof FileWriteErrors]
+
+export type FileWriteResponses = {
+  /**
+   * Write result
+   */
+  200: FileWriteResult
+}
+
+export type FileWriteResponse = FileWriteResponses[keyof FileWriteResponses]
+
 export type InstanceDisposeData = {
   body?: never
   path?: never
@@ -8422,6 +8495,225 @@ export type FormatterStatusResponses = {
 }
 
 export type FormatterStatusResponse = FormatterStatusResponses[keyof FormatterStatusResponses]
+
+export type LspHoverData = {
+  body?: {
+    path: string
+    line: number
+    character: number
+    triggerKind?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    triggerCharacter?: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/lsp/hover"
+}
+
+export type LspHoverErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type LspHoverError = LspHoverErrors[keyof LspHoverErrors]
+
+export type LspHoverResponses = {
+  /**
+   * Hover result
+   */
+  200: unknown
+}
+
+export type LspDefinitionData = {
+  body?: {
+    path: string
+    line: number
+    character: number
+    triggerKind?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    triggerCharacter?: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/lsp/definition"
+}
+
+export type LspDefinitionErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type LspDefinitionError = LspDefinitionErrors[keyof LspDefinitionErrors]
+
+export type LspDefinitionResponses = {
+  /**
+   * Definition locations
+   */
+  200: unknown
+}
+
+export type LspReferencesData = {
+  body?: {
+    path: string
+    line: number
+    character: number
+    triggerKind?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    triggerCharacter?: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/lsp/references"
+}
+
+export type LspReferencesErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type LspReferencesError = LspReferencesErrors[keyof LspReferencesErrors]
+
+export type LspReferencesResponses = {
+  /**
+   * Reference locations
+   */
+  200: unknown
+}
+
+export type LspCompletionData = {
+  body?: {
+    path: string
+    line: number
+    character: number
+    triggerKind?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    triggerCharacter?: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/lsp/completion"
+}
+
+export type LspCompletionErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type LspCompletionError = LspCompletionErrors[keyof LspCompletionErrors]
+
+export type LspCompletionResponses = {
+  /**
+   * Completion result
+   */
+  200: unknown
+}
+
+export type LspDiagnosticsData = {
+  body?: never
+  path?: never
+  query: {
+    directory?: string
+    workspace?: string
+    path: string
+  }
+  url: "/lsp/diagnostics"
+}
+
+export type LspDiagnosticsErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type LspDiagnosticsError = LspDiagnosticsErrors[keyof LspDiagnosticsErrors]
+
+export type LspDiagnosticsResponses = {
+  /**
+   * Diagnostics for the file
+   */
+  200: Array<Diagnostic>
+}
+
+export type LspDiagnosticsResponse = LspDiagnosticsResponses[keyof LspDiagnosticsResponses]
+
+export type LspBufferData = {
+  body?: {
+    path: string
+    text: string
+    version: number
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/lsp/buffer"
+}
+
+export type LspBufferErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type LspBufferError = LspBufferErrors[keyof LspBufferErrors]
+
+export type LspBufferResponses = {
+  /**
+   * Buffer synced
+   */
+  200: boolean
+}
+
+export type LspBufferResponse = LspBufferResponses[keyof LspBufferResponses]
+
+export type LspBufferCloseData = {
+  body?: {
+    path: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/lsp/buffer/close"
+}
+
+export type LspBufferCloseErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type LspBufferCloseError = LspBufferCloseErrors[keyof LspBufferCloseErrors]
+
+export type LspBufferCloseResponses = {
+  /**
+   * Buffer closed
+   */
+  200: boolean
+}
+
+export type LspBufferCloseResponse = LspBufferCloseResponses[keyof LspBufferCloseResponses]
 
 export type McpStatusData = {
   body?: never

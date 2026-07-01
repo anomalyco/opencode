@@ -23,6 +23,7 @@ import { useSettings } from "@/context/settings"
 import { useSync } from "@/context/sync"
 import { createFileTabListSync } from "@/pages/session/file-tab-scroll"
 import { FileTabContent } from "@/pages/session/file-tabs"
+import { guardTab } from "@/pages/session/file-save"
 import {
   createOpenSessionFileTab,
   createSessionTabs,
@@ -191,6 +192,30 @@ export function SessionSidePanel(props: {
     setStore("activeDraggable", undefined)
   }
 
+  const closeTabGuarded = async (tab: string) => {
+    if (!(await guardTab(tab))) return
+    tabs().close(tab)
+  }
+
+  // Run the unsaved guard before switching away from a dirty active file tab (switching disposes its editor buffer).
+  const openTabGuarded = (value: string) => {
+    const next = normalizeTab(value)
+    const current = activeFileTab()
+    if (!current || current === next) {
+      openTab(value)
+      return
+    }
+    void guardTab(current).then((ok) => {
+      if (ok) openTab(value)
+    })
+  }
+
+  // Ignore the controlled <Tabs> stale-key feedback during a programmatic tab write (see layout tabsWriting).
+  const onTabsChange = (value: string) => {
+    if (layout.tabsWriting()) return
+    openTabGuarded(value)
+  }
+
   createEffect(() => {
     if (!file.ready()) return
 
@@ -253,7 +278,7 @@ export function SessionSidePanel(props: {
                 >
                   <DragDropSensors />
                   <ConstrainDragYAxis />
-                  <Tabs value={activeTab()} onChange={openTab}>
+                  <Tabs value={activeTab()} onChange={onTabsChange}>
                     <div class="sticky top-0 shrink-0 flex">
                       <Tabs.List
                         ref={(el: HTMLDivElement) => {
@@ -300,7 +325,7 @@ export function SessionSidePanel(props: {
                           </Tabs.Trigger>
                         </Show>
                         <SortableProvider ids={openedTabs()}>
-                          <For each={openedTabs()}>{(tab) => <SortableTab tab={tab} onTabClose={tabs().close} />}</For>
+                          <For each={openedTabs()}>{(tab) => <SortableTab tab={tab} onTabClose={(t) => void closeTabGuarded(t)} />}</For>
                         </SortableProvider>
                         <div class="bg-background-stronger h-full shrink-0 sticky right-0 z-10 flex items-center justify-center pr-3">
                           <TooltipKeybind
@@ -443,7 +468,7 @@ export function SessionSidePanel(props: {
                             class="pt-3"
                             modified={diffFiles()}
                             kinds={kinds()}
-                            onFileClick={(node) => openTab(file.tab(node.path))}
+                            onFileClick={(node) => openTabGuarded(file.tab(node.path))}
                           />
                         </Match>
                       </Switch>
