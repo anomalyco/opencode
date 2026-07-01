@@ -1,0 +1,137 @@
+---
+title: Richtlinien
+description: Steuern Sie, welche konfigurierten Ressourcen OpenCode verwenden darf.
+---
+
+Richtlinien legen fest, ob OpenCode eine Aktion für eine bestimmte Ressource ausführen darf. Diese Funktion befindet sich im Teststadium und wird über das Array `experimental.policies` in der Datei `opencode.json` konfiguriert.
+
+Richtlinien sind von [Berechtigungen](/docs/permissions) zu unterscheiden. Berechtigungen legen fest, was Tools während einer Sitzung tun dürfen, während Richtlinien regeln, ob OpenCode eine Ressource wie beispielsweise einen LLM-Anbieter nutzen darf.
+
+---
+
+## Konfiguration
+
+Jede Richtlinienangabe umfasst drei Felder:
+
+- `effect` - Entweder `"allow"` oder `"deny"`.
+- `action` - Die Aktion, die gesteuert werden soll.
+- `resource` - Die Ressourcen-ID oder ein Platzhalter, auf das sich die Anweisung bezieht.
+
+Beispiel: Die Nutzung des Anbieters `openai` untersagen:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {
+    "policies": [
+      {
+        "effect": "deny",
+        "action": "provider.use",
+        "resource": "openai"
+      }
+    ]
+  }
+}
+```
+
+Ein Anbieter, dessen Nutzung aufgrund einer Richtlinie untersagt ist, steht weder für die Modellauswahl noch für die Modellnutzung zur Verfügung, selbst wenn er über die erforderlichen Berechtigungen verfügt oder anderweitig korrekt konfiguriert ist.
+
+---
+
+## Verfügbare Richtlinien
+
+OpenCode unterstützt derzeit eine Richtlinienmaßnahme:
+
+| Aktion         | Ressource                  | Beschreibung                                              |
+| -------------- | -------------------------- | --------------------------------------------------------- |
+| `provider.use` | Anbieter-ID, z.B. `openai` | Die Nutzung eines LLM-Anbieters zulassen oder untersagen. |
+
+In Zukunft könnten weitere politische Maßnahmen hinzukommen.
+
+---
+
+## Abgleich
+
+Das Feld `resource` unterstützt den Einsatz von Platzhaltern. Verwenden Sie `*`, um null oder mehr Zeichen zu ersetzen, und `?`, um ein Zeichen zu ersetzen.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {
+    "policies": [
+      {
+        "effect": "deny",
+        "action": "provider.use",
+        "resource": "company-*"
+      }
+    ]
+  }
+}
+```
+
+Dadurch wird die Nutzung von Anbietern wie `company-us` und `company-eu` untersagt.
+
+---
+
+## Reihenfolge der Regelanwendung
+
+Wenn mehrere Anweisungen zutreffen, hat die zuletzt genannte Anweisung Vorrang. Fügen Sie zunächst allgemeine Regeln ein und anschließend spezifischere Ausnahmen.
+
+Beispiel: Erlaube nur Anthropic
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {
+    "policies": [
+      {
+        "effect": "deny",
+        "action": "provider.use",
+        "resource": "*"
+      },
+      {
+        "effect": "allow",
+        "action": "provider.use",
+        "resource": "anthropic"
+      }
+    ]
+  }
+}
+```
+
+Wenn keine Richtlinie auf einen Anbieter zutrifft, ist die Nutzung des Anbieters standardmäßig zulässig.
+
+Richtlinien können sowohl in Ihrer globalen Konfiguration als auch in der Projektkonfiguration festgelegt werden. Wenn Richtlinien aus beiden Bereichen denselben Anbieter betreffen, hat Ihre globale Richtlinie Vorrang vor der Projektrichtlinie. Dadurch wird verhindert, dass ein Repository einen Anbieter wieder aktiviert, den Sie global gesperrt haben.
+
+---
+
+## Anbieter-Listen
+
+Verwenden Sie zur Steuerung des Providerzugriffs Richtlinien anstelle der älteren Einstellungen `disabled_providers` und `enabled_providers`.
+
+Um `disabled_providers` zu ersetzen:
+
+```json title="opencode.json"
+{
+  "experimental": {
+    "policies": [
+      { "effect": "deny", "action": "provider.use", "resource": "openai" },
+      { "effect": "deny", "action": "provider.use", "resource": "google" }
+    ]
+  }
+}
+```
+
+Um `enabled_providers` zu ersetzen, blockieren Sie zunächst alle Anbieter und lassen Sie anschließend die ausgewählten Anbieter zu:
+
+```json title="opencode.json"
+{
+  "experimental": {
+    "policies": [
+      { "effect": "deny", "action": "provider.use", "resource": "*" },
+      { "effect": "allow", "action": "provider.use", "resource": "anthropic" },
+      { "effect": "allow", "action": "provider.use", "resource": "openai" }
+    ]
+  }
+}
+```
