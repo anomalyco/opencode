@@ -139,7 +139,11 @@ await $`rm -rf dist`
 
 const binaries: Record<string, string> = {}
 if (!skipInstall) {
-  await $`bun install --cwd ${workspaceRoot} --frozen-lockfile`
+  // On Windows, use the hoisted linker (matches .github/actions/setup-bun) so
+  // native postinstalls like tree-sitter-powershell's node-gyp rebuild resolve
+  // correctly; the default linker layout breaks node-gyp on Windows runners.
+  const linkerFlag = process.platform === "win32" ? ["--linker", "hoisted"] : []
+  await $`bun install --cwd ${workspaceRoot} --frozen-lockfile ${linkerFlag}`
   await $`bun install --os="*" --cpu="*" @opentui/core@${pkg.dependencies["@opentui/core"]}`
   await $`bun install --os="*" --cpu="*" @parcel/watcher@${pkg.dependencies["@parcel/watcher"]}`
   await $`bun install --os="*" --cpu="*" @ff-labs/fff-bun@${pkg.dependencies["@ff-labs/fff-bun"]}`

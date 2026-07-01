@@ -51,6 +51,25 @@ jobs:
       - name: Setup Bun
         uses: ./.github/actions/setup-bun
 
+      - name: Ensure ripgrep on PATH
+        shell: bash
+        run: |
+          # The Ripgrep service downloads + PowerShell-extracts rg when it isn't on
+          # PATH, which hangs the ripgrep tests (~30s timeout) on the Windows runner.
+          # Guarantee a system rg so that download path is never taken.
+          if command -v rg >/dev/null 2>&1; then
+            echo "rg already present: $(rg --version | head -1)"
+            exit 0
+          fi
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            choco install ripgrep -y --no-progress
+          elif [ "$RUNNER_OS" = "Linux" ]; then
+            sudo apt-get update && sudo apt-get install -y ripgrep
+          else
+            brew install ripgrep
+          fi
+          rg --version | head -1
+
       - name: Configure git identity
         run: |
           git config --global user.email "bot@opencode.ai"
@@ -188,9 +207,6 @@ jobs:
       - name: Setup Bun
         uses: ./.github/actions/setup-bun
 
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-
       - name: Build single-platform CLI
         run: bun run ./packages/opencode/script/build.ts --single --skip-embed-web-ui
         env:
@@ -243,9 +259,6 @@ jobs:
       - name: Setup Bun
         uses: ./.github/actions/setup-bun
 
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-
       - name: Build single-platform CLI
         run: bun run ./packages/opencode/script/build.ts --single --skip-embed-web-ui
         env:
@@ -279,9 +292,6 @@ jobs:
 
       - name: Setup Bun
         uses: ./.github/actions/setup-bun
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
 
       - name: Install previous released opencode
         run: |
