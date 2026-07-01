@@ -7,19 +7,12 @@ import { ShellID } from "./id"
 const PS = new Set(["powershell", "pwsh"])
 const CMD = new Set(["cmd"])
 
-const descriptions = {
-  bash: "Clear, concise description of what this command does in 5-10 words. Examples:\nInput: ls\nOutput: Lists files in current directory\n\nInput: git status\nOutput: Shows working tree status\n\nInput: npm install\nOutput: Installs package dependencies\n\nInput: mkdir foo\nOutput: Creates directory 'foo'",
-  powershell:
-    'Clear, concise description of what this command does in 5-10 words. Examples:\nInput: Get-ChildItem -LiteralPath "."\nOutput: Lists current directory\n\nInput: git status\nOutput: Shows working tree status\n\nInput: npm install\nOutput: Installs package dependencies\n\nInput: New-Item -ItemType Directory -Path "tmp"\nOutput: Creates directory tmp',
-  cmd: 'Clear, concise description of what this command does in 5-10 words. Examples:\nInput: dir\nOutput: Lists current directory\n\nInput: if exist "package.json" type "package.json"\nOutput: Prints package.json when it exists\n\nInput: mkdir tmp\nOutput: Creates directory tmp',
-}
-
 export type Limits = {
   maxLines: number
   maxBytes: number
 }
 
-export function parameterSchema(description: string) {
+export function parameterSchema() {
   return Schema.Struct({
     command: Schema.String.annotate({ description: "The command to execute" }),
     timeout: Schema.optional(PositiveInt).annotate({ description: "Optional timeout in milliseconds" }),
@@ -34,7 +27,7 @@ export function parameterSchema(description: string) {
   })
 }
 
-export const Parameters = parameterSchema(descriptions.bash)
+export const Parameters = parameterSchema()
 export type Parameters = Schema.Schema.Type<typeof Parameters>
 
 function renderPrompt(template: string, values: Record<string, string>) {
@@ -249,7 +242,6 @@ function profile(name: string, platform: NodeJS.Platform, limits: Limits, defaul
       gitCommandRestriction: "git commands",
       createPrInstruction: "Create PR using a temporary body file so cmd.exe quoting stays simple.",
       createPrExample: `(\n  echo ## Summary\n  echo - ^<1-3 bullet points^>\n) > pr-body.txt\ngh pr create --title "the pr title" --body-file pr-body.txt`,
-      parameterDescription: descriptions.cmd,
     }
   }
   if (isPowerShell) {
@@ -271,7 +263,6 @@ function profile(name: string, platform: NodeJS.Platform, limits: Limits, defaul
 ## Summary
 - <1-3 bullet points>
 '@`,
-      parameterDescription: descriptions.powershell,
     }
   }
   return {
@@ -287,7 +278,6 @@ function profile(name: string, platform: NodeJS.Platform, limits: Limits, defaul
     createPrExample: `gh pr create --title "the pr title" --body "$(cat <<'EOF'
 ## Summary
 <1-3 bullet points>`,
-    parameterDescription: descriptions.bash,
   }
 }
 
@@ -307,7 +297,7 @@ export function render(name: string, platform: NodeJS.Platform, limits: Limits, 
       createPrInstruction: selected.createPrInstruction,
       createPrExample: selected.createPrExample,
     }),
-    parameters: parameterSchema(selected.parameterDescription),
+    parameters: parameterSchema(),
   }
 }
 

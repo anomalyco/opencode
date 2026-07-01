@@ -1,5 +1,4 @@
 import {
-  batch,
   createEffect,
   createMemo,
   createResource,
@@ -13,7 +12,7 @@ import {
   type Accessor,
 } from "solid-js"
 import { makeEventListener } from "@solid-primitives/event-listener"
-import { useLocation, useNavigate, useParams } from "@solidjs/router"
+import { useNavigate, useParams } from "@solidjs/router"
 import { useLayout, LocalProject } from "@/context/layout"
 import { useServerSync } from "@/context/server-sync"
 import { Persist, persisted } from "@/utils/persist"
@@ -21,12 +20,13 @@ import { base64Encode } from "@opencode-ai/core/util/encode"
 import { decode64 } from "@/utils/base64"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Button } from "@opencode-ai/ui/button"
+import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { getFilename } from "@opencode-ai/core/util/path"
-import { Session, type Message } from "@opencode-ai/sdk/v2/client"
+import { Session } from "@opencode-ai/sdk/v2/client"
 import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
 import { createStore, produce, reconcile } from "solid-js/store"
@@ -37,16 +37,7 @@ import { toaster } from "@opencode-ai/ui/toast"
 import { setV2Toast, showToast, ToastRegion } from "@/utils/toast"
 import { useServerSDK } from "@/context/server-sdk"
 import { clearWorkspaceTerminals } from "@/context/terminal"
-import { dropSessionCaches, pickSessionCacheEvictions } from "@/context/global-sync/session-cache"
-import {
-  clearSessionPrefetchInflight,
-  clearSessionPrefetch,
-  getSessionPrefetch,
-  isSessionPrefetchCurrent,
-  runSessionPrefetch,
-  setSessionPrefetch,
-  shouldSkipSessionPrefetch,
-} from "@/context/global-sync/session-prefetch"
+import { pickSessionCacheEvictions } from "@/context/global-sync/session-cache"
 import { useNotification } from "@/context/notification"
 import { usePermission } from "@/context/permission"
 import { Binary } from "@opencode-ai/core/util/binary"
@@ -92,7 +83,7 @@ import {
 import { ProjectDragOverlay, SortableProject, type ProjectSidebarContext } from "./layout/sidebar-project"
 import { SidebarContent } from "./layout/sidebar-shell"
 
-export default function Layout(props: ParentProps) {
+export default function LegacyLayout(props: ParentProps) {
   const serverSDK = useServerSDK()
   const [store, setStore, , ready] = persisted(
     Persist.serverGlobal(serverSDK().scope, "layout.page", ["layout.page.v1"]),
@@ -131,10 +122,8 @@ export default function Layout(props: ParentProps) {
   const command = useCommand()
   const theme = useTheme()
   const language = useLanguage()
-  const newDesign = createMemo(() => settings.general.newLayoutDesigns())
-  createEffect(() => setV2Toast(newDesign()))
+  createEffect(() => setV2Toast(false))
   const initialDirectory = decode64(params.dir)
-  const location = useLocation()
   const route = createMemo(() => {
     const slug = params.dir
     if (!slug) return { slug, dir: "" }
@@ -158,7 +147,7 @@ export default function Layout(props: ParentProps) {
   const currentDir = createMemo(() => route().dir)
 
   const [state, setState] = createStore({
-    autoselect: !initialDirectory && !newDesign(),
+    autoselect: !initialDirectory,
     busyWorkspaces: {} as Record<string, boolean>,
     hoverProject: undefined as string | undefined,
     scrollSessionKey: undefined as string | undefined,
@@ -686,7 +675,6 @@ export default function Layout(props: ParentProps) {
     serverSDK().url
 
     prefetchToken.value += 1
-    clearSessionPrefetchInflight(serverSDK().scope)
     prefetchQueues.clear()
   })
 
@@ -714,88 +702,12 @@ export default function Layout(props: ParentProps) {
     return created
   }
 
-  const mergeByID = <T extends { id: string }>(current: T[], incoming: T[]) => {
-    if (current.length === 0) {
-      return incoming.slice().sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
-    }
-
-    const map = new Map<string, T>()
-    for (const item of current) {
-      map.set(item.id, item)
-    }
-    for (const item of incoming) {
-      map.set(item.id, item)
-    }
-    return [...map.values()].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
-  }
-
   async function prefetchMessages(directory: string, sessionID: string, token: number) {
-    const [store, setStore] = serverSync().child(directory, { bootstrap: false })
-
-    return runSessionPrefetch({
-      scope: serverSDK().scope,
-      directory,
-      sessionID,
-      task: (rev) =>
-        retry(() => serverSDK().client.session.messages({ directory, sessionID, limit: prefetchChunk }))
-          .then((messages) => {
-            if (prefetchToken.value !== token) return
-            if (!isSessionPrefetchCurrent(serverSDK().scope, directory, sessionID, rev)) return
-
-            const items = (messages.data ?? []).filter((x) => !!x?.info?.id)
-            const next = items.map((x) => x.info).filter((m): m is Message => !!m?.id)
-            const sorted = mergeByID([], next)
-            const stale = markPrefetched(directory, sessionID)
-            const cursor = messages.response.headers.get("x-next-cursor") ?? undefined
-            const meta = {
-              limit: sorted.length,
-              cursor,
-              complete: !cursor,
-              at: Date.now(),
-            }
-
-            if (stale.length > 0) {
-              clearSessionPrefetch(serverSDK().scope, directory, stale)
-              for (const id of stale) {
-                serverSync().todo.set(id, undefined)
-              }
-            }
-
-            const current = store.message[sessionID] ?? []
-            const merged = mergeByID(
-              current.filter((item): item is Message => !!item?.id),
-              sorted,
-            )
-
-            if (!isSessionPrefetchCurrent(serverSDK().scope, directory, sessionID, rev)) return
-
-            batch(() => {
-              if (stale.length > 0) {
-                setStore(
-                  produce((draft) => {
-                    dropSessionCaches(draft, stale)
-                  }),
-                )
-              }
-
-              setStore("message", sessionID, reconcile(merged, { key: "id" }))
-              setSessionPrefetch({ scope: serverSDK().scope, directory, sessionID, ...meta })
-
-              for (const message of items) {
-                const currentParts = store.part[message.info.id] ?? []
-                const mergedParts = mergeByID(
-                  currentParts.filter((item): item is (typeof currentParts)[number] & { id: string } => !!item?.id),
-                  message.parts.filter((item): item is (typeof message.parts)[number] & { id: string } => !!item?.id),
-                )
-
-                setStore("part", message.info.id, reconcile(mergedParts, { key: "id" }))
-              }
-            })
-
-            return meta
-          })
-          .catch(() => undefined),
-    })
+    await serverSync()
+      .session.prefetch(sessionID, prefetchChunk)
+      .catch(() => {})
+    if (prefetchToken.value !== token) return
+    for (const stale of markPrefetched(directory, sessionID)) serverSync().session.evict(stale)
   }
 
   const pumpPrefetch = (directory: string) => {
@@ -822,15 +734,7 @@ export default function Layout(props: ParentProps) {
     const directory = session.directory
     if (!directory) return
 
-    const [store] = serverSync().child(directory, { bootstrap: false })
-    const cached = untrack(() => {
-      const info = getSessionPrefetch(serverSDK().scope, directory, session.id)
-      return shouldSkipSessionPrefetch({
-        message: store.message[session.id] !== undefined,
-        info,
-        chunk: prefetchChunk,
-      })
-    })
+    const cached = untrack(() => !serverSync().session.shouldPrefetch(session.id, prefetchChunk))
     if (cached) return
 
     const q = queueFor(directory)
@@ -996,7 +900,7 @@ export default function Layout(props: ParentProps) {
         id: "sidebar.toggle",
         title: language.t("command.sidebar.toggle"),
         category: language.t("command.category.view"),
-        keybind: newDesign() ? undefined : "mod+b",
+        keybind: "mod+b",
         onSelect: () => layout.sidebar.toggle(),
       },
       {
@@ -1039,18 +943,6 @@ export default function Layout(props: ParentProps) {
         keybind: "mod+comma",
         onSelect: () => openSettings(),
       },
-      ...(platform.platform === "desktop" && platform.exportDebugLogs
-        ? [
-            {
-              id: "logs.export",
-              title: "Export logs",
-              category: language.t("command.category.settings"),
-              onSelect: () => {
-                void platform.exportDebugLogs?.()
-              },
-            },
-          ]
-        : []),
       {
         id: "session.previous",
         title: language.t("command.session.previous"),
@@ -1134,20 +1026,19 @@ export default function Layout(props: ParentProps) {
       },
     ]
 
-    if (!newDesign())
-      Array.from({ length: 9 }, (_, i) => {
-        const index = i
-        const number = index + 1
-        commands.push({
-          id: `project.${number}`,
-          category: language.t("command.category.project"),
-          title: `Open Project {number}`,
-          keybind: `mod+${number}`,
-          disabled: layout.projects.list().length <= index,
-          hidden: true,
-          onSelect: () => navigateToProjectIndex(index),
-        })
+    Array.from({ length: 9 }, (_, i) => {
+      const index = i
+      const number = index + 1
+      commands.push({
+        id: `project.${number}`,
+        category: language.t("command.category.project"),
+        title: `Open Project {number}`,
+        keybind: `mod+${number}`,
+        disabled: layout.projects.list().length <= index,
+        hidden: true,
+        onSelect: () => navigateToProjectIndex(index),
       })
+    })
 
     for (const [id] of availableThemeEntries()) {
       commands.push({
@@ -1302,15 +1193,15 @@ export default function Layout(props: ParentProps) {
     }
     const openSession = async (target: { directory: string; id: string }) => {
       if (!canOpen(target.directory)) return false
-      const [data] = serverSync().child(target.directory, { bootstrap: false })
-      if (data.session.some((item) => item.id === target.id)) {
+      const sync = serverSync().ensureDirSyncContext(target.directory)
+      if (sync.session.get(target.id)) {
         setStore("lastProjectSession", root, { directory: target.directory, id: target.id, at: Date.now() })
         navigateWithSidebarReset(`/${base64Encode(target.directory)}/session/${target.id}`)
         return true
       }
-      const resolved = await serverSDK()
-        .client.session.get({ sessionID: target.id })
-        .then((x) => x.data)
+      const resolved = await sync.session
+        .sync(target.id)
+        .then(() => sync.session.get(target.id))
         .catch(() => undefined)
       if (!resolved?.directory) return false
       if (!canOpen(resolved.directory)) return false
@@ -1812,7 +1703,7 @@ export default function Layout(props: ParentProps) {
   createEffect(() => {
     document.documentElement.style.setProperty(
       "--dialog-left-margin",
-      newDesign() ? "0px" : `${layout.sidebar.opened() ? layout.sidebar.width() : 48}px`,
+      `${layout.sidebar.opened() ? layout.sidebar.width() : 48}px`,
     )
   })
 
@@ -2213,7 +2104,6 @@ export default function Layout(props: ParentProps) {
                       <div class="shrink-0 py-4">
                         <Button
                           size="large"
-                          icon="new-session"
                           class="w-full"
                           onClick={() => {
                             const dir = worktree()
@@ -2221,6 +2111,7 @@ export default function Layout(props: ParentProps) {
                             navigateWithSidebarReset(`/${base64Encode(dir)}/session`)
                           }}
                         >
+                          <IconV2 name="edit" size="small" />
                           {language.t("command.session.new")}
                         </Button>
                       </div>
@@ -2355,176 +2246,158 @@ export default function Layout(props: ParentProps) {
   )
 
   return (
-    <Show
-      when={!newDesign()}
-      fallback={
-        <div class="relative bg-v2-background-bg-deep flex-1 min-h-0 min-w-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text">
-          {autoselecting() ?? ""}
-          <Titlebar update={titlebarUpdate} />
-          <main class="flex-1 min-h-0 min-w-0 overflow-x-hidden flex flex-col items-start contain-strict">
-            <Show when={!autoselecting.loading} fallback={<div class="size-full" />}>
-              {props.children}
-            </Show>
-          </main>
-          {import.meta.env.DEV && import.meta.env.VITE_DISABLE_DEBUG_BAR !== "1" && <DebugBar />}
-          <HelpButton />
-          <ToastRegion v2={newDesign()} />
-        </div>
-      }
-    >
-      <div class="relative bg-background-base flex-1 min-h-0 min-w-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text">
-        {autoselecting() ?? ""}
-        <Titlebar update={titlebarUpdate} />
-        <Show when={updateVersion() !== undefined}>
-          <UpdateAvailableToast version={updateVersion() ?? ""} install={installUpdate} language={language} />
-        </Show>
-        <div class="flex-1 min-h-0 min-w-0 flex">
-          <div class="flex-1 min-h-0 relative">
-            <div class="size-full relative overflow-x-hidden">
-              <nav
-                aria-label={language.t("sidebar.nav.projectsAndSessions")}
-                data-component="sidebar-nav-desktop"
-                classList={{
-                  "hidden xl:block": true,
-                  "absolute inset-y-0 left-0": true,
-                  "z-10": true,
-                }}
-                style={{ width: `${side()}px` }}
-                ref={(el) => {
-                  setState("nav", el)
-                }}
-                onMouseEnter={() => {
-                  disarm()
-                }}
-                onMouseLeave={() => {
-                  aim.reset()
-                  if (!sidebarHovering()) return
+    <div class="relative bg-background-base flex-1 min-h-0 min-w-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text">
+      {autoselecting() ?? ""}
+      <Titlebar update={titlebarUpdate} />
+      <Show when={updateVersion() !== undefined}>
+        <UpdateAvailableToast version={updateVersion() ?? ""} install={installUpdate} language={language} />
+      </Show>
+      <div class="flex-1 min-h-0 min-w-0 flex">
+        <div class="flex-1 min-h-0 relative">
+          <div class="size-full relative overflow-x-hidden">
+            <nav
+              aria-label={language.t("sidebar.nav.projectsAndSessions")}
+              data-component="sidebar-nav-desktop"
+              classList={{
+                "hidden xl:block": true,
+                "absolute inset-y-0 left-0": true,
+                "z-10": true,
+              }}
+              style={{ width: `${side()}px` }}
+              ref={(el) => {
+                setState("nav", el)
+              }}
+              onMouseEnter={() => {
+                disarm()
+              }}
+              onMouseLeave={() => {
+                aim.reset()
+                if (!sidebarHovering()) return
 
-                  arm()
-                }}
-              >
-                <div class="@container w-full h-full contain-strict">{sidebarContent()}</div>
-              </nav>
+                arm()
+              }}
+            >
+              <div class="@container w-full h-full contain-strict">{sidebarContent()}</div>
+            </nav>
 
-              <Show when={layout.sidebar.opened()}>
-                <div
-                  class="hidden xl:block absolute inset-y-0 z-30 w-0 overflow-visible"
-                  style={{ left: `${side()}px` }}
-                  onPointerDown={() => setState("sizing", true)}
-                >
-                  <ResizeHandle
-                    direction="horizontal"
-                    size={layout.sidebar.width()}
-                    min={244}
-                    max={typeof window === "undefined" ? 1000 : window.innerWidth * 0.3 + 64}
-                    onResize={(w) => {
-                      setState("sizing", true)
-                      if (sizet !== undefined) clearTimeout(sizet)
-                      sizet = window.setTimeout(() => setState("sizing", false), 120)
-                      layout.sidebar.resize(w)
-                    }}
-                  />
-                </div>
-              </Show>
-
+            <Show when={layout.sidebar.opened()}>
               <div
-                class="hidden xl:block pointer-events-none absolute top-0 right-0 z-0 border-t border-border-weaker-base"
-                style={{ left: "calc(4rem + 12px)" }}
-              />
-
-              <div class="xl:hidden">
-                <div
-                  classList={{
-                    "fixed inset-x-0 top-10 bottom-0 z-40 transition-opacity duration-200": true,
-                    "opacity-100 pointer-events-auto": layout.mobileSidebar.opened(),
-                    "opacity-0 pointer-events-none": !layout.mobileSidebar.opened(),
-                  }}
-                  onClick={(e) => {
-                    if (e.target === e.currentTarget) layout.mobileSidebar.hide()
+                class="hidden xl:block absolute inset-y-0 z-30 w-0 overflow-visible"
+                style={{ left: `${side()}px` }}
+                onPointerDown={() => setState("sizing", true)}
+              >
+                <ResizeHandle
+                  direction="horizontal"
+                  size={layout.sidebar.width()}
+                  min={244}
+                  max={typeof window === "undefined" ? 1000 : window.innerWidth * 0.3 + 64}
+                  onResize={(w) => {
+                    setState("sizing", true)
+                    if (sizet !== undefined) clearTimeout(sizet)
+                    sizet = window.setTimeout(() => setState("sizing", false), 120)
+                    layout.sidebar.resize(w)
                   }}
                 />
-                <nav
-                  aria-label={language.t("sidebar.nav.projectsAndSessions")}
-                  data-component="sidebar-nav-mobile"
-                  classList={{
-                    "@container fixed top-10 bottom-0 left-0 z-50 w-full max-w-[400px] overflow-hidden border-r border-border-weaker-base bg-background-base transition-transform duration-200 ease-out": true,
-                    "translate-x-0": layout.mobileSidebar.opened(),
-                    "-translate-x-full": !layout.mobileSidebar.opened(),
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  {sidebarContent(true)}
-                </nav>
               </div>
+            </Show>
 
+            <div
+              class="hidden xl:block pointer-events-none absolute top-0 right-0 z-0 border-t border-border-weaker-base"
+              style={{ left: "calc(4rem + 12px)" }}
+            />
+
+            <div class="xl:hidden">
               <div
                 classList={{
-                  "absolute inset-0": true,
-                  "xl:inset-y-0 xl:right-0 xl:left-[var(--main-left)]": true,
-                  "z-20": true,
-                  "transition-[left] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[left] motion-reduce:transition-none":
-                    !state.sizing,
+                  "fixed inset-x-0 top-10 bottom-0 z-40 transition-opacity duration-200": true,
+                  "opacity-100 pointer-events-auto": layout.mobileSidebar.opened(),
+                  "opacity-0 pointer-events-none": !layout.mobileSidebar.opened(),
                 }}
-                style={{
-                  "--main-left": layout.sidebar.opened() ? `${side()}px` : "4rem",
+                onClick={(e) => {
+                  if (e.target === e.currentTarget) layout.mobileSidebar.hide()
                 }}
-              >
-                <main
-                  classList={{
-                    "size-full overflow-x-hidden flex flex-col items-start contain-strict border-t border-border-weak-base bg-background-base xl:border-l xl:rounded-tl-[12px]": true,
-                  }}
-                >
-                  <Show when={!autoselecting.loading} fallback={<div class="size-full" />}>
-                    {props.children}
-                  </Show>
-                </main>
-              </div>
-
-              <div
+              />
+              <nav
+                aria-label={language.t("sidebar.nav.projectsAndSessions")}
+                data-component="sidebar-nav-mobile"
                 classList={{
-                  "hidden xl:flex absolute inset-y-0 left-16 z-30": true,
-                  "opacity-100 translate-x-0 pointer-events-auto": state.peeked && !layout.sidebar.opened(),
-                  "opacity-0 -translate-x-2 pointer-events-none": !state.peeked || layout.sidebar.opened(),
-                  "transition-[opacity,transform] motion-reduce:transition-none": true,
-                  "duration-180 ease-out": state.peeked && !layout.sidebar.opened(),
-                  "duration-120 ease-in": !state.peeked || layout.sidebar.opened(),
+                  "@container fixed top-10 bottom-0 left-0 z-50 w-full max-w-[400px] overflow-hidden border-r border-border-weaker-base bg-background-base transition-transform duration-200 ease-out": true,
+                  "translate-x-0": layout.mobileSidebar.opened(),
+                  "-translate-x-full": !layout.mobileSidebar.opened(),
                 }}
-                onMouseMove={disarm}
-                onMouseEnter={() => {
-                  disarm()
-                  aim.reset()
-                }}
-                onPointerDown={disarm}
-                onMouseLeave={() => {
-                  arm()
+                onClick={(e) => e.stopPropagation()}
+              >
+                {sidebarContent(true)}
+              </nav>
+            </div>
+
+            <div
+              classList={{
+                "absolute inset-0": true,
+                "xl:inset-y-0 xl:right-0 xl:left-[var(--main-left)]": true,
+                "z-20": true,
+                "transition-[left] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[left] motion-reduce:transition-none":
+                  !state.sizing,
+              }}
+              style={{
+                "--main-left": layout.sidebar.opened() ? `${side()}px` : "4rem",
+              }}
+            >
+              <main
+                classList={{
+                  "size-full overflow-x-hidden flex flex-col items-start contain-strict border-t border-border-weak-base bg-background-base xl:border-l xl:rounded-tl-[12px]": true,
                 }}
               >
-                <Show when={peekProject()}>
-                  <SidebarPanel project={peekProject} merged={false} />
+                <Show when={!autoselecting.loading} fallback={<div class="size-full" />}>
+                  {props.children}
                 </Show>
-              </div>
+              </main>
+            </div>
 
-              <div
-                classList={{
-                  "hidden xl:block pointer-events-none absolute inset-y-0 right-0 z-25 overflow-hidden": true,
-                  "opacity-100 translate-x-0": state.peeked && !layout.sidebar.opened(),
-                  "opacity-0 -translate-x-2": !state.peeked || layout.sidebar.opened(),
-                  "transition-[opacity,transform] motion-reduce:transition-none": true,
-                  "duration-180 ease-out": state.peeked && !layout.sidebar.opened(),
-                  "duration-120 ease-in": !state.peeked || layout.sidebar.opened(),
-                }}
-                style={{ left: `calc(4rem + ${panel()}px)` }}
-              >
-                <div class="h-full w-px" style={{ "box-shadow": "var(--shadow-sidebar-overlay)" }} />
-              </div>
+            <div
+              classList={{
+                "hidden xl:flex absolute inset-y-0 left-16 z-30": true,
+                "opacity-100 translate-x-0 pointer-events-auto": state.peeked && !layout.sidebar.opened(),
+                "opacity-0 -translate-x-2 pointer-events-none": !state.peeked || layout.sidebar.opened(),
+                "transition-[opacity,transform] motion-reduce:transition-none": true,
+                "duration-180 ease-out": state.peeked && !layout.sidebar.opened(),
+                "duration-120 ease-in": !state.peeked || layout.sidebar.opened(),
+              }}
+              onMouseMove={disarm}
+              onMouseEnter={() => {
+                disarm()
+                aim.reset()
+              }}
+              onPointerDown={disarm}
+              onMouseLeave={() => {
+                arm()
+              }}
+            >
+              <Show when={peekProject()}>
+                <SidebarPanel project={peekProject} merged={false} />
+              </Show>
+            </div>
+
+            <div
+              classList={{
+                "hidden xl:block pointer-events-none absolute inset-y-0 right-0 z-25 overflow-hidden": true,
+                "opacity-100 translate-x-0": state.peeked && !layout.sidebar.opened(),
+                "opacity-0 -translate-x-2": !state.peeked || layout.sidebar.opened(),
+                "transition-[opacity,transform] motion-reduce:transition-none": true,
+                "duration-180 ease-out": state.peeked && !layout.sidebar.opened(),
+                "duration-120 ease-in": !state.peeked || layout.sidebar.opened(),
+              }}
+              style={{ left: `calc(4rem + ${panel()}px)` }}
+            >
+              <div class="h-full w-px" style={{ "box-shadow": "var(--shadow-sidebar-overlay)" }} />
             </div>
           </div>
-          {import.meta.env.DEV && import.meta.env.VITE_DISABLE_DEBUG_BAR !== "1" && <DebugBar />}
         </div>
-        <HelpButton />
-        <ToastRegion v2={newDesign()} />
+        {import.meta.env.DEV && import.meta.env.VITE_DISABLE_DEBUG_BAR !== "1" && <DebugBar />}
       </div>
-    </Show>
+      <HelpButton />
+      <ToastRegion v2={false} />
+    </div>
   )
 }
 

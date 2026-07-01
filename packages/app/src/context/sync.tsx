@@ -113,7 +113,7 @@ export const useSync = () => {
   const serverSync = useServerSync()
   const sdk = useSDK()
 
-  return createMemo(() => serverSync().createDirSyncContext(sdk().directory))
+  return createMemo(() => serverSync().ensureDirSyncContext(sdk().directory))
 }
 
 export type DirectorySync = ReturnType<ReturnType<typeof useSync>>

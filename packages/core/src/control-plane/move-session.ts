@@ -1,14 +1,15 @@
 export * as MoveSession from "./move-session"
 
 import { Context, DateTime, Effect, Layer, Schema } from "effect"
+import { makeGlobalNode } from "../effect/app-node"
 import { EventV2 } from "../event"
 import { Git } from "../git"
 import { Location } from "../location"
 import { ProjectV2 } from "../project"
 import { SessionV2 } from "../session"
-import { SessionExecution } from "../session/execution"
 import { SessionEvent } from "../session/event"
 import { SessionSchema } from "../session/schema"
+import { SessionStore } from "../session/store"
 import { AbsolutePath, RelativePath } from "../schema"
 import path from "path"
 
@@ -65,16 +66,17 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ControlPlaneMoveSession") {}
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const git = yield* Git.Service
     const events = yield* EventV2.Service
     const project = yield* ProjectV2.Service
-    const session = yield* SessionV2.Service
+    const sessions = yield* SessionStore.Service
 
     const moveSession = Effect.fn("MoveSession.moveSession")(function* (input: Input) {
-      const current = yield* session.get(input.sessionID)
+      const current = yield* sessions.get(input.sessionID)
+      if (!current) return yield* new SessionV2.NotFoundError({ sessionID: input.sessionID })
       const directory = AbsolutePath.make(input.destination.directory)
       if (current.location.directory === directory) return
 
@@ -84,15 +86,20 @@ export const layer = Layer.effect(
         return yield* new DestinationProjectMismatchError({ expected: current.projectID, actual: destination.id })
       }
 
-      const patch =
-        input.moveChanges && source.directory !== destination.directory
-          ? yield* git
-              .patch(current.location.directory)
-              .pipe(Effect.mapError((error) => new CaptureChangesError({ message: error.message })))
-          : ""
+      const moveChanges = input.moveChanges && source.directory !== destination.directory
+      const sourceRepository = moveChanges ? yield* git.repo.discover(current.location.directory) : undefined
+      if (moveChanges && !sourceRepository)
+        return yield* new CaptureChangesError({ message: "Source is not a Git repository" })
+      const patch = sourceRepository
+        ? yield* git.change
+            .capture({ repository: sourceRepository, path: current.location.directory })
+            .pipe(Effect.mapError((error) => new CaptureChangesError({ message: error.message })))
+        : Git.ChangeSet.make("")
       if (patch) {
-        yield* git
-          .applyPatch({ directory, patch })
+        const repository = yield* git.repo.discover(directory)
+        if (!repository) return yield* new ApplyChangesError({ message: "Destination is not a Git repository" })
+        yield* git.change
+          .apply({ repository, path: directory, changes: patch })
           .pipe(Effect.mapError((error) => new ApplyChangesError({ message: error.message })))
       }
 
@@ -104,16 +111,29 @@ export const layer = Layer.effect(
       })
 
       if (patch) {
-        yield* git.softResetChanges(current.location.directory).pipe(
-          Effect.mapError(
-            (error) =>
-              new ResetSourceChangesError({
-                directory: current.location.directory,
-                message: error.message,
-                cause: error.cause,
-              }),
-          ),
-        )
+        const repository = yield* git.repo.discover(current.location.directory)
+        if (!repository)
+          return yield* new ResetSourceChangesError({
+            directory: current.location.directory,
+            message: "Source is not a Git repository",
+          })
+        yield* git.change
+          .discard({
+            repository,
+            path: current.location.directory,
+            index: "preserve",
+            untracked: "remove",
+          })
+          .pipe(
+            Effect.mapError(
+              (error) =>
+                new ResetSourceChangesError({
+                  directory: current.location.directory,
+                  message: error.message,
+                  cause: error.cause,
+                }),
+            ),
+          )
       }
     })
 
@@ -121,10 +141,8 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer.pipe(
-  Layer.provide(Git.defaultLayer),
-  Layer.provide(EventV2.defaultLayer),
-  Layer.provide(ProjectV2.defaultLayer),
-  Layer.provide(SessionExecution.noopLayer),
-  Layer.provide(SessionV2.defaultLayer),
-)
+export const node = makeGlobalNode({
+  service: Service,
+  layer,
+  deps: [Git.node, EventV2.node, ProjectV2.node, SessionStore.node],
+})

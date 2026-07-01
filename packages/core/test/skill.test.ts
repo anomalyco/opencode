@@ -3,6 +3,8 @@ import path from "path"
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { AgentV2 } from "@opencode-ai/core/agent"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SkillV2 } from "@opencode-ai/core/skill"
@@ -22,11 +24,7 @@ const discovery = Layer.succeed(
   }),
 )
 const it = testEffect(
-  SkillV2.layer.pipe(
-    Layer.provide(discovery),
-    Layer.provide(FSUtil.defaultLayer),
-    Layer.provideMerge(AgentV2.locationLayer),
-  ),
+  AppNodeBuilder.build(LayerNode.group([SkillV2.node, AgentV2.node]), [[SkillDiscovery.node, discovery]]),
 )
 
 function write(directory: string, name: string, description: string) {
@@ -74,7 +72,7 @@ describe("SkillV2", () => {
             { type: "directory", path: AbsolutePath.make(second) },
           ])
           expect(yield* skill.list()).toEqual([
-            new SkillV2.Info({
+            SkillV2.Info.make({
               name: "foo",
               slash: true,
               location: AbsolutePath.make(path.join(first, "foo.md")),

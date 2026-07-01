@@ -1,5 +1,5 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { httpClient } from "@opencode-ai/core/effect/layer-node-platform"
+import { httpClient } from "@opencode-ai/core/effect/app-node-platform"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { PlanExitTool } from "./plan"
 import { Session } from "@/session/session"
@@ -34,7 +34,6 @@ import { Glob } from "@opencode-ai/core/util/glob"
 import path from "path"
 import { pathToFileURL } from "url"
 import { Effect, Layer, Context } from "effect"
-import { FetchHttpClient, HttpClient } from "effect/unstable/http"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { AppProcess } from "@opencode-ai/core/process"
@@ -89,7 +88,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ToolRegistry") {}
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const config = yield* Config.Service
@@ -360,7 +359,6 @@ export const defaultLayer = Layer.suspend(() =>
     )
     .pipe(Layer.provide(Database.defaultLayer), Layer.provide(RuntimeFlags.defaultLayer)),
 )
-
 function isZodType(value: unknown): value is z.ZodType {
   return typeof value === "object" && value !== null && "_zod" in value
 }
@@ -437,9 +435,14 @@ function isJsonSchemaObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
 }
 
-export const node = LayerNode.make(
-  layer.pipe(Layer.provide(Ripgrep.defaultLayer), Layer.provide(backgroundLayer), Layer.provide(shellJobLayer)),
-  [
+export const node = LayerNode.make({
+  service: Service,
+  layer: layer.pipe(
+    Layer.provide(Ripgrep.defaultLayer),
+    Layer.provide(backgroundLayer),
+    Layer.provide(shellJobLayer),
+  ),
+  deps: [
     Config.node,
     Plugin.node,
     Question.node,
@@ -459,7 +462,8 @@ export const node = LayerNode.make(
     Truncate.node,
     RuntimeFlags.node,
     Database.node,
+    Ripgrep.node,
   ],
-)
+})
 
 export * as ToolRegistry from "./registry"

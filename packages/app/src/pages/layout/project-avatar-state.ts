@@ -15,7 +15,7 @@ export function useSessionTabAvatarState(
   const hasPermissions = createMemo(() => {
     if (!active()) return false
     const [store] = globalSync().child(directory(), { bootstrap: false })
-    return !!sessionPermissionRequest(store.session, store.permission, sessionId(), (item) => {
+    return !!sessionPermissionRequest(store.session, globalSync().session.data.permission, sessionId(), (item) => {
       return !permission.autoResponds(item, directory())
     })
   })
@@ -23,8 +23,7 @@ export function useSessionTabAvatarState(
   const loading = createMemo(() => {
     if (!active()) return false
     if (hasPermissions()) return false
-    const [store] = globalSync().child(directory(), { bootstrap: false })
-    return store.session_working(sessionId())
+    return globalSync().session.data.session_working(sessionId())
   })
   return { unread, loading }
 }

@@ -221,6 +221,158 @@ index 3617e787f0ba70447c99501aee7aa67584d89758..4a96d6a0328fa348b96f3869ab7e0bb7
                      this._cleanupTimeout(messageId);
                      reject(error);
                  });
+diff --git a/dist/cjs/client/auth.d.ts b/dist/cjs/client/auth.d.ts
+index f4363ce7c94fbddf0e1d5943b1b26682bdbaa40e..e7dd57096e4f056bcd735d5081433beea1b32f04 100644
+--- a/dist/cjs/client/auth.d.ts
++++ b/dist/cjs/client/auth.d.ts
+@@ -205,6 +205,15 @@ export declare function parseErrorResponse(input: Response | string): Promise<OA
+  * @returns A Promise that resolves to an OAuthError instance
+  */
+ export declare function parseErrorResponse(input: Response | string): Promise<OAuthError>;
++/**
++ * Selects scopes per the MCP spec and augments them for refresh token support.
++ */
++export declare function determineScope(options: {
++    requestedScope?: string;
++    resourceMetadata?: OAuthProtectedResourceMetadata;
++    authServerMetadata?: AuthorizationServerMetadata;
++    clientMetadata: OAuthClientMetadata;
++}): string | undefined;
+ /**
+  * Orchestrates the full auth flow with a server.
+  *
+diff --git a/dist/cjs/client/auth.js b/dist/cjs/client/auth.js
+index c2e4fa91d26f5336889f6afa416147db75fc4872..178d7cfd96412d53bc14bbc13a8f76c11f727ee7 100644
+--- a/dist/cjs/client/auth.js
++++ b/dist/cjs/client/auth.js
+@@ -7,6 +7,7 @@ exports.UnauthorizedError = void 0;
+ exports.selectClientAuthMethod = selectClientAuthMethod;
+ exports.parseErrorResponse = parseErrorResponse;
+ exports.auth = auth;
++exports.determineScope = determineScope;
+ exports.isHttpsUrl = isHttpsUrl;
+ exports.selectResourceURL = selectResourceURL;
+ exports.extractWWWAuthenticateParams = extractWWWAuthenticateParams;
+@@ -186,6 +187,19 @@ async function auth(provider, options) {
+         throw error;
+     }
+ }
++/**
++ * Selects scopes per the MCP spec and augments them for refresh token support.
++ */
++function determineScope({ requestedScope, resourceMetadata, authServerMetadata, clientMetadata }) {
++    let effectiveScope = requestedScope || resourceMetadata?.scopes_supported?.join(' ') || clientMetadata.scope;
++    if (effectiveScope &&
++        authServerMetadata?.scopes_supported?.includes('offline_access') &&
++        !effectiveScope.split(' ').includes('offline_access') &&
++        clientMetadata.grant_types?.includes('refresh_token')) {
++        effectiveScope = `${effectiveScope} offline_access`;
++    }
++    return effectiveScope;
++}
+ async function authInternal(provider, { serverUrl, authorizationCode, scope, resourceMetadataUrl, fetchFn }) {
+     // Check if the provider has cached discovery state to skip discovery
+     const cachedState = await provider.discoveryState?.();
+@@ -241,12 +255,12 @@ async function authInternal(provider, { serverUrl, authorizationCode, scope, res
+         });
+     }
+     const resource = await selectResourceURL(serverUrl, provider, resourceMetadata);
+-    // Apply scope selection strategy (SEP-835):
+-    // 1. WWW-Authenticate scope (passed via `scope` param)
+-    // 2. PRM scopes_supported
+-    // 3. Client metadata scope (user-configured fallback)
+-    // The resolved scope is used consistently for both DCR and the authorization request.
+-    const resolvedScope = scope || resourceMetadata?.scopes_supported?.join(' ') || provider.clientMetadata.scope;
++    const resolvedScope = determineScope({
++        requestedScope: scope,
++        resourceMetadata,
++        authServerMetadata: metadata,
++        clientMetadata: provider.clientMetadata
++    });
+     // Handle client registration if needed
+     let clientInformation = await Promise.resolve(provider.clientInformation());
+     if (!clientInformation) {
+@@ -741,7 +755,7 @@ async function startAuthorization(authorizationServerUrl, { metadata, clientInfo
+     if (scope) {
+         authorizationUrl.searchParams.set('scope', scope);
+     }
+-    if (scope?.includes('offline_access')) {
++    if (scope?.split(' ').includes('offline_access')) {
+         // if the request includes the OIDC-only "offline_access" scope,
+         // we need to set the prompt to "consent" to ensure the user is prompted to grant offline access
+         // https://openid.net/specs/openid-connect-core-1_0.html#OfflineAccess
+diff --git a/dist/esm/client/auth.d.ts b/dist/esm/client/auth.d.ts
+index f4363ce7c94fbddf0e1d5943b1b26682bdbaa40e..e7dd57096e4f056bcd735d5081433beea1b32f04 100644
+--- a/dist/esm/client/auth.d.ts
++++ b/dist/esm/client/auth.d.ts
+@@ -205,6 +205,15 @@ export declare function parseErrorResponse(input: Response | string): Promise<OA
+  * @returns A Promise that resolves to an OAuthError instance
+  */
+ export declare function parseErrorResponse(input: Response | string): Promise<OAuthError>;
++/**
++ * Selects scopes per the MCP spec and augments them for refresh token support.
++ */
++export declare function determineScope(options: {
++    requestedScope?: string;
++    resourceMetadata?: OAuthProtectedResourceMetadata;
++    authServerMetadata?: AuthorizationServerMetadata;
++    clientMetadata: OAuthClientMetadata;
++}): string | undefined;
+ /**
+  * Orchestrates the full auth flow with a server.
+  *
+diff --git a/dist/esm/client/auth.js b/dist/esm/client/auth.js
+index e183040fc2bba22ca1ccc784984f3310854403b7..d367661e580ee61a96654f7af78b2af61dcad98b 100644
+--- a/dist/esm/client/auth.js
++++ b/dist/esm/client/auth.js
+@@ -161,6 +161,19 @@ export async function auth(provider, options) {
+         throw error;
+     }
+ }
++/**
++ * Selects scopes per the MCP spec and augments them for refresh token support.
++ */
++export function determineScope({ requestedScope, resourceMetadata, authServerMetadata, clientMetadata }) {
++    let effectiveScope = requestedScope || resourceMetadata?.scopes_supported?.join(' ') || clientMetadata.scope;
++    if (effectiveScope &&
++        authServerMetadata?.scopes_supported?.includes('offline_access') &&
++        !effectiveScope.split(' ').includes('offline_access') &&
++        clientMetadata.grant_types?.includes('refresh_token')) {
++        effectiveScope = `${effectiveScope} offline_access`;
++    }
++    return effectiveScope;
++}
+ async function authInternal(provider, { serverUrl, authorizationCode, scope, resourceMetadataUrl, fetchFn }) {
+     // Check if the provider has cached discovery state to skip discovery
+     const cachedState = await provider.discoveryState?.();
+@@ -216,12 +229,12 @@ async function authInternal(provider, { serverUrl, authorizationCode, scope, res
+         });
+     }
+     const resource = await selectResourceURL(serverUrl, provider, resourceMetadata);
+-    // Apply scope selection strategy (SEP-835):
+-    // 1. WWW-Authenticate scope (passed via `scope` param)
+-    // 2. PRM scopes_supported
+-    // 3. Client metadata scope (user-configured fallback)
+-    // The resolved scope is used consistently for both DCR and the authorization request.
+-    const resolvedScope = scope || resourceMetadata?.scopes_supported?.join(' ') || provider.clientMetadata.scope;
++    const resolvedScope = determineScope({
++        requestedScope: scope,
++        resourceMetadata,
++        authServerMetadata: metadata,
++        clientMetadata: provider.clientMetadata
++    });
+     // Handle client registration if needed
+     let clientInformation = await Promise.resolve(provider.clientInformation());
+     if (!clientInformation) {
+@@ -716,7 +729,7 @@ export async function startAuthorization(authorizationServerUrl, { metadata, cli
+     if (scope) {
+         authorizationUrl.searchParams.set('scope', scope);
+     }
+-    if (scope?.includes('offline_access')) {
++    if (scope?.split(' ').includes('offline_access')) {
+         // if the request includes the OIDC-only "offline_access" scope,
+         // we need to set the prompt to "consent" to ensure the user is prompted to grant offline access
+         // https://openid.net/specs/openid-connect-core-1_0.html#OfflineAccess
 diff --git a/dist/esm/client/index.js b/dist/esm/client/index.js
 index 49b12c6cd918c457420fef7ad5528a9443d1a191..2afe2e22e960f26c9d516ef135d89f8eb9e4caff 100644
 --- a/dist/esm/client/index.js

@@ -1,5 +1,6 @@
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { describe, expect } from "bun:test"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Cause, Effect, Exit, Layer } from "effect"
 import type * as Scope from "effect/Scope"
 import os from "os"
@@ -26,15 +27,19 @@ import { InstanceStore } from "@/project/instance-store"
 
 const backgroundLayer = BackgroundJob.defaultLayer
 const shellLayer = Layer.mergeAll(
-  CrossSpawnSpawner.defaultLayer,
-  FSUtil.defaultLayer,
-  Plugin.defaultLayer,
-  Truncate.defaultLayer,
-  Config.defaultLayer,
-  Agent.defaultLayer,
-  RuntimeFlags.defaultLayer,
-  backgroundLayer,
-  ShellJob.defaultLayer.pipe(Layer.provide(AppProcess.defaultLayer), Layer.provide(backgroundLayer)),
+  LayerNode.compile(
+    LayerNode.group([
+      CrossSpawnSpawner.node,
+      FSUtil.node,
+      Plugin.node,
+      Truncate.node,
+      Config.node,
+      Agent.node,
+      RuntimeFlags.node,
+      BackgroundJob.node,
+      ShellJob.node,
+    ]),
+  ),
   testInstanceStoreLayer,
 )
 const it = testEffect(shellLayer)
@@ -188,7 +193,6 @@ describe("tool.shell", () => {
       Effect.gen(function* () {
         const result = yield* run({
           command: "echo test",
-          description: "Echo test message",
         })
         expect(result.metadata.exit).toBe(0)
         expect(result.metadata.output).toContain("test")
@@ -210,7 +214,6 @@ describe("tool.shell", () => {
           const result = yield* bash.execute(
             {
               command: "echo fallback",
-              description: "Echo fallback text",
             },
             ctx,
           )
@@ -233,7 +236,6 @@ describe("tool.shell permissions", () => {
           yield* run(
             {
               command: "echo hello",
-              description: "Echo hello",
             },
             capture(requests),
           )
@@ -255,7 +257,6 @@ describe("tool.shell permissions", () => {
           yield* run(
             {
               command: "echo foo && echo bar",
-              description: "Echo twice",
             },
             capture(requests),
           )
@@ -279,7 +280,6 @@ describe("tool.shell permissions", () => {
             yield* run(
               {
                 command: "Write-Host foo; if ($?) { Write-Host bar }",
-                description: "Check PowerShell conditional",
               },
               capture(requests),
             )
@@ -309,7 +309,6 @@ describe("tool.shell permissions", () => {
                 yield* fail(
                   {
                     command: "Remove-Item -Recurse tmp",
-                    description: "Remove a temp directory",
                   },
                   capture(requests, err),
                 ),
@@ -337,7 +336,6 @@ describe("tool.shell permissions", () => {
           yield* fail(
             {
               command: `cat ${file}`,
-              description: "Read wildcard path",
             },
             capture(requests, err),
           ),
@@ -365,7 +363,6 @@ describe("tool.shell permissions", () => {
                 yield* run(
                   {
                     command: `echo $(cat "${file}")`,
-                    description: "Read nested bash file",
                   },
                   capture(requests),
                 )
@@ -395,7 +392,6 @@ describe("tool.shell permissions", () => {
                 yield* fail(
                   {
                     command: `Copy-Item -PassThru "${process.env.WINDIR!.replaceAll("\\", "/")}/win.ini" ./out`,
-                    description: "Copy Windows ini",
                   },
                   capture(requests, err),
                 ),
@@ -421,7 +417,6 @@ describe("tool.shell permissions", () => {
               yield* run(
                 {
                   command: `Write-Output $(Get-Content ${file})`,
-                  description: "Read nested PowerShell file",
                 },
                 capture(requests),
               )
@@ -452,7 +447,6 @@ describe("tool.shell permissions", () => {
                   yield* fail(
                     {
                       command: 'Get-Content "C:../outside.txt"',
-                      description: "Read drive-relative file",
                     },
                     capture(requests, err),
                   ),
@@ -480,7 +474,6 @@ describe("tool.shell permissions", () => {
                 yield* fail(
                   {
                     command: 'Get-Content "$HOME/.ssh/config"',
-                    description: "Read home config",
                   },
                   capture(requests, err),
                 ),
@@ -509,7 +502,6 @@ describe("tool.shell permissions", () => {
                   yield* fail(
                     {
                       command: 'Get-Content "$PWD/../outside.txt"',
-                      description: "Read pwd-relative file",
                     },
                     capture(requests, err),
                   ),
@@ -537,7 +529,6 @@ describe("tool.shell permissions", () => {
                 yield* fail(
                   {
                     command: 'Get-Content "$PSHOME/outside.txt"',
-                    description: "Read pshome file",
                   },
                   capture(requests, err),
                 ),
@@ -573,7 +564,6 @@ describe("tool.shell permissions", () => {
                     yield* fail(
                       {
                         command: `Get-Content -Path "${root}$env:${key}\\Windows\\win.ini"`,
-                        description: "Read Windows ini with missing env",
                       },
                       capture(requests, err),
                     ),
@@ -604,7 +594,6 @@ describe("tool.shell permissions", () => {
               yield* run(
                 {
                   command: "Get-Content $env:WINDIR/win.ini",
-                  description: "Read Windows ini from env",
                 },
                 capture(requests),
               )
@@ -632,7 +621,6 @@ describe("tool.shell permissions", () => {
                 yield* fail(
                   {
                     command: `Get-Content -Path FileSystem::${process.env.WINDIR!.replaceAll("\\", "/")}/win.ini`,
-                    description: "Read Windows ini from FileSystem provider",
                   },
                   capture(requests, err),
                 ),
@@ -661,7 +649,6 @@ describe("tool.shell permissions", () => {
                 yield* fail(
                   {
                     command: "Get-Content ${env:WINDIR}/win.ini",
-                    description: "Read Windows ini from braced env",
                   },
                   capture(requests, err),
                 ),
@@ -688,7 +675,6 @@ describe("tool.shell permissions", () => {
               yield* run(
                 {
                   command: "Set-Location C:/Windows",
-                  description: "Change location",
                 },
                 capture(requests),
               )
@@ -716,7 +702,6 @@ describe("tool.shell permissions", () => {
               yield* run(
                 {
                   command: "Write-Output ('a' * 3)",
-                  description: "Write repeated text",
                 },
                 capture(requests),
               )
@@ -742,7 +727,6 @@ describe("tool.shell permissions", () => {
             yield* run(
               {
                 command: `TYPE "${path.join(process.env.WINDIR!, "win.ini")}"`,
-                description: "Read Windows ini with cmd",
               },
               capture(requests),
             )
@@ -767,7 +751,6 @@ describe("tool.shell permissions", () => {
             yield* fail(
               {
                 command: "cd ../",
-                description: "Change to parent directory",
               },
               capture(requests, err),
             ),
@@ -792,7 +775,6 @@ describe("tool.shell permissions", () => {
               {
                 command: "echo ok",
                 workdir: os.tmpdir(),
-                description: "Echo from temp dir",
               },
               capture(requests, err),
             ),
@@ -823,7 +805,6 @@ describe("tool.shell permissions", () => {
                   {
                     command: "echo ok",
                     workdir: dir,
-                    description: "Echo from external dir",
                   },
                   capture(requests, err),
                 ),
@@ -856,7 +837,6 @@ describe("tool.shell permissions", () => {
                   {
                     command: "echo ok",
                     workdir: "/tmp",
-                    description: "Echo from Git Bash tmp",
                   },
                   capture(requests, err),
                 ),
@@ -884,7 +864,6 @@ describe("tool.shell permissions", () => {
                 yield* fail(
                   {
                     command: "cat /tmp/opencode-does-not-exist",
-                    description: "Read Git Bash tmp file",
                   },
                   capture(requests, err),
                 ),
@@ -916,7 +895,6 @@ describe("tool.shell permissions", () => {
             yield* fail(
               {
                 command: `cat ${filepath}`,
-                description: "Read external file",
               },
               capture(requests, err),
             ),
@@ -928,7 +906,6 @@ describe("tool.shell permissions", () => {
           expect(extDirReq!.always).toContain(expected)
           expect(extDirReq!.metadata).toMatchObject({
             command: `cat ${filepath}`,
-            description: "Read external file",
             directories: [outerTmp],
             patterns: [expected],
           })
@@ -948,7 +925,6 @@ describe("tool.shell permissions", () => {
           yield* run(
             {
               command: `rm -rf ${path.join(tmp, "nested")}`,
-              description: "Remove nested dir",
             },
             capture(requests),
           )
@@ -969,7 +945,6 @@ describe("tool.shell permissions", () => {
           yield* run(
             {
               command: "git log --oneline -5",
-              description: "Git log",
             },
             capture(requests),
           )
@@ -991,7 +966,6 @@ describe("tool.shell permissions", () => {
           yield* run(
             {
               command: "cd .",
-              description: "Stay in current directory",
             },
             capture(requests),
           )
@@ -1010,12 +984,9 @@ describe("tool.shell permissions", () => {
         Effect.gen(function* () {
           const err = new Error("stop after permission")
           const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
-          expect(
-            yield* fail(
-              { command: "echo test > output.txt", description: "Redirect test output" },
-              capture(requests, err),
-            ),
-          ).toMatchObject({ message: err.message })
+          expect(yield* fail({ command: "echo test > output.txt" }, capture(requests, err))).toMatchObject({
+            message: err.message,
+          })
           const bashReq = requests.find((r) => r.permission === "bash")
           expect(bashReq).toBeDefined()
           expect(bashReq!.patterns).toContain("echo test > output.txt")
@@ -1031,7 +1002,7 @@ describe("tool.shell permissions", () => {
         tmp,
         Effect.gen(function* () {
           const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
-          yield* run({ command: "ls -la", description: "List" }, capture(requests))
+          yield* run({ command: "ls -la" }, capture(requests))
           const bashReq = requests.find((r) => r.permission === "bash")
           expect(bashReq).toBeDefined()
           expect(bashReq!.always[0]).toBe("ls *")
@@ -1053,7 +1024,6 @@ describe("tool.shell abort", () => {
           const res = yield* run(
             {
               command: `echo before && sleep 30`,
-              description: "Long running command",
             },
             {
               ...ctx,
@@ -1084,7 +1054,6 @@ describe("tool.shell abort", () => {
         Effect.gen(function* () {
           const result = yield* run({
             command: `sleep 60`,
-            description: "Timeout test",
             timeout: 500,
           })
           expect(result.output).toContain("shell tool terminated command after exceeding timeout")
@@ -1105,7 +1074,6 @@ describe("tool.shell abort", () => {
           const result = yield* tool.execute(
             {
               command: `sleep 60`,
-              description: "Default timeout test",
             },
             ctx,
           )
@@ -1122,7 +1090,6 @@ describe("tool.shell abort", () => {
         Effect.gen(function* () {
           const result = yield* run({
             command: `echo stdout_msg && echo stderr_msg >&2`,
-            description: "Stderr test",
           })
           expect(result.output).toContain("stdout_msg")
           expect(result.output).toContain("stderr_msg")
@@ -1138,7 +1105,6 @@ describe("tool.shell abort", () => {
       Effect.gen(function* () {
         const result = yield* run({
           command: `exit 42`,
-          description: "Non-zero exit",
         })
         expect(result.metadata.exit).toBe(42)
       }),
@@ -1153,7 +1119,6 @@ describe("tool.shell abort", () => {
         const result = yield* run(
           {
             command: `echo first && sleep 0.1 && echo second`,
-            description: "Streaming test",
           },
           {
             ...ctx,
@@ -1180,7 +1145,6 @@ describe("tool.shell truncation", () => {
         const lineCount = Truncate.MAX_LINES + 500
         const result = yield* run({
           command: fill("lines", lineCount),
-          description: "Generate lines exceeding limit",
         })
         mustTruncate(result)
         expect(result.output).toMatch(/\.\.\.output truncated\.\.\./)
@@ -1196,7 +1160,6 @@ describe("tool.shell truncation", () => {
         const byteCount = Truncate.MAX_BYTES + 10000
         const result = yield* run({
           command: fill("bytes", byteCount),
-          description: "Generate bytes exceeding limit",
         })
         mustTruncate(result)
         expect(result.output).toMatch(/\.\.\.output truncated\.\.\./)
@@ -1211,7 +1174,6 @@ describe("tool.shell truncation", () => {
       Effect.gen(function* () {
         const result = yield* run({
           command: fill("lines", 1),
-          description: "Generate one line",
         })
         expect((result.metadata as { truncated?: boolean }).truncated).toBe(false)
         expect(result.output).toContain("1")
@@ -1226,7 +1188,6 @@ describe("tool.shell truncation", () => {
         const lineCount = Truncate.MAX_LINES + 100
         const result = yield* run({
           command: fill("lines", lineCount),
-          description: "Generate lines for file check",
         })
         mustTruncate(result)
 

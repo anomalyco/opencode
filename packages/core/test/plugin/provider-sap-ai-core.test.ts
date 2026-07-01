@@ -1,3 +1,4 @@
+import { AISDK } from "@opencode-ai/core/aisdk"
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { ModelV2 } from "@opencode-ai/core/model"
@@ -19,8 +20,9 @@ const npm = Npm.Service.of({
 
 const addPlugin = Effect.fn(function* () {
   const plugin = yield* PluginV2.Service
-  const host = yield* PluginHost.make()
-  yield* plugin.add({ id: SapAICorePlugin.id, effect: SapAICorePlugin.effect({ ...host, npm }) })
+  const aisdk = yield* AISDK.Service
+  const host = yield* PluginHost.make(plugin)
+  yield* SapAICorePlugin.effect(host).pipe(Effect.provideService(Npm.Service, npm))
 })
 
 function withEnv<A, E, R>(vars: Record<string, string | undefined>, effect: () => Effect.Effect<A, E, R>) {
@@ -45,7 +47,7 @@ function withEnv<A, E, R>(vars: Record<string, string | undefined>, effect: () =
 }
 
 function model(providerID: string) {
-  return new ModelV2.Info({
+  return ModelV2.Info.make({
     ...ModelV2.Info.empty(ProviderV2.ID.make(providerID), ModelV2.ID.make("sap-model")),
     api: { id: ModelV2.ID.make("sap-model"), type: "aisdk", package: fixtureProvider },
   })
@@ -58,16 +60,13 @@ describe("SapAICorePlugin", () => {
       () =>
         Effect.gen(function* () {
           const plugin = yield* PluginV2.Service
+          const aisdk = yield* AISDK.Service
           yield* addPlugin()
-          const sdk = yield* plugin.trigger(
-            "aisdk.sdk",
-            {
-              model: model("sap-ai-core"),
-              package: fixtureProvider,
-              options: { name: "sap-ai-core", serviceKey: "service-key" },
-            },
-            {},
-          )
+          const sdk = yield* aisdk.runSDK({
+            model: model("sap-ai-core"),
+            package: fixtureProvider,
+            options: { name: "sap-ai-core", serviceKey: "service-key" },
+          })
           expect(process.env.AICORE_SERVICE_KEY).toBe("service-key")
           expect(sdk.sdk.options).toEqual({ deploymentId: "deployment", resourceGroup: "resource-group" })
         }),
@@ -84,16 +83,13 @@ describe("SapAICorePlugin", () => {
       () =>
         Effect.gen(function* () {
           const plugin = yield* PluginV2.Service
+          const aisdk = yield* AISDK.Service
           yield* addPlugin()
-          const sdk = yield* plugin.trigger(
-            "aisdk.sdk",
-            {
-              model: model("sap-ai-core"),
-              package: fixtureProvider,
-              options: { name: "sap-ai-core", serviceKey: "option-service-key" },
-            },
-            {},
-          )
+          const sdk = yield* aisdk.runSDK({
+            model: model("sap-ai-core"),
+            package: fixtureProvider,
+            options: { name: "sap-ai-core", serviceKey: "option-service-key" },
+          })
           expect(process.env.AICORE_SERVICE_KEY).toBe("env-service-key")
           expect(sdk.sdk.options).toEqual({ deploymentId: "deployment", resourceGroup: "resource-group" })
         }),
@@ -106,12 +102,13 @@ describe("SapAICorePlugin", () => {
       () =>
         Effect.gen(function* () {
           const plugin = yield* PluginV2.Service
+          const aisdk = yield* AISDK.Service
           yield* addPlugin()
-          const sdk = yield* plugin.trigger(
-            "aisdk.sdk",
-            { model: model("sap-ai-core"), package: fixtureProvider, options: { name: "sap-ai-core" } },
-            {},
-          )
+          const sdk = yield* aisdk.runSDK({
+            model: model("sap-ai-core"),
+            package: fixtureProvider,
+            options: { name: "sap-ai-core" },
+          })
           expect(process.env.AICORE_SERVICE_KEY).toBeUndefined()
           expect(sdk.sdk.options).toEqual({})
         }),
@@ -121,13 +118,14 @@ describe("SapAICorePlugin", () => {
   it.effect("uses the callable SDK for language selection", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
+      const aisdk = yield* AISDK.Service
       yield* addPlugin()
       const sdk = Object.assign((modelID: string) => ({ modelID, provider: "callable" }), {
         languageModel() {
           throw new Error("SAP AI Core should call the SDK directly")
         },
       })
-      const language = yield* plugin.trigger("aisdk.language", { model: model("sap-ai-core"), sdk, options: {} }, {})
+      const language = yield* aisdk.runLanguage({ model: model("sap-ai-core"), sdk, options: {} })
       expect(language.language as unknown).toEqual({ modelID: "sap-model", provider: "callable" })
     }),
   )
@@ -138,27 +136,20 @@ describe("SapAICorePlugin", () => {
       () =>
         Effect.gen(function* () {
           const plugin = yield* PluginV2.Service
+          const aisdk = yield* AISDK.Service
           yield* addPlugin()
-          const sdk = yield* plugin.trigger(
-            "aisdk.sdk",
-            {
-              model: model("openai"),
-              package: fixtureProvider,
-              options: { name: "openai", serviceKey: "service-key" },
+          const sdk = yield* aisdk.runSDK({
+            model: model("openai"),
+            package: fixtureProvider,
+            options: { name: "openai", serviceKey: "service-key" },
+          })
+          const language = yield* aisdk.runLanguage({
+            model: model("openai"),
+            sdk: () => {
+              throw new Error("SAP AI Core should ignore other providers")
             },
-            {},
-          )
-          const language = yield* plugin.trigger(
-            "aisdk.language",
-            {
-              model: model("openai"),
-              sdk: () => {
-                throw new Error("SAP AI Core should ignore other providers")
-              },
-              options: {},
-            },
-            {},
-          )
+            options: {},
+          })
           expect(process.env.AICORE_SERVICE_KEY).toBeUndefined()
           expect(sdk.sdk).toBeUndefined()
           expect(language.language).toBeUndefined()

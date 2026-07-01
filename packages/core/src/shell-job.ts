@@ -5,6 +5,7 @@ import type { ChildProcess } from "effect/unstable/process"
 import { BackgroundJob } from "./background-job"
 import { Identifier } from "./id/id"
 import { AppProcess } from "./process"
+import { makeGlobalNode } from "./effect/app-node"
 import type { SessionSchema } from "./session/schema"
 
 export type Status = "running" | "exited" | "timed_out" | "cancelled" | "failed"
@@ -249,3 +250,4 @@ export const make = Effect.gen(function* () {
 
 export const layer = Layer.effect(Service, make)
 export const defaultLayer = layer
+export const node = makeGlobalNode({ service: Service, layer, deps: [AppProcess.node, BackgroundJob.node] })

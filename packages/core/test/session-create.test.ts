@@ -4,6 +4,8 @@ import { Effect, Layer, Stream } from "effect"
 import { AgentV2 } from "@opencode-ai/core/agent"
 import { asc, eq } from "drizzle-orm"
 import { Database } from "@opencode-ai/core/database/database"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventV2 } from "@opencode-ai/core/event"
 import { EventTable } from "@opencode-ai/core/event/sql"
 import { Location } from "@opencode-ai/core/location"
@@ -33,43 +35,19 @@ const projects = Layer.succeed(
     commit: () => Effect.void,
   }),
 )
-const sessions = SessionV2.layer.pipe(
-  Layer.provide(EventV2.defaultLayer),
-  Layer.provide(Database.defaultLayer),
-  Layer.provide(SessionStore.defaultLayer),
-  Layer.provide(projects),
-  Layer.provide(SessionExecution.noopLayer),
-)
 const it = testEffect(
-  Layer.mergeAll(
-    Database.defaultLayer,
-    EventV2.defaultLayer,
-    projects,
-    SessionProjector.defaultLayer,
-    SessionStore.defaultLayer,
-    SessionExecution.noopLayer,
-    sessions,
+  AppNodeBuilder.build(
+    LayerNode.group([Database.node, EventV2.node, SessionProjector.node, SessionStore.node, SessionV2.node]),
+    [
+      [ProjectV2.node, projects],
+      [SessionExecution.node, SessionExecution.noopLayer],
+    ],
   ),
 )
 const location = Location.Ref.make({ directory: AbsolutePath.make("/project") })
 const id = SessionV2.ID.create()
 
 describe("SessionV2.create", () => {
-  it.effect("derives stable namespaced external IDs", () =>
-    Effect.sync(() => {
-      const input = { namespace: "opencord.agent-thread", key: "thread-1" }
-
-      expect(SessionV2.ID.fromExternal(input)).toBe(SessionV2.ID.fromExternal(input))
-      expect(SessionV2.ID.fromExternal(input)).toMatch(/^ses_[a-f0-9]{64}$/)
-      expect(SessionV2.ID.fromExternal({ ...input, namespace: "another-app" })).not.toBe(
-        SessionV2.ID.fromExternal(input),
-      )
-      expect(SessionV2.ID.fromExternal({ namespace: "a:b", key: "c" })).not.toBe(
-        SessionV2.ID.fromExternal({ namespace: "a", key: "b:c" }),
-      )
-    }),
-  )
-
   it.effect("creates a fresh projected session when the ID is omitted", () =>
     Effect.gen(function* () {
       const session = yield* SessionV2.Service
@@ -218,14 +196,14 @@ describe("SessionV2.create", () => {
       const events = yield* EventV2.Service
       const { db } = yield* Database.Service
       const created = yield* session.create({ location })
-      yield* session.prompt({ sessionID: created.id, prompt: new Prompt({ text: "Hello" }), resume: false })
+      yield* session.prompt({ sessionID: created.id, prompt: Prompt.make({ text: "Hello" }), resume: false })
       yield* SessionInput.promoteSteers(db, events, created.id, Number.MAX_SAFE_INTEGER)
 
       expect(
         Array.from(yield* session.events({ sessionID: created.id }).pipe(Stream.take(2), Stream.runCollect)),
       ).toMatchObject([
         { durable: { seq: 1 }, type: "session.next.prompt.admitted", data: { prompt: { text: "Hello" } } },
-        { durable: { seq: 2 }, type: "session.next.prompt.promoted" },
+        { durable: { seq: 2 }, type: "session.next.prompted" },
       ])
     }),
   )
@@ -238,7 +216,7 @@ describe("SessionV2.create", () => {
       const created = yield* session.create({ id: SessionV2.ID.make("ses_fresh_target_replay"), location })
       const admitted = yield* session.prompt({
         sessionID: created.id,
-        prompt: new Prompt({ text: "Replay lifecycle" }),
+        prompt: Prompt.make({ text: "Replay lifecycle" }),
         resume: false,
       })
       yield* SessionInput.promoteSteers(sourceDb, sourceEvents, created.id, Number.MAX_SAFE_INTEGER)
@@ -261,9 +239,10 @@ describe("SessionV2.create", () => {
         (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
       )
       const targetDatabase = Database.layerFromPath(path.join(tmp.path, "target.sqlite"))
-      const targetEvents = EventV2.layer.pipe(Layer.provide(targetDatabase))
-      const targetProjector = SessionProjector.layer.pipe(Layer.provide(targetEvents), Layer.provide(targetDatabase))
-      const targetStore = SessionStore.layer.pipe(Layer.provide(targetDatabase))
+      const targetLayer = AppNodeBuilder.build(
+        LayerNode.group([Database.node, EventV2.node, SessionProjector.node, SessionStore.node]),
+        [[Database.node, targetDatabase]],
+      )
 
       yield* Effect.gen(function* () {
         const db = (yield* Database.Service).db
@@ -308,10 +287,10 @@ describe("SessionV2.create", () => {
             .pipe(Effect.orDie)).map((event) => [event.seq, event.type]),
         ).toEqual([
           [0, EventV2.versionedType(SessionV1.Event.Created.type, 1)],
-          [1, EventV2.versionedType(SessionEvent.PromptLifecycle.Admitted.type, 1)],
-          [2, EventV2.versionedType(SessionEvent.PromptLifecycle.Promoted.type, 1)],
+          [1, EventV2.versionedType(SessionEvent.PromptAdmitted.type, 1)],
+          [2, EventV2.versionedType(SessionEvent.Prompted.type, 1)],
         ])
-      }).pipe(Effect.provide(Layer.fresh(Layer.mergeAll(targetDatabase, targetEvents, targetProjector, targetStore))))
+      }).pipe(Effect.provide(Layer.fresh(targetLayer)))
     }),
   )
 
@@ -390,7 +369,7 @@ describe("SessionV2.create", () => {
     }),
   )
 
-  it.effect("persists repeated switches as distinct durable Session events", () =>
+  it.effect("ignores a model switch when the selected model is unchanged", () =>
     Effect.gen(function* () {
       const session = yield* SessionV2.Service
       const created = yield* session.create({ location })
@@ -402,8 +381,26 @@ describe("SessionV2.create", () => {
       const { db } = yield* Database.Service
       expect(
         yield* db.select().from(EventTable).where(eq(EventTable.aggregate_id, created.id)).all().pipe(Effect.orDie),
-      ).toHaveLength(3)
+      ).toHaveLength(2)
       expect(yield* session.get(created.id)).toMatchObject({ model })
+    }),
+  )
+
+  it.effect("treats an omitted variant as the default variant", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionV2.Service
+      const model = ModelV2.Ref.make({ id: ModelV2.ID.make("sonnet"), providerID: ProviderV2.ID.anthropic })
+      const created = yield* session.create({ location, model })
+
+      yield* session.switchModel({
+        sessionID: created.id,
+        model: ModelV2.Ref.make({ ...model, variant: ModelV2.VariantID.make("default") }),
+      })
+
+      const { db } = yield* Database.Service
+      expect(
+        yield* db.select().from(EventTable).where(eq(EventTable.aggregate_id, created.id)).all().pipe(Effect.orDie),
+      ).toHaveLength(1)
     }),
   )
 

@@ -1,16 +1,18 @@
 import { describe, expect } from "bun:test"
 import { Effect, Exit, Layer, Scope } from "effect"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Global } from "@opencode-ai/core/global"
 import { Reference } from "@opencode-ai/core/reference"
 import { Repository } from "@opencode-ai/core/repository"
 import { RepositoryCache } from "@opencode-ai/core/repository-cache"
-import { EventV2 } from "@opencode-ai/core/event"
 import { it } from "./lib/effect"
 
 const cache = Layer.mock(RepositoryCache.Service, {
   ensure: () => Effect.die("unexpected Git materialization"),
 })
+const referenceLayer = AppNodeBuilder.build(Reference.node, [[RepositoryCache.node, cache]])
 
 describe("Reference", () => {
   it.effect("registers normalized sources for the owning scope", () =>
@@ -18,7 +20,7 @@ describe("Reference", () => {
       const references = yield* Reference.Service
       const scope = yield* Scope.make()
       const path = AbsolutePath.make("/docs")
-      const source = new Reference.LocalSource({
+      const source = Reference.LocalSource.make({
         type: "local",
         path,
         description: "Use for API documentation",
@@ -32,19 +34,14 @@ describe("Reference", () => {
 
       yield* Scope.close(scope, Exit.void)
       expect(yield* references.list()).toEqual([])
-    }).pipe(
-      Effect.provide(Reference.layer),
-      Effect.provide(cache),
-      Effect.provide(EventV2.defaultLayer),
-      Effect.provide(Global.defaultLayer),
-    ),
+    }).pipe(Effect.provide(referenceLayer)),
   )
 
   it.effect("derives Git paths without exposing cache operations", () =>
     Effect.gen(function* () {
       const references = yield* Reference.Service
       const repository = Repository.parseRemote("owner/repo")
-      const source = new Reference.GitSource({ type: "git", repository: "owner/repo", branch: "main" })
+      const source = Reference.GitSource.make({ type: "git", repository: "owner/repo", branch: "main" })
       yield* references.transform((editor) => editor.add("sdk", source))
 
       expect(yield* references.list()).toEqual([
@@ -54,20 +51,14 @@ describe("Reference", () => {
           source,
         }),
       ])
-    }).pipe(
-      Effect.scoped,
-      Effect.provide(Reference.layer),
-      Effect.provide(cache),
-      Effect.provide(EventV2.defaultLayer),
-      Effect.provide(Global.defaultLayer),
-    ),
+    }).pipe(Effect.scoped, Effect.provide(referenceLayer)),
   )
 
   it.effect("preserves configured Git descriptions", () =>
     Effect.gen(function* () {
       const references = yield* Reference.Service
       const repository = Repository.parseRemote("owner/repo")
-      const source = new Reference.GitSource({
+      const source = Reference.GitSource.make({
         type: "git",
         repository: "owner/repo",
         description: "Use for SDK implementation details",
@@ -82,12 +73,6 @@ describe("Reference", () => {
           source,
         }),
       ])
-    }).pipe(
-      Effect.scoped,
-      Effect.provide(Reference.layer),
-      Effect.provide(cache),
-      Effect.provide(EventV2.defaultLayer),
-      Effect.provide(Global.defaultLayer),
-    ),
+    }).pipe(Effect.scoped, Effect.provide(referenceLayer)),
   )
 })

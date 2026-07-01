@@ -1,6 +1,8 @@
 export * as Reference from "./reference"
 
-import { Context, Effect, Layer, Schema, Scope, Types } from "effect"
+import { makeLocationNode } from "./effect/app-node"
+import { Context, Effect, Layer, Scope, Types } from "effect"
+import { Reference } from "@opencode-ai/schema/reference"
 import { Global } from "./global"
 import { EventV2 } from "./event"
 import { Repository } from "./repository"
@@ -8,35 +10,19 @@ import { RepositoryCache } from "./repository-cache"
 import { AbsolutePath } from "./schema"
 import { State } from "./state"
 
-export class LocalSource extends Schema.Class<LocalSource>("Reference.LocalSource")({
-  type: Schema.Literal("local"),
-  path: AbsolutePath,
-  description: Schema.String.pipe(Schema.optional),
-  hidden: Schema.Boolean.pipe(Schema.optional),
-}) {}
+export const LocalSource = Reference.LocalSource
+export type LocalSource = Reference.LocalSource
 
-export class GitSource extends Schema.Class<GitSource>("Reference.GitSource")({
-  type: Schema.Literal("git"),
-  repository: Schema.String,
-  branch: Schema.String.pipe(Schema.optional),
-  description: Schema.String.pipe(Schema.optional),
-  hidden: Schema.Boolean.pipe(Schema.optional),
-}) {}
+export const GitSource = Reference.GitSource
+export type GitSource = Reference.GitSource
 
-export const Source = Schema.Union([LocalSource, GitSource]).pipe(Schema.toTaggedUnion("type"))
-export type Source = typeof Source.Type
+export const Source = Reference.Source
+export type Source = Reference.Source
 
-export const Event = {
-  Updated: EventV2.define({ type: "reference.updated", schema: {} }),
-}
+export const Event = Reference.Event
 
-export class Info extends Schema.Class<Info>("Reference.Info")({
-  name: Schema.String,
-  path: AbsolutePath,
-  description: Schema.String.pipe(Schema.optional),
-  hidden: Schema.Boolean.pipe(Schema.optional),
-  source: Source,
-}) {}
+export const Info = Reference.Info
+export type Info = Reference.Info
 
 type Data = {
   sources: Map<string, Types.DeepMutable<Source>>
@@ -54,7 +40,7 @@ export interface Interface extends State.Transformable<Draft> {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Reference") {}
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const global = yield* Global.Service
@@ -80,8 +66,8 @@ export const layer = Layer.effect(
                 new Info({
                   name,
                   path: source.path,
-                  description: source.description,
-                  hidden: source.hidden,
+                  ...(source.description === undefined ? {} : { description: source.description }),
+                  ...(source.hidden === undefined ? {} : { hidden: source.hidden }),
                   source,
                 }),
               )
@@ -104,8 +90,8 @@ export const layer = Layer.effect(
               new Info({
                 name,
                 path: AbsolutePath.make(target),
-                description: source.description,
-                hidden: source.hidden,
+                ...(source.description === undefined ? {} : { description: source.description }),
+                ...(source.hidden === undefined ? {} : { hidden: source.hidden }),
                 source,
               }),
             )
@@ -126,7 +112,7 @@ export const layer = Layer.effect(
 
     return Service.of({
       transform: state.transform,
-      rebuild: state.rebuild,
+      reload: state.reload,
       list: Effect.fn("Reference.list")(function* () {
         return Array.from(materialized.values())
       }),
@@ -135,3 +121,9 @@ export const layer = Layer.effect(
 )
 
 export const locationLayer = layer
+
+export const node = makeLocationNode({
+  service: Service,
+  layer,
+  deps: [Global.node, EventV2.node, RepositoryCache.node],
+})

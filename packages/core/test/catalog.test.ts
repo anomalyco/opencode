@@ -3,6 +3,8 @@ import { Effect, Fiber, Layer, Stream } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Integration } from "@opencode-ai/core/integration"
 import { Credential } from "@opencode-ai/core/credential"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventV2 } from "@opencode-ai/core/event"
 import { Location } from "@opencode-ai/core/location"
 import { ModelV2 } from "@opencode-ai/core/model"
@@ -21,13 +23,11 @@ const locationLayer = Layer.succeed(
   Location.Service,
   Location.Service.of(location({ directory: AbsolutePath.make("test") })),
 )
-const it = testEffect(
-  Catalog.locationLayer.pipe(
-    Layer.provideMerge(EventV2.defaultLayer),
-    Layer.provideMerge(locationLayer),
-    Layer.provideMerge(Credential.defaultLayer),
-  ),
+const catalogLayer = AppNodeBuilder.build(
+  LayerNode.group([Catalog.node, EventV2.node, Credential.node, Integration.node, Policy.node]),
+  [[Location.node, locationLayer]],
 )
+const it = testEffect(catalogLayer)
 
 describe("CatalogV2", () => {
   it.effect("publishes an updated event after catalog changes", () =>
@@ -47,11 +47,8 @@ describe("CatalogV2", () => {
 
   it.effect("derives availability from active credentials without changing provider state", () => {
     const integrationID = Integration.ID.make("test")
-    const layer = Catalog.locationLayer.pipe(
-      Layer.fresh,
-      Layer.provideMerge(EventV2.defaultLayer),
-      Layer.provideMerge(locationLayer),
-      Layer.provideMerge(Credential.defaultLayer.pipe(Layer.fresh)),
+    const localCatalogLayer = Layer.fresh(
+      AppNodeBuilder.build(LayerNode.group([Catalog.node, Credential.node]), [[Location.node, locationLayer]]),
     )
 
     return Effect.gen(function* () {
@@ -61,7 +58,7 @@ describe("CatalogV2", () => {
       yield* credentials.create({
         integrationID,
         label: "First",
-        value: new Credential.Key({ type: "key", key: "first", metadata: { tenant: "one" } }),
+        value: Credential.Key.make({ type: "key", key: "first", metadata: { tenant: "one" } }),
       })
 
       expect((yield* catalog.provider.available()).map((provider) => provider.id)).toEqual([ProviderV2.ID.make("test")])
@@ -69,11 +66,39 @@ describe("CatalogV2", () => {
       yield* credentials.create({
         integrationID,
         label: "Second",
-        value: new Credential.Key({ type: "key", key: "second", metadata: { tenant: "two" } }),
+        value: Credential.Key.make({ type: "key", key: "second", metadata: { tenant: "two" } }),
       })
       expect((yield* catalog.provider.available()).map((provider) => provider.id)).toEqual([ProviderV2.ID.make("test")])
       expect(required(yield* catalog.provider.get(ProviderV2.ID.make("test"))).request.body).toEqual({})
-    }).pipe(Effect.provide(layer))
+    }).pipe(Effect.provide(localCatalogLayer))
+  })
+
+  it.effect("derives availability from a provider's integration", () => {
+    const integrationID = Integration.ID.make("gateway")
+    const providerID = ProviderV2.ID.make("remote")
+    const localCatalogLayer = Layer.fresh(
+      AppNodeBuilder.build(LayerNode.group([Catalog.node, Credential.node, Integration.node]), [
+        [Location.node, locationLayer],
+      ]),
+    )
+
+    return Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      yield* (yield* Integration.Service).transform((editor) => editor.update(integrationID, () => {}))
+      yield* catalog.transform((editor) =>
+        editor.provider.update(providerID, (provider) => {
+          provider.integrationID = integrationID
+        }),
+      )
+      expect(yield* catalog.provider.available()).toEqual([])
+
+      yield* (yield* Credential.Service).create({
+        integrationID,
+        value: Credential.Key.make({ type: "key", key: "secret" }),
+      })
+
+      expect((yield* catalog.provider.available()).map((provider) => provider.id)).toEqual([providerID])
+    }).pipe(Effect.provide(localCatalogLayer))
   })
 
   it.effect("projects environment connections without a catalog plugin", () =>
@@ -204,16 +229,13 @@ describe("CatalogV2", () => {
           model.request.headers.shared = "model"
           model.request.body.model = true
           model.request.body.request = true
-          const options = (model.request.options ??= {})
-          options.shared = "model"
-          options.model = true
+          model.request.body.shared = "model"
         })
       })
 
       const model = required(yield* catalog.model.get(providerID, modelID))
       expect(model.request.headers).toEqual({ provider: "provider", shared: "model", model: "model" })
-      expect(model.request.body).toEqual({ provider: true, model: true, request: true })
-      expect(model.request.options).toEqual({ shared: "model", model: true })
+      expect(model.request.body).toEqual({ provider: true, model: true, request: true, shared: "model" })
     }),
   )
 
@@ -259,7 +281,7 @@ describe("CatalogV2", () => {
       expect((yield* catalog.model.default())?.id).toBe(old)
 
       configured = false
-      yield* catalog.rebuild()
+      yield* catalog.reload()
       expect((yield* catalog.model.default())?.id).toBe(newest)
     }),
   )

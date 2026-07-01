@@ -1,14 +1,13 @@
 import os from "os"
 import { InstallationVersion } from "../../installation/version"
 import { Effect } from "effect"
-import { define } from "@opencode-ai/plugin/v2/effect"
+import { define } from "../internal"
 import { ProviderV2 } from "../../provider"
 
 export const GitLabPlugin = define({
   id: "gitlab",
   effect: Effect.fn(function* (ctx) {
-    yield* ctx.aisdk.hook(
-      "sdk",
+    yield* ctx.aisdk.sdk(
       Effect.fn(function* (evt) {
         if (evt.package !== "gitlab-ai-provider") return
         const mod = yield* Effect.promise(() => import("gitlab-ai-provider"))
@@ -32,8 +31,7 @@ export const GitLabPlugin = define({
         })
       }),
     )
-    yield* ctx.aisdk.hook(
-      "language",
+    yield* ctx.aisdk.language(
       Effect.fn(function* (evt) {
         if (evt.model.providerID !== ProviderV2.ID.gitlab) return
         const featureFlags =

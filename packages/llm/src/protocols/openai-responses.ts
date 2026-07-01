@@ -8,6 +8,7 @@ import {
   LLMEvent,
   Usage,
   type FinishReason,
+  type JsonSchema,
   type LLMRequest,
   type ProviderMetadata,
   type ReasoningPart,
@@ -21,6 +22,7 @@ import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./share
 import { isContextOverflow } from "../provider-error"
 import { OpenAIOptions } from "./utils/openai-options"
 import { Lifecycle } from "./utils/lifecycle"
+import { ToolSchemaProjection } from "./utils/tool-schema"
 import { ToolStream } from "./utils/tool-stream"
 
 const ADAPTER = "openai-responses"
@@ -53,7 +55,7 @@ const OpenAIResponsesReasoningSummaryText = Schema.Struct({
 
 const OpenAIResponsesReasoningItem = Schema.Struct({
   type: Schema.tag("reasoning"),
-  id: Schema.String,
+  id: Schema.optionalKey(Schema.String),
   summary: Schema.Array(OpenAIResponsesReasoningSummaryText),
   encrypted_content: optionalNull(Schema.String),
 })
@@ -101,6 +103,7 @@ type OpenAIResponsesReasoningInput = {
   summary: Array<{ type: "summary_text"; text: string }>
   encrypted_content?: string | null
 }
+type OpenAIResponsesReasoningReplay = Omit<OpenAIResponsesReasoningInput, "id">
 
 const OpenAIResponsesTool = Schema.Struct({
   type: Schema.tag("function"),
@@ -253,11 +256,13 @@ const invalid = ProviderShared.invalidRequest
 // =============================================================================
 // Request Lowering
 // =============================================================================
-const lowerTool = (tool: ToolDefinition): OpenAIResponsesTool => ({
+const lowerTool = (tool: ToolDefinition, inputSchema: JsonSchema): OpenAIResponsesTool => ({
   type: "function",
   name: tool.name,
   description: tool.description,
-  parameters: ProviderShared.openAiToolInputSchema(tool.inputSchema),
+  parameters: ToolSchemaProjection.openAI(inputSchema),
+  // TODO: Read this from OpenAI-specific tool options so direct LLM callers can opt into strict schemas.
+  strict: false,
 })
 
 const lowerToolChoice = (toolChoice: NonNullable<LLMRequest["toolChoice"]>) =>
@@ -364,7 +369,7 @@ const lowerMessages = Effect.fn("OpenAIResponses.lowerMessages")(function* (requ
 
     if (message.role === "assistant") {
       const content: TextPart[] = []
-      const reasoningItems: Record<string, OpenAIResponsesReasoningInput> = {}
+      const reasoningItems: Record<string, OpenAIResponsesReasoningReplay> = {}
       const reasoningReferences = new Set<string>()
       const hostedToolReferences = new Set<string>()
       const flushText = () => {
@@ -381,7 +386,7 @@ const lowerMessages = Effect.fn("OpenAIResponses.lowerMessages")(function* (requ
           flushText()
           const reasoning = lowerReasoning(part)
           if (!reasoning) continue
-          if (store !== false && reasoning.id) {
+          if (store !== false) {
             if (!reasoningReferences.has(reasoning.id)) input.push({ type: "item_reference", id: reasoning.id })
             reasoningReferences.add(reasoning.id)
             continue
@@ -393,8 +398,13 @@ const lowerMessages = Effect.fn("OpenAIResponses.lowerMessages")(function* (requ
               existing.encrypted_content = reasoning.encrypted_content
             continue
           }
-          reasoningItems[reasoning.id] = reasoning
-          input.push(reasoning)
+          const replay = {
+            type: reasoning.type,
+            summary: reasoning.summary,
+            encrypted_content: reasoning.encrypted_content,
+          }
+          reasoningItems[reasoning.id] = replay
+          input.push(replay)
           continue
         }
         if (part.type === "tool-call") {
@@ -468,10 +478,16 @@ const lowerOptions = Effect.fn("OpenAIResponses.lowerOptions")(function* (reques
 const fromRequest = Effect.fn("OpenAIResponses.fromRequest")(function* (request: LLMRequest) {
   const generation = request.generation
   const options = yield* lowerOptions(request)
+  const toolSchemaCompatibility = request.model.compatibility?.toolSchema
   return {
     model: request.model.id,
     input: yield* lowerMessages(request),
-    tools: request.tools.length === 0 ? undefined : request.tools.map(lowerTool),
+    tools:
+      request.tools.length === 0
+        ? undefined
+        : request.tools.map((tool) =>
+            lowerTool(tool, ToolSchemaProjection.modelCompatibility(tool.inputSchema, toolSchemaCompatibility)),
+          ),
     tool_choice: request.toolChoice ? yield* lowerToolChoice(request.toolChoice) : undefined,
     stream: true as const,
     max_output_tokens: generation?.maxTokens,
@@ -972,6 +988,7 @@ export const route = Route.make({
   endpoint,
   auth,
   transport: httpTransport,
+  defaults: { providerOptions: { openai: { store: false } } },
 })
 
 const decodeWebSocketMessage = ProviderShared.validateWith(Schema.decodeUnknownEffect(OpenAIResponsesWebSocketMessage))
@@ -999,6 +1016,7 @@ export const webSocketRoute = Route.make({
   endpoint,
   auth,
   transport: webSocketTransport,
+  defaults: { providerOptions: { openai: { store: false } } },
 })
 
 export * as OpenAIResponses from "./openai-responses"
