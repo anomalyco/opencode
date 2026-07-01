@@ -75,7 +75,7 @@ export const providerLayerWithCell = (cell: Cell) =>
       const sessions = yield* SessionV2.Service
       const jobs = yield* Job.Service
       const locations = yield* LocationServiceMap.Service
-      const runtime = {
+      const runtime: Interface = {
         session: sessions,
         job: jobs,
         location: {
@@ -92,10 +92,10 @@ export const providerLayerWithCell = (cell: Cell) =>
                   }),
                   data: yield* agents.list(),
                 }
-              }).pipe(Effect.provide(locations.get(ref))),
+              }).pipe(Effect.provide(locations.get(ref)), Effect.orDie),
           },
         },
-      } satisfies Interface
+      }
       cell.runtime = runtime
       yield* Effect.addFinalizer(() =>
         Effect.sync(() => {

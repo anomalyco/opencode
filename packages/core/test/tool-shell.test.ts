@@ -118,23 +118,23 @@ const executionNode = makeGlobalNode({
 })
 
 const layer = AppNodeBuilder.build(
-  LayerNode.bind(
-    LayerNode.group([
-      Database.node,
-      EventV2.node,
-      Job.node,
-      ToolOutputStore.cleanupNode,
-      SessionV2.node,
-      PluginRuntime.providerNode,
-      LocationServiceMap.node,
-      filesystem,
-      FSUtil.node,
-      Global.node,
-    ]),
+  LayerNode.group([
+    Database.node,
+    EventV2.node,
+    Job.node,
+    ToolOutputStore.cleanupNode,
+    SessionV2.node,
     SessionExecution.node,
-    executionNode,
-  ),
-  [LayerNode.replace(PermissionV2.layer, permission)],
+    PluginRuntime.providerNode,
+    LocationServiceMap.node,
+    filesystem,
+    FSUtil.node,
+    Global.node,
+  ]),
+  [
+    [SessionExecution.node, executionNode],
+    [PermissionV2.node, permission],
+  ],
 )
 
 const it = testEffect(layer)

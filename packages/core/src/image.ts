@@ -44,7 +44,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Image") {}
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const config = yield* Config.Service
@@ -75,7 +75,5 @@ export const layer = Layer.effect(
     return Service.of({ normalize })
   }),
 )
-
-export const locationLayer = layer.pipe(Layer.provide(Config.locationLayer))
 
 export const node = makeLocationNode({ service: Service, layer, deps: [Config.node] })

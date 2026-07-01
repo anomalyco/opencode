@@ -179,7 +179,7 @@ export const supported = (model: ModelV2.Info) =>
     (model.api.package === "@ai-sdk/openai-compatible" && model.api.url !== undefined))
 
 /** Resolves models from the catalog belonging to the current Location runtime. */
-export const locationLayer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const catalog = yield* Catalog.Service
@@ -215,4 +215,4 @@ export const locationLayer = Layer.effect(
   }),
 )
 
-export const node = makeLocationNode({ service: Service, layer: locationLayer, deps: [Catalog.node, Integration.node] })
+export const node = makeLocationNode({ service: Service, layer, deps: [Catalog.node, Integration.node] })

@@ -92,19 +92,17 @@ const executionNode = makeGlobalNode({
 })
 
 const layer = AppNodeBuilder.build(
-  LayerNode.bind(
-    LayerNode.group([
-      Database.node,
-      EventV2.node,
-      Job.node,
-      ToolOutputStore.cleanupNode,
-      SessionV2.node,
-      PluginRuntime.providerNode,
-      LocationServiceMap.node,
-    ]),
+  LayerNode.group([
+    Database.node,
+    EventV2.node,
+    Job.node,
+    ToolOutputStore.cleanupNode,
+    SessionV2.node,
     SessionExecution.node,
-    executionNode,
-  ),
+    PluginRuntime.providerNode,
+    LocationServiceMap.node,
+  ]),
+  [[SessionExecution.node, executionNode]],
 )
 
 const it = testEffect(layer)

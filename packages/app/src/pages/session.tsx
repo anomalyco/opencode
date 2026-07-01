@@ -3,6 +3,7 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { createQuery, skipToken, useMutation, useQueryClient } from "@tanstack/solid-query"
 import {
   batch,
+  ErrorBoundary,
   onCleanup,
   Show,
   Match,
@@ -10,8 +11,10 @@ import {
   createMemo,
   createEffect,
   createComputed,
+  createResource,
   on,
   onMount,
+  type ParentProps,
   untrack,
 } from "solid-js"
 import { makeEventListener } from "@solid-primitives/event-listener"
@@ -19,29 +22,37 @@ import { createMediaQuery } from "@solid-primitives/media"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { debounce } from "@solid-primitives/scheduled"
 import { useLocal } from "@/context/local"
-import { selectionFromLines, useFile, type FileSelection, type SelectedLineRange } from "@/context/file"
+import { FileProvider, selectionFromLines, useFile, type FileSelection, type SelectedLineRange } from "@/context/file"
 import { createStore } from "solid-js/store"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Select } from "@opencode-ai/ui/select"
 import { Tabs } from "@opencode-ai/ui/tabs"
+import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { createAutoScroll } from "@opencode-ai/ui/hooks"
 import { previewSelectedLines } from "@opencode-ai/session-ui/pierre/selection-bridge"
 import { Button } from "@opencode-ai/ui/button"
 import { showToast } from "@/utils/toast"
 import { base64Encode, checksum } from "@opencode-ai/core/util/encode"
-import { useLocation, useNavigate, useSearchParams } from "@solidjs/router"
+import { Navigate, useLocation, useNavigate, useParams, useSearchParams } from "@solidjs/router"
 import { NewSessionView, SessionHeader } from "@/components/session"
-import { useComments } from "@/context/comments"
+import { ErrorPage } from "@/pages/error"
+import { CommentsProvider, useComments } from "@/context/comments"
+import { DirectoryDataProvider } from "@/pages/directory-layout"
 import { useServerSync } from "@/context/server-sync"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
-import { usePrompt } from "@/context/prompt"
+import { ModelsProvider } from "@/context/models"
+import { useNotification } from "@/context/notification"
+import { PermissionProvider } from "@/context/permission"
+import { PromptProvider, usePrompt } from "@/context/prompt"
 import { usePlatform } from "@/context/platform"
-import { useSDK } from "@/context/sdk"
+import { SDKProvider, useSDK } from "@/context/sdk"
 import { useServerSDK } from "@/context/server-sdk"
+import { ServerConnection, serverName, useServer } from "@/context/server"
 import { useSettings } from "@/context/settings"
 import { useSync } from "@/context/sync"
-import { useTerminal } from "@/context/terminal"
+import { useTabs } from "@/context/tabs"
+import { TerminalProvider, useTerminal } from "@/context/terminal"
 import { PromptInput } from "@/components/prompt-input"
 import { useSettingsCommand } from "@/components/settings-dialog"
 import { type FollowupDraft, sendFollowupDraft } from "@/components/prompt-input/submit"
@@ -73,8 +84,8 @@ import { Identifier } from "@/utils/id"
 import { diffs as list } from "@/utils/diffs"
 import { Persist, persisted } from "@/utils/persist"
 import { extractPromptFromParts } from "@/utils/prompt"
-import { formatServerError } from "@/utils/server-errors"
-import { legacySessionHref, requireServerKey, sessionHref } from "@/utils/session-route"
+import { formatServerError, isSessionNotFoundError } from "@/utils/server-errors"
+import { legacySessionHref, requireServerKey, selectSessionLineage, sessionHref } from "@/utils/session-route"
 import { useUsageExceededDialogs } from "./session/usage-exceeded-dialogs"
 import { createSessionOwnership } from "./session/session-ownership"
 
@@ -90,6 +101,15 @@ const sessionViewState = () => ({
   mobileTab: "session" as "session" | "changes",
   changes: "git" as ChangeMode,
 })
+
+function isLocalSessionNotFoundError(error: unknown, sessionID: string) {
+  return error instanceof Error && error.message === `Session not found: ${sessionID}`
+}
+
+function isCurrentSessionNotFoundError(error: unknown, sessionID: string | undefined) {
+  if (!sessionID) return false
+  return isSessionNotFoundError(error, sessionID) || isLocalSessionNotFoundError(error, sessionID)
+}
 
 async function runPromptRollbackMutation<T, R>(input: {
   capturePrompt: () => { current: () => T[]; set: (value: T[]) => void; reset: () => void }
@@ -112,6 +132,204 @@ async function runPromptRollbackMutation<T, R>(input: {
       })
       input.fail(error)
     })
+}
+
+export function SessionPage() {
+  return (
+    <SessionProviders>
+      <Page />
+    </SessionProviders>
+  )
+}
+
+export function TargetSessionRoute() {
+  const params = useParams<{ serverKey: string; id: string }>()
+  return (
+    <Show when={`${params.serverKey}\0${params.id}`} keyed>
+      <SessionRouteErrorBoundary sessionID={params.id} serverKey={requireServerKey(params.serverKey)} padded>
+        <ResolvedTargetSessionRoute />
+      </SessionRouteErrorBoundary>
+    </Show>
+  )
+}
+
+function SessionRouteErrorBoundary(
+  props: ParentProps<{ sessionID?: string; serverKey?: ServerConnection.Key; padded?: boolean }>,
+) {
+  const settings = useSettings()
+  return (
+    <ErrorBoundary
+      fallback={(error) =>
+        settings.general.newLayoutDesigns() ? (
+          <SessionRouteFrame padded={props.padded}>
+            <SessionPanelFrame newLayout raised={!!props.sessionID}>
+              <SessionErrorFallback error={error} sessionID={props.sessionID} serverKey={props.serverKey} />
+            </SessionPanelFrame>
+          </SessionRouteFrame>
+        ) : (
+          <ErrorPage error={error} />
+        )
+      }
+    >
+      {props.children}
+    </ErrorBoundary>
+  )
+}
+
+function SessionErrorFallback(props: { error: unknown; sessionID?: string; serverKey?: ServerConnection.Key }) {
+  const language = useLanguage()
+  const server = useServer()
+  const tabs = useTabs()
+  const displayServer = createMemo(() => {
+    const key = props.serverKey ?? server.key
+    const conn = server.list.find((item) => ServerConnection.key(item) === key)
+    return conn ? serverName(conn) : key
+  })
+  const closeTab = () => {
+    if (!props.sessionID) return
+    tabs.removeSessionTab({ server: props.serverKey ?? server.key, sessionId: props.sessionID })
+  }
+  if (isCurrentSessionNotFoundError(props.error, props.sessionID)) {
+    return (
+      <div class="flex-1 min-h-0 overflow-hidden">
+        <div class="h-full px-6 pb-42 -mt-4 flex flex-col items-center justify-center text-center gap-4">
+          <div class="flex flex-col items-center gap-2">
+            <div class="text-16-medium text-text max-w-md">{language.t("session.error.notFound")}</div>
+            <div class="text-13-regular text-text-weak max-w-md">
+              {language.t("session.error.notFound.description")}
+            </div>
+          </div>
+          <Show when={props.sessionID}>
+            {(sessionID) => (
+              <div class="max-w-full flex flex-col items-center gap-1">
+                <div class="max-w-full text-11-regular text-text-faint break-all">{displayServer()}</div>
+                <code class="max-w-full rounded-[4px] px-1 py-0.5 font-mono text-xs font-medium leading-4 text-text-base break-all bg-[color-mix(in_oklch,var(--v2-text-text-base)_8%,transparent)]">
+                  {sessionID()}
+                </code>
+              </div>
+            )}
+          </Show>
+          <ButtonV2 variant="neutral" size="normal" icon="xmark-small" onClick={closeTab}>
+            {language.t("session.error.notFound.closeTab")}
+          </ButtonV2>
+        </div>
+      </div>
+    )
+  }
+  return <ErrorPage error={props.error} />
+}
+
+function ResolvedTargetSessionRoute() {
+  const params = useParams<{ serverKey: string; id: string }>()
+  const settings = useSettings()
+  const tabs = useTabs()
+  const sync = useServerSync()
+  const serverKey = createMemo(() => requireServerKey(params.serverKey))
+  const cached = createMemo(() => sync().session.lineage.peek(params.id))
+  const [resolved] = createResource(
+    () => {
+      if (cached()) return
+      return { id: params.id, sync: sync() }
+    },
+    ({ id, sync }) => sync.session.lineage.resolve(id),
+  )
+  const current = createMemo(() => selectSessionLineage(params.id, cached(), resolved()))
+  const directory = createMemo(() => current()?.session.directory)
+  const targetDirectory = () => directory()!
+
+  createEffect(() => {
+    const session = current()
+    if (!session) return
+    tabs.addSessionTab({
+      server: serverKey(),
+      sessionId: session.root.id,
+    })
+  })
+
+  return (
+    <TargetServerScopedProviders directory={directory} sessionID={() => params.id}>
+      <Show when={directory()}>
+        <Show
+          when={settings.general.newLayoutDesigns()}
+          fallback={<Navigate href={legacySessionHref(directory()!, params.id)} />}
+        >
+          <SDKProvider directory={targetDirectory}>
+            <DirectoryDataProvider directory={targetDirectory} server={serverKey}>
+              <TargetSessionPage />
+            </DirectoryDataProvider>
+          </SDKProvider>
+        </Show>
+      </Show>
+    </TargetServerScopedProviders>
+  )
+}
+
+function TargetSessionPage() {
+  const sdk = useSDK()
+  const serverSDK = useServerSDK()
+  return (
+    <Show when={`${serverSDK().scope}\0${sdk().directory}`} keyed>
+      <SessionPage />
+    </Show>
+  )
+}
+
+function TargetServerScopedProviders(
+  props: ParentProps<{ directory?: () => string | undefined; sessionID?: () => string | undefined }>,
+) {
+  return (
+    <PermissionProvider directory={props.directory}>
+      <MarkSessionNotificationsViewed sessionID={props.sessionID} />
+      <ModelsProvider directory={props.directory}>{props.children}</ModelsProvider>
+    </PermissionProvider>
+  )
+}
+
+function MarkSessionNotificationsViewed(props: { sessionID?: () => string | undefined }) {
+  const notification = useNotification()
+  createEffect(() => {
+    const sessionID = props.sessionID?.()
+    if (!notification.ready() || !sessionID) return
+    if (notification.session.unseenCount(sessionID) === 0) return
+    notification.session.markViewed(sessionID)
+  })
+  return null
+}
+
+function SessionProviders(props: ParentProps) {
+  return (
+    <TerminalProvider>
+      <FileProvider>
+        <PromptProvider>
+          <CommentsProvider>{props.children}</CommentsProvider>
+        </PromptProvider>
+      </FileProvider>
+    </TerminalProvider>
+  )
+}
+
+function SessionRouteFrame(props: ParentProps<{ padded?: boolean }>) {
+  return (
+    <div class="relative size-full overflow-hidden flex flex-col" classList={{ "p-2": props.padded }}>
+      {props.children}
+    </div>
+  )
+}
+
+function SessionPanelFrame(props: ParentProps<{ newLayout: boolean; raised?: boolean }>) {
+  return (
+    <div
+      classList={{
+        "flex-1 min-h-0 flex flex-col": true,
+        "bg-v2-background-bg-base": props.newLayout,
+        "bg-background-stronger": !props.newLayout,
+        "rounded-[10px] overflow-hidden": props.newLayout,
+        "shadow-[var(--v2-elevation-raised)]": props.newLayout && props.raised,
+      }}
+    >
+      {props.children}
+    </div>
+  )
 }
 
 export default function Page() {
@@ -1695,9 +1913,88 @@ export default function Page() {
     () => !isDesktop() && settings.general.newLayoutDesigns() && settings.general.mobileTitlebarPosition() === "bottom",
   )
 
-  return (
-    <div class="relative size-full overflow-hidden flex flex-col">
+  const sessionErrorFallback = (error: unknown, reset: () => void) => {
+    createEffect(on(sessionKey, reset, { defer: true }))
+    return <SessionErrorFallback error={error} sessionID={params.id} />
+  }
+
+  const sessionPanelContent = () => (
+    <>
       {sessionSync() ?? ""}
+      <Show when={!isDesktop() && !!params.id && settings.general.newLayoutDesigns() && !mobileTabsBottom()}>
+        {mobileTabs(true)}
+      </Show>
+      <div class="flex-1 min-h-0 overflow-hidden">
+        <Switch>
+          <Match when={params.id && mobileChanges()}>
+            <div class="relative h-full overflow-hidden">
+              {reviewContent({
+                diffStyle: "unified",
+                classes: {
+                  root: "pb-8 [&_[data-slot=session-review-list]]:pb-0",
+                  header: "px-4 !h-16 !pb-4",
+                  container: "px-4",
+                },
+                loadingClass: "px-4 py-4 text-text-weak",
+                emptyClass: "h-full pb-64 -mt-4 flex flex-col items-center justify-center text-center gap-6",
+              })}
+            </div>
+          </Match>
+          <Match when={params.id}>
+            <Show when={messagesReady() ? params.id : undefined} keyed>
+              {(_id) => (
+                <MessageTimeline
+                  actions={actions}
+                  scroll={ui.scroll}
+                  onResumeScroll={resumeScroll}
+                  setScrollRef={setScrollRef}
+                  onScheduleScrollState={scheduleScrollState}
+                  onAutoScrollHandleScroll={autoScroll.handleScroll}
+                  onMarkScrollGesture={markScrollGesture}
+                  hasScrollGesture={hasScrollGesture}
+                  onUserScroll={markUserScroll}
+                  onHistoryScroll={onHistoryScroll}
+                  onAutoScrollInteraction={autoScroll.handleInteraction}
+                  shouldAnchorBottom={() =>
+                    !location.hash && !store.messageId && !ui.pendingMessage && !autoScroll.userScrolled()
+                  }
+                  centered={centered()}
+                  setContentRef={(el) => {
+                    content = el
+                    autoScroll.contentRef(el)
+
+                    const root = scroller
+                    if (root) scheduleScrollState(root)
+                  }}
+                  userMessages={visibleUserMessages()}
+                  setHistoryAnchor={(handlers) => {
+                    captureHistoryAnchor = handlers.capture
+                    restoreHistoryAnchor = handlers.restore
+                  }}
+                  anchor={anchor}
+                  setRevealMessage={(fn) => {
+                    revealMessage = fn
+                  }}
+                  setScrollToEnd={(fn) => {
+                    scrollToEnd = fn
+                  }}
+                />
+              )}
+            </Show>
+          </Match>
+          <Match when={true}>
+            <NewSessionView worktree={newSessionWorktree()} />
+          </Match>
+        </Switch>
+      </div>
+
+      <Show when={(params.id || !newSessionDesign()) && !mobileChanges()}>{(_) => composerRegion()}</Show>
+      <Show when={!!params.id && mobileTabsBottom()}>{mobileTabs(true, true)}</Show>
+    </>
+  )
+
+  return (
+    <SessionRouteFrame>
       <SessionHeader />
       <div
         class="flex-1 min-h-0 flex flex-col md:flex-row"
@@ -1717,85 +2014,13 @@ export default function Page() {
             width: sessionPanelWidth(),
           }}
         >
-          <div
-            classList={{
-              "flex-1 min-h-0 flex flex-col": true,
-              "bg-v2-background-bg-base": settings.general.newLayoutDesigns(),
-              "bg-background-stronger": !settings.general.newLayoutDesigns(),
-              "rounded-[10px] overflow-hidden": settings.general.newLayoutDesigns(),
-              "shadow-[var(--v2-elevation-raised)]": settings.general.newLayoutDesigns() && !!params.id,
-            }}
-          >
-            <Show when={!isDesktop() && !!params.id && settings.general.newLayoutDesigns() && !mobileTabsBottom()}>
-              {mobileTabs(true)}
-            </Show>
-            <div class="flex-1 min-h-0 overflow-hidden">
-              <Switch>
-                <Match when={params.id && mobileChanges()}>
-                  <div class="relative h-full overflow-hidden">
-                    {reviewContent({
-                      diffStyle: "unified",
-                      classes: {
-                        root: "pb-8 [&_[data-slot=session-review-list]]:pb-0",
-                        header: "px-4 !h-16 !pb-4",
-                        container: "px-4",
-                      },
-                      loadingClass: "px-4 py-4 text-text-weak",
-                      emptyClass: "h-full pb-64 -mt-4 flex flex-col items-center justify-center text-center gap-6",
-                    })}
-                  </div>
-                </Match>
-                <Match when={params.id}>
-                  <Show when={messagesReady() ? params.id : undefined} keyed>
-                    {(_id) => (
-                      <MessageTimeline
-                        actions={actions}
-                        scroll={ui.scroll}
-                        onResumeScroll={resumeScroll}
-                        setScrollRef={setScrollRef}
-                        onScheduleScrollState={scheduleScrollState}
-                        onAutoScrollHandleScroll={autoScroll.handleScroll}
-                        onMarkScrollGesture={markScrollGesture}
-                        hasScrollGesture={hasScrollGesture}
-                        onUserScroll={markUserScroll}
-                        onHistoryScroll={onHistoryScroll}
-                        onAutoScrollInteraction={autoScroll.handleInteraction}
-                        shouldAnchorBottom={() =>
-                          !location.hash && !store.messageId && !ui.pendingMessage && !autoScroll.userScrolled()
-                        }
-                        centered={centered()}
-                        setContentRef={(el) => {
-                          content = el
-                          autoScroll.contentRef(el)
-
-                          const root = scroller
-                          if (root) scheduleScrollState(root)
-                        }}
-                        userMessages={visibleUserMessages()}
-                        setHistoryAnchor={(handlers) => {
-                          captureHistoryAnchor = handlers.capture
-                          restoreHistoryAnchor = handlers.restore
-                        }}
-                        anchor={anchor}
-                        setRevealMessage={(fn) => {
-                          revealMessage = fn
-                        }}
-                        setScrollToEnd={(fn) => {
-                          scrollToEnd = fn
-                        }}
-                      />
-                    )}
-                  </Show>
-                </Match>
-                <Match when={true}>
-                  <NewSessionView worktree={newSessionWorktree()} />
-                </Match>
-              </Switch>
-            </div>
-
-            <Show when={(params.id || !newSessionDesign()) && !mobileChanges()}>{(_) => composerRegion()}</Show>
-            <Show when={!!params.id && mobileTabsBottom()}>{mobileTabs(true, true)}</Show>
-          </div>
+          <SessionPanelFrame newLayout={settings.general.newLayoutDesigns()} raised={!!params.id}>
+            {settings.general.newLayoutDesigns() ? (
+              <ErrorBoundary fallback={sessionErrorFallback}>{sessionPanelContent()}</ErrorBoundary>
+            ) : (
+              sessionPanelContent()
+            )}
+          </SessionPanelFrame>
 
           <Show when={desktopReviewOpen()}>
             <div onPointerDown={() => size.start()}>
@@ -1832,6 +2057,6 @@ export default function Page() {
       </div>
 
       <TerminalPanel />
-    </div>
+    </SessionRouteFrame>
   )
 }

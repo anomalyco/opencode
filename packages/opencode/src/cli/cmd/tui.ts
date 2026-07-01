@@ -6,11 +6,12 @@ import { fileURLToPath } from "url"
 import { UI } from "@/cli/ui"
 import { errorMessage } from "@opencode-ai/tui/util/error"
 import { withTimeout } from "@/util/timeout"
-import { withNetworkOptions, resolveNetworkOptionsNoConfig } from "@/cli/network"
+import { withNetworkOptions, resolveNetworkOptionsNoConfig, hasArg } from "@/cli/network"
 import { Filesystem } from "@/util/filesystem"
 import { OpenCode } from "@opencode-ai/client"
 import { createOpencodeClient } from "@opencode-ai/sdk/v2"
 import { writeHeapSnapshot } from "v8"
+import { ServerAuth } from "@/server/auth"
 import { validateSession } from "../tui/validate-session"
 import { win32InstallCtrlCGuard } from "@opencode-ai/tui/terminal-win32"
 
@@ -73,6 +74,21 @@ export const TuiThreadCommand = cmd({
       .option("agent", {
         type: "string",
         describe: "agent to use",
+      })
+      .option("auto", {
+        type: "boolean",
+        describe: "auto-approve permissions that are not explicitly denied (dangerous!)",
+        default: false,
+      })
+      .option("yolo", {
+        type: "boolean",
+        hidden: true,
+        default: false,
+      })
+      .option("dangerously-skip-permissions", {
+        type: "boolean",
+        hidden: true,
+        default: false,
       })
       .option("mini", {
         type: "boolean",
@@ -181,13 +197,30 @@ export const TuiThreadCommand = cmd({
       const config = await TuiConfig.get()
 
       const network = resolveNetworkOptionsNoConfig(args)
-      const url = (await client.call("server", network)).url
+      const external = hasArg("--port") || hasArg("--hostname") || network.mdns === true
+
+      const headers = external ? ServerAuth.headers() : undefined
+
+      const transport = external
+        ? {
+            url: (await client.call("server", network)).url,
+            fetch: undefined,
+            events: undefined,
+            headers,
+          }
+        : {
+            url: "http://opencode.internal",
+            fetch: createWorkerFetch(client),
+            events: createEventSource(client),
+          }
 
       try {
         await validateSession({
-          url,
+          url: transport.url,
           sessionID: args.session,
           directory: cwd,
+          fetch: transport.fetch,
+          headers,
         })
       } catch (error) {
         UI.error(errorMessage(error))
@@ -205,8 +238,8 @@ export const TuiThreadCommand = cmd({
         const { createLegacyTuiPluginHost } = await import("@/plugin/tui/runtime")
         await Effect.runPromise(
           run({
-            client: createOpencodeClient({ baseUrl: url, directory: cwd }),
-            api: OpenCode.make({ baseUrl: url }),
+            client: createOpencodeClient({ baseUrl: transport.url, directory: cwd }),
+            api: OpenCode.make({ baseUrl: transport.url, headers: transport.headers }),
             async onSnapshot() {
               const tui = writeHeapSnapshot("tui.heapsnapshot")
               const server = await client.call("snapshot", undefined)
@@ -214,6 +247,10 @@ export const TuiThreadCommand = cmd({
             },
             config,
             pluginHost: createLegacyTuiPluginHost(),
+            directory: cwd,
+            fetch: transport.fetch,
+            headers: transport.headers,
+            events: transport.events,
             args: {
               continue: args.continue,
               sessionID: args.session,
@@ -221,6 +258,7 @@ export const TuiThreadCommand = cmd({
               model: args.model,
               prompt,
               fork: args.fork,
+              auto: args.auto || args.yolo || args["dangerously-skip-permissions"],
             },
           }),
         )

@@ -1,4 +1,6 @@
 import { OpenCode } from "@opencode-ai/client/effect"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { PermissionSaved } from "@opencode-ai/core/permission/saved"
 import { SdkPlugins } from "@opencode-ai/core/plugin/sdk"
 import { createEmbeddedRoutes } from "@opencode-ai/server/routes"
@@ -10,7 +12,9 @@ export const create = Effect.fn("OpenCode.create")(function* () {
   const memoMap = yield* Layer.makeMemoMap
   const sdkPlugins = SdkPlugins.makeStore()
   const context = yield* Layer.buildWithMemoMap(
-    Layer.mergeAll(PermissionSaved.defaultLayer, SdkPlugins.layerWithStore(sdkPlugins)),
+    AppNodeBuilder.build(LayerNode.group([PermissionSaved.node, SdkPlugins.node]), [
+      [SdkPlugins.node, SdkPlugins.layerWithStore(sdkPlugins)],
+    ]),
     memoMap,
     scope,
   )

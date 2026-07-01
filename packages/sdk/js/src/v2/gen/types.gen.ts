@@ -9,7 +9,6 @@ export type Event =
   | EventIntegrationUpdated
   | EventIntegrationConnectionUpdated
   | EventCatalogUpdated
-  | EventAgentUpdated
   | EventSessionCreated
   | EventSessionUpdated
   | EventSessionDeleted
@@ -20,13 +19,10 @@ export type Event =
   | EventSessionNextAgentSwitched
   | EventSessionNextModelSwitched
   | EventSessionNextMoved
-  | EventSessionNextRenamed
-  | EventSessionNextForked
   | EventSessionNextPrompted
   | EventSessionNextPromptAdmitted
   | EventSessionNextContextUpdated
   | EventSessionNextSynthetic
-  | EventSessionNextSkillActivated
   | EventSessionNextShellStarted
   | EventSessionNextShellEnded
   | EventSessionNextStepStarted
@@ -68,9 +64,6 @@ export type Event =
   | EventPtyUpdated
   | EventPtyExited
   | EventPtyDeleted
-  | EventShellCreated
-  | EventShellExited
-  | EventShellDeleted
   | EventQuestionV2Asked
   | EventQuestionV2Replied
   | EventQuestionV2Rejected
@@ -84,7 +77,6 @@ export type Event =
   | EventTuiSessionSelect2
   | EventMcpToolsChanged
   | EventMcpBrowserOpenFailed
-  | EventMcpStatusChanged
   | EventCommandExecuted
   | EventProjectUpdated
   | EventSessionStatus
@@ -663,24 +655,6 @@ export type Pty = {
   exitCode?: number
 }
 
-export type Shell = {
-  id: string
-  status: "running" | "exited" | "timeout" | "killed"
-  command: string
-  cwd: string
-  shell: string
-  file: string
-  pid?: number
-  exit?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-  metadata: {
-    [key: string]: unknown
-  }
-  time: {
-    started: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-    completed?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-  }
-}
-
 export type Todo = {
   /**
    * Brief description of the task
@@ -788,13 +762,6 @@ export type GlobalEvent = {
       }
     | {
         id: string
-        type: "agent.updated"
-        properties: {
-          [key: string]: unknown
-        }
-      }
-    | {
-        id: string
         type: "session.created"
         properties: {
           sessionID: string
@@ -883,25 +850,6 @@ export type GlobalEvent = {
       }
     | {
         id: string
-        type: "session.next.renamed"
-        properties: {
-          timestamp: number
-          sessionID: string
-          title: string
-        }
-      }
-    | {
-        id: string
-        type: "session.next.forked"
-        properties: {
-          timestamp: number
-          sessionID: string
-          parentID: string
-          messageID?: string
-        }
-      }
-    | {
-        id: string
         type: "session.next.prompted"
         properties: {
           timestamp: number
@@ -939,17 +887,6 @@ export type GlobalEvent = {
           timestamp: number
           sessionID: string
           messageID: string
-          text: string
-        }
-      }
-    | {
-        id: string
-        type: "session.next.skill.activated"
-        properties: {
-          timestamp: number
-          sessionID: string
-          messageID: string
-          name: string
           text: string
         }
       }
@@ -1393,29 +1330,6 @@ export type GlobalEvent = {
       }
     | {
         id: string
-        type: "shell.created"
-        properties: {
-          info: Shell
-        }
-      }
-    | {
-        id: string
-        type: "shell.exited"
-        properties: {
-          id: string
-          exit?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-          status: "running" | "exited" | "timeout" | "killed"
-        }
-      }
-    | {
-        id: string
-        type: "shell.deleted"
-        properties: {
-          id: string
-        }
-      }
-    | {
-        id: string
         type: "question.v2.asked"
         properties: {
           id: string
@@ -1502,7 +1416,6 @@ export type GlobalEvent = {
             | "session.new"
             | "session.share"
             | "session.interrupt"
-            | "session.background"
             | "session.compact"
             | "session.page.up"
             | "session.page.down"
@@ -1551,13 +1464,6 @@ export type GlobalEvent = {
         properties: {
           mcpName: string
           url: string
-        }
-      }
-    | {
-        id: string
-        type: "mcp.status.changed"
-        properties: {
-          server: string
         }
       }
     | {
@@ -1705,13 +1611,10 @@ export type GlobalEvent = {
     | SyncEventSessionNextAgentSwitched
     | SyncEventSessionNextModelSwitched
     | SyncEventSessionNextMoved
-    | SyncEventSessionNextRenamed
-    | SyncEventSessionNextForked
     | SyncEventSessionNextPrompted
     | SyncEventSessionNextPromptAdmitted
     | SyncEventSessionNextContextUpdated
     | SyncEventSessionNextSynthetic
-    | SyncEventSessionNextSkillActivated
     | SyncEventSessionNextShellStarted
     | SyncEventSessionNextShellEnded
     | SyncEventSessionNextStepStarted
@@ -2708,7 +2611,6 @@ export type EventTuiCommandExecute = {
       | "session.new"
       | "session.share"
       | "session.interrupt"
-      | "session.background"
       | "session.compact"
       | "session.page.up"
       | "session.page.down"
@@ -2798,13 +2700,6 @@ export type SessionNotFoundError = {
   message: string
 }
 
-export type MessageNotFoundError = {
-  _tag: "MessageNotFoundError"
-  sessionID: string
-  messageID: string
-  message: string
-}
-
 export type PromptInput = {
   text: string
   files?: Array<PromptInputFileAttachment>
@@ -2817,16 +2712,17 @@ export type ConflictError = {
   resource?: string
 }
 
-export type SkillNotFoundError = {
-  _tag: "SkillNotFoundError"
-  skill: string
-  message: string
-}
-
 export type ServiceUnavailableError = {
   _tag: "ServiceUnavailableError"
   message: string
   service?: string
+}
+
+export type MessageNotFoundError = {
+  _tag: "MessageNotFoundError"
+  sessionID: string
+  messageID: string
+  message: string
 }
 
 export type UnknownError1 = {
@@ -2839,13 +2735,10 @@ export type SessionDurableEvent =
   | SessionNextAgentSwitched
   | SessionNextModelSwitched
   | SessionNextMoved
-  | SessionNextRenamed
-  | SessionNextForked
   | SessionNextPrompted
   | SessionNextPromptAdmitted
   | SessionNextContextUpdated
   | SessionNextSynthetic
-  | SessionNextSkillActivated
   | SessionNextShellStarted
   | SessionNextShellEnded
   | SessionNextStepStarted
@@ -2883,12 +2776,6 @@ export type SessionMessagesResponse = {
   }
 }
 
-export type GenerateTextResponse = {
-  data: {
-    text: string
-  }
-}
-
 export type ProviderNotFoundError = {
   _tag: "ProviderNotFoundError"
   providerID: string
@@ -2904,24 +2791,6 @@ export type OutputFormat1 =
       schema: JsonSchema
       retryCount?: number
     }
-
-export type Shell1 = {
-  id: string
-  status: "running" | "exited" | "timeout" | "killed"
-  command: string
-  cwd: string
-  shell: string
-  file: string
-  pid?: number
-  exit?: number | "NaN" | "Infinity" | "-Infinity"
-  metadata: {
-    [key: string]: unknown
-  }
-  time: {
-    started: number | "NaN" | "Infinity" | "-Infinity"
-    completed?: number | "NaN" | "Infinity" | "-Infinity"
-  }
-}
 
 export type SessionStatus2 = {
   id: string
@@ -2983,7 +2852,6 @@ export type V2Event =
   | IntegrationUpdated
   | IntegrationConnectionUpdated
   | CatalogUpdated
-  | AgentUpdated
   | SessionCreated
   | SessionUpdated
   | SessionDeleted
@@ -2994,13 +2862,10 @@ export type V2Event =
   | SessionNextAgentSwitched
   | SessionNextModelSwitched
   | SessionNextMoved
-  | SessionNextRenamed
-  | SessionNextForked
   | SessionNextPrompted
   | SessionNextPromptAdmitted
   | SessionNextContextUpdated
   | SessionNextSynthetic
-  | SessionNextSkillActivated
   | SessionNextShellStarted
   | SessionNextShellEnded
   | SessionNextStepStarted
@@ -3042,9 +2907,6 @@ export type V2Event =
   | PtyUpdated
   | PtyExited
   | PtyDeleted
-  | ShellCreated
-  | ShellExited
-  | ShellDeleted
   | QuestionV2Asked
   | QuestionV2Replied
   | QuestionV2Rejected
@@ -3058,7 +2920,6 @@ export type V2Event =
   | TuiSessionSelect
   | McpToolsChanged
   | McpBrowserOpenFailed
-  | McpStatusChanged
   | CommandExecuted
   | ProjectUpdated
   | SessionStatus2
@@ -3083,12 +2944,6 @@ export type ForbiddenError = {
   message: string
 }
 
-export type ShellNotFoundError = {
-  _tag: "ShellNotFoundError"
-  id: string
-  message: string
-}
-
 export type ProjectCopyError = {
   name: "ProjectCopyError"
   data: {
@@ -3099,24 +2954,6 @@ export type ProjectCopyError = {
 
 export type EffectHttpApiErrorForbidden = {
   _tag: "Forbidden"
-}
-
-export type Shell2 = {
-  id: string
-  status: "running" | "exited" | "timeout" | "killed"
-  command: string
-  cwd: string
-  shell: string
-  file: string
-  pid?: number
-  exit?: number | "NaN" | "Infinity" | "-Infinity"
-  metadata: {
-    [key: string]: unknown
-  }
-  time: {
-    started: number | "NaN" | "Infinity" | "-Infinity"
-    completed?: number | "NaN" | "Infinity" | "-Infinity"
-  }
 }
 
 export type EventTuiPromptAppend2 = {
@@ -3136,7 +2973,6 @@ export type EventTuiCommandExecute2 = {
       | "session.new"
       | "session.share"
       | "session.interrupt"
-      | "session.background"
       | "session.compact"
       | "session.page.up"
       | "session.page.down"
@@ -3508,39 +3344,6 @@ export type SyncEventSessionNextMoved = {
   }
 }
 
-export type SyncEventSessionNextRenamed = {
-  type: "sync"
-  id: string
-  syncEvent: {
-    type: "session.next.renamed.1"
-    id: string
-    seq: number
-    aggregateID: string
-    data: {
-      timestamp: number
-      sessionID: string
-      title: string
-    }
-  }
-}
-
-export type SyncEventSessionNextForked = {
-  type: "sync"
-  id: string
-  syncEvent: {
-    type: "session.next.forked.1"
-    id: string
-    seq: number
-    aggregateID: string
-    data: {
-      timestamp: number
-      sessionID: string
-      parentID: string
-      messageID?: string
-    }
-  }
-}
-
 export type SyncEventSessionNextPrompted = {
   type: "sync"
   id: string
@@ -3606,24 +3409,6 @@ export type SyncEventSessionNextSynthetic = {
       timestamp: number
       sessionID: string
       messageID: string
-      text: string
-    }
-  }
-}
-
-export type SyncEventSessionNextSkillActivated = {
-  type: "sync"
-  id: string
-  syncEvent: {
-    type: "session.next.skill.activated.1"
-    id: string
-    seq: number
-    aggregateID: string
-    data: {
-      timestamp: number
-      sessionID: string
-      messageID: string
-      name: string
       text: string
     }
   }
@@ -4054,12 +3839,10 @@ export type ConfigV2ExperimentalPolicy = {
   resource: string
 }
 
-export type ProjectDirectory = {
+export type ProjectDirectories = Array<{
   directory: string
   strategy?: string
-}
-
-export type ProjectDirectories = Array<ProjectDirectory>
+}>
 
 export type PtyTicketConnectToken = {
   ticket: string
@@ -4112,10 +3895,6 @@ export type AgentV2Info = {
   color?: AgentColor
   steps?: number
   permissions: PermissionV2Ruleset
-}
-
-export type PluginInfo = {
-  id: string
 }
 
 export type SessionV2Info = {
@@ -4222,19 +4001,6 @@ export type SessionMessageSystem = {
     created: number
   }
   type: "system"
-  text: string
-}
-
-export type SessionMessageSkill = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  time: {
-    created: number
-  }
-  type: "skill"
-  name: string
   text: string
 }
 
@@ -4387,7 +4153,6 @@ export type SessionMessage =
   | SessionMessageUser
   | SessionMessageSynthetic
   | SessionMessageSystem
-  | SessionMessageSkill
   | SessionMessageShell
   | SessionMessageAssistant
   | SessionMessageCompaction
@@ -4449,45 +4214,6 @@ export type SessionNextMoved = {
     sessionID: string
     location: LocationRef
     subdirectory?: string
-  }
-}
-
-export type SessionNextRenamed = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "session.next.renamed"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef
-  data: {
-    timestamp: number
-    sessionID: string
-    title: string
-  }
-}
-
-export type SessionNextForked = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "session.next.forked"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef
-  data: {
-    timestamp: number
-    sessionID: string
-    parentID: string
-    messageID?: string
   }
 }
 
@@ -4569,27 +4295,6 @@ export type SessionNextSynthetic = {
     timestamp: number
     sessionID: string
     messageID: string
-    text: string
-  }
-}
-
-export type SessionNextSkillActivated = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "session.next.skill.activated"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef
-  data: {
-    timestamp: number
-    sessionID: string
-    messageID: string
-    name: string
     text: string
   }
 }
@@ -5270,49 +4975,6 @@ export type IntegrationAttemptStatus =
       }
     }
 
-export type McpStatusConnected2 = {
-  status: "connected"
-}
-
-export type McpStatusDisconnected = {
-  status: "disconnected"
-}
-
-export type McpStatusDisabled2 = {
-  status: "disabled"
-}
-
-export type McpStatusFailed2 = {
-  status: "failed"
-  error: string
-}
-
-export type McpStatusNeedsAuth2 = {
-  status: "needs_auth"
-}
-
-export type McpStatusNeedsClientRegistration2 = {
-  status: "needs_client_registration"
-  error: string
-}
-
-export type McpServer = {
-  name: string
-  status:
-    | McpStatusConnected2
-    | McpStatusDisconnected
-    | McpStatusDisabled2
-    | McpStatusFailed2
-    | McpStatusNeedsAuth2
-    | McpStatusNeedsClientRegistration2
-  integrationID?: string
-}
-
-export type ProjectCurrent = {
-  id: string
-  directory: string
-}
-
 export type PermissionV2Request = {
   id: string
   sessionID: string
@@ -5411,23 +5073,6 @@ export type CatalogUpdated = {
     [key: string]: unknown
   }
   type: "catalog.updated"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef
-  data: {
-    [key: string]: unknown
-  }
-}
-
-export type AgentUpdated = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "agent.updated"
   durable?: {
     aggregateID: string
     seq: number
@@ -5948,59 +5593,6 @@ export type PtyDeleted = {
   }
 }
 
-export type ShellCreated = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "shell.created"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef
-  data: {
-    info: Shell1
-  }
-}
-
-export type ShellExited = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "shell.exited"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef
-  data: {
-    id: string
-    exit?: number | "NaN" | "Infinity" | "-Infinity"
-    status: "running" | "exited" | "timeout" | "killed"
-  }
-}
-
-export type ShellDeleted = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "shell.deleted"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef
-  data: {
-    id: string
-  }
-}
-
 export type QuestionV2Asked = {
   id: string
   metadata?: {
@@ -6178,7 +5770,6 @@ export type TuiCommandExecute = {
       | "session.new"
       | "session.share"
       | "session.interrupt"
-      | "session.background"
       | "session.compact"
       | "session.page.up"
       | "session.page.down"
@@ -6267,23 +5858,6 @@ export type McpBrowserOpenFailed = {
   data: {
     mcpName: string
     url: string
-  }
-}
-
-export type McpStatusChanged = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "mcp.status.changed"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef
-  data: {
-    server: string
   }
 }
 
@@ -6604,14 +6178,6 @@ export type EventCatalogUpdated = {
   }
 }
 
-export type EventAgentUpdated = {
-  id: string
-  type: "agent.updated"
-  properties: {
-    [key: string]: unknown
-  }
-}
-
 export type EventSessionCreated = {
   id: string
   type: "session.created"
@@ -6710,27 +6276,6 @@ export type EventSessionNextMoved = {
   }
 }
 
-export type EventSessionNextRenamed = {
-  id: string
-  type: "session.next.renamed"
-  properties: {
-    timestamp: number
-    sessionID: string
-    title: string
-  }
-}
-
-export type EventSessionNextForked = {
-  id: string
-  type: "session.next.forked"
-  properties: {
-    timestamp: number
-    sessionID: string
-    parentID: string
-    messageID?: string
-  }
-}
-
 export type EventSessionNextPrompted = {
   id: string
   type: "session.next.prompted"
@@ -6773,18 +6318,6 @@ export type EventSessionNextSynthetic = {
     timestamp: number
     sessionID: string
     messageID: string
-    text: string
-  }
-}
-
-export type EventSessionNextSkillActivated = {
-  id: string
-  type: "session.next.skill.activated"
-  properties: {
-    timestamp: number
-    sessionID: string
-    messageID: string
-    name: string
     text: string
   }
 }
@@ -7268,32 +6801,6 @@ export type EventPtyDeleted = {
   }
 }
 
-export type EventShellCreated = {
-  id: string
-  type: "shell.created"
-  properties: {
-    info: Shell2
-  }
-}
-
-export type EventShellExited = {
-  id: string
-  type: "shell.exited"
-  properties: {
-    id: string
-    exit?: number | "NaN" | "Infinity" | "-Infinity"
-    status: "running" | "exited" | "timeout" | "killed"
-  }
-}
-
-export type EventShellDeleted = {
-  id: string
-  type: "shell.deleted"
-  properties: {
-    id: string
-  }
-}
-
 export type EventQuestionV2Asked = {
   id: string
   type: "question.v2.asked"
@@ -7387,14 +6894,6 @@ export type EventMcpBrowserOpenFailed = {
   properties: {
     mcpName: string
     url: string
-  }
-}
-
-export type EventMcpStatusChanged = {
-  id: string
-  type: "mcp.status.changed"
-  properties: {
-    server: string
   }
 }
 
@@ -11825,43 +11324,6 @@ export type V2AgentListResponses = {
 
 export type V2AgentListResponse = V2AgentListResponses[keyof V2AgentListResponses]
 
-export type V2PluginListData = {
-  body?: never
-  path?: never
-  query?: {
-    location?: {
-      directory?: string
-      workspace?: string
-    }
-  }
-  url: "/api/plugin"
-}
-
-export type V2PluginListErrors = {
-  /**
-   * InvalidRequestError
-   */
-  400: InvalidRequestError
-  /**
-   * UnauthorizedError
-   */
-  401: UnauthorizedError
-}
-
-export type V2PluginListError = V2PluginListErrors[keyof V2PluginListErrors]
-
-export type V2PluginListResponses = {
-  /**
-   * Success
-   */
-  200: {
-    location: LocationInfo
-    data: Array<PluginInfo>
-  }
-}
-
-export type V2PluginListResponse = V2PluginListResponses[keyof V2PluginListResponses]
-
 export type V2SessionListData = {
   body?: never
   path?: never
@@ -12009,45 +11471,6 @@ export type V2SessionGetResponses = {
 
 export type V2SessionGetResponse = V2SessionGetResponses[keyof V2SessionGetResponses]
 
-export type V2SessionForkData = {
-  body: {
-    messageID?: string
-  }
-  path: {
-    sessionID: string
-  }
-  query?: never
-  url: "/api/session/{sessionID}/fork"
-}
-
-export type V2SessionForkErrors = {
-  /**
-   * InvalidRequestError
-   */
-  400: InvalidRequestError
-  /**
-   * UnauthorizedError
-   */
-  401: UnauthorizedError
-  /**
-   * SessionNotFoundError | MessageNotFoundError
-   */
-  404: MessageNotFoundError | SessionNotFoundError
-}
-
-export type V2SessionForkError = V2SessionForkErrors[keyof V2SessionForkErrors]
-
-export type V2SessionForkResponses = {
-  /**
-   * Success
-   */
-  200: {
-    data: SessionV2Info
-  }
-}
-
-export type V2SessionForkResponse = V2SessionForkResponses[keyof V2SessionForkResponses]
-
 export type V2SessionSwitchAgentData = {
   body: {
     agent: string
@@ -12122,43 +11545,6 @@ export type V2SessionSwitchModelResponses = {
 
 export type V2SessionSwitchModelResponse = V2SessionSwitchModelResponses[keyof V2SessionSwitchModelResponses]
 
-export type V2SessionRenameData = {
-  body: {
-    title: string
-  }
-  path: {
-    sessionID: string
-  }
-  query?: never
-  url: "/api/session/{sessionID}/rename"
-}
-
-export type V2SessionRenameErrors = {
-  /**
-   * InvalidRequestError
-   */
-  400: InvalidRequestError
-  /**
-   * UnauthorizedError
-   */
-  401: UnauthorizedError
-  /**
-   * SessionNotFoundError
-   */
-  404: SessionNotFoundError
-}
-
-export type V2SessionRenameError = V2SessionRenameErrors[keyof V2SessionRenameErrors]
-
-export type V2SessionRenameResponses = {
-  /**
-   * <No Content>
-   */
-  204: void
-}
-
-export type V2SessionRenameResponse = V2SessionRenameResponses[keyof V2SessionRenameResponses]
-
 export type V2SessionPromptData = {
   body: {
     id?: string
@@ -12205,45 +11591,6 @@ export type V2SessionPromptResponses = {
 
 export type V2SessionPromptResponse = V2SessionPromptResponses[keyof V2SessionPromptResponses]
 
-export type V2SessionSkillData = {
-  body: {
-    id?: string
-    skill: string
-    resume?: boolean
-  }
-  path: {
-    sessionID: string
-  }
-  query?: never
-  url: "/api/session/{sessionID}/skill"
-}
-
-export type V2SessionSkillErrors = {
-  /**
-   * InvalidRequestError
-   */
-  400: InvalidRequestError
-  /**
-   * UnauthorizedError
-   */
-  401: UnauthorizedError
-  /**
-   * SessionNotFoundError | SkillNotFoundError
-   */
-  404: SkillNotFoundError | SessionNotFoundError
-}
-
-export type V2SessionSkillError = V2SessionSkillErrors[keyof V2SessionSkillErrors]
-
-export type V2SessionSkillResponses = {
-  /**
-   * <No Content>
-   */
-  204: void
-}
-
-export type V2SessionSkillResponse = V2SessionSkillResponses[keyof V2SessionSkillResponses]
-
 export type V2SessionCompactData = {
   body?: never
   path: {
@@ -12266,14 +11613,6 @@ export type V2SessionCompactErrors = {
    * SessionNotFoundError
    */
   404: SessionNotFoundError
-  /**
-   * SessionBusyError
-   */
-  409: SessionBusyError
-  /**
-   * UnknownError
-   */
-  500: UnknownError1
   /**
    * ServiceUnavailableError
    */
@@ -12356,10 +11695,6 @@ export type V2SessionRevertStageErrors = {
    */
   404: MessageNotFoundError | SessionNotFoundError
   /**
-   * SessionBusyError
-   */
-  409: SessionBusyError
-  /**
    * UnknownError
    */
   500: UnknownError1
@@ -12401,10 +11736,6 @@ export type V2SessionRevertClearErrors = {
    */
   404: SessionNotFoundError
   /**
-   * SessionBusyError
-   */
-  409: SessionBusyError
-  /**
    * UnknownError
    */
   500: UnknownError1
@@ -12443,10 +11774,6 @@ export type V2SessionRevertCommitErrors = {
    * SessionNotFoundError
    */
   404: SessionNotFoundError
-  /**
-   * SessionBusyError
-   */
-  409: SessionBusyError
 }
 
 export type V2SessionRevertCommitError = V2SessionRevertCommitErrors[keyof V2SessionRevertCommitErrors]
@@ -12615,41 +11942,6 @@ export type V2SessionInterruptResponses = {
 
 export type V2SessionInterruptResponse = V2SessionInterruptResponses[keyof V2SessionInterruptResponses]
 
-export type V2SessionBackgroundData = {
-  body?: never
-  path: {
-    sessionID: string
-  }
-  query?: never
-  url: "/api/session/{sessionID}/background"
-}
-
-export type V2SessionBackgroundErrors = {
-  /**
-   * InvalidRequestError
-   */
-  400: InvalidRequestError
-  /**
-   * UnauthorizedError
-   */
-  401: UnauthorizedError
-  /**
-   * SessionNotFoundError
-   */
-  404: SessionNotFoundError
-}
-
-export type V2SessionBackgroundError = V2SessionBackgroundErrors[keyof V2SessionBackgroundErrors]
-
-export type V2SessionBackgroundResponses = {
-  /**
-   * <No Content>
-   */
-  204: void
-}
-
-export type V2SessionBackgroundResponse = V2SessionBackgroundResponses[keyof V2SessionBackgroundResponses]
-
 export type V2SessionMessageData = {
   body?: never
   path: {
@@ -12774,47 +12066,6 @@ export type V2ModelListResponses = {
 }
 
 export type V2ModelListResponse = V2ModelListResponses[keyof V2ModelListResponses]
-
-export type V2GenerateTextData = {
-  body: {
-    prompt: string
-    model?: ModelRef
-  }
-  path?: never
-  query?: {
-    location?: {
-      directory?: string
-      workspace?: string
-    }
-  }
-  url: "/api/generate"
-}
-
-export type V2GenerateTextErrors = {
-  /**
-   * InvalidRequestError
-   */
-  400: InvalidRequestError
-  /**
-   * UnauthorizedError
-   */
-  401: UnauthorizedError
-  /**
-   * ServiceUnavailableError
-   */
-  503: ServiceUnavailableError
-}
-
-export type V2GenerateTextError = V2GenerateTextErrors[keyof V2GenerateTextErrors]
-
-export type V2GenerateTextResponses = {
-  /**
-   * GenerateTextResponse
-   */
-  200: GenerateTextResponse
-}
-
-export type V2GenerateTextResponse = V2GenerateTextResponses[keyof V2GenerateTextResponses]
 
 export type V2ProviderListData = {
   body?: never
@@ -13182,43 +12433,6 @@ export type V2IntegrationAttemptCompleteResponses = {
 export type V2IntegrationAttemptCompleteResponse =
   V2IntegrationAttemptCompleteResponses[keyof V2IntegrationAttemptCompleteResponses]
 
-export type V2McpListData = {
-  body?: never
-  path?: never
-  query?: {
-    location?: {
-      directory?: string
-      workspace?: string
-    }
-  }
-  url: "/api/mcp"
-}
-
-export type V2McpListErrors = {
-  /**
-   * InvalidRequestError
-   */
-  400: InvalidRequestError
-  /**
-   * UnauthorizedError
-   */
-  401: UnauthorizedError
-}
-
-export type V2McpListError = V2McpListErrors[keyof V2McpListErrors]
-
-export type V2McpListResponses = {
-  /**
-   * Success
-   */
-  200: {
-    location: LocationInfo
-    data: Array<McpServer>
-  }
-}
-
-export type V2McpListResponse = V2McpListResponses[keyof V2McpListResponses]
-
 export type V2CredentialRemoveData = {
   body?: never
   path: {
@@ -13292,76 +12506,6 @@ export type V2CredentialUpdateResponses = {
 }
 
 export type V2CredentialUpdateResponse = V2CredentialUpdateResponses[keyof V2CredentialUpdateResponses]
-
-export type V2ProjectCurrentData = {
-  body?: never
-  path?: never
-  query?: {
-    location?: {
-      directory?: string
-      workspace?: string
-    }
-  }
-  url: "/api/project/current"
-}
-
-export type V2ProjectCurrentErrors = {
-  /**
-   * InvalidRequestError
-   */
-  400: InvalidRequestError
-  /**
-   * UnauthorizedError
-   */
-  401: UnauthorizedError
-}
-
-export type V2ProjectCurrentError = V2ProjectCurrentErrors[keyof V2ProjectCurrentErrors]
-
-export type V2ProjectCurrentResponses = {
-  /**
-   * Project.Current
-   */
-  200: ProjectCurrent
-}
-
-export type V2ProjectCurrentResponse = V2ProjectCurrentResponses[keyof V2ProjectCurrentResponses]
-
-export type V2ProjectDirectoriesData = {
-  body?: never
-  path: {
-    projectID: string
-  }
-  query?: {
-    location?: {
-      directory?: string
-      workspace?: string
-    }
-  }
-  url: "/api/project/{projectID}/directories"
-}
-
-export type V2ProjectDirectoriesErrors = {
-  /**
-   * InvalidRequestError
-   */
-  400: InvalidRequestError
-  /**
-   * UnauthorizedError
-   */
-  401: UnauthorizedError
-}
-
-export type V2ProjectDirectoriesError = V2ProjectDirectoriesErrors[keyof V2ProjectDirectoriesErrors]
-
-export type V2ProjectDirectoriesResponses = {
-  /**
-   * Project.Directories
-   */
-  200: ProjectDirectories
-}
-
-export type V2ProjectDirectoriesResponse = V2ProjectDirectoriesResponses[keyof V2ProjectDirectoriesResponses]
 
 export type V2PermissionRequestListData = {
   body?: never
@@ -14149,220 +13293,6 @@ export type V2PtyConnectResponses = {
 }
 
 export type V2PtyConnectResponse = V2PtyConnectResponses[keyof V2PtyConnectResponses]
-
-export type V2ShellListData = {
-  body?: never
-  path?: never
-  query?: {
-    location?: {
-      directory?: string
-      workspace?: string
-    }
-  }
-  url: "/api/shell"
-}
-
-export type V2ShellListErrors = {
-  /**
-   * InvalidRequestError
-   */
-  400: InvalidRequestError
-  /**
-   * UnauthorizedError
-   */
-  401: UnauthorizedError
-}
-
-export type V2ShellListError = V2ShellListErrors[keyof V2ShellListErrors]
-
-export type V2ShellListResponses = {
-  /**
-   * Success
-   */
-  200: {
-    location: LocationInfo
-    data: Array<Shell>
-  }
-}
-
-export type V2ShellListResponse = V2ShellListResponses[keyof V2ShellListResponses]
-
-export type V2ShellCreateData = {
-  body: {
-    command: string
-    cwd?: string
-    timeout?: number
-    metadata?: {
-      [key: string]: unknown
-    }
-  }
-  path?: never
-  query?: {
-    location?: {
-      directory?: string
-      workspace?: string
-    }
-  }
-  url: "/api/shell"
-}
-
-export type V2ShellCreateErrors = {
-  /**
-   * InvalidRequestError
-   */
-  400: InvalidRequestError
-  /**
-   * UnauthorizedError
-   */
-  401: UnauthorizedError
-}
-
-export type V2ShellCreateError = V2ShellCreateErrors[keyof V2ShellCreateErrors]
-
-export type V2ShellCreateResponses = {
-  /**
-   * Success
-   */
-  200: {
-    location: LocationInfo
-    data: Shell
-  }
-}
-
-export type V2ShellCreateResponse = V2ShellCreateResponses[keyof V2ShellCreateResponses]
-
-export type V2ShellRemoveData = {
-  body?: never
-  path: {
-    id: string
-  }
-  query?: {
-    location?: {
-      directory?: string
-      workspace?: string
-    }
-  }
-  url: "/api/shell/{id}"
-}
-
-export type V2ShellRemoveErrors = {
-  /**
-   * InvalidRequestError
-   */
-  400: InvalidRequestError
-  /**
-   * UnauthorizedError
-   */
-  401: UnauthorizedError
-  /**
-   * ShellNotFoundError
-   */
-  404: ShellNotFoundError
-}
-
-export type V2ShellRemoveError = V2ShellRemoveErrors[keyof V2ShellRemoveErrors]
-
-export type V2ShellRemoveResponses = {
-  /**
-   * <No Content>
-   */
-  204: void
-}
-
-export type V2ShellRemoveResponse = V2ShellRemoveResponses[keyof V2ShellRemoveResponses]
-
-export type V2ShellGetData = {
-  body?: never
-  path: {
-    id: string
-  }
-  query?: {
-    location?: {
-      directory?: string
-      workspace?: string
-    }
-  }
-  url: "/api/shell/{id}"
-}
-
-export type V2ShellGetErrors = {
-  /**
-   * InvalidRequestError
-   */
-  400: InvalidRequestError
-  /**
-   * UnauthorizedError
-   */
-  401: UnauthorizedError
-  /**
-   * ShellNotFoundError
-   */
-  404: ShellNotFoundError
-}
-
-export type V2ShellGetError = V2ShellGetErrors[keyof V2ShellGetErrors]
-
-export type V2ShellGetResponses = {
-  /**
-   * Success
-   */
-  200: {
-    location: LocationInfo
-    data: Shell
-  }
-}
-
-export type V2ShellGetResponse = V2ShellGetResponses[keyof V2ShellGetResponses]
-
-export type V2ShellOutputData = {
-  body?: never
-  path: {
-    id: string
-  }
-  query?: {
-    location?: {
-      directory?: string
-      workspace?: string
-    }
-    cursor?: string
-    limit?: string
-  }
-  url: "/api/shell/{id}/output"
-}
-
-export type V2ShellOutputErrors = {
-  /**
-   * InvalidRequestError
-   */
-  400: InvalidRequestError
-  /**
-   * UnauthorizedError
-   */
-  401: UnauthorizedError
-  /**
-   * ShellNotFoundError
-   */
-  404: ShellNotFoundError
-}
-
-export type V2ShellOutputError = V2ShellOutputErrors[keyof V2ShellOutputErrors]
-
-export type V2ShellOutputResponses = {
-  /**
-   * Success
-   */
-  200: {
-    location: LocationInfo
-    data: {
-      output: string
-      cursor: number
-      size: number
-      truncated: boolean
-    }
-  }
-}
-
-export type V2ShellOutputResponse = V2ShellOutputResponses[keyof V2ShellOutputResponses]
 
 export type V2QuestionRequestListData = {
   body?: never

@@ -186,7 +186,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Ac
 
 export const use = serviceUse(Service)
 
-export const layer: Layer.Layer<Service, never, AccountRepo.Service | HttpClient.HttpClient> = Layer.effect(
+const layer: Layer.Layer<Service, never, AccountRepo.Service | HttpClient.HttpClient> = Layer.effect(
   Service,
   Effect.gen(function* () {
     const repo = yield* AccountRepo.Service
@@ -455,8 +455,6 @@ export const layer: Layer.Layer<Service, never, AccountRepo.Service | HttpClient
     })
   }),
 )
-
-export const defaultLayer = layer.pipe(Layer.provide(AccountRepo.defaultLayer), Layer.provide(FetchHttpClient.layer))
 
 export const node = LayerNode.make({ service: Service, layer: layer, deps: [AccountRepo.node, httpClient] })
 

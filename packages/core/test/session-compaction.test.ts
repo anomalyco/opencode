@@ -3,6 +3,9 @@ import { LLMClient, LLMEvent, Model, type LLMRequest } from "@opencode-ai/llm"
 import { OpenAIChat } from "@opencode-ai/llm/protocols"
 import { Config } from "@opencode-ai/core/config"
 import { Database } from "@opencode-ai/core/database/database"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { llmClient } from "@opencode-ai/core/effect/app-node-platform"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventV2 } from "@opencode-ai/core/event"
 import { EventTable } from "@opencode-ai/core/event/sql"
 import { SessionCompaction } from "@opencode-ai/core/session/compaction"
@@ -37,17 +40,13 @@ const client = Layer.mock(LLMClient.Service)({
 const config = Layer.mock(Config.Service)({ entries: () => Effect.succeed([]) })
 const models = Layer.mock(SessionRunnerModel.Service)({ resolve: () => Effect.succeed(model) })
 const it = testEffect(
-  Layer.mergeAll(
-    Database.defaultLayer,
-    EventV2.defaultLayer,
-    SessionProjector.defaultLayer,
-    SessionStore.defaultLayer,
-    SessionCompaction.layer.pipe(
-      Layer.provide(client),
-      Layer.provide(config),
-      Layer.provide(models),
-      Layer.provide(EventV2.defaultLayer),
-    ),
+  AppNodeBuilder.build(
+    LayerNode.group([Database.node, EventV2.node, SessionProjector.node, SessionStore.node, SessionCompaction.node]),
+    [
+      [llmClient, client],
+      [Config.node, config],
+      [SessionRunnerModel.node, models],
+    ],
   ),
 )
 

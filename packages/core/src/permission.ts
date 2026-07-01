@@ -106,7 +106,7 @@ interface Pending {
   readonly deferred: Deferred.Deferred<void, RejectedError | CorrectedError>
 }
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   EffectRuntime.gen(function* () {
     const events = yield* EventV2.Service
@@ -299,8 +299,6 @@ export const layer = Layer.effect(
     return Service.of({ ask, assert, reply, get, forSession, list })
   }),
 )
-
-export const locationLayer = layer.pipe(Layer.provideMerge(AgentV2.locationLayer))
 
 export const node = makeLocationNode({
   service: Service,

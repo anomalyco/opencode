@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect } from "bun:test"
 import { Effect, Exit, Layer, Option } from "effect"
-import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { httpClient } from "@opencode-ai/core/effect/app-node-platform"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
@@ -34,15 +34,12 @@ const json = (req: Parameters<typeof HttpClientResponse.fromWeb>[0], body: unkno
 const none = HttpClient.make(() => Effect.die("unexpected http call"))
 
 function requestLayer(client: HttpClient.HttpClient) {
-  const replacement = LayerNode.replace(FetchHttpClient.layer, Layer.succeed(HttpClient.HttpClient, client))
-  return LayerNode.compile(
-    LayerNode.group([ShareNext.node, AccountRepo.node]),
-    new Map([[replacement.source, replacement.replacement]]),
-  )
+  const replacement = [httpClient, Layer.succeed(HttpClient.HttpClient, client)] as const
+  return LayerNode.compile(LayerNode.group([ShareNext.node, AccountRepo.node]), [replacement])
 }
 
 function integrationLayer(client: HttpClient.HttpClient) {
-  const replacement = LayerNode.replace(FetchHttpClient.layer, Layer.succeed(HttpClient.HttpClient, client))
+  const replacement = [httpClient, Layer.succeed(HttpClient.HttpClient, client)] as const
   return LayerNode.compile(
     LayerNode.group([
       ShareNext.node,
@@ -52,7 +49,7 @@ function integrationLayer(client: HttpClient.HttpClient) {
       AccountRepo.node,
       Database.node,
     ]),
-    new Map([[replacement.source, replacement.replacement]]),
+    [replacement],
   )
 }
 

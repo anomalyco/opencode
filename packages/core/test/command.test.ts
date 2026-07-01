@@ -1,11 +1,12 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { CommandV2 } from "@opencode-ai/core/command"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { testEffect } from "./lib/effect"
 
-const it = testEffect(CommandV2.locationLayer)
+const it = testEffect(AppNodeBuilder.build(CommandV2.node))
 
 describe("CommandV2", () => {
   it.effect("applies command transforms and preserves later overrides", () =>

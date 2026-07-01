@@ -108,6 +108,45 @@
     }
   }
 
+  .home-session-group-header::before {
+    content: "";
+    position: absolute;
+    top: -12px;
+    left: 0;
+    width: 100%;
+    height: 12px;
+    background: var(--v2-background-bg-base);
+  }
+
+  .home-session-group-header::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    left: 0;
+    width: 100%;
+    height: 16px;
+    pointer-events: none;
+    background: linear-gradient(
+      180deg,
+      var(--v2-background-bg-base) 0%,
+      color-mix(in srgb, var(--v2-background-bg-base) 92.0456%, transparent) 7.93%,
+      color-mix(in srgb, var(--v2-background-bg-base) 84.9947%, transparent) 14.14%,
+      color-mix(in srgb, var(--v2-background-bg-base) 78.6813%, transparent) 19%,
+      color-mix(in srgb, var(--v2-background-bg-base) 72.9394%, transparent) 22.85%,
+      color-mix(in srgb, var(--v2-background-bg-base) 67.6028%, transparent) 26.05%,
+      color-mix(in srgb, var(--v2-background-bg-base) 62.5055%, transparent) 28.95%,
+      color-mix(in srgb, var(--v2-background-bg-base) 57.4815%, transparent) 31.91%,
+      color-mix(in srgb, var(--v2-background-bg-base) 52.3647%, transparent) 35.27%,
+      color-mix(in srgb, var(--v2-background-bg-base) 46.989%, transparent) 39.4%,
+      color-mix(in srgb, var(--v2-background-bg-base) 41.1884%, transparent) 44.65%,
+      color-mix(in srgb, var(--v2-background-bg-base) 34.7969%, transparent) 51.36%,
+      color-mix(in srgb, var(--v2-background-bg-base) 27.6484%, transparent) 59.9%,
+      color-mix(in srgb, var(--v2-background-bg-base) 19.5767%, transparent) 70.62%,
+      color-mix(in srgb, var(--v2-background-bg-base) 10.416%, transparent) 83.87%,
+      transparent 100%
+    );
+  }
+
   [data-slot="titlebar-update-loader"] {
     display: block;
     flex-shrink: 0;
@@ -130,6 +169,124 @@
   @keyframes titlebar-update-loader-spin {
     to {
       transform: rotate(360deg);
+    }
+  }
+
+  @keyframes home-projects-fade-top {
+    from {
+      visibility: hidden;
+    }
+    to {
+      visibility: visible;
+    }
+  }
+
+  @keyframes home-projects-fade-bottom {
+    from {
+      visibility: visible;
+    }
+    to {
+      visibility: hidden;
+    }
+  }
+
+  [data-slot="home-projects-scroll"] {
+    timeline-scope: --home-projects-scroll;
+  }
+
+  [data-slot="model-selector-scroll"] {
+    timeline-scope: --model-selector-scroll;
+  }
+
+  [data-slot="manage-models-scroll"] {
+    timeline-scope: --manage-models-scroll;
+  }
+
+  [data-slot="home-projects-scroll"]::before,
+  [data-slot="home-projects-scroll"]::after,
+  [data-slot="model-selector-scroll"]::before,
+  [data-slot="model-selector-scroll"]::after,
+  [data-slot="manage-models-scroll"]::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    z-index: 10;
+    height: 16px;
+    pointer-events: none;
+    visibility: hidden;
+  }
+
+  [data-slot="home-projects-scroll"]::before {
+    top: 0;
+    background: linear-gradient(to bottom, var(--v2-background-bg-base), transparent);
+  }
+
+  [data-slot="model-selector-scroll"]::before {
+    top: 0;
+    background: linear-gradient(to bottom, var(--v2-background-bg-layer-01), transparent);
+  }
+
+  [data-slot="manage-models-scroll"]::before {
+    top: 0;
+    background: linear-gradient(to bottom, var(--v2-background-bg-base), transparent);
+  }
+
+  [data-slot="home-projects-scroll"]::after {
+    bottom: 0;
+    background: linear-gradient(to top, var(--v2-background-bg-base), transparent);
+  }
+
+  [data-slot="model-selector-scroll"]::after {
+    bottom: 0;
+    background: linear-gradient(to top, var(--v2-background-bg-layer-01), transparent);
+  }
+
+  @supports (animation-timeline: --home-projects-scroll) and (timeline-scope: --home-projects-scroll) {
+    [data-slot="home-projects-scroll"] .scroll-view__viewport {
+      scroll-timeline: --home-projects-scroll y;
+    }
+
+    [data-slot="home-projects-scroll"]::before {
+      animation: home-projects-fade-top linear both;
+      animation-timeline: --home-projects-scroll;
+      animation-range: 0 0.1px;
+    }
+
+    [data-slot="home-projects-scroll"]::after {
+      animation: home-projects-fade-bottom linear both;
+      animation-timeline: --home-projects-scroll;
+      animation-range: calc(100% - 1.1px) calc(100% - 1px);
+    }
+  }
+
+  @supports (animation-timeline: --model-selector-scroll) and (timeline-scope: --model-selector-scroll) {
+    [data-slot="model-selector-scroll"] .scroll-view__viewport {
+      scroll-timeline: --model-selector-scroll y;
+    }
+
+    [data-slot="model-selector-scroll"]::before {
+      animation: home-projects-fade-top linear both;
+      animation-timeline: --model-selector-scroll;
+      animation-range: 0 0.1px;
+    }
+
+    [data-slot="model-selector-scroll"]::after {
+      animation: home-projects-fade-bottom linear both;
+      animation-timeline: --model-selector-scroll;
+      animation-range: calc(100% - 1.1px) calc(100% - 1px);
+    }
+  }
+
+  @supports (animation-timeline: --manage-models-scroll) and (timeline-scope: --manage-models-scroll) {
+    [data-slot="manage-models-scroll"] .settings-v2-panel {
+      scroll-timeline: --manage-models-scroll y;
+    }
+
+    [data-slot="manage-models-scroll"]::before {
+      animation: home-projects-fade-top linear both;
+      animation-timeline: --manage-models-scroll;
+      animation-range: 0 0.1px;
     }
   }
 }

@@ -33,15 +33,6 @@ export type SessionNotFoundError = {
 export const isSessionNotFoundError = (value: unknown): value is SessionNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "SessionNotFoundError"
 
-export type MessageNotFoundError = {
-  readonly _tag: "MessageNotFoundError"
-  readonly sessionID: string
-  readonly messageID: string
-  readonly message: string
-}
-export const isMessageNotFoundError = (value: unknown): value is MessageNotFoundError =>
-  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "MessageNotFoundError"
-
 export type ConflictError = {
   readonly _tag: "ConflictError"
   readonly message: string
@@ -50,22 +41,6 @@ export type ConflictError = {
 export const isConflictError = (value: unknown): value is ConflictError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ConflictError"
 
-export type SkillNotFoundError = {
-  readonly _tag: "SkillNotFoundError"
-  readonly skill: string
-  readonly message: string
-}
-export const isSkillNotFoundError = (value: unknown): value is SkillNotFoundError =>
-  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "SkillNotFoundError"
-
-export type SessionBusyError = {
-  readonly _tag: "SessionBusyError"
-  readonly sessionID: string
-  readonly message: string
-}
-export const isSessionBusyError = (value: unknown): value is SessionBusyError =>
-  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "SessionBusyError"
-
 export type ServiceUnavailableError = {
   readonly _tag: "ServiceUnavailableError"
   readonly message: string
@@ -73,6 +48,15 @@ export type ServiceUnavailableError = {
 }
 export const isServiceUnavailableError = (value: unknown): value is ServiceUnavailableError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ServiceUnavailableError"
+
+export type MessageNotFoundError = {
+  readonly _tag: "MessageNotFoundError"
+  readonly sessionID: string
+  readonly messageID: string
+  readonly message: string
+}
+export const isMessageNotFoundError = (value: unknown): value is MessageNotFoundError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "MessageNotFoundError"
 
 export type UnknownError = {
   readonly _tag: "UnknownError"
@@ -101,10 +85,6 @@ export const isPermissionNotFoundError = (value: unknown): value is PermissionNo
 export type PtyNotFoundError = { readonly _tag: "PtyNotFoundError"; readonly ptyID: string; readonly message: string }
 export const isPtyNotFoundError = (value: unknown): value is PtyNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "PtyNotFoundError"
-
-export type ShellNotFoundError = { readonly _tag: "ShellNotFoundError"; readonly id: string; readonly message: string }
-export const isShellNotFoundError = (value: unknown): value is ShellNotFoundError =>
-  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ShellNotFoundError"
 
 export type QuestionNotFoundError = {
   readonly _tag: "QuestionNotFoundError"
@@ -135,13 +115,13 @@ export type LocationGetOutput = {
   readonly project: { readonly id: string; readonly directory: string }
 }
 
-export type AgentListInput = {
+export type AgentsListInput = {
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   }["location"]
 }
 
-export type AgentListOutput = {
+export type AgentsListOutput = {
   readonly location: {
     readonly directory: string
     readonly workspaceID?: string
@@ -168,22 +148,7 @@ export type AgentListOutput = {
   }>
 }
 
-export type PluginListInput = {
-  readonly location?: {
-    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-  }["location"]
-}
-
-export type PluginListOutput = {
-  readonly location: {
-    readonly directory: string
-    readonly workspaceID?: string
-    readonly project: { readonly id: string; readonly directory: string }
-  }
-  readonly data: ReadonlyArray<{ readonly id: string }>
-}
-
-export type SessionListInput = {
+export type SessionsListInput = {
   readonly workspace?: {
     readonly workspace?: string | undefined
     readonly limit?: number | undefined
@@ -266,7 +231,7 @@ export type SessionListInput = {
   }["cursor"]
 }
 
-export type SessionListOutput = {
+export type SessionsListOutput = {
   readonly data: ReadonlyArray<{
     readonly id: string
     readonly parentID?: string
@@ -301,7 +266,7 @@ export type SessionListOutput = {
   readonly cursor: { readonly previous?: string | null; readonly next?: string | null }
 }
 
-export type SessionCreateInput = {
+export type SessionsCreateInput = {
   readonly id?: {
     readonly id?: string | null
     readonly agent?: string | null
@@ -328,7 +293,7 @@ export type SessionCreateInput = {
   }["location"]
 }
 
-export type SessionCreateOutput = {
+export type SessionsCreateOutput = {
   readonly data: {
     readonly id: string
     readonly parentID?: string
@@ -362,11 +327,11 @@ export type SessionCreateOutput = {
   }
 }["data"]
 
-export type SessionActiveOutput = { readonly data: { readonly [x: string]: { readonly type: "running" } } }["data"]
+export type SessionsActiveOutput = { readonly data: { readonly [x: string]: { readonly type: "running" } } }["data"]
 
-export type SessionGetInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
+export type SessionsGetInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
 
-export type SessionGetOutput = {
+export type SessionsGetOutput = {
   readonly data: {
     readonly id: string
     readonly parentID?: string
@@ -400,69 +365,23 @@ export type SessionGetOutput = {
   }
 }["data"]
 
-export type SessionForkInput = {
-  readonly sessionID: { readonly sessionID: string }["sessionID"]
-  readonly messageID?: { readonly messageID?: string | undefined }["messageID"]
-}
-
-export type SessionForkOutput = {
-  readonly data: {
-    readonly id: string
-    readonly parentID?: string
-    readonly projectID: string
-    readonly agent?: string
-    readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
-    readonly cost: number
-    readonly tokens: {
-      readonly input: number
-      readonly output: number
-      readonly reasoning: number
-      readonly cache: { readonly read: number; readonly write: number }
-    }
-    readonly time: { readonly created: number; readonly updated: number; readonly archived?: number }
-    readonly title: string
-    readonly location: { readonly directory: string; readonly workspaceID?: string }
-    readonly subpath?: string
-    readonly revert?: {
-      readonly messageID: string
-      readonly partID?: string
-      readonly snapshot?: string
-      readonly diff?: string
-      readonly files?: ReadonlyArray<{
-        readonly path: string
-        readonly status: "added" | "modified" | "deleted"
-        readonly additions: number
-        readonly deletions: number
-        readonly patch: string
-      }>
-    }
-  }
-}["data"]
-
-export type SessionSwitchAgentInput = {
+export type SessionsSwitchAgentInput = {
   readonly sessionID: { readonly sessionID: string }["sessionID"]
   readonly agent: { readonly agent: string }["agent"]
 }
 
-export type SessionSwitchAgentOutput = void
+export type SessionsSwitchAgentOutput = void
 
-export type SessionSwitchModelInput = {
+export type SessionsSwitchModelInput = {
   readonly sessionID: { readonly sessionID: string }["sessionID"]
   readonly model: {
     readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
   }["model"]
 }
 
-export type SessionSwitchModelOutput = void
+export type SessionsSwitchModelOutput = void
 
-export type SessionRenameInput = {
-  readonly sessionID: { readonly sessionID: string }["sessionID"]
-  readonly title: { readonly title: string }["title"]
-}
-
-export type SessionRenameOutput = void
-
-export type SessionPromptInput = {
+export type SessionsPromptInput = {
   readonly sessionID: { readonly sessionID: string }["sessionID"]
   readonly id?: {
     readonly id?: string | null
@@ -538,7 +457,7 @@ export type SessionPromptInput = {
   }["resume"]
 }
 
-export type SessionPromptOutput = {
+export type SessionsPromptOutput = {
   readonly data: {
     readonly admittedSeq: number
     readonly id: string
@@ -563,42 +482,21 @@ export type SessionPromptOutput = {
   }
 }["data"]
 
-export type SessionSkillInput = {
-  readonly sessionID: { readonly sessionID: string }["sessionID"]
-  readonly id?: {
-    readonly id?: string | undefined
-    readonly skill: string
-    readonly resume?: boolean | undefined
-  }["id"]
-  readonly skill: {
-    readonly id?: string | undefined
-    readonly skill: string
-    readonly resume?: boolean | undefined
-  }["skill"]
-  readonly resume?: {
-    readonly id?: string | undefined
-    readonly skill: string
-    readonly resume?: boolean | undefined
-  }["resume"]
-}
+export type SessionsCompactInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
 
-export type SessionSkillOutput = void
+export type SessionsCompactOutput = void
 
-export type SessionCompactInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
+export type SessionsWaitInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
 
-export type SessionCompactOutput = void
+export type SessionsWaitOutput = void
 
-export type SessionWaitInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
-
-export type SessionWaitOutput = void
-
-export type SessionRevertStageInput = {
+export type SessionsStageInput = {
   readonly sessionID: { readonly sessionID: string }["sessionID"]
   readonly messageID: { readonly messageID: string; readonly files?: boolean | undefined }["messageID"]
   readonly files?: { readonly messageID: string; readonly files?: boolean | undefined }["files"]
 }
 
-export type SessionRevertStageOutput = {
+export type SessionsStageOutput = {
   readonly data: {
     readonly messageID: string
     readonly partID?: string
@@ -614,17 +512,17 @@ export type SessionRevertStageOutput = {
   }
 }["data"]
 
-export type SessionRevertClearInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
+export type SessionsClearInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
 
-export type SessionRevertClearOutput = void
+export type SessionsClearOutput = void
 
-export type SessionRevertCommitInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
+export type SessionsCommitInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
 
-export type SessionRevertCommitOutput = void
+export type SessionsCommitOutput = void
 
-export type SessionContextInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
+export type SessionsContextInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
 
-export type SessionContextOutput = {
+export type SessionsContextOutput = {
   readonly data: ReadonlyArray<
     | {
         readonly id: string
@@ -671,14 +569,6 @@ export type SessionContextOutput = {
         readonly metadata?: { readonly [x: string]: JsonValue }
         readonly time: { readonly created: number }
         readonly type: "system"
-        readonly text: string
-      }
-    | {
-        readonly id: string
-        readonly metadata?: { readonly [x: string]: JsonValue }
-        readonly time: { readonly created: number }
-        readonly type: "skill"
-        readonly name: string
         readonly text: string
       }
     | {
@@ -786,13 +676,13 @@ export type SessionContextOutput = {
   >
 }["data"]
 
-export type SessionHistoryInput = {
+export type SessionsHistoryInput = {
   readonly sessionID: { readonly sessionID: string }["sessionID"]
   readonly limit?: { readonly limit?: number | undefined; readonly after?: number | undefined }["limit"]
   readonly after?: { readonly limit?: number | undefined; readonly after?: number | undefined }["after"]
 }
 
-export type SessionHistoryOutput = {
+export type SessionsHistoryOutput = {
   readonly data: ReadonlyArray<
     | {
         readonly id: string
@@ -831,27 +721,6 @@ export type SessionHistoryOutput = {
           readonly sessionID: string
           readonly location: { readonly directory: string; readonly workspaceID?: string }
           readonly subdirectory?: string
-        }
-      }
-    | {
-        readonly id: string
-        readonly metadata?: { readonly [x: string]: JsonValue }
-        readonly type: "session.next.renamed"
-        readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-        readonly location?: { readonly directory: string; readonly workspaceID?: string }
-        readonly data: { readonly timestamp: number; readonly sessionID: string; readonly title: string }
-      }
-    | {
-        readonly id: string
-        readonly metadata?: { readonly [x: string]: JsonValue }
-        readonly type: "session.next.forked"
-        readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-        readonly location?: { readonly directory: string; readonly workspaceID?: string }
-        readonly data: {
-          readonly timestamp: number
-          readonly sessionID: string
-          readonly parentID: string
-          readonly messageID?: string
         }
       }
     | {
@@ -931,20 +800,6 @@ export type SessionHistoryOutput = {
           readonly timestamp: number
           readonly sessionID: string
           readonly messageID: string
-          readonly text: string
-        }
-      }
-    | {
-        readonly id: string
-        readonly metadata?: { readonly [x: string]: JsonValue }
-        readonly type: "session.next.skill.activated"
-        readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-        readonly location?: { readonly directory: string; readonly workspaceID?: string }
-        readonly data: {
-          readonly timestamp: number
-          readonly sessionID: string
-          readonly messageID: string
-          readonly name: string
           readonly text: string
         }
       }
@@ -1281,12 +1136,12 @@ export type SessionHistoryOutput = {
   readonly hasMore: boolean
 }
 
-export type SessionEventsInput = {
+export type SessionsEventsInput = {
   readonly sessionID: { readonly sessionID: string }["sessionID"]
   readonly after?: { readonly after?: number | undefined }["after"]
 }
 
-export type SessionEventsOutput =
+export type SessionsEventsOutput =
   | {
       readonly id: string
       readonly metadata?: { readonly [x: string]: unknown }
@@ -1324,27 +1179,6 @@ export type SessionEventsOutput =
         readonly sessionID: string
         readonly location: { readonly directory: string; readonly workspaceID?: string }
         readonly subdirectory?: string
-      }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "session.next.renamed"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: { readonly timestamp: number; readonly sessionID: string; readonly title: string }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "session.next.forked"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: {
-        readonly timestamp: number
-        readonly sessionID: string
-        readonly parentID: string
-        readonly messageID?: string
       }
     }
   | {
@@ -1424,20 +1258,6 @@ export type SessionEventsOutput =
         readonly timestamp: number
         readonly sessionID: string
         readonly messageID: string
-        readonly text: string
-      }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "session.next.skill.activated"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: {
-        readonly timestamp: number
-        readonly sessionID: string
-        readonly messageID: string
-        readonly name: string
         readonly text: string
       }
     }
@@ -1771,20 +1591,16 @@ export type SessionEventsOutput =
       readonly data: { readonly timestamp: number; readonly sessionID: string; readonly messageID: string }
     }
 
-export type SessionInterruptInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
+export type SessionsInterruptInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
 
-export type SessionInterruptOutput = void
+export type SessionsInterruptOutput = void
 
-export type SessionBackgroundInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
-
-export type SessionBackgroundOutput = void
-
-export type SessionMessageInput = {
+export type SessionsMessageInput = {
   readonly sessionID: { readonly sessionID: string; readonly messageID: string }["sessionID"]
   readonly messageID: { readonly sessionID: string; readonly messageID: string }["messageID"]
 }
 
-export type SessionMessageOutput = {
+export type SessionsMessageOutput = {
   readonly data:
     | {
         readonly id: string
@@ -1831,14 +1647,6 @@ export type SessionMessageOutput = {
         readonly metadata?: { readonly [x: string]: JsonValue }
         readonly time: { readonly created: number }
         readonly type: "system"
-        readonly text: string
-      }
-    | {
-        readonly id: string
-        readonly metadata?: { readonly [x: string]: JsonValue }
-        readonly time: { readonly created: number }
-        readonly type: "skill"
-        readonly name: string
         readonly text: string
       }
     | {
@@ -1945,7 +1753,7 @@ export type SessionMessageOutput = {
       }
 }["data"]
 
-export type MessageListInput = {
+export type MessagesListInput = {
   readonly sessionID: { readonly sessionID: string }["sessionID"]
   readonly limit?: {
     readonly limit?: number | undefined
@@ -1964,7 +1772,7 @@ export type MessageListInput = {
   }["cursor"]
 }
 
-export type MessageListOutput = {
+export type MessagesListOutput = {
   readonly data: ReadonlyArray<
     | {
         readonly id: string
@@ -2011,14 +1819,6 @@ export type MessageListOutput = {
         readonly metadata?: { readonly [x: string]: JsonValue }
         readonly time: { readonly created: number }
         readonly type: "system"
-        readonly text: string
-      }
-    | {
-        readonly id: string
-        readonly metadata?: { readonly [x: string]: JsonValue }
-        readonly time: { readonly created: number }
-        readonly type: "skill"
-        readonly name: string
         readonly text: string
       }
     | {
@@ -2127,13 +1927,13 @@ export type MessageListOutput = {
   readonly cursor: { readonly previous?: string | null; readonly next?: string | null }
 }
 
-export type ModelListInput = {
+export type ModelsListInput = {
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   }["location"]
 }
 
-export type ModelListOutput = {
+export type ModelsListOutput = {
   readonly location: {
     readonly directory: string
     readonly workspaceID?: string
@@ -2186,29 +1986,13 @@ export type ModelListOutput = {
   }>
 }
 
-export type GenerateTextInput = {
-  readonly location?: {
-    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-  }["location"]
-  readonly prompt: {
-    readonly prompt: string
-    readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null
-  }["prompt"]
-  readonly model?: {
-    readonly prompt: string
-    readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null
-  }["model"]
-}
-
-export type GenerateTextOutput = { readonly data: { readonly text: string } }["data"]
-
-export type ProviderListInput = {
+export type ProvidersListInput = {
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   }["location"]
 }
 
-export type ProviderListOutput = {
+export type ProvidersListOutput = {
   readonly location: {
     readonly directory: string
     readonly workspaceID?: string
@@ -2234,14 +2018,14 @@ export type ProviderListOutput = {
   }>
 }
 
-export type ProviderGetInput = {
+export type ProvidersGetInput = {
   readonly providerID: { readonly providerID: string }["providerID"]
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   }["location"]
 }
 
-export type ProviderGetOutput = {
+export type ProvidersGetOutput = {
   readonly location: {
     readonly directory: string
     readonly workspaceID?: string
@@ -2267,13 +2051,13 @@ export type ProviderGetOutput = {
   }
 }
 
-export type IntegrationListInput = {
+export type IntegrationsListInput = {
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   }["location"]
 }
 
-export type IntegrationListOutput = {
+export type IntegrationsListOutput = {
   readonly location: {
     readonly directory: string
     readonly workspaceID?: string
@@ -2318,14 +2102,14 @@ export type IntegrationListOutput = {
   }>
 }
 
-export type IntegrationGetInput = {
+export type IntegrationsGetInput = {
   readonly integrationID: { readonly integrationID: string }["integrationID"]
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   }["location"]
 }
 
-export type IntegrationGetOutput = {
+export type IntegrationsGetOutput = {
   readonly location: {
     readonly directory: string
     readonly workspaceID?: string
@@ -2370,7 +2154,7 @@ export type IntegrationGetOutput = {
   } | null
 }
 
-export type IntegrationConnectKeyInput = {
+export type IntegrationsConnectKeyInput = {
   readonly integrationID: { readonly integrationID: string }["integrationID"]
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
@@ -2379,9 +2163,9 @@ export type IntegrationConnectKeyInput = {
   readonly label?: { readonly key: string; readonly label?: string | undefined }["label"]
 }
 
-export type IntegrationConnectKeyOutput = void
+export type IntegrationsConnectKeyOutput = void
 
-export type IntegrationConnectOauthInput = {
+export type IntegrationsConnectOauthInput = {
   readonly integrationID: { readonly integrationID: string }["integrationID"]
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
@@ -2403,7 +2187,7 @@ export type IntegrationConnectOauthInput = {
   }["label"]
 }
 
-export type IntegrationConnectOauthOutput = {
+export type IntegrationsConnectOauthOutput = {
   readonly location: {
     readonly directory: string
     readonly workspaceID?: string
@@ -2421,14 +2205,14 @@ export type IntegrationConnectOauthOutput = {
   }
 }
 
-export type IntegrationAttemptStatusInput = {
+export type IntegrationsAttemptStatusInput = {
   readonly attemptID: { readonly attemptID: string }["attemptID"]
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   }["location"]
 }
 
-export type IntegrationAttemptStatusOutput = {
+export type IntegrationsAttemptStatusOutput = {
   readonly location: {
     readonly directory: string
     readonly workspaceID?: string
@@ -2466,7 +2250,7 @@ export type IntegrationAttemptStatusOutput = {
       }
 }
 
-export type IntegrationAttemptCompleteInput = {
+export type IntegrationsAttemptCompleteInput = {
   readonly attemptID: { readonly attemptID: string }["attemptID"]
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
@@ -2474,43 +2258,18 @@ export type IntegrationAttemptCompleteInput = {
   readonly code?: { readonly code?: string | undefined }["code"]
 }
 
-export type IntegrationAttemptCompleteOutput = void
+export type IntegrationsAttemptCompleteOutput = void
 
-export type IntegrationAttemptCancelInput = {
+export type IntegrationsAttemptCancelInput = {
   readonly attemptID: { readonly attemptID: string }["attemptID"]
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   }["location"]
 }
 
-export type IntegrationAttemptCancelOutput = void
+export type IntegrationsAttemptCancelOutput = void
 
-export type ServerMcpListInput = {
-  readonly location?: {
-    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-  }["location"]
-}
-
-export type ServerMcpListOutput = {
-  readonly location: {
-    readonly directory: string
-    readonly workspaceID?: string
-    readonly project: { readonly id: string; readonly directory: string }
-  }
-  readonly data: ReadonlyArray<{
-    readonly name: string
-    readonly status:
-      | { readonly status: "connected" }
-      | { readonly status: "disconnected" }
-      | { readonly status: "disabled" }
-      | { readonly status: "failed"; readonly error: string }
-      | { readonly status: "needs_auth" }
-      | { readonly status: "needs_client_registration"; readonly error: string }
-    readonly integrationID?: string
-  }>
-}
-
-export type CredentialUpdateInput = {
+export type CredentialsUpdateInput = {
   readonly credentialID: { readonly credentialID: string }["credentialID"]
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
@@ -2518,41 +2277,24 @@ export type CredentialUpdateInput = {
   readonly label: { readonly label: string }["label"]
 }
 
-export type CredentialUpdateOutput = void
+export type CredentialsUpdateOutput = void
 
-export type CredentialRemoveInput = {
+export type CredentialsRemoveInput = {
   readonly credentialID: { readonly credentialID: string }["credentialID"]
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   }["location"]
 }
 
-export type CredentialRemoveOutput = void
+export type CredentialsRemoveOutput = void
 
-export type ProjectCurrentInput = {
+export type PermissionsListRequestsInput = {
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   }["location"]
 }
 
-export type ProjectCurrentOutput = { readonly id: string; readonly directory: string }
-
-export type ProjectDirectoriesInput = {
-  readonly projectID: { readonly projectID: string }["projectID"]
-  readonly location?: {
-    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-  }["location"]
-}
-
-export type ProjectDirectoriesOutput = ReadonlyArray<{ readonly directory: string; readonly strategy?: string }>
-
-export type PermissionListRequestsInput = {
-  readonly location?: {
-    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-  }["location"]
-}
-
-export type PermissionListRequestsOutput = {
+export type PermissionsListRequestsOutput = {
   readonly location: {
     readonly directory: string
     readonly workspaceID?: string
@@ -2569,9 +2311,11 @@ export type PermissionListRequestsOutput = {
   }>
 }
 
-export type PermissionListSavedInput = { readonly projectID?: { readonly projectID?: string | undefined }["projectID"] }
+export type PermissionsListSavedInput = {
+  readonly projectID?: { readonly projectID?: string | undefined }["projectID"]
+}
 
-export type PermissionListSavedOutput = {
+export type PermissionsListSavedOutput = {
   readonly data: ReadonlyArray<{
     readonly id: string
     readonly projectID: string
@@ -2580,11 +2324,11 @@ export type PermissionListSavedOutput = {
   }>
 }["data"]
 
-export type PermissionRemoveSavedInput = { readonly id: { readonly id: string }["id"] }
+export type PermissionsRemoveSavedInput = { readonly id: { readonly id: string }["id"] }
 
-export type PermissionRemoveSavedOutput = void
+export type PermissionsRemoveSavedOutput = void
 
-export type PermissionCreateInput = {
+export type PermissionsCreateInput = {
   readonly sessionID: { readonly sessionID: string }["sessionID"]
   readonly id?: {
     readonly id?: string | null
@@ -2651,13 +2395,13 @@ export type PermissionCreateInput = {
   }["agent"]
 }
 
-export type PermissionCreateOutput = {
+export type PermissionsCreateOutput = {
   readonly data: { readonly id: string; readonly effect: "allow" | "deny" | "ask" }
 }["data"]
 
-export type PermissionListInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
+export type PermissionsListInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
 
-export type PermissionListOutput = {
+export type PermissionsListOutput = {
   readonly data: ReadonlyArray<{
     readonly id: string
     readonly sessionID: string
@@ -2669,12 +2413,12 @@ export type PermissionListOutput = {
   }>
 }["data"]
 
-export type PermissionGetInput = {
+export type PermissionsGetInput = {
   readonly sessionID: { readonly sessionID: string; readonly requestID: string }["sessionID"]
   readonly requestID: { readonly sessionID: string; readonly requestID: string }["requestID"]
 }
 
-export type PermissionGetOutput = {
+export type PermissionsGetOutput = {
   readonly data: {
     readonly id: string
     readonly sessionID: string
@@ -2686,25 +2430,16 @@ export type PermissionGetOutput = {
   }
 }["data"]
 
-export type PermissionReplyInput = {
+export type PermissionsReplyInput = {
   readonly sessionID: { readonly sessionID: string; readonly requestID: string }["sessionID"]
   readonly requestID: { readonly sessionID: string; readonly requestID: string }["requestID"]
   readonly reply: { readonly reply: "once" | "always" | "reject"; readonly message?: string | undefined }["reply"]
   readonly message?: { readonly reply: "once" | "always" | "reject"; readonly message?: string | undefined }["message"]
 }
 
-export type PermissionReplyOutput = void
+export type PermissionsReplyOutput = void
 
-export type FileReadInput = {
-  readonly location?: {
-    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-  }["location"]
-  readonly path: string
-}
-
-export type FileReadOutput = globalThis.Uint8Array
-
-export type FileListInput = {
+export type FilesListInput = {
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
     readonly path?: string | undefined
@@ -2715,7 +2450,7 @@ export type FileListInput = {
   }["path"]
 }
 
-export type FileListOutput = {
+export type FilesListOutput = {
   readonly location: {
     readonly directory: string
     readonly workspaceID?: string
@@ -2724,7 +2459,7 @@ export type FileListOutput = {
   readonly data: ReadonlyArray<{ readonly path: string; readonly type: "file" | "directory" }>
 }
 
-export type FileFindInput = {
+export type FilesFindInput = {
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
     readonly query: string
@@ -2751,7 +2486,7 @@ export type FileFindInput = {
   }["limit"]
 }
 
-export type FileFindOutput = {
+export type FilesFindOutput = {
   readonly location: {
     readonly directory: string
     readonly workspaceID?: string
@@ -2760,13 +2495,13 @@ export type FileFindOutput = {
   readonly data: ReadonlyArray<{ readonly path: string; readonly type: "file" | "directory" }>
 }
 
-export type CommandListInput = {
+export type CommandsListInput = {
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   }["location"]
 }
 
-export type CommandListOutput = {
+export type CommandsListOutput = {
   readonly location: {
     readonly directory: string
     readonly workspaceID?: string
@@ -2782,13 +2517,13 @@ export type CommandListOutput = {
   }>
 }
 
-export type SkillListInput = {
+export type SkillsListInput = {
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   }["location"]
 }
 
-export type SkillListOutput = {
+export type SkillsListOutput = {
   readonly location: {
     readonly directory: string
     readonly workspaceID?: string
@@ -2803,1355 +2538,15 @@ export type SkillListOutput = {
   }>
 }
 
-export type EventSubscribeOutput =
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "models-dev.refreshed"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: {}
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "integration.updated"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: {}
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "integration.connection.updated"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: { readonly integrationID: string }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "catalog.updated"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: {}
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "agent.updated"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: {}
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "session.created"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: {
-        readonly sessionID: string
-        readonly info: {
-          readonly id: string
-          readonly slug: string
-          readonly projectID: string
-          readonly workspaceID?: string
-          readonly directory: string
-          readonly path?: string
-          readonly parentID?: string
-          readonly summary?: {
-            readonly additions: number
-            readonly deletions: number
-            readonly files: number
-            readonly diffs?: ReadonlyArray<{
-              readonly file?: string
-              readonly patch?: string
-              readonly additions: number
-              readonly deletions: number
-              readonly status?: "added" | "deleted" | "modified"
-            }>
-          }
-          readonly cost?: number
-          readonly tokens?: {
-            readonly input: number
-            readonly output: number
-            readonly reasoning: number
-            readonly cache: { readonly read: number; readonly write: number }
-          }
-          readonly share?: { readonly url: string }
-          readonly title: string
-          readonly agent?: string
-          readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
-          readonly version: string
-          readonly metadata?: { readonly [x: string]: any }
-          readonly time: {
-            readonly created: number
-            readonly updated: number
-            readonly compacting?: number
-            readonly archived?: number
-          }
-          readonly permission?: ReadonlyArray<{
-            readonly permission: string
-            readonly pattern: string
-            readonly action: "allow" | "deny" | "ask"
-          }>
-          readonly revert?: {
-            readonly messageID: string
-            readonly partID?: string
-            readonly snapshot?: string
-            readonly diff?: string
-          }
-        }
-      }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "session.updated"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: {
-        readonly sessionID: string
-        readonly info: {
-          readonly id: string
-          readonly slug: string
-          readonly projectID: string
-          readonly workspaceID?: string
-          readonly directory: string
-          readonly path?: string
-          readonly parentID?: string
-          readonly summary?: {
-            readonly additions: number
-            readonly deletions: number
-            readonly files: number
-            readonly diffs?: ReadonlyArray<{
-              readonly file?: string
-              readonly patch?: string
-              readonly additions: number
-              readonly deletions: number
-              readonly status?: "added" | "deleted" | "modified"
-            }>
-          }
-          readonly cost?: number
-          readonly tokens?: {
-            readonly input: number
-            readonly output: number
-            readonly reasoning: number
-            readonly cache: { readonly read: number; readonly write: number }
-          }
-          readonly share?: { readonly url: string }
-          readonly title: string
-          readonly agent?: string
-          readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
-          readonly version: string
-          readonly metadata?: { readonly [x: string]: any }
-          readonly time: {
-            readonly created: number
-            readonly updated: number
-            readonly compacting?: number
-            readonly archived?: number
-          }
-          readonly permission?: ReadonlyArray<{
-            readonly permission: string
-            readonly pattern: string
-            readonly action: "allow" | "deny" | "ask"
-          }>
-          readonly revert?: {
-            readonly messageID: string
-            readonly partID?: string
-            readonly snapshot?: string
-            readonly diff?: string
-          }
-        }
-      }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "session.deleted"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: {
-        readonly sessionID: string
-        readonly info: {
-          readonly id: string
-          readonly slug: string
-          readonly projectID: string
-          readonly workspaceID?: string
-          readonly directory: string
-          readonly path?: string
-          readonly parentID?: string
-          readonly summary?: {
-            readonly additions: number
-            readonly deletions: number
-            readonly files: number
-            readonly diffs?: ReadonlyArray<{
-              readonly file?: string
-              readonly patch?: string
-              readonly additions: number
-              readonly deletions: number
-              readonly status?: "added" | "deleted" | "modified"
-            }>
-          }
-          readonly cost?: number
-          readonly tokens?: {
-            readonly input: number
-            readonly output: number
-            readonly reasoning: number
-            readonly cache: { readonly read: number; readonly write: number }
-          }
-          readonly share?: { readonly url: string }
-          readonly title: string
-          readonly agent?: string
-          readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
-          readonly version: string
-          readonly metadata?: { readonly [x: string]: any }
-          readonly time: {
-            readonly created: number
-            readonly updated: number
-            readonly compacting?: number
-            readonly archived?: number
-          }
-          readonly permission?: ReadonlyArray<{
-            readonly permission: string
-            readonly pattern: string
-            readonly action: "allow" | "deny" | "ask"
-          }>
-          readonly revert?: {
-            readonly messageID: string
-            readonly partID?: string
-            readonly snapshot?: string
-            readonly diff?: string
-          }
-        }
-      }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "message.updated"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: {
-        readonly sessionID: string
-        readonly info:
-          | {
-              readonly id: string
-              readonly sessionID: string
-              readonly role: "user"
-              readonly time: { readonly created: number }
-              readonly format?:
-                | (
-                    | { readonly type: "text" }
-                    | {
-                        readonly type: "json_schema"
-                        readonly schema: { readonly [x: string]: any }
-                        readonly retryCount?: number | undefined | undefined
-                      }
-                  )
-                | undefined
-              readonly summary?:
-                | {
-                    readonly title?: string | undefined
-                    readonly body?: string | undefined
-                    readonly diffs: ReadonlyArray<{
-                      readonly file?: string
-                      readonly patch?: string
-                      readonly additions: number
-                      readonly deletions: number
-                      readonly status?: "added" | "deleted" | "modified"
-                    }>
-                  }
-                | undefined
-              readonly agent: string
-              readonly model: {
-                readonly providerID: string
-                readonly modelID: string
-                readonly variant?: string | undefined
-              }
-              readonly system?: string | undefined
-              readonly tools?: { readonly [x: string]: boolean } | undefined
-            }
-          | {
-              readonly id: string
-              readonly sessionID: string
-              readonly role: "assistant"
-              readonly time: { readonly created: number; readonly completed?: number | undefined }
-              readonly error?:
-                | {
-                    readonly name: "ProviderAuthError"
-                    readonly data: { readonly providerID: string; readonly message: string }
-                  }
-                | {
-                    readonly name: "UnknownError"
-                    readonly data: { readonly message: string; readonly ref?: string | undefined }
-                  }
-                | { readonly name: "MessageOutputLengthError"; readonly data: {} }
-                | { readonly name: "MessageAbortedError"; readonly data: { readonly message: string } }
-                | {
-                    readonly name: "StructuredOutputError"
-                    readonly data: { readonly message: string; readonly retries: number }
-                  }
-                | {
-                    readonly name: "ContextOverflowError"
-                    readonly data: { readonly message: string; readonly responseBody?: string | undefined }
-                  }
-                | { readonly name: "ContentFilterError"; readonly data: { readonly message: string } }
-                | {
-                    readonly name: "APIError"
-                    readonly data: {
-                      readonly message: string
-                      readonly statusCode?: number | undefined
-                      readonly isRetryable: boolean
-                      readonly responseHeaders?: { readonly [x: string]: string } | undefined
-                      readonly responseBody?: string | undefined
-                      readonly metadata?: { readonly [x: string]: string } | undefined
-                    }
-                  }
-                | undefined
-              readonly parentID: string
-              readonly modelID: string
-              readonly providerID: string
-              readonly mode: string
-              readonly agent: string
-              readonly path: { readonly cwd: string; readonly root: string }
-              readonly summary?: boolean | undefined
-              readonly cost: number
-              readonly tokens: {
-                readonly total?: number | undefined
-                readonly input: number
-                readonly output: number
-                readonly reasoning: number
-                readonly cache: { readonly read: number; readonly write: number }
-              }
-              readonly structured?: any | undefined
-              readonly variant?: string | undefined
-              readonly finish?: string | undefined
-            }
-      }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "message.removed"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: { readonly sessionID: string; readonly messageID: string }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "message.part.updated"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: {
-        readonly sessionID: string
-        readonly part:
-          | {
-              readonly id: string
-              readonly sessionID: string
-              readonly messageID: string
-              readonly type: "text"
-              readonly text: string
-              readonly synthetic?: boolean | undefined
-              readonly ignored?: boolean | undefined
-              readonly time?: { readonly start: number; readonly end?: number | undefined } | undefined
-              readonly metadata?: { readonly [x: string]: any } | undefined
-            }
-          | {
-              readonly id: string
-              readonly sessionID: string
-              readonly messageID: string
-              readonly type: "subtask"
-              readonly prompt: string
-              readonly description: string
-              readonly agent: string
-              readonly model?: { readonly providerID: string; readonly modelID: string } | undefined
-              readonly command?: string | undefined
-            }
-          | {
-              readonly id: string
-              readonly sessionID: string
-              readonly messageID: string
-              readonly type: "reasoning"
-              readonly text: string
-              readonly metadata?: { readonly [x: string]: any } | undefined
-              readonly time: { readonly start: number; readonly end?: number | undefined }
-            }
-          | {
-              readonly id: string
-              readonly sessionID: string
-              readonly messageID: string
-              readonly type: "file"
-              readonly mime: string
-              readonly filename?: string | undefined
-              readonly url: string
-              readonly source?:
-                | (
-                    | {
-                        readonly text: { readonly value: string; readonly start: number; readonly end: number }
-                        readonly type: "file"
-                        readonly path: string
-                      }
-                    | {
-                        readonly text: { readonly value: string; readonly start: number; readonly end: number }
-                        readonly type: "symbol"
-                        readonly path: string
-                        readonly range: {
-                          readonly start: { readonly line: number; readonly character: number }
-                          readonly end: { readonly line: number; readonly character: number }
-                        }
-                        readonly name: string
-                        readonly kind: number
-                      }
-                    | {
-                        readonly text: { readonly value: string; readonly start: number; readonly end: number }
-                        readonly type: "resource"
-                        readonly clientName: string
-                        readonly uri: string
-                      }
-                  )
-                | undefined
-            }
-          | {
-              readonly id: string
-              readonly sessionID: string
-              readonly messageID: string
-              readonly type: "tool"
-              readonly callID: string
-              readonly tool: string
-              readonly state:
-                | { readonly status: "pending"; readonly input: { readonly [x: string]: any }; readonly raw: string }
-                | {
-                    readonly status: "running"
-                    readonly input: { readonly [x: string]: any }
-                    readonly title?: string | undefined
-                    readonly metadata?: { readonly [x: string]: any } | undefined
-                    readonly time: { readonly start: number }
-                  }
-                | {
-                    readonly status: "completed"
-                    readonly input: { readonly [x: string]: any }
-                    readonly output: string
-                    readonly title: string
-                    readonly metadata: { readonly [x: string]: any }
-                    readonly time: {
-                      readonly start: number
-                      readonly end: number
-                      readonly compacted?: number | undefined
-                    }
-                    readonly attachments?:
-                      | ReadonlyArray<{
-                          readonly id: string
-                          readonly sessionID: string
-                          readonly messageID: string
-                          readonly type: "file"
-                          readonly mime: string
-                          readonly filename?: string | undefined
-                          readonly url: string
-                          readonly source?:
-                            | (
-                                | {
-                                    readonly text: {
-                                      readonly value: string
-                                      readonly start: number
-                                      readonly end: number
-                                    }
-                                    readonly type: "file"
-                                    readonly path: string
-                                  }
-                                | {
-                                    readonly text: {
-                                      readonly value: string
-                                      readonly start: number
-                                      readonly end: number
-                                    }
-                                    readonly type: "symbol"
-                                    readonly path: string
-                                    readonly range: {
-                                      readonly start: { readonly line: number; readonly character: number }
-                                      readonly end: { readonly line: number; readonly character: number }
-                                    }
-                                    readonly name: string
-                                    readonly kind: number
-                                  }
-                                | {
-                                    readonly text: {
-                                      readonly value: string
-                                      readonly start: number
-                                      readonly end: number
-                                    }
-                                    readonly type: "resource"
-                                    readonly clientName: string
-                                    readonly uri: string
-                                  }
-                              )
-                            | undefined
-                        }>
-                      | undefined
-                  }
-                | {
-                    readonly status: "error"
-                    readonly input: { readonly [x: string]: any }
-                    readonly error: string
-                    readonly metadata?: { readonly [x: string]: any } | undefined
-                    readonly time: { readonly start: number; readonly end: number }
-                  }
-              readonly metadata?: { readonly [x: string]: any } | undefined
-            }
-          | {
-              readonly id: string
-              readonly sessionID: string
-              readonly messageID: string
-              readonly type: "step-start"
-              readonly snapshot?: string | undefined
-            }
-          | {
-              readonly id: string
-              readonly sessionID: string
-              readonly messageID: string
-              readonly type: "step-finish"
-              readonly reason: string
-              readonly snapshot?: string | undefined
-              readonly cost: number
-              readonly tokens: {
-                readonly total?: number | undefined
-                readonly input: number
-                readonly output: number
-                readonly reasoning: number
-                readonly cache: { readonly read: number; readonly write: number }
-              }
-            }
-          | {
-              readonly id: string
-              readonly sessionID: string
-              readonly messageID: string
-              readonly type: "snapshot"
-              readonly snapshot: string
-            }
-          | {
-              readonly id: string
-              readonly sessionID: string
-              readonly messageID: string
-              readonly type: "patch"
-              readonly hash: string
-              readonly files: ReadonlyArray<string>
-            }
-          | {
-              readonly id: string
-              readonly sessionID: string
-              readonly messageID: string
-              readonly type: "agent"
-              readonly name: string
-              readonly source?: { readonly value: string; readonly start: number; readonly end: number } | undefined
-            }
-          | {
-              readonly id: string
-              readonly sessionID: string
-              readonly messageID: string
-              readonly type: "retry"
-              readonly attempt: number
-              readonly error: {
-                readonly name: "APIError"
-                readonly data: {
-                  readonly message: string
-                  readonly statusCode?: number | undefined
-                  readonly isRetryable: boolean
-                  readonly responseHeaders?: { readonly [x: string]: string } | undefined
-                  readonly responseBody?: string | undefined
-                  readonly metadata?: { readonly [x: string]: string } | undefined
-                }
-              }
-              readonly time: { readonly created: number }
-            }
-          | {
-              readonly id: string
-              readonly sessionID: string
-              readonly messageID: string
-              readonly type: "compaction"
-              readonly auto: boolean
-              readonly overflow?: boolean | undefined
-              readonly tail_start_id?: string | undefined
-            }
-        readonly time: number
-      }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "message.part.removed"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: { readonly sessionID: string; readonly messageID: string; readonly partID: string }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "session.next.agent.switched"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: {
-        readonly timestamp: number
-        readonly sessionID: string
-        readonly messageID: string
-        readonly agent: string
-      }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "session.next.model.switched"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: {
-        readonly timestamp: number
-        readonly sessionID: string
-        readonly messageID: string
-        readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
-      }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "session.next.moved"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: {
-        readonly timestamp: number
-        readonly sessionID: string
-        readonly location: { readonly directory: string; readonly workspaceID?: string }
-        readonly subdirectory?: string
-      }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "session.next.renamed"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: { readonly timestamp: number; readonly sessionID: string; readonly title: string }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "session.next.forked"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: {
-        readonly timestamp: number
-        readonly sessionID: string
-        readonly parentID: string
-        readonly messageID?: string
-      }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "session.next.prompted"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: {
-        readonly timestamp: number
-        readonly sessionID: string
-        readonly messageID: string
-        readonly prompt: {
-          readonly text: string
-          readonly files?: ReadonlyArray<{
-            readonly uri: string
-            readonly mime: string
-            readonly name?: string
-            readonly description?: string
-            readonly source?: { readonly start: number; readonly end: number; readonly text: string }
-          }>
-          readonly agents?: ReadonlyArray<{
-            readonly name: string
-            readonly source?: { readonly start: number; readonly end: number; readonly text: string }
-          }>
-        }
-        readonly delivery: "steer" | "queue"
-      }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "session.next.prompt.admitted"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: {
-        readonly timestamp: number
-        readonly sessionID: string
-        readonly messageID: string
-        readonly prompt: {
-          readonly text: string
-          readonly files?: ReadonlyArray<{
-            readonly uri: string
-            readonly mime: string
-            readonly name?: string
-            readonly description?: string
-            readonly source?: { readonly start: number; readonly end: number; readonly text: string }
-          }>
-          readonly agents?: ReadonlyArray<{
-            readonly name: string
-            readonly source?: { readonly start: number; readonly end: number; readonly text: string }
-          }>
-        }
-        readonly delivery: "steer" | "queue"
-      }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "session.next.context.updated"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: {
-        readonly timestamp: number
-        readonly sessionID: string
-        readonly messageID: string
-        readonly text: string
-      }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "session.next.synthetic"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: {
-        readonly timestamp: number
-        readonly sessionID: string
-        readonly messageID: string
-        readonly text: string
-      }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "session.next.skill.activated"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: {
-        readonly timestamp: number
-        readonly sessionID: string
-        readonly messageID: string
-        readonly name: string
-        readonly text: string
-      }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "session.next.shell.started"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: {
-        readonly timestamp: number
-        readonly sessionID: string
-        readonly messageID: string
-        readonly callID: string
-        readonly command: string
-      }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "session.next.shell.ended"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: {
-        readonly timestamp: number
-        readonly sessionID: string
-        readonly callID: string
-        readonly output: string
-      }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "session.next.step.started"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: {
-        readonly timestamp: number
-        readonly sessionID: string
-        readonly assistantMessageID: string
-        readonly agent: string
-        readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
-        readonly snapshot?: string
-      }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "session.next.step.ended"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: {
-        readonly timestamp: number
-        readonly sessionID: string
-        readonly assistantMessageID: string
-        readonly finish: string
-        readonly cost: number
-        readonly tokens: {
-          readonly input: number
-          readonly output: number
-          readonly reasoning: number
-          readonly cache: { readonly read: number; readonly write: number }
-        }
-        readonly snapshot?: string
-        readonly files?: ReadonlyArray<string>
-      }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "session.next.step.failed"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: {
-        readonly timestamp: number
-        readonly sessionID: string
-        readonly assistantMessageID: string
-        readonly error: { readonly type: "unknown"; readonly message: string }
-      }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "session.next.text.started"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: {
-        readonly timestamp: number
-        readonly sessionID: string
-        readonly assistantMessageID: string
-        readonly textID: string
-      }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "session.next.text.delta"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: {
-        readonly timestamp: number
-        readonly sessionID: string
-        readonly assistantMessageID: string
-        readonly textID: string
-        readonly delta: string
-      }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "session.next.text.ended"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: {
-        readonly timestamp: number
-        readonly sessionID: string
-        readonly assistantMessageID: string
-        readonly textID: string
-        readonly text: string
-      }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "session.next.reasoning.started"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: {
-        readonly timestamp: number
-        readonly sessionID: string
-        readonly assistantMessageID: string
-        readonly reasoningID: string
-        readonly providerMetadata?: { readonly [x: string]: { readonly [x: string]: unknown } }
-      }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "session.next.reasoning.delta"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: {
-        readonly timestamp: number
-        readonly sessionID: string
-        readonly assistantMessageID: string
-        readonly reasoningID: string
-        readonly delta: string
-      }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "session.next.reasoning.ended"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: {
-        readonly timestamp: number
-        readonly sessionID: string
-        readonly assistantMessageID: string
-        readonly reasoningID: string
-        readonly text: string
-        readonly providerMetadata?: { readonly [x: string]: { readonly [x: string]: unknown } }
-      }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "session.next.tool.input.started"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: {
-        readonly timestamp: number
-        readonly sessionID: string
-        readonly assistantMessageID: string
-        readonly callID: string
-        readonly name: string
-      }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "session.next.tool.input.delta"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: {
-        readonly timestamp: number
-        readonly sessionID: string
-        readonly assistantMessageID: string
-        readonly callID: string
-        readonly delta: string
-      }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "session.next.tool.input.ended"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: {
-        readonly timestamp: number
-        readonly sessionID: string
-        readonly assistantMessageID: string
-        readonly callID: string
-        readonly text: string
-      }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "session.next.tool.called"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: {
-        readonly timestamp: number
-        readonly sessionID: string
-        readonly assistantMessageID: string
-        readonly callID: string
-        readonly tool: string
-        readonly input: { readonly [x: string]: unknown }
-        readonly provider: {
-          readonly executed: boolean
-          readonly metadata?: { readonly [x: string]: { readonly [x: string]: unknown } }
-        }
-      }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "session.next.tool.progress"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: {
-        readonly timestamp: number
-        readonly sessionID: string
-        readonly assistantMessageID: string
-        readonly callID: string
-        readonly structured: { readonly [x: string]: unknown }
-        readonly content: ReadonlyArray<
-          | { readonly type: "text"; readonly text: string }
-          | { readonly type: "file"; readonly uri: string; readonly mime: string; readonly name?: string }
-        >
-      }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "session.next.tool.success"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: {
-        readonly timestamp: number
-        readonly sessionID: string
-        readonly assistantMessageID: string
-        readonly callID: string
-        readonly structured: { readonly [x: string]: unknown }
-        readonly content: ReadonlyArray<
-          | { readonly type: "text"; readonly text: string }
-          | { readonly type: "file"; readonly uri: string; readonly mime: string; readonly name?: string }
-        >
-        readonly outputPaths?: ReadonlyArray<string>
-        readonly result?: unknown
-        readonly provider: {
-          readonly executed: boolean
-          readonly metadata?: { readonly [x: string]: { readonly [x: string]: unknown } }
-        }
-      }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "session.next.tool.failed"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: {
-        readonly timestamp: number
-        readonly sessionID: string
-        readonly assistantMessageID: string
-        readonly callID: string
-        readonly error: { readonly type: "unknown"; readonly message: string }
-        readonly result?: unknown
-        readonly provider: {
-          readonly executed: boolean
-          readonly metadata?: { readonly [x: string]: { readonly [x: string]: unknown } }
-        }
-      }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "session.next.retried"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: {
-        readonly timestamp: number
-        readonly sessionID: string
-        readonly attempt: number
-        readonly error: {
-          readonly message: string
-          readonly statusCode?: number
-          readonly isRetryable: boolean
-          readonly responseHeaders?: { readonly [x: string]: string }
-          readonly responseBody?: string
-          readonly metadata?: { readonly [x: string]: string }
-        }
-      }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "session.next.compaction.started"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: {
-        readonly timestamp: number
-        readonly sessionID: string
-        readonly messageID: string
-        readonly reason: "auto" | "manual"
-      }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "session.next.compaction.delta"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: {
-        readonly timestamp: number
-        readonly sessionID: string
-        readonly messageID: string
-        readonly text: string
-      }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "session.next.compaction.ended"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: {
-        readonly timestamp: number
-        readonly sessionID: string
-        readonly messageID: string
-        readonly reason: "auto" | "manual"
-        readonly text: string
-        readonly recent: string
-      }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "session.next.revert.staged"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: {
-        readonly timestamp: number
-        readonly sessionID: string
-        readonly revert: {
-          readonly messageID: string
-          readonly partID?: string
-          readonly snapshot?: string
-          readonly diff?: string
-          readonly files?: ReadonlyArray<{
-            readonly path: string
-            readonly status: "added" | "modified" | "deleted"
-            readonly additions: number
-            readonly deletions: number
-            readonly patch: string
-          }>
-        }
-      }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "session.next.revert.cleared"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: { readonly timestamp: number; readonly sessionID: string }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "session.next.revert.committed"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: { readonly timestamp: number; readonly sessionID: string; readonly messageID: string }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "file.edited"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: { readonly file: string }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "reference.updated"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: {}
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "permission.v2.asked"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: {
-        readonly id: string
-        readonly sessionID: string
-        readonly action: string
-        readonly resources: ReadonlyArray<string>
-        readonly save?: ReadonlyArray<string>
-        readonly metadata?: { readonly [x: string]: unknown }
-        readonly source?: { readonly type: "tool"; readonly messageID: string; readonly callID: string }
-      }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "permission.v2.replied"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: {
-        readonly sessionID: string
-        readonly requestID: string
-        readonly reply: "once" | "always" | "reject"
-      }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "plugin.added"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: { readonly id: string }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "project.directories.updated"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: { readonly projectID: string }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "file.watcher.updated"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: { readonly file: string; readonly event: "add" | "change" | "unlink" }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "pty.created"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: {
-        readonly info: {
-          readonly id: string
-          readonly title: string
-          readonly command: string
-          readonly args: ReadonlyArray<string>
-          readonly cwd: string
-          readonly status: "running" | "exited"
-          readonly pid: number
-          readonly exitCode?: number
-        }
-      }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "pty.updated"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: {
-        readonly info: {
-          readonly id: string
-          readonly title: string
-          readonly command: string
-          readonly args: ReadonlyArray<string>
-          readonly cwd: string
-          readonly status: "running" | "exited"
-          readonly pid: number
-          readonly exitCode?: number
-        }
-      }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "pty.exited"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: { readonly id: string; readonly exitCode: number }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "pty.deleted"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: { readonly id: string }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "shell.created"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: {
-        readonly info: {
-          readonly id: string
-          readonly status: "running" | "exited" | "timeout" | "killed"
-          readonly command: string
-          readonly cwd: string
-          readonly shell: string
-          readonly file: string
-          readonly pid?: number
-          readonly exit?: number
-          readonly metadata: { readonly [x: string]: unknown }
-          readonly time: { readonly started: number; readonly completed?: number }
-        }
-      }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "shell.exited"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: {
-        readonly id: string
-        readonly exit?: number
-        readonly status: "running" | "exited" | "timeout" | "killed"
-      }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "shell.deleted"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: { readonly id: string }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "question.v2.asked"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: {
-        readonly id: string
-        readonly sessionID: string
-        readonly questions: ReadonlyArray<{
-          readonly question: string
-          readonly header: string
-          readonly options: ReadonlyArray<{ readonly label: string; readonly description: string }>
-          readonly multiple?: boolean
-          readonly custom?: boolean
-        }>
-        readonly tool?: { readonly messageID: string; readonly callID: string }
-      }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "question.v2.replied"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: {
-        readonly sessionID: string
-        readonly requestID: string
-        readonly answers: ReadonlyArray<ReadonlyArray<string>>
-      }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "question.v2.rejected"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: { readonly sessionID: string; readonly requestID: string }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "todo.updated"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: {
-        readonly sessionID: string
-        readonly todos: ReadonlyArray<{ readonly content: string; readonly status: string; readonly priority: string }>
-      }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown } | undefined
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number } | undefined
-      readonly location?: { readonly directory: string; readonly workspaceID?: string } | undefined
-      readonly type: "server.connected"
-      readonly data: {}
-    }
+export type EventsSubscribeOutput = OpenCodeEventEncoded
 
-export type PtyListInput = {
+export type PtysListInput = {
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   }["location"]
 }
 
-export type PtyListOutput = {
+export type PtysListOutput = {
   readonly location: {
     readonly directory: string
     readonly workspaceID?: string
@@ -4169,7 +2564,7 @@ export type PtyListOutput = {
   }>
 }
 
-export type PtyCreateInput = {
+export type PtysCreateInput = {
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   }["location"]
@@ -4210,7 +2605,7 @@ export type PtyCreateInput = {
   }["env"]
 }
 
-export type PtyCreateOutput = {
+export type PtysCreateOutput = {
   readonly location: {
     readonly directory: string
     readonly workspaceID?: string
@@ -4228,14 +2623,14 @@ export type PtyCreateOutput = {
   }
 }
 
-export type PtyGetInput = {
+export type PtysGetInput = {
   readonly ptyID: { readonly ptyID: string }["ptyID"]
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   }["location"]
 }
 
-export type PtyGetOutput = {
+export type PtysGetOutput = {
   readonly location: {
     readonly directory: string
     readonly workspaceID?: string
@@ -4253,7 +2648,7 @@ export type PtyGetOutput = {
   }
 }
 
-export type PtyUpdateInput = {
+export type PtysUpdateInput = {
   readonly ptyID: { readonly ptyID: string }["ptyID"]
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
@@ -4265,7 +2660,7 @@ export type PtyUpdateInput = {
   readonly size?: { readonly title?: string; readonly size?: { readonly rows: number; readonly cols: number } }["size"]
 }
 
-export type PtyUpdateOutput = {
+export type PtysUpdateOutput = {
   readonly location: {
     readonly directory: string
     readonly workspaceID?: string
@@ -4283,176 +2678,22 @@ export type PtyUpdateOutput = {
   }
 }
 
-export type PtyRemoveInput = {
+export type PtysRemoveInput = {
   readonly ptyID: { readonly ptyID: string }["ptyID"]
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   }["location"]
 }
 
-export type PtyRemoveOutput = void
+export type PtysRemoveOutput = void
 
-export type ShellListInput = {
+export type QuestionsListRequestsInput = {
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   }["location"]
 }
 
-export type ShellListOutput = {
-  readonly location: {
-    readonly directory: string
-    readonly workspaceID?: string
-    readonly project: { readonly id: string; readonly directory: string }
-  }
-  readonly data: ReadonlyArray<{
-    readonly id: string
-    readonly status: "running" | "exited" | "timeout" | "killed"
-    readonly command: string
-    readonly cwd: string
-    readonly shell: string
-    readonly file: string
-    readonly pid?: number
-    readonly exit?: number | "Infinity" | "-Infinity" | "NaN"
-    readonly metadata: { readonly [x: string]: JsonValue }
-    readonly time: {
-      readonly started: number | "Infinity" | "-Infinity" | "NaN"
-      readonly completed?: number | "Infinity" | "-Infinity" | "NaN"
-    }
-  }>
-}
-
-export type ShellCreateInput = {
-  readonly location?: {
-    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-  }["location"]
-  readonly command: {
-    readonly command: string
-    readonly cwd?: string
-    readonly timeout?: number
-    readonly metadata?: { readonly [x: string]: JsonValue }
-  }["command"]
-  readonly cwd?: {
-    readonly command: string
-    readonly cwd?: string
-    readonly timeout?: number
-    readonly metadata?: { readonly [x: string]: JsonValue }
-  }["cwd"]
-  readonly timeout?: {
-    readonly command: string
-    readonly cwd?: string
-    readonly timeout?: number
-    readonly metadata?: { readonly [x: string]: JsonValue }
-  }["timeout"]
-  readonly metadata?: {
-    readonly command: string
-    readonly cwd?: string
-    readonly timeout?: number
-    readonly metadata?: { readonly [x: string]: JsonValue }
-  }["metadata"]
-}
-
-export type ShellCreateOutput = {
-  readonly location: {
-    readonly directory: string
-    readonly workspaceID?: string
-    readonly project: { readonly id: string; readonly directory: string }
-  }
-  readonly data: {
-    readonly id: string
-    readonly status: "running" | "exited" | "timeout" | "killed"
-    readonly command: string
-    readonly cwd: string
-    readonly shell: string
-    readonly file: string
-    readonly pid?: number
-    readonly exit?: number | "Infinity" | "-Infinity" | "NaN"
-    readonly metadata: { readonly [x: string]: JsonValue }
-    readonly time: {
-      readonly started: number | "Infinity" | "-Infinity" | "NaN"
-      readonly completed?: number | "Infinity" | "-Infinity" | "NaN"
-    }
-  }
-}
-
-export type ShellGetInput = {
-  readonly id: { readonly id: string }["id"]
-  readonly location?: {
-    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-  }["location"]
-}
-
-export type ShellGetOutput = {
-  readonly location: {
-    readonly directory: string
-    readonly workspaceID?: string
-    readonly project: { readonly id: string; readonly directory: string }
-  }
-  readonly data: {
-    readonly id: string
-    readonly status: "running" | "exited" | "timeout" | "killed"
-    readonly command: string
-    readonly cwd: string
-    readonly shell: string
-    readonly file: string
-    readonly pid?: number
-    readonly exit?: number | "Infinity" | "-Infinity" | "NaN"
-    readonly metadata: { readonly [x: string]: JsonValue }
-    readonly time: {
-      readonly started: number | "Infinity" | "-Infinity" | "NaN"
-      readonly completed?: number | "Infinity" | "-Infinity" | "NaN"
-    }
-  }
-}
-
-export type ShellOutputInput = {
-  readonly id: { readonly id: string }["id"]
-  readonly location?: {
-    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-    readonly cursor?: number | undefined
-    readonly limit?: number | undefined
-  }["location"]
-  readonly cursor?: {
-    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-    readonly cursor?: number | undefined
-    readonly limit?: number | undefined
-  }["cursor"]
-  readonly limit?: {
-    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-    readonly cursor?: number | undefined
-    readonly limit?: number | undefined
-  }["limit"]
-}
-
-export type ShellOutputOutput = {
-  readonly location: {
-    readonly directory: string
-    readonly workspaceID?: string
-    readonly project: { readonly id: string; readonly directory: string }
-  }
-  readonly data: {
-    readonly output: string
-    readonly cursor: number
-    readonly size: number
-    readonly truncated: boolean
-  }
-}
-
-export type ShellRemoveInput = {
-  readonly id: { readonly id: string }["id"]
-  readonly location?: {
-    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-  }["location"]
-}
-
-export type ShellRemoveOutput = void
-
-export type QuestionListRequestsInput = {
-  readonly location?: {
-    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-  }["location"]
-}
-
-export type QuestionListRequestsOutput = {
+export type QuestionsListRequestsOutput = {
   readonly location: {
     readonly directory: string
     readonly workspaceID?: string
@@ -4472,9 +2713,9 @@ export type QuestionListRequestsOutput = {
   }>
 }
 
-export type QuestionListInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
+export type QuestionsListInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
 
-export type QuestionListOutput = {
+export type QuestionsListOutput = {
   readonly data: ReadonlyArray<{
     readonly id: string
     readonly sessionID: string
@@ -4489,28 +2730,28 @@ export type QuestionListOutput = {
   }>
 }["data"]
 
-export type QuestionReplyInput = {
+export type QuestionsReplyInput = {
   readonly sessionID: { readonly sessionID: string; readonly requestID: string }["sessionID"]
   readonly requestID: { readonly sessionID: string; readonly requestID: string }["requestID"]
   readonly answers: { readonly answers: ReadonlyArray<ReadonlyArray<string>> }["answers"]
 }
 
-export type QuestionReplyOutput = void
+export type QuestionsReplyOutput = void
 
-export type QuestionRejectInput = {
+export type QuestionsRejectInput = {
   readonly sessionID: { readonly sessionID: string; readonly requestID: string }["sessionID"]
   readonly requestID: { readonly sessionID: string; readonly requestID: string }["requestID"]
 }
 
-export type QuestionRejectOutput = void
+export type QuestionsRejectOutput = void
 
-export type ReferenceListInput = {
+export type ReferencesListInput = {
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   }["location"]
 }
 
-export type ReferenceListOutput = {
+export type ReferencesListOutput = {
   readonly location: {
     readonly directory: string
     readonly workspaceID?: string
@@ -4533,7 +2774,7 @@ export type ReferenceListOutput = {
   }>
 }
 
-export type ProjectCopyCreateInput = {
+export type ProjectCopiesCreateInput = {
   readonly projectID: { readonly projectID: string }["projectID"]
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
@@ -4543,9 +2784,9 @@ export type ProjectCopyCreateInput = {
   readonly name?: { readonly strategy: string; readonly directory: string; readonly name?: string }["name"]
 }
 
-export type ProjectCopyCreateOutput = { readonly directory: string }
+export type ProjectCopiesCreateOutput = { readonly directory: string }
 
-export type ProjectCopyRemoveInput = {
+export type ProjectCopiesRemoveInput = {
   readonly projectID: { readonly projectID: string }["projectID"]
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
@@ -4554,13 +2795,13 @@ export type ProjectCopyRemoveInput = {
   readonly force: { readonly directory: string; readonly force: boolean }["force"]
 }
 
-export type ProjectCopyRemoveOutput = void
+export type ProjectCopiesRemoveOutput = void
 
-export type ProjectCopyRefreshInput = {
+export type ProjectCopiesRefreshInput = {
   readonly projectID: { readonly projectID: string }["projectID"]
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   }["location"]
 }
 
-export type ProjectCopyRefreshOutput = void
+export type ProjectCopiesRefreshOutput = void

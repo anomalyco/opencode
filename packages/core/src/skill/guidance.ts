@@ -37,7 +37,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/SkillGuidance") {}
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const skills = yield* SkillV2.Service
@@ -70,7 +70,5 @@ export const layer = Layer.effect(
     })
   }),
 )
-
-export const locationLayer = layer
 
 export const node = makeLocationNode({ service: Service, layer, deps: [SkillV2.node] })

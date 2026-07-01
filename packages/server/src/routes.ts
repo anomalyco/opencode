@@ -44,8 +44,8 @@ const applicationServices = LayerNode.group([
 export function createRoutes(password?: string) {
   return makeRoutes(
     password
-      ? ServerAuth.Config.layer({ username: "opencode", password: Option.some(password) })
-      : ServerAuth.Config.defaultLayer,
+      ? ServerAuth.Config.configLayer({ username: "opencode", password: Option.some(password) })
+      : ServerAuth.Config.layer,
   )
 }
 
@@ -59,11 +59,12 @@ function makeRoutes<AuthError, AuthServices>(
 ) {
   const pluginRuntimeCell = PluginRuntime.makeCell()
   const serviceLayer = AppNodeBuilder.build(
-    LayerNode.bind(applicationServices, SessionExecution.node, SessionExecutionLocal.node),
+    applicationServices,
     [
-      LayerNode.replace(PluginRuntime.layer, PluginRuntime.layerWithCell(pluginRuntimeCell)),
-      LayerNode.replace(PluginRuntime.providerLayer, PluginRuntime.providerLayerWithCell(pluginRuntimeCell)),
-      ...(sdkPlugins ? [LayerNode.replace(SdkPlugins.layer, SdkPlugins.layerWithStore(sdkPlugins))] : []),
+      [SessionExecution.node, SessionExecutionLocal.node],
+      [PluginRuntime.node, PluginRuntime.layerWithCell(pluginRuntimeCell)],
+      [PluginRuntime.providerNode, PluginRuntime.providerLayerWithCell(pluginRuntimeCell)],
+      ...(sdkPlugins ? [[SdkPlugins.node, SdkPlugins.layerWithStore(sdkPlugins)] as const] : []),
     ],
   )
 

@@ -2,146 +2,116 @@ import type {
   HealthGetOutput,
   LocationGetInput,
   LocationGetOutput,
-  AgentListInput,
-  AgentListOutput,
-  PluginListInput,
-  PluginListOutput,
-  SessionListInput,
-  SessionListOutput,
-  SessionCreateInput,
-  SessionCreateOutput,
-  SessionActiveOutput,
-  SessionGetInput,
-  SessionGetOutput,
-  SessionForkInput,
-  SessionForkOutput,
-  SessionSwitchAgentInput,
-  SessionSwitchAgentOutput,
-  SessionSwitchModelInput,
-  SessionSwitchModelOutput,
-  SessionRenameInput,
-  SessionRenameOutput,
-  SessionPromptInput,
-  SessionPromptOutput,
-  SessionSkillInput,
-  SessionSkillOutput,
-  SessionCompactInput,
-  SessionCompactOutput,
-  SessionWaitInput,
-  SessionWaitOutput,
-  SessionRevertStageInput,
-  SessionRevertStageOutput,
-  SessionRevertClearInput,
-  SessionRevertClearOutput,
-  SessionRevertCommitInput,
-  SessionRevertCommitOutput,
-  SessionContextInput,
-  SessionContextOutput,
-  SessionHistoryInput,
-  SessionHistoryOutput,
-  SessionEventsInput,
-  SessionEventsOutput,
-  SessionInterruptInput,
-  SessionInterruptOutput,
-  SessionBackgroundInput,
-  SessionBackgroundOutput,
-  SessionMessageInput,
-  SessionMessageOutput,
-  MessageListInput,
-  MessageListOutput,
-  ModelListInput,
-  ModelListOutput,
-  GenerateTextInput,
-  GenerateTextOutput,
-  ProviderListInput,
-  ProviderListOutput,
-  ProviderGetInput,
-  ProviderGetOutput,
-  IntegrationListInput,
-  IntegrationListOutput,
-  IntegrationGetInput,
-  IntegrationGetOutput,
-  IntegrationConnectKeyInput,
-  IntegrationConnectKeyOutput,
-  IntegrationConnectOauthInput,
-  IntegrationConnectOauthOutput,
-  IntegrationAttemptStatusInput,
-  IntegrationAttemptStatusOutput,
-  IntegrationAttemptCompleteInput,
-  IntegrationAttemptCompleteOutput,
-  IntegrationAttemptCancelInput,
-  IntegrationAttemptCancelOutput,
-  ServerMcpListInput,
-  ServerMcpListOutput,
-  CredentialUpdateInput,
-  CredentialUpdateOutput,
-  CredentialRemoveInput,
-  CredentialRemoveOutput,
-  ProjectCurrentInput,
-  ProjectCurrentOutput,
-  ProjectDirectoriesInput,
-  ProjectDirectoriesOutput,
-  PermissionListRequestsInput,
-  PermissionListRequestsOutput,
-  PermissionListSavedInput,
-  PermissionListSavedOutput,
-  PermissionRemoveSavedInput,
-  PermissionRemoveSavedOutput,
-  PermissionCreateInput,
-  PermissionCreateOutput,
-  PermissionListInput,
-  PermissionListOutput,
-  PermissionGetInput,
-  PermissionGetOutput,
-  PermissionReplyInput,
-  PermissionReplyOutput,
-  FileReadInput,
-  FileReadOutput,
-  FileListInput,
-  FileListOutput,
-  FileFindInput,
-  FileFindOutput,
-  CommandListInput,
-  CommandListOutput,
-  SkillListInput,
-  SkillListOutput,
-  EventSubscribeOutput,
-  PtyListInput,
-  PtyListOutput,
-  PtyCreateInput,
-  PtyCreateOutput,
-  PtyGetInput,
-  PtyGetOutput,
-  PtyUpdateInput,
-  PtyUpdateOutput,
-  PtyRemoveInput,
-  PtyRemoveOutput,
-  ShellListInput,
-  ShellListOutput,
-  ShellCreateInput,
-  ShellCreateOutput,
-  ShellGetInput,
-  ShellGetOutput,
-  ShellOutputInput,
-  ShellOutputOutput,
-  ShellRemoveInput,
-  ShellRemoveOutput,
-  QuestionListRequestsInput,
-  QuestionListRequestsOutput,
-  QuestionListInput,
-  QuestionListOutput,
-  QuestionReplyInput,
-  QuestionReplyOutput,
-  QuestionRejectInput,
-  QuestionRejectOutput,
-  ReferenceListInput,
-  ReferenceListOutput,
-  ProjectCopyCreateInput,
-  ProjectCopyCreateOutput,
-  ProjectCopyRemoveInput,
-  ProjectCopyRemoveOutput,
-  ProjectCopyRefreshInput,
-  ProjectCopyRefreshOutput,
+  AgentsListInput,
+  AgentsListOutput,
+  SessionsListInput,
+  SessionsListOutput,
+  SessionsCreateInput,
+  SessionsCreateOutput,
+  SessionsActiveOutput,
+  SessionsGetInput,
+  SessionsGetOutput,
+  SessionsSwitchAgentInput,
+  SessionsSwitchAgentOutput,
+  SessionsSwitchModelInput,
+  SessionsSwitchModelOutput,
+  SessionsPromptInput,
+  SessionsPromptOutput,
+  SessionsCompactInput,
+  SessionsCompactOutput,
+  SessionsWaitInput,
+  SessionsWaitOutput,
+  SessionsStageInput,
+  SessionsStageOutput,
+  SessionsClearInput,
+  SessionsClearOutput,
+  SessionsCommitInput,
+  SessionsCommitOutput,
+  SessionsContextInput,
+  SessionsContextOutput,
+  SessionsHistoryInput,
+  SessionsHistoryOutput,
+  SessionsEventsInput,
+  SessionsEventsOutput,
+  SessionsInterruptInput,
+  SessionsInterruptOutput,
+  SessionsMessageInput,
+  SessionsMessageOutput,
+  MessagesListInput,
+  MessagesListOutput,
+  ModelsListInput,
+  ModelsListOutput,
+  ProvidersListInput,
+  ProvidersListOutput,
+  ProvidersGetInput,
+  ProvidersGetOutput,
+  IntegrationsListInput,
+  IntegrationsListOutput,
+  IntegrationsGetInput,
+  IntegrationsGetOutput,
+  IntegrationsConnectKeyInput,
+  IntegrationsConnectKeyOutput,
+  IntegrationsConnectOauthInput,
+  IntegrationsConnectOauthOutput,
+  IntegrationsAttemptStatusInput,
+  IntegrationsAttemptStatusOutput,
+  IntegrationsAttemptCompleteInput,
+  IntegrationsAttemptCompleteOutput,
+  IntegrationsAttemptCancelInput,
+  IntegrationsAttemptCancelOutput,
+  CredentialsUpdateInput,
+  CredentialsUpdateOutput,
+  CredentialsRemoveInput,
+  CredentialsRemoveOutput,
+  PermissionsListRequestsInput,
+  PermissionsListRequestsOutput,
+  PermissionsListSavedInput,
+  PermissionsListSavedOutput,
+  PermissionsRemoveSavedInput,
+  PermissionsRemoveSavedOutput,
+  PermissionsCreateInput,
+  PermissionsCreateOutput,
+  PermissionsListInput,
+  PermissionsListOutput,
+  PermissionsGetInput,
+  PermissionsGetOutput,
+  PermissionsReplyInput,
+  PermissionsReplyOutput,
+  FilesListInput,
+  FilesListOutput,
+  FilesFindInput,
+  FilesFindOutput,
+  CommandsListInput,
+  CommandsListOutput,
+  SkillsListInput,
+  SkillsListOutput,
+  EventsSubscribeOutput,
+  PtysListInput,
+  PtysListOutput,
+  PtysCreateInput,
+  PtysCreateOutput,
+  PtysGetInput,
+  PtysGetOutput,
+  PtysUpdateInput,
+  PtysUpdateOutput,
+  PtysRemoveInput,
+  PtysRemoveOutput,
+  QuestionsListRequestsInput,
+  QuestionsListRequestsOutput,
+  QuestionsListInput,
+  QuestionsListOutput,
+  QuestionsReplyInput,
+  QuestionsReplyOutput,
+  QuestionsRejectInput,
+  QuestionsRejectOutput,
+  ReferencesListInput,
+  ReferencesListOutput,
+  ProjectCopiesCreateInput,
+  ProjectCopiesCreateOutput,
+  ProjectCopiesRemoveInput,
+  ProjectCopiesRemoveOutput,
+  ProjectCopiesRefreshInput,
+  ProjectCopiesRefreshOutput,
 } from "./types"
 import { ClientError } from "./client-error"
 
@@ -165,7 +135,6 @@ interface RequestDescriptor {
   readonly successStatus: number
   readonly declaredStatuses: ReadonlyArray<number>
   readonly empty: boolean
-  readonly binary?: true
 }
 
 export function make(options: ClientOptions) {
@@ -211,7 +180,6 @@ export function make(options: ClientOptions) {
   const request = async <A>(descriptor: RequestDescriptor, requestOptions?: RequestOptions): Promise<A> => {
     const response = await execute(descriptor, requestOptions)
     if (response.status !== descriptor.successStatus) return responseError(response, descriptor)
-    if (descriptor.binary) return new Uint8Array(await response.arrayBuffer()) as A
     if (descriptor.empty) {
       try {
         await response.body?.cancel()
@@ -300,9 +268,9 @@ export function make(options: ClientOptions) {
           requestOptions,
         ),
     },
-    agent: {
-      list: (input?: AgentListInput, requestOptions?: RequestOptions) =>
-        request<AgentListOutput>(
+    agents: {
+      list: (input?: AgentsListInput, requestOptions?: RequestOptions) =>
+        request<AgentsListOutput>(
           {
             method: "GET",
             path: `/api/agent`,
@@ -314,23 +282,9 @@ export function make(options: ClientOptions) {
           requestOptions,
         ),
     },
-    plugin: {
-      list: (input?: PluginListInput, requestOptions?: RequestOptions) =>
-        request<PluginListOutput>(
-          {
-            method: "GET",
-            path: `/api/plugin`,
-            query: { location: input?.["location"] },
-            successStatus: 200,
-            declaredStatuses: [401, 400],
-            empty: false,
-          },
-          requestOptions,
-        ),
-    },
-    session: {
-      list: (input?: SessionListInput, requestOptions?: RequestOptions) =>
-        request<SessionListOutput>(
+    sessions: {
+      list: (input?: SessionsListInput, requestOptions?: RequestOptions) =>
+        request<SessionsListOutput>(
           {
             method: "GET",
             path: `/api/session`,
@@ -350,8 +304,8 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
-      create: (input?: SessionCreateInput, requestOptions?: RequestOptions) =>
-        request<{ readonly data: SessionCreateOutput }>(
+      create: (input?: SessionsCreateInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: SessionsCreateOutput }>(
           {
             method: "POST",
             path: `/api/session`,
@@ -368,7 +322,7 @@ export function make(options: ClientOptions) {
           requestOptions,
         ).then((value) => value.data),
       active: (requestOptions?: RequestOptions) =>
-        request<{ readonly data: SessionActiveOutput }>(
+        request<{ readonly data: SessionsActiveOutput }>(
           {
             method: "GET",
             path: `/api/session/active`,
@@ -378,8 +332,8 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ).then((value) => value.data),
-      get: (input: SessionGetInput, requestOptions?: RequestOptions) =>
-        request<{ readonly data: SessionGetOutput }>(
+      get: (input: SessionsGetInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: SessionsGetOutput }>(
           {
             method: "GET",
             path: `/api/session/${encodeURIComponent(input.sessionID)}`,
@@ -389,20 +343,8 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ).then((value) => value.data),
-      fork: (input: SessionForkInput, requestOptions?: RequestOptions) =>
-        request<{ readonly data: SessionForkOutput }>(
-          {
-            method: "POST",
-            path: `/api/session/${encodeURIComponent(input.sessionID)}/fork`,
-            body: { messageID: input["messageID"] },
-            successStatus: 200,
-            declaredStatuses: [404, 400, 401],
-            empty: false,
-          },
-          requestOptions,
-        ).then((value) => value.data),
-      switchAgent: (input: SessionSwitchAgentInput, requestOptions?: RequestOptions) =>
-        request<SessionSwitchAgentOutput>(
+      switchAgent: (input: SessionsSwitchAgentInput, requestOptions?: RequestOptions) =>
+        request<SessionsSwitchAgentOutput>(
           {
             method: "POST",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/agent`,
@@ -413,8 +355,8 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
-      switchModel: (input: SessionSwitchModelInput, requestOptions?: RequestOptions) =>
-        request<SessionSwitchModelOutput>(
+      switchModel: (input: SessionsSwitchModelInput, requestOptions?: RequestOptions) =>
+        request<SessionsSwitchModelOutput>(
           {
             method: "POST",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/model`,
@@ -425,20 +367,8 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
-      rename: (input: SessionRenameInput, requestOptions?: RequestOptions) =>
-        request<SessionRenameOutput>(
-          {
-            method: "POST",
-            path: `/api/session/${encodeURIComponent(input.sessionID)}/rename`,
-            body: { title: input["title"] },
-            successStatus: 204,
-            declaredStatuses: [404, 400, 401],
-            empty: true,
-          },
-          requestOptions,
-        ),
-      prompt: (input: SessionPromptInput, requestOptions?: RequestOptions) =>
-        request<{ readonly data: SessionPromptOutput }>(
+      prompt: (input: SessionsPromptInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: SessionsPromptOutput }>(
           {
             method: "POST",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/prompt`,
@@ -449,31 +379,19 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ).then((value) => value.data),
-      skill: (input: SessionSkillInput, requestOptions?: RequestOptions) =>
-        request<SessionSkillOutput>(
-          {
-            method: "POST",
-            path: `/api/session/${encodeURIComponent(input.sessionID)}/skill`,
-            body: { id: input["id"], skill: input["skill"], resume: input["resume"] },
-            successStatus: 204,
-            declaredStatuses: [404, 400, 401],
-            empty: true,
-          },
-          requestOptions,
-        ),
-      compact: (input: SessionCompactInput, requestOptions?: RequestOptions) =>
-        request<SessionCompactOutput>(
+      compact: (input: SessionsCompactInput, requestOptions?: RequestOptions) =>
+        request<SessionsCompactOutput>(
           {
             method: "POST",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/compact`,
             successStatus: 204,
-            declaredStatuses: [404, 409, 503, 500, 400, 401],
+            declaredStatuses: [404, 503, 400, 401],
             empty: true,
           },
           requestOptions,
         ),
-      wait: (input: SessionWaitInput, requestOptions?: RequestOptions) =>
-        request<SessionWaitOutput>(
+      wait: (input: SessionsWaitInput, requestOptions?: RequestOptions) =>
+        request<SessionsWaitOutput>(
           {
             method: "POST",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/wait`,
@@ -483,42 +401,42 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
-      revertStage: (input: SessionRevertStageInput, requestOptions?: RequestOptions) =>
-        request<{ readonly data: SessionRevertStageOutput }>(
+      stage: (input: SessionsStageInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: SessionsStageOutput }>(
           {
             method: "POST",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/revert/stage`,
             body: { messageID: input["messageID"], files: input["files"] },
             successStatus: 200,
-            declaredStatuses: [404, 409, 500, 400, 401],
+            declaredStatuses: [404, 500, 400, 401],
             empty: false,
           },
           requestOptions,
         ).then((value) => value.data),
-      revertClear: (input: SessionRevertClearInput, requestOptions?: RequestOptions) =>
-        request<SessionRevertClearOutput>(
+      clear: (input: SessionsClearInput, requestOptions?: RequestOptions) =>
+        request<SessionsClearOutput>(
           {
             method: "POST",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/revert/clear`,
             successStatus: 204,
-            declaredStatuses: [404, 409, 500, 400, 401],
+            declaredStatuses: [404, 500, 400, 401],
             empty: true,
           },
           requestOptions,
         ),
-      revertCommit: (input: SessionRevertCommitInput, requestOptions?: RequestOptions) =>
-        request<SessionRevertCommitOutput>(
+      commit: (input: SessionsCommitInput, requestOptions?: RequestOptions) =>
+        request<SessionsCommitOutput>(
           {
             method: "POST",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/revert/commit`,
             successStatus: 204,
-            declaredStatuses: [404, 409, 400, 401],
+            declaredStatuses: [404, 400, 401],
             empty: true,
           },
           requestOptions,
         ),
-      context: (input: SessionContextInput, requestOptions?: RequestOptions) =>
-        request<{ readonly data: SessionContextOutput }>(
+      context: (input: SessionsContextInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: SessionsContextOutput }>(
           {
             method: "GET",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/context`,
@@ -528,8 +446,8 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ).then((value) => value.data),
-      history: (input: SessionHistoryInput, requestOptions?: RequestOptions) =>
-        request<SessionHistoryOutput>(
+      history: (input: SessionsHistoryInput, requestOptions?: RequestOptions) =>
+        request<SessionsHistoryOutput>(
           {
             method: "GET",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/history`,
@@ -540,8 +458,8 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
-      events: (input: SessionEventsInput, requestOptions?: RequestOptions): AsyncIterable<SessionEventsOutput> =>
-        sse<SessionEventsOutput>(
+      events: (input: SessionsEventsInput, requestOptions?: RequestOptions): AsyncIterable<SessionsEventsOutput> =>
+        sse<SessionsEventsOutput>(
           {
             method: "GET",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/event`,
@@ -552,8 +470,8 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
-      interrupt: (input: SessionInterruptInput, requestOptions?: RequestOptions) =>
-        request<SessionInterruptOutput>(
+      interrupt: (input: SessionsInterruptInput, requestOptions?: RequestOptions) =>
+        request<SessionsInterruptOutput>(
           {
             method: "POST",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/interrupt`,
@@ -563,19 +481,8 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
-      background: (input: SessionBackgroundInput, requestOptions?: RequestOptions) =>
-        request<SessionBackgroundOutput>(
-          {
-            method: "POST",
-            path: `/api/session/${encodeURIComponent(input.sessionID)}/background`,
-            successStatus: 204,
-            declaredStatuses: [404, 400, 401],
-            empty: true,
-          },
-          requestOptions,
-        ),
-      message: (input: SessionMessageInput, requestOptions?: RequestOptions) =>
-        request<{ readonly data: SessionMessageOutput }>(
+      message: (input: SessionsMessageInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: SessionsMessageOutput }>(
           {
             method: "GET",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/message/${encodeURIComponent(input.messageID)}`,
@@ -586,9 +493,9 @@ export function make(options: ClientOptions) {
           requestOptions,
         ).then((value) => value.data),
     },
-    message: {
-      list: (input: MessageListInput, requestOptions?: RequestOptions) =>
-        request<MessageListOutput>(
+    messages: {
+      list: (input: MessagesListInput, requestOptions?: RequestOptions) =>
+        request<MessagesListOutput>(
           {
             method: "GET",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/message`,
@@ -600,9 +507,9 @@ export function make(options: ClientOptions) {
           requestOptions,
         ),
     },
-    model: {
-      list: (input?: ModelListInput, requestOptions?: RequestOptions) =>
-        request<ModelListOutput>(
+    models: {
+      list: (input?: ModelsListInput, requestOptions?: RequestOptions) =>
+        request<ModelsListOutput>(
           {
             method: "GET",
             path: `/api/model`,
@@ -614,24 +521,9 @@ export function make(options: ClientOptions) {
           requestOptions,
         ),
     },
-    generate: {
-      text: (input: GenerateTextInput, requestOptions?: RequestOptions) =>
-        request<{ readonly data: GenerateTextOutput }>(
-          {
-            method: "POST",
-            path: `/api/generate`,
-            query: { location: input["location"] },
-            body: { prompt: input["prompt"], model: input["model"] },
-            successStatus: 200,
-            declaredStatuses: [400, 503, 401],
-            empty: false,
-          },
-          requestOptions,
-        ).then((value) => value.data),
-    },
-    provider: {
-      list: (input?: ProviderListInput, requestOptions?: RequestOptions) =>
-        request<ProviderListOutput>(
+    providers: {
+      list: (input?: ProvidersListInput, requestOptions?: RequestOptions) =>
+        request<ProvidersListOutput>(
           {
             method: "GET",
             path: `/api/provider`,
@@ -642,8 +534,8 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
-      get: (input: ProviderGetInput, requestOptions?: RequestOptions) =>
-        request<ProviderGetOutput>(
+      get: (input: ProvidersGetInput, requestOptions?: RequestOptions) =>
+        request<ProvidersGetOutput>(
           {
             method: "GET",
             path: `/api/provider/${encodeURIComponent(input.providerID)}`,
@@ -655,9 +547,9 @@ export function make(options: ClientOptions) {
           requestOptions,
         ),
     },
-    integration: {
-      list: (input?: IntegrationListInput, requestOptions?: RequestOptions) =>
-        request<IntegrationListOutput>(
+    integrations: {
+      list: (input?: IntegrationsListInput, requestOptions?: RequestOptions) =>
+        request<IntegrationsListOutput>(
           {
             method: "GET",
             path: `/api/integration`,
@@ -668,8 +560,8 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
-      get: (input: IntegrationGetInput, requestOptions?: RequestOptions) =>
-        request<IntegrationGetOutput>(
+      get: (input: IntegrationsGetInput, requestOptions?: RequestOptions) =>
+        request<IntegrationsGetOutput>(
           {
             method: "GET",
             path: `/api/integration/${encodeURIComponent(input.integrationID)}`,
@@ -680,8 +572,8 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
-      connectKey: (input: IntegrationConnectKeyInput, requestOptions?: RequestOptions) =>
-        request<IntegrationConnectKeyOutput>(
+      connectKey: (input: IntegrationsConnectKeyInput, requestOptions?: RequestOptions) =>
+        request<IntegrationsConnectKeyOutput>(
           {
             method: "POST",
             path: `/api/integration/${encodeURIComponent(input.integrationID)}/connect/key`,
@@ -693,8 +585,8 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
-      connectOauth: (input: IntegrationConnectOauthInput, requestOptions?: RequestOptions) =>
-        request<IntegrationConnectOauthOutput>(
+      connectOauth: (input: IntegrationsConnectOauthInput, requestOptions?: RequestOptions) =>
+        request<IntegrationsConnectOauthOutput>(
           {
             method: "POST",
             path: `/api/integration/${encodeURIComponent(input.integrationID)}/connect/oauth`,
@@ -706,8 +598,8 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
-      attemptStatus: (input: IntegrationAttemptStatusInput, requestOptions?: RequestOptions) =>
-        request<IntegrationAttemptStatusOutput>(
+      attemptStatus: (input: IntegrationsAttemptStatusInput, requestOptions?: RequestOptions) =>
+        request<IntegrationsAttemptStatusOutput>(
           {
             method: "GET",
             path: `/api/integration/attempt/${encodeURIComponent(input.attemptID)}`,
@@ -718,8 +610,8 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
-      attemptComplete: (input: IntegrationAttemptCompleteInput, requestOptions?: RequestOptions) =>
-        request<IntegrationAttemptCompleteOutput>(
+      attemptComplete: (input: IntegrationsAttemptCompleteInput, requestOptions?: RequestOptions) =>
+        request<IntegrationsAttemptCompleteOutput>(
           {
             method: "POST",
             path: `/api/integration/attempt/${encodeURIComponent(input.attemptID)}/complete`,
@@ -731,8 +623,8 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
-      attemptCancel: (input: IntegrationAttemptCancelInput, requestOptions?: RequestOptions) =>
-        request<IntegrationAttemptCancelOutput>(
+      attemptCancel: (input: IntegrationsAttemptCancelInput, requestOptions?: RequestOptions) =>
+        request<IntegrationsAttemptCancelOutput>(
           {
             method: "DELETE",
             path: `/api/integration/attempt/${encodeURIComponent(input.attemptID)}`,
@@ -744,23 +636,9 @@ export function make(options: ClientOptions) {
           requestOptions,
         ),
     },
-    "server.mcp": {
-      list: (input?: ServerMcpListInput, requestOptions?: RequestOptions) =>
-        request<ServerMcpListOutput>(
-          {
-            method: "GET",
-            path: `/api/mcp`,
-            query: { location: input?.["location"] },
-            successStatus: 200,
-            declaredStatuses: [401, 400],
-            empty: false,
-          },
-          requestOptions,
-        ),
-    },
-    credential: {
-      update: (input: CredentialUpdateInput, requestOptions?: RequestOptions) =>
-        request<CredentialUpdateOutput>(
+    credentials: {
+      update: (input: CredentialsUpdateInput, requestOptions?: RequestOptions) =>
+        request<CredentialsUpdateOutput>(
           {
             method: "PATCH",
             path: `/api/credential/${encodeURIComponent(input.credentialID)}`,
@@ -772,8 +650,8 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
-      remove: (input: CredentialRemoveInput, requestOptions?: RequestOptions) =>
-        request<CredentialRemoveOutput>(
+      remove: (input: CredentialsRemoveInput, requestOptions?: RequestOptions) =>
+        request<CredentialsRemoveOutput>(
           {
             method: "DELETE",
             path: `/api/credential/${encodeURIComponent(input.credentialID)}`,
@@ -785,35 +663,9 @@ export function make(options: ClientOptions) {
           requestOptions,
         ),
     },
-    project: {
-      current: (input?: ProjectCurrentInput, requestOptions?: RequestOptions) =>
-        request<ProjectCurrentOutput>(
-          {
-            method: "GET",
-            path: `/api/project/current`,
-            query: { location: input?.["location"] },
-            successStatus: 200,
-            declaredStatuses: [401, 400],
-            empty: false,
-          },
-          requestOptions,
-        ),
-      directories: (input: ProjectDirectoriesInput, requestOptions?: RequestOptions) =>
-        request<ProjectDirectoriesOutput>(
-          {
-            method: "GET",
-            path: `/api/project/${encodeURIComponent(input.projectID)}/directories`,
-            query: { location: input["location"] },
-            successStatus: 200,
-            declaredStatuses: [401, 400],
-            empty: false,
-          },
-          requestOptions,
-        ),
-    },
-    permission: {
-      listRequests: (input?: PermissionListRequestsInput, requestOptions?: RequestOptions) =>
-        request<PermissionListRequestsOutput>(
+    permissions: {
+      listRequests: (input?: PermissionsListRequestsInput, requestOptions?: RequestOptions) =>
+        request<PermissionsListRequestsOutput>(
           {
             method: "GET",
             path: `/api/permission/request`,
@@ -824,8 +676,8 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
-      listSaved: (input?: PermissionListSavedInput, requestOptions?: RequestOptions) =>
-        request<{ readonly data: PermissionListSavedOutput }>(
+      listSaved: (input?: PermissionsListSavedInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: PermissionsListSavedOutput }>(
           {
             method: "GET",
             path: `/api/permission/saved`,
@@ -836,8 +688,8 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ).then((value) => value.data),
-      removeSaved: (input: PermissionRemoveSavedInput, requestOptions?: RequestOptions) =>
-        request<PermissionRemoveSavedOutput>(
+      removeSaved: (input: PermissionsRemoveSavedInput, requestOptions?: RequestOptions) =>
+        request<PermissionsRemoveSavedOutput>(
           {
             method: "DELETE",
             path: `/api/permission/saved/${encodeURIComponent(input.id)}`,
@@ -847,8 +699,8 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
-      create: (input: PermissionCreateInput, requestOptions?: RequestOptions) =>
-        request<{ readonly data: PermissionCreateOutput }>(
+      create: (input: PermissionsCreateInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: PermissionsCreateOutput }>(
           {
             method: "POST",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/permission`,
@@ -867,8 +719,8 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ).then((value) => value.data),
-      list: (input: PermissionListInput, requestOptions?: RequestOptions) =>
-        request<{ readonly data: PermissionListOutput }>(
+      list: (input: PermissionsListInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: PermissionsListOutput }>(
           {
             method: "GET",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/permission`,
@@ -878,8 +730,8 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ).then((value) => value.data),
-      get: (input: PermissionGetInput, requestOptions?: RequestOptions) =>
-        request<{ readonly data: PermissionGetOutput }>(
+      get: (input: PermissionsGetInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: PermissionsGetOutput }>(
           {
             method: "GET",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/permission/${encodeURIComponent(input.requestID)}`,
@@ -889,8 +741,8 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ).then((value) => value.data),
-      reply: (input: PermissionReplyInput, requestOptions?: RequestOptions) =>
-        request<PermissionReplyOutput>(
+      reply: (input: PermissionsReplyInput, requestOptions?: RequestOptions) =>
+        request<PermissionsReplyOutput>(
           {
             method: "POST",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/permission/${encodeURIComponent(input.requestID)}/reply`,
@@ -902,22 +754,9 @@ export function make(options: ClientOptions) {
           requestOptions,
         ),
     },
-    file: {
-      read: (input: FileReadInput, requestOptions?: RequestOptions) =>
-        request<FileReadOutput>(
-          {
-            method: "GET",
-            path: `/api/fs/read/${encodePath(input.path)}`,
-            query: { location: input["location"] },
-            successStatus: 200,
-            declaredStatuses: [401, 400],
-            empty: false,
-            binary: true,
-          },
-          requestOptions,
-        ),
-      list: (input?: FileListInput, requestOptions?: RequestOptions) =>
-        request<FileListOutput>(
+    files: {
+      list: (input?: FilesListInput, requestOptions?: RequestOptions) =>
+        request<FilesListOutput>(
           {
             method: "GET",
             path: `/api/fs/list`,
@@ -928,8 +767,8 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
-      find: (input: FileFindInput, requestOptions?: RequestOptions) =>
-        request<FileFindOutput>(
+      find: (input: FilesFindInput, requestOptions?: RequestOptions) =>
+        request<FilesFindOutput>(
           {
             method: "GET",
             path: `/api/fs/find`,
@@ -941,9 +780,9 @@ export function make(options: ClientOptions) {
           requestOptions,
         ),
     },
-    command: {
-      list: (input?: CommandListInput, requestOptions?: RequestOptions) =>
-        request<CommandListOutput>(
+    commands: {
+      list: (input?: CommandsListInput, requestOptions?: RequestOptions) =>
+        request<CommandsListOutput>(
           {
             method: "GET",
             path: `/api/command`,
@@ -955,9 +794,9 @@ export function make(options: ClientOptions) {
           requestOptions,
         ),
     },
-    skill: {
-      list: (input?: SkillListInput, requestOptions?: RequestOptions) =>
-        request<SkillListOutput>(
+    skills: {
+      list: (input?: SkillsListInput, requestOptions?: RequestOptions) =>
+        request<SkillsListOutput>(
           {
             method: "GET",
             path: `/api/skill`,
@@ -969,16 +808,16 @@ export function make(options: ClientOptions) {
           requestOptions,
         ),
     },
-    event: {
-      subscribe: (requestOptions?: RequestOptions): AsyncIterable<EventSubscribeOutput> =>
-        sse<EventSubscribeOutput>(
+    events: {
+      subscribe: (requestOptions?: RequestOptions): AsyncIterable<EventsSubscribeOutput> =>
+        sse<EventsSubscribeOutput>(
           { method: "GET", path: `/api/event`, successStatus: 200, declaredStatuses: [401, 400], empty: false },
           requestOptions,
         ),
     },
-    pty: {
-      list: (input?: PtyListInput, requestOptions?: RequestOptions) =>
-        request<PtyListOutput>(
+    ptys: {
+      list: (input?: PtysListInput, requestOptions?: RequestOptions) =>
+        request<PtysListOutput>(
           {
             method: "GET",
             path: `/api/pty`,
@@ -989,8 +828,8 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
-      create: (input?: PtyCreateInput, requestOptions?: RequestOptions) =>
-        request<PtyCreateOutput>(
+      create: (input?: PtysCreateInput, requestOptions?: RequestOptions) =>
+        request<PtysCreateOutput>(
           {
             method: "POST",
             path: `/api/pty`,
@@ -1008,8 +847,8 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
-      get: (input: PtyGetInput, requestOptions?: RequestOptions) =>
-        request<PtyGetOutput>(
+      get: (input: PtysGetInput, requestOptions?: RequestOptions) =>
+        request<PtysGetOutput>(
           {
             method: "GET",
             path: `/api/pty/${encodeURIComponent(input.ptyID)}`,
@@ -1020,8 +859,8 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
-      update: (input: PtyUpdateInput, requestOptions?: RequestOptions) =>
-        request<PtyUpdateOutput>(
+      update: (input: PtysUpdateInput, requestOptions?: RequestOptions) =>
+        request<PtysUpdateOutput>(
           {
             method: "PUT",
             path: `/api/pty/${encodeURIComponent(input.ptyID)}`,
@@ -1033,8 +872,8 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
-      remove: (input: PtyRemoveInput, requestOptions?: RequestOptions) =>
-        request<PtyRemoveOutput>(
+      remove: (input: PtysRemoveInput, requestOptions?: RequestOptions) =>
+        request<PtysRemoveOutput>(
           {
             method: "DELETE",
             path: `/api/pty/${encodeURIComponent(input.ptyID)}`,
@@ -1046,77 +885,9 @@ export function make(options: ClientOptions) {
           requestOptions,
         ),
     },
-    shell: {
-      list: (input?: ShellListInput, requestOptions?: RequestOptions) =>
-        request<ShellListOutput>(
-          {
-            method: "GET",
-            path: `/api/shell`,
-            query: { location: input?.["location"] },
-            successStatus: 200,
-            declaredStatuses: [401, 400],
-            empty: false,
-          },
-          requestOptions,
-        ),
-      create: (input: ShellCreateInput, requestOptions?: RequestOptions) =>
-        request<ShellCreateOutput>(
-          {
-            method: "POST",
-            path: `/api/shell`,
-            query: { location: input["location"] },
-            body: {
-              command: input["command"],
-              cwd: input["cwd"],
-              timeout: input["timeout"],
-              metadata: input["metadata"],
-            },
-            successStatus: 200,
-            declaredStatuses: [401, 400],
-            empty: false,
-          },
-          requestOptions,
-        ),
-      get: (input: ShellGetInput, requestOptions?: RequestOptions) =>
-        request<ShellGetOutput>(
-          {
-            method: "GET",
-            path: `/api/shell/${encodeURIComponent(input.id)}`,
-            query: { location: input["location"] },
-            successStatus: 200,
-            declaredStatuses: [404, 401, 400],
-            empty: false,
-          },
-          requestOptions,
-        ),
-      output: (input: ShellOutputInput, requestOptions?: RequestOptions) =>
-        request<ShellOutputOutput>(
-          {
-            method: "GET",
-            path: `/api/shell/${encodeURIComponent(input.id)}/output`,
-            query: { location: input["location"], cursor: input["cursor"], limit: input["limit"] },
-            successStatus: 200,
-            declaredStatuses: [404, 401, 400],
-            empty: false,
-          },
-          requestOptions,
-        ),
-      remove: (input: ShellRemoveInput, requestOptions?: RequestOptions) =>
-        request<ShellRemoveOutput>(
-          {
-            method: "DELETE",
-            path: `/api/shell/${encodeURIComponent(input.id)}`,
-            query: { location: input["location"] },
-            successStatus: 204,
-            declaredStatuses: [404, 401, 400],
-            empty: true,
-          },
-          requestOptions,
-        ),
-    },
-    question: {
-      listRequests: (input?: QuestionListRequestsInput, requestOptions?: RequestOptions) =>
-        request<QuestionListRequestsOutput>(
+    questions: {
+      listRequests: (input?: QuestionsListRequestsInput, requestOptions?: RequestOptions) =>
+        request<QuestionsListRequestsOutput>(
           {
             method: "GET",
             path: `/api/question/request`,
@@ -1127,8 +898,8 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
-      list: (input: QuestionListInput, requestOptions?: RequestOptions) =>
-        request<{ readonly data: QuestionListOutput }>(
+      list: (input: QuestionsListInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: QuestionsListOutput }>(
           {
             method: "GET",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/question`,
@@ -1138,8 +909,8 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ).then((value) => value.data),
-      reply: (input: QuestionReplyInput, requestOptions?: RequestOptions) =>
-        request<QuestionReplyOutput>(
+      reply: (input: QuestionsReplyInput, requestOptions?: RequestOptions) =>
+        request<QuestionsReplyOutput>(
           {
             method: "POST",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/question/${encodeURIComponent(input.requestID)}/reply`,
@@ -1150,8 +921,8 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
-      reject: (input: QuestionRejectInput, requestOptions?: RequestOptions) =>
-        request<QuestionRejectOutput>(
+      reject: (input: QuestionsRejectInput, requestOptions?: RequestOptions) =>
+        request<QuestionsRejectOutput>(
           {
             method: "POST",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/question/${encodeURIComponent(input.requestID)}/reject`,
@@ -1162,9 +933,9 @@ export function make(options: ClientOptions) {
           requestOptions,
         ),
     },
-    reference: {
-      list: (input?: ReferenceListInput, requestOptions?: RequestOptions) =>
-        request<ReferenceListOutput>(
+    references: {
+      list: (input?: ReferencesListInput, requestOptions?: RequestOptions) =>
+        request<ReferencesListOutput>(
           {
             method: "GET",
             path: `/api/reference`,
@@ -1176,9 +947,9 @@ export function make(options: ClientOptions) {
           requestOptions,
         ),
     },
-    projectCopy: {
-      create: (input: ProjectCopyCreateInput, requestOptions?: RequestOptions) =>
-        request<ProjectCopyCreateOutput>(
+    projectCopies: {
+      create: (input: ProjectCopiesCreateInput, requestOptions?: RequestOptions) =>
+        request<ProjectCopiesCreateOutput>(
           {
             method: "POST",
             path: `/experimental/project/${encodeURIComponent(input.projectID)}/copy`,
@@ -1190,8 +961,8 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
-      remove: (input: ProjectCopyRemoveInput, requestOptions?: RequestOptions) =>
-        request<ProjectCopyRemoveOutput>(
+      remove: (input: ProjectCopiesRemoveInput, requestOptions?: RequestOptions) =>
+        request<ProjectCopiesRemoveOutput>(
           {
             method: "DELETE",
             path: `/experimental/project/${encodeURIComponent(input.projectID)}/copy`,
@@ -1203,8 +974,8 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
-      refresh: (input: ProjectCopyRefreshInput, requestOptions?: RequestOptions) =>
-        request<ProjectCopyRefreshOutput>(
+      refresh: (input: ProjectCopiesRefreshInput, requestOptions?: RequestOptions) =>
+        request<ProjectCopiesRefreshOutput>(
           {
             method: "POST",
             path: `/experimental/project/${encodeURIComponent(input.projectID)}/copy/refresh`,
@@ -1217,10 +988,6 @@ export function make(options: ClientOptions) {
         ),
     },
   }
-}
-
-function encodePath(value: string): string {
-  return value.split("/").map(encodeURIComponent).join("/")
 }
 
 function appendQuery(params: URLSearchParams, key: string, value: unknown): void {

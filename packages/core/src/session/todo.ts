@@ -23,7 +23,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/SessionTodo") {}
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const { db } = yield* Database.Service
@@ -74,7 +74,5 @@ export const layer = Layer.effect(
     return Service.of({ update, get })
   }),
 )
-
-export const defaultLayer = layer.pipe(Layer.provide(EventV2.defaultLayer), Layer.provide(Database.defaultLayer))
 
 export const node = makeLocationNode({ service: Service, layer, deps: [EventV2.node, Database.node] })

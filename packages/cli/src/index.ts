@@ -11,6 +11,10 @@ import { Daemon } from "./services/daemon"
 import { Logging } from "@opencode-ai/core/observability/logging"
 import { Updater } from "./services/updater"
 import { InstallationChannel, InstallationVersion, InstallationLocal } from "@opencode-ai/core/installation/version"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { Global } from "@opencode-ai/core/global"
+import { AppProcess } from "@opencode-ai/core/process"
 
 const LoggingLayer = Logger.layer(Logging.loggers(), { mergeWithExisting: false }).pipe(
   Layer.provide(NodeFileSystem.layer),
@@ -46,8 +50,9 @@ const Handlers = Runtime.handlers(Commands, {
 Effect.logInfo("cli starting", { version: InstallationVersion, channel: InstallationChannel, local: InstallationLocal }).pipe(
   Effect.flatMap(() => Runtime.run(Commands, Handlers, { version: InstallationVersion })),
   Effect.annotateLogs({ role: "cli" }),
-  Effect.provide(Daemon.defaultLayer),
-  Effect.provide(Updater.defaultLayer),
+  Effect.provide(Daemon.layer),
+  Effect.provide(Updater.layer),
+  Effect.provide(AppNodeBuilder.build(LayerNode.group([Global.node, AppProcess.node]))),
   Effect.provide(LoggingLayer),
   Effect.provide(NodeServices.layer),
   Effect.scoped,

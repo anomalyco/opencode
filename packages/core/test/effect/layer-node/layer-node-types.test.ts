@@ -15,7 +15,7 @@ class OtherError {
 
 const tags = LayerNode.tags({ app: [] })
 const make = tags.make("app")
-const build = <A, E>(root: LayerNode.Node<A, E, any>) => LayerNode.compile(root)
+const build = <A, E>(root: LayerNode.Node<A, E, any>) => LayerNode.compile(root) as Layer.Layer<A, E>
 const aLayer = Layer.succeed(A, A.of({}))
 const bLayer = Layer.effect(B, Effect.as(A, B.of({})))
 const cLayer = Layer.effect(
@@ -32,6 +32,8 @@ const b = make({ service: B, layer: bLayer, deps: [a] })
 const c = make({ service: C, layer: cLayer, deps: [a, b] })
 const failing = make({ service: A, layer: failingA, deps: [] })
 const dependent = make({ service: B, layer: bLayer, deps: [failing] })
+const inputA = LayerNode.unbound(A, tags.values.app)
+const inputDependent = make({ service: B, layer: bLayer, deps: [inputA] })
 
 make({ name: "manual-a", layer: aLayer, deps: [] })
 
@@ -49,20 +51,28 @@ make({ service: C, layer: cLayer, deps: [a] })
 
 const closed = build(LayerNode.group([c]))
 const closedWithError = build(LayerNode.group([dependent]))
-const checkClosed: Layer.Layer<C> = closed
-const checkError: Layer.Layer<B, LayerError> = closedWithError
+const checkClosed: Layer.Layer<C, never, never> = closed
+const checkError: Layer.Layer<B, LayerError, never> = closedWithError
 void checkClosed
 void checkError
 
-LayerNode.replace(aLayer, Layer.succeed(A, A.of({})))
+LayerNode.compile(a, [[a, Layer.succeed(A, A.of({}))]])
+LayerNode.compile(a, [[a, make({ service: A, layer: Layer.succeed(A, A.of({})), deps: [] })]])
 
 // @ts-expect-error Replacement must provide A
-LayerNode.replace(aLayer, Layer.succeed(B, B.of({})))
+LayerNode.compile(a, [[a, Layer.succeed(B, B.of({}))]])
+
+// @ts-expect-error Node replacement must provide A
+const invalidNodeReplacement = () => LayerNode.compile(a, [[a, b]])
+void invalidNodeReplacement
 
 // @ts-expect-error Replacement cannot introduce a new error
-LayerNode.replace(aLayer, Layer.effect(A, Effect.fail(new OtherError())))
+LayerNode.compile(a, [[a, Layer.effect(A, Effect.fail(new OtherError()))]])
 
-LayerNode.replace(bLayer, bLayer)
+const invalidNodeErrorReplacement = () =>
+  // @ts-expect-error Node replacement cannot introduce a new error
+  LayerNode.compile(a, [[a, make({ service: A, layer: Layer.effect(A, Effect.fail(new OtherError())), deps: [] })]])
+void invalidNodeErrorReplacement
 
 class TagA extends Context.Service<TagA, {}>()("test/TagA") {}
 class TagB extends Context.Service<TagB, {}>()("test/TagB") {}

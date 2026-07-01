@@ -3,6 +3,8 @@ import { LLMClient, LLMEvent, Model, type LLMRequest } from "@opencode-ai/llm"
 import { OpenAIChat } from "@opencode-ai/llm/protocols"
 import { Config } from "@opencode-ai/core/config"
 import { Database } from "@opencode-ai/core/database/database"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventV2 } from "@opencode-ai/core/event"
 import { Location } from "@opencode-ai/core/location"
 import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
@@ -59,23 +61,14 @@ const locations = Layer.effect(
       ) as unknown as Layer.Layer<LocationServices>,
   ),
 )
-const sessions = SessionV2.layer.pipe(
-  Layer.provide(locations),
-  Layer.provide(EventV2.defaultLayer),
-  Layer.provide(Database.defaultLayer),
-  Layer.provide(SessionStore.defaultLayer),
-  Layer.provide(projects),
-  Layer.provide(SessionExecution.noopLayer),
-)
 const it = testEffect(
-  Layer.mergeAll(
-    Database.defaultLayer,
-    EventV2.defaultLayer,
-    projects,
-    SessionProjector.defaultLayer,
-    SessionStore.defaultLayer,
-    SessionExecution.noopLayer,
-    sessions,
+  AppNodeBuilder.build(
+    LayerNode.group([Database.node, EventV2.node, SessionProjector.node, SessionStore.node, SessionV2.node]),
+    [
+      [LocationServiceMap.node, locations],
+      [ProjectV2.node, projects],
+      [SessionExecution.node, SessionExecution.noopLayer],
+    ],
   ),
 )
 

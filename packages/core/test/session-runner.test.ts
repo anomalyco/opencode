@@ -11,6 +11,10 @@ import {
 } from "@opencode-ai/llm"
 import * as OpenAIChat from "@opencode-ai/llm/protocols/openai-chat"
 import { Database } from "@opencode-ai/core/database/database"
+import { makeLocationNode } from "@opencode-ai/core/effect/app-node"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNodePlatform } from "@opencode-ai/core/effect/app-node-platform"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventV2 } from "@opencode-ai/core/event"
 import { PermissionV2 } from "@opencode-ai/core/permission"
 import { EventTable } from "@opencode-ai/core/event/sql"
@@ -19,7 +23,6 @@ import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { QuestionV2 } from "@opencode-ai/core/question"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
-import { locationServiceMapLayer } from "@opencode-ai/core/location-services"
 import { Snapshot } from "@opencode-ai/core/snapshot"
 import { ContextSnapshotDecodeError } from "@opencode-ai/core/session/error"
 import { SessionEvent } from "@opencode-ai/core/session/event"
@@ -60,7 +63,6 @@ import { Cause, DateTime, Deferred, Effect, Exit, Fiber, Layer, Schema, Stream }
 import { asc, eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
 
-const questions = QuestionV2.layer.pipe(Layer.provide(EventV2.defaultLayer))
 const requests: LLMRequest[] = []
 let response: LLMEvent[] = []
 let responses: LLMEvent[][] | undefined
@@ -124,8 +126,6 @@ const permission = Layer.succeed(
     list: () => Effect.die("unused"),
   }),
 )
-const registry = ToolRegistry.layer.pipe(Layer.provide(permission), Layer.provide(ToolOutputStore.defaultLayer))
-const agents = AgentV2.layer.pipe(Layer.provide(EventV2.defaultLayer))
 const echo = Layer.effectDiscard(
   ToolRegistry.Service.use((registry) =>
     registry.register({
@@ -155,7 +155,8 @@ const echo = Layer.effectDiscard(
       }),
     }),
   ),
-).pipe(Layer.provide(registry))
+)
+const echoNode = makeLocationNode({ name: "test/session-runner-tools", layer: echo, deps: [ToolRegistry.node] })
 let modelResolveHook = Effect.void
 let currentModel = model
 const models = SessionRunnerModel.layerWith((session) =>
@@ -195,8 +196,7 @@ const systemContext = Layer.effectDiscard(
       }),
     ),
   ),
-).pipe(Layer.provideMerge(SystemContextRegistry.layer))
-const location = Location.layer({ directory: AbsolutePath.make("/project") }).pipe(Layer.provide(Project.defaultLayer))
+).pipe(Layer.provideMerge(AppNodeBuilder.build(SystemContextRegistry.node)))
 const skillGuidance = Layer.mock(SkillGuidance.Service, {
   load: (agent) =>
     Effect.succeed(
@@ -231,24 +231,19 @@ const config = Layer.succeed(
       ]),
   }),
 )
-const runner = SessionRunnerLLM.layer.pipe(
-  Layer.provide(SessionCompaction.layer),
-  Layer.provide(SessionTitle.layer),
-  Layer.provide(Snapshot.noopLayer),
-  Layer.provide(Database.defaultLayer),
-  Layer.provide(SessionStore.defaultLayer),
-  Layer.provide(EventV2.defaultLayer),
-  Layer.provide(client),
-  Layer.provide(registry),
-  Layer.provide(models),
-  Layer.provide(systemContext),
-  Layer.provide(location),
-  Layer.provide(agents),
-  Layer.provide(skillGuidance),
-  Layer.provide(referenceGuidance),
-  Layer.provide(mcpGuidance),
-  Layer.provide(config),
-)
+const runnerLayer = AppNodeBuilder.build(SessionRunnerLLM.node, [
+  [Snapshot.node, Snapshot.noopLayer],
+  [LayerNodePlatform.llmClient, client],
+  [SessionRunnerModel.node, models],
+  [SystemContextRegistry.node, systemContext],
+  [Location.node, Location.boundNode({ directory: AbsolutePath.make("/project") })],
+  [SkillGuidance.node, skillGuidance],
+  [ReferenceGuidance.node, referenceGuidance],
+  [PermissionV2.node, permission],
+  [Config.node, config],
+  [McpGuidance.node, mcpGuidance],
+  [ToolOutputStore.node, ToolOutputStore.nodeWithoutConfig],
+])
 const execution = Layer.effect(
   SessionExecution.Service,
   Effect.gen(function* () {
@@ -264,35 +259,42 @@ const execution = Layer.effect(
       awaitIdle: coordinator.awaitIdle,
     })
   }),
-).pipe(Layer.provide(runner))
-const sessions = SessionV2.layer.pipe(
-  Layer.provide(locationServiceMapLayer),
-  Layer.provide(EventV2.defaultLayer),
-  Layer.provide(Database.defaultLayer),
-  Layer.provide(SessionStore.defaultLayer),
-  Layer.provide(Project.defaultLayer),
-  Layer.provide(execution),
-)
+).pipe(Layer.provide(runnerLayer))
 const it = testEffect(
-  Layer.mergeAll(
-    Database.defaultLayer,
-    EventV2.defaultLayer,
-    questions,
-    SessionProjector.defaultLayer,
-    SessionStore.defaultLayer,
-    client,
-    permission,
-    agents,
-    registry,
-    echo,
-    models,
-    systemContext,
-    location,
-    skillGuidance,
-    config,
-    runner,
-    execution,
-    sessions,
+  AppNodeBuilder.build(
+    LayerNode.group([
+      Database.node,
+      EventV2.node,
+      QuestionV2.node,
+      SessionProjector.node,
+      SessionStore.node,
+      AgentV2.node,
+      ToolRegistry.node,
+      ToolRegistry.toolsNode,
+      echoNode,
+      SessionRunnerModel.node,
+      SystemContextRegistry.node,
+      SkillGuidance.node,
+      ReferenceGuidance.node,
+      Config.node,
+      Snapshot.node,
+      SessionRunnerLLM.node,
+      SessionExecution.node,
+      SessionV2.node,
+    ]),
+    [
+      [LayerNodePlatform.llmClient, client],
+      [PermissionV2.node, permission],
+      [SessionRunnerModel.node, models],
+      [SystemContextRegistry.node, systemContext],
+      [Location.node, Location.boundNode({ directory: AbsolutePath.make("/project") })],
+      [SkillGuidance.node, skillGuidance],
+      [ReferenceGuidance.node, referenceGuidance],
+      [Snapshot.node, Snapshot.noopLayer],
+      [SessionExecution.node, execution],
+      [Config.node, config],
+      [ToolOutputStore.node, ToolOutputStore.nodeWithoutConfig],
+    ],
   ),
 )
 const sessionID = SessionV2.ID.make("ses_runner_test")

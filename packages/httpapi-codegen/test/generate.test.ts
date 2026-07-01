@@ -362,6 +362,22 @@ describe("HttpApiCodegen.generate", () => {
       emitPromise(
         compileContract(
           api(
+            HttpApiEndpoint.get("binary", "/binary", {
+              success: Schema.Uint8Array.pipe(HttpApiSchema.asUint8Array()),
+            }),
+          ),
+        ),
+      ),
+    ).toThrow("Unsupported Promise success encoding: session.binary")
+
+    expect(() =>
+      emitPromise(compileContract(api(HttpApiEndpoint.get("read", "/file/*", { success: Schema.String })))),
+    ).toThrow("Unsupported Promise path wildcard: /file/*")
+
+    expect(() =>
+      emitPromise(
+        compileContract(
+          api(
             HttpApiEndpoint.get("events", "/events", {
               success: HttpApiSchema.StreamSse({ data: Schema.String, error: Missing }),
             }),
