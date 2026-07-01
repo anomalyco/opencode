@@ -11,6 +11,7 @@
   },
   "scripts": {
     "typecheck": "tsgo -b",
+    "test": "bun test src/ --timeout 30000",
     "predev": "bun ./scripts/predev.ts",
     "dev": "electron-vite dev",
     "prebuild": "bun ./scripts/prebuild.ts",

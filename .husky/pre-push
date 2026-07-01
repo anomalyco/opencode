@@ -18,3 +18,8 @@ if (process.versions.bun !== expectedBunVersion) {
 }
 '
 bun typecheck
+# Run the tests for packages affected since the previous commit. Keeps the hook
+# fast while catching obvious local breakage (e.g. an anr-core regression) before
+# it reaches CI's release gate. `...[HEAD~1]` = packages changed since HEAD~1 and
+# their dependents.
+bun turbo test --filter='...[HEAD~1]'

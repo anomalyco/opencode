@@ -6,7 +6,7 @@
   "license": "MIT",
   "private": true,
   "scripts": {
-    "test": "bun test --timeout 30000 --only-failures",
+    "test": "bun test --timeout 30000",
     "typecheck": "tsgo --noEmit"
   },
   "exports": {

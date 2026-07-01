@@ -149,6 +149,9 @@ const table = sqliteTable("session", {
 - Avoid mocks as much as possible, you shouldn't be using globalThis.\* at all unless it's the only option.
 - Test actual implementation, do not duplicate logic into tests
 - Tests cannot run from repo root (guard: `do-not-run-tests-from-root`); run from package dirs like `packages/opencode`.
+- Run the whole monorepo suite with `bun turbo test`. Every package with a `test` script is wired into `turbo.json`; `bun turbo test` must run them all.
+- Do not add `--only-failures` to any `test`/`test:ci` script — CI must always run the full suite. Regressions in previously-passing tests must not be skipped.
+- Release gate: `publish.yml` and `release.yml` require the reusable `test.yml` gate to pass for the same SHA before producing any artifact. Upstream-sync PRs require both a full-workspace typecheck AND full-workspace tests to pass before they are marked ready (`.github/scripts/sync-upstream.sh`). See CONTRIBUTING.md "Release Gate" for the layered model.
 
 ## Type Checking
 

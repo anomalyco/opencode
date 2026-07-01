@@ -190,6 +190,36 @@ With that said, you may want to try these methods, as they might work for you.
 - Explain the issue and why your change fixes it
 - Before adding new functionality, ensure it doesn't already exist elsewhere in the codebase
 
+### Release Gate (ANR fork)
+
+Every release — especially upstream-sync releases — is exercised end to end before
+publishing. The gate is layered; a release artifact is produced only when every
+layer is green for the same commit SHA:
+
+| Layer | Proves | Where |
+|---|---|---|
+| Static — `bun turbo typecheck` | Code compiles | pre-push, PR, sync-validate, publish gate |
+| Unit — `bun turbo test` (all packages) | Logic correct | PR, sync-validate, publish gate |
+| HttpApi exerciser — `bun --cwd packages/opencode test:httpapi` | Server contract | PR, publish gate |
+| App e2e — Playwright | Web app works | PR, publish gate |
+| CLI smoke | Built binary runs (`--version`, `--help`) | publish gate (all platforms) |
+| Config-layer | `.opencode/` agents/skills/commands load against the binary | publish gate |
+| Upgrade smoke | Previous-version state still readable | publish gate |
+| Desktop smoke | Electron app launches | publish gate (Linux) |
+
+Contract:
+
+- Run tests from a package dir or via `bun turbo test`, never from repo root
+  (guard: `do-not-run-tests-from-root`).
+- CI test invocations do **not** use `--only-failures`; the full suite always runs.
+- `publish.yml` and `release.yml` depend on the reusable `test.yml` gate. A red gate
+  blocks the artifact; it does not ship.
+- Upstream-sync PRs are only labeled `upstream-sync` (ready) when both the
+  full-workspace typecheck AND the full-workspace tests pass. Otherwise they are
+  `needs-manual-review`. See `.github/scripts/sync-upstream.sh`.
+- The new smoke jobs are `continue-on-error` for the first release cycle, then
+  re-armed.
+
 ### UI Changes
 
 If your PR includes UI changes, please include screenshots or videos showing the before and after. This helps maintainers review faster and gives you quicker feedback.

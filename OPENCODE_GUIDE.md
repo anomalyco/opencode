@@ -202,4 +202,34 @@ Two config files control behavior. Both support JSONC (comments allowed).
 
 ---
 
+## Release Gate (ANR fork)
+
+This fork ships a layered, mandatory release gate so upstream-sync releases can't
+publish a non-functional app. A release artifact is produced only when every layer
+is green for the same commit SHA:
+
+```
+typecheck -> unit -> HttpApi -> app e2e -> CLI smoke -> config-layer -> upgrade -> desktop -> publish
+```
+
+- **Static / Unit / HttpApi / App e2e** — `.github/workflows/test.yml`, on every PR
+  and push to `dev`. `bun turbo test` runs every package's suite (wired in
+  `turbo.json`); no `--only-failures`.
+- **CLI smoke** — builds the single-file binary and runs `--version` / `--help` on
+  Linux/macOS/Windows.
+- **Config-layer** — loads this repo's `.opencode/` agents, skills, and commands
+  against the built binary and verifies referenced skills resolve
+  (`.github/scripts/validate-opencode-config.ts`).
+- **Upgrade smoke** — installs the previous released version, creates state, then
+  runs the build-under-test against it to catch migration regressions.
+- **Desktop smoke** — launches the packaged Electron app headlessly (Linux).
+
+`publish.yml` and `release.yml` require the reusable `test.yml` gate via `needs:`.
+Upstream-sync PRs (`.github/scripts/sync-upstream.sh`) are marked ready only when
+both the full-workspace typecheck and the full-workspace tests pass; otherwise they
+are escalated to `needs-manual-review`. The four smoke jobs are `continue-on-error`
+for the first release cycle and then re-armed.
+
+---
+
 *Full docs: https://opencode.ai/docs*

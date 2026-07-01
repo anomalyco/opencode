@@ -30,9 +30,19 @@ permissions:
 
 jobs:
   # ---------------------------------------------------------------------------
+  # 0. Gate: the full test suite must pass for THIS SHA before we version/build.
+  #    Reuses test.yml so a release exercises the same suite PRs do. A red gate
+  #    blocks the draft release + CLI build.
+  # ---------------------------------------------------------------------------
+  gate:
+    uses: ./.github/workflows/test.yml
+    secrets: inherit
+
+  # ---------------------------------------------------------------------------
   # 1. Version: derive from git tags, create a draft GitHub release
   # ---------------------------------------------------------------------------
   version:
+    needs: gate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3

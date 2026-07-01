@@ -22,7 +22,7 @@
   },
   "scripts": {
     "typecheck": "tsgo --noEmit",
-    "test": "bun test src --only-failures"
+    "test": "bun test src"
   },
   "devDependencies": {
     "@tsconfig/node22": "catalog:",

@@ -9,6 +9,10 @@
 # Safety model:
 #   * Only ever opens/updates ONE PR from sync/upstream -> dev. NEVER pushes dev,
 #     NEVER merges. A human always merges.
+#   * A sync is only labeled `upstream-sync` (ready) when BOTH validation gates
+#     pass: full-workspace typecheck AND full-workspace tests. Any failure, any
+#     leftover conflict marker, or any ANR-critical escalation labels it
+#     `needs-manual-review` instead.
 #   * Manual and nightly runs cannot clobber each other:
 #       - `concurrency` serializes runs (no two at once).
 #       - a pre-flight guard SKIPS the run if an open sync PR is already in flight,
@@ -126,6 +130,9 @@ jobs:
           REVIEW: ${{ steps.sync.outputs.needs_review }}
           ESCALATED: ${{ steps.sync.outputs.escalated }}
           TYPECHECK: ${{ steps.sync.outputs.typecheck }}
+          TESTS: ${{ steps.sync.outputs.tests }}
+          ANR_RISK: ${{ steps.sync.outputs.anr_risk }}
+          ANR_TOUCHED: ${{ steps.sync.outputs.anr_touched }}
           HEAD_SHA: ${{ steps.sync.outputs.head }}
         run: |
           set -euo pipefail
@@ -136,8 +143,15 @@ jobs:
             body=$(cat <<EOF
           Automated incremental upstream sync ($date).
 
-          Validation passed ✅ (full-workspace typecheck). Conflicts were resolved
-          automatically via remembered resolutions (git rerere) and conflict-rules.conf.
+          Validation passed ✅
+          - Typecheck (full workspace): **$TYPECHECK**
+          - Tests (full workspace): **$TESTS**
+
+          Conflicts were resolved automatically via remembered resolutions
+          (git rerere) and conflict-rules.conf.
+
+          ANR-critical areas touched: \`${ANR_TOUCHED:-none}\`
+          $([ "$ANR_RISK" = "yes" ] && echo "> ⚠️ This sync touches ANR-critical code. Run the matching regression checks (auth/federation, telemetry/OTEL, CLI, release, workflows, desktop, backend) before merging." || echo "")
 
           Tip of branch: \`$HEAD_SHA\`. Ready for review and merge into \`$TARGET_BRANCH\`.
           EOF
@@ -149,15 +163,20 @@ jobs:
           Automated incremental upstream sync ($date) needs a human.
 
           - Typecheck (full workspace): **$TYPECHECK**
+          - Tests (full workspace): **$TESTS**
           - Files left with conflict markers (textual): \`$ESCALATED\`
+          - ANR-critical areas touched: \`${ANR_TOUCHED:-none}\`
 
           A \`failed\` typecheck means a *semantic* break — code that merged cleanly
           but no longer compiles (an ANR file using an upstream API that changed).
-          Check the workflow log's "Validate" step for the exact errors; those files
-          have NO conflict markers.
+          A \`failed\` tests result means a *runtime-behavior* break — it compiles
+          but an ANR test (auth, telemetry, quota, CLI, …) now fails. In both cases
+          the offending files have NO conflict markers; check the workflow log's
+          "Validate" steps for the exact errors.
+          $([ "$ANR_RISK" = "yes" ] && echo "" && echo "> ⚠️ ANR-critical code changed in this sync. Expanded regression validation is REQUIRED before merge — this PR was held for review even if the automated gates passed." || echo "")
 
-          To finish: resolve the conflict file(s) above and fix any typecheck errors
-          **locally with rerere enabled** so the fix is remembered next time:
+          To finish: resolve the conflict file(s) above and fix any typecheck/test
+          failures **locally with rerere enabled** so the fix is remembered next time:
 
           \`\`\`
           git fetch origin $SYNC_BRANCH && git checkout $SYNC_BRANCH

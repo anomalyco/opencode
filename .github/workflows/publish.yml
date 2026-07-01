@@ -32,7 +32,19 @@ permissions:
   packages: write
 
 jobs:
+  # ---------------------------------------------------------------------------
+  # 0. Gate: the full test suite (unit + e2e + smoke) must be green for THIS SHA
+  #    before anything is versioned, built, or published. Reuses test.yml so the
+  #    release path exercises the exact same suite that runs on PRs. No green
+  #    gate => no npm/desktop/Homebrew artifact.
+  # ---------------------------------------------------------------------------
+  gate:
+    if: github.repository == 'anomalyco/opencode'
+    uses: ./.github/workflows/test.yml
+    secrets: inherit
+
   version:
+    needs: gate
     runs-on: blacksmith-4vcpu-ubuntu-2404
     if: github.repository == 'anomalyco/opencode'
     steps:

@@ -11,8 +11,13 @@
 #        c. bun.lock is reconciled with `bun install` if it was touched.
 #      Anything still unresolved -> escalate (stop, leave for a human).
 #   4. Validate the merged result with a FULL-workspace typecheck (catches
-#      semantic breaks that no textual rule can see).
-#   5. Persist any newly-recorded rerere resolutions back to the store so the
+#      semantic breaks that no textual rule can see) AND the FULL-workspace test
+#      suite (catches runtime-behavior breaks that still compile). A sync is only
+#      marked safe_to_push when BOTH gates are green.
+#   5. Scan the merged changes for ANR-critical areas (auth/federation/telemetry/
+#      CLI/release/workflows/desktop/backend). Any ANR-critical *escalation* forces
+#      manual review regardless of the automated gates.
+#   6. Persist any newly-recorded rerere resolutions back to the store so the
 #      next run remembers them.
 #
 # Default is a DRY RUN: it resolves, validates, and reports, but never pushes.
@@ -24,7 +29,7 @@
 #     --max-batches N        stop after N batches (default: unlimited)
 #     --upstream-ref REF     upstream ref to sync from (default: dev)
 #     --target-commit SHA    merge only up to this upstream commit (testing)
-#     --no-typecheck         skip the full-workspace typecheck (faster local loops)
+#     --no-typecheck         skip the full-workspace typecheck AND tests (faster local loops)
 #
 set -euo pipefail
 
@@ -97,7 +102,7 @@ PENDING="$(git rev-list --count "${SYNC_BRANCH}..${UPSTREAM_TIP}")"
 info "$PENDING upstream commit(s) to merge (batch size $BATCH_SIZE)"
 if [ "$PENDING" -eq 0 ]; then
   echo "Already up to date."
-  [ -n "${SYNC_GITHUB_OUTPUT:-}" ] && printf 'result=uptodate\nsafe_to_push=no\nneeds_review=no\n' >> "$SYNC_GITHUB_OUTPUT"
+  [ -n "${SYNC_GITHUB_OUTPUT:-}" ] && printf 'result=uptodate\nsafe_to_push=no\nneeds_review=no\ntests=skipped\ntypecheck=skipped\nanr_risk=no\n' >> "$SYNC_GITHUB_OUTPUT"
   exit 0
 fi
 
@@ -218,6 +223,21 @@ if [ "$DO_TYPECHECK" -eq 1 ]; then
   fi
 fi
 
+# ---- validation: full-workspace tests (runtime-break gate) -------------------
+# Typecheck alone proves the code COMPILES; it does not prove it still BEHAVES.
+# A clean-compiling upstream merge can still break ANR runtime behavior (auth,
+# telemetry, quota, CLI, etc.). Run the full monorepo test suite so a sync PR is
+# only marked safe when both gates are green. Skipped alongside --no-typecheck so
+# fast local loops stay fast; CI always runs live (DO_TYPECHECK=1).
+TESTS_OK="skipped"
+if [ "$DO_TYPECHECK" -eq 1 ]; then
+  log "Validate: full-workspace tests"
+  if bun turbo test; then TESTS_OK="passed"; else
+    TESTS_OK="failed"
+    log "TESTS FAILED — runtime-behavior break; escalating for manual review"
+  fi
+fi
+
 # ---- persist newly-recorded resolutions back to the store --------------------
 log "Persist rerere memory"
 if [ -n "$(ls -A .git/rr-cache 2>/dev/null || true)" ]; then
@@ -233,19 +253,53 @@ if [ -n "$(ls -A .git/rr-cache 2>/dev/null || true)" ]; then
   fi
 fi
 
+# ---- ANR-critical regression scan -------------------------------------------
+# Higher-risk resolutions get flagged for expanded review. If any file touched by
+# this sync (vs the target branch) OR any escalated file lands in an ANR-critical
+# area, we surface it so a reviewer knows to run the matching regression checks —
+# and we force needs-review even if the automated gates happened to pass.
+log "ANR-critical regression scan"
+# path fragments -> human-readable area. Keep in sync with conflict-rules.conf
+# and the release-gate docs.
+ANR_CRITICAL_REGEX='(^|/)(anr-core)/|auth|federation|oidc|telemetry|otel|observ|bedrock|(^|/)aws|quota|(^|/)packages/opencode/src/cli/|(^|/)packages/cli/|release|publish|\.github/workflows/|\.github/scripts/|(^|/)packages/desktop/|(^|/)packages/enterprise/|(^|/)infra/|(^|/)sst\.config'
+CHANGED_FILES="$(git diff --name-only "$TARGET_BRANCH..HEAD" || true)"
+ANR_TOUCHED="$(printf '%s\n' "$CHANGED_FILES" | grep -iE "$ANR_CRITICAL_REGEX" || true)"
+ANR_ESCALATED=""
+if [ "${#ALL_ESCALATED[@]}" -gt 0 ]; then
+  ANR_ESCALATED="$(printf '%s\n' "${ALL_ESCALATED[@]}" | tr ',' '\n' | grep -iE "$ANR_CRITICAL_REGEX" || true)"
+fi
+ANR_RISK="no"
+if [ -n "$ANR_TOUCHED" ] || [ -n "$ANR_ESCALATED" ]; then
+  ANR_RISK="yes"
+  info "ANR-critical areas touched by this sync — expanded regression review required"
+  printf '%s\n' "$ANR_TOUCHED" | sed '/^$/d' | sed 's/^/   touched: /' || true
+else
+  info "no ANR-critical areas touched"
+fi
+
 # ---- report ------------------------------------------------------------------
 log "Summary"
 SAFE=1
 [ "${#ALL_ESCALATED[@]}" -gt 0 ] && SAFE=0
 [ "$TYPECHECK_OK" = "failed" ] && SAFE=0
+[ "$TESTS_OK" = "failed" ] && SAFE=0
+# An ANR-critical escalation is never auto-safe; it always needs a human even if
+# the other gates are green (they cannot prove ANR behavior is intact by hunk).
+[ -n "$ANR_ESCALATED" ] && SAFE=0
 NEEDS_REVIEW_OUT="$([ "$NEEDS_REVIEW" -eq 1 ] && echo yes || echo no)"
+[ -n "$ANR_ESCALATED" ] && NEEDS_REVIEW_OUT="yes"
 SAFE_OUT="$([ "$SAFE" -eq 1 ] && echo yes || echo no)"
+# newline -> comma for a single-line, workflow-friendly value
+ANR_TOUCHED_CSV="$(printf '%s' "$ANR_TOUCHED" | sed '/^$/d' | paste -sd ',' - 2>/dev/null || true)"
 {
   echo "batches=$batch"
   echo "head=$(git rev-parse --short HEAD)"
   echo "typecheck=$TYPECHECK_OK"
+  echo "tests=$TESTS_OK"
   echo "needs_review=$NEEDS_REVIEW_OUT"
   echo "escalated=${ALL_ESCALATED[*]:-none}"
+  echo "anr_risk=$ANR_RISK"
+  echo "anr_touched=${ANR_TOUCHED_CSV:-none}"
   echo "safe_to_push=$SAFE_OUT"
 } | tee "$SUMMARY_FILE"
 
@@ -256,9 +310,12 @@ if [ -n "${SYNC_GITHUB_OUTPUT:-}" ]; then
     echo "result=ok"
     echo "head=$(git rev-parse --short HEAD)"
     echo "typecheck=$TYPECHECK_OK"
+    echo "tests=$TESTS_OK"
     echo "needs_review=$NEEDS_REVIEW_OUT"
     echo "safe_to_push=$SAFE_OUT"
     echo "escalated=${ALL_ESCALATED[*]:-none}"
+    echo "anr_risk=$ANR_RISK"
+    echo "anr_touched=${ANR_TOUCHED_CSV:-none}"
   } >> "$SYNC_GITHUB_OUTPUT"
 fi
 

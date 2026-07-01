@@ -13,7 +13,8 @@
   "scripts": {
     "build": "bun run script/build.ts",
     "dev": "bun run src/index.ts",
-    "typecheck": "tsgo --noEmit"
+    "typecheck": "tsgo --noEmit",
+    "test": "bun test --timeout 30000"
   },
   "dependencies": {
     "@effect/platform-node": "catalog:",

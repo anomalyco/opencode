@@ -18,7 +18,7 @@
     "build": "vite build",
     "serve": "vite preview",
     "test": "bun run test:unit && bun run test:virtualizer",
-    "test:unit": "bun test --only-failures --preload ./happydom.ts ./src",
+    "test:unit": "bun test --preload ./happydom.ts ./src",
     "test:virtualizer": "bun test --conditions=browser --preload ./happydom.ts ./test-browser/solid-virtual.test.ts",
     "test:unit:watch": "bun test --watch --preload ./happydom.ts ./src",
     "test:e2e": "playwright test",

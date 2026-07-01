@@ -37,7 +37,8 @@
     "update-limits": "script/update-limits.ts",
     "promote-limits-to-dev": "script/promote-limits.ts dev",
     "promote-limits-to-prod": "script/promote-limits.ts production",
-    "typecheck": "tsgo --noEmit"
+    "typecheck": "tsgo --noEmit",
+    "test": "bun test test/ --timeout 30000"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "catalog:",
