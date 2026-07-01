@@ -556,7 +556,7 @@ const layer: Layer.Layer<
 
     const listGlobal = Effect.fn("Session.listGlobal")(function* (input?: GlobalListInput) {
       const conditions: SQL[] = []
-      if (input?.directory) conditions.push(eq(SessionTable.directory, input.directory))
+      if (input?.directory) conditions.push(eq(SessionTable.directory, dbDir(input.directory)))
       if (input?.roots) conditions.push(isNull(SessionTable.parent_id))
       if (input?.start) conditions.push(gte(SessionTable.time_updated, input.start))
       if (input?.cursor) conditions.push(lt(SessionTable.time_updated, input.cursor))
@@ -954,6 +954,8 @@ const cancelBackgroundJobs = Effect.fn("Session.cancelBackgroundJobs")(function*
   )
 })
 
+const dbDir = (dir: string) => (process.platform === "win32" ? dir.replaceAll("\\", "/") : dir)
+
 function listByProject(
   db: Database.Interface["db"],
   input: ListInput & {
@@ -975,13 +977,13 @@ function listByProject(
 
       conditions.push(
         input.directory
-          ? or(...conds, and(isNull(SessionTable.path), eq(SessionTable.directory, input.directory))!)!
+          ? or(...conds, and(isNull(SessionTable.path), eq(SessionTable.directory, dbDir(input.directory)))!)!
           : or(...conds)!,
       )
     }
   } else if (input.scope !== "project") {
     if (input.directory) {
-      conditions.push(eq(SessionTable.directory, input.directory))
+      conditions.push(eq(SessionTable.directory, dbDir(input.directory)))
     }
   }
   if (input.roots) {

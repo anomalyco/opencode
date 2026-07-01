@@ -52,6 +52,8 @@ export type RevertState = Revert.State
 
 export { ListAnchor }
 
+const dbDir = (dir: string) => (process.platform === "win32" ? dir.replaceAll("\\", "/") : dir)
+
 const ListInputBase = {
   workspaceID: WorkspaceV2.ID.pipe(Schema.optional),
   search: Schema.String.pipe(Schema.optional),
@@ -271,7 +273,7 @@ const layer = Layer.effect(
         const order = direction === "previous" ? (requestedOrder === "asc" ? "desc" : "asc") : requestedOrder
         const sortColumn = SessionTable.time_created
         const conditions: SQL[] = []
-        if ("directory" in input) conditions.push(eq(SessionTable.directory, input.directory))
+        if ("directory" in input) conditions.push(eq(SessionTable.directory, dbDir(input.directory)))
         if (input.workspaceID) conditions.push(eq(SessionTable.workspace_id, input.workspaceID))
         if ("project" in input) conditions.push(eq(SessionTable.project_id, input.project))
         if (input.search) conditions.push(like(SessionTable.title, `%${input.search}%`))
