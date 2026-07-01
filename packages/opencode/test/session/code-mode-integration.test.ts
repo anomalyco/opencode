@@ -120,7 +120,10 @@ describe("code mode integration (real MCP server)", () => {
     expect(desc.signature).toBe(
       "tools.fixtures.add(input: { a: number; b: number }): Promise<{ result: { sum: number }; attachments?: Attachment[] }>",
     )
-    expect(desc.outputSchema).toBeDefined()
+    // describe returns TypeScript for the input/output types, not raw JSON Schema.
+    expect(desc.input).toBe("{\n  a: number\n  b: number\n}")
+    expect(desc.output).toBe("{\n  sum: number\n}")
+    expect(desc.outputSchema).toBeUndefined()
   })
 
   test("describe falls back to result: unknown when no outputSchema is declared", async () => {

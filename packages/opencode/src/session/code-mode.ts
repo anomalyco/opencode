@@ -115,42 +115,159 @@ export function groupByServer(
 
 const access = (segment: string) => (IDENTIFIER.test(segment) ? `.${segment}` : `[${JSON.stringify(segment)}]`)
 
-/**
- * Render a JSON Schema as a compact TypeScript-ish type string for model-facing
- * signatures. Depth-limited and total — never throws, falls back to `any`/`object`.
- */
-export function renderType(def: JSONSchema7 | boolean | undefined, depth = 0): string {
-  if (!def || typeof def === "boolean") return "any"
-  if (Array.isArray(def.enum)) return def.enum.map((value) => JSON.stringify(value)).join(" | ")
-  if (def.const !== undefined) return JSON.stringify(def.const)
-  if (Array.isArray(def.anyOf ?? def.oneOf)) {
-    const alts = (def.anyOf ?? def.oneOf)!
-    return alts.map((alt) => renderType(alt as JSONSchema7, depth)).join(" | ")
+/** An object property name, bare when it is a valid identifier, else quoted. */
+const propKey = (name: string) => (IDENTIFIER.test(name) ? name : JSON.stringify(name))
+
+/** Join type strings into a union, de-duplicating members and preserving order. An
+ *  empty set of members (e.g. an empty `enum`/`anyOf`) is `never`, never the empty string. */
+const asUnion = (parts: string[]) => {
+  const unique = [...new Set(parts)]
+  return unique.length > 0 ? unique.join(" | ") : "never"
+}
+
+/** Resolve a local JSON-Schema `$ref` (`#/$defs/Foo`) against the document root.
+ *  Returns undefined for external or unresolvable refs. */
+function resolveRef(ref: string, root: JSONSchema7 | undefined): JSONSchema7 | undefined {
+  if (!root || !ref.startsWith("#/")) return undefined
+  let node: unknown = root
+  for (const raw of ref.slice(2).split("/")) {
+    const segment = raw.replace(/~1/g, "/").replace(/~0/g, "~")
+    if (!node || typeof node !== "object") return undefined
+    node = (node as Record<string, unknown>)[segment]
   }
-  const type = Array.isArray(def.type) ? def.type[0] : def.type
-  switch (type) {
+  return node && typeof node === "object" ? (node as JSONSchema7) : undefined
+}
+
+const MAX_DEPTH = 8
+
+/** Options for {@link renderType}. `root` anchors `$ref` resolution (defaults to the
+ *  top-level schema); `pretty` switches from a single-line type to an indented,
+ *  JSDoc-annotated block used by `describe`. */
+export type RenderOptions = { root?: JSONSchema7; pretty?: boolean }
+
+/**
+ * Render a JSON Schema as a TypeScript type string for model-facing signatures.
+ * Total (never throws — falls back to `any`/`object`) and cycle-safe: local `$ref`s
+ * are inlined, self-referential ones collapse to the ref name. Compact by default
+ * (single line, no docs); `pretty` produces an indented block with `/** … *\/` docs
+ * on described fields. Handles enums, `const`, `anyOf`/`oneOf` unions, `allOf`
+ * intersections (the common Pydantic `allOf: [{ $ref }]` shape), nullable `type`
+ * arrays, tuples, and `additionalProperties`.
+ */
+export function renderType(
+  def: JSONSchema7 | boolean | undefined,
+  options: RenderOptions = {},
+  depth = 0,
+  seen: ReadonlySet<JSONSchema7> = new Set(),
+): string {
+  if (!def || typeof def === "boolean") return "any"
+  // Absolute recursion ceiling. Object/array recursion increments `depth`, and so do
+  // the union/nullable branches below, so this bounds every recursion path — including
+  // pure-union structural cycles that the `$ref` `seen` guard cannot see. Keeps the
+  // "never throws" contract even for pathological (non-JSON-transport) input.
+  if (depth > MAX_DEPTH) return "any"
+  const root = options.root ?? def
+  const opts: RenderOptions = { ...options, root }
+
+  if (typeof def.$ref === "string") {
+    const target = resolveRef(def.$ref, root)
+    const name = def.$ref.split("/").pop() || "any"
+    if (!target) return "any"
+    if (seen.has(target)) return name // recursive type: reference by name rather than loop
+    return renderType(target, opts, depth, new Set([...seen, target]))
+  }
+  if (Array.isArray(def.enum)) return asUnion(def.enum.map((value) => JSON.stringify(value)))
+  if (def.const !== undefined) return JSON.stringify(def.const)
+
+  // allOf = intersection. The dominant Pydantic/FastMCP shape is `allOf: [{ $ref }]`
+  // with a sibling description/default, so a single member renders as just that member;
+  // any base `properties` on `def` itself are intersected in.
+  if (Array.isArray(def.allOf) && def.allOf.length > 0) {
+    const base = def.properties || def.additionalProperties !== undefined ? renderObject(def, opts, depth, seen) : undefined
+    const members = def.allOf.map((member) => renderType(member as JSONSchema7, opts, depth + 1, seen))
+    const parts = [...(base ? [base] : []), ...members].filter((part) => part !== "any")
+    return parts.length === 0 ? "any" : parts.length === 1 ? parts[0]! : parts.join(" & ")
+  }
+
+  // Nullable / multi-type: `["string","null"]` -> `string | null` (don't drop members).
+  if (Array.isArray(def.type)) {
+    return asUnion(def.type.map((type) => renderType({ ...def, type }, opts, depth + 1, seen)))
+  }
+
+  switch (def.type) {
     case "integer":
       return "number"
     case "string":
     case "number":
     case "boolean":
     case "null":
-      return type
+      return def.type
     case "array": {
       const items = Array.isArray(def.items) ? def.items[0] : def.items
-      return `${renderType(items as JSONSchema7 | undefined, depth + 1)}[]`
+      const inner = renderType(items as JSONSchema7 | undefined, opts, depth + 1, seen)
+      return /[ |&]/.test(inner) ? `(${inner})[]` : `${inner}[]`
     }
   }
-  if (type === "object" || def.properties) {
-    if (depth >= 3) return "object"
-    const props = def.properties ?? {}
-    const required = new Set(Array.isArray(def.required) ? def.required : [])
-    const fields = Object.entries(props).map(
-      ([name, value]) => `${name}${required.has(name) ? "" : "?"}: ${renderType(value as JSONSchema7, depth + 1)}`,
-    )
-    return fields.length > 0 ? `{ ${fields.join("; ")} }` : "object"
+
+  if (def.type === "object" || def.properties || def.additionalProperties !== undefined) {
+    return renderObject(def, opts, depth, seen)
   }
+
+  // anyOf / oneOf union — checked after object handling so a base object paired with a
+  // `require one of` anyOf still renders its properties instead of collapsing to a union.
+  const union = def.anyOf ?? def.oneOf
+  if (Array.isArray(union)) return asUnion(union.map((alt) => renderType(alt as JSONSchema7, opts, depth + 1, seen)))
   return "any"
+}
+
+/**
+ * Format a schema `description` as a JSDoc comment at the given indent, preserving
+ * multi-line text (a single line stays `/** … *\/`; multiple lines become a `*`-prefixed
+ * block). `*\/` is neutralized so a description can't close the comment early, and blank
+ * leading/trailing/edge lines are trimmed. Returns "" (with a trailing newline when
+ * non-empty) so callers can prepend it directly to the field line.
+ */
+function jsdoc(description: string | undefined, pad: string): string {
+  if (!description) return ""
+  const lines = description
+    .replaceAll("*/", "* /")
+    .split("\n")
+    .map((line) => line.replace(/\s+$/, ""))
+  while (lines.length > 0 && lines[0]!.trim() === "") lines.shift()
+  while (lines.length > 0 && lines[lines.length - 1]!.trim() === "") lines.pop()
+  if (lines.length === 0) return ""
+  if (lines.length === 1) return `${pad}/** ${lines[0]} */\n`
+  const body = lines.map((line) => `${pad} *${line ? ` ${line}` : ""}`).join("\n")
+  return `${pad}/**\n${body}\n${pad} */\n`
+}
+
+function renderObject(
+  def: JSONSchema7,
+  opts: RenderOptions,
+  depth: number,
+  seen: ReadonlySet<JSONSchema7>,
+): string {
+  const props = (def.properties ?? {}) as Record<string, JSONSchema7>
+  const names = Object.keys(props)
+  const additional = def.additionalProperties
+  const indexType =
+    additional === true ? "any" : additional && typeof additional === "object" ? renderType(additional, opts, depth + 1, seen) : undefined
+  if (names.length === 0) return indexType ? `{ [key: string]: ${indexType} }` : "object"
+  if (depth >= MAX_DEPTH) return "object"
+
+  const required = new Set(Array.isArray(def.required) ? def.required : [])
+  const field = (name: string) => `${propKey(name)}${required.has(name) ? "" : "?"}: ${renderType(props[name], opts, depth + 1, seen)}`
+
+  if (!opts.pretty) {
+    const fields = names.map(field)
+    if (indexType) fields.push(`[key: string]: ${indexType}`)
+    return `{ ${fields.join("; ")} }`
+  }
+
+  const pad = "  ".repeat(depth + 1)
+  const lines = names.map((name) => `${jsdoc(props[name]?.description, pad)}${pad}${field(name)}`)
+  if (indexType) lines.push(`${pad}[key: string]: ${indexType}`)
+  return `{\n${lines.join("\n")}\n${"  ".repeat(depth)}}`
 }
 
 function inputType(tool: AITool): string {
@@ -199,7 +316,7 @@ export function describe(groups: Map<string, CatalogEntry[]>): string {
     "The runtime provides two discovery capabilities under `tools.$rune` (its own namespace, separate",
     "from your MCP servers):",
     "- `await tools.$rune.search(query, { namespace?, limit? })` -> `{ items: [{ path, description }], total }`",
-    "- `await tools.$rune.describe(path)` -> `{ path, description, signature, inputSchema, outputSchema? }`",
+    "- `await tools.$rune.describe(path)` -> `{ path, description, signature, input, output? }` (types as TypeScript)",
     "- Call a tool by its path: `await tools.<server>.<tool>(input)`. Each resolves to `{ result, attachments? }`.",
     "",
     "Every tool call and your final `return` use the same envelope: `{ result, attachments? }`.",
@@ -479,18 +596,23 @@ export function define(
       const suggestions = (scoped.length > 0 ? scoped : rankTools(index, leaf, undefined, 5).items).map((i) => i.path)
       return { error: { code: "tool_not_found", message: `No tool at '${path}'.`, suggestions } }
     }
-    let inputSchema: unknown
+    // Everything the model sees is TypeScript: `signature` is the compact one-line
+    // call form; `input`/`output` are the detailed types (multi-line, with JSDoc for
+    // any described fields and literal unions for enums) that raw JSON Schema used to
+    // carry. `output` is present only when the server declares an outputSchema.
+    let input = "unknown"
     try {
-      inputSchema = asSchema(entry.tool.inputSchema).jsonSchema
+      const schema = asSchema(entry.tool.inputSchema).jsonSchema as JSONSchema7 | undefined
+      input = renderType(schema, { pretty: true })
     } catch {
-      inputSchema = undefined
+      input = "unknown"
     }
     return {
       path: entry.path,
       description: entry.description,
       signature: signatureFor(entry),
-      inputSchema,
-      ...(entry.outputSchema ? { outputSchema: entry.outputSchema } : {}),
+      input,
+      ...(entry.outputSchema ? { output: renderType(entry.outputSchema, { pretty: true }) } : {}),
     }
   }
 

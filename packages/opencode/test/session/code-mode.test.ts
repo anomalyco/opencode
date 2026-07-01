@@ -6,6 +6,7 @@ import {
   formatValue,
   groupByServer,
   rankTools,
+  renderType,
   toEnvelope,
   type SearchEntry,
 } from "@/session/code-mode"
@@ -415,7 +416,28 @@ describe("code mode execute", () => {
     expect(desc.signature).toBe(
       "tools.weather.current(input: { city?: string }): Promise<{ result: { tempC: number; summary?: string }; attachments?: Attachment[] }>",
     )
-    expect(desc.outputSchema).toBeDefined()
+    // describe now returns the return shape as pretty TypeScript, not raw JSON Schema.
+    expect(desc.output).toBe("{\n  tempC: number\n  summary?: string\n}")
+    expect(desc.outputSchema).toBeUndefined()
+  })
+
+  test("describe returns the input type as TypeScript with JSDoc and enum literals", async () => {
+    const tool = await build({
+      docs_resolve: mcpTool("resolve", () => "", {
+        type: "object",
+        properties: {
+          library: { type: "string", description: "The library name to resolve" },
+          kind: { enum: ["react", "vue"] },
+        },
+        required: ["library"],
+      }),
+    })
+    const described = await Effect.runPromise(tool.execute({ code: "return await tools.$rune.describe('docs.resolve')" }, ctx))
+    const desc = JSON.parse(described.output)
+    expect(desc.input).toBe(
+      '{\n  /** The library name to resolve */\n  library: string\n  kind?: "react" | "vue"\n}',
+    )
+    expect(desc.inputSchema).toBeUndefined()
   })
 
   test("forwards attachments from a returned tool result and drops them when only .result is returned", async () => {
@@ -518,5 +540,172 @@ describe("rankTools", () => {
   test("returns nothing when no term matches", () => {
     const entries = [E("github.search", "search")]
     expect(rankTools(entries, "nonexistent")).toEqual({ items: [], total: 0 })
+  })
+})
+
+describe("renderType", () => {
+  test("renders primitives, integers, and arrays", () => {
+    expect(renderType({ type: "string" })).toBe("string")
+    expect(renderType({ type: "integer" })).toBe("number")
+    expect(renderType({ type: "array", items: { type: "string" } })).toBe("string[]")
+  })
+
+  test("renders enums and const as literal types", () => {
+    expect(renderType({ enum: ["a", "b", "c"] })).toBe('"a" | "b" | "c"')
+    expect(renderType({ const: 42 })).toBe("42")
+  })
+
+  test("renders a nullable type array as a union (does not drop null)", () => {
+    expect(renderType({ type: ["string", "null"] })).toBe("string | null")
+  })
+
+  test("parenthesizes a union inside an array", () => {
+    expect(renderType({ type: "array", items: { type: ["string", "null"] } })).toBe("(string | null)[]")
+  })
+
+  test("renders additionalProperties as an index signature", () => {
+    expect(renderType({ type: "object", additionalProperties: { type: "number" } })).toBe("{ [key: string]: number }")
+    expect(renderType({ type: "object", additionalProperties: true })).toBe("{ [key: string]: any }")
+  })
+
+  test("resolves a local $ref against the document root", () => {
+    const schema = {
+      type: "object",
+      properties: { node: { $ref: "#/$defs/Node" } },
+      required: ["node"],
+      $defs: { Node: { type: "object", properties: { id: { type: "string" } }, required: ["id"] } },
+    } as any
+    expect(renderType(schema)).toBe("{ node: { id: string } }")
+  })
+
+  test("collapses a self-referential $ref to its name instead of looping", () => {
+    const schema = {
+      $defs: { Node: { type: "object", properties: { next: { $ref: "#/$defs/Node" } } } },
+      $ref: "#/$defs/Node",
+    } as any
+    // Must terminate; the recursive position falls back to the ref name.
+    expect(renderType(schema)).toBe("{ next?: Node }")
+  })
+
+  test("pretty mode emits an indented block with JSDoc for described fields", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "The library name to resolve" },
+        kind: { enum: ["lib", "app"] },
+      },
+      required: ["name"],
+    } as any
+    expect(renderType(schema, { pretty: true })).toBe(
+      '{\n  /** The library name to resolve */\n  name: string\n  kind?: "lib" | "app"\n}',
+    )
+  })
+
+  test("renders anyOf / oneOf as a union", () => {
+    expect(renderType({ anyOf: [{ type: "string" }, { type: "number" }] })).toBe("string | number")
+    expect(renderType({ oneOf: [{ const: "a" }, { const: "b" }] })).toBe('"a" | "b"')
+  })
+
+  test("empty enum / anyOf / type arrays render as never, not an empty string", () => {
+    expect(renderType({ enum: [] })).toBe("never")
+    expect(renderType({ anyOf: [] })).toBe("never")
+    expect(renderType({ type: [] as any })).toBe("never")
+  })
+
+  test("renders a tuple's first item type", () => {
+    expect(renderType({ type: "array", items: [{ type: "string" }, { type: "number" }] as any })).toBe("string[]")
+  })
+
+  test("combines named properties with an additionalProperties index signature", () => {
+    const schema = {
+      type: "object",
+      properties: { id: { type: "string" } },
+      required: ["id"],
+      additionalProperties: { type: "number" },
+    } as any
+    expect(renderType(schema)).toBe("{ id: string; [key: string]: number }")
+  })
+
+  test("quotes non-identifier property names", () => {
+    const schema = { type: "object", properties: { "content-type": { type: "string" } } } as any
+    expect(renderType(schema)).toBe('{ "content-type"?: string }')
+  })
+
+  test("nests pretty objects with increasing indentation", () => {
+    const schema = {
+      type: "object",
+      properties: { outer: { type: "object", properties: { inner: { type: "string" } }, required: ["inner"] } },
+      required: ["outer"],
+    } as any
+    expect(renderType(schema, { pretty: true })).toBe("{\n  outer: {\n    inner: string\n  }\n}")
+  })
+
+  test("resolves mutually recursive $refs without looping", () => {
+    const schema = {
+      $ref: "#/$defs/A",
+      $defs: {
+        A: { type: "object", properties: { b: { $ref: "#/$defs/B" } } },
+        B: { type: "object", properties: { a: { $ref: "#/$defs/A" } } },
+      },
+    } as any
+    // A -> B -> A: the second A is on the resolution path, so it collapses to its name.
+    expect(renderType(schema)).toBe("{ b?: { a?: A } }")
+  })
+
+  test("preserves a multi-line description as a multi-line JSDoc block", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "The search query.\nSupports globs.\n\nExamples: *.ts" },
+      },
+      required: ["query"],
+    } as any
+    expect(renderType(schema, { pretty: true })).toBe(
+      "{\n  /**\n   * The search query.\n   * Supports globs.\n   *\n   * Examples: *.ts\n   */\n  query: string\n}",
+    )
+  })
+
+  test("neutralizes a comment terminator inside a JSDoc description", () => {
+    const schema = { type: "object", properties: { x: { type: "string", description: "danger */ oops" } } } as any
+    const out = renderType(schema, { pretty: true })
+    expect(out).toContain("/** danger * / oops */")
+    expect(out).not.toContain("*/ oops")
+  })
+
+  test("is total on a self-referential union (never throws)", () => {
+    const a: any = { anyOf: [] }
+    a.anyOf.push(a) // structural cycle with no $ref
+    expect(() => renderType(a)).not.toThrow()
+  })
+
+  test("unwraps the Pydantic allOf: [{ $ref }] shape with sibling description", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        config: { allOf: [{ $ref: "#/$defs/Config" }], description: "the config block" },
+      },
+      required: ["config"],
+      $defs: { Config: { type: "object", properties: { level: { type: "integer" } }, required: ["level"] } },
+    } as any
+    expect(renderType(schema)).toBe("{ config: { level: number } }")
+  })
+
+  test("renders multi-member allOf as an intersection", () => {
+    const schema = {
+      allOf: [
+        { type: "object", properties: { a: { type: "string" } }, required: ["a"] },
+        { type: "object", properties: { b: { type: "number" } }, required: ["b"] },
+      ],
+    } as any
+    expect(renderType(schema)).toBe("{ a: string } & { b: number }")
+  })
+
+  test("renders a base object's properties even when it also carries a require-one-of anyOf", () => {
+    const schema = {
+      type: "object",
+      properties: { a: { type: "string" }, b: { type: "string" } },
+      anyOf: [{ required: ["a"] }, { required: ["b"] }],
+    } as any
+    expect(renderType(schema)).toBe("{ a?: string; b?: string }")
   })
 })

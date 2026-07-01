@@ -94,9 +94,8 @@ not cumulative. (Code mode overrides `maxDataBytes`→10MB, `timeoutMs`→30s.)
 
 Code mode (`session/code-mode.ts`) is a *consumer* of Rune, not part of the interpreter. It
 exposes connected MCP tools to the program as `tools.<server>.<tool>(input)` and adds its own
-discovery capabilities under `tools.$rune.*`. The design borrows from prior art (`executor`,
-R. Sullivan) and deliberately tolerates the mistakes weaker models commonly make rather than
-punishing them. The trade-offs below are intentional.
+discovery capabilities under `tools.$rune.*`. The design deliberately tolerates the mistakes
+weaker models commonly make rather than punishing them. The trade-offs below are intentional.
 
 ## tools.$rune.search(query, { namespace?, limit? })
 
@@ -117,15 +116,28 @@ Returns `{ items: [{ path, description }], total }`.
 
 ## tools.$rune.describe(path)
 
-Returns `{ path, description, signature, inputSchema, outputSchema? }` for one tool.
+Returns `{ path, description, signature, input, output? }` for one tool. **Everything is
+TypeScript — no raw JSON Schema is ever surfaced to the model.**
 
-- **Compact TS signature *and* raw JSON Schema.** `signature` is a compact TypeScript-ish form
-  (`renderType`), e.g.
+- **Compact signature + detailed TS types.** `signature` is the one-line call form, e.g.
   `tools.github.create_issue(input: { title: string; body?: string }): Promise<{ result: unknown; attachments?: Attachment[] }>`.
-  We *also* return the raw `inputSchema` (and `outputSchema` when the server declares one).
-  Executor ships TS only and strips per-parameter descriptions to save tokens; we keep the
-  schema so the model still sees parameter docs, enums, and formats. `describe` is on-demand,
-  so the extra tokens are cheap — we chose completeness over compactness here.
+  `input` (and `output`, when the server declares an `outputSchema`) are the *detailed* types
+  rendered by `renderType` in pretty mode: an indented block with `/** … */` JSDoc on described
+  fields and literal unions for enums. This carries everything the raw JSON Schema used to —
+  parameter docs, enums, required-ness — now expressed as TypeScript rather than a schema blob.
+  A field's `description` becomes a JSDoc comment (single-line `/** … */`, or a multi-line
+  block, preserved as written) because a bare type has nowhere else to hold it; `*/` in a
+  description is neutralized so it cannot close the comment early. `describe` is on-demand, so
+  keeping the docs costs nothing on the hot path.
+- **`renderType` is a total, cycle-safe JSON-Schema → TS renderer.** Local `$ref`s
+  (`#/$defs/…`) are resolved against the document root; a self-referential ref collapses to its
+  name rather than looping. It renders enums/`const` as literals, `anyOf`/`oneOf` and nullable
+  `type` arrays (`["string","null"]` → `string | null`) as unions, `allOf` as an intersection
+  (unwrapping the common Pydantic `allOf: [{ $ref }]` shape), tuples, and
+  `additionalProperties` as an index signature. It never throws — unknown shapes fall back to
+  `any`/`object`, and depth is capped. (Rune's own Effect-schema renderer in `rune/tool.ts`,
+  `renderSchema`, is separate and has known gaps — no `$ref` cycle guard, and unions containing
+  a number collapse to `number`; code mode does not use it.)
 - **Return type shown ahead of the call.** Every tool resolves to the uniform envelope
   `{ result, attachments? }`, surfaced in `signature`. `result` is typed `unknown` unless the
   server declares a structured `outputSchema` (many MCP servers return text, in which case
@@ -146,15 +158,13 @@ removes that whole failure mode.
 returns `{ error: { code: 'tool_not_found', message, suggestions } }`. Suggestions come from a
 fuzzy fallback: rank the *leaf* name within its namespace, then fall back to a global search,
 returning real callable paths (e.g. `context7/resolve-library` → suggests
-`context7.resolve-library-id`). This matches executor and avoids derailing a whole program
-over one typo — the model branches on `result.error` and retries with a suggestion. (Tool
+`context7.resolve-library-id`). This avoids derailing a whole program over one typo — the model
+branches on `result.error` and retries with a suggestion. (Tool
 *calls* on a genuinely unknown path still surface as a catchable in-program error via Rune's
 `UnknownCapability`; only the discovery helpers return soft errors.)
 
-## Deliberately NOT adopted from executor (yet)
+## Not done yet
 
-- **`console` capture** — executor surfaces a `console.log` buffer in its result envelope.
-  Rune has no `console` (see "What is missing") and the interpreter is frozen, so this is
-  deferred to separate interpreter work rather than faked here.
-- **TS-only `describe`** — we keep JSON Schema alongside the TS signature for the parameter
-  docs/enums executor drops (above).
+- **`console` capture** — a program has no way to surface `console.log` output. Rune has no
+  `console` (see "What is missing") and the interpreter is frozen, so buffering log output into
+  the result envelope is deferred to separate interpreter work rather than faked here.
