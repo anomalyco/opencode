@@ -780,10 +780,12 @@ test("settles pending tools when a live failure arrives", async () => {
 
 test("renders admitted prompts immediately with queued marker and clears when promoted", async () => {
   const events = createEventStream()
+  const sessionID = "session-1"
+  const messageID = "msg_user_1"
   const calls = createFetch((url) => {
-    if (url.pathname === "/api/session/session-1/message")
+    if (url.pathname === `/api/session/${sessionID}/message`)
       return json({
-        data: [{ id: "msg_user_1", type: "user", text: "hello", time: { created: 0 } }],
+        data: [{ id: messageID, type: "user", text: "hello", time: { created: 0 } }],
         cursor: {},
       })
   }, events)
@@ -819,26 +821,26 @@ test("renders admitted prompts immediately with queued marker and clears when pr
       id: "evt_admitted_1",
       type: "session.next.prompt.admitted",
       data: {
-        sessionID: "session-1",
-        messageID: "msg_user_1",
+        sessionID,
+        messageID,
         timestamp: 0,
         prompt: { text: "hello" },
         delivery: "steer",
       },
     })
-    await wait(() => sync.session.message.list("session-1")?.length === 1)
-    const admitted = sync.session.message.list("session-1")?.[0]
-    expect(admitted).toMatchObject({ id: "msg_user_1", type: "user", text: "hello", metadata: { queued: true } })
+    await wait(() => sync.session.message.list(sessionID)?.length === 1)
+    const admitted = sync.session.message.list(sessionID)?.[0]
+    expect(admitted).toMatchObject({ id: messageID, type: "user", text: "hello", metadata: { queued: true } })
 
-    await sync.session.message.refresh("session-1")
-    expect(sync.session.message.list("session-1")?.[0]?.metadata?.queued).toBeUndefined()
+    await sync.session.message.refresh(sessionID)
+    expect(sync.session.message.list(sessionID)?.[0]?.metadata?.queued).toBeUndefined()
 
     emitEvent(events, {
       id: "evt_prompted_1",
       type: "session.next.prompted",
       data: {
-        sessionID: "session-1",
-        messageID: "msg_user_1",
+        sessionID,
+        messageID,
         timestamp: 0,
         prompt: { text: "hello" },
         delivery: "steer",
@@ -848,15 +850,15 @@ test("renders admitted prompts immediately with queued marker and clears when pr
     await wait(() => received.at(-1) === "session.next.prompted")
     expect(received.slice(-2)).toEqual(["session.next.prompt.admitted", "session.next.prompted"])
     unsubscribe()
-    const message = sync.session.message.list("session-1")?.[0]
+    const message = sync.session.message.list(sessionID)?.[0]
     expect(message?.type).toBe("user")
     if (message?.type !== "user") return
-    expect(message).toMatchObject({ id: "msg_user_1", text: "hello" })
+    expect(message).toMatchObject({ id: messageID, text: "hello" })
     expect(message.metadata?.queued).toBeUndefined()
-    expect(sync.session.message.ids("session-1")).toEqual(["msg_user_1"])
+    expect(sync.session.message.ids(sessionID)).toEqual([messageID])
     expect(sync.session.message.ids("missing")).toEqual([])
-    expect(sync.session.message.get("session-1", "msg_user_1")).toBe(message)
-    expect(sync.session.message.get("session-1", "missing")).toBeUndefined()
+    expect(sync.session.message.get(sessionID, messageID)).toBe(message)
+    expect(sync.session.message.get(sessionID, "missing")).toBeUndefined()
     expect(received).toHaveLength(3)
   } finally {
     app.renderer.destroy()

@@ -620,15 +620,15 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             const loaded = mutable(
               (await sdk.api.message.list({ sessionID, limit: 200, order: "desc" })).data,
             ).toReversed()
+            const loadedIDs = new Set(loaded.map((message) => message.id))
             const liveByID = new Map(live.map((message) => [message.id, message]))
             const messages = [
               ...loaded.map((message) => {
                 if (message.type === "user") return message
                 return liveByID.get(message.id) ?? message
               }),
-              ...live,
+              ...live.filter((message) => !loadedIDs.has(message.id)),
             ]
-              .filter((message, index, messages) => messages.findIndex((item) => item.id === message.id) === index)
               .toSorted((a, b) => a.time.created - b.time.created)
             messageIndex.set(sessionID, new Map(messages.map((message, index) => [message.id, index])))
             setStore("session", "message", sessionID, messages)
