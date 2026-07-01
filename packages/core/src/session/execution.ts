@@ -1,6 +1,8 @@
 export * as SessionExecution from "./execution"
 
 import { Context, Effect, Layer } from "effect"
+import { LayerNode } from "../effect/layer-node"
+import { Node } from "../effect/app-node"
 import { SessionRunner } from "./runner/index"
 import { SessionSchema } from "./schema"
 
@@ -17,6 +19,8 @@ export interface Interface {
 
 /** Routes execution from a Session ID to the runner owned by that Session's Location. */
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/SessionExecution") {}
+
+export const node = LayerNode.unbound(Service, Node.tags.values.global)
 
 /** Low-level compatibility layer for callers that only need durable Session recording. */
 export const noopLayer = Layer.succeed(

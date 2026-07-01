@@ -221,6 +221,7 @@ export const dict = {
   "model.noPeersDescription": "تظهر ترتيبات النماذج المشابهة بعد وصول الاستخدام.",
   "model.noUsageLastWeek": "لا يوجد استخدام الأسبوع الماضي",
   "model.newThisWeek": "جديد هذا الأسبوع",
+  "model.sameAsPreviousWeek": "دون تغيير عن الأسبوع السابق",
   "model.vsPreviousWeek": "{{change}} مقارنة بالأسبوع السابق",
   "model.pdf": "PDF",
   "format.users": "مستخدمون",

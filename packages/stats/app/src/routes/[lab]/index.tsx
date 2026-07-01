@@ -20,7 +20,9 @@ import {
   type ModelCatalogEntry,
   type ModelCatalogLab,
 } from "../model-catalog"
+import { SectionHeading } from "../section-heading"
 import { runStatsEffect } from "../../stats-runtime"
+import { setStatsPageCacheHeaders } from "../stats-cache"
 import {
   applyThemePreference,
   Footer,
@@ -43,7 +45,7 @@ export default function StatsLab() {
   const i18n = useI18n()
   const language = useLanguage()
   const event = getRequestEvent()
-  event?.response.headers.set("Cache-Control", "public, max-age=60, s-maxage=300, stale-while-revalidate=86400")
+  setStatsPageCacheHeaders(event?.response.headers)
   const params = useParams()
   const labParam = createMemo(() => params.lab ?? "")
   const catalog = createAsync(() => getModelCatalog())
@@ -147,7 +149,11 @@ function LabLoading() {
           <a data-slot="model-back-link" href={language.route(import.meta.env.BASE_URL)}>
             {i18n.t("footer.modelData")}
           </a>
-          <h1>{i18n.t("lab.loadingTitle")}</h1>
+          <h1>
+            <a data-slot="heading-link" href="#overview">
+              {i18n.t("lab.loadingTitle")}
+            </a>
+          </h1>
           <p>{i18n.t("lab.loadingDescription")}</p>
         </div>
       </div>
@@ -165,7 +171,11 @@ function LabNotFound(props: { lab: string }) {
           <a data-slot="model-back-link" href={language.route(import.meta.env.BASE_URL)}>
             {i18n.t("footer.modelData")}
           </a>
-          <h1>{formatCatalogLabName(props.lab)}</h1>
+          <h1>
+            <a data-slot="heading-link" href="#overview">
+              {formatCatalogLabName(props.lab)}
+            </a>
+          </h1>
           <p>{i18n.t("lab.notFound")}</p>
         </div>
       </div>
@@ -192,7 +202,11 @@ function LabHero(props: { lab: ModelCatalogLab; stats: StatsLabData | null }) {
       </a>
       <div data-slot="model-hero-grid">
         <div data-slot="model-hero-copy">
-          <h1>{props.lab.name}</h1>
+          <h1>
+            <a data-slot="heading-link" href="#overview">
+              {props.lab.name}
+            </a>
+          </h1>
           <div data-slot="model-hero-pattern" aria-hidden="true" />
           <p>
             {i18n.t("lab.heroPrefix", { count: props.lab.models.length, lab: props.lab.name })}
@@ -234,10 +248,11 @@ function LabUsageSection(props: { lab: ModelCatalogLab; data: StatsLabData | nul
 
   return (
     <section id="usage" data-section="model-panel">
-      <p data-slot="section-title">
-        <strong>{i18n.t("lab.usageTitle", { lab: props.lab.name })}.</strong>{" "}
-        <span>{i18n.t("lab.usageDescription")}</span>
-      </p>
+      <SectionHeading
+        href="#usage"
+        title={i18n.t("lab.usageTitle", { lab: props.lab.name })}
+        description={i18n.t("lab.usageDescription")}
+      />
       <Show
         when={usage().some((item) => item.tokens > 0)}
         fallback={<LabEmptyState title={i18n.t("lab.noUsageTitle")} description={i18n.t("lab.noUsageDescription")} />}
@@ -335,10 +350,11 @@ function LabModelsSection(props: { lab: ModelCatalogLab; usage: LabUsageModelEnt
   const usageBySlug = createMemo(() => new Map(props.usage.map((item) => [item.slug, item])))
   return (
     <section id="models" data-section="model-panel">
-      <p data-slot="section-title">
-        <strong>{i18n.t("lab.modelsTitle", { lab: props.lab.name })}.</strong>{" "}
-        <span>{i18n.t("lab.recentUsageAndLimits")}</span>
-      </p>
+      <SectionHeading
+        href="#models"
+        title={i18n.t("lab.modelsTitle", { lab: props.lab.name })}
+        description={i18n.t("lab.recentUsageAndLimits")}
+      />
       <div data-component="lab-model-grid">
         <For each={props.lab.models}>
           {(model) => <LabModelCard model={model} usage={usageBySlug().get(model.slug)} />}

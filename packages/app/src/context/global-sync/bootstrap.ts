@@ -6,6 +6,7 @@ import type {
   Project,
   ProviderAuthResponse,
   QuestionRequest,
+  ReferenceInfo,
   Session,
 } from "@opencode-ai/sdk/v2/client"
 import { showToast } from "@/utils/toast"
@@ -18,7 +19,7 @@ import type { ServerSession } from "../server-session"
 import { cmp, normalizeAgentList, normalizeProviderList } from "./utils"
 import { formatServerError } from "@/utils/server-errors"
 import { QueryClient, queryOptions } from "@tanstack/solid-query"
-import { loadMcpQuery } from "../server-sync"
+import { loadMcpQuery, loadMcpResourcesQuery } from "../server-sync"
 import { NormalizedProviderListResponse } from "@opencode-ai/session-ui/context"
 import { ScopedKey, type ServerScope } from "@/utils/server-scope"
 
@@ -195,6 +196,13 @@ export const loadPathQuery = (scope: ServerScope, directory: string | null, sdk:
     queryFn: () => retry(() => sdk.path.get().then((x) => x.data!)),
   })
 
+export const loadReferencesQuery = (scope: ServerScope, directory: string, sdk: OpencodeClient) =>
+  queryOptions<ReferenceInfo[]>({
+    queryKey: [scope, directory, "references"] as const,
+    queryFn: () => retry(() => sdk.v2.reference.list().then((x) => x.data?.data ?? [])).catch(() => []),
+    placeholderData: [],
+  })
+
 export async function bootstrapDirectory(input: {
   directory: string
   scope: ServerScope
@@ -277,6 +285,7 @@ export async function bootstrapDirectory(input: {
           }),
         ),
       input.mcp && (() => retry(() => input.sdk.command.list().then((x) => input.setStore("command", x.data ?? [])))),
+      () => input.queryClient.fetchQuery(loadReferencesQuery(input.scope, input.directory, input.sdk)),
       () =>
         retry(() =>
           input.sdk.permission.list().then((x) => {
@@ -339,6 +348,7 @@ export async function bootstrapDirectory(input: {
         ),
       () => Promise.resolve(input.loadSessions(input.directory)),
       input.mcp && (() => input.queryClient.fetchQuery(loadMcpQuery(input.scope, input.directory, input.sdk))),
+      input.mcp && (() => input.queryClient.fetchQuery(loadMcpResourcesQuery(input.scope, input.directory, input.sdk))),
       () =>
         input.queryClient.fetchQuery(loadProvidersQuery(input.scope, input.directory, input.sdk)).catch((err) => {
           const project = getFilename(input.directory)

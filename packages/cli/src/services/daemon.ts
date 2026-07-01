@@ -189,6 +189,4 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer
-
 export * as Daemon from "./daemon"

@@ -65,6 +65,7 @@ export function DialogConnectProvider(props: { provider: string; directory?: Acc
   const [store, setStore] = createStore({
     methodIndex: undefined as undefined | number,
     authorization: undefined as undefined | ProviderAuthAuthorization,
+    promptInputs: undefined as undefined | Record<string, string>,
     state: "pending" as undefined | "pending" | "complete" | "error" | "prompt",
     error: undefined as string | undefined,
   })
@@ -73,6 +74,7 @@ export function DialogConnectProvider(props: { provider: string; directory?: Acc
     | { type: "method.select"; index: number }
     | { type: "method.reset" }
     | { type: "auth.prompt" }
+    | { type: "auth.inputs"; inputs: Record<string, string> }
     | { type: "auth.pending" }
     | { type: "auth.complete"; authorization: ProviderAuthAuthorization }
     | { type: "auth.error"; error: string }
@@ -83,6 +85,7 @@ export function DialogConnectProvider(props: { provider: string; directory?: Acc
         if (action.type === "method.select") {
           draft.methodIndex = action.index
           draft.authorization = undefined
+          draft.promptInputs = undefined
           draft.state = undefined
           draft.error = undefined
           return
@@ -90,12 +93,19 @@ export function DialogConnectProvider(props: { provider: string; directory?: Acc
         if (action.type === "method.reset") {
           draft.methodIndex = undefined
           draft.authorization = undefined
+          draft.promptInputs = undefined
           draft.state = undefined
           draft.error = undefined
           return
         }
         if (action.type === "auth.prompt") {
           draft.state = "prompt"
+          draft.error = undefined
+          return
+        }
+        if (action.type === "auth.inputs") {
+          draft.promptInputs = action.inputs
+          draft.state = undefined
           draft.error = undefined
           return
         }
@@ -151,6 +161,15 @@ export function DialogConnectProvider(props: { provider: string; directory?: Acc
     const method = methods()[index]
     dispatch({ type: "method.select", index })
 
+    if (method.type === "api" && method.prompts?.length) {
+      if (!inputs) {
+        dispatch({ type: "auth.prompt" })
+        return
+      }
+      dispatch({ type: "auth.inputs", inputs })
+      return
+    }
+
     if (method.type === "oauth") {
       if (method.prompts?.length && !inputs) {
         dispatch({ type: "auth.prompt" })
@@ -190,7 +209,7 @@ export function DialogConnectProvider(props: { provider: string; directory?: Acc
     }
   }
 
-  function OAuthPromptsView() {
+  function AuthPromptsView() {
     const [formStore, setFormStore] = createStore({
       value: {} as Record<string, string>,
       index: 0,
@@ -198,8 +217,7 @@ export function DialogConnectProvider(props: { provider: string; directory?: Acc
 
     const prompts = createMemo<NonNullable<ProviderAuthMethod["prompts"]>>(() => {
       const value = method()
-      if (value?.type !== "oauth") return []
-      return value.prompts ?? []
+      return value?.prompts ?? []
     })
     const matches = (prompt: NonNullable<ReturnType<typeof prompts>[number]>, value: Record<string, string>) => {
       if (!prompt.when) return true
@@ -228,6 +246,10 @@ export function DialogConnectProvider(props: { provider: string; directory?: Acc
       const next = prompts().findIndex((prompt, i) => i > index && matches(prompt, value))
       if (next !== -1) {
         setFormStore("index", next)
+        return
+      }
+      if (method()?.type === "api") {
+        dispatch({ type: "auth.inputs", inputs: value })
         return
       }
       await selectMethod(store.methodIndex, value)
@@ -414,6 +436,7 @@ export function DialogConnectProvider(props: { provider: string; directory?: Acc
         auth: {
           type: "api",
           key: apiKey,
+          ...(store.promptInputs ? { metadata: store.promptInputs } : {}),
         },
       })
       await complete()
@@ -622,7 +645,7 @@ export function DialogConnectProvider(props: { provider: string; directory?: Acc
                 </div>
               </Match>
               <Match when={store.state === "prompt"}>
-                <OAuthPromptsView />
+                <AuthPromptsView />
               </Match>
               <Match when={store.state === "error"}>
                 <div class="text-14-regular text-text-base">

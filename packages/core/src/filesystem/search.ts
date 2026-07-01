@@ -1,5 +1,6 @@
 export * as FileSystemSearch from "./search"
 
+import { makeLocationNode } from "../effect/app-node"
 import path from "path"
 import { Context, Effect, Layer, Scope } from "effect"
 import { Fff } from "#fff"
@@ -229,6 +230,8 @@ export const fffLayer = Layer.effect(
   }),
 )
 
-export const locationLayer = Layer.unwrap(
-  Effect.sync(() => (Flag.OPENCODE_DISABLE_FFF || !Fff.available() ? ripgrepLayer : fffLayer)),
-)
+const layer = Layer.unwrap(Effect.sync(() => (Flag.OPENCODE_DISABLE_FFF || !Fff.available() ? ripgrepLayer : fffLayer)))
+
+export const locationLayer = layer
+
+export const node = makeLocationNode({ service: Service, layer, deps: [FSUtil.node, Location.node, Ripgrep.node] })

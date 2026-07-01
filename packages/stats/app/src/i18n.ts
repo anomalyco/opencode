@@ -240,6 +240,7 @@ const en = {
   "model.noPeersDescription": "Peer rankings appear after usage lands.",
   "model.noUsageLastWeek": "No usage last week",
   "model.newThisWeek": "New this week",
+  "model.sameAsPreviousWeek": "Same as previous week",
   "model.vsPreviousWeek": "{{change}} vs previous week",
   "model.pdf": "PDF",
   "format.users": "users",
