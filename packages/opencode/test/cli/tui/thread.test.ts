@@ -4,6 +4,7 @@ import fs from "fs/promises"
 import path from "path"
 import yargs from "yargs"
 import { tmpdir } from "../../fixture/fixture"
+import { MiniLocalCommand } from "../../../src/cli/cmd/mini"
 import { TuiThreadCommand, resolveThreadDirectory } from "../../../src/cli/cmd/tui"
 import { cliIt } from "../../lib/cli-process"
 
@@ -45,12 +46,12 @@ describe("tui thread", () => {
     expect(resolveThreadDirectory(undefined, pwd.path, cwd.path)).toBe(cwd.path)
   })
 
-  test("parses supported --no-replay forms", async () => {
+  test("parses supported mini --no-replay forms", async () => {
     for (const option of ["--no-replay", "--no-replay=true", "--noReplay"]) {
       const args = await yargs([])
-        .command({ ...TuiThreadCommand, handler: () => {} })
+        .command({ ...MiniLocalCommand, handler: () => {} })
         .exitProcess(false)
-        .parse(["--mini", option, "--replay-limit", "10"])
+        .parse([option, "--replay-limit", "10"])
 
       expect(args.replay === false || args.noReplay === true).toBe(true)
       expect(args.replayLimit).toBe(10)
@@ -66,30 +67,48 @@ describe("tui thread", () => {
     expect(args.mdns).toBe(false)
   })
 
-  cliIt.live("rejects mini-only options without --mini", ({ opencode }) =>
+  cliIt.live("rejects removed top-level mini alias", ({ opencode }) =>
     Effect.gen(function* () {
-      const result = yield* opencode.spawn(["--replay-limit", "10"])
+      const result = yield* opencode.spawn(["--mini"])
 
       opencode.expectExit(result, 1)
-      expect(result.stderr).toContain("--replay-limit requires --mini")
+      expect(result.stderr).not.toContain("opencode mini requires a TTY stdout")
     }),
   )
 
-  cliIt.live("routes attached sessions to mini mode", ({ opencode }) =>
+  cliIt.live("rejects removed run mini flag", ({ opencode }) =>
+    Effect.gen(function* () {
+      const result = yield* opencode.spawn(["run", "--mini"])
+
+      opencode.expectExit(result, 1)
+      expect(result.stderr).not.toContain("opencode mini requires a TTY stdout")
+    }),
+  )
+
+  cliIt.live("routes local sessions through mini", ({ opencode }) =>
+    Effect.gen(function* () {
+      const result = yield* opencode.spawn(["mini"])
+
+      opencode.expectExit(result, 1)
+      expect(result.stderr).toContain("opencode mini requires a TTY stdout")
+    }),
+  )
+
+  cliIt.live("routes attached sessions through mini attach", ({ opencode }) =>
+    Effect.gen(function* () {
+      const result = yield* opencode.spawn(["mini", "attach", "http://127.0.0.1:1"])
+
+      opencode.expectExit(result, 1)
+      expect(result.stderr).toContain("opencode mini requires a TTY stdout")
+    }),
+  )
+
+  cliIt.live("rejects removed attach mini alias", ({ opencode }) =>
     Effect.gen(function* () {
       const result = yield* opencode.spawn(["attach", "http://127.0.0.1:1", "--mini"])
 
       opencode.expectExit(result, 1)
-      expect(result.stderr).toContain("--mini requires a TTY stdout")
-    }),
-  )
-
-  cliIt.live("rejects network options in mini mode", ({ opencode }) =>
-    Effect.gen(function* () {
-      const result = yield* opencode.spawn(["--mini", "--port", "4096"])
-
-      opencode.expectExit(result, 1)
-      expect(result.stderr).toContain("--port cannot be used with --mini")
+      expect(result.stderr).not.toContain("opencode mini requires a TTY stdout")
     }),
   )
 })

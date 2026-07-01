@@ -1,7 +1,7 @@
 import fs from "fs"
 import * as tty from "node:tty"
 
-export const INTERACTIVE_INPUT_ERROR = "--mini requires a controlling terminal for input"
+export const INTERACTIVE_INPUT_ERROR = "opencode mini requires a controlling terminal for input"
 
 type InteractiveStdin = {
   stdin: NodeJS.ReadStream

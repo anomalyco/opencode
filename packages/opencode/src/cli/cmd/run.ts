@@ -1,13 +1,13 @@
 import type { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { FSUtil } from "@opencode-ai/core/fs-util"
-// CLI entry point for `opencode run` and `opencode --mini`.
+// CLI entry point for `opencode run` and `opencode mini`.
 //
 // Handles three modes:
 //   1. Non-interactive (default): sends a single prompt, streams events to
 //      stdout, and exits when the session goes idle.
-//   2. Interactive local (`opencode --mini`): boots the split-footer direct mode
+//   2. Interactive local (`opencode mini`): boots the split-footer direct mode
 //      with an in-process server (no external HTTP).
-//   3. Interactive attach (`opencode --mini --attach`): connects to a running
+//   3. Interactive attach (`opencode mini attach`): connects to a running
 //      opencode server and runs interactive mode against it.
 //
 // Also supports `--command` for slash-command execution, `--format json` for
@@ -227,11 +227,6 @@ export const RunCommand = effectCmd({
         type: "boolean",
         describe: "show thinking blocks",
       })
-      .option("mini", {
-        type: "boolean",
-        hidden: true,
-        default: false,
-      })
       .option("replay", {
         type: "boolean",
         default: true,
@@ -280,7 +275,7 @@ export const RunCommand = effectCmd({
     const localInstance = yield* InstanceRef
     yield* Effect.promise(async () => {
       const rawMessage = [...args.message, ...(args["--"] || [])].join(" ")
-      const interactive = args.mini
+      const interactive = (args as typeof args & { mini?: boolean }).mini === true
       const auto = args.auto || args.yolo || args["dangerously-skip-permissions"]
       const thinking = interactive ? (args.thinking ?? true) : (args.thinking ?? false)
       const die = (message: string): never => {
@@ -300,23 +295,23 @@ export const RunCommand = effectCmd({
         .join(" ")
 
       if (interactive && args.command) {
-        die("--mini cannot be used with --command")
+        die("opencode mini cannot be used with --command")
       }
 
       if (interactive && args._?.[0] !== "mini") {
-        die("--mini must be used without the run subcommand")
+        die("opencode mini must be run with the mini command")
       }
 
       if (args.demo && !interactive) {
-        die("--demo requires --mini")
+        die("--demo requires opencode mini")
       }
 
       if (interactive && args.format === "json") {
-        die("--mini cannot be used with --format json")
+        die("opencode mini cannot be used with --format json")
       }
 
       if (args["replay-limit"] !== undefined && !interactive) {
-        die("--replay-limit requires --mini")
+        die("--replay-limit requires opencode mini")
       }
 
       if (
@@ -327,7 +322,7 @@ export const RunCommand = effectCmd({
       }
 
       if (interactive && !process.stdout.isTTY) {
-        die("--mini requires a TTY stdout")
+        die("opencode mini requires a TTY stdout")
       }
 
       if (interactive) {
@@ -1138,5 +1133,5 @@ export async function runMini(input: MiniCommandInput) {
     "dangerously-skip-permissions": false,
     dangerouslySkipPermissions: false,
     demo: input.demo ?? false,
-  })
+  } as Parameters<NonNullable<typeof RunCommand.handler>>[0] & { mini: boolean })
 }

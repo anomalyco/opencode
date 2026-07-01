@@ -13,8 +13,16 @@
 // version (changes per release), so we'd snapshot a moving target.
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
+import { fileURLToPath } from "node:url"
 import { cliIt } from "../../lib/cli-process"
 import { normalizeForSnapshot, PATH_SEP } from "../../lib/snapshot"
+
+const PACKAGE_ROOT_PATTERN = new RegExp(
+  fileURLToPath(new URL("../../..", import.meta.url))
+    .replace(/[/\\]$/, "")
+    .replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+  "g",
+)
 
 // Composes `normalizeForSnapshot` (CRLF + tmpdir) with two help-specific
 // rules:
@@ -22,7 +30,10 @@ import { normalizeForSnapshot, PATH_SEP } from "../../lib/snapshot"
 //   1. The harness's `oc-cli-XXX` subdir under TMPDIR collapses to `<HOME>`.
 //      `PATH_SEP` matches `/` and `\\` so the rule works on POSIX + Windows.
 //
-//   2. yargs wraps the `[string] [default: "..."]` clause based on the
+//   2. Some command defaults use the package cwd when the harness spawns the
+//      CLI. Collapse that path too so snapshots do not depend on checkout path.
+//
+//   3. yargs wraps the `[string] [default: "..."]` clause based on the
 //      pre-normalized default's character length, so different random home
 //      path widths produce different leading-whitespace counts (or even
 //      line-wraps onto a fresh line on Windows). `\s+` matches both forms.
@@ -33,6 +44,7 @@ function normalize(text: string): string {
       // (the harness now uses FileSystem.makeTempDirectoryScoped under the
       // hood). A `[a-z0-9]+` regex would leave uppercase chars trailing.
       [new RegExp(`<TMPDIR>${PATH_SEP}oc-cli-[A-Za-z0-9]+`, "g"), "<HOME>"],
+      [PACKAGE_ROOT_PATTERN, "<HOME>"],
       [/\s+\[string\] \[default: "<HOME>"\]/g, ' [string] [default: "<HOME>"]'],
     ],
   })
@@ -45,6 +57,7 @@ function normalize(text: string): string {
 const TOP_LEVEL = [
   "acp",
   "mcp",
+  "mini",
   "attach",
   "run",
   "debug",
@@ -69,6 +82,7 @@ const TOP_LEVEL = [
 // distinct argv shape, not every leaf. Add new entries when a subcommand
 // gains user-visible flags that we want to lock in.
 const SUBCOMMANDS = [
+  ["mini", "attach"],
   ["mcp", "list"],
   ["mcp", "add"],
   ["mcp", "auth"],
@@ -101,7 +115,8 @@ describe("opencode CLI help-text snapshots", () => {
         const topLevel = yield* opencode.spawn(["--help"], { env: SNAPSHOT_ENV })
         expect(topLevel.exitCode).toBe(0)
         expect(topLevel.stderr.endsWith("\n")).toBe(true)
-        expect(topLevel.stderr).toContain("--mini")
+        expect(topLevel.stderr).toContain("opencode mini")
+        expect(topLevel.stderr).not.toContain("--mini")
         expect(topLevel.stderr).not.toContain("--thinking")
         expect(topLevel.stderr).not.toContain("--variant")
         expect(topLevel.stderr).not.toContain("--demo")
