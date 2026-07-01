@@ -378,15 +378,6 @@
     pointer-events: auto;
   }
 
-  [data-slot="bash-copy"] [data-component="icon-button"][data-variant="secondary"] {
-    box-shadow: none;
-    border: 0.5px solid var(--v2-border-border-base);
-  }
-
-  [data-slot="bash-copy"] [data-component="icon-button"][data-variant="secondary"] [data-slot="icon-svg"] {
-    color: var(--icon-base);
-  }
-
   [data-slot="bash-scroll"] {
     width: 100%;
     overflow-y: auto;
@@ -1364,10 +1355,6 @@ body:not([data-new-layout]) {
 
   [data-component="bash-output"] {
     border: 1px solid var(--border-weak-base);
-
-    [data-slot="bash-copy"] [data-component="icon-button"][data-variant="secondary"] {
-      border: 1px solid var(--border-weak-base);
-    }
   }
 
   [data-component="edit-trigger"],
