@@ -572,7 +572,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                           placement="bottom"
                           title={language.t("command.session.new")}
                           keybind={command.keybind("session.new")}
-                          openDelay={2000}
+                          openDelay={800}
                         >
                           <Button
                             variant="ghost"
@@ -602,7 +602,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                   >
                     <Show when={hasProjects() && nav()}>
                       <div class="flex items-center gap-0 transition-transform">
-                        <Tooltip placement="bottom" value={language.t("common.goBack")} openDelay={2000}>
+                        <Tooltip placement="bottom" value={language.t("common.goBack")} openDelay={800}>
                           <Button
                             variant="ghost"
                             icon="chevron-left"
@@ -612,7 +612,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                             aria-label={language.t("common.goBack")}
                           />
                         </Tooltip>
-                        <Tooltip placement="bottom" value={language.t("common.goForward")} openDelay={2000}>
+                        <Tooltip placement="bottom" value={language.t("common.goForward")} openDelay={800}>
                           <Button
                             variant="ghost"
                             icon="chevron-right"

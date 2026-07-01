@@ -736,8 +736,9 @@ export function MessageTimeline(props: {
     if (!sessionID() || parentID()) return
     setTitle({ editing: true, draft: titleLabel() ?? "" })
     requestAnimationFrame(() => {
-      titleRef?.focus()
-      titleRef?.select()
+      if (!titleRef) return
+      titleRef.focus()
+      titleRef.select()
     })
   }
 
@@ -1369,19 +1370,19 @@ export function MessageTimeline(props: {
                   "pr-3": !settings.general.newLayoutDesigns(),
                 }}
               >
-                <div class="flex items-center min-w-0 grow-1">
+                <div class="flex items-center min-w-0 flex-1 w-full">
                   <Show when={parentID()}>
                     <button
                       type="button"
                       data-slot="session-title-parent"
-                      class="min-w-0 max-w-[40%] truncate text-14-medium text-text-weak transition-colors hover:text-text-base"
+                      class="min-w-0 max-w-[40%] truncate px-2 text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-faint transition-colors hover:text-v2-text-text-muted"
                       onClick={navigateParent}
                     >
                       {parentTitle()}
                     </button>
                     <span
                       data-slot="session-title-separator"
-                      class="px-2 text-14-medium text-text-weak"
+                      class="-translate-y-[0.5px] px-1 text-[11px] font-medium text-v2-text-text-faint"
                       aria-hidden="true"
                     >
                       /
@@ -1394,7 +1395,7 @@ export function MessageTimeline(props: {
                         <h1
                           data-slot="session-title-child"
                           classList={{
-                            "text-14-medium text-text-strong truncate": true,
+                            "truncate text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-base": true,
                             "w-fit rounded-[6px] px-2 py-1 hover:bg-v2-overlay-simple-overlay-hover":
                               settings.general.newLayoutDesigns(),
                             "grow-1 min-w-0": !settings.general.newLayoutDesigns(),
@@ -1413,9 +1414,9 @@ export function MessageTimeline(props: {
                         value={title.draft}
                         disabled={titleMutation.isPending}
                         classList={{
-                          "text-14-medium text-text-strong grow-1 min-w-0 pl-1 ml-1": true,
-                          "grow-1 min-w-0 pl-1 -ml-1 rounded-[6px]": !settings.general.newLayoutDesigns(),
-                          "rounded-[6px] -ml-2 px-2 py-1 h-6 leading-4 focus:shadow-none focus:outline focus:outline-1 focus:outline-offset-[-1px] focus:outline-v2-border-border-focus":
+                          "block text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-base": true,
+                          "w-full flex-1 grow-1 min-w-0 pl-1 -ml-1 rounded-[6px]": !settings.general.newLayoutDesigns(),
+                          "field-sizing-content self-start rounded-[6px] px-2 py-1 ":
                             settings.general.newLayoutDesigns(),
                         }}
                         style={{

@@ -671,7 +671,7 @@ function HomeProjectColumn(props: {
       class="mt-6 flex min-h-0 min-w-0 flex-col gap-4 overflow-hidden lg:mt-14 lg:pt-[52px]"
       aria-label={props.language.t("home.projects")}
     >
-      <div class="flex h-7 min-w-0 shrink-0 items-center justify-between pl-1.5">
+      <div class="flex h-7 min-w-0 shrink-0 items-center justify-between pl-1.5 pr-3">
         <div class={HOME_SECTION_LABEL}>{props.language.t("home.projects")}</div>
         <Show when={global.servers.list().length === 1}>
           <TooltipV2 placement="bottom" value={props.language.t("home.project.add")}>
@@ -697,7 +697,7 @@ function HomeProjectColumn(props: {
             </div>
           }
         >
-          <div class="flex min-w-0 flex-col gap-1 pr-3">
+          <div class="flex min-w-0 flex-col gap-4 pr-3">
             <For each={global.servers.list()}>
               {(item) => {
                 const key = ServerConnection.key(item)
@@ -1006,8 +1006,8 @@ function HomeSessionLeading(props: {
       <Show when={hasOpenTab()}>
         <span
           aria-hidden="true"
-          class="pointer-events-none absolute top-1/2 h-[7px] w-[3px] -translate-y-1/2 rounded-[2px] bg-v2-background-bg-layer-04"
-          style={{ right: "calc(100% + 5px)" }}
+          class="pointer-events-none absolute top-1/2 h-3 w-0.5 -translate-y-1/2 rounded-[2px] bg-v2-background-bg-layer-04"
+          style={{ right: "calc(100% + 4px)" }}
         />
       </Show>
       <SessionTabAvatar
@@ -1163,13 +1163,7 @@ function HomeSessionSearch(props: {
             </div>
           </div>
         </Show>
-        <label
-          class="relative z-20 flex h-9 w-full items-center gap-2 rounded-[6px] bg-v2-background-bg-layer-02 py-1 pl-3 pr-2 text-v2-icon-icon-muted transition-[background-color,box-shadow] duration-[120ms] ease-in-out"
-          classList={{
-            "focus-within:shadow-[0_0_0_0.5px_var(--v2-border-border-focus),var(--v2-elevation-raised)]": !props.open,
-            "shadow-[0_0_0_0.5px_var(--v2-border-border-focus)]": props.open,
-          }}
-        >
+        <label class="relative z-20 flex h-9 w-full items-center gap-2 rounded-[6px] bg-v2-background-bg-layer-02/60 py-1 pl-3 pr-2 text-v2-icon-icon-muted transition-[background-color,box-shadow] duration-[120ms] ease-in-out hover:bg-v2-background-bg-layer-02">
           <IconV2 name="magnifying-glass" />
           <input
             ref={input}
