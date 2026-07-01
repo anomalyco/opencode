@@ -185,7 +185,7 @@ const promptRoot = LayerNode.group([
   LSP.node,
   MCP.node,
   FSUtil.node,
-  BackgroundJob.node,
+  Job.node,
   SessionStatus.node,
   SessionRunState.node,
   Database.node,

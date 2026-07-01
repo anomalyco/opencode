@@ -13,6 +13,7 @@ import { useTheme } from "./theme"
 import { useToast } from "../ui/toast"
 import { useRoute } from "./route"
 import { useData } from "./data"
+import { usePermission } from "./permission"
 
 export type LocalTheme = {
   secondary: RGBA
@@ -60,6 +61,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const paths = useTuiPaths()
     const args = useArgs()
     const event = useEvent()
+    const permission = usePermission()
 
     function isModelValid(model: { providerID: string; modelID: string }) {
       return !!data.location.model

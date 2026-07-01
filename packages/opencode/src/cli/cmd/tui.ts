@@ -197,30 +197,13 @@ export const TuiThreadCommand = cmd({
       const config = await TuiConfig.get()
 
       const network = resolveNetworkOptionsNoConfig(args)
-      const external = hasArg("--port") || hasArg("--hostname") || network.mdns === true
-
-      const headers = external ? ServerAuth.headers() : undefined
-
-      const transport = external
-        ? {
-            url: (await client.call("server", network)).url,
-            fetch: undefined,
-            events: undefined,
-            headers,
-          }
-        : {
-            url: "http://opencode.internal",
-            fetch: createWorkerFetch(client),
-            events: createEventSource(client),
-          }
+      const url = (await client.call("server", network)).url
 
       try {
         await validateSession({
-          url: transport.url,
+          url,
           sessionID: args.session,
           directory: cwd,
-          fetch: transport.fetch,
-          headers,
         })
       } catch (error) {
         UI.error(errorMessage(error))
@@ -238,8 +221,8 @@ export const TuiThreadCommand = cmd({
         const { createLegacyTuiPluginHost } = await import("@/plugin/tui/runtime")
         await Effect.runPromise(
           run({
-            client: createOpencodeClient({ baseUrl: transport.url, directory: cwd }),
-            api: OpenCode.make({ baseUrl: transport.url, headers: transport.headers }),
+            client: createOpencodeClient({ baseUrl: url, directory: cwd }),
+            api: OpenCode.make({ baseUrl: url }),
             async onSnapshot() {
               const tui = writeHeapSnapshot("tui.heapsnapshot")
               const server = await client.call("snapshot", undefined)
@@ -247,10 +230,6 @@ export const TuiThreadCommand = cmd({
             },
             config,
             pluginHost: createLegacyTuiPluginHost(),
-            directory: cwd,
-            fetch: transport.fetch,
-            headers: transport.headers,
-            events: transport.events,
             args: {
               continue: args.continue,
               sessionID: args.session,
