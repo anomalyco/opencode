@@ -1679,7 +1679,7 @@ export function Prompt(props: PromptProps) {
                         const cost = item().cost
                         if (cost) parts.push(cost)
                         if (item().mcpTotal > 0) {
-                          const dot = item().mcpHasError ? "⊙" : (item().mcpConnected > 0 ? "⊙" : "⊙")
+                          const dot = item().mcpHasError ? "⊙" : (item().mcpConnected > 0 ? "●" : "○")
                           parts.push(`${dot} ${item().mcpConnected}/${item().mcpTotal} MCP`)
                         }
                         if (item().lspTotal > 0) {
