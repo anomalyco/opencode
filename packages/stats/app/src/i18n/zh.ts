@@ -222,6 +222,7 @@ export const dict = {
   "model.noPeersDescription": "使用量到达后会显示同类模型排名。",
   "model.noUsageLastWeek": "上周无使用量",
   "model.newThisWeek": "本周新增",
+  "model.sameAsPreviousWeek": "与上周相同",
   "model.vsPreviousWeek": "较上周 {{change}}",
   "model.pdf": "PDF",
   "format.users": "用户",

@@ -69,12 +69,14 @@ export function createPromptProjectController(input: {
     if (servers().length <= 1) {
       return [...projects().map(projectKey), actionKey(servers()[0]?.key)]
     }
-    return servers().flatMap((server) => [
-      ...projects()
-        .filter((project) => project.server?.key === server!.key)
-        .map(projectKey),
-      actionKey(server!.key),
-    ])
+    return [
+      ...servers().flatMap((server) =>
+        projects()
+          .filter((project) => project.server?.key === server!.key)
+          .map(projectKey),
+      ),
+      actionKey(),
+    ]
   }
   const initialActive = () => {
     const selectedKey = selected() ? projectKey(selected()!) : undefined
@@ -130,7 +132,10 @@ export function createPromptProjectController(input: {
       const first = input
         .controls()
         .available.find((project) => !search || displayName(project).toLowerCase().includes(search))
-      setStore({ search: value, active: first ? projectKey(first) : actionKey(servers()[0]?.key) })
+      setStore({
+        search: value,
+        active: first ? projectKey(first) : actionKey(servers().length > 1 ? undefined : servers()[0]?.key),
+      })
     },
     clearSearch() {
       setStore({ search: "", active: initialActive() })
@@ -156,6 +161,9 @@ export function createPromptProjectController(input: {
         ? decodeURIComponent(store.active.slice(actionPrefix.length)) || undefined
         : undefined
     },
+    activeAction() {
+      return store.active.startsWith(actionPrefix)
+    },
     setSearchRef(el: HTMLInputElement) {
       searchRef = el
     },
@@ -167,7 +175,10 @@ export function createPromptProjectController(input: {
 
 export type PromptProjectController = ReturnType<typeof createPromptProjectController>
 
-export function PromptProjectSelector(props: { controller: PromptProjectController }) {
+export function PromptProjectSelector(props: {
+  controller: PromptProjectController
+  placement?: "bottom" | "bottom-start"
+}) {
   let contentRef: HTMLDivElement | undefined
   let restoreTrigger = true
 
@@ -201,6 +212,12 @@ export function PromptProjectSelector(props: { controller: PromptProjectControll
       selectProject(project)
       return
     }
+    if (props.controller.activeAction() && props.controller.servers().length > 1) {
+      const item = activeItem()
+      item?.focus()
+      item?.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }))
+      return
+    }
     selectAction(props.controller.activeServer())
   }
   const moveActive = (delta: number) => {
@@ -229,9 +246,8 @@ export function PromptProjectSelector(props: { controller: PromptProjectControll
   return (
     <DropdownMenu
       open={props.controller.open()}
-      placement="bottom-start"
+      placement={props.placement ?? "bottom"}
       gutter={4}
-      shift={-6}
       modal={false}
       onOpenChange={(open) => props.controller.setOpen(open)}
     >
@@ -318,7 +334,13 @@ export function PromptProjectSelector(props: { controller: PromptProjectControll
                 </DropdownMenu.RadioGroup>
               }
             >
-              <For each={props.controller.servers()}>
+              <For
+                each={props.controller
+                  .servers()
+                  .filter((server) =>
+                    props.controller.projects().some((project) => project.server?.key === server!.key),
+                  )}
+              >
                 {(server) => (
                   <div>
                     <div class="flex h-7 select-none items-center pl-1.5 pr-3 text-[11px] font-[530] leading-none tracking-[0.05px] text-v2-text-text-faint">
@@ -331,22 +353,49 @@ export function PromptProjectSelector(props: { controller: PromptProjectControll
                         )}
                       </For>
                     </DropdownMenu.RadioGroup>
-                    <ProjectAction server={server!.key} controller={props.controller} onSelect={selectAction} />
                   </div>
                 )}
               </For>
             </Show>
           </div>
-          <Show when={props.controller.servers().length <= 1}>
-            <div class="h-px bg-v2-border-border-muted" />
-            <div class="flex flex-col p-0.5">
-              <ProjectAction
-                server={props.controller.servers()[0]?.key}
-                controller={props.controller}
-                onSelect={selectAction}
-              />
-            </div>
-          </Show>
+          <div class="h-px bg-v2-border-border-muted" />
+          <div class="flex flex-col p-0.5">
+            <Show
+              when={props.controller.servers().length > 1}
+              fallback={
+                <ProjectAction
+                  server={props.controller.servers()[0]?.key}
+                  controller={props.controller}
+                  onSelect={selectAction}
+                />
+              }
+            >
+              <DropdownMenu.Sub>
+                <DropdownMenu.SubTrigger
+                  id={props.controller.actionKey()}
+                  data-option-key={props.controller.actionKey()}
+                  class={projectActionClass}
+                  classList={{
+                    "!bg-v2-overlay-simple-overlay-hover": props.controller.active() === props.controller.actionKey(),
+                  }}
+                  onMouseEnter={() => props.controller.setActive(props.controller.actionKey())}
+                >
+                  <Icon name="plus" size="small" />
+                  <span data-slot="dropdown-menu-item-label" class="min-w-0 flex-1 truncate leading-5">
+                    {props.controller.labels.add()}
+                  </span>
+                  <Icon name="chevron-right" size="small" class="shrink-0 text-v2-icon-icon-muted" />
+                </DropdownMenu.SubTrigger>
+                <DropdownMenu.Portal>
+                  <DropdownMenu.SubContent class="min-w-[180px] overflow-hidden rounded-md border-0 bg-v2-background-bg-layer-01 p-0.5 shadow-[var(--v2-elevation-floating)] focus:outline-none">
+                    <For each={props.controller.servers()}>
+                      {(server) => <ServerAction server={server!} onSelect={selectAction} />}
+                    </For>
+                  </DropdownMenu.SubContent>
+                </DropdownMenu.Portal>
+              </DropdownMenu.Sub>
+            </Show>
+          </div>
         </DropdownMenu.Content>
       </DropdownMenu.Portal>
     </DropdownMenu>
@@ -376,11 +425,12 @@ function ProjectTrigger(props: ComponentProps<"button"> & { controller: PromptPr
       {...rest}
       data-action="prompt-project"
       type="button"
-      class="flex h-7 min-w-0 max-w-[203px] items-center gap-1.5 rounded-sm px-2 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-faint transition-colors focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
+      class="flex h-7 min-w-0 max-w-[203px] items-center gap-1.5 rounded-sm px-1.5 transition-colors focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
       classList={{
         ...local.classList,
         "hover:bg-v2-overlay-simple-overlay-hover": !local.controller.open(),
         "bg-v2-overlay-simple-overlay-pressed": local.controller.open(),
+        "text-v2-text-text-muted": local.controller.open(),
       }}
       onClick={local.onClick ?? (() => local.controller.setOpen(true))}
       onKeyDown={(event) => {
@@ -454,6 +504,9 @@ function ProjectItem(props: {
   )
 }
 
+const projectActionClass =
+  "h-7 gap-2 rounded-sm px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base [font-family:var(--v2-font-family-sans)] data-[highlighted]:!bg-v2-overlay-simple-overlay-hover"
+
 function ProjectAction(props: {
   server?: string
   controller: PromptProjectController
@@ -485,6 +538,14 @@ function ProjectAction(props: {
       <DropdownMenu.ItemLabel class="min-w-0 truncate leading-5">
         {props.controller.labels.add()}
       </DropdownMenu.ItemLabel>
+    </DropdownMenu.Item>
+  )
+}
+
+function ServerAction(props: { server: { key: string; name: string }; onSelect: (server: string) => void }) {
+  return (
+    <DropdownMenu.Item class={projectActionClass} onSelect={() => props.onSelect(props.server.key)}>
+      <DropdownMenu.ItemLabel class="min-w-0 flex-1 truncate leading-5">{props.server.name}</DropdownMenu.ItemLabel>
     </DropdownMenu.Item>
   )
 }

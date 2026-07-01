@@ -7,7 +7,7 @@ export interface ButtonV2Props
   extends ComponentProps<typeof Kobalte>,
     Pick<ComponentProps<"button">, "class" | "classList" | "children"> {
   size?: "small" | "normal" | "large"
-  variant?: "neutral" | "contrast" | "ghost" | "ghost-muted"
+  variant?: "neutral" | "danger" | "contrast" | "ghost" | "ghost-muted" | "outline"
   icon?: IconProps["name"]
 }
 

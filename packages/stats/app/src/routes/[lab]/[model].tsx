@@ -30,7 +30,9 @@ import {
   type ModelCatalogCost,
   type ModelCatalogEntry,
 } from "../model-catalog"
+import { SectionHeading } from "../section-heading"
 import { runStatsEffect } from "../../stats-runtime"
+import { setStatsPageCacheHeaders } from "../stats-cache"
 import {
   applyThemePreference,
   Footer,
@@ -86,7 +88,7 @@ export default function StatsModel() {
   const i18n = useI18n()
   const language = useLanguage()
   const event = getRequestEvent()
-  event?.response.headers.set("Cache-Control", "public, max-age=60, s-maxage=300, stale-while-revalidate=86400")
+  setStatsPageCacheHeaders(event?.response.headers)
   const params = useParams()
   const labParam = createMemo(() => params.lab ?? "")
   const modelParam = createMemo(() => params.model ?? "")
@@ -204,7 +206,11 @@ function ModelLoading() {
             <a data-slot="model-back-link" href={language.route(import.meta.env.BASE_URL)}>
               {i18n.t("footer.modelData")}
             </a>
-            <h1>{i18n.t("model.loadingTitle")}</h1>
+            <h1>
+              <a data-slot="heading-link" href="#overview">
+                {i18n.t("model.loadingTitle")}
+              </a>
+            </h1>
             <p>{i18n.t("model.loadingDescription")}</p>
           </div>
         </div>
@@ -227,7 +233,11 @@ function ModelNotFound(props: { lab: string; model: string }) {
             <a data-slot="model-back-link" href={language.route(import.meta.env.BASE_URL)}>
               {i18n.t("footer.modelData")}
             </a>
-            <h1>{props.model || i18n.t("model.fallback")}</h1>
+            <h1>
+              <a data-slot="heading-link" href="#overview">
+                {props.model || i18n.t("model.fallback")}
+              </a>
+            </h1>
             <p>{i18n.t("model.noMatched", { id: props.lab ? `${props.lab}/${props.model}` : props.model })}</p>
           </div>
         </div>
@@ -259,7 +269,11 @@ function ModelHero(props: { data: StatsModelData | null; catalog: ModelCatalogEn
             </a>
             <span data-slot="model-id-tag">{modelId()}</span>
           </div>
-          <h1>{props.catalog?.name ?? props.data?.model ?? i18n.t("model.fallback")}</h1>
+          <h1>
+            <a data-slot="heading-link" href="#overview">
+              {props.catalog?.name ?? props.data?.model ?? i18n.t("model.fallback")}
+            </a>
+          </h1>
           <Show when={props.data} fallback={<p>{i18n.t("model.catalogFallback")}</p>}>
             {(data) => (
               <p>
@@ -351,8 +365,12 @@ function CatalogDatum(props: { label: string; value: string }) {
 function ModelOverview(props: { data: StatsModelData | null }) {
   const i18n = useI18n()
   return (
-    <section data-section="model-panel">
-      <SectionTitle title={i18n.t("nav.overview")} description={i18n.t("model.overviewDescription")} />
+    <section id="model-overview" data-section="model-panel">
+      <SectionTitle
+        href="#model-overview"
+        title={i18n.t("nav.overview")}
+        description={i18n.t("model.overviewDescription")}
+      />
       <Show
         when={props.data}
         fallback={
@@ -398,7 +416,7 @@ function ModelUsageSection(props: { data: ModelUsagePoint[] }) {
   const i18n = useI18n()
   return (
     <section id="usage" data-section="model-panel">
-      <SectionTitle title={i18n.t("nav.usage")} description={i18n.t("model.usageDescription")} />
+      <SectionTitle href="#usage" title={i18n.t("nav.usage")} description={i18n.t("model.usageDescription")} />
       <Show
         when={props.data.some((item) => item.tokens > 0)}
         fallback={
@@ -415,7 +433,7 @@ function ModelUsersSection(props: { data: ModelUsagePoint[] }) {
   const i18n = useI18n()
   return (
     <section id="users" data-section="model-panel">
-      <SectionTitle title={i18n.t("model.uniqueUsers")} description={i18n.t("model.usersDescription")} />
+      <SectionTitle href="#users" title={i18n.t("model.uniqueUsers")} description={i18n.t("model.usersDescription")} />
       <Show
         when={props.data.some((item) => item.users > 0)}
         fallback={
@@ -549,7 +567,11 @@ function ModelEfficiencySection(props: { data: StatsModelData | null; catalog: M
   const i18n = useI18n()
   return (
     <section id="efficiency" data-section="model-panel">
-      <SectionTitle title={i18n.t("nav.efficiency")} description={i18n.t("model.efficiencyDescription")} />
+      <SectionTitle
+        href="#efficiency"
+        title={i18n.t("nav.efficiency")}
+        description={i18n.t("model.efficiencyDescription")}
+      />
       <Show
         when={props.data}
         fallback={
@@ -622,7 +644,11 @@ function ModelGeoBreakdownSection(props: { data: Record<UsageRange, CountryEntry
         setActiveCountry(undefined)
       }}
     >
-      <SectionTitle title={i18n.t("nav.geoBreakdown")} description={i18n.t("model.geoDescription")} />
+      <SectionTitle
+        href="#geo-breakdown"
+        title={i18n.t("nav.geoBreakdown")}
+        description={i18n.t("model.geoDescription")}
+      />
       <Show
         when={data().length > 0}
         fallback={<ModelEmptyState title={i18n.t("model.noGeoTitle")} description={i18n.t("model.noGeoDescription")} />}
@@ -787,7 +813,7 @@ function ModelPeersSection(props: { data: StatsModelData | null }) {
   const i18n = useI18n()
   return (
     <section id="peers" data-section="model-panel">
-      <SectionTitle title={i18n.t("nav.peers")} description={i18n.t("model.peersDescription")} />
+      <SectionTitle href="#peers" title={i18n.t("nav.peers")} description={i18n.t("model.peersDescription")} />
       <Show
         when={props.data?.peers.length}
         fallback={
@@ -832,12 +858,8 @@ function PeerRow(props: { peer: ModelPeerEntry; active: boolean }) {
   )
 }
 
-function SectionTitle(props: { title: string; description: string }) {
-  return (
-    <p data-slot="section-title">
-      <strong>{props.title}.</strong> <span>{props.description}</span>
-    </p>
-  )
+function SectionTitle(props: { href: string; title: string; description: string }) {
+  return <SectionHeading href={props.href} title={props.title} description={props.description} />
 }
 
 function ModelEmptyState(props: { title: string; description: string; compact?: boolean }) {
@@ -911,17 +933,17 @@ function isModelUsageLabelHidden(index: number, count: number) {
   return index !== count - 1 && index % interval !== 0
 }
 
-function formatRankMove(previousRank: number, rank: number) {
-  const change = previousRank - rank
+function formatRankMove(change: number) {
   if (change > 0) return `+${change}`
-  if (change < 0) return `${change}`
-  return "0"
+  return `${change}`
 }
 
 function formatModelRankMoveLabel(data: StatsModelData, i18n: ReturnType<typeof useI18n>) {
   if (data.rank === null) return i18n.t("model.noUsageLastWeek")
   if (data.previousRank === null) return i18n.t("model.newThisWeek")
-  return i18n.t("model.vsPreviousWeek", { change: formatRankMove(data.previousRank, data.rank) })
+  const change = data.previousRank - data.rank
+  if (change === 0) return i18n.t("model.sameAsPreviousWeek")
+  return i18n.t("model.vsPreviousWeek", { change: formatRankMove(change) })
 }
 
 function formatTokens(value: number) {

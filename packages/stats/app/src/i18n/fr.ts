@@ -224,6 +224,7 @@ export const dict = {
   "model.noPeersDescription": "Les classements de modèles proches apparaissent après l'arrivée de l'utilisation.",
   "model.noUsageLastWeek": "Aucune utilisation la semaine dernière",
   "model.newThisWeek": "Nouveau cette semaine",
+  "model.sameAsPreviousWeek": "Identique à la semaine précédente",
   "model.vsPreviousWeek": "{{change}} vs semaine précédente",
   "model.pdf": "PDF",
   "format.users": "utilisateurs",
