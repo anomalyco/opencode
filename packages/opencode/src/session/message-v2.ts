@@ -442,7 +442,7 @@ export const page = Effect.fn("MessageV2.page")(function* (input: {
     : after
       ? and(eq(MessageTable.session_id, input.sessionID), newer(after))
       : eq(MessageTable.session_id, input.sessionID)
-  const rows = Database.use((db) =>
+  const rows = yield* Database.use((db) =>
     db
       .select()
       .from(MessageTable)
@@ -455,12 +455,9 @@ export const page = Effect.fn("MessageV2.page")(function* (input: {
       .all(),
   )
   if (rows.length === 0) {
-    const row = yield* db
-      .select({ id: SessionTable.id })
-      .from(SessionTable)
-      .where(eq(SessionTable.id, input.sessionID))
-      .get()
-      .pipe(Effect.orDie)
+    const row = yield* Database.use((db) =>
+      db.select({ id: SessionTable.id }).from(SessionTable).where(eq(SessionTable.id, input.sessionID)).get(),
+    )
     if (!row) return yield* new NotFoundError({ message: `Session not found: ${input.sessionID}` })
     return {
       items: [] as WithParts[],
@@ -470,7 +467,7 @@ export const page = Effect.fn("MessageV2.page")(function* (input: {
 
   const more = rows.length > input.limit
   const slice = more ? rows.slice(0, input.limit) : rows
-  const items = hydrate(slice)
+  const items = yield* hydrate(slice)
   if (!after) items.reverse()
   const cursorRow = slice.at(-1)
   return {
