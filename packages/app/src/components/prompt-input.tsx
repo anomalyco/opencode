@@ -800,10 +800,33 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const images = imageAttachments()
 
     if (cmd.type === "custom") {
-      const text = `/${cmd.trigger} `
-      setEditorText(text)
-      prompt.set([{ type: "text", content: text, start: 0, end: text.length }, ...images], text.length)
-      focusEditorEnd()
+      const replacement = `/${cmd.trigger} `
+      const triggerOffset = store.slashTriggerOffset
+      const cursorOffset = getCursorPosition(editorRef)
+
+      // If the slash was at position 0 and there is nothing else in the editor,
+      // use the fast path that replaces the whole content.
+      if (triggerOffset === 0 && promptLength(prompt.current().filter((p) => p.type !== "image")) === cursorOffset) {
+        setEditorText(replacement)
+        prompt.set([{ type: "text", content: replacement, start: 0, end: replacement.length }, ...images], replacement.length)
+        focusEditorEnd()
+        return
+      }
+
+      // Multi-command path: replace only the `/filter` token on this line,
+      // keeping any other content (previous lines / commands) intact.
+      const rawParts = prompt.current()
+      const fullText = rawParts.map((p) => ("content" in p ? p.content : "")).join("")
+      const before = fullText.slice(0, triggerOffset)
+      const after = fullText.slice(cursorOffset) // skip the partial filter the user typed
+      const newText = before + replacement + after
+      setEditorText(newText)
+      const newCursor = before.length + replacement.length
+      prompt.set([{ type: "text", content: newText, start: 0, end: newText.length }, ...images], newCursor)
+      requestAnimationFrame(() => {
+        editorRef.focus()
+        setCursorPosition(editorRef, newCursor)
+      })
       return
     }
 
@@ -1071,6 +1094,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         atOnInput(atMatch[1])
         setStore("popover", "at")
       } else if (slashMatch) {
+        // Compute the character offset of the `/` within rawText so handleSlashSelect
+        // can replace only that token rather than the whole editor content.
+        const matchStart = slashMatch.index ?? 0
+        const slashOffset = matchStart + (slashMatch[0].startsWith("\n") ? 1 : 0)
+        setStore("slashTriggerOffset", slashOffset)
         slashOnInput(slashMatch[1])
         setStore("popover", "slash")
       } else {

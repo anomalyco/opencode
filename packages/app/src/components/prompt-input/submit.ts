@@ -457,6 +457,56 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       return
     }
 
+    // Multi-command: if every non-empty line starts with a known slash command,
+    // fire them sequentially rather than treating the text as a plain prompt.
+    const lines = text.split("\n").map((l) => l.trim()).filter(Boolean)
+    const commandLines = lines.filter((l) => l.startsWith("/"))
+    const isAllCommands = lines.length > 0 && commandLines.length === lines.length
+
+    if (isAllCommands) {
+      const knownCommands = commandLines.map((line) => {
+        const [head, ...rest] = line.split(" ")
+        const name = head.slice(1)
+        const cmd = sync().data.command.find((c) => c.name === name)
+        return cmd ? { name, args: rest.join(" "), cmd } : null
+      })
+
+      // Only proceed if every line resolved to a known command
+      if (knownCommands.every(Boolean)) {
+        clearInput()
+        const fireSequentially = async (index: number): Promise<void> => {
+          if (index >= knownCommands.length) return
+          const item = knownCommands[index]!
+          await client.session.command({
+            sessionID: session.id,
+            command: item.name,
+            arguments: item.args,
+            agent,
+            model: `${model.providerID}/${model.modelID}`,
+            variant,
+            parts: images.map((attachment) => ({
+              id: Identifier.ascending("part"),
+              type: "file" as const,
+              mime: attachment.mime,
+              url: attachment.dataUrl,
+              filename: attachment.filename,
+            })),
+          })
+          await fireSequentially(index + 1)
+        }
+        fireSequentially(0).catch((err) => {
+          showToast({
+            title: language.t("prompt.toast.commandSendFailed.title"),
+            description: formatServerError(err, language.t, language.t("common.requestFailed")),
+          })
+          restoreInput()
+        })
+        return
+      }
+    }
+
+    // Single-command fast path (kept for backward compat and the case where
+    // the line is a command mixed with other non-command text).
     if (text.startsWith("/")) {
       const [cmdName, ...args] = text.split(" ")
       const commandName = cmdName.slice(1)

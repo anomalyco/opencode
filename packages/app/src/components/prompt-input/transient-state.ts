@@ -4,6 +4,10 @@ import type { PromptHistoryEntry } from "./history"
 
 export type PromptInputTransientState = {
   popover: "at" | "slash" | null
+  // Offset of the `/` character that opened the slash picker, within the raw editor text.
+  // Used by handleSlashSelect to replace only the typed `/filter` with the chosen command
+  // instead of nuking the entire editor — required for multi-command prompts.
+  slashTriggerOffset: number
   historyIndex: number
   savedPrompt: PromptHistoryEntry | null
   placeholder: number
@@ -16,6 +20,7 @@ export type PromptInputTransientState = {
 function resetPromptInputTransientState(setStore: SetStoreFunction<PromptInputTransientState>) {
   setStore({
     popover: null,
+    slashTriggerOffset: 0,
     historyIndex: -1,
     savedPrompt: null,
     draggingType: null,
@@ -28,6 +33,7 @@ function resetPromptInputTransientState(setStore: SetStoreFunction<PromptInputTr
 export function createPromptInputTransientState(identity: Accessor<unknown>, placeholder: number) {
   const [store, setStore] = createStore<PromptInputTransientState>({
     popover: null,
+    slashTriggerOffset: 0,
     historyIndex: -1,
     savedPrompt: null,
     placeholder,
