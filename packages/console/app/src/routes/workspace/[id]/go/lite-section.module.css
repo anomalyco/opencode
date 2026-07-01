@@ -75,6 +75,40 @@
     }
   }
 
+  [data-slot="providers-section"] {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    margin-top: var(--space-6);
+    padding-top: var(--space-6);
+    border-top: 1px solid var(--color-border-muted);
+
+    [data-slot="providers-header"] {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-1);
+
+      h3 {
+        color: var(--color-text);
+        font-size: var(--font-size-lg);
+        font-weight: 600;
+        line-height: 1.2;
+        margin: 0;
+      }
+
+      p {
+        color: var(--color-text-muted);
+        font-size: var(--font-size-sm);
+        line-height: 1.5;
+        margin: 0;
+      }
+    }
+
+    [data-slot="setting-row"] {
+      margin-top: 0;
+    }
+  }
+
   [data-slot="toggle-label"] {
     position: relative;
     display: inline-block;

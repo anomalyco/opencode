@@ -1,7 +1,6 @@
-import type { RouteDefaultsInput } from "./route/client"
 import type { Model, ModelID, ProviderID } from "./schema"
 
-export type ModelOptions = RouteDefaultsInput
+export type ModelOptions = Pick<Model.Input, "defaults" | "compatibility">
 
 /**
  * Advanced structural provider definition helper. Built-in providers should

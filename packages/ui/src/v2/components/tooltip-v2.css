@@ -55,3 +55,10 @@
     transform: scale(0.96);
   }
 }
+
+@media (prefers-reduced-motion: reduce) {
+  [data-component="tooltip-v2"],
+  [data-component="tooltip-v2"][data-closed] {
+    animation: none;
+  }
+}

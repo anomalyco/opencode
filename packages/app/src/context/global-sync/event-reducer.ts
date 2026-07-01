@@ -112,6 +112,7 @@ export function applyDirectoryEvent(input: {
   push: (directory: string) => void
   directory: string
   loadLsp: () => void
+  loadReferences?: () => void
   vcsCache?: VcsCache
   setSessionTodo?: (sessionID: string, todos: Todo[] | undefined) => void
   retainedLimit?: number
@@ -402,6 +403,10 @@ export function applyDirectoryEvent(input: {
     }
     case "lsp.updated": {
       input.loadLsp()
+      break
+    }
+    case "reference.updated": {
+      input.loadReferences?.()
       break
     }
   }

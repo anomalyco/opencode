@@ -76,7 +76,7 @@ interface ResolvedPath {
 
 const slash = (value: string) => value.replaceAll("\\", "/")
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service

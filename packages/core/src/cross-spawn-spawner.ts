@@ -497,12 +497,11 @@ export const make = Effect.gen(function* () {
   return makeSpawner(spawnCommand)
 })
 
-export const layer: Layer.Layer<ChildProcessSpawner, never, FileSystem.FileSystem | Path.Path> = Layer.effect(
+const layer: Layer.Layer<ChildProcessSpawner, never, FileSystem.FileSystem | Path.Path> = Layer.effect(
   ChildProcessSpawner,
   make,
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(NodeFileSystem.layer), Layer.provide(NodePath.layer))
 export const node = makeGlobalNode({ service: ChildProcessSpawner, layer, deps: [filesystem, path] })
 
 export * as CrossSpawnSpawner from "./cross-spawn-spawner"
