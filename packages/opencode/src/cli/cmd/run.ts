@@ -360,6 +360,12 @@ export const RunCommand = effectCmd({
       }
 
       const files: FilePart[] = []
+      const fileInputs: Array<{
+        filePath: string
+        resolvedPath: string
+        stat: ReturnType<typeof Filesystem.stat>
+        isDirectory: boolean
+      }> = []
       if (args.file) {
         const list = Array.isArray(args.file) ? args.file : [args.file]
 
@@ -376,49 +382,7 @@ export const RunCommand = effectCmd({
             UI.error(`Cannot attach local directory without a shared filesystem: ${filePath}`)
             process.exit(1)
           }
-          if (!isDirectory && (!stat?.isFile() || stat.size > ATTACH_FILE_MAX_BYTES)) {
-            UI.error(`Cannot attach local file larger than 10 MiB or a special file: ${filePath}`)
-            process.exit(1)
-          }
-
-          const content = await (async () => {
-            if (isDirectory) return
-            const handle = await open(resolvedPath, "r")
-            try {
-              const opened = await handle.stat()
-              if (!opened.isFile() || Number(opened.size) > ATTACH_FILE_MAX_BYTES) {
-                UI.error(`Cannot attach local file larger than 10 MiB or a special file: ${filePath}`)
-                process.exit(1)
-              }
-              if (opened.size === 0) return Buffer.alloc(0)
-              const buffer = Buffer.alloc(Number(opened.size))
-              let offset = 0
-              while (offset < buffer.length) {
-                const read = await handle.read(buffer, offset, buffer.length - offset, offset)
-                if (read.bytesRead === 0) break
-                offset += read.bytesRead
-              }
-              return buffer.subarray(0, offset)
-            } finally {
-              await handle.close()
-            }
-          })()
-          const detected = FSUtil.mimeType(resolvedPath)
-          const text = content?.toString("utf8")
-          const mime = isDirectory
-            ? "application/x-directory"
-            : isImageAttachment(detected) || isPdfAttachment(detected)
-              ? detected
-              : content && !isBinaryContent(content) && text !== undefined && Buffer.from(text, "utf8").equals(content)
-                ? "text/plain"
-                : detected
-
-          files.push({
-            type: "file",
-            url: content ? `data:${mime};base64,${content.toString("base64")}` : pathToFileURL(resolvedPath).href,
-            filename: path.basename(resolvedPath),
-            mime,
-          })
+          fileInputs.push({ filePath, resolvedPath, stat, isDirectory })
         }
       }
 
@@ -456,7 +420,53 @@ export const RunCommand = effectCmd({
             },
           ]
       const currentPrompt =
-        !interactive && !args.command && !args.fork && files.every((file) => file.mime !== "application/x-directory")
+        !interactive && !args.command && !args.fork && fileInputs.every((file) => !file.isDirectory)
+
+      const inlineFiles = interactive || currentPrompt
+      for (const file of fileInputs) {
+        const content = await (async () => {
+          if (file.isDirectory || !inlineFiles) return
+          if (!file.stat?.isFile() || file.stat.size > ATTACH_FILE_MAX_BYTES) {
+            UI.error(`Cannot attach local file larger than 10 MiB or a special file: ${file.filePath}`)
+            process.exit(1)
+          }
+          const handle = await open(file.resolvedPath, "r")
+          try {
+            const opened = await handle.stat()
+            if (!opened.isFile() || Number(opened.size) > ATTACH_FILE_MAX_BYTES) {
+              UI.error(`Cannot attach local file larger than 10 MiB or a special file: ${file.filePath}`)
+              process.exit(1)
+            }
+            if (opened.size === 0) return Buffer.alloc(0)
+            const buffer = Buffer.alloc(Number(opened.size))
+            let offset = 0
+            while (offset < buffer.length) {
+              const read = await handle.read(buffer, offset, buffer.length - offset, offset)
+              if (read.bytesRead === 0) break
+              offset += read.bytesRead
+            }
+            return buffer.subarray(0, offset)
+          } finally {
+            await handle.close()
+          }
+        })()
+        const detected = FSUtil.mimeType(file.resolvedPath)
+        const text = content?.toString("utf8")
+        const mime = file.isDirectory
+          ? "application/x-directory"
+          : isImageAttachment(detected) || isPdfAttachment(detected)
+            ? detected
+            : content && !isBinaryContent(content) && text !== undefined && Buffer.from(text, "utf8").equals(content)
+              ? "text/plain"
+              : detected
+
+        files.push({
+          type: "file",
+          url: content ? `data:${mime};base64,${content.toString("base64")}` : pathToFileURL(file.resolvedPath).href,
+          filename: path.basename(file.resolvedPath),
+          mime,
+        })
+      }
 
       function title() {
         if (args.title === undefined) return
@@ -1014,6 +1024,7 @@ export const RunCommand = effectCmd({
             variant: args.variant,
             files,
             initialInput,
+            localFilesystem: !args.attach,
             createSession: createFreshSession,
             thinking,
             backgroundSubagents: flags.experimentalBackgroundSubagents,

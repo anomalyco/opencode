@@ -14,6 +14,7 @@ import type {
   V2Event,
 } from "@opencode-ai/sdk/v2"
 import { blockerStatus, pickBlockerView } from "./session-data"
+import { authoredPromptText } from "./session.shared"
 import { writeSessionOutput } from "./stream"
 import type {
   FooterApi,
@@ -37,6 +38,7 @@ type Trace = {
 type StreamInput = {
   sdk: OpencodeClient
   directory?: string
+  localFilesystem?: boolean
   sessionID: string
   thinking: boolean
   replay?: boolean
@@ -329,6 +331,10 @@ function readFailure(filePath: string, message: string) {
   return `Read tool failed to read ${filePath} with the following error: ${message}`
 }
 
+function streamPartKey(messageID: string, partID: string) {
+  return `${messageID}\u0000${partID}`
+}
+
 function decodeTextDataUrl(uri: string) {
   if (!uri.startsWith("data:")) return
   const comma = uri.indexOf(",")
@@ -466,7 +472,115 @@ async function readLocalTextFile(filePath: string, page?: { offset?: number; lim
   return output
 }
 
-async function preparePromptFilePart(part: PromptFilePart) {
+function formatRemoteTextFile(filePath: string, content: string, page?: { offset?: number; limit?: number }) {
+  const offset = page?.offset ?? 1
+  const limit = page?.limit ?? DEFAULT_READ_LIMIT
+  const lines = content.replaceAll("\r\n", "\n").replaceAll("\r", "\n").split("\n")
+  if (lines.at(-1) === "") lines.pop()
+  if (lines.length < offset && !(lines.length === 0 && offset === 1)) {
+    throw new Error(`Offset ${offset} is out of range for this file (${lines.length} lines)`)
+  }
+
+  const out: string[] = []
+  let bytes = 0
+  let cut = false
+  for (const line of lines.slice(offset - 1, offset - 1 + limit)) {
+    const next = line.length > MAX_LINE_LENGTH ? line.slice(0, MAX_LINE_LENGTH) + MAX_LINE_SUFFIX : line
+    const size = Buffer.byteLength(next, "utf-8") + (out.length > 0 ? 1 : 0)
+    if (bytes + size > MAX_BYTES) {
+      cut = true
+      break
+    }
+    out.push(next)
+    bytes += size
+  }
+
+  const last = offset + out.length - 1
+  const next = last + 1
+  const more = cut || offset - 1 + out.length < lines.length
+  let output = [`<path>${filePath}</path>`, `<type>file</type>`, "<content>\n"].join("\n")
+  output += out.map((line, index) => `${index + offset}: ${line}`).join("\n")
+  if (cut) {
+    output += `\n\n(Output capped at ${MAX_BYTES_LABEL}. Showing lines ${offset}-${last}. Use offset=${next} to continue.)`
+  } else if (more) {
+    output += `\n\n(Showing lines ${offset}-${last} of ${lines.length}. Use offset=${next} to continue.)`
+  } else {
+    output += `\n\n(End of file - total ${lines.length} lines)`
+  }
+  output += "\n</content>"
+  return output
+}
+
+function fileApiPath(directory: string | undefined, filePath: string) {
+  if (!directory || !path.isAbsolute(filePath)) return filePath
+  const relative = path.relative(directory, filePath)
+  if (!relative) return "."
+  if (!relative.startsWith("..") && !path.isAbsolute(relative)) return relative
+  return filePath
+}
+
+async function readRemoteDirectory(input: StreamInput, filePath: string, page?: { offset?: number; limit?: number }) {
+  const response = await input.sdk.file.list({ directory: input.directory, path: fileApiPath(input.directory, filePath) })
+  if (response.error) throw new Error(formatUnknownError(response.error))
+  const entries = (response.data ?? [])
+    .map((entry) => (entry.type === "directory" ? entry.name + "/" : entry.name))
+    .sort((a, b) => a.localeCompare(b))
+  const offset = page?.offset ?? 1
+  const limit = page?.limit ?? DEFAULT_READ_LIMIT
+  const start = offset - 1
+  const sliced = entries.slice(start, start + limit)
+  const truncated = start + sliced.length < entries.length
+  return [
+    `<path>${filePath}</path>`,
+    `<type>directory</type>`,
+    `<entries>`,
+    sliced.join("\n"),
+    truncated
+      ? `\n(Showing ${sliced.length} of ${entries.length} entries. Use 'offset' parameter to read beyond entry ${offset + sliced.length})`
+      : `\n(${entries.length} entries)`,
+    `</entries>`,
+  ].join("\n")
+}
+
+async function readRemoteFile(input: StreamInput, part: PromptFilePart, filePath: string, page?: { offset?: number; limit?: number }) {
+  const response = await input.sdk.file.read({ directory: input.directory, path: fileApiPath(input.directory, filePath) })
+  if (response.error) throw new Error(formatUnknownError(response.error))
+  const data = response.data
+  if (!data) throw new Error(`File not found: ${filePath}`)
+  if (data.type === "binary") {
+    const mime = data.mimeType ?? FSUtil.mimeType(filePath)
+    if (isImageAttachment(mime) || isPdfAttachment(mime)) {
+      return {
+        text: [readCall(filePath)],
+        attachment: {
+          uri: `data:${mime};base64,${data.content}`,
+          mime,
+          name: part.filename,
+          source: promptFileSource(part),
+        },
+      }
+    }
+    throw new Error(`Cannot read binary file: ${filePath}`)
+  }
+  return { text: [readCall(filePath, page), formatRemoteTextFile(filePath, data.content, page)] }
+}
+
+async function prepareRemotePromptFilePart(input: StreamInput, part: PromptFilePart, filePath: string, page?: { offset?: number; limit?: number }) {
+  const source = promptFileSource(part)
+  try {
+    const prepared =
+      part.mime === "application/x-directory"
+        ? { text: [readCall(filePath, page), await readRemoteDirectory(input, filePath, page)] }
+        : await readRemoteFile(input, part, filePath, page)
+    return prepared
+  } catch (error) {
+    return {
+      text: [readFailure(filePath, error instanceof Error ? error.message : String(error))],
+    }
+  }
+}
+
+async function preparePromptFilePart(input: StreamInput, part: PromptFilePart) {
   const source = promptFileSource(part)
   const decoded = decodeTextDataUrl(part.url)
   if (decoded !== undefined) {
@@ -481,6 +595,7 @@ async function preparePromptFilePart(part: PromptFilePart) {
   url.hash = ""
   url.search = ""
   const filePath = fileURLToPath(url)
+  if (input.localFilesystem === false) return prepareRemotePromptFilePart(input, part, filePath, page)
 
   try {
     if ((await stat(filePath)).isDirectory()) {
@@ -630,16 +745,17 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       if (!render || state.messageIDs.has(message.id)) return
       state.messageIDs.add(message.id)
       if (reuseVisibleWait && waiting) return
-      write([{ kind: "user", source: "system", text: message.text, phase: "start", messageID: message.id }])
+      write([{ kind: "user", source: "system", text: authoredPromptText(message.text), phase: "start", messageID: message.id }])
       return
     }
     if (message.type !== "assistant") return
     state.messageIDs.add(message.id)
     for (const item of message.content) {
       if (item.type === "text") {
-        const sent = state.text.get(item.id)?.length ?? 0
-        state.text.set(item.id, item.text)
-        if (render) state.projectedText.set(item.id, item.text)
+        const key = streamPartKey(message.id, item.id)
+        const sent = state.text.get(key)?.length ?? 0
+        state.text.set(key, item.text)
+        if (render) state.projectedText.set(key, item.text)
         if (render && item.text.length > sent)
           write([
             {
@@ -654,9 +770,10 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
         continue
       }
       if (item.type === "reasoning") {
-        const sent = state.reasoning.get(item.id)?.length ?? 0
-        state.reasoning.set(item.id, item.text)
-        if (render) state.projectedReasoning.set(item.id, item.text)
+        const key = streamPartKey(message.id, item.id)
+        const sent = state.reasoning.get(key)?.length ?? 0
+        state.reasoning.set(key, item.text)
+        if (render) state.projectedReasoning.set(key, item.text)
         if (render && input.thinking && item.text.length > sent)
           write([
             {
@@ -723,14 +840,15 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       return
     }
     if (event.type === "session.next.text.delta") {
-      const projected = state.projectedText.get(event.data.textID)
+      const key = streamPartKey(event.data.assistantMessageID, event.data.textID)
+      const projected = state.projectedText.get(key)
       const covered = projected?.indexOf(event.data.delta) ?? -1
       if (projected && covered >= 0) {
-        state.projectedText.set(event.data.textID, projected.slice(covered + event.data.delta.length))
+        state.projectedText.set(key, projected.slice(covered + event.data.delta.length))
         return
       }
-      const previous = state.text.get(event.data.textID) ?? ""
-      state.text.set(event.data.textID, previous + event.data.delta)
+      const previous = state.text.get(key) ?? ""
+      state.text.set(key, previous + event.data.delta)
       write([
         {
           kind: "assistant",
@@ -744,7 +862,8 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       return
     }
     if (event.type === "session.next.text.ended") {
-      const previous = state.text.get(event.data.textID) ?? ""
+      const key = streamPartKey(event.data.assistantMessageID, event.data.textID)
+      const previous = state.text.get(key) ?? ""
       if (event.data.text.length > previous.length)
         write([
           {
@@ -756,19 +875,20 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
             partID: event.data.textID,
           },
         ])
-      state.text.set(event.data.textID, event.data.text)
-      state.projectedText.delete(event.data.textID)
+      state.text.set(key, event.data.text)
+      state.projectedText.delete(key)
       return
     }
     if (event.type === "session.next.reasoning.delta") {
-      const projected = state.projectedReasoning.get(event.data.reasoningID)
+      const key = streamPartKey(event.data.assistantMessageID, event.data.reasoningID)
+      const projected = state.projectedReasoning.get(key)
       const covered = projected?.indexOf(event.data.delta) ?? -1
       if (projected && covered >= 0) {
-        state.projectedReasoning.set(event.data.reasoningID, projected.slice(covered + event.data.delta.length))
+        state.projectedReasoning.set(key, projected.slice(covered + event.data.delta.length))
         return
       }
-      const previous = state.reasoning.get(event.data.reasoningID) ?? ""
-      state.reasoning.set(event.data.reasoningID, previous + event.data.delta)
+      const previous = state.reasoning.get(key) ?? ""
+      state.reasoning.set(key, previous + event.data.delta)
       if (input.thinking)
         write([
           {
@@ -783,7 +903,8 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       return
     }
     if (event.type === "session.next.reasoning.ended") {
-      const previous = state.reasoning.get(event.data.reasoningID) ?? ""
+      const key = streamPartKey(event.data.assistantMessageID, event.data.reasoningID)
+      const previous = state.reasoning.get(key) ?? ""
       if (input.thinking && event.data.text.length > previous.length)
         write([
           {
@@ -795,8 +916,8 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
             partID: event.data.reasoningID,
           },
         ])
-      state.reasoning.set(event.data.reasoningID, event.data.text)
-      state.projectedReasoning.delete(event.data.reasoningID)
+      state.reasoning.set(key, event.data.text)
+      state.projectedReasoning.delete(key)
       return
     }
     if (event.type === "session.next.tool.input.started") {
@@ -992,7 +1113,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
 
       const prepared = await Promise.all((next.includeFiles ? next.files : []).map(prepareFile))
       const promptFiles = await Promise.all(
-        next.prompt.parts.flatMap((part) => (part.type === "file" ? [preparePromptFilePart(part)] : [])),
+        next.prompt.parts.flatMap((part) => (part.type === "file" ? [preparePromptFilePart(input, part)] : [])),
       )
       const attachments = [
         ...prepared.flatMap((file) => (file.attachment ? [file.attachment] : [])),
@@ -1043,7 +1164,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
               text: [
                 next.prompt.text,
                 ...prepared.flatMap((file) => (file.text ? [file.text] : [])),
-                ...promptFiles.flatMap((file) => file.text ?? []),
+                ...promptFiles.flatMap((file) => ("text" in file ? file.text : [])),
               ].join("\n\n"),
               files: attachments.length ? attachments : undefined,
               agents: agents.length ? agents : undefined,

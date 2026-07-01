@@ -3,10 +3,13 @@
 // Fetches session messages from the SDK and extracts user turn text for
 // the prompt history ring. Also finds the most recently used variant for
 // the current model so the footer can pre-select it.
+import path from "path"
+import { pathToFileURL } from "node:url"
 import { promptCopy, promptSame } from "./prompt.shared"
 import type { RunInput, RunPrompt } from "./types"
 
 const LIMIT = 200
+const READ_CALL_PREFIX = "Called the Read tool with the following input: "
 
 export type SessionMessages = NonNullable<Awaited<ReturnType<RunInput["sdk"]["session"]["messages"]>>["data"]>
 
@@ -20,6 +23,116 @@ type Turn = {
 export type RunSession = {
   first: boolean
   turns: Turn[]
+}
+
+export function authoredPromptText(text: string) {
+  const index = text.indexOf(`\n\n${READ_CALL_PREFIX}`)
+  if (index === -1) return text
+  return text.slice(0, index)
+}
+
+function parseReadArgs(input: string) {
+  try {
+    const value = JSON.parse(input) as unknown
+    if (!value || typeof value !== "object") return
+    const filePath = Reflect.get(value, "filePath")
+    if (typeof filePath !== "string") return
+    const offset = Reflect.get(value, "offset")
+    const limit = Reflect.get(value, "limit")
+    return {
+      filePath,
+      ...(typeof offset === "number" ? { offset } : {}),
+      ...(typeof limit === "number" ? { limit } : {}),
+    }
+  } catch {}
+}
+
+function readCalls(text: string) {
+  const out: Array<{ index: number; args: NonNullable<ReturnType<typeof parseReadArgs>> }> = []
+  let search = 0
+  while (true) {
+    const index = text.indexOf(READ_CALL_PREFIX, search)
+    if (index === -1) return out
+    const end = text.indexOf("\n", index)
+    const args = parseReadArgs(text.slice(index + READ_CALL_PREFIX.length, end === -1 ? undefined : end))
+    if (args) out.push({ index, args })
+    search = index + READ_CALL_PREFIX.length
+  }
+}
+
+function readUrl(args: NonNullable<ReturnType<typeof parseReadArgs>>, directory: string | undefined) {
+  const target = path.isAbsolute(args.filePath) || !directory ? args.filePath : path.resolve(directory, args.filePath)
+  const url = pathToFileURL(target)
+  if (args.offset !== undefined) url.searchParams.set("start", String(args.offset))
+  if (args.offset !== undefined && args.limit !== undefined) {
+    url.searchParams.set("end", String(args.offset + args.limit - 1))
+  }
+  return url.href
+}
+
+function lineSuffix(args: NonNullable<ReturnType<typeof parseReadArgs>>, directory: boolean) {
+  if (directory || args.offset === undefined) return ""
+  if (args.limit === undefined) return `#${args.offset}`
+  return `#${args.offset}-${args.offset + args.limit - 1}`
+}
+
+function mentionCandidates(
+  args: NonNullable<ReturnType<typeof parseReadArgs>>,
+  directory: string | undefined,
+  isDirectory: boolean,
+) {
+  const target = path.isAbsolute(args.filePath) || !directory ? args.filePath : path.resolve(directory, args.filePath)
+  const relative = directory && path.isAbsolute(target) ? path.relative(directory, target) : undefined
+  const suffix = lineSuffix(args, isDirectory)
+  return Array.from(
+    new Set(
+      [relative && !relative.startsWith("..") && !path.isAbsolute(relative) ? relative : undefined, path.basename(target)]
+        .filter((item): item is string => Boolean(item))
+        .map((item) => item.replaceAll("\\", "/").replace(/\/$/, "") + suffix),
+    ),
+  )
+}
+
+function takeMention(text: string, used: Array<{ start: number; end: number }>, candidates: string[]) {
+  for (const candidate of candidates) {
+    const value = "@" + candidate
+    let from = 0
+    while (true) {
+      const idx = text.indexOf(value, from)
+      if (idx === -1) break
+      const start = Bun.stringWidth(text.slice(0, idx))
+      const end = start + Bun.stringWidth(value)
+      if (!used.some((item) => item.start < end && start < item.end)) return { start, end, value }
+      from = idx + value.length
+    }
+  }
+}
+
+function readPromptParts(text: string, directory: string | undefined): RunPrompt["parts"] {
+  const authored = authoredPromptText(text)
+  const calls = readCalls(text.slice(authored.length))
+  const used: Array<{ start: number; end: number }> = []
+  return calls.flatMap((call, index) => {
+    const block = text.slice(authored.length + call.index, authored.length + (calls[index + 1]?.index ?? text.length))
+    const isDirectory = block.includes("<type>directory</type>")
+    if (!isDirectory && !block.includes("<type>file</type>")) return []
+    const span = takeMention(authored, used, mentionCandidates(call.args, directory, isDirectory))
+    if (!span) return []
+    used.push({ start: span.start, end: span.end })
+    return [
+      {
+        type: "file" as const,
+        url: readUrl(call.args, directory),
+        mime: isDirectory ? "application/x-directory" : "text/plain",
+        filename: span.value.slice(1),
+        source: {
+          type: "file" as const,
+          path: span.value.slice(1),
+          text: span,
+        },
+      },
+    ]
+  })
 }
 
 function fileName(url: string, filename?: string) {
@@ -175,7 +288,7 @@ export async function resolveCurrentSession(
       return [
         {
           prompt: {
-            text: message.text,
+            text: authoredPromptText(message.text),
             parts: [
               ...(message.files ?? []).map((file) => ({
                 type: "file" as const,
@@ -190,6 +303,7 @@ export async function resolveCurrentSession(
                     }
                   : undefined,
               })),
+              ...readPromptParts(message.text, session.data.data.location.directory),
               ...(message.agents ?? []).map((agent) => ({
                 type: "agent" as const,
                 name: agent.name,

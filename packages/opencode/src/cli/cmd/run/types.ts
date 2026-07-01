@@ -67,6 +67,7 @@ export type RunInput = {
   variant: string | undefined
   files: RunFilePart[]
   initialInput?: string
+  localFilesystem?: boolean
   thinking: boolean
   backgroundSubagents: boolean
   demo?: boolean

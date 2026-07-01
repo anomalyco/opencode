@@ -300,6 +300,102 @@ describe("V2 mini transport", () => {
     await transport.close()
   })
 
+  test("reads attached file mentions through the remote server", async () => {
+    const events = feed()
+    events.push(connected())
+    const client = sdk({ streams: [events] })
+    const ui = footer()
+    const remoteRead = spyOn(client.file, "read").mockImplementation((input) => {
+      expect(input).toEqual({ directory: "/remote/project", path: "note.ts" })
+      return ok({ type: "text" as const, content: "remote sentinel\n" })
+    })
+    const remoteList = spyOn(client.file, "list").mockImplementation((input) => {
+      expect(input).toEqual({ directory: "/remote/project", path: "docs" })
+      return ok([{ name: "README.md", path: "docs/README.md", absolute: "/remote/project/docs/README.md", type: "file" as const, ignored: false }])
+    })
+    const transport = await createSessionTransport({
+      sdk: client,
+      directory: "/remote/project",
+      localFilesystem: false,
+      sessionID: "ses_1",
+      thinking: false,
+      limits: () => ({}),
+      footer: ui.api,
+    })
+    let request:
+      | Parameters<OpencodeClient["v2"]["session"]["prompt"]>[0]
+      | undefined
+    // The generated method has conditional return types for throwOnError; this mock represents the successful branch.
+    // @ts-expect-error successful SDK response is valid for both modes at runtime
+    spyOn(client.v2.session, "prompt").mockImplementation((input) => {
+      request = input
+      queueMicrotask(() => {
+        events.push({
+          id: "evt_prompted",
+          type: "session.next.prompted",
+          data: {
+            timestamp: 2,
+            sessionID: "ses_1",
+            messageID: "msg_prompt",
+            prompt: { text: input.prompt?.text ?? "" },
+            delivery: "steer",
+          },
+        })
+        events.push({
+          id: "evt_settled",
+          type: "session.next.execution.settled",
+          data: { timestamp: 3, sessionID: "ses_1", outcome: "success" },
+        })
+      })
+      return ok({
+        data: {
+          admittedSeq: 1,
+          id: input.id ?? "msg_prompt",
+          sessionID: "ses_1",
+          prompt: input.prompt ?? { text: "" },
+          delivery: "steer" as const,
+          timeCreated: 2,
+        },
+      })
+    })
+
+    await transport.runPromptTurn({
+      agent: undefined,
+      model: undefined,
+      variant: undefined,
+      prompt: {
+        messageID: "msg_prompt",
+        text: "Review @note.ts and @docs",
+        parts: [
+          {
+            type: "file",
+            url: "file:///remote/project/note.ts",
+            mime: "text/plain",
+            filename: "note.ts",
+            source: { type: "file", path: "note.ts", text: { start: 7, end: 15, value: "@note.ts" } },
+          },
+          {
+            type: "file",
+            url: "file:///remote/project/docs",
+            mime: "application/x-directory",
+            filename: "docs",
+            source: { type: "file", path: "docs", text: { start: 20, end: 25, value: "@docs" } },
+          },
+        ],
+      },
+      files: [],
+      includeFiles: true,
+    })
+
+    expect(remoteRead).toHaveBeenCalled()
+    expect(remoteList).toHaveBeenCalled()
+    expect(request?.prompt?.text).toContain("remote sentinel")
+    expect(request?.prompt?.text).toContain("README.md")
+    expect(request?.prompt?.text).not.toContain("Read tool failed")
+    expect(request?.prompt?.files).toBeUndefined()
+    await transport.close()
+  })
+
   test("converts local media mentions into data URL attachments before current prompt admission", async () => {
     await using tmp = await tmpdir()
     const filePath = path.join(tmp.path, "diagram.png")
@@ -611,6 +707,59 @@ describe("V2 mini transport", () => {
 
     expect(ui.commits.filter((item) => item.text === "the answer")).toHaveLength(1)
     expect(ui.commits.some((item) => item.text === "answer")).toBe(false)
+    await transport.close()
+  })
+
+  test("scopes repeated text and reasoning ids by assistant message", async () => {
+    const events = feed()
+    events.push(connected())
+    const client = sdk({ streams: [events] })
+    spyOn(client.v2.session, "messages").mockImplementation(() =>
+      ok({
+        data: [
+          {
+            id: "msg_b",
+            type: "assistant",
+            agent: "build",
+            model: { providerID: "test", id: "model" },
+            content: [
+              { type: "reasoning", id: "reasoning-0", text: "second thought" },
+              { type: "text", id: "text-0", text: "second answer" },
+            ],
+            time: { created: 4, completed: 5 },
+          },
+          {
+            id: "msg_a",
+            type: "assistant",
+            agent: "build",
+            model: { providerID: "test", id: "model" },
+            content: [
+              { type: "reasoning", id: "reasoning-0", text: "first thought" },
+              { type: "text", id: "text-0", text: "first answer" },
+            ],
+            time: { created: 2, completed: 3 },
+          },
+        ],
+        cursor: {},
+      }),
+    )
+
+    const ui = footer()
+    const transport = await createSessionTransport({
+      sdk: client,
+      sessionID: "ses_1",
+      thinking: true,
+      replay: true,
+      limits: () => ({}),
+      footer: ui.api,
+    })
+
+    expect(ui.commits.map((item) => item.text)).toEqual([
+      "Thinking: first thought",
+      "first answer",
+      "Thinking: second thought",
+      "second answer",
+    ])
     await transport.close()
   })
 
