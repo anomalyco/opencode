@@ -5,10 +5,11 @@ import { Global } from "@opencode-ai/core/global"
 import { loadBuiltinPlugins } from "@opencode-ai/tui/builtins"
 import { OpenCode } from "@opencode-ai/client"
 import { createOpencodeClient } from "@opencode-ai/sdk/v2/client"
+import type { Args } from "@opencode-ai/tui/context/args"
 
 type Transport = { url: string; headers: RequestInit["headers"] }
 
-export function runTui(transport: Transport, reload?: () => Promise<Transport>) {
+export function runTui(transport: Transport, args: Args, reload?: () => Promise<Transport>) {
   const config = TuiConfig.resolve({}, { terminalSuspend: false })
   let disposeSlots: (() => void) | undefined
   return Effect.gen(function* () {
@@ -32,7 +33,7 @@ export function runTui(transport: Transport, reload?: () => Promise<Transport>) 
             }
           }
         : undefined,
-      args: {},
+      args,
       config,
       pluginHost: {
         async start(input) {

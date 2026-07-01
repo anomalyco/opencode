@@ -16,6 +16,7 @@ export default Runtime.handler(Commands, (input) =>
     const { runTui } = yield* Effect.promise(() => import("../../tui"))
     yield* runTui(
       transport,
+      { continue: input.continue, sessionID: Option.getOrUndefined(input.session) },
       input.standalone
         ? undefined
         : async () => {
