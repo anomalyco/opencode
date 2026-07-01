@@ -71,6 +71,26 @@ const SUPPORTED_MCP_RESOURCE_ATTACHMENT_MIMES = new Set([
   "image/webp",
 ])
 
+// Treat a file attachment as readable text rather than a binary blob. Besides the
+// canonical `text/plain`, this covers text-like MIMEs (markdown, csv, json, xml, …)
+// and the `application/octet-stream` fallback that `mime-types` returns for
+// extension-less or unrecognized files. For `file:` attachments the Read tool
+// still content-sniffs and fails closed on genuine binary; matching here just
+// keeps text files off the base64 path that garbles their content.
+function isTextMime(mime: string) {
+  return (
+    !mime ||
+    mime === "application/octet-stream" ||
+    mime.startsWith("text/") ||
+    mime === "application/json" ||
+    mime.endsWith("+json") ||
+    mime === "application/xml" ||
+    mime.endsWith("+xml") ||
+    mime === "application/javascript" ||
+    mime === "application/x-javascript"
+  )
+}
+
 const STRUCTURED_OUTPUT_DESCRIPTION = `Use this tool to return your final response in the requested structured format.
 
 IMPORTANT:
@@ -785,7 +805,10 @@ const layer = Layer.effect(
           const url = new URL(part.url)
           switch (url.protocol) {
             case "data:":
-              if (part.mime === "text/plain") {
+              // Inline data URLs have no file to content-sniff, so only decode as
+              // text for MIMEs that are unambiguously textual (not the
+              // `application/octet-stream` fallback, which may be real binary).
+              if (part.mime !== "application/octet-stream" && isTextMime(part.mime)) {
                 return [
                   {
                     messageID: info.id,
@@ -801,7 +824,9 @@ const layer = Layer.effect(
                     synthetic: true,
                     text: decodeDataUrl(part.url),
                   },
-                  { ...part, messageID: info.id, sessionID: input.sessionID },
+                  // Normalized to text/plain so message-v2 drops it instead of
+                  // re-sending the decoded content as a binary attachment.
+                  { ...part, mime: "text/plain", messageID: info.id, sessionID: input.sessionID },
                 ]
               }
               break
@@ -809,6 +834,7 @@ const layer = Layer.effect(
               yield* Effect.logInfo("file", { mime: part.mime })
               const filepath = fileURLToPath(part.url)
               const mime = (yield* fsys.isDir(filepath)) ? "application/x-directory" : part.mime
+              const asText = isTextMime(mime)
 
               const { read } = yield* registry.named()
               const execRead = (args: Parameters<typeof read.execute>[0], extra?: Tool.Context["extra"]) => {
@@ -827,7 +853,7 @@ const layer = Layer.effect(
                   .pipe(Effect.onInterrupt(() => Effect.sync(() => controller.abort())))
               }
 
-              if (mime === "text/plain") {
+              if (asText) {
                 let offset: number | undefined
                 let limit: number | undefined
                 const range = { start: url.searchParams.get("start"), end: url.searchParams.get("end") }
@@ -885,7 +911,11 @@ const layer = Layer.effect(
                       })),
                     )
                   } else {
-                    pieces.push({ ...part, mime, messageID: info.id, sessionID: input.sessionID })
+                    // The file was read into synthetic text above, so mark the
+                    // trailing file part as text/plain: downstream (message-v2)
+                    // drops text/plain file parts instead of re-sending the raw
+                    // bytes as a binary attachment (which would garble text files).
+                    pieces.push({ ...part, mime: "text/plain", messageID: info.id, sessionID: input.sessionID })
                   }
                 } else {
                   const error = Cause.squash(exit.cause)

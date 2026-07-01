@@ -2060,6 +2060,103 @@ noLLMServer.instance(
   30_000,
 )
 
+// Text file attachments with non-text/plain MIME (regression: garbled/binary output, issue #17301)
+
+// A .txt attached with an octet-stream MIME (the mime-types fallback for
+// extension-less / unrecognized files) previously skipped the Read-tool text
+// path and was base64-blobbed as binary, producing garbled model input. It must
+// now be read into clean synthetic text, and no raw binary file part should be
+// forwarded to the model.
+noLLMServer.instance(
+  "text file attached as application/octet-stream is read as clean text",
+  () =>
+    Effect.gen(function* () {
+      const { directory: dir } = yield* TestInstance
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({})
+
+      const testFile = path.join(dir, "notes")
+      yield* writeText(testFile, "test123")
+
+      const msg = yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        noReply: true,
+        parts: [
+          { type: "text", text: "read this" },
+          {
+            type: "file",
+            mime: "application/octet-stream",
+            url: `file://${testFile}`,
+            filename: "notes",
+          },
+        ],
+      })
+
+      if (msg.info.role !== "user") throw new Error("expected user message")
+
+      const stored = yield* MessageV2.get({ sessionID: session.id, messageID: msg.info.id })
+
+      // File content arrives as clean synthetic text, not a garbled binary blob.
+      const textParts = stored.parts.filter((part) => part.type === "text")
+      expect(textParts.some((part) => part.text.includes("test123"))).toBe(true)
+      expect(textParts.some((part) => part.text.startsWith("Called the Read tool"))).toBe(true)
+
+      // The trailing file part must not still carry the binary MIME / base64 data
+      // URL that message-v2 would forward to the model as a garbled attachment.
+      const forwarded = stored.parts.filter(
+        (part) => part.type === "file" && part.mime !== "text/plain" && part.mime !== "application/x-directory",
+      )
+      expect(forwarded).toHaveLength(0)
+
+      yield* sessions.remove(session.id)
+    }),
+  { config: cfg },
+)
+
+noLLMServer.instance(
+  "text file attached as text/markdown is read as clean text",
+  () =>
+    Effect.gen(function* () {
+      const { directory: dir } = yield* TestInstance
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({})
+
+      const testFile = path.join(dir, "readme.md")
+      yield* writeText(testFile, "# Heading\n\nhello markdown\n")
+
+      const msg = yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        noReply: true,
+        parts: [
+          {
+            type: "file",
+            mime: "text/markdown",
+            url: `file://${testFile}`,
+            filename: "readme.md",
+          },
+        ],
+      })
+
+      if (msg.info.role !== "user") throw new Error("expected user message")
+
+      const stored = yield* MessageV2.get({ sessionID: session.id, messageID: msg.info.id })
+      const textParts = stored.parts.filter((part) => part.type === "text")
+      expect(textParts.some((part) => part.text.includes("hello markdown"))).toBe(true)
+
+      const forwarded = stored.parts.filter(
+        (part) => part.type === "file" && part.mime !== "text/plain" && part.mime !== "application/x-directory",
+      )
+      expect(forwarded).toHaveLength(0)
+
+      yield* sessions.remove(session.id)
+    }),
+  { config: cfg },
+)
+
 // Missing file handling
 
 noLLMServer.instance(
