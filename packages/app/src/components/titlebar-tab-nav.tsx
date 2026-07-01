@@ -83,9 +83,6 @@ export function TabNavItem(props: {
 
   const [popoverOpen, setPopoverOpen] = createSignal(false)
   const previewBlocked = () => !!props.dragging || editing() || !!props.pressed || !props.session()
-  createEffect(() => {
-    if (previewBlocked()) setPopoverOpen(false)
-  })
 
   const measureTitleOverflow = () => {
     if (!titleEl || editing()) {
@@ -314,7 +311,7 @@ export function TabNavItem(props: {
   return (
     <TabPreviewPopover
       trigger={tab}
-      open={popoverOpen()}
+      open={popoverOpen() && !previewBlocked()}
       onOpenChange={(value) => {
         if (value && previewBlocked()) return
         setPopoverOpen(value)
