@@ -16,6 +16,7 @@ type PersistedWithReady<T> = [
 
 type PersistTarget = {
   storage?: string
+  scope?: "window"
   legacyStorageNames?: string[]
   key: string
   legacy?: string[]
@@ -24,6 +25,7 @@ type PersistTarget = {
 
 const LEGACY_STORAGE = "default.dat"
 const GLOBAL_STORAGE = "opencode.global.dat"
+const WINDOW_STORAGE = "opencode.window"
 const LOCAL_PREFIX = "opencode."
 const fallback = new Map<string, boolean>()
 
@@ -347,6 +349,11 @@ function draftStorage(draftID: string) {
   return `opencode.draft.${head}.${sum}.dat`
 }
 
+function windowStorage(windowID: string) {
+  const safe = (windowID || "browser").replace(/[^a-zA-Z0-9._-]/g, "-")
+  return `${WINDOW_STORAGE}.${safe}.dat`
+}
+
 function legacyWorkspaceStorage(dir: string) {
   const storage = workspaceStorage(pathKey(dir))
   const result = new Set<string>()
@@ -467,12 +474,17 @@ export const PersistTesting = {
   localStorageWithPrefix,
   migrateLegacy,
   normalize,
+  resolveTarget,
+  windowStorage,
   workspaceStorage,
 }
 
 export const Persist = {
   global(key: string, legacy?: string[]): PersistTarget {
     return { storage: GLOBAL_STORAGE, key, legacy }
+  },
+  window(key: string, legacy?: string[]): PersistTarget {
+    return { scope: "window", key, legacy }
   },
   draft(draftID: string, key: string, legacy?: string[]): PersistTarget {
     return { storage: draftStorage(draftID), key: `draft:${key}`, legacy }
@@ -501,6 +513,16 @@ export const Persist = {
     if (session) return Persist.serverSession(scope, dir, session, key, legacy)
     return Persist.serverWorkspace(scope, dir, key, legacy)
   },
+}
+
+function resolveTarget(target: PersistTarget, platform: Platform): PersistTarget {
+  if (target.scope !== "window") return target
+  if (platform.platform === "desktop" && !platform.windowID) return { ...target, storage: GLOBAL_STORAGE }
+  const windowID = platform.platform === "desktop" ? (platform.windowID ?? "browser") : "browser"
+  return {
+    ...target,
+    storage: windowStorage(windowID),
+  }
 }
 
 export function removePersisted(
@@ -533,7 +555,7 @@ export function persisted<T>(
   store: [Store<T>, SetStoreFunction<T>],
 ): PersistedWithReady<T> {
   const platform = usePlatform()
-  const config: PersistTarget = typeof target === "string" ? { key: target } : target
+  const config = resolveTarget(typeof target === "string" ? { key: target } : target, platform)
 
   const defaults = snapshot(store[0])
   const legacy = config.legacy ?? []

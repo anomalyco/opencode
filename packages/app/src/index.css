@@ -194,8 +194,19 @@
     timeline-scope: --home-projects-scroll;
   }
 
+  [data-slot="model-selector-scroll"] {
+    timeline-scope: --model-selector-scroll;
+  }
+
+  [data-slot="manage-models-scroll"] {
+    timeline-scope: --manage-models-scroll;
+  }
+
   [data-slot="home-projects-scroll"]::before,
-  [data-slot="home-projects-scroll"]::after {
+  [data-slot="home-projects-scroll"]::after,
+  [data-slot="model-selector-scroll"]::before,
+  [data-slot="model-selector-scroll"]::after,
+  [data-slot="manage-models-scroll"]::before {
     content: "";
     position: absolute;
     left: 0;
@@ -211,9 +222,24 @@
     background: linear-gradient(to bottom, var(--v2-background-bg-base), transparent);
   }
 
+  [data-slot="model-selector-scroll"]::before {
+    top: 0;
+    background: linear-gradient(to bottom, var(--v2-background-bg-layer-01), transparent);
+  }
+
+  [data-slot="manage-models-scroll"]::before {
+    top: 0;
+    background: linear-gradient(to bottom, var(--v2-background-bg-base), transparent);
+  }
+
   [data-slot="home-projects-scroll"]::after {
     bottom: 0;
     background: linear-gradient(to top, var(--v2-background-bg-base), transparent);
+  }
+
+  [data-slot="model-selector-scroll"]::after {
+    bottom: 0;
+    background: linear-gradient(to top, var(--v2-background-bg-layer-01), transparent);
   }
 
   @supports (animation-timeline: --home-projects-scroll) and (timeline-scope: --home-projects-scroll) {
@@ -231,6 +257,36 @@
       animation: home-projects-fade-bottom linear both;
       animation-timeline: --home-projects-scroll;
       animation-range: calc(100% - 1.1px) calc(100% - 1px);
+    }
+  }
+
+  @supports (animation-timeline: --model-selector-scroll) and (timeline-scope: --model-selector-scroll) {
+    [data-slot="model-selector-scroll"] .scroll-view__viewport {
+      scroll-timeline: --model-selector-scroll y;
+    }
+
+    [data-slot="model-selector-scroll"]::before {
+      animation: home-projects-fade-top linear both;
+      animation-timeline: --model-selector-scroll;
+      animation-range: 0 0.1px;
+    }
+
+    [data-slot="model-selector-scroll"]::after {
+      animation: home-projects-fade-bottom linear both;
+      animation-timeline: --model-selector-scroll;
+      animation-range: calc(100% - 1.1px) calc(100% - 1px);
+    }
+  }
+
+  @supports (animation-timeline: --manage-models-scroll) and (timeline-scope: --manage-models-scroll) {
+    [data-slot="manage-models-scroll"] .settings-v2-panel {
+      scroll-timeline: --manage-models-scroll y;
+    }
+
+    [data-slot="manage-models-scroll"]::before {
+      animation: home-projects-fade-top linear both;
+      animation-timeline: --manage-models-scroll;
+      animation-range: 0 0.1px;
     }
   }
 }
