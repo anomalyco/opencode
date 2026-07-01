@@ -65,6 +65,9 @@ function routeCurrent(route: ReturnType<typeof useRoute>): TuiPluginApi["route"]
       },
     }
   }
+  if (route.data.type === "grid") {
+    return { name: "grid" }
+  }
 
   return {
     name: route.data.id,

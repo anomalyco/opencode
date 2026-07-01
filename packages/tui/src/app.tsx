@@ -51,6 +51,7 @@ import { DialogConsoleOrg } from "./component/dialog-console-org"
 import { ThemeProvider, useTheme } from "./context/theme"
 import { Home } from "./routes/home"
 import { Session } from "./routes/session"
+import { GridView } from "./routes/grid"
 import { PromptHistoryProvider } from "./component/prompt/history"
 import { FrecencyProvider } from "./component/prompt/frecency"
 import { PromptStashProvider } from "./component/prompt/stash"
@@ -97,6 +98,7 @@ const appGlobalBindingCommands = [
   "session.quick_switch.7",
   "session.quick_switch.8",
   "session.quick_switch.9",
+  "grid_create",
 ] as const
 
 const appBindingCommands = [
@@ -468,6 +470,10 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
     if (route.data.type === "plugin") {
       renderer.setTerminalTitle(`OC | ${route.data.id}`)
     }
+
+    if (route.data.type === "grid") {
+      renderer.setTerminalTitle("OpenCode | Grid")
+    }
   })
 
   const args = useArgs()
@@ -491,6 +497,11 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         })
       }
     })
+    if (args.grid || Flag.OPENCODE_GRID) {
+      if (!args.sessionID && !args.continue) {
+        route.navigate({ type: "grid" })
+      }
+    }
   })
 
   let continued = false
@@ -587,6 +598,19 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
           dialog.clear()
         },
       },
+      {
+        name: "grid.open",
+        title: "Open grid mode",
+        category: "Workspace",
+        slashName: "grid",
+        slashAliases: ["grid-mode", "gridmode"],
+        hidden: false,
+        run: () => {
+          route.navigate({ type: "grid" })
+          dialog.clear()
+        },
+      },
+
       {
         name: "workspace.copy_path",
         title: "Copy worktree path",
@@ -1103,6 +1127,9 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
               <Show when={route.data.type === "session" ? route.data.sessionID : undefined} keyed>
                 {(_) => <Session />}
               </Show>
+            </Match>
+            <Match when={route.data.type === "grid"}>
+              <GridView />
             </Match>
           </Switch>
           {plugin()}

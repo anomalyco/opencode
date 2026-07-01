@@ -97,6 +97,10 @@ export const TuiThreadCommand = cmd({
         type: "boolean",
         describe: "fork the session when continuing (use with --continue or --session)",
       })
+      .option("grid", {
+        type: "boolean",
+        describe: "start in grid mode (multi-session workspace)",
+      })
       .option("prompt", {
         type: "string",
         describe: "prompt to use",
@@ -168,6 +172,7 @@ export const TuiThreadCommand = cmd({
         model: args.model,
         agent: args.agent,
         prompt: args.prompt,
+      grid: args.grid,
         replay: noReplay ? false : undefined,
         replayLimit: args.replayLimit,
         demo: args.demo,

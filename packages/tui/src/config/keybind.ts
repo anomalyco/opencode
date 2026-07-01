@@ -236,6 +236,16 @@ export const Definitions = {
   which_key_page_down: keybind("ctrl+alt+pagedown", "Page which-key down"),
   which_key_home: keybind("ctrl+alt+home", "Jump to first which-key binding"),
   which_key_end: keybind("ctrl+alt+end", "Jump to last which-key binding"),
+
+  grid_create: keybind("<leader>w", "Open grid mode"),
+  grid_open: keybind("none", "Open grid mode"),
+  grid_close: keybind("<leader>0", "Close active grid cell"),
+  grid_next: keybind("ctrl+down", "Focus next grid cell"),
+  grid_prev: keybind("ctrl+up", "Focus previous grid cell"),
+  grid_single: keybind("<leader>s,ctrl+1", "Switch grid to single layout"),
+  grid_layout_toggle: keybind("<leader>t", "Toggle grid layout (single / split-h / split-v)"),
+  grid_plan_mode: keybind("<leader>p", "Toggle plan-only mode for active grid cell"),
+  grid_help: keybind("<leader>?", "Show grid keyboard help"),
 } satisfies Record<string, Definition>
 
 type KeybindName = keyof typeof Definitions
@@ -415,6 +425,16 @@ export const CommandMap = {
   which_key_page_down: "which-key.page.down",
   which_key_home: "which-key.home",
   which_key_end: "which-key.end",
+
+  grid_create: "grid.create",
+  grid_open: "grid.open",
+  grid_close: "grid.close",
+  grid_next: "grid.next",
+  grid_prev: "grid.prev",
+  grid_single: "grid.single",
+  grid_layout_toggle: "grid.layout.toggle",
+  grid_plan_mode: "grid.plan_mode",
+  grid_help: "grid.help",
 } satisfies BindingCommandMap
 const CommandDescriptions = Object.fromEntries(
   Object.entries(Definitions).map(([name, item]) => [
