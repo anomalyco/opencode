@@ -1319,11 +1319,12 @@ function RevertMessage(props: {
 
 function UserMessage(props: { message: SessionMessageUser }) {
   const ctx = use()
+  const data = useData()
   const local = useLocal()
   const files = createMemo(() => props.message.files ?? [])
   const { theme } = useTheme()
   const [hover, setHover] = createSignal(false)
-  const color = createMemo(() => local.agent.color(useData().session.get(ctx.sessionID)?.agent ?? "build"))
+  const color = createMemo(() => local.agent.color(data.session.get(ctx.sessionID)?.agent ?? "build"))
   const queued = createMemo(() => props.message.metadata?.queued === true)
   const queuedFg = createMemo(() => selectedForeground(theme, color()))
   const metadataVisible = createMemo(() => queued() || ctx.showTimestamps())
