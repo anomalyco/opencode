@@ -613,6 +613,60 @@ describe("ProviderTransform.providerOptions", () => {
     })
   })
 
+  test("forces reasoning for custom OpenAI package models with explicit effort", () => {
+    const model = createModel({
+      providerID: "meta",
+      api: {
+        id: "muse-spark",
+        url: "https://api.ai.meta.com/v1",
+        npm: "@ai-sdk/openai",
+      },
+    })
+
+    expect(ProviderTransform.providerOptions(model, { reasoningEffort: "xhigh", reasoningSummary: "auto" })).toEqual({
+      openai: { forceReasoning: true, reasoningEffort: "xhigh", reasoningSummary: "auto" },
+    })
+  })
+
+  test("forces reasoning for Azure OpenAI models with explicit effort", () => {
+    const model = createModel({
+      providerID: "azure",
+      api: {
+        id: "custom-gpt-5-deployment",
+        url: "https://azure.openai.example.com/openai/v1",
+        npm: "@ai-sdk/azure",
+      },
+    })
+
+    expect(ProviderTransform.providerOptions(model, { reasoningEffort: "xhigh" })).toEqual({
+      openai: { forceReasoning: true, reasoningEffort: "xhigh" },
+      azure: { forceReasoning: true, reasoningEffort: "xhigh" },
+    })
+  })
+
+  test("forces reasoning for Bedrock Mantle OpenAI models with explicit effort", () => {
+    const model = createModel({
+      providerID: "amazon-bedrock",
+      api: {
+        id: "openai.gpt-5-custom",
+        url: "https://bedrock-mantle.us-east-2.api.aws/openai/v1",
+        npm: "@ai-sdk/amazon-bedrock/mantle",
+      },
+    })
+
+    expect(ProviderTransform.providerOptions(model, { reasoningEffort: "xhigh" })).toEqual({
+      openai: { forceReasoning: true, reasoningEffort: "xhigh" },
+    })
+  })
+
+  test("preserves explicit forceReasoning override", () => {
+    expect(
+      ProviderTransform.providerOptions(createModel(), { forceReasoning: false, reasoningEffort: "xhigh" }),
+    ).toEqual({
+      openai: { forceReasoning: false, reasoningEffort: "xhigh" },
+    })
+  })
+
   test("uses gateway model provider slug for gateway models", () => {
     const model = createModel({
       providerID: "vercel",
@@ -707,7 +761,7 @@ describe("ProviderTransform.providerOptions", () => {
     })
 
     expect(ProviderTransform.providerOptions(model, { reasoningEffort: "medium" })).toEqual({
-      openai: { reasoningEffort: "medium" },
+      openai: { forceReasoning: true, reasoningEffort: "medium" },
     })
   })
 
