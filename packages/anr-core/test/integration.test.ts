@@ -74,8 +74,8 @@ describe("integration points exist in opencode package", () => {
     "auth/anr-refresh.ts",             // Credential refresh module
     "session/processor.ts",            // Session hooks for tracking
     "provider/provider.ts",            // Model ID passthrough
-    "cli/cmd/tui/worker.ts",           // Worker OTEL re-init
-    "cli/cmd/tui/context/quota.tsx",   // Quota TUI display
+    "cli/tui/worker.ts",               // Worker OTEL re-init
+    "cli/cmd/tui.ts",                  // Quota wiring surfaced in the TUI command
     "cli/cmd/debug/otel.ts",           // Debug commands
   ]
 
@@ -141,7 +141,7 @@ describe("critical code patterns are present", () => {
   })
 
   test("worker.ts re-initializes OTEL in worker process", async () => {
-    const content = await Bun.file(resolve(OPENCODE_SRC, "cli/cmd/tui/worker.ts")).text()
+    const content = await Bun.file(resolve(OPENCODE_SRC, "cli/tui/worker.ts")).text()
     expect(content).toContain("initializeOTEL")
     expect(content).toContain("reconstructTelemetryContextFromEnv")
     expect(content).toContain("OPENCODE_ENABLE_TELEMETRY")

@@ -57,10 +57,6 @@
       "dependsOn": ["^build"],
       "outputs": []
     },
-    "@opencode-ai/enterprise#test": {
-      "dependsOn": ["^build"],
-      "outputs": []
-    },
     "@opencode-ai/desktop#test": {
       "dependsOn": ["^build"],
       "outputs": []

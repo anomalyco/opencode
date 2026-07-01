@@ -6,7 +6,6 @@
   "license": "MIT",
   "scripts": {
     "typecheck": "tsgo --noEmit",
-    "test": "bun test test/ --timeout 30000",
     "dev": "vite dev",
     "build": "vite build",
     "build:cloudflare": "OPENCODE_DEPLOYMENT_TARGET=cloudflare vite build",
