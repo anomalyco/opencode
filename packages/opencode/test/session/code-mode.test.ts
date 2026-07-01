@@ -9,6 +9,7 @@ import {
   rankTools,
   renderType,
   toEnvelope,
+  withLogs,
   type SearchEntry,
 } from "@/session/code-mode"
 import type { Tool as MCPToolDef } from "@modelcontextprotocol/sdk/types.js"
@@ -404,6 +405,17 @@ describe("code mode execute", () => {
     expect(formatValue("text")).toBe("text")
     expect(formatValue({ a: 1 })).toBe(JSON.stringify({ a: 1 }, null, 2))
     expect(formatValue(undefined)).toBe("undefined")
+  })
+
+  test("unit: withLogs", () => {
+    // No logs: output is returned untouched.
+    expect(withLogs("result", [])).toBe("result")
+    // Logs are appended as a trailing section, one `[level] message` line each.
+    expect(withLogs("result", [{ level: "log", message: "a" }, { level: "warn", message: "b" }])).toBe(
+      "result\n\nLogs:\n[log] a\n[warn] b",
+    )
+    // Empty output still gets the section (no leading blank lines).
+    expect(withLogs("", [{ level: "error", message: "boom" }])).toBe("Logs:\n[error] boom")
   })
 
   test("terminates a runaway loop via the operation limit instead of hanging", async () => {

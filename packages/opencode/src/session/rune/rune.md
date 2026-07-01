@@ -31,9 +31,10 @@ implemented throws.
   errors.
 
 ### Result
-`{ ok: true, value, toolCalls }` or `{ ok: false, error: { kind, message, location?,
-suggestions? }, toolCalls }`. `value` is the program's `return`. Uncaught `throw`
-becomes `ok: false`.
+`{ ok: true, value, toolCalls, logs }` or `{ ok: false, error: { kind, message, location?,
+suggestions? }, toolCalls, logs }`. `value` is the program's `return`. Uncaught `throw`
+becomes `ok: false`. `logs` is the captured `console.*` output (see below), present on
+every path — including timeout and failure — so logs emitted before a crash survive.
 
 ### Limits (`ExecutionLimits`, enforced; defaults)
 | Limit | Default | Bounds |
@@ -53,8 +54,12 @@ not cumulative. (Code mode overrides `maxDataBytes`→10MB, `timeoutMs`→30s.)
 
 ## Standard library (allowlist — everything else throws)
 
-- **Globals**: `tools`, `Promise`, `Object`, `Math`, `JSON`, `Number`, `String`,
+- **Globals**: `tools`, `console`, `Promise`, `Object`, `Math`, `JSON`, `Number`, `String`,
   `Boolean`, `Array`, `parseInt`, `parseFloat`, `undefined`.
+- **console**: `log`/`warn`/`error`/`info`/`debug`. Each formats its args (strings verbatim,
+  objects/arrays as JSON, space-joined) and appends a line to `logs`; it returns `undefined`,
+  is **not** a tool call (spends no tool-call budget), and any other member throws. Formatting
+  is charged to `maxOperations`, and total captured output is bounded by `maxAuditBytes`.
 - **String**: case/trim, split, slice/substring/substr, includes/startsWith/endsWith,
   indexOf/lastIndexOf, replace/replaceAll, repeat, padStart/padEnd, charAt/at,
   charCodeAt/codePointAt, concat. **String args only.**
@@ -76,7 +81,6 @@ not cumulative. (Code mode overrides `maxDataBytes`→10MB, `timeoutMs`→30s.)
 - **`Date`** — no dates or time.
 - **`RegExp` / regex literals** — none. `replace`/`split` take plain strings only.
 - **`Map` / `Set` / `WeakMap` / `WeakSet`** — none.
-- **`console`** — no logging/output.
 - **`Promise`** — only `Promise.all`. No `new Promise`, `race`, `allSettled`, `resolve`,
   `reject`.
 - **`new`** — only the `Error` family (`Error`, `TypeError`, `RangeError`, `SyntaxError`,
@@ -167,6 +171,25 @@ impossible rather than merely discouraged. The trade-off: a program can no longe
 bytes to route them into another tool's input; if that need arises it would be an explicit host
 call (e.g. a `readAttachment(handle)`), not the always-on default. Not implemented yet.
 
+## console output is surfaced to the model as a trailing `Logs:` section
+
+The sandbox has no stdout, but `console.log`/`warn`/`error`/`info`/`debug` are available (an
+interpreter builtin, not a tool). Code mode reads the run's `logs` and, when non-empty, appends
+them to the model-facing text as a trailing section — one `[level] message` line each:
+
+```
+<result text>
+
+Logs:
+[log] resolved 3 candidates
+[warn] falling back to first match
+```
+
+This holds on the error path too, so a program's diagnostics ride back with the failure that
+followed them. Logs go to the **model only** (not the user) — they are the program's scratch
+channel for narrating what it did, distinct from the `return` value (the answer) and returned
+`attachments` (media for the model + user). A program that logs nothing gets no section.
+
 ## Path handling — separator-tolerant
 
 The flat catalog key is `server_tool`, but the model is never required to guess the
@@ -197,9 +220,3 @@ returning real callable paths (e.g. `context7/resolve-library` → suggests
 branches on `result.error` and retries with a suggestion. (Tool
 *calls* on a genuinely unknown path still surface as a catchable in-program error via Rune's
 `UnknownCapability`; only the discovery helpers return soft errors.)
-
-## Not done yet
-
-- **`console` capture** — a program has no way to surface `console.log` output. Rune has no
-  `console` (see "What is missing") and the interpreter is frozen, so buffering log output into
-  the result envelope is deferred to separate interpreter work rather than faked here.

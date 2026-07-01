@@ -3,7 +3,7 @@ import { asSchema, type Tool as AITool, type JSONSchema7 } from "ai"
 import type { Tool as MCPToolDef } from "@modelcontextprotocol/sdk/types.js"
 import { Effect, Schema } from "effect"
 import { Rune } from "./rune/rune"
-import type { ExecutionLimits } from "./rune/rune"
+import type { ExecutionLimits, LogEntry } from "./rune/rune"
 import type { HostTools } from "./rune/tool-runtime"
 
 export const CODE_MODE_TOOL = "execute"
@@ -544,6 +544,18 @@ export function toEnvelope(result: unknown, seal: AttachmentTable["seal"]): Enve
   return attachments.length > 0 ? { result: value, attachments } : { result: value }
 }
 
+/**
+ * Append captured `console.*` output to the model-facing text as a trailing `Logs:` section,
+ * so a program's diagnostics ride back alongside its result (and errors). Each line is
+ * `[level] message`; returns the text unchanged when nothing was logged. This is the sandbox's
+ * only stdout-like channel — it goes to the model, not the user.
+ */
+export function withLogs(output: string, logs: ReadonlyArray<LogEntry>): string {
+  if (logs.length === 0) return output
+  const section = "Logs:\n" + logs.map((entry) => `[${entry.level}] ${entry.message}`).join("\n")
+  return output.length > 0 ? `${output}\n\n${section}` : section
+}
+
 /** Coerce the program's return value to model-facing text without ever failing on shape. */
 export function formatValue(value: unknown): string {
   if (typeof value === "string") return value
@@ -800,7 +812,7 @@ export function define(
           return {
             title: "execute",
             metadata: { toolCalls: calls },
-            output,
+            output: withLogs(output, result.logs),
             ...(attachments && attachments.length > 0 ? { attachments } : {}),
           } satisfies Tool.ExecuteResult<Metadata>
         }
@@ -812,7 +824,7 @@ export function define(
         return {
           title: "execute",
           metadata: { toolCalls: calls, error: true },
-          output: result.error.message + hint,
+          output: withLogs(result.error.message + hint, result.logs),
         } satisfies Tool.ExecuteResult<Metadata>
       }),
     }),

@@ -57,11 +57,18 @@ export type ExecuteOptions<Tools extends Record<string, unknown> = {}> = {
   limits?: ExecutionLimits
 }
 
+/** One captured `console.*` line: the method used and the formatted message. */
+export type LogEntry = {
+  readonly level: "log" | "warn" | "error" | "info" | "debug"
+  readonly message: string
+}
+
 export type ExecuteResult =
   | {
       ok: true
       value: unknown
       toolCalls: ReadonlyArray<ToolCall>
+      logs: ReadonlyArray<LogEntry>
     }
   | {
       ok: false
@@ -72,6 +79,7 @@ export type ExecuteResult =
         suggestions?: ReadonlyArray<string>
       }
       toolCalls: ReadonlyArray<ToolCall>
+      logs: ReadonlyArray<LogEntry>
     }
 
 export type RuneOptions<Tools extends Record<string, unknown> = {}> = Omit<ExecuteOptions<Tools>, "code">
@@ -91,6 +99,7 @@ export const ExecuteResultSchema = Schema.Union([
     ok: Schema.Literal(true),
     value: Schema.Unknown,
     toolCalls: Schema.Array(Schema.Struct({ name: Schema.String })),
+    logs: Schema.Array(Schema.Struct({ level: Schema.String, message: Schema.String })),
   }),
   Schema.Struct({
     ok: Schema.Literal(false),
@@ -101,6 +110,7 @@ export const ExecuteResultSchema = Schema.Union([
       suggestions: Schema.optional(Schema.Array(Schema.String)),
     }),
     toolCalls: Schema.Array(Schema.Struct({ name: Schema.String })),
+    logs: Schema.Array(Schema.Struct({ level: Schema.String, message: Schema.String })),
   }),
 ])
 
@@ -201,6 +211,56 @@ class GlobalMethodReference {
 // A built-in callable global (`Number`, `String`, `Boolean`, `parseInt`, `parseFloat`).
 class CoercionFunction {
   constructor(readonly name: "Number" | "String" | "Boolean" | "parseInt" | "parseFloat") {}
+}
+
+// The `console` builtin. `console.<level>` resolves to a ConsoleMethodReference; calling it
+// formats its arguments and appends a line to the run's shared LogCollector. Logging is a pure
+// side effect on the host — it never dispatches a tool, spends the tool-call budget, or returns
+// a value the program can branch on (every method returns undefined, like JS `console`).
+class ConsoleReference {}
+
+const consoleLevels = new Set(["log", "warn", "error", "info", "debug"] as const)
+
+class ConsoleMethodReference {
+  constructor(readonly level: LogEntry["level"]) {}
+}
+
+/**
+ * Collects `console.*` output for one execution. Shared by reference across parallel
+ * interpreter forks (like the operation budget), so logs emitted inside `Promise.all`
+ * / `.map` callbacks are captured too. Bounded by a total character budget — once spent,
+ * further lines are dropped (the last accepted line is truncated to fit) so a logging loop
+ * can't grow memory without also spending the operation budget.
+ */
+class LogCollector {
+  readonly entries: LogEntry[] = []
+  private used = 0
+  constructor(private readonly maxChars: number) {}
+  push(level: LogEntry["level"], message: string): void {
+    if (this.used >= this.maxChars) return
+    const remaining = this.maxChars - this.used
+    const text = message.length > remaining ? message.slice(0, remaining) : message
+    this.used += text.length
+    this.entries.push({ level, message: text })
+  }
+}
+
+/** Format one `console.*` argument the way `console` roughly does: strings verbatim,
+ *  objects/arrays as JSON, opaque runtime references as a placeholder (never leaking their
+ *  internals), everything else via String(). Never throws. */
+const formatLogArg = (value: unknown): string => {
+  if (typeof value === "string") return value
+  if (value === null) return "null"
+  if (value === undefined) return "undefined"
+  if (isRuntimeReference(value)) return "[runtime reference]"
+  if (typeof value === "object") {
+    try {
+      return JSON.stringify(value) ?? coerceToString(value)
+    } catch {
+      return coerceToString(value)
+    }
+  }
+  return String(value)
 }
 
 class ProgramThrow {
@@ -479,7 +539,8 @@ const boundedData = (value: unknown, label: string, node: AstNode, limits: Resol
 const isRuntimeReference = (value: unknown): boolean =>
     value instanceof RuneFunction || value instanceof ToolReference || value instanceof IntrinsicReference ||
     value instanceof GlobalNamespace || value instanceof GlobalMethodReference || value instanceof PromiseNamespace ||
-    value instanceof PromiseAllReference || value instanceof CoercionFunction
+    value instanceof PromiseAllReference || value instanceof CoercionFunction ||
+    value instanceof ConsoleReference || value instanceof ConsoleMethodReference
 
 const containsRuntimeReference = (value: unknown, seen = new Set<object>()): boolean => {
   if (isRuntimeReference(value)) return true
@@ -904,6 +965,9 @@ class Interpreter<R> {
   private readonly limits: ResolvedExecutionLimits
   private readonly invokeTool: (path: ReadonlyArray<string>, args: Array<unknown>) => Effect.Effect<unknown, unknown, R>
   private readonly budget: { operations: number }
+  // Shared by reference with any parallel forks (see forkForParallelCallback) so every
+  // console.* line lands in one ordered collection regardless of which fork emitted it.
+  private readonly logs: LogCollector
   private lastValue: unknown
   // Cached byte size (and, for objects, key count) of each live container, maintained incrementally
   // by the mutation helpers so appending in a loop is O(1)/op rather than re-walking the whole
@@ -916,14 +980,17 @@ class Interpreter<R> {
     limits: ResolvedExecutionLimits,
     invokeTool: (path: ReadonlyArray<string>, args: Array<unknown>) => Effect.Effect<unknown, unknown, R>,
     budget: { operations: number } = { operations: 0 },
+    logs: LogCollector = new LogCollector(limits.maxAuditBytes),
   ) {
     const globalScope = new Map<string, Binding>()
     this.scopes = [globalScope]
     this.limits = limits
     this.invokeTool = invokeTool
     this.budget = budget
+    this.logs = logs
     this.lastValue = undefined
     globalScope.set("tools", { mutable: false, value: new ToolReference([]) })
+    globalScope.set("console", { mutable: false, value: new ConsoleReference() })
     globalScope.set("Promise", { mutable: false, value: new PromiseNamespace() })
     globalScope.set("undefined", { mutable: false, value: undefined })
     globalScope.set("Object", { mutable: false, value: new GlobalNamespace("Object") })
@@ -1740,6 +1807,14 @@ class Interpreter<R> {
         self.recordWork(workUnits(coercionResult), node)
         return boundedData(coercionResult, `${callable.name} result`, node, self.limits)
       }
+      if (callable instanceof ConsoleMethodReference) {
+        const message = args.map(formatLogArg).join(" ")
+        // Charge formatting to the operation budget so a console.log loop is bounded by
+        // maxOperations, not just the wall-clock timeout.
+        self.recordWork(message.length, node)
+        self.logs.push(callable.level, message)
+        return undefined
+      }
       throw new InterpreterRuntimeError("Only tool capabilities are callable in Rune.", callee)
     })
   }
@@ -2310,7 +2385,7 @@ class Interpreter<R> {
     }
   }
 
-  private getMemberReference(node: AstNode): Effect.Effect<MemberReference | ToolReference | PromiseAllReference | IntrinsicReference | GlobalMethodReference | ComputedValue | typeof OptionalShortCircuit | undefined, unknown, R> {
+  private getMemberReference(node: AstNode): Effect.Effect<MemberReference | ToolReference | PromiseAllReference | IntrinsicReference | GlobalMethodReference | ConsoleMethodReference | ComputedValue | typeof OptionalShortCircuit | undefined, unknown, R> {
     const objectNode = getNode(node, "object")
     const propertyNode = getNode(node, "property")
     const computed = getBoolean(node, "computed")
@@ -2337,6 +2412,13 @@ class Interpreter<R> {
       if (objectValue instanceof PromiseNamespace) {
         if (key === "all") return new PromiseAllReference()
         throw new InterpreterRuntimeError(`Promise.${String(key)} is not available in Rune. Use Promise.all(...) for parallel Tool Capabilities.`, propertyNode)
+      }
+
+      if (objectValue instanceof ConsoleReference) {
+        if (typeof key === "string" && consoleLevels.has(key as LogEntry["level"])) {
+          return new ConsoleMethodReference(key as LogEntry["level"])
+        }
+        throw new InterpreterRuntimeError(`console.${String(key)} is not available in Rune. Use log, warn, error, info, or debug.`, propertyNode)
       }
 
       if (objectValue instanceof GlobalNamespace) {
@@ -2411,7 +2493,8 @@ class Interpreter<R> {
         reference instanceof ToolReference ||
         reference instanceof PromiseAllReference ||
         reference instanceof IntrinsicReference ||
-        reference instanceof GlobalMethodReference
+        reference instanceof GlobalMethodReference ||
+        reference instanceof ConsoleMethodReference
       ) return reference
       if (Array.isArray(reference.target)) {
         if (typeof reference.key === "string" && arrayMethods.has(reference.key)) {
@@ -2444,7 +2527,8 @@ class Interpreter<R> {
         reference instanceof ToolReference ||
         reference instanceof PromiseAllReference ||
         reference instanceof IntrinsicReference ||
-        reference instanceof GlobalMethodReference
+        reference instanceof GlobalMethodReference ||
+        reference instanceof ConsoleMethodReference
       ) {
         throw new InterpreterRuntimeError("Only data fields may be assigned in Rune.", node)
       }
@@ -2643,7 +2727,7 @@ class Interpreter<R> {
   }
 
   private forkForParallelCallback(): Interpreter<R> {
-    const fork = new Interpreter(this.limits, this.invokeTool, this.budget)
+    const fork = new Interpreter(this.limits, this.invokeTool, this.budget, this.logs)
     fork.scopes.splice(
       0,
       fork.scopes.length,
@@ -2682,12 +2766,16 @@ export const execute = <const Tools extends Record<string, unknown>>(options: Ex
   const limits = resolveExecutionLimits(options.limits)
   ToolRuntime.assertValidTools((options.tools ?? {}) as HostTools<Services<Tools>>)
   const tools = ToolRuntime.make((options.tools ?? {}) as HostTools<Services<Tools>>, limits.maxToolCalls, limits)
+  // Lives in the outer scope (not the interpreter) so console output is surfaced on every
+  // result path, including timeout and failure where the interpreter instance is unreachable.
+  const logs = new LogCollector(limits.maxAuditBytes)
 
   if (new TextEncoder().encode(options.code).byteLength > limits.maxSourceBytes) {
     return Effect.succeed({
       ok: false,
       error: { kind: "InvalidDataValue", message: `Code exceeds the maximum source size of ${limits.maxSourceBytes} bytes.` },
       toolCalls: tools.calls,
+      logs: logs.entries,
     })
   }
 
@@ -2696,12 +2784,13 @@ export const execute = <const Tools extends Record<string, unknown>>(options: Ex
       ok: false,
       error: { kind: "ParseError", message: "Code cannot be empty." },
       toolCalls: tools.calls,
+      logs: logs.entries,
     })
   }
 
   const operation = Effect.gen(function*() {
     const program = parseProgram(options.code)
-    const interpreter = new Interpreter<Services<Tools>>(limits, tools.invoke)
+    const interpreter = new Interpreter<Services<Tools>>(limits, tools.invoke, undefined, logs)
     const value = yield* interpreter.run(program)
     const copied = copyIn(value, "Execution result", limits)
     if (dataByteLength(copied) > limits.maxDataBytes) {
@@ -2711,6 +2800,7 @@ export const execute = <const Tools extends Record<string, unknown>>(options: Ex
       ok: true,
       value: copyOut(copied),
       toolCalls: tools.calls,
+      logs: logs.entries,
     } satisfies ExecuteResult
   }).pipe(
     Effect.timeoutOrElse({
@@ -2719,6 +2809,7 @@ export const execute = <const Tools extends Record<string, unknown>>(options: Ex
         ok: false,
         error: { kind: "TimeoutExceeded", message: `Execution timed out after ${limits.timeoutMs}ms.` },
         toolCalls: tools.calls,
+        logs: logs.entries,
       } satisfies ExecuteResult),
     }),
   )
@@ -2729,6 +2820,7 @@ export const execute = <const Tools extends Record<string, unknown>>(options: Ex
         ok: false,
         error: normalizeError(Cause.squash(cause)),
         toolCalls: tools.calls,
+        logs: logs.entries,
       }),
       onSuccess: (result): ExecuteResult => result,
     }),

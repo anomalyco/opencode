@@ -216,6 +216,40 @@ describe("code mode integration (real MCP server)", () => {
     expect(out.output).toContain("kaboom")
   })
 
+  test("console output is captured and appended as a Logs section after the result", async () => {
+    const out = await run(`
+      console.log("looking up", { name: "world" })
+      const r = await tools.fixtures.get_text({ name: "world" })
+      console.warn("got", r.result)
+      return r.result
+    `)
+    expect(out.output).toBe('hello world\n\nLogs:\n[log] looking up {"name":"world"}\n[warn] got hello world')
+    expect(out.metadata.error).toBeUndefined()
+  })
+
+  test("console output is preserved on the error path", async () => {
+    const out = await run(`
+      console.log("before the throw")
+      await tools.fixtures.boom({})
+      return "unreachable"
+    `)
+    expect(out.metadata.error).toBe(true)
+    expect(out.output).toContain("kaboom")
+    expect(out.output).toContain("Logs:\n[log] before the throw")
+  })
+
+  test("a program that logs nothing gets no Logs section", async () => {
+    const out = await run("return 'quiet'")
+    expect(out.output).toBe("quiet")
+    expect(out.output).not.toContain("Logs:")
+  })
+
+  test("console does not consume the tool-call metadata (logging is not a tool call)", async () => {
+    const out = await run("console.log('hi'); console.error('bye'); return 'ok'")
+    expect(out.output).toBe("ok\n\nLogs:\n[log] hi\n[error] bye")
+    expect(out.metadata.toolCalls).toEqual([])
+  })
+
   test("asks permission for each MCP call but not for discovery helpers", async () => {
     const asked: string[] = []
     const permCtx: Tool.Context = { ...ctx, ask: (req: any) => Effect.sync(() => void asked.push(req.permission)) }
