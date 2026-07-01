@@ -680,8 +680,8 @@ export function Autocomplete(props: {
             props.input().cursorOffset <= store.index ||
             // There is a space between the trigger and the cursor
             props.input().getTextRange(store.index, props.input().cursorOffset).match(/\s/) ||
-            // "/<command>" is not the sole content
-            (store.visible === "/" && value.match(/^\S+\s+\S+\s*$/))
+            // "/<command> <arg>" — user has finished selecting a command and started typing args
+            (store.visible === "/" && value.slice(store.index).match(/^\S+\s+\S+/))
           ) {
             hide()
           }
@@ -692,10 +692,14 @@ export function Autocomplete(props: {
         const offset = props.input().cursorOffset
         if (offset === 0) return
 
-        // Check for "/" at position 0 - reopen slash commands
-        if (value.startsWith("/") && !value.slice(0, offset).match(/\s/)) {
+        // Check for "/" at the start of the current line — trigger slash commands.
+        // Using lastIndexOf("\n") finds the start of the current line so that "/" mid-sentence
+        // (e.g. inside a file path like "/Users/foo") does NOT trigger the picker.
+        const lineStart = value.lastIndexOf("\n", offset - 1) + 1
+        const lineUpToCursor = value.slice(lineStart, offset)
+        if (lineUpToCursor.startsWith("/") && !lineUpToCursor.slice(1).match(/\s/)) {
           show("/")
-          setStore("index", 0)
+          setStore("index", lineStart)
           return
         }
 

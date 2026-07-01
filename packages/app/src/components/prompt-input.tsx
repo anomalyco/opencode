@@ -1064,7 +1064,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     if (!shellMode) {
       const atMatch = rawText.substring(0, cursorPosition).match(/@(\S*)$/)
-      const slashMatch = rawText.match(/^\/(\S*)$/)
+      // Match `/` at the start of any line (not mid-line, to avoid false-triggering on file paths)
+      const slashMatch = rawText.substring(0, cursorPosition).match(/(?:^|\n)\/(\S*)$/)
 
       if (atMatch) {
         atOnInput(atMatch[1])
