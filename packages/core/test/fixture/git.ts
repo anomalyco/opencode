@@ -45,5 +45,21 @@ export async function branch(source: string, name: string, content: string) {
 }
 
 export async function git(cwd: string, ...args: string[]) {
-  await exec("git", args, { cwd })
+  // Harden for CI (especially Windows runners): never prompt (a prompt hangs the
+  // exec until it times out and looks like "Command failed"), treat any repo as
+  // safe (temp-dir repos otherwise trip git's dubious-ownership guard), and pin a
+  // committer identity via env so a fresh repo with no user.* config can commit.
+  await exec("git", ["-c", "safe.directory=*", ...args], {
+    cwd,
+    env: {
+      ...process.env,
+      GIT_TERMINAL_PROMPT: "0",
+      GIT_ASKPASS: "echo",
+      GCM_INTERACTIVE: "never",
+      GIT_AUTHOR_NAME: "Test",
+      GIT_AUTHOR_EMAIL: "test@example.com",
+      GIT_COMMITTER_NAME: "Test",
+      GIT_COMMITTER_EMAIL: "test@example.com",
+    },
+  })
 }
