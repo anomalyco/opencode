@@ -127,7 +127,7 @@ test.describe("smoke: session timeline", () => {
     await page.addInitScript(
       ({ dirBase64, sourceID, targetID }) => {
         localStorage.setItem(
-          "opencode.window.browser.dat:tabs",
+          "opencode.global.dat:tabs",
           JSON.stringify(
             [sourceID, targetID].map((sessionId) => ({
               type: "session",
@@ -253,7 +253,7 @@ test.describe("smoke: session timeline", () => {
     await page.addInitScript(
       ({ dirBase64, sourceID, targetID }) => {
         localStorage.setItem(
-          "opencode.window.browser.dat:tabs",
+          "opencode.global.dat:tabs",
           JSON.stringify(
             [sourceID, targetID].map((sessionId) => ({
               type: "session",
