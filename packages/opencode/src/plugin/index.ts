@@ -19,6 +19,7 @@ import { CloudflareAIGatewayAuthPlugin, CloudflareWorkersAuthPlugin } from "./cl
 import { AzureAuthPlugin } from "./azure"
 import { DigitalOceanAuthPlugin } from "./digitalocean"
 import { XaiAuthPlugin } from "./xai"
+import { OAuthDeviceProviderPlugin } from "./oauth-device"
 import { SnowflakeCortexAuthPlugin } from "./snowflake-cortex"
 import { Effect, Layer, Context } from "effect"
 import { EffectBridge } from "@/effect/bridge"
@@ -31,6 +32,7 @@ import type { WorkspaceAdapter } from "@/control-plane/types"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { InstallationChannel } from "@opencode-ai/core/installation/version"
+import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 
 type State = {
   hooks: Hooks[]
@@ -62,7 +64,32 @@ export function experimentalWebSocketsEnabled(input: { enabled: boolean; channel
 }
 
 // Built-in plugins that are directly imported (not installed from npm)
-function internalPlugins(flags: RuntimeFlags.Info): PluginInstance[] {
+function internalPlugins(flags: RuntimeFlags.Info, cfg: ConfigV1.Info): PluginInstance[] {
+  // Config-derived plugins: any user-configured provider whose `options`
+  // declares both `deviceAuthorizationUrl` and `tokenUrl` gets a generic
+  // RFC 8628 device-flow OAuth plugin wired to those endpoints. The
+  // providerId from opencode.json becomes the auth provider id used for
+  // credential storage in auth.json.
+  const configuredOAuthProviders: PluginInstance[] = Object.entries(cfg.provider ?? {})
+    .filter(([, info]) => info?.options?.deviceAuthorizationUrl && info?.options?.tokenUrl)
+    .map(([providerId, info]) => {
+      const options = info!.options!
+      const deviceAuthorizationUrl = options.deviceAuthorizationUrl
+      const tokenUrl = options.tokenUrl
+      const clientId = options.oauthClientId
+      const scope = options.oauthScope
+      const label = info!.name ?? providerId
+      return (input: PluginInput) =>
+        OAuthDeviceProviderPlugin(input, {
+          providerId,
+          label,
+          deviceAuthorizationUrl,
+          tokenUrl,
+          clientId,
+          scope,
+        })
+    })
+
   return [
     // Temporary rollout: pre-release builds use WebSockets by default; releases require explicit opt-in.
     (input) =>
@@ -78,6 +105,7 @@ function internalPlugins(flags: RuntimeFlags.Info): PluginInstance[] {
     DigitalOceanAuthPlugin,
     SnowflakeCortexAuthPlugin,
     XaiAuthPlugin,
+    ...configuredOAuthProviders,
   ]
 }
 
@@ -163,7 +191,7 @@ const layer = Layer.effect(
           $: typeof Bun === "undefined" ? undefined : Bun.$,
         }
 
-        for (const plugin of flags.disableDefaultPlugins ? [] : internalPlugins(flags)) {
+        for (const plugin of flags.disableDefaultPlugins ? [] : internalPlugins(flags, cfg)) {
           const init = yield* Effect.tryPromise({
             try: () => plugin(input),
             catch: errorMessage,

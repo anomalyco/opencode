@@ -112,6 +112,22 @@ export const Info = Schema.Struct({
           description:
             "Timeout in milliseconds between streamed SSE chunks for this provider. If no chunk arrives within this window, the request is aborted.",
         }),
+        deviceAuthorizationUrl: Schema.optional(Schema.String).annotate({
+          description:
+            "RFC 8628 device-authorization endpoint. When set alongside tokenUrl, this provider uses device-flow OAuth instead of a static API key.",
+        }),
+        tokenUrl: Schema.optional(Schema.String).annotate({
+          description:
+            "RFC 8628 token endpoint. When set alongside deviceAuthorizationUrl, this provider uses device-flow OAuth instead of a static API key.",
+        }),
+        oauthClientId: Schema.optional(Schema.String).annotate({
+          description:
+            "client_id sent in device-authorization and token POSTs. Defaults to \"opencode\". Override if your OAuth server requires a pre-registered client_id.",
+        }),
+        oauthScope: Schema.optional(Schema.String).annotate({
+          description:
+            "OAuth scope string sent in the device-authorization POST. Omitted from the POST body when unset.",
+        }),
       }),
       [Schema.Record(Schema.String, Schema.Any)],
     ),

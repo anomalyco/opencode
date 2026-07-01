@@ -2486,6 +2486,51 @@ The `limit` fields allow OpenCode to understand how much context you have left. 
 
 ---
 
+## Custom OAuth (device flow)
+
+If your custom OpenAI-compatible gateway exposes [RFC 8628](https://datatracker.ietf.org/doc/html/rfc8628) device-flow OAuth endpoints, opencode can drive the same browser-based SSO UX that built-in providers (xAI, Copilot) get. This is the headless / VPS / SSH / CI path: opencode prints a verification URL and a short user code, the user opens the URL on any device with a browser, types the code, and opencode long-polls the token endpoint until authorization completes. No loopback callback server is started on the CLI host, so this works in every environment where `127.0.0.1` isn't reachable from the user's browser.
+
+Configure the OAuth endpoints inside the provider's `options` block alongside `baseURL`. When both `deviceAuthorizationUrl` and `tokenUrl` are present, opencode automatically registers a device-flow plugin for that provider and exposes it in the `/connect` command. Refresh tokens are persisted to `auth.json` and rotated proactively before each request — you do not need to re-authorize on every run.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "litellm-proxy": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "LiteLLM Proxy",
+      "options": {
+        "baseURL": "https://litellm-proxy.d.shared.int/v1",
+        "deviceAuthorizationUrl": "https://litellm-proxy.d.shared.int/oauth/device_authorization",
+        "tokenUrl": "https://litellm-proxy.d.shared.int/oauth/token"
+      },
+      "models": {
+        "glm-5.2": {
+          "name": "GLM 5.2"
+        }
+      }
+    }
+  }
+}
+```
+
+Optional fields (also under `options`):
+
+- **oauthClientId**: `client_id` sent in the device-authorization and token POSTs. Defaults to `opencode`. Override this if your OAuth server requires a pre-registered client_id.
+- **oauthScope**: OAuth scope string sent in the device-authorization POST. Omitted entirely from the POST body when unset (some servers reject an empty `scope=` form field).
+
+##### Requirements for your OAuth server
+
+- Must expose `deviceAuthorizationUrl` and `tokenUrl` per [RFC 8628](https://datatracker.ietf.org/doc/html/rfc8628).
+- The device-authorization endpoint MUST return `device_code`, `user_code`, and `verification_uri` (RFC 8628 §3.2).
+- The token endpoint MUST accept `grant_type=urn:ietf:params:oauth:grant-type:device_code` and return `access_token` + `refresh_token` (RFC 8628 §3.4-3.5).
+- Must accept `client_id=opencode` (or whatever you configured in `options.oauthClientId`).
+- Must issue refresh tokens so opencode can rotate the access token proactively without re-prompting the user.
+- `token_type` SHOULD be `Bearer`. The access token is sent to your gateway as `Authorization: Bearer <access>`.
+- The token endpoint MUST handle the standard RFC 8628 error responses: `authorization_pending`, `slow_down`, `access_denied`, and `expired_token`.
+
+---
+
 ## Troubleshooting
 
 If you are having trouble with configuring a provider, check the following:
