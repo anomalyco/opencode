@@ -212,9 +212,10 @@ jobs:
 
       - name: opencode --help
         run: |
-          out="$("${{ steps.bin.outputs.path }}" --help)"
+          # opencode prints help (and its banner) to stderr, so capture both streams.
+          out="$("${{ steps.bin.outputs.path }}" --help 2>&1)"
           echo "$out"
-          echo "$out" | grep -qi "run" || { echo "help missing 'run' command" >&2; exit 1; }
+          echo "$out" | grep -q "opencode run" || { echo "help missing 'run' command" >&2; exit 1; }
 
   # Config-layer smoke: load the fork's .opencode/ agents/skills/commands against
   # the built binary and validate references. Catches upstream schema drift.
