@@ -552,6 +552,126 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  // Regression: #34126 — a standalone `</think>` chunk that some
+  // OpenAI-compatible proxies (OmniRoute + Kimi Coding) emit at the
+  // reasoning→tool boundary must not become persisted assistant text.
+  // Currently the parser emits a `text-delta` for any `delta.content`,
+  // including the lone closing marker, which downstream `processor.ts`
+  // turns into a regular text part and `message-v2.ts` replays into the
+  // next request.
+  it.effect("drops standalone `</think>` chunk emitted between reasoning and tool_calls", () =>
+    Effect.gen(function* () {
+      const body = sseEvents(
+        { choices: [{ delta: { reasoning_content: "thinking" }, finish_reason: null }] },
+        { choices: [{ delta: { content: "</think>" }, finish_reason: null }] },
+        {
+          choices: [
+            {
+              delta: {
+                tool_calls: [
+                  {
+                    index: 0,
+                    id: "call_1",
+                    type: "function",
+                    function: { name: "lookup", arguments: '{"query":"weather"}' },
+                  },
+                ],
+              },
+              finish_reason: null,
+            },
+          ],
+        },
+        { choices: [{ delta: {}, finish_reason: "tool_calls" }] },
+      )
+
+      const response = yield* LLMClient.generate(
+        LLM.updateRequest(request, {
+          tools: [{ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } }],
+        }),
+      ).pipe(Effect.provide(fixedResponse(body)))
+
+      expect(response.reasoning).toBe("thinking")
+      expect(response.text).toBe("")
+      expect(response.toolCalls).toHaveLength(1)
+      expect(response.toolCalls[0]?.name).toBe("lookup")
+      // No text-delta should be emitted for the dropped closing marker.
+      expect(response.events.filter(LLMEvent.is.textDelta)).toEqual([])
+    }),
+  )
+
+  it.effect("drops standalone `</thinking>` chunk between reasoning and tool_calls", () =>
+    Effect.gen(function* () {
+      const body = sseEvents(
+        { choices: [{ delta: { reasoning_content: "thinking" }, finish_reason: null }] },
+        { choices: [{ delta: { content: "</thinking>" }, finish_reason: null }] },
+        {
+          choices: [
+            {
+              delta: {
+                tool_calls: [
+                  {
+                    index: 0,
+                    id: "call_1",
+                    type: "function",
+                    function: { name: "lookup", arguments: "{}" },
+                  },
+                ],
+              },
+              finish_reason: null,
+            },
+          ],
+        },
+        { choices: [{ delta: {}, finish_reason: "tool_calls" }] },
+      )
+
+      const response = yield* LLMClient.generate(
+        LLM.updateRequest(request, {
+          tools: [{ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } }],
+        }),
+      ).pipe(Effect.provide(fixedResponse(body)))
+
+      expect(response.reasoning).toBe("thinking")
+      expect(response.text).toBe("")
+      expect(response.toolCalls).toHaveLength(1)
+    }),
+  )
+
+  it.effect("preserves `</think>` as ordinary text when reasoning was never active", () =>
+    Effect.gen(function* () {
+      // Defensive: if `</think>` appears without preceding reasoning_content
+      // it must remain user-visible text (e.g. model literally wrote it as
+      // a tag, or it's part of a larger string).
+      const body = sseEvents(
+        deltaChunk({ role: "assistant", content: "before " }),
+        deltaChunk({ content: "</think>" }),
+        deltaChunk({}, "stop"),
+      )
+
+      const response = yield* LLMClient.generate(request).pipe(Effect.provide(fixedResponse(body)))
+
+      expect(response.text).toBe("before </think>")
+      expect(response.reasoning).toBe("")
+    }),
+  )
+
+  it.effect("preserves `</think>` embedded in larger content even after reasoning", () =>
+    Effect.gen(function* () {
+      // `</think>` is a CLOSING marker, but only when it's a *lone*
+      // boundary marker. If it appears inside a larger content string,
+      // it must be preserved.
+      const body = sseEvents(
+        { choices: [{ delta: { reasoning_content: "thinking" }, finish_reason: null }] },
+        { choices: [{ delta: { content: "ok here's the answer </think> done" }, finish_reason: null }] },
+        { choices: [{ delta: {}, finish_reason: "stop" }] },
+      )
+
+      const response = yield* LLMClient.generate(request).pipe(Effect.provide(fixedResponse(body)))
+
+      expect(response.reasoning).toBe("thinking")
+      expect(response.text).toBe("ok here's the answer </think> done")
+    }),
+  )
+
   it.effect("assembles streamed tool call input", () =>
     Effect.gen(function* () {
       const body = sseEvents(

@@ -421,7 +421,17 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
 
     if (delta?.content) {
       lifecycle = Lifecycle.reasoningEnd(lifecycle, events, "reasoning-0")
-      lifecycle = Lifecycle.textDelta(lifecycle, events, "text-0", delta.content)
+      // Suppress a lone closing reasoning marker (</think> / </thinking>) at the
+      // reasoning→tool boundary — some OpenAI-compatible proxies (OmniRoute +
+      // Kimi Coding) emit it as a separate content chunk between
+      // reasoning_content and tool_calls. Treat it as a reasoning boundary
+      // artifact, not user-visible assistant text. Only suppresses when
+      // reasoning is currently active; outside that boundary the marker is
+      // ordinary text and must be preserved. See #34126.
+      const isLoneClosingMarker = /^\s*<\/(?:think|thinking)>\s*$/.test(delta.content)
+      if (!(isLoneClosingMarker && state.lifecycle.reasoning.has("reasoning-0"))) {
+        lifecycle = Lifecycle.textDelta(lifecycle, events, "text-0", delta.content)
+      }
     }
 
     if (toolDeltas.length) lifecycle = Lifecycle.reasoningEnd(lifecycle, events, "reasoning-0")
