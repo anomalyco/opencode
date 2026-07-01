@@ -3,6 +3,7 @@ import { resolveThemeVariant } from "@opencode-ai/ui/theme/resolve"
 import type { DesktopTheme } from "@opencode-ai/ui/theme/types"
 import oc2ThemeJson from "../../../ui/src/theme/themes/oc-2.json"
 import { randomUUID } from "node:crypto"
+import { rmSync } from "node:fs"
 import { app, BrowserWindow, dialog, net, nativeImage, nativeTheme, protocol } from "electron"
 import { dirname, isAbsolute, join, relative, resolve } from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
@@ -146,6 +147,7 @@ export function setDockIcon() {
 
 export function createMainWindow(id: string = randomUUID()) {
   const state = windowState({
+    file: windowStateFile(id),
     defaultWidth: 1280,
     defaultHeight: 800,
   })
@@ -182,8 +184,6 @@ export function createMainWindow(id: string = randomUUID()) {
     },
   })
 
-  registerWindow(win, id)
-
   allowRendererPermissions(win)
   wireWindowRecovery(win, id)
 
@@ -200,6 +200,7 @@ export function createMainWindow(id: string = randomUUID()) {
   })
 
   state.manage(win)
+  registerWindow(win, id)
   loadWindow(win, "index.html")
   wireZoom(win)
 
@@ -243,6 +244,11 @@ function persistWindowID(id: string) {
 
 function removeWindowID(id: string) {
   writeWindowIDs(readWindowIDs().filter((item) => item !== id))
+  rmSync(join(app.getPath("userData"), windowStateFile(id)), { force: true })
+}
+
+function windowStateFile(id: string) {
+  return `window-state-${id.replace(/[^a-zA-Z0-9._-]/g, "-")}.json`
 }
 
 export function registerRendererProtocol() {
