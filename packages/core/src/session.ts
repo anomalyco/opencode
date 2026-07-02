@@ -470,7 +470,7 @@ const layer = Layer.effect(
         const commands = yield* CommandV2.Service.pipe(Effect.provide(locations.get(session.location)))
         const command = yield* commands.get(input.command)
         if (!command) return yield* new CommandV2.NotFoundError({ command: input.command })
-        const text = yield* commands.evaluate({ name: input.command, arguments: input.arguments })
+        const evaluated = yield* commands.evaluate({ name: input.command, arguments: input.arguments })
 
         // TODO(v2 commands): decide whether command-level subtask/background execution belongs in v2 commands.
         const agent = command.agent ?? input.agent
@@ -487,7 +487,7 @@ const layer = Layer.effect(
         return yield* result.prompt({
           id: input.id,
           sessionID: input.sessionID,
-          prompt: { text, files: input.files, agents: input.agents },
+          prompt: { text: evaluated.text, files: mergeFiles(evaluated.files, input.files), agents: input.agents },
           delivery: input.delivery,
           resume: input.resume,
         })
@@ -641,6 +641,16 @@ const resolvePrompt = (input: PromptInput.Prompt) =>
       }
     }),
   })
+
+function mergeFiles(
+  templateFiles: PromptInput.Prompt["files"],
+  inputFiles: PromptInput.Prompt["files"],
+): PromptInput.Prompt["files"] {
+  if (!templateFiles?.length) return inputFiles
+  if (!inputFiles?.length) return templateFiles
+  const uris = new Set(inputFiles.map((file) => file.uri))
+  return [...templateFiles.filter((file) => !uris.has(file.uri)), ...inputFiles]
+}
 
 export const node = makeGlobalNode({
   service: Service,

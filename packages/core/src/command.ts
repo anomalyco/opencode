@@ -3,13 +3,28 @@ export * as CommandV2 from "./command"
 import { makeLocationNode } from "./effect/app-node"
 import { Context, Effect, Layer, Schema, Types } from "effect"
 import { Command } from "@opencode-ai/schema/command"
+import { PromptInput } from "@opencode-ai/schema/prompt-input"
 import { State } from "./state"
 import { MCP } from "./mcp/index"
 import { EventV2 } from "./event"
+import { AppProcess } from "./process"
+import { ChildProcess } from "effect/unstable/process"
+import { Config } from "./config"
+import { Location } from "./location"
+import { ShellSelect } from "./shell/select"
+import { stat } from "node:fs/promises"
+import os from "node:os"
+import path from "node:path"
+import { pathToFileURL } from "node:url"
 
 export const Info = Command.Info
 export type Info = Command.Info
 export const Event = Command.Event
+
+export type Evaluation = {
+  readonly text: string
+  readonly files?: PromptInput.FileAttachment[]
+}
 
 export type Data = {
   commands: Map<string, Types.DeepMutable<Info>>
@@ -37,7 +52,7 @@ export interface Interface extends State.Transformable<Draft> {
   readonly evaluate: (input: {
     readonly name: string
     readonly arguments?: string
-  }) => Effect.Effect<string, NotFoundError | EvaluationError>
+  }) => Effect.Effect<Evaluation, NotFoundError | EvaluationError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Command") {}
@@ -47,6 +62,9 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const mcp = yield* MCP.Service
     const events = yield* EventV2.Service
+    const processes = yield* AppProcess.Service
+    const config = yield* Config.Service
+    const location = yield* Location.Service
     const state = State.create<Data, Draft>({
       initial: () => ({ commands: new Map() }),
       draft: (draft) => ({
@@ -93,7 +111,11 @@ const layer = Layer.effect(
       }),
       evaluate: Effect.fn("CommandV2.evaluate")(function* (input) {
         const command = staticCommand(input.name)
-        if (command) return evaluateTemplate(command.template, input.arguments ?? "")
+        if (command) return yield* evaluateTemplate(input.name, command.template, input.arguments ?? "", {
+          config,
+          location,
+          processes,
+        })
 
         const prompt = (yield* mcp.prompts()).find((prompt) => mcpCommandName(prompt.server, prompt.name) === input.name)
         if (!prompt) return yield* new NotFoundError({ command: input.name })
@@ -125,13 +147,30 @@ const layer = Layer.effect(
             command: input.name,
             message: `MCP prompt could not be evaluated: ${prompt.server}:${prompt.name}`,
           })
-        return result.messages.map((message) => promptMessageText(message.content)).join("\n").trim()
+        return { text: result.messages.map((message) => promptMessageText(message.content)).join("\n").trim() }
       }),
     })
   }),
 )
 
-function evaluateTemplate(template: string, input: string) {
+function evaluateTemplate(
+  command: string,
+  template: string,
+  input: string,
+  services: {
+    readonly config: Config.Interface
+    readonly location: Location.Info
+    readonly processes: AppProcess.Interface
+  },
+) {
+  return Effect.gen(function* () {
+    const text = yield* evaluateShell(command, evaluateArguments(template, input), services)
+    const files = yield* resolveFiles(text, services.location.directory)
+    return { text, ...(files.length === 0 ? {} : { files }) }
+  })
+}
+
+function evaluateArguments(template: string, input: string) {
   const args = parseArguments(input)
   const placeholders = template.match(placeholderRegex) ?? []
   const last = Math.max(0, ...placeholders.map((item) => Number(item.slice(1))))
@@ -146,6 +185,58 @@ function evaluateTemplate(template: string, input: string) {
   if (placeholders.length === 0 && !template.includes("$ARGUMENTS") && input.trim()) return `${withArguments}\n\n${input}`.trim()
   return withArguments.trim()
 }
+
+const evaluateShell = Effect.fnUntraced(function* (
+  command: string,
+  text: string,
+  services: {
+    readonly config: Config.Interface
+    readonly location: Location.Info
+    readonly processes: AppProcess.Interface
+  },
+) {
+  const matches = Array.from(text.matchAll(shellRegex))
+  if (matches.length === 0) return text
+  const shell = ShellSelect.preferred(Config.latest(yield* services.config.entries(), "shell"))
+  const outputs = yield* Effect.forEach(
+    matches,
+    (match) => {
+      const source = match[1] ?? ""
+      return services.processes
+        .run(ChildProcess.make(shell, ShellSelect.args(shell, source), { cwd: services.location.directory, stdin: "ignore" }), {
+          combineOutput: true,
+        })
+        .pipe(
+          Effect.map((result) => (result.output ?? Buffer.concat([result.stdout, result.stderr])).toString("utf8")),
+          Effect.mapError(
+            (error) =>
+              new EvaluationError({ command, message: `Shell interpolation failed for ${JSON.stringify(source)}: ${error.message}` }),
+          ),
+        )
+    },
+    { concurrency: "unbounded" },
+  )
+  let index = 0
+  return text.replace(shellRegex, () => outputs[index++] ?? "")
+})
+
+const resolveFiles = Effect.fnUntraced(function* (text: string, directory: string) {
+  const names = Array.from(new Set(Array.from(text.matchAll(fileRegex)).flatMap((match) => (match[1] ? [match[1]] : []))))
+  return yield* Effect.forEach(
+    names,
+    (name) =>
+      Effect.promise(async () => {
+        const filepath = name.startsWith("~/") ? path.join(os.homedir(), name.slice(2)) : path.resolve(directory, name)
+        const info = await stat(filepath).catch(() => undefined)
+        if (!info) return
+        return PromptInput.FileAttachment.make({
+          uri: pathToFileURL(filepath).href,
+          name,
+        })
+      }),
+    { concurrency: "unbounded" },
+  ).pipe(Effect.map((files) => files.filter((file): file is PromptInput.FileAttachment => file !== undefined)))
+})
 
 function parseArguments(input: string) {
   return (input.match(argsRegex) ?? []).map((arg) => arg.replace(quoteTrimRegex, ""))
@@ -170,5 +261,11 @@ function sanitize(value: string) {
 const argsRegex = /(?:\[Image\s+\d+\]|"[^"]*"|'[^']*'|[^\s"']+)/gi
 const placeholderRegex = /\$(\d+)/g
 const quoteTrimRegex = /^["']|["']$/g
+const shellRegex = /!`([^`]+)`/g
+const fileRegex = /(?<![\w`])@(\.?[^\s`,.]*(?:\.[^\s`,.]+)*)/g
 
-export const node = makeLocationNode({ service: Service, layer, deps: [MCP.node, EventV2.node] })
+export const node = makeLocationNode({
+  service: Service,
+  layer,
+  deps: [MCP.node, EventV2.node, AppProcess.node, Config.node, Location.node],
+})
