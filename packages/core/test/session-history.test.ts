@@ -79,7 +79,7 @@ describe("SessionV2.history", () => {
 
       const page = yield* session.history({ sessionID: created.id, after: 1, limit: 10 })
 
-      expect(page.events.map((event) => event.durable?.seq)).toEqual([2])
+      expect(page.events.map((event): number | undefined => event.durable?.seq)).toEqual([2])
       expect(page.hasMore).toBe(false)
     }),
   )
@@ -101,7 +101,7 @@ describe("SessionV2.history", () => {
         after,
         limit: 2,
       })
-      const sequence = [...first.events, ...second.events].map((event) => event.durable?.seq)
+      const sequence = [...first.events, ...second.events].map((event): number | undefined => event.durable?.seq)
 
       expect(first.hasMore).toBe(true)
       expect(second.hasMore).toBe(false)
@@ -126,7 +126,9 @@ describe("SessionV2.history", () => {
       })
 
       expect(first.hasMore).toBe(true)
-      expect([...first.events, ...second.events].map((event) => event.durable?.seq)).toEqual([1, 2, 3])
+      expect([...first.events, ...second.events].map((event): number | undefined => event.durable?.seq)).toEqual([
+        1, 2, 3,
+      ])
       expect(second.hasMore).toBe(false)
     }),
   )

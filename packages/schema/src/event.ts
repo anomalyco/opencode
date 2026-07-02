@@ -12,6 +12,18 @@ export const ID = Schema.String.check(Schema.isStartsWith("evt_")).pipe(
 )
 export type ID = typeof ID.Type
 
+/**
+ * Position in one aggregate's durable log. Values originate from the durable
+ * event envelope, caught-up markers, change hints, and snapshot watermarks;
+ * `after` cursors accept only values that came from those sources.
+ */
+export const Seq = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)).pipe(Schema.brand("Event.Seq"))
+export type Seq = typeof Seq.Type
+
+/** Durable schema version of one event type, from the event definition that committed it. */
+export const Version = Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)).pipe(Schema.brand("Event.Version"))
+export type Version = typeof Version.Type
+
 export type Definition<
   Type extends string = string,
   DataSchema extends Schema.Codec<unknown, unknown> = Schema.Codec<unknown, unknown>,
@@ -32,8 +44,8 @@ export type Payload<D extends Definition = Definition> = {
   readonly data: Data<D>
   readonly durable?: {
     readonly aggregateID: string
-    readonly seq: number
-    readonly version: number
+    readonly seq: Seq
+    readonly version: Version
   }
   readonly location?: Location.Ref
   readonly metadata?: Record<string, unknown>
@@ -55,7 +67,7 @@ export function define<
     id: ID,
     metadata: optional(Schema.Record(Schema.String, Schema.Unknown)),
     type: Schema.Literal(input.type),
-    durable: optional(Schema.Struct({ aggregateID: Schema.String, seq: Schema.Int, version: Schema.Int })),
+    durable: optional(Schema.Struct({ aggregateID: Schema.String, seq: Seq, version: Version })),
     location: optional(Location.Ref),
     data,
   })

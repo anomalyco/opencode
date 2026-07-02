@@ -14,6 +14,10 @@ import { Durable } from "@opencode-ai/schema/durable-event-manifest"
 
 export const ID = Event.ID
 export type ID = import("@opencode-ai/schema/event").ID
+export const Seq = Event.Seq
+export type Seq = import("@opencode-ai/schema/event").Seq
+export const Version = Event.Version
+export type Version = import("@opencode-ai/schema/event").Version
 export type { Data, Definition, Payload } from "@opencode-ai/schema/event"
 
 export type Subscriber<D extends Definition = Definition> = (event: Payload<D>) => Effect.Effect<void>
@@ -64,6 +68,12 @@ export class InvalidDurableEventError extends Schema.TaggedErrorClass<InvalidDur
   },
 ) {}
 
+const envelope = (aggregateID: string, seq: number, version: number) => ({
+  aggregateID,
+  seq: Seq.make(seq),
+  version: Version.make(version),
+})
+
 const decodeSerializedEvent = (event: SerializedEvent): Payload => {
   const definition = Durable.get(event.type)
   if (!definition?.durable) {
@@ -72,7 +82,7 @@ const decodeSerializedEvent = (event: SerializedEvent): Payload => {
   return {
     id: event.id,
     type: definition.type,
-    durable: { aggregateID: event.aggregateID, seq: event.seq, version: definition.durable.version },
+    durable: envelope(event.aggregateID, event.seq, definition.durable.version),
     data: Schema.decodeUnknownSync(definition.data)(event.data),
   }
 }
@@ -171,7 +181,7 @@ export interface Interface {
    */
   readonly changes: () => Stream.Stream<EventLog.Change>
   /** Latest committed seq per aggregate. Aggregates without events are absent. */
-  readonly sequences: (aggregateIDs: ReadonlyArray<string>) => Effect.Effect<ReadonlyMap<string, number>>
+  readonly sequences: (aggregateIDs: ReadonlyArray<string>) => Effect.Effect<ReadonlyMap<string, Seq>>
   readonly durable: (input: { readonly aggregateID: string; readonly after?: number }) => Stream.Stream<Payload>
   /** @deprecated Use `all()` and consume the returned stream. */
   readonly listen: (listener: Subscriber) => Effect.Effect<Unsubscribe>
@@ -456,11 +466,7 @@ export const layerWith = (options?: LayerOptions) =>
             if (committed) {
               event = {
                 ...event,
-                durable: {
-                  aggregateID: committed.aggregateID,
-                  seq: committed.seq,
-                  version: definition.durable.version,
-                },
+                durable: envelope(committed.aggregateID, committed.seq, definition.durable.version),
               }
               yield* notify(event as Payload, true)
               return event
@@ -540,11 +546,7 @@ export const layerWith = (options?: LayerOptions) =>
               yield* notify(
                 {
                   ...payload,
-                  durable: {
-                    aggregateID: committed.aggregateID,
-                    seq: committed.seq,
-                    version: definition.durable.version,
-                  },
+                  durable: envelope(committed.aggregateID, committed.seq, definition.durable.version),
                 },
                 true,
               )
@@ -680,7 +682,7 @@ export const layerWith = (options?: LayerOptions) =>
             const marker: EventLog.CaughtUp = {
               type: "log.caught_up",
               aggregateID: input.aggregateID,
-              ...(sequence >= 0 ? { seq: sequence } : {}),
+              ...(sequence >= 0 ? { seq: Seq.make(sequence) } : {}),
             }
             const replay = Stream.fromIterable<LogItem>(historical).pipe(Stream.concat(Stream.make(marker)))
             if (!wakes) return replay
@@ -717,7 +719,7 @@ export const layerWith = (options?: LayerOptions) =>
               }
               const hints = Array.from(
                 subscriber.hints,
-                ([aggregateID, seq]): EventLog.Change => ({ type: "log.hint", aggregateID, seq }),
+                ([aggregateID, seq]): EventLog.Change => ({ type: "log.hint", aggregateID, seq: Seq.make(seq) }),
               )
               subscriber.hints.clear()
               return hints
@@ -736,7 +738,7 @@ export const layerWith = (options?: LayerOptions) =>
           }),
         )
 
-      const sequences = (aggregateIDs: ReadonlyArray<string>): Effect.Effect<ReadonlyMap<string, number>> => {
+      const sequences = (aggregateIDs: ReadonlyArray<string>): Effect.Effect<ReadonlyMap<string, Seq>> => {
         if (aggregateIDs.length === 0) return Effect.succeed(new Map())
         return db
           .select({ aggregateID: EventSequenceTable.aggregate_id, seq: EventSequenceTable.seq })
@@ -745,7 +747,7 @@ export const layerWith = (options?: LayerOptions) =>
           .all()
           .pipe(
             Effect.orDie,
-            Effect.map((rows) => new Map(rows.map((row) => [row.aggregateID, row.seq]))),
+            Effect.map((rows) => new Map(rows.map((row) => [row.aggregateID, Seq.make(row.seq)]))),
           )
       }
 

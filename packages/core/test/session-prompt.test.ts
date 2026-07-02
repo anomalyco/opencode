@@ -253,7 +253,7 @@ describe("SessionV2.prompt", () => {
       yield* SessionInput.promoteSteers(db, events, sessionID, Number.MAX_SAFE_INTEGER)
       const streamed = Array.from(yield* Fiber.join(fiber))
 
-      expect(streamed.map((event) => [event.durable?.seq, event.type])).toEqual([
+      expect(streamed.map((event): [number | undefined, string] => [event.durable?.seq, event.type])).toEqual([
         [0, "session.next.prompt.admitted"],
         [1, "session.next.prompt.admitted"],
         [2, "session.next.prompted"],
@@ -264,7 +264,7 @@ describe("SessionV2.prompt", () => {
           yield* session
             .events({ sessionID, after: streamed[0]!.durable?.seq })
             .pipe(Stream.take(1), Stream.runCollect),
-        ).map((event) => [event.durable?.seq, event.type]),
+        ).map((event): [number | undefined, string] => [event.durable?.seq, event.type]),
       ).toEqual([[1, "session.next.prompt.admitted"]])
     }),
   )

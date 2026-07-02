@@ -140,7 +140,7 @@ export interface Interface {
   readonly list: (input?: ListInput) => Effect.Effect<{
     readonly data: SessionSchema.Info[]
     /** Per-session durable log watermark, read in the same transaction as the snapshot. Sessions without events are absent. */
-    readonly watermarks: ReadonlyMap<string, number>
+    readonly watermarks: ReadonlyMap<string, EventV2.Seq>
   }>
   readonly create: (input: CreateInput) => Effect.Effect<SessionSchema.Info, NotFoundError>
   readonly fork: (input: ForkInput) => Effect.Effect<SessionSchema.Info, NotFoundError | MessageNotFoundError>
@@ -178,7 +178,7 @@ export interface Interface {
     follow?: boolean
   }) => Stream.Stream<SessionEvent.DurableEvent | EventLog.CaughtUp, NotFoundError>
   /** Latest durable log seq per session. Sessions without events are absent. */
-  readonly watermarks: (sessionIDs: ReadonlyArray<SessionSchema.ID>) => Effect.Effect<ReadonlyMap<string, number>>
+  readonly watermarks: (sessionIDs: ReadonlyArray<SessionSchema.ID>) => Effect.Effect<ReadonlyMap<string, EventV2.Seq>>
   readonly history: (input: {
     sessionID: SessionSchema.ID
     after?: number
@@ -208,7 +208,10 @@ export interface Interface {
     agents?: PromptInput.Prompt["agents"]
     delivery?: SessionInput.Delivery
     resume?: boolean
-  }) => Effect.Effect<SessionInput.Admitted, NotFoundError | PromptConflictError | CommandV2.NotFoundError | CommandV2.EvaluationError>
+  }) => Effect.Effect<
+    SessionInput.Admitted,
+    NotFoundError | PromptConflictError | CommandV2.NotFoundError | CommandV2.EvaluationError
+  >
   readonly shell: (input: {
     id?: EventV2.ID
     sessionID: SessionSchema.ID

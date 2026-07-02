@@ -1,7 +1,8 @@
 export * as EventLog from "./event-log.js"
 
 import { Schema } from "effect"
-import { NonNegativeInt, optional } from "./schema.js"
+import { Event } from "./event.js"
+import { optional } from "./schema.js"
 
 /**
  * Replay-to-live boundary marker for a durable log read. The reader now holds
@@ -12,7 +13,7 @@ import { NonNegativeInt, optional } from "./schema.js"
 export const CaughtUp = Schema.Struct({
   type: Schema.Literal("log.caught_up"),
   aggregateID: Schema.String,
-  seq: optional(NonNegativeInt),
+  seq: optional(Event.Seq),
 }).annotate({
   identifier: "EventLog.CaughtUp",
   description:
@@ -29,7 +30,7 @@ export interface CaughtUp extends Schema.Schema.Type<typeof CaughtUp> {}
 export const Hint = Schema.Struct({
   type: Schema.Literal("log.hint"),
   aggregateID: Schema.String,
-  seq: NonNegativeInt,
+  seq: Event.Seq,
 }).annotate({
   identifier: "EventLog.Hint",
   description:

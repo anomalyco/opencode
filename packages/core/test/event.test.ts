@@ -119,7 +119,7 @@ describe("EventV2", () => {
       const event = yield* events.publish(VersionedMessage, { id: "one", text: "hello" })
 
       expect(event.type).toBe("test.versioned")
-      expect(event.durable?.version).toBe(2)
+      expect(event.durable?.version).toBe(EventV2.Version.make(2))
     }),
   )
 
@@ -1132,11 +1132,11 @@ describe("EventV2", () => {
       const items = Array.from(yield* Stream.runCollect(events.log({ aggregateID })))
 
       expect(items.map((item) => (EventV2.isCaughtUp(item) ? item.type : item.durable?.seq))).toEqual([
-        0,
-        1,
+        EventV2.Seq.make(0),
+        EventV2.Seq.make(1),
         "log.caught_up",
       ])
-      expect(items.at(-1)).toEqual({ type: "log.caught_up", aggregateID, seq: 1 })
+      expect(items.at(-1)).toEqual({ type: "log.caught_up", aggregateID, seq: EventV2.Seq.make(1) })
     }),
   )
 
@@ -1151,7 +1151,7 @@ describe("EventV2", () => {
 
       expect(empty).toEqual([{ type: "log.caught_up", aggregateID }])
       expect(empty[0]).not.toHaveProperty("seq")
-      expect(drained).toEqual([{ type: "log.caught_up", aggregateID, seq: 0 }])
+      expect(drained).toEqual([{ type: "log.caught_up", aggregateID, seq: EventV2.Seq.make(0) }])
     }),
   )
 
@@ -1169,9 +1169,9 @@ describe("EventV2", () => {
 
       const items = Array.from(yield* Fiber.join(fiber))
       expect(items.map((item) => (EventV2.isCaughtUp(item) ? item : item.durable?.seq))).toEqual([
-        0,
-        { type: "log.caught_up", aggregateID, seq: 0 },
-        1,
+        EventV2.Seq.make(0),
+        { type: "log.caught_up", aggregateID, seq: EventV2.Seq.make(0) },
+        EventV2.Seq.make(1),
       ])
     }),
   )
@@ -1191,8 +1191,8 @@ describe("EventV2", () => {
       yield* events.publish(DurableMessage, durableData(second, "zero"))
 
       expect(Array.from(yield* pull)).toEqual([
-        { type: "log.hint", aggregateID: first, seq: 2 },
-        { type: "log.hint", aggregateID: second, seq: 0 },
+        { type: "log.hint", aggregateID: first, seq: EventV2.Seq.make(2) },
+        { type: "log.hint", aggregateID: second, seq: EventV2.Seq.make(0) },
       ])
     }),
   )
@@ -1217,7 +1217,7 @@ describe("EventV2", () => {
         const late = Session.ID.create()
         yield* events.publish(DurableMessage, durableData(late, "d"))
 
-        expect(Array.from(yield* pull)).toEqual([{ type: "log.hint", aggregateID: late, seq: 0 }])
+        expect(Array.from(yield* pull)).toEqual([{ type: "log.hint", aggregateID: late, seq: EventV2.Seq.make(0) }])
       }).pipe(Effect.provide(Layer.merge(LayerNode.compile(Database.node), eventLayer)))
     }),
   )
@@ -1235,8 +1235,8 @@ describe("EventV2", () => {
 
       expect(sequences).toEqual(
         new Map([
-          [first, 1],
-          [second, 0],
+          [first, EventV2.Seq.make(1)],
+          [second, EventV2.Seq.make(0)],
         ]),
       )
       expect(yield* events.sequences([])).toEqual(new Map())

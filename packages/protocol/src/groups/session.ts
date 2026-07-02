@@ -4,7 +4,8 @@ import { PromptInput } from "@opencode-ai/schema/prompt-input"
 import { Session } from "@opencode-ai/schema/session"
 import { SessionContextEntry } from "@opencode-ai/schema/session-context-entry"
 import { Project } from "@opencode-ai/schema/project"
-import { AbsolutePath, NonNegativeInt, PositiveInt, RelativePath, statics } from "@opencode-ai/schema/schema"
+import { AbsolutePath, PositiveInt, RelativePath, statics } from "@opencode-ai/schema/schema"
+import { Event } from "@opencode-ai/schema/event"
 import { Workspace } from "@opencode-ai/schema/workspace"
 import { Context, Effect, Encoding, Result, Schema, SchemaGetter, Struct } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
@@ -90,7 +91,7 @@ const SessionActive = Schema.Struct({
   type: Schema.Literal("running"),
 }).annotate({ identifier: "SessionActive" })
 
-const SessionWatermarks = Schema.Record(Session.ID, NonNegativeInt).annotate({
+const SessionWatermarks = Schema.Record(Session.ID, Event.Seq).annotate({
   identifier: "SessionWatermarks",
   description:
     "Durable log seq each session's snapshot was computed at. Attach a live log read after the watermark to compose fetch and stream gap-free; apply a snapshot only where its watermark is at or beyond already-applied events. Sessions without durable events are absent.",
@@ -107,7 +108,7 @@ const SessionHistoryLimit = PositiveInt.check(Schema.isLessThanOrEqualTo(100))
 
 export const SessionHistoryQuery = Schema.Struct({
   limit: Schema.NumberFromString.pipe(Schema.decodeTo(SessionHistoryLimit), Schema.optional),
-  after: Schema.NumberFromString.pipe(Schema.decodeTo(NonNegativeInt), Schema.optional),
+  after: Schema.NumberFromString.pipe(Schema.decodeTo(Event.Seq), Schema.optional),
 })
 
 const SessionsQueryCursor = SessionsCursor.annotate({
@@ -297,7 +298,8 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
           OpenApi.annotations({
             identifier: "v2.session.command",
             summary: "Run command",
-            description: "Resolve a slash command into prompt input, admit it durably, and schedule execution unless resume is false.",
+            description:
+              "Resolve a slash command into prompt input, admit it durably, and schedule execution unless resume is false.",
           }),
         ),
     )
@@ -493,7 +495,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
       HttpApiEndpoint.get("session.events", "/api/session/:sessionID/event", {
         params: { sessionID: Session.ID },
         query: {
-          after: Schema.NumberFromString.pipe(Schema.decodeTo(NonNegativeInt), Schema.optional),
+          after: Schema.NumberFromString.pipe(Schema.decodeTo(Event.Seq), Schema.optional),
         },
         success: HttpApiSchema.StreamSse({ data: SessionEvent.Durable }),
         error: SessionNotFoundError,
@@ -511,7 +513,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
       HttpApiEndpoint.get("session.log", "/api/session/:sessionID/log", {
         params: { sessionID: Session.ID },
         query: {
-          after: Schema.NumberFromString.pipe(Schema.decodeTo(NonNegativeInt), Schema.optional),
+          after: Schema.NumberFromString.pipe(Schema.decodeTo(Event.Seq), Schema.optional),
           follow: BooleanFromString.pipe(Schema.optional),
         },
         success: HttpApiSchema.StreamSse({
