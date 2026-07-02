@@ -208,6 +208,144 @@ describe("tool.edit", () => {
       }),
     )
 
+    it.instance("fuzzy replaces a unique long single-line markdown bullet", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const filepath = path.join(test.directory, "pivot-plan.txt")
+
+        const original = [
+          "- unrelated item before",
+          "- ml-research-bench at **15 tasks**, with/without grounding A/B frozen (the novelty — protect it)",
+          "- unrelated item after",
+          "",
+        ].join("\n")
+
+        const oldString =
+          "- ml-research-bench at **15+ tasks**, with/without-grounding A/B frozen (this is the *novelty* — protect it)"
+
+        const newString =
+          "- cost-trajectory on the 100-instance Verified set: **hub-on vs hub-off A/B frozen** (the novelty — protect it)"
+
+        yield* put(filepath, original)
+
+        const result = yield* run({
+          filePath: filepath,
+          oldString,
+          newString,
+        })
+
+        expect(result.output).toContain("Edit applied successfully")
+        expect(yield* load(filepath)).toBe(
+          ["- unrelated item before", newString, "- unrelated item after", ""].join("\n"),
+        )
+      }),
+    )
+
+    it.instance("does not fuzzy replace short single-line strings", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const filepath = path.join(test.directory, "file.ts")
+        const original = ["return true", ""].join("\n")
+        yield* put(filepath, original)
+
+        expect(
+          (yield* fail({
+            filePath: filepath,
+            oldString: "return false",
+            newString: "return null",
+          })).message,
+        ).toContain("Could not find oldString")
+
+        expect(yield* load(filepath)).toBe(original)
+      }),
+    )
+
+    it.instance("does not fuzzy replace ambiguous similar single-line candidates", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const filepath = path.join(test.directory, "pivot-plan.txt")
+
+        const original = [
+          "- ml-research-bench at **15 tasks**, with/without grounding A/B frozen (the novelty — protect it)",
+          "- ml-research-bench at **16 tasks**, with/without grounding A/B frozen (the novelty — protect it)",
+          "",
+        ].join("\n")
+
+        yield* put(filepath, original)
+
+        expect(
+          (yield* fail({
+            filePath: filepath,
+            oldString:
+              "- ml-research-bench at **15+ tasks**, with/without-grounding A/B frozen (this is the *novelty* — protect it)",
+            newString:
+              "- cost-trajectory on the 100-instance Verified set: **hub-on vs hub-off A/B frozen** (the novelty — protect it)",
+          })).message,
+        ).toContain("Could not find oldString")
+
+        expect(yield* load(filepath)).toBe(original)
+      }),
+    )
+
+    it.instance("does not use fuzzy fallback with replaceAll", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const filepath = path.join(test.directory, "pivot-plan.txt")
+
+        const original = [
+          "- ml-research-bench at **15 tasks**, with/without grounding A/B frozen (the novelty — protect it)",
+          "",
+        ].join("\n")
+
+        yield* put(filepath, original)
+
+        expect(
+          (yield* fail({
+            filePath: filepath,
+            oldString:
+              "- ml-research-bench at **15+ tasks**, with/without-grounding A/B frozen (this is the *novelty* — protect it)",
+            newString:
+              "- cost-trajectory on the 100-instance Verified set: **hub-on vs hub-off A/B frozen** (the novelty — protect it)",
+            replaceAll: true,
+          })).message,
+        ).toContain("Could not find oldString")
+
+        expect(yield* load(filepath)).toBe(original)
+      }),
+    )
+
+    it.instance("preserves CRLF when fuzzy replacing a unique single line", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const filepath = path.join(test.directory, "pivot-plan.txt")
+
+        const original = [
+          "- unrelated item before",
+          "- ml-research-bench at **15 tasks**, with/without grounding A/B frozen (the novelty — protect it)",
+          "- unrelated item after",
+          "",
+        ].join("\r\n")
+
+        const oldString =
+          "- ml-research-bench at **15+ tasks**, with/without-grounding A/B frozen (this is the *novelty* — protect it)"
+
+        const newString =
+          "- cost-trajectory on the 100-instance Verified set: **hub-on vs hub-off A/B frozen** (the novelty — protect it)"
+
+        yield* put(filepath, original)
+
+        yield* run({
+          filePath: filepath,
+          oldString,
+          newString,
+        })
+
+        expect(yield* loadRaw(filepath)).toBe(
+          ["- unrelated item before", newString, "- unrelated item after", ""].join("\r\n"),
+        )
+      }),
+    )
+
     it.instance("rejects loose block-anchor matches and leaves content unchanged", () =>
       Effect.gen(function* () {
         const test = yield* TestInstance

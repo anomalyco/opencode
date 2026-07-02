@@ -679,6 +679,168 @@ export function trimDiff(diff: string): string {
   return trimmedLines.join("\n")
 }
 
+const FUZZY_MATCH_MIN_LENGTH = 40
+const FUZZY_MATCH_MAX_LINES = 4
+const FUZZY_MATCH_THRESHOLD = 0.74
+const FUZZY_MATCH_MARGIN = 0.08
+
+type FuzzyLineMatch = {
+  start: number
+  end: number
+  line: string
+  score: number
+}
+
+function normalizeForFuzzy(text: string): string {
+  return text
+    .normalize("NFKC")
+    .replace(/[\u2010-\u2015]/g, "-")
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .replace(/[`*_]+/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase()
+}
+
+function tokenSet(text: string): Set<string> {
+  return new Set(
+    normalizeForFuzzy(text)
+      .split(/[^a-z0-9]+/i)
+      .filter((token) => token.length >= 3),
+  )
+}
+
+function jaccardSimilarity(a: string, b: string): number {
+  const left = tokenSet(a)
+  const right = tokenSet(b)
+  if (left.size === 0 || right.size === 0) return 0
+
+  let intersection = 0
+  for (const token of left) {
+    if (right.has(token)) intersection++
+  }
+
+  const union = left.size + right.size - intersection
+  return union === 0 ? 0 : intersection / union
+}
+
+function characterSimilarity(a: string, b: string): number {
+  const left = normalizeForFuzzy(a)
+  const right = normalizeForFuzzy(b)
+  const maxLength = Math.max(left.length, right.length)
+  if (maxLength === 0) return 1
+
+  return 1 - levenshtein(left, right) / maxLength
+}
+
+function combinedSimilarity(a: string, b: string): number {
+  return characterSimilarity(a, b) * 0.65 + jaccardSimilarity(a, b) * 0.35
+}
+
+function linePrefix(text: string): string | undefined {
+  return text.trimStart().match(/^([-*+]\s+|\d+\.\s+)/)?.[0]
+}
+
+function findUniqueFuzzyMatch(content: string, oldString: string): FuzzyLineMatch | undefined {
+  const targetLines = oldString.split("\n")
+
+  if (targetLines[targetLines.length - 1] === "") {
+    targetLines.pop()
+  }
+
+  if (targetLines.length === 0) return undefined
+  if (targetLines.length > FUZZY_MATCH_MAX_LINES) return undefined
+
+  const target = targetLines.join("\n").trim()
+  if (normalizeForFuzzy(target).length < FUZZY_MATCH_MIN_LENGTH) return undefined
+
+  const requiredPrefix = linePrefix(targetLines[0] ?? "")
+
+  const rawLines = content.split("\n")
+  const candidates: FuzzyLineMatch[] = []
+
+  let offset = 0
+  const lineStarts: number[] = []
+  const lineEnds: number[] = []
+  const lines: string[] = []
+
+  for (const rawLine of rawLines) {
+    const hasTrailingCR = rawLine.endsWith("\r")
+    const line = hasTrailingCR ? rawLine.slice(0, -1) : rawLine
+
+    lineStarts.push(offset)
+    lineEnds.push(offset + line.length)
+    lines.push(line)
+
+    offset += rawLine.length + 1
+  }
+
+  for (let i = 0; i <= lines.length - targetLines.length; i++) {
+    if (requiredPrefix && !lines[i].trimStart().startsWith(requiredPrefix)) {
+      continue
+    }
+
+    const candidateLines = lines.slice(i, i + targetLines.length)
+    const candidate = candidateLines.join("\n")
+
+    if (!candidate.trim()) continue
+
+    const charScore = characterSimilarity(candidate, target)
+    const tokenScore = jaccardSimilarity(candidate, target)
+    const score = charScore * 0.65 + tokenScore * 0.35
+
+    candidates.push({
+      start: lineStarts[i],
+      end: lineEnds[i + targetLines.length - 1],
+      line: candidate,
+      score,
+    })
+  }
+
+  candidates.sort((a, b) => b.score - a.score)
+
+  const best = candidates[0]
+  if (!best || best.score < FUZZY_MATCH_THRESHOLD) {
+    return undefined
+  }
+
+  const secondScore = candidates[1]?.score ?? 0
+  if (best.score - secondScore < FUZZY_MATCH_MARGIN) {
+    return undefined
+  }
+
+  return best
+}
+
+function nearestLines(content: string, oldString: string, limit = 3): Array<{ line: string; score: number }> {
+  return content
+    .split("\n")
+    .map((rawLine) => {
+      const line = rawLine.endsWith("\r") ? rawLine.slice(0, -1) : rawLine
+      return {
+        line,
+        score: combinedSimilarity(line, oldString),
+      }
+    })
+    .filter((candidate) => candidate.line.trim().length > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+}
+
+function oldStringNotFoundError(content: string, oldString: string): Error {
+  const nearest = nearestLines(content, oldString)
+  const hint = nearest.length
+    ? `\n\nClosest candidate lines:\n${nearest
+        .map((candidate) => `- score=${candidate.score.toFixed(2)}: ${candidate.line}`)
+        .join("\n")}`
+    : ""
+
+  return new Error(
+    `Could not find oldString in the file. It must match exactly, including whitespace, indentation, and line endings. No safe unique fuzzy match was found either.${hint}`,
+  )
+}
+
 export function replace(content: string, oldString: string, newString: string, replaceAll = false): string {
   if (oldString === newString) {
     throw new Error("No changes to apply: oldString and newString are identical.")
@@ -705,26 +867,37 @@ export function replace(content: string, oldString: string, newString: string, r
     for (const search of replacer(content, oldString)) {
       const index = content.indexOf(search)
       if (index === -1) continue
+
       notFound = false
+
       if (isDisproportionateMatch(search, oldString)) {
         throw new Error(
           "Refusing replacement because the matched span is much larger than oldString. Re-read the file and provide the full exact oldString for the intended replacement.",
         )
       }
+
       if (replaceAll) {
         return content.replaceAll(search, newString)
       }
+
       const lastIndex = content.lastIndexOf(search)
       if (index !== lastIndex) continue
+
       return content.substring(0, index) + newString + content.substring(index + search.length)
     }
   }
 
-  if (notFound) {
-    throw new Error(
-      "Could not find oldString in the file. It must match exactly, including whitespace, indentation, and line endings.",
-    )
+  if (notFound && !replaceAll) {
+    const fuzzyMatch = findUniqueFuzzyMatch(content, oldString)
+    if (fuzzyMatch) {
+      return content.substring(0, fuzzyMatch.start) + newString + content.substring(fuzzyMatch.end)
+    }
   }
+
+  if (notFound) {
+    throw oldStringNotFoundError(content, oldString)
+  }
+
   throw new Error("Found multiple matches for oldString. Provide more surrounding context to make the match unique.")
 }
 
