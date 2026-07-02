@@ -26,3 +26,11 @@ export function name(
 ) {
   return get(list, providerID, modelID)?.name ?? modelID
 }
+
+export function formatRef(model: { providerID: string; id: string; variant?: string }) {
+  return [model.providerID, model.id, model.variant].filter((value) => value !== undefined).join("/")
+}
+
+export function switchLabel(model: { providerID: string; id: string; variant?: string }) {
+  return `Switched model to ${formatRef(model)}`
+}
