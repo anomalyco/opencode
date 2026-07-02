@@ -9,7 +9,7 @@ import { Global } from "@opencode-ai/core/global"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SystemContext } from "@opencode-ai/core/system-context"
 import { SystemContextBuiltIns } from "@opencode-ai/core/system-context/builtins"
-import { SystemContextRegistry } from "@opencode-ai/core/system-context/registry"
+import { InstructionContext } from "@opencode-ai/core/instruction-context"
 import { location } from "../fixture/location"
 import { testEffect } from "../lib/effect"
 
@@ -27,7 +27,7 @@ const locationLayer = Layer.succeed(
     ),
   ),
 )
-const builtInsNode = LayerNode.group([SystemContextBuiltIns.node, SystemContextRegistry.node])
+const builtInsNode = LayerNode.group([SystemContextBuiltIns.node, InstructionContext.node])
 const it = testEffect(
   AppNodeBuilder.build(builtInsNode, [
     [Location.node, locationLayer],
@@ -58,7 +58,7 @@ describe("SystemContextBuiltIns", () => {
   it.effect("loads location-scoped environment and host-local date context", () =>
     Effect.gen(function* () {
       yield* TestClock.setTime(timestamp)
-      const context = yield* SystemContextRegistry.Service
+      const context = yield* SystemContextBuiltIns.Service
       const initialized = yield* SystemContext.initialize(yield* context.load())
 
       expect(initialized.text).toBe(
@@ -80,7 +80,7 @@ describe("SystemContextBuiltIns", () => {
   it.effect("reconciles the date without repeating unchanged environment context", () =>
     Effect.gen(function* () {
       yield* TestClock.setTime(timestamp)
-      const context = yield* SystemContextRegistry.Service
+      const context = yield* SystemContextBuiltIns.Service
       const initialized = yield* SystemContext.initialize(yield* context.load())
 
       yield* TestClock.setTime(timestamp + 24 * 60 * 60 * 1000)
@@ -96,7 +96,7 @@ describe("SystemContextBuiltIns", () => {
   it.effect("does not update again within the same local calendar day", () =>
     Effect.gen(function* () {
       yield* TestClock.setTime(timestamp)
-      const context = yield* SystemContextRegistry.Service
+      const context = yield* SystemContextBuiltIns.Service
       const initialized = yield* SystemContext.initialize(yield* context.load())
 
       yield* TestClock.setTime(timestamp + 60 * 60 * 1000)
@@ -107,7 +107,11 @@ describe("SystemContextBuiltIns", () => {
   itWithInstructions.effect("composes ambient instructions after built-in context", () =>
     Effect.gen(function* () {
       yield* TestClock.setTime(timestamp)
-      const context = yield* SystemContextRegistry.Service
+      const builtIns = yield* SystemContextBuiltIns.Service
+      const instructions = yield* InstructionContext.Service
+      const context = {
+        load: () => Effect.all([builtIns.load(), instructions.load()]).pipe(Effect.map(SystemContext.combine)),
+      }
 
       expect((yield* SystemContext.initialize(yield* context.load())).text).toBe(
         [

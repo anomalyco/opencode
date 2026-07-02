@@ -10,7 +10,6 @@ import { InstructionContext } from "@opencode-ai/core/instruction-context"
 import { Location } from "@opencode-ai/core/location"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SystemContext } from "@opencode-ai/core/system-context"
-import { SystemContextRegistry } from "@opencode-ai/core/system-context/registry"
 import { location } from "./fixture/location"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
@@ -22,7 +21,7 @@ const instructionLayer = (input: {
   locationServiceLayer: Layer.Layer<Location.Service>
   filesystemLayer?: Layer.Layer<FSUtil.Service>
 }) =>
-  AppNodeBuilder.build(LayerNode.group([SystemContextRegistry.node, InstructionContext.node]), [
+  AppNodeBuilder.build(InstructionContext.node, [
     [Global.node, Global.layerWith({ config: input.config })],
     [Location.node, input.locationServiceLayer],
     ...(input.filesystemLayer ? [[FSUtil.node, input.filesystemLayer] as const] : []),
@@ -52,7 +51,7 @@ describe("InstructionContext", () => {
             await fs.writeFile(packageFile, "package")
           })
 
-          const load = SystemContextRegistry.Service.pipe(
+          const load = InstructionContext.Service.pipe(
             Effect.flatMap((service) => service.load()),
             Effect.provide(
               instructionLayer({
@@ -118,7 +117,7 @@ describe("InstructionContext", () => {
         Effect.gen(function* () {
           const file = path.join(tmp.path, "AGENTS.md")
           yield* Effect.promise(() => fs.writeFile(file, ""))
-          const context = yield* SystemContextRegistry.Service.pipe(
+          const context = yield* InstructionContext.Service.pipe(
             Effect.flatMap((service) => service.load()),
             Effect.provide(
               instructionLayer({
@@ -147,7 +146,7 @@ describe("InstructionContext", () => {
           ),
         ),
       ).pipe(Layer.provide(LayerNode.compile(FSUtil.node)))
-      const context = yield* SystemContextRegistry.Service.pipe(
+      const context = yield* InstructionContext.Service.pipe(
         Effect.flatMap((service) => service.load()),
         Effect.provide(
           instructionLayer({
@@ -187,7 +186,7 @@ describe("InstructionContext", () => {
           ),
         ),
       ).pipe(Layer.provide(LayerNode.compile(FSUtil.node)))
-      const context = yield* SystemContextRegistry.Service.pipe(
+      const context = yield* InstructionContext.Service.pipe(
         Effect.flatMap((service) => service.load()),
         Effect.provide(
           instructionLayer({
@@ -231,7 +230,7 @@ describe("InstructionContext", () => {
         ),
       ).pipe(Layer.provide(LayerNode.compile(FSUtil.node)))
 
-      yield* SystemContextRegistry.Service.pipe(
+      yield* InstructionContext.Service.pipe(
         Effect.flatMap((service) => service.load()),
         Effect.provide(
           instructionLayer({
@@ -261,7 +260,7 @@ describe("InstructionContext", () => {
       let scanned = false
       process.env.OPENCODE_DISABLE_PROJECT_CONFIG = "1"
 
-      yield* SystemContextRegistry.Service.pipe(
+      yield* InstructionContext.Service.pipe(
         Effect.flatMap((service) => service.load()),
         Effect.provide(
           instructionLayer({
@@ -293,7 +292,7 @@ describe("InstructionContext", () => {
   it.effect("does not discover project instructions outside the canonical project root", () =>
     Effect.gen(function* () {
       let scanned = false
-      yield* SystemContextRegistry.Service.pipe(
+      yield* InstructionContext.Service.pipe(
         Effect.flatMap((service) => service.load()),
         Effect.provide(
           instructionLayer({

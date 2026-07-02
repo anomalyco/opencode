@@ -1,6 +1,6 @@
 export * as InstructionContext from "./instruction-context"
 
-import { Array, Effect, Layer, Schema } from "effect"
+import { Array, Context, Effect, Layer, Schema } from "effect"
 import { isAbsolute, join, relative, sep } from "path"
 import { FSUtil } from "./fs-util"
 import { Flag } from "./flag/flag"
@@ -8,7 +8,6 @@ import { Global } from "./global"
 import { Location } from "./location"
 import { AbsolutePath } from "./schema"
 import { SystemContext } from "./system-context/index"
-import { SystemContextRegistry } from "./system-context/registry"
 import { makeLocationNode } from "./effect/app-node"
 
 class File extends Schema.Class<File>("InstructionContext.File")({
@@ -19,12 +18,18 @@ class File extends Schema.Class<File>("InstructionContext.File")({
 const Files = Schema.Array(File)
 const key = SystemContext.Key.make("core/instructions")
 
-const layer = Layer.effectDiscard(
+export interface Interface {
+  readonly load: () => Effect.Effect<SystemContext.SystemContext>
+}
+
+export class Service extends Context.Service<Service, Interface>()("@opencode/v2/InstructionContext") {}
+
+const layer = Layer.effect(
+  Service,
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
     const global = yield* Global.Service
     const location = yield* Location.Service
-    const registry = yield* SystemContextRegistry.Service
 
     const source = (value: ReadonlyArray<File> | SystemContext.Unavailable) =>
       SystemContext.make({
@@ -71,28 +76,24 @@ const layer = Layer.effectDiscard(
       return files.filter((file): file is File => file !== undefined)
     })
 
-    yield* registry.register({
-      key,
-      load: observe().pipe(
-        Effect.map((files) =>
-          files === SystemContext.unavailable
-            ? source(files)
-            : files.length === 0
-              ? SystemContext.empty
-              : source(files),
+    return Service.of({
+      load: () =>
+        observe().pipe(
+          Effect.map((files) =>
+            files === SystemContext.unavailable
+              ? source(files)
+              : files.length === 0
+                ? SystemContext.empty
+                : source(files),
+          ),
+          Effect.catch(() => Effect.succeed(source(SystemContext.unavailable))),
+          Effect.catchDefect(() => Effect.succeed(source(SystemContext.unavailable))),
         ),
-        Effect.catch(() => Effect.succeed(source(SystemContext.unavailable))),
-        Effect.catchDefect(() => Effect.succeed(source(SystemContext.unavailable))),
-      ),
     })
   }),
 )
 
-export const node = makeLocationNode({
-  name: "instruction-context",
-  layer,
-  deps: [FSUtil.node, Global.node, Location.node, SystemContextRegistry.node],
-})
+export const node = makeLocationNode({ service: Service, layer, deps: [FSUtil.node, Global.node, Location.node] })
 
 function render(files: ReadonlyArray<File>) {
   return files.map((file) => `Instructions from: ${file.path}\n${file.content}`).join("\n\n")

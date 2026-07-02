@@ -52,7 +52,8 @@ import {
 } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { SystemContext } from "@opencode-ai/core/system-context"
-import { SystemContextRegistry } from "@opencode-ai/core/system-context/registry"
+import { SystemContextBuiltIns } from "@opencode-ai/core/system-context/builtins"
+import { InstructionContext } from "@opencode-ai/core/instruction-context"
 import { SkillGuidance } from "@opencode-ai/core/skill/guidance"
 import { ReferenceGuidance } from "@opencode-ai/core/reference/guidance"
 import { McpGuidance } from "@opencode-ai/core/mcp/guidance"
@@ -168,35 +169,28 @@ let systemRemoved = false
 let systemUnavailable = false
 let systemLoadHook = Effect.void
 const skillBaselines = new Map<AgentV2.ID, string>()
-const systemContext = Layer.effectDiscard(
-  SystemContextRegistry.Service.pipe(
-    Effect.flatMap((registry) =>
-      registry.register({
-        key: systemContextKey,
-        load: Effect.sync(() =>
-          SystemContext.combine(
-            systemRemoved
-              ? []
-              : [
-                  SystemContext.make({
-                    key: systemContextKey,
-                    codec: Schema.toCodecJson(Schema.String),
-                    load: systemLoadHook.pipe(
-                      Effect.andThen(
-                        Effect.sync(() => (systemUnavailable ? SystemContext.unavailable : systemBaseline)),
-                      ),
-                    ),
-                    baseline: String,
-                    update: (_previous, current) => current,
-                    removed: () => "System context source removed: test/context",
-                  }),
-                ],
-          ),
-        ),
-      }),
+const systemContext = Layer.mock(SystemContextBuiltIns.Service, {
+  load: () =>
+    Effect.sync(() =>
+      SystemContext.combine(
+        systemRemoved
+          ? []
+          : [
+              SystemContext.make({
+                key: systemContextKey,
+                codec: Schema.toCodecJson(Schema.String),
+                load: systemLoadHook.pipe(
+                  Effect.andThen(Effect.sync(() => (systemUnavailable ? SystemContext.unavailable : systemBaseline))),
+                ),
+                baseline: String,
+                update: (_previous, current) => current,
+                removed: () => "System context source removed: test/context",
+              }),
+            ],
+      ),
     ),
-  ),
-).pipe(Layer.provideMerge(AppNodeBuilder.build(SystemContextRegistry.node)))
+})
+const instructionContext = Layer.mock(InstructionContext.Service, { load: () => Effect.succeed(SystemContext.empty) })
 const skillGuidance = Layer.mock(SkillGuidance.Service, {
   load: (agent) =>
     Effect.succeed(
@@ -235,7 +229,8 @@ const runnerLayer = AppNodeBuilder.build(SessionRunnerLLM.node, [
   [Snapshot.node, Snapshot.noopLayer],
   [LayerNodePlatform.llmClient, client],
   [SessionRunnerModel.node, models],
-  [SystemContextRegistry.node, systemContext],
+  [SystemContextBuiltIns.node, systemContext],
+  [InstructionContext.node, instructionContext],
   [Location.node, Location.boundNode({ directory: AbsolutePath.make("/project") })],
   [SkillGuidance.node, skillGuidance],
   [ReferenceGuidance.node, referenceGuidance],
@@ -273,7 +268,8 @@ const it = testEffect(
       ToolRegistry.toolsNode,
       echoNode,
       SessionRunnerModel.node,
-      SystemContextRegistry.node,
+      SystemContextBuiltIns.node,
+      InstructionContext.node,
       SkillGuidance.node,
       ReferenceGuidance.node,
       Config.node,
@@ -286,7 +282,8 @@ const it = testEffect(
       [LayerNodePlatform.llmClient, client],
       [PermissionV2.node, permission],
       [SessionRunnerModel.node, models],
-      [SystemContextRegistry.node, systemContext],
+      [SystemContextBuiltIns.node, systemContext],
+      [InstructionContext.node, instructionContext],
       [Location.node, Location.boundNode({ directory: AbsolutePath.make("/project") })],
       [SkillGuidance.node, skillGuidance],
       [ReferenceGuidance.node, referenceGuidance],
