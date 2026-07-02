@@ -128,7 +128,8 @@ const withVariant = (
 const apiName = (model: ModelV2.Info) =>
   model.api.type === "aisdk" ? `${model.api.type}:${model.api.package}` : model.api.type
 
-// The OpenAIResponses route's default baseURL points at OpenAI.
+// The OpenAIResponses route's default baseURL points at OpenAI, so xAI models
+// without a catalog URL need their own default.
 const XAI_DEFAULT_BASE_URL = "https://api.x.ai/v1"
 
 export const fromCatalogModel = (
@@ -150,7 +151,7 @@ export const fromCatalogModel = (
     )
   }
   if (resolved.api.type === "aisdk" && resolved.api.package === "@ai-sdk/xai") {
-    // xAI's Responses API is OpenAI-shaped, including prompt_cache_key.
+    // xAI's Responses API matches the OpenAI Responses API, including prompt_cache_key.
     return Effect.succeed(
       withDefaults(resolved, OpenAIResponses.route)
         .with({
