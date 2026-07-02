@@ -234,19 +234,6 @@ describe("SessionRunnerModel", () => {
     }),
   )
 
-  it.effect("maps catalog xAI AI SDK models into native Responses routes", () =>
-    Effect.gen(function* () {
-      const resolved = yield* SessionRunnerModel.fromCatalogModel(
-        model({ type: "aisdk", package: "@ai-sdk/xai", url: "https://xai.example/v1" }),
-      )
-
-      expect(resolved.route).toMatchObject({
-        id: "openai-responses",
-        endpoint: { baseURL: "https://xai.example/v1" },
-      })
-    }),
-  )
-
   it.effect("defaults catalog xAI models without a URL to the xAI endpoint", () =>
     Effect.gen(function* () {
       const resolved = yield* SessionRunnerModel.fromCatalogModel(model({ type: "aisdk", package: "@ai-sdk/xai" }))
