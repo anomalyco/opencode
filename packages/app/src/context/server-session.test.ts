@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test"
-import type { OpencodeClient, Session } from "@opencode-ai/sdk/v2/client"
+import { describe, expect, mock, test } from "bun:test"
+import type { Message, OpencodeClient, Part, Session } from "@opencode-ai/sdk/v2/client"
 import { createServerSession } from "./server-session"
 
 const session = (id: string, parentID?: string): Session => ({
@@ -53,6 +53,49 @@ describe("server session", () => {
     expect(ctx.get).toEqual([{ sessionID: "root" }])
     expect(ctx.messages).toEqual([{ sessionID: "root", limit: 2, before: undefined }])
     expect(ctx.store.data.message.root).toEqual([])
+  })
+
+  test("retries transient message hydration failures", async () => {
+    const message: Message = {
+      id: "message",
+      sessionID: "root",
+      role: "user",
+      time: { created: 1 },
+      summary: { diffs: [] },
+      agent: "build",
+      model: { providerID: "anthropic", modelID: "claude" },
+    }
+    const part: Extract<Part, { type: "text" }> = {
+      id: "part",
+      sessionID: "root",
+      messageID: message.id,
+      type: "text",
+      text: "hello",
+    }
+    const messages = mock(async () => {
+      if (messages.mock.calls.length === 1) {
+        throw new Error("GET /session/root/message -> 503 Service Unavailable", {
+          cause: { status: 503 },
+        })
+      }
+
+      return {
+        data: [{ info: message, parts: [part] }],
+        response: { headers: new Headers() },
+      }
+    })
+    const store = createServerSession({
+      session: {
+        get: mock(async () => ({ data: session("root") })),
+        messages,
+      },
+    } as unknown as OpencodeClient)
+
+    await store.sync("root")
+
+    expect(messages).toHaveBeenCalledTimes(2)
+    expect(store.data.message.root?.map((message) => message.id)).toEqual(["message"])
+    expect(store.data.part.message?.map((part) => part.id)).toEqual(["part"])
   })
 
   test("applies events without a directory store", () => {

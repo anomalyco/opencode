@@ -22,6 +22,7 @@ const SKIP_PARTS = new Set(["patch", "step-start", "step-finish"])
 const initialMessagePageSize = 2
 const historyMessagePageSize = 200
 const sessionInfoLimit = 2_048
+const retryableMessageLoadStatuses = new Set([408, 409, 425, 429, 500, 502, 503, 504])
 
 type OptimisticItem = {
   message: Message
@@ -75,6 +76,24 @@ function merge<T extends { id: string }>(a: readonly T[], b: readonly T[]) {
   return [...items.values()].sort((x, y) => cmp(x.id, y.id))
 }
 
+function isRetryableMessageLoadError(error: unknown) {
+  if (error instanceof Error) {
+    const status = (error.cause as { status?: unknown } | undefined)?.status
+    if (typeof status === "number" && retryableMessageLoadStatuses.has(status)) return true
+    return [
+      "load failed",
+      "network connection was lost",
+      "network request failed",
+      "failed to fetch",
+      "econnreset",
+      "econnrefused",
+      "etimedout",
+      "socket hang up",
+    ].some((message) => error.message.toLowerCase().includes(message))
+  }
+  return false
+}
+
 export function createServerSession(client: OpencodeClient) {
   const [data, setData] = createStore({
     info: {} as Record<string, Session | undefined>,
@@ -92,6 +111,7 @@ export function createServerSession(client: OpencodeClient) {
   })
   const requests = new Map<string, Promise<Session>>()
   const inflight = new Map<string, Promise<void>>()
+  const messageLoads = new Map<string, Promise<void>>()
   const inflightDiff = new Map<string, Promise<void>>()
   const inflightTodo = new Map<string, Promise<void>>()
   const optimistic = new Map<string, Map<string, OptimisticItem>>()
@@ -202,6 +222,7 @@ export function createServerSession(client: OpencodeClient) {
       clearOptimistic(sessionID)
       requests.delete(sessionID)
       inflight.delete(sessionID)
+      messageLoads.delete(sessionID)
       inflightDiff.delete(sessionID)
       inflightTodo.delete(sessionID)
     })
@@ -248,7 +269,9 @@ export function createServerSession(client: OpencodeClient) {
     )
 
   const fetchMessages = async (sessionID: string, limit: number, before?: string) => {
-    const response = await retry(() => client.session.messages({ sessionID, limit, before }))
+    const response = await retry(() => client.session.messages({ sessionID, limit, before }), {
+      retryIf: isRetryableMessageLoadError,
+    })
     const items = (response.data ?? []).filter((item) => !!item?.info?.id)
     return {
       session: items.map((item) => cleanMessage(item.info)).sort((a, b) => cmp(a.id, b.id)),
@@ -262,10 +285,11 @@ export function createServerSession(client: OpencodeClient) {
   }
 
   const loadMessages = async (sessionID: string, limit: number, before?: string, mode?: "replace" | "prepend") => {
-    if (meta.loading[sessionID]) return
+    const pending = messageLoads.get(sessionID)
+    if (pending) return pending
     const generation = generations.get(sessionID) ?? 0
     setMeta("loading", sessionID, true)
-    await fetchMessages(sessionID, limit, before)
+    const request = fetchMessages(sessionID, limit, before)
       .then((page) => {
         if ((generations.get(sessionID) ?? 0) !== generation) return
         const next = mergeOptimisticPage(page, [...(optimistic.get(sessionID)?.values() ?? [])])
@@ -284,8 +308,11 @@ export function createServerSession(client: OpencodeClient) {
         })
       })
       .finally(() => {
+        if (messageLoads.get(sessionID) === request) messageLoads.delete(sessionID)
         if ((generations.get(sessionID) ?? 0) === generation) setMeta("loading", sessionID, false)
       })
+    messageLoads.set(sessionID, request)
+    await request
   }
 
   const sync = (sessionID: string, options?: { force?: boolean; messageLimit?: number }) => {

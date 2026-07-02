@@ -507,11 +507,13 @@ export function MessageTimeline(props: {
   }
 
   let measuredSessionKey = sessionKey()
+  let measuredRowCount = timelineRows().length
   createEffect(() => {
     const key = sessionKey()
-    timelineRows().length
-    if (measuredSessionKey !== key) {
+    const rowCount = timelineRows().length
+    if (measuredSessionKey !== key || measuredRowCount !== rowCount) {
       measuredSessionKey = key
+      measuredRowCount = rowCount
       virtualizer.measure()
     }
     maybeAnchorBottom()
@@ -549,6 +551,10 @@ export function MessageTimeline(props: {
     if (root === listRoot()) return
     setListRoot(root)
     props.setScrollRef(root)
+    requestAnimationFrame(() => {
+      virtualizer.measure()
+      maybeAnchorBottom()
+    })
   }
 
   const handleListWheel = (event: WheelEvent & { currentTarget: HTMLDivElement }) => {
