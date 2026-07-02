@@ -1,6 +1,6 @@
 export * as Provider from "./provider.js"
 
-import { Schema } from "effect"
+import { Effect, Schema } from "effect"
 import { optional } from "./schema.js"
 import { Integration } from "./integration.js"
 import { statics } from "./schema.js"
@@ -48,7 +48,7 @@ export type Settings = typeof Settings.Type
 
 export interface Request extends Schema.Schema.Type<typeof Request> {}
 export const Request = Schema.Struct({
-  settings: Settings,
+  settings: Settings.pipe(Schema.withConstructorDefault(Effect.succeed({}))),
   headers: Schema.Record(Schema.String, Schema.String),
   body: Schema.Record(Schema.String, Schema.Json),
 }).annotate({ identifier: "Provider.Request" })
