@@ -1108,14 +1108,7 @@ describe("SessionRunnerLLM", () => {
       // String values render verbatim inside the tagged block at baseline.
       expect(requests[0]?.system.map((part) => part.text)).toEqual([
         defaultSystem,
-        [
-          "Initial context",
-          "",
-          'An API client attached the following context to this session under "deploy-target":',
-          '<context key="deploy-target">',
-          "production",
-          "</context>",
-        ].join("\n"),
+        ["Initial context", "", '<context key="deploy-target">', "production", "</context>"].join("\n"),
       ])
 
       // Non-string JSON pretty-prints; the change narrates as a System update.
@@ -1128,7 +1121,7 @@ describe("SessionRunnerLLM", () => {
         {
           type: "text",
           text: [
-            'The attached context "deploy-target" changed. This value supersedes the previous one:',
+            'The context under "deploy-target" changed and supersedes the previous value:',
             '<context key="deploy-target">',
             "{",
             '  "region": "us-east-1"',
@@ -1146,7 +1139,7 @@ describe("SessionRunnerLLM", () => {
 
       expect(requests[2]?.messages.map((message) => message.role)).toEqual(["user", "system", "user", "system", "user"])
       expect(requests[2]?.messages.at(-2)?.content).toEqual([
-        { type: "text", text: 'The attached context "deploy-target" was removed. Disregard it.' },
+        { type: "text", text: 'The context under "deploy-target" no longer applies. Disregard it.' },
       ])
       expect(yield* contextEntries.list(sessionID)).toEqual([])
     }),
