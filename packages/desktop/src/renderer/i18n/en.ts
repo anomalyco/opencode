@@ -1,8 +1,61 @@
 export const dict = {
+  // Menu bar top-level labels
+  "desktop.menu.file": "File",
+  "desktop.menu.edit": "Edit",
+  "desktop.menu.view": "View",
+  "desktop.menu.go": "Go",
+  "desktop.menu.window": "Window",
+  "desktop.menu.help": "Help",
+
+  // File menu
+  "desktop.menu.newSession": "New Session",
+  "desktop.menu.openProject": "Open Project...",
+  "desktop.menu.settings": "Settings",
+  "desktop.menu.newWindow": "New Window",
+  "desktop.menu.closeWindow": "Close Window",
+  "desktop.menu.exportLogs": "Export Logs...",
   "desktop.menu.checkForUpdates": "Check for Updates...",
   "desktop.menu.installCli": "Install CLI...",
   "desktop.menu.reloadWebview": "Reload Webview",
   "desktop.menu.restart": "Restart",
+
+  // Edit menu
+  "desktop.menu.undo": "Undo",
+  "desktop.menu.redo": "Redo",
+  "desktop.menu.cut": "Cut",
+  "desktop.menu.copy": "Copy",
+  "desktop.menu.paste": "Paste",
+  "desktop.menu.delete": "Delete",
+  "desktop.menu.selectAll": "Select All",
+
+  // View menu
+  "desktop.menu.toggleSidebar": "Toggle Sidebar",
+  "desktop.menu.toggleTerminal": "Toggle Terminal",
+  "desktop.menu.toggleFileTree": "Toggle File Tree",
+  "desktop.menu.reload": "Reload",
+  "desktop.menu.toggleDevTools": "Toggle Developer Tools",
+  "desktop.menu.actualSize": "Actual Size",
+  "desktop.menu.zoomIn": "Zoom In",
+  "desktop.menu.zoomOut": "Zoom Out",
+  "desktop.menu.toggleFullScreen": "Toggle Full Screen",
+
+  // Go menu
+  "desktop.menu.back": "Back",
+  "desktop.menu.forward": "Forward",
+  "desktop.menu.previousSession": "Previous Session",
+  "desktop.menu.nextSession": "Next Session",
+  "desktop.menu.previousProject": "Previous Project",
+  "desktop.menu.nextProject": "Next Project",
+
+  // Window menu
+  "desktop.menu.minimize": "Minimize",
+  "desktop.menu.maximize": "Maximize",
+
+  // Help menu
+  "desktop.menu.documentation": "OpenCode Documentation",
+  "desktop.menu.supportForum": "Support Forum",
+  "desktop.menu.shareFeedback": "Share Feedback",
+  "desktop.menu.reportBug": "Report a Bug",
 
   "desktop.dialog.chooseFolder": "Choose a folder",
   "desktop.dialog.chooseFile": "Choose a file",
