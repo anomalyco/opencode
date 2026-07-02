@@ -27,7 +27,7 @@ const ADMIN_DEFAULT_PASSWORD = "opencode-admin"
 // Default to the OneInfo Consulting Azure AD tenant. Mirror the values from
 // packages/opencode/src/plugin/microsoft.ts so the gate is independent of
 // plugin initialization. Override via env for other tenants / clients.
-const DEFAULT_TENANT = "3219b5f9-900d-4608-80c8-7cd86886de3"
+const DEFAULT_TENANT = "oneinfoconsulting.com"
 const DEFAULT_CLIENT_ID = "cb06d541-ed31-4195-b7ff-d2b50084da6f"
 const DEFAULT_SCOPES = "openid email profile offline_access"
 const DEFAULT_REDIRECT_URI = "http://127.0.0.1:53800/callback"

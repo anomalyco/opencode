@@ -7,12 +7,17 @@ import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { getLogger } from "./logging"
 
+// Root path for resolving preload scripts at runtime.
+// Defined at module level (same pattern as windows.ts) so it resolves to the
+// bundle location regardless of where it's called from.
+const PRELOAD_ROOT = dirname(fileURLToPath(import.meta.url))
+
 // --- Constants ---
 
 const ADMIN_DEFAULT_USERNAME = "admin"
 const ADMIN_DEFAULT_PASSWORD = "opencode-admin"
 
-const DEFAULT_TENANT = "3219b5f9-900d-4608-80c8-7cd86886de3"
+const DEFAULT_TENANT = "oneinfoconsulting.com"
 const DEFAULT_CLIENT_ID = "cb06d541-ed31-4195-b7ff-d2b50084da6f"
 const DEFAULT_SCOPES = "openid email profile offline_access"
 const OAUTH_HOST = "127.0.0.1"
@@ -419,7 +424,20 @@ const HTML_LOGIN = `
 </div>
 
 <script>
-  const { loginApi } = window
+  const loginApi = window.loginApi
+
+  document.addEventListener('DOMContentLoaded', () => {
+    if (!loginApi) {
+      const error = document.getElementById('error')
+      const adminBtn = document.getElementById('adminBtn')
+      const microsoftBtn = document.getElementById('microsoftBtn')
+      error.textContent = 'Preload script failed to load — login API unavailable. Please restart the application.'
+      error.classList.add('visible')
+      adminBtn.disabled = true
+      microsoftBtn.disabled = true
+      console.error('loginApi is undefined — preload script may not have loaded')
+    }
+  })
 
   async function submitAdmin(event) {
     event.preventDefault()
@@ -545,8 +563,10 @@ export async function enforceDesktopLogin(serverUrl: string, serverPassword: str
     await showLoginDialog(serverUrl, serverPassword)
   } catch (error) {
     logger.error("login gate rejected", error instanceof Error ? error.message : String(error))
-    // Exit the app — login is required
+    // Exit the app — login is required. app.exit() doesn't stop the current tick,
+    // so throw to prevent createMainWindow() from running afterward.
     app.exit(1)
+    throw error
   }
 
   logger.log("login gate passed")
@@ -583,8 +603,9 @@ async function checkExistingAuth(): Promise<boolean> {
 }
 
 function showLoginDialog(serverUrl: string, serverPassword: string): Promise<void> {
-  const root = dirname(fileURLToPath(import.meta.url))
-  const preloadPath = join(root, "../preload/login.js")
+  const logger = getLogger()
+  const preloadPath = join(PRELOAD_ROOT, "../preload/login.js")
+  logger.log("login dialog preload path", { preloadPath, packaged: app.isPackaged })
 
   return new Promise<void>((resolve, reject) => {
     let resolved = false
@@ -606,6 +627,12 @@ function showLoginDialog(serverUrl: string, serverPassword: string): Promise<voi
         nodeIntegration: false,
         sandbox: false,
       },
+    })
+
+    // Log any preload script failures — critical for diagnosing
+    // "window.loginApi is undefined" issues on Windows packaged builds.
+    win.webContents.on("preload-error", (_event, failedPath, error) => {
+      logger.error("login dialog preload failed", { preloadPath: failedPath, error })
     })
 
     // IPC handlers for this login window

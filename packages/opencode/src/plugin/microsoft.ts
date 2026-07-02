@@ -9,7 +9,7 @@ const MICROSOFT_LOGIN_HOST = "https://login.microsoftonline.com"
 
 // Default to the OneInfo Consulting Azure AD tenant.
 // Override via tenant option or env var for other tenants.
-const COMPANY_TENANT = "3219b5f9-900d-4608-80c8-7cd86886de3"
+const COMPANY_TENANT = "oneinfoconsulting.com"
 const DEFAULT_TENANT = COMPANY_TENANT
 
 // Public client registered in the OneInfo Consulting Azure AD tenant.

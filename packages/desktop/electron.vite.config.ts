@@ -12,7 +12,10 @@ const channel = (() => {
   return "dev"
 })()
 
-const nodePtyPkg = `@lydell/node-pty-${process.platform}-${process.arch}`
+// Override via env when cross-compiling (e.g. TARGET_PLATFORM=win32 TARGET_ARCH=x64)
+const targetPlatform = process.env.TARGET_PLATFORM ?? process.platform
+const targetArch = process.env.TARGET_ARCH ?? process.arch
+const nodePtyPkg = `@lydell/node-pty-${targetPlatform}-${targetArch}`
 
 const sentry =
   process.env.SENTRY_AUTH_TOKEN && process.env.SENTRY_ORG && process.env.SENTRY_PROJECT
