@@ -310,6 +310,5 @@ export const node = LayerNode.make({
   layer: layer,
   deps: [EventV2Bridge.node, Config.node, RuntimeFlags.node],
 })
-export const defaultLayer = layer
 
 export * as Plugin from "."

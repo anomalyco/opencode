@@ -1874,6 +1874,5 @@ export const node = LayerNode.make({
     Messaging.node,
   ],
 })
-export const defaultLayer = layer
 
 export * as SessionPrompt from "./prompt"

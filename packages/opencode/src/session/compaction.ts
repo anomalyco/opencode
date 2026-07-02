@@ -558,6 +558,5 @@ export const node = LayerNode.make({
     RuntimeFlags.node,
   ],
 })
-export const defaultLayer = layer
 
 export * as SessionCompaction from "./compaction"

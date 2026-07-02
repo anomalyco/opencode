@@ -141,6 +141,5 @@ export const node = LayerNode.make({
   layer: layer,
   deps: [Skill.node, MCP.node, locationServiceMapNode],
 })
-export const defaultLayer = layer
 
 export * as SystemPrompt from "./system"

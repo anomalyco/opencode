@@ -233,6 +233,5 @@ export const node = LayerNode.make({
   layer: layer,
   deps: [Config.node, FSUtil.node, Global.node, RuntimeFlags.node, httpClient],
 })
-export const defaultLayer = layer
 
 export * as Instruction from "./instruction"

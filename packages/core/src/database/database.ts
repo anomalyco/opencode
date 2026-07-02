@@ -56,4 +56,3 @@ export function path() {
 }
 
 export const node = makeGlobalNode({ service: Service, layer: layerFromPath(path()), deps: [] })
-export const defaultLayer = layer

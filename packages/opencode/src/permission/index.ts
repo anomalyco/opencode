@@ -219,6 +219,5 @@ export function visibleTools<T>(tools: Record<string, T>, ruleset: PermissionV1.
 }
 
 export const node = LayerNode.make({ service: Service, layer: layer, deps: [EventV2Bridge.node] })
-export const defaultLayer = layer
 
 export * as Permission from "."

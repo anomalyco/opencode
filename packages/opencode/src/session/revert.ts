@@ -142,6 +142,5 @@ export const node = LayerNode.make({
   layer: layer,
   deps: [Session.node, Snapshot.node, Storage.node, EventV2Bridge.node, SessionSummary.node, SessionRunState.node],
 })
-export const defaultLayer = layer
 
 export * as SessionRevert from "./revert"

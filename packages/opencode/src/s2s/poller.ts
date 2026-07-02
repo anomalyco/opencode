@@ -283,6 +283,5 @@ export const node = LayerNode.make({
     EventV2Bridge.node,
   ],
 })
-export const defaultLayer = layer
 
 export * as S2SPoller from "./poller"

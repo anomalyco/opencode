@@ -470,6 +470,5 @@ export const node = LayerNode.make({
     Ripgrep.node,
   ],
 })
-export const defaultLayer = layer
 
 export * as ToolRegistry from "./registry"

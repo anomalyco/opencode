@@ -714,6 +714,5 @@ export const node = LayerNode.make({
     Database.node,
   ],
 })
-export const defaultLayer = layer
 
 export * as SessionProcessor from "./processor"

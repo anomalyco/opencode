@@ -803,6 +803,5 @@ export const node = LayerNode.make({
   layer: layer,
   deps: [FSUtil.node, AppProcess.node, Config.node],
 })
-export const defaultLayer = layer
 
 export * as Snapshot from "."

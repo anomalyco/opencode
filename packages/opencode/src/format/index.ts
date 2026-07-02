@@ -199,6 +199,5 @@ export const node = LayerNode.make({
   layer: layer,
   deps: [Config.node, AppProcess.node, RuntimeFlags.node],
 })
-export const defaultLayer = layer
 
 export * as Format from "."

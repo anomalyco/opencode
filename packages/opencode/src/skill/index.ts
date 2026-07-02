@@ -350,6 +350,5 @@ export const node = LayerNode.make({
   layer: layer,
   deps: [Discovery.node, Config.node, EventV2Bridge.node, FSUtil.node, Global.node, RuntimeFlags.node],
 })
-export const defaultLayer = layer
 
 export * as Skill from "."

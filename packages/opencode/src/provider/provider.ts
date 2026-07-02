@@ -2000,6 +2000,5 @@ export const node = LayerNode.make({
   layer: layer,
   deps: [FSUtil.node, Config.node, Auth.node, Env.node, Plugin.node, ModelsDev.node, RuntimeFlags.node],
 })
-export const defaultLayer = layer
 
 export * as Provider from "./provider"
