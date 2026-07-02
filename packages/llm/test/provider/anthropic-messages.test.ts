@@ -57,6 +57,23 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
+  it.effect("lowers adaptive thinking settings with effort", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(
+        LLM.updateRequest(request, {
+          providerOptions: {
+            anthropic: { thinking: { type: "adaptive", display: "summarized" }, effort: "low" },
+          },
+        }),
+      )
+
+      expect(prepared.body).toMatchObject({
+        thinking: { type: "adaptive", display: "summarized" },
+        output_config: { effort: "low" },
+      })
+    }),
+  )
+
   it.effect("lowers chronological system updates natively for Claude Opus 4.8 with cache hints", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(

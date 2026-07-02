@@ -98,12 +98,26 @@ describe("OpenAI Chat route", () => {
         LLM.request({
           model: OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).chat("gpt-4o-mini"),
           prompt: "think",
-          providerOptions: { openai: { reasoningEffort: "low" } },
+          providerOptions: { openai: { reasoningEffort: "max" } },
         }),
       )
 
       expect(prepared.body.store).toBe(false)
-      expect(prepared.body.reasoning_effort).toBe("low")
+      expect(prepared.body.reasoning_effort).toBe("max")
+    }),
+  )
+
+  it.effect("passes through custom OpenAI-compatible reasoning effort strings", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
+        LLM.request({
+          model,
+          prompt: "think",
+          providerOptions: { openai: { reasoningEffort: "experimental" } },
+        }),
+      )
+
+      expect(prepared.body.reasoning_effort).toBe("experimental")
     }),
   )
 

@@ -243,6 +243,14 @@ describe("ModelsDevPlugin", () => {
             headers: {},
             body: {},
           })
+
+          const anthropicEffortModel = yield* catalog.model.get(ProviderV2.ID.anthropic, ModelV2.ID.make("claude-effort"))
+          expect(anthropicEffortModel?.variants).toContainEqual({
+            id: ModelV2.VariantID.make("low"),
+            settings: { thinking: { type: "adaptive", display: "summarized" }, effort: "low" },
+            headers: {},
+            body: {},
+          })
         }).pipe(Effect.provide(AppNodeBuilder.build(ModelsDev.node))),
       (previous) =>
         Effect.sync(() => {

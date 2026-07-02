@@ -27,7 +27,7 @@ export const ToolCallID = Schema.String
 export type ToolCallID = Schema.Schema.Type<typeof ToolCallID>
 
 export const ReasoningEfforts = ["none", "minimal", "low", "medium", "high", "xhigh", "max"] as const
-export const ReasoningEffort = Schema.Literals(ReasoningEfforts)
+export const ReasoningEffort = Schema.String
 export type ReasoningEffort = Schema.Schema.Type<typeof ReasoningEffort>
 
 export const TextVerbosity = Schema.Literals(["low", "medium", "high"])

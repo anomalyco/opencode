@@ -98,7 +98,7 @@ function reasoningVariants(provider: ModelsDev.Provider, model: ModelsDev.Model)
 function settingsForEffort(npm: string | undefined, effort: string): ProviderV2.Settings | undefined {
   if (npm === "@openrouter/ai-sdk-provider") return { reasoning: { effort } }
   if (npm === "@ai-sdk/anthropic" || npm === "@ai-sdk/google-vertex/anthropic") {
-    return { thinking: { type: "adaptive" }, effort }
+    return { thinking: { type: "adaptive", display: "summarized" }, effort }
   }
   if (npm === "@ai-sdk/google" || npm === "@ai-sdk/google-vertex") {
     return { thinkingConfig: { includeThoughts: true, thinkingLevel: effort } }
