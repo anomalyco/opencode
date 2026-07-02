@@ -1,6 +1,7 @@
 import type { AgentSideConnection, Usage } from "@agentclientprotocol/sdk"
 import type { AssistantMessage as OpenCodeAssistantMessage, Message } from "@opencode-ai/sdk/v2"
 import { InstanceRef } from "@/effect/instance-ref"
+import { InstanceBootstrap } from "@/project/bootstrap"
 import { InstanceStore } from "@/project/instance-store"
 import { makeGlobalNode, Node } from "@opencode-ai/core/effect/app-node"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
@@ -134,7 +135,7 @@ export const contextLimitLoaderLayer = Layer.effect(
   }),
 )
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const messageLoader = yield* MessageLoader
@@ -223,12 +224,6 @@ export const layer = Layer.effect(
       sendUpdate,
     })
   }),
-)
-
-export const defaultLayer = layer.pipe(
-  Layer.provide(contextLimitLoaderLayer),
-  Layer.provide(Provider.defaultLayer),
-  Layer.provide(InstanceStore.defaultLayer),
 )
 
 export const messageLoaderNode = LayerNode.unbound(MessageLoader, Node.tags.values.global)

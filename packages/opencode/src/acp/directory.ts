@@ -1,6 +1,7 @@
 import { Agent } from "@/agent/agent"
 import { Command } from "@/command"
 import { InstanceRef } from "@/effect/instance-ref"
+import { InstanceBootstrap } from "@/project/bootstrap"
 import { InstanceStore } from "@/project/instance-store"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { ProviderV2 } from "@opencode-ai/core/provider"
@@ -140,7 +141,7 @@ export const loaderLayer = Layer.effect(
   }),
 )
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const loader = yield* Loader
@@ -198,14 +199,6 @@ export const layer = Layer.effect(
       variants,
     })
   }),
-)
-
-export const defaultLayer = layer.pipe(
-  Layer.provide(loaderLayer),
-  Layer.provide(Provider.defaultLayer),
-  Layer.provide(Agent.defaultLayer),
-  Layer.provide(Command.defaultLayer),
-  Layer.provide(InstanceStore.defaultLayer),
 )
 
 export const loaderNode = LayerNode.make({

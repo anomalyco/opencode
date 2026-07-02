@@ -22,7 +22,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Policy") {}
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   EffectRuntime.gen(function* () {
     let statements: Info[] = []

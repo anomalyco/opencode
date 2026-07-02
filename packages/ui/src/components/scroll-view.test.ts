@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { scrollKey, scrollTopFromThumbPointer } from "./scroll-view"
+import { canScrollKey, scrollKey, scrollTopFromThumbPointer } from "./scroll-view"
 
 describe("scrollKey", () => {
   test("maps plain navigation keys", () => {
@@ -15,6 +15,27 @@ describe("scrollKey", () => {
     ).toBeUndefined()
     expect(scrollKey({ key: "PageUp", altKey: false, ctrlKey: true, metaKey: false, shiftKey: false })).toBeUndefined()
     expect(scrollKey({ key: "End", altKey: false, ctrlKey: false, metaKey: false, shiftKey: true })).toBeUndefined()
+  })
+
+  test("maps space and shift-space directions", () => {
+    expect(scrollKey({ key: " ", altKey: false, ctrlKey: false, metaKey: false, shiftKey: false })).toBe("page-down")
+    expect(scrollKey({ key: " ", altKey: false, ctrlKey: false, metaKey: false, shiftKey: true })).toBe("page-up")
+  })
+})
+
+describe("canScrollKey", () => {
+  const element = (scrollTop: number, clientHeight = 100, scrollHeight = 300) =>
+    ({ scrollTop, clientHeight, scrollHeight }) as HTMLElement
+
+  test("owns upward keys only above the top boundary", () => {
+    expect(canScrollKey(element(50), "page-up")).toBe(true)
+    expect(canScrollKey(element(0), "page-up")).toBe(false)
+  })
+
+  test("owns downward keys only before the bottom boundary", () => {
+    expect(canScrollKey(element(50), "page-down")).toBe(true)
+    expect(canScrollKey(element(200), "page-down")).toBe(false)
+    expect(canScrollKey(element(0, 100, 100), "page-down")).toBe(false)
   })
 })
 
