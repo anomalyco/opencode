@@ -66,6 +66,26 @@ function testLayer(
   ])
 }
 
+function withExecPath<A, E, R>(execPath: string, effect: Effect.Effect<A, E, R>) {
+  return Effect.suspend(() => {
+    const original = Object.getOwnPropertyDescriptor(process, "execPath")
+    Object.defineProperty(process, "execPath", {
+      configurable: true,
+      enumerable: original?.enumerable ?? true,
+      value: execPath,
+      writable: true,
+    })
+
+    return Effect.gen(function* () {
+      try {
+        return yield* effect
+      } finally {
+        if (original) Object.defineProperty(process, "execPath", original)
+      }
+    })
+  })
+}
+
 describe("installation", () => {
   describe("latest", () => {
     testEffect(testLayer(() => jsonResponse({ tag_name: "v1.2.3" }))).effect(
@@ -178,6 +198,100 @@ describe("installation", () => {
         const result = yield* Installation.use.latest("brew")
         expect(result).toBe("2.1.0")
       }),
+    )
+  })
+
+  describe("method", () => {
+    const scoopNodeExecPath = "C:\\Users\\aquib\\scoop\\apps\\nodejs\\current\\node.exe"
+
+    const reproCalls: Array<{ cmd: string; args: readonly string[] }> = []
+    testEffect(
+      testLayer(
+        () => jsonResponse({}),
+        (cmd, args) => {
+          reproCalls.push({ cmd, args })
+          if (cmd === "scoop" && args[0] === "prefix") {
+            return {
+              code: 1,
+              stdout: "Installed apps matching 'opencode':",
+              stderr: "opencode is not installed",
+            }
+          }
+          if (cmd === "npm") return "opencode-ai@1.2.3"
+          return ""
+        },
+      ),
+    ).effect("does not detect failed scoop prefix output as scoop ownership", () =>
+      withExecPath(
+        scoopNodeExecPath,
+        Effect.gen(function* () {
+          const result = yield* Installation.use.method()
+
+          expect(result).toBe("npm")
+          expect(reproCalls.filter((call) => call.cmd === "scoop").map((call) => call.args)).toEqual([
+            ["prefix", "opencode"],
+          ])
+          expect(reproCalls.some((call) => call.cmd === "scoop" && call.args[0] === "list")).toBe(false)
+        }),
+      ),
+    )
+
+    const positiveCalls: Array<{ cmd: string; args: readonly string[] }> = []
+    testEffect(
+      testLayer(
+        () => jsonResponse({}),
+        (cmd, args) => {
+          positiveCalls.push({ cmd, args })
+          if (cmd === "scoop" && args[0] === "prefix") {
+            return { code: 0, stdout: "C:\\Users\\aquib\\scoop\\apps\\opencode\\current" }
+          }
+          return ""
+        },
+      ),
+    ).effect("detects scoop when scoop prefix succeeds", () =>
+      withExecPath(
+        scoopNodeExecPath,
+        Effect.gen(function* () {
+          const result = yield* Installation.use.method()
+
+          expect(result).toBe("scoop")
+          expect(positiveCalls.filter((call) => call.cmd === "scoop").map((call) => call.args)).toEqual([
+            ["prefix", "opencode"],
+          ])
+          expect(positiveCalls.some((call) => call.cmd === "scoop" && call.args[0] === "list")).toBe(false)
+        }),
+      ),
+    )
+
+    const negativeCalls: Array<{ cmd: string; args: readonly string[] }> = []
+    testEffect(
+      testLayer(
+        () => jsonResponse({}),
+        (cmd, args) => {
+          negativeCalls.push({ cmd, args })
+          if (cmd === "scoop" && args[0] === "prefix") {
+            return {
+              code: 1,
+              stdout: "Installed apps matching 'opencode':",
+              stderr: "opencode is not installed",
+            }
+          }
+          return ""
+        },
+      ),
+    ).effect("returns unknown when failed scoop prefix mentions opencode and no manager owns it", () =>
+      withExecPath(
+        scoopNodeExecPath,
+        Effect.gen(function* () {
+          const result = yield* Installation.use.method()
+
+          expect(result).toBe("unknown")
+          expect(negativeCalls.filter((call) => call.cmd === "scoop").map((call) => call.args)).toEqual([
+            ["prefix", "opencode"],
+          ])
+          expect(negativeCalls.some((call) => call.cmd === "scoop" && call.args[0] === "list")).toBe(false)
+        }),
+      ),
     )
   })
 

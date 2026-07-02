@@ -176,13 +176,17 @@ const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProcess.Serv
         if (process.execPath.includes(path.join(".local", "bin"))) return "curl" as Method
         const exec = process.execPath.toLowerCase()
 
-        const checks: Array<{ name: Method; command: () => Effect.Effect<string> }> = [
+        type PackageManagerCheck =
+          | { name: Exclude<Method, "curl" | "scoop" | "unknown">; command: () => Effect.Effect<string> }
+          | { name: "scoop" }
+
+        const checks: Array<PackageManagerCheck> = [
           { name: "npm", command: () => text(["npm", "list", "-g", "--depth=0"]) },
           { name: "yarn", command: () => text(["yarn", "global", "list"]) },
           { name: "pnpm", command: () => text(["pnpm", "list", "-g", "--depth=0"]) },
           { name: "bun", command: () => text(["bun", "pm", "ls", "-g"]) },
           { name: "brew", command: () => text(["brew", "list", "--formula", "opencode"]) },
-          { name: "scoop", command: () => text(["scoop", "list", "opencode"]) },
+          { name: "scoop" },
           { name: "choco", command: () => text(["choco", "list", "--limit-output", "opencode"]) },
         ]
 
@@ -195,9 +199,14 @@ const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProcess.Serv
         })
 
         for (const check of checks) {
+          if (check.name === "scoop") {
+            const result = yield* run(["scoop", "prefix", "opencode"])
+            if (result.code === 0) return check.name
+            continue
+          }
+
           const output = yield* check.command()
-          const installedName =
-            check.name === "brew" || check.name === "choco" || check.name === "scoop" ? "opencode" : "opencode-ai"
+          const installedName = check.name === "brew" || check.name === "choco" ? "opencode" : "opencode-ai"
           if (output.includes(installedName)) {
             return check.name
           }
