@@ -1168,30 +1168,51 @@ export default function Page() {
 
   const reviewV2State = createReviewPanelV2State()
 
+  // Getters defer reactive reads to the consuming scope. Eager reads here ran inside
+  // the side panel's Show children and remounted the whole review panel on unrelated
+  // updates such as session switches.
   const reviewPanelV2Props = () => ({
-    title: changesTitleV2(),
-    empty: reviewEmptyV2({
-      loadingClass: "px-6 py-4 text-text-weak",
-    }),
+    get title() {
+      return changesTitleV2()
+    },
+    get empty() {
+      return reviewEmptyV2({
+        loadingClass: "px-6 py-4 text-text-weak",
+      })
+    },
     diffs: reviewDiffs,
     diffsReady: reviewReady,
-    activeFile: tree.activeDiff,
+    get activeFile() {
+      return tree.activeDiff
+    },
     onSelectFile: focusReviewDiff,
-    diffStyle: layout.review.diffStyle(),
+    get diffStyle() {
+      return layout.review.diffStyle()
+    },
     onDiffStyleChange: layout.review.setDiffStyle,
     state: reviewV2State,
     onLineComment: (comment: SessionReviewLineComment) => addCommentToContext({ ...comment, origin: "review" }),
     onLineCommentUpdate: updateCommentInContext,
     onLineCommentDelete: removeCommentFromContext,
-    lineCommentActions: reviewCommentActions(),
-    comments: comments.all(),
-    focusedComment: comments.focus(),
+    get lineCommentActions() {
+      return reviewCommentActions()
+    },
+    get comments() {
+      return comments.all()
+    },
+    get focusedComment() {
+      return comments.focus()
+    },
     onFocusedCommentChange: comments.setFocus,
   })
 
   const reviewPanelV2 = () => (
     <div class="flex flex-col h-full overflow-hidden bg-background-stronger contain-strict">
-      <ReviewPanelV2 {...reviewPanelV2Props()} />
+      {/* The route remounts per session; defer the diff render off the switch critical path
+          like the legacy review tab does. */}
+      <Show when={!store.deferRender}>
+        <ReviewPanelV2 {...reviewPanelV2Props()} />
+      </Show>
     </div>
   )
 

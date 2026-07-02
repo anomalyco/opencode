@@ -20,28 +20,31 @@ export function FileTabContentV2(props: { tab: string; review: () => ReviewPanel
   })
 
   return (
-    <Show when={diffItem()} keyed fallback={<FileTabContent tab={props.tab} embedded />}>
-      {(diff) => {
-        const model = review()
-        return (
-          <div data-component="session-review-v2" class="flex flex-col h-full min-h-0 overflow-hidden">
-            <SessionReviewFilePreviewV2
-              file={diff.file}
-              diff={diff}
-              diffStyle={model.diffStyle}
-              expandMode={model.state.expandMode()}
-              readFile={readFile}
-              onLineComment={model.onLineComment}
-              onLineCommentUpdate={model.onLineCommentUpdate}
-              onLineCommentDelete={model.onLineCommentDelete}
-              lineCommentActions={model.lineCommentActions}
-              comments={model.comments}
-              focusedComment={model.focusedComment}
-              onFocusedCommentChange={model.onFocusedCommentChange}
-            />
-          </div>
-        )
-      }}
+    // Key on the file path, not the diff object identity, so refreshed diff data
+    // updates the mounted preview instead of remounting the whole viewer.
+    <Show when={path()} keyed fallback={<FileTabContent tab={props.tab} embedded />}>
+      {(file) => (
+        <Show when={diffItem()} fallback={<FileTabContent tab={props.tab} embedded />}>
+          {(diff) => (
+            <div data-component="session-review-v2" class="flex flex-col h-full min-h-0 overflow-hidden">
+              <SessionReviewFilePreviewV2
+                file={file}
+                diff={diff()}
+                diffStyle={review().diffStyle}
+                expandMode={review().state.expandMode()}
+                readFile={readFile}
+                onLineComment={review().onLineComment}
+                onLineCommentUpdate={review().onLineCommentUpdate}
+                onLineCommentDelete={review().onLineCommentDelete}
+                lineCommentActions={review().lineCommentActions}
+                comments={review().comments}
+                focusedComment={review().focusedComment}
+                onFocusedCommentChange={review().onFocusedCommentChange}
+              />
+            </div>
+          )}
+        </Show>
+      )}
     </Show>
   )
 }

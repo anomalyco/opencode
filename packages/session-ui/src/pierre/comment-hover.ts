@@ -39,10 +39,14 @@ export function createHoverCommentUtility(props: {
     line = next
   }
 
-  const loop = () => {
-    if (!button.isConnected) return
+  // The hovered line can only change while the pointer moves, so track it with a
+  // passive listener instead of polling every animation frame.
+  const onPointerMove = () => {
+    if (!button.isConnected) {
+      document.removeEventListener("pointermove", onPointerMove)
+      return
+    }
     sync()
-    requestAnimationFrame(loop)
   }
 
   const open = () => {
@@ -51,7 +55,7 @@ export function createHoverCommentUtility(props: {
     props.onSelect(next)
   }
 
-  requestAnimationFrame(loop)
+  document.addEventListener("pointermove", onPointerMove, { passive: true })
   button.addEventListener("mouseenter", sync)
   button.addEventListener("mousemove", sync)
   button.addEventListener("pointerdown", (event) => {

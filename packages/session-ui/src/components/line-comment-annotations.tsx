@@ -471,66 +471,96 @@ export function createLineCommentAnnotations<T>(
   const line = (range: SelectedLineRange) => Math.max(range.start, range.end)
 
   if ("getSide" in props) {
-    return createMemo<DiffLineAnnotation<LineCommentAnnotationMeta<T>>[]>(() => {
+    return createMemo<DiffLineAnnotation<LineCommentAnnotationMeta<T>>[]>(
+      () => {
+        const list = props.comments().map((comment) => {
+          const range = props.getCommentSelection(comment)
+          return {
+            side: props.getSide(range),
+            lineNumber: line(range),
+            metadata: {
+              kind: "comment",
+              key: `comment:${props.getCommentId(comment)}`,
+              comment,
+            } satisfies LineCommentAnnotationMeta<T>,
+          }
+        })
+
+        const range = props.draftRange()
+        if (!range) return list
+
+        return [
+          ...list,
+          {
+            side: props.getSide(range),
+            lineNumber: line(range),
+            metadata: {
+              kind: "draft",
+              key: `draft:${props.draftKey()}`,
+              range,
+            } satisfies LineCommentAnnotationMeta<T>,
+          },
+        ]
+      },
+      [],
+      // Stable identity for unchanged annotations avoids no-op diff rerenders downstream.
+      { equals: sameAnnotationLists },
+    )
+  }
+
+  return createMemo<LineCommentAnnotation<T>[]>(
+    () => {
       const list = props.comments().map((comment) => {
         const range = props.getCommentSelection(comment)
-        return {
-          side: props.getSide(range),
+        const entry: LineCommentAnnotation<T> = {
           lineNumber: line(range),
           metadata: {
             kind: "comment",
             key: `comment:${props.getCommentId(comment)}`,
             comment,
-          } satisfies LineCommentAnnotationMeta<T>,
+          },
         }
+
+        return entry
       })
 
       const range = props.draftRange()
       if (!range) return list
 
-      return [
-        ...list,
-        {
-          side: props.getSide(range),
-          lineNumber: line(range),
-          metadata: {
-            kind: "draft",
-            key: `draft:${props.draftKey()}`,
-            range,
-          } satisfies LineCommentAnnotationMeta<T>,
-        },
-      ]
-    })
-  }
-
-  return createMemo<LineCommentAnnotation<T>[]>(() => {
-    const list = props.comments().map((comment) => {
-      const range = props.getCommentSelection(comment)
-      const entry: LineCommentAnnotation<T> = {
+      const draft: LineCommentAnnotation<T> = {
         lineNumber: line(range),
         metadata: {
-          kind: "comment",
-          key: `comment:${props.getCommentId(comment)}`,
-          comment,
+          kind: "draft",
+          key: `draft:${props.draftKey()}`,
+          range,
         },
       }
 
-      return entry
-    })
+      return [...list, draft]
+    },
+    [],
+    { equals: sameAnnotationLists },
+  )
+}
 
-    const range = props.draftRange()
-    if (!range) return list
+type AnnotationListItem = {
+  lineNumber: number
+  side?: unknown
+  metadata: { kind: string; key: string; comment?: unknown; range?: unknown }
+}
 
-    const draft: LineCommentAnnotation<T> = {
-      lineNumber: line(range),
-      metadata: {
-        kind: "draft",
-        key: `draft:${props.draftKey()}`,
-        range,
-      },
-    }
-
-    return [...list, draft]
+function sameAnnotationLists(previous: AnnotationListItem[], next: AnnotationListItem[]) {
+  if (previous.length !== next.length) return false
+  return previous.every((item, index) => {
+    const other = next[index]!
+    return (
+      item.lineNumber === other.lineNumber &&
+      item.side === other.side &&
+      item.metadata.kind === other.metadata.kind &&
+      item.metadata.key === other.metadata.key &&
+      item.metadata.comment === other.metadata.comment &&
+      item.metadata.range === other.metadata.range
+    )
   })
 }
 

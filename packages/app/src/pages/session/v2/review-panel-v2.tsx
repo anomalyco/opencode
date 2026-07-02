@@ -200,22 +200,28 @@ export function ReviewPanelV2(props: ReviewPanelV2Props) {
       onExpandModeChange={props.state.setExpandMode}
       hasDiffs={model.diffs().length > 0}
       preview={
-        <Show when={model.activeItem()} keyed>
-          {(diff) => (
-            <SessionReviewFilePreviewV2
-              file={diff.file}
-              diff={diff}
-              diffStyle={props.diffStyle}
-              expandMode={props.state.expandMode()}
-              readFile={readFile}
-              onLineComment={props.onLineComment}
-              onLineCommentUpdate={props.onLineCommentUpdate}
-              onLineCommentDelete={props.onLineCommentDelete}
-              lineCommentActions={props.lineCommentActions}
-              comments={props.comments}
-              focusedComment={props.focusedComment}
-              onFocusedCommentChange={props.onFocusedCommentChange}
-            />
+        // Key on the file path, not the diff object identity, so refreshed diff data
+        // updates the mounted preview instead of remounting the whole viewer.
+        <Show when={model.activeDiff()} keyed>
+          {(file) => (
+            <Show when={model.activeItem()}>
+              {(diff) => (
+                <SessionReviewFilePreviewV2
+                  file={file}
+                  diff={diff()}
+                  diffStyle={props.diffStyle}
+                  expandMode={props.state.expandMode()}
+                  readFile={readFile}
+                  onLineComment={props.onLineComment}
+                  onLineCommentUpdate={props.onLineCommentUpdate}
+                  onLineCommentDelete={props.onLineCommentDelete}
+                  lineCommentActions={props.lineCommentActions}
+                  comments={props.comments}
+                  focusedComment={props.focusedComment}
+                  onFocusedCommentChange={props.onFocusedCommentChange}
+                />
+              )}
+            </Show>
           )}
         </Show>
       }
