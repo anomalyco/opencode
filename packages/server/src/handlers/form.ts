@@ -34,6 +34,7 @@ export const FormHandler = HttpApiBuilder.group(Api, "server.form", (handlers) =
       formID: Form.ID,
       use: (service: Form.Interface, info: Form.Info) => Effect.Effect<A, E>,
     ) {
+      const form = yield* Form.Service
       const info = yield* form.get(formID).pipe(Effect.catchTag("Form.NotFoundError", () => missingForm(formID)))
       if (info.sessionID !== sessionID) return yield* missingForm(formID)
       return yield* use(form, info)

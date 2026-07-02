@@ -8,6 +8,7 @@ import { SplitBorder } from "../../ui/border"
 import { useTuiConfig } from "../../config"
 import { useBindings, useOpencodeModeStack } from "../../keymap"
 import { questionAnswer, type QuestionAnswer, type QuestionForm } from "../../util/question-form"
+import { errorMessage } from "../../util/error"
 
 const QUESTION_MODE = "question"
 
@@ -22,6 +23,8 @@ export function QuestionPrompt(props: { request: QuestionForm; directory?: strin
   const single = createMemo(() => questions().length === 1 && questions()[0]?.type !== "multiselect")
   const tabs = createMemo(() => (single() ? 1 : questions().length + 1)) // questions + confirm tab (no confirm for single select)
   const [tabHover, setTabHover] = createSignal<number | "confirm" | null>(null)
+  const [settling, setSettling] = createSignal<"reply" | "cancel">()
+  const [settleError, setSettleError] = createSignal<string>()
   const [store, setStore] = createStore({
     tab: 0,
     answers: [] as QuestionAnswer[],
@@ -47,18 +50,35 @@ export function QuestionPrompt(props: { request: QuestionForm; directory?: strin
 
   function submit() {
     const answers = questions().map((_, i) => store.answers[i] ?? [])
-    void sdk.api.form.reply({
-      sessionID: props.request.sessionID,
-      formID: props.request.id,
-      answer: questionAnswer(questions(), answers),
-    })
+    settle("reply", () =>
+      sdk.api.form.reply({
+        sessionID: props.request.sessionID,
+        formID: props.request.id,
+        answer: questionAnswer(questions(), answers),
+      }),
+    )
   }
 
   function reject() {
-    void sdk.api.form.cancel({
-      sessionID: props.request.sessionID,
-      formID: props.request.id,
-    })
+    settle("cancel", () =>
+      sdk.api.form.cancel({
+        sessionID: props.request.sessionID,
+        formID: props.request.id,
+      }),
+    )
+  }
+
+  function settle(kind: "reply" | "cancel", run: () => Promise<unknown>) {
+    if (settling()) return
+    setSettling(kind)
+    setSettleError(undefined)
+    void run()
+      .catch((error) => {
+        setSettleError(errorMessage(error))
+      })
+      .finally(() => {
+        setSettling(undefined)
+      })
   }
 
   function pick(answer: string, custom: boolean = false) {
@@ -71,11 +91,13 @@ export function QuestionPrompt(props: { request: QuestionForm; directory?: strin
       setStore("custom", inputs)
     }
     if (single()) {
-      void sdk.api.form.reply({
-        sessionID: props.request.sessionID,
-        formID: props.request.id,
-        answer: questionAnswer(questions(), [[answer]]),
-      })
+      settle("reply", () =>
+        sdk.api.form.reply({
+          sessionID: props.request.sessionID,
+          formID: props.request.id,
+          answer: questionAnswer(questions(), [[answer]]),
+        }),
+      )
       return
     }
     setStore("tab", store.tab + 1)
@@ -151,10 +173,10 @@ export function QuestionPrompt(props: { request: QuestionForm; directory?: strin
     bindings: [
       {
         key: "escape",
-        desc: "Cancel answer edit",
+        desc: "Reject question",
         group: "Question",
         cmd: () => {
-          setStore("editing", false)
+          reject()
         },
       },
       ...tuiConfig.keybinds.get("prompt.clear"),
@@ -507,6 +529,12 @@ export function QuestionPrompt(props: { request: QuestionForm; directory?: strin
           <text fg={theme.text}>
             esc <span style={{ fg: theme.textMuted }}>dismiss</span>
           </text>
+          <Show when={settling()}>
+            <text fg={theme.textMuted}>{settling() === "cancel" ? "Dismissing..." : "Submitting..."}</text>
+          </Show>
+          <Show when={settleError()}>
+            <text fg={theme.error}>{settleError()}</text>
+          </Show>
         </box>
       </box>
     </box>
