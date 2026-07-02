@@ -9,8 +9,12 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { UnauthorizedError, type OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js"
 import {
   CallToolResultSchema,
+  GetPromptResultSchema,
+  ListPromptsResultSchema,
   ListRootsRequestSchema,
   ListToolsResultSchema,
+  PromptListChangedNotificationSchema,
+  PromptSchema,
   type LoggingMessageNotification,
   LoggingMessageNotificationSchema,
   ToolListChangedNotificationSchema,
@@ -30,6 +34,9 @@ type Transport = StdioClientTransport | StreamableHTTPClientTransport
 const TolerantListToolsResult = ListToolsResultSchema.extend({
   tools: ToolSchema.omit({ outputSchema: true }).array(),
 })
+const TolerantListPromptsResult = ListPromptsResultSchema.extend({
+  prompts: PromptSchema.array(),
+})
 
 export class NeedsAuthError extends Schema.TaggedErrorClass<NeedsAuthError>()("MCP.NeedsAuthError", {
   server: Schema.String,
@@ -44,6 +51,25 @@ export interface ToolDefinition {
   readonly name: string
   readonly description: string | undefined
   readonly inputSchema: unknown
+}
+
+export interface PromptDefinition {
+  readonly name: string
+  readonly description: string | undefined
+  readonly arguments: ReadonlyArray<{
+    readonly name: string
+    readonly description: string | undefined
+    readonly required: boolean | undefined
+  }> | undefined
+}
+
+export interface PromptMessage {
+  readonly role: string
+  readonly content: unknown
+}
+
+export interface PromptResult {
+  readonly messages: ReadonlyArray<PromptMessage>
 }
 
 export type CallToolContent =
@@ -68,6 +94,13 @@ export interface Connection {
   readonly instructions: string | undefined
   /** Lists the server's tools; returns [] when the server doesn't advertise tool support, fails on a transport error. */
   readonly tools: () => Effect.Effect<ToolDefinition[], Error>
+  /** Lists the server's prompts; returns [] when the server doesn't advertise prompt support, fails on a transport error. */
+  readonly prompts: () => Effect.Effect<PromptDefinition[], Error>
+  /** Invokes a prompt on the server. Interruption aborts the in-flight request. */
+  readonly prompt: (input: {
+    readonly name: string
+    readonly args?: Record<string, string>
+  }) => Effect.Effect<PromptResult, Error>
   /** Invokes a tool on the server. Interruption aborts the in-flight request. */
   readonly callTool: (input: {
     readonly name: string
@@ -78,6 +111,8 @@ export interface Connection {
   readonly onLog: (callback: (message: LogMessage) => void) => void
   /** Registers a callback fired when the server announces its tool list changed; no-op if unsupported. */
   readonly onToolsChanged: (callback: () => void) => void
+  /** Registers a callback fired when the server announces its prompt list changed; no-op if unsupported. */
+  readonly onPromptsChanged: (callback: () => void) => void
 }
 
 /** Connects an MCP server; closing the calling scope tears down the transport and any spawned process. */
@@ -166,6 +201,48 @@ export const connect = Effect.fnUntraced(function* (
             inputSchema: tool.inputSchema,
           }))
         }),
+      prompts: () =>
+        Effect.gen(function* () {
+          if (!client.getServerCapabilities()?.prompts) return []
+          const prompts = yield* Effect.tryPromise({
+            try: () =>
+              paginate(
+                async (cursor) => {
+                  const params = cursor === undefined ? undefined : { cursor }
+                  return client.request({ method: "prompts/list", params }, TolerantListPromptsResult, {
+                    timeout: requestTimeout,
+                  })
+                },
+                (result) => result.prompts,
+              ),
+            catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+          }).pipe(
+            Effect.tapError((error) => Effect.logWarning("failed to list MCP prompts", { server, error: error.message })),
+          )
+          return prompts.map((prompt) => ({
+            name: prompt.name,
+            description: prompt.description,
+            arguments: prompt.arguments?.map((argument) => ({
+              name: argument.name,
+              description: argument.description,
+              required: argument.required,
+            })),
+          }))
+        }),
+      prompt: (input) =>
+        Effect.tryPromise({
+          try: (signal) =>
+            client.request(
+              { method: "prompts/get", params: { name: input.name, arguments: input.args ?? {} } },
+              GetPromptResultSchema,
+              { signal, timeout: requestTimeout, resetTimeoutOnProgress: true, onprogress: () => {} },
+            ),
+          catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+        }).pipe(
+          Effect.map((result) => ({
+            messages: result.messages.map((message) => ({ role: message.role, content: message.content })),
+          })),
+        ),
       callTool: (input) =>
         Effect.tryPromise({
           try: (signal) =>
@@ -206,6 +283,10 @@ export const connect = Effect.fnUntraced(function* (
       onToolsChanged: (callback) => {
         if (!client.getServerCapabilities()?.tools?.listChanged) return
         client.setNotificationHandler(ToolListChangedNotificationSchema, async () => callback())
+      },
+      onPromptsChanged: (callback) => {
+        if (!client.getServerCapabilities()?.prompts?.listChanged) return
+        client.setNotificationHandler(PromptListChangedNotificationSchema, async () => callback())
       },
     } satisfies Connection
   }

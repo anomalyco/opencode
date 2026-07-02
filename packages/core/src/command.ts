@@ -4,12 +4,20 @@ import { makeLocationNode } from "./effect/app-node"
 import { Context, Effect, Layer, Types } from "effect"
 import { Command } from "@opencode-ai/schema/command"
 import { State } from "./state"
+import { MCP } from "./mcp/index"
 
 export const Info = Command.Info
 export type Info = Command.Info
 
 export type Data = {
   commands: Map<string, Types.DeepMutable<Info>>
+}
+
+export type Expanded = {
+  readonly info: Info
+  readonly prompt: {
+    readonly text: string
+  }
 }
 
 export type Draft = {
@@ -22,13 +30,15 @@ export type Draft = {
 export interface Interface extends State.Transformable<Draft> {
   readonly get: (name: string) => Effect.Effect<Info | undefined>
   readonly list: () => Effect.Effect<Info[]>
+  readonly expand: (input: { readonly name: string; readonly arguments?: string }) => Effect.Effect<Expanded | undefined>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Command") {}
 
 const layer = Layer.effect(
   Service,
-  Effect.sync(() => {
+  Effect.gen(function* () {
+    const mcp = yield* MCP.Service
     const state = State.create<Data, Draft>({
       initial: () => ({ commands: new Map() }),
       draft: (draft) => ({
@@ -45,18 +55,98 @@ const layer = Layer.effect(
         },
       }),
     })
+    const staticCommand = (name: string) => state.get().commands.get(name) as Info | undefined
+    const mcpCommands = Effect.fnUntraced(function* () {
+      return (yield* mcp.prompts()).map((prompt) =>
+        Info.make({
+          name: mcpCommandName(prompt.server, prompt.name),
+          template: "",
+          description: prompt.description,
+        }),
+      )
+    })
 
     return Service.of({
       reload: state.reload,
       transform: state.transform,
       get: Effect.fn("CommandV2.get")(function* (name) {
-        return state.get().commands.get(name)
+        const command = staticCommand(name)
+        if (command) return command
+        return (yield* mcpCommands()).find((command) => command.name === name)
       }),
       list: Effect.fn("CommandV2.list")(function* () {
-        return Array.from(state.get().commands.values())
+        const commands = Array.from(state.get().commands.values()) as Info[]
+        const names = new Set(commands.map((command) => command.name))
+        return [
+          ...commands,
+          ...(yield* mcpCommands()).filter((command) => !names.has(command.name)),
+        ].toSorted((a, b) => a.name.localeCompare(b.name))
+      }),
+      expand: Effect.fn("CommandV2.expand")(function* (input) {
+        const command = staticCommand(input.name)
+        if (command)
+          return {
+            info: command,
+            prompt: { text: expandTemplate(command.template, input.arguments ?? "") },
+          }
+
+        const prompt = (yield* mcp.prompts()).find((prompt) => mcpCommandName(prompt.server, prompt.name) === input.name)
+        if (!prompt) return undefined
+        const result = yield* mcp.prompt({
+          server: prompt.server,
+          name: prompt.name,
+          args: Object.fromEntries(
+            (prompt.arguments ?? []).map((argument, index) => [argument.name, parseArguments(input.arguments ?? "")[index] ?? ""]),
+          ),
+        })
+        if (!result) return undefined
+        return {
+          info: Info.make({ name: input.name, template: "", description: prompt.description }),
+          prompt: { text: result.messages.map((message) => promptMessageText(message.content)).join("\n").trim() },
+        }
       }),
     })
   }),
 )
 
-export const node = makeLocationNode({ service: Service, layer, deps: [] })
+function expandTemplate(template: string, input: string) {
+  const args = parseArguments(input)
+  const placeholders = template.match(placeholderRegex) ?? []
+  const last = Math.max(0, ...placeholders.map((item) => Number(item.slice(1))))
+  const expanded = template.replaceAll(placeholderRegex, (_, index) => {
+    const position = Number(index)
+    const argIndex = position - 1
+    if (argIndex >= args.length) return ""
+    if (position === last) return args.slice(argIndex).join(" ")
+    return args[argIndex]
+  })
+  const withArguments = expanded.replaceAll("$ARGUMENTS", input)
+  if (placeholders.length === 0 && !template.includes("$ARGUMENTS") && input.trim()) return `${withArguments}\n\n${input}`.trim()
+  return withArguments.trim()
+}
+
+function parseArguments(input: string) {
+  return (input.match(argsRegex) ?? []).map((arg) => arg.replace(quoteTrimRegex, ""))
+}
+
+function promptMessageText(content: unknown) {
+  if (typeof content === "string") return content
+  if (!content || typeof content !== "object") return ""
+  if (!("type" in content) || content.type !== "text") return ""
+  if (!("text" in content) || typeof content.text !== "string") return ""
+  return content.text
+}
+
+function mcpCommandName(server: string, prompt: string) {
+  return `${sanitize(server)}:${sanitize(prompt)}`
+}
+
+function sanitize(value: string) {
+  return value.replace(/[^a-zA-Z0-9_-]/g, "_")
+}
+
+const argsRegex = /(?:\[Image\s+\d+\]|"[^"]*"|'[^']*'|[^\s"']+)/gi
+const placeholderRegex = /\$(\d+)/g
+const quoteTrimRegex = /^["']|["']$/g
+
+export const node = makeLocationNode({ service: Service, layer, deps: [MCP.node] })
