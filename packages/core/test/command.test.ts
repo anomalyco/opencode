@@ -69,11 +69,11 @@ describe("CommandV2", () => {
       const command = yield* CommandV2.Service
       yield* command.transform((editor) => {
         editor.update("review", (command) => {
-          command.template = "Output: !`printf command-output`"
+          command.template = "Output: !`echo command-output`"
         })
       })
 
-      expect(yield* command.evaluate({ name: "review" })).toEqual({ text: "Output: command-output" })
+      expect((yield* command.evaluate({ name: "review" })).text.replace(/\r?\n$/, "")).toEqual("Output: command-output")
     }),
   )
 

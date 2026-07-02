@@ -49,6 +49,12 @@ const it = testEffect(
 const location = Location.Ref.make({ directory: AbsolutePath.make("/project") })
 const id = SessionV2.ID.create()
 
+/** Public session events from a `log` read, without caught-up markers. */
+const logEvents = (session: SessionV2.Interface, sessionID: SessionV2.ID, follow?: boolean) =>
+  session
+    .log({ sessionID, follow })
+    .pipe(Stream.filter((item): item is SessionEvent.DurableEvent => !EventV2.isCaughtUp(item)))
+
 const assertCreateInputTypes = (session: SessionV2.Interface) => {
   // @ts-expect-error location or parentID is required.
   session.create({})
@@ -66,7 +72,7 @@ describe("SessionV2.create", () => {
       const second = yield* session.create({ location })
 
       expect(second.id).not.toBe(first.id)
-      expect(yield* session.list()).toHaveLength(2)
+      expect((yield* session.list()).data).toHaveLength(2)
     }),
   )
 
@@ -79,7 +85,7 @@ describe("SessionV2.create", () => {
       const retried = yield* session.create(input)
 
       expect(retried).toEqual(first)
-      expect(yield* session.list()).toEqual([first])
+      expect((yield* session.list()).data).toEqual([first])
     }),
   )
 
@@ -146,7 +152,7 @@ describe("SessionV2.create", () => {
       const forked = yield* session.fork({ sessionID: parent.id })
       const parentContext = yield* session.context(parent.id)
       const forkContext = yield* session.context(forked.id)
-      const history = yield* session.history({ sessionID: forked.id, limit: 10 })
+      const history = Array.from(yield* Stream.runCollect(logEvents(session, forked.id)))
 
       expect(forked).toMatchObject({ parentID: parent.id, title: "Parent (fork #1)" })
       expect(forkContext).toMatchObject([
@@ -154,8 +160,8 @@ describe("SessionV2.create", () => {
         { type: "synthetic", text: "parent note", sessionID: forked.id },
       ])
       expect(forkContext.map((message) => message.id)).not.toEqual(parentContext.map((message) => message.id))
-      expect(history.events).toHaveLength(1)
-      expect(history.events[0]).toMatchObject({
+      expect(history).toHaveLength(1)
+      expect(history[0]).toMatchObject({
         type: "session.next.forked",
         durable: { seq: 0 },
         data: { sessionID: forked.id, parentID: parent.id },
@@ -175,7 +181,9 @@ describe("SessionV2.create", () => {
       expect((yield* session.context(forked.id)).map((message) => message.type)).toEqual(["user", "synthetic", "user"])
       expect((yield* session.context(forked.id)).at(-1)).toMatchObject({ text: "Child continues" })
       expect(
-        (yield* session.history({ sessionID: forked.id, limit: 10 })).events.map((event) => event.durable?.seq),
+        Array.from(yield* Stream.runCollect(logEvents(session, forked.id))).map(
+          (event): number | undefined => event.durable?.seq,
+        ),
       ).toEqual([0, 4, 5])
       expect(yield* SessionInput.find(db, admitted.id)).toMatchObject({ sessionID: parent.id })
     }),
@@ -203,10 +211,10 @@ describe("SessionV2.create", () => {
       const forked = yield* session.fork({ sessionID: parent.id, messageID: second.id })
 
       const context = yield* session.context(forked.id)
-      const history = yield* session.history({ sessionID: forked.id, limit: 10 })
+      const history = Array.from(yield* Stream.runCollect(logEvents(session, forked.id)))
       expect(context).toMatchObject([{ text: "First" }])
       expect(context[0]?.id).not.toBe(first.id)
-      expect(history.events[0]).toMatchObject({ data: { messageID: second.id } })
+      expect(history[0]).toMatchObject({ data: { messageID: second.id } })
     }),
   )
 
@@ -227,7 +235,7 @@ describe("SessionV2.create", () => {
       for (const input of changed) {
         expect(yield* session.create(input)).toEqual(created)
       }
-      expect(yield* session.list()).toHaveLength(1)
+      expect((yield* session.list()).data).toHaveLength(1)
     }),
   )
 
@@ -239,7 +247,7 @@ describe("SessionV2.create", () => {
       const created = yield* Effect.all([session.create(input), session.create(input)], { concurrency: "unbounded" })
 
       expect(created[1]).toEqual(created[0])
-      expect(yield* session.list()).toEqual([created[0]])
+      expect((yield* session.list()).data).toEqual([created[0]])
     }),
   )
 
@@ -317,7 +325,7 @@ describe("SessionV2.create", () => {
       yield* SessionInput.promoteSteers(db, events, created.id, Number.MAX_SAFE_INTEGER)
 
       expect(
-        Array.from(yield* session.events({ sessionID: created.id }).pipe(Stream.take(2), Stream.runCollect)),
+        Array.from(yield* logEvents(session, created.id, true).pipe(Stream.take(2), Stream.runCollect)),
       ).toMatchObject([
         { durable: { seq: 1 }, type: "session.next.prompt.admitted", data: { prompt: { text: "Hello" } } },
         { durable: { seq: 2 }, type: "session.next.prompted" },
@@ -447,7 +455,7 @@ describe("SessionV2.create", () => {
 
       expect(yield* session.get(created.id)).toMatchObject({ agent: "plan" })
       expect(
-        Array.from(yield* session.events({ sessionID: created.id }).pipe(Stream.take(1), Stream.runCollect)),
+        Array.from(yield* logEvents(session, created.id, true).pipe(Stream.take(1), Stream.runCollect)),
       ).toMatchObject([{ type: "session.next.agent.switched", data: { agent: "plan" } }])
     }),
   )
@@ -480,7 +488,7 @@ describe("SessionV2.create", () => {
 
       expect(yield* session.get(created.id)).toMatchObject({ model })
       expect(
-        Array.from(yield* session.events({ sessionID: created.id }).pipe(Stream.take(1), Stream.runCollect)),
+        Array.from(yield* logEvents(session, created.id, true).pipe(Stream.take(1), Stream.runCollect)),
       ).toMatchObject([{ type: "session.next.model.switched", data: { model } }])
     }),
   )

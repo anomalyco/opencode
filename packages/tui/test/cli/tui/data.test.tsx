@@ -232,7 +232,8 @@ test("connectedOnce is false until first connect and persists across disconnect"
 test("tracks session status from active sessions and execution events", async () => {
   const events = createEventStream()
   const calls = createFetch((url) => {
-    if (url.pathname === "/api/session/active") return json({ data: { "session-active": { type: "running" } } })
+    if (url.pathname === "/api/session/active")
+      return json({ data: { "session-active": { type: "running" } }, watermarks: {} })
   }, events)
   let data!: ReturnType<typeof useData>
 

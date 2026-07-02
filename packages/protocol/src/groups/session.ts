@@ -4,9 +4,10 @@ import { PromptInput } from "@opencode-ai/schema/prompt-input"
 import { Session } from "@opencode-ai/schema/session"
 import { SessionContextEntry } from "@opencode-ai/schema/session-context-entry"
 import { Project } from "@opencode-ai/schema/project"
-import { AbsolutePath, NonNegativeInt, PositiveInt, RelativePath, statics } from "@opencode-ai/schema/schema"
+import { AbsolutePath, PositiveInt, RelativePath, statics } from "@opencode-ai/schema/schema"
+import { Event } from "@opencode-ai/schema/event"
 import { Workspace } from "@opencode-ai/schema/workspace"
-import { Context, Effect, Encoding, Result, Schema, Struct } from "effect"
+import { Context, Effect, Encoding, Result, Schema, SchemaGetter, Struct } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
 import {
   ConflictError,
@@ -26,6 +27,7 @@ import { Model } from "@opencode-ai/schema/model"
 import { Location } from "@opencode-ai/schema/location"
 import { Revert } from "@opencode-ai/schema/revert"
 import { SessionEvent } from "@opencode-ai/schema/session-event"
+import { EventLog } from "@opencode-ai/schema/event-log"
 
 const SessionsQueryFields = {
   workspace: Workspace.ID.pipe(Schema.optional),
@@ -89,12 +91,18 @@ const SessionActive = Schema.Struct({
   type: Schema.Literal("running"),
 }).annotate({ identifier: "SessionActive" })
 
-const SessionHistoryLimit = PositiveInt.check(Schema.isLessThanOrEqualTo(100))
-
-export const SessionHistoryQuery = Schema.Struct({
-  limit: Schema.NumberFromString.pipe(Schema.decodeTo(SessionHistoryLimit), Schema.optional),
-  after: Schema.NumberFromString.pipe(Schema.decodeTo(NonNegativeInt), Schema.optional),
+const SessionWatermarks = Schema.Record(Session.ID, Event.Seq).annotate({
+  identifier: "SessionWatermarks",
+  description:
+    "Durable log seq each session's snapshot was computed at. Attach a live log read after the watermark to compose fetch and stream gap-free; apply a snapshot only where its watermark is at or beyond already-applied events. Sessions without durable events are absent.",
 })
+
+const BooleanFromString = Schema.Literals(["true", "false"]).pipe(
+  Schema.decodeTo(Schema.Boolean, {
+    decode: SchemaGetter.transform((value) => value === "true"),
+    encode: SchemaGetter.transform((value): "true" | "false" => (value ? "true" : "false")),
+  }),
+)
 
 const SessionsQueryCursor = SessionsCursor.annotate({
   description: "Opaque pagination cursor returned as cursor.previous or cursor.next in the previous response.",
@@ -115,6 +123,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
         query: SessionsQuery,
         success: Schema.Struct({
           data: Schema.Array(Session.Info),
+          watermarks: SessionWatermarks,
           cursor: Schema.Struct({
             previous: SessionsCursor.pipe(Schema.optional),
             next: SessionsCursor.pipe(Schema.optional),
@@ -149,13 +158,13 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
     )
     .add(
       HttpApiEndpoint.get("session.active", "/api/session/active", {
-        success: Schema.Struct({ data: Schema.Record(Session.ID, SessionActive) }),
+        success: Schema.Struct({ data: Schema.Record(Session.ID, SessionActive), watermarks: SessionWatermarks }),
       }).annotateMerge(
         OpenApi.annotations({
           identifier: "v2.session.active",
           summary: "List active sessions",
           description:
-            "Retrieve foreground Session drains currently owned by this OpenCode process. Sessions absent from the result are inactive.",
+            "Retrieve foreground Session drains currently owned by this OpenCode process. Sessions absent from the result are inactive. Watermarks are the durable log positions read alongside the activity snapshot; activity itself is process state, so the pairing is advisory rather than transactional.",
         }),
       ),
     )
@@ -282,7 +291,8 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
           OpenApi.annotations({
             identifier: "v2.session.command",
             summary: "Run command",
-            description: "Resolve a slash command into prompt input, admit it durably, and schedule execution unless resume is false.",
+            description:
+              "Resolve a slash command into prompt input, admit it durably, and schedule execution unless resume is false.",
           }),
         ),
     )
@@ -455,40 +465,24 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
         ),
     )
     .add(
-      HttpApiEndpoint.get("session.history", "/api/session/:sessionID/history", {
-        params: { sessionID: Session.ID },
-        query: SessionHistoryQuery,
-        success: Schema.Struct({
-          data: Schema.Array(SessionEvent.Durable),
-          hasMore: Schema.Boolean,
-        }).annotate({ identifier: "SessionHistory" }),
-        error: SessionNotFoundError,
-      })
-        .middleware(sessionLocationMiddleware)
-        .annotateMerge(
-          OpenApi.annotations({
-            identifier: "v2.session.history",
-            summary: "Get session history",
-            description:
-              "Read one finite page of public durable Session events after an exclusive aggregate sequence. Newly committed events may appear on later pages.",
-          }),
-        ),
-    )
-    .add(
-      HttpApiEndpoint.get("session.events", "/api/session/:sessionID/event", {
+      HttpApiEndpoint.get("session.log", "/api/session/:sessionID/log", {
         params: { sessionID: Session.ID },
         query: {
-          after: Schema.NumberFromString.pipe(Schema.decodeTo(NonNegativeInt), Schema.optional),
+          after: Schema.NumberFromString.pipe(Schema.decodeTo(Event.Seq), Schema.optional),
+          follow: BooleanFromString.pipe(Schema.optional),
         },
-        success: HttpApiSchema.StreamSse({ data: SessionEvent.Durable }),
+        success: HttpApiSchema.StreamSse({
+          data: Schema.Union([SessionEvent.Durable, EventLog.CaughtUp]).annotate({ identifier: "SessionLogItem" }),
+        }),
         error: SessionNotFoundError,
       })
         .middleware(sessionLocationMiddleware)
         .annotateMerge(
           OpenApi.annotations({
-            identifier: "v2.session.events",
-            summary: "Subscribe to session events",
-            description: "Replay durable events after an aggregate sequence, then continue with new durable events.",
+            identifier: "v2.session.log",
+            summary: "Read the session log",
+            description:
+              "Durable, ordered, gap-free read of public session events after an exclusive aggregate sequence. Emits a caught-up marker once the replay reaches the end of the log, then completes; with follow=true it continues with live events instead. The only event API that promises reliability: attach after a snapshot watermark to compose fetch and stream without a race window.",
           }),
         ),
     )

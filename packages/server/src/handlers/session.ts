@@ -19,7 +19,6 @@ import {
 import { AbsolutePath } from "@opencode-ai/core/schema"
 
 const DefaultSessionsLimit = 50
-const DefaultSessionHistoryLimit = 50
 
 export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handlers) =>
   Effect.gen(function* () {
@@ -35,15 +34,17 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                   Effect.mapError(() => new InvalidCursorError({ message: "Invalid cursor" })),
                 )
               : ctx.query
-          const sessions = yield* session.list({
+          const page = yield* session.list({
             ...query,
             workspaceID: query.workspace,
             limit: ctx.query.limit ?? DefaultSessionsLimit,
           })
+          const sessions = page.data
           const first = sessions[0]
           const last = sessions.at(-1)
           return {
             data: sessions,
+            watermarks: Object.fromEntries(page.watermarks),
             cursor: {
               previous: first
                 ? SessionsCursor.make({
@@ -87,10 +88,11 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.active",
         Effect.fn(function* () {
+          const active = yield* session.active
+          const watermarks = yield* session.watermarks(Array.from(active))
           return {
-            data: Object.fromEntries(
-              Array.from(yield* session.active, (sessionID) => [sessionID, { type: "running" as const }]),
-            ),
+            data: Object.fromEntries(Array.from(active, (sessionID) => [sessionID, { type: "running" as const }])),
+            watermarks: Object.fromEntries(watermarks),
           }
         }),
       )
@@ -547,35 +549,12 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
         }),
       )
       .handle(
-        "session.history",
-        Effect.fn(function* (ctx) {
-          return yield* session
-            .history({
-              sessionID: ctx.params.sessionID,
-              after: ctx.query.after,
-              limit: ctx.query.limit ?? DefaultSessionHistoryLimit,
-            })
-            .pipe(
-              Effect.map((page) => ({
-                data: page.events,
-                hasMore: page.hasMore,
-              })),
-              Effect.catchTag(
-                "Session.NotFoundError",
-                (error) =>
-                  new SessionNotFoundError({
-                    sessionID: error.sessionID,
-                    message: `Session not found: ${error.sessionID}`,
-                  }),
-              ),
-            )
-        }),
-      )
-      .handle(
-        "session.events",
+        "session.log",
         Effect.fn((ctx) =>
           Effect.succeed(
-            session.events({ sessionID: ctx.params.sessionID, after: ctx.query.after }).pipe(Stream.orDie),
+            session
+              .log({ sessionID: ctx.params.sessionID, after: ctx.query.after, follow: ctx.query.follow })
+              .pipe(Stream.orDie),
           ),
         ),
       )

@@ -1,7 +1,9 @@
 import { expect, test } from "bun:test"
 import { DateTime, Effect, Stream } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/unstable/http"
-import { AbsolutePath, Agent, Location, Model, OpenCode, Prompt, Session, SessionMessage } from "../src/effect"
+import { AbsolutePath, Agent, Event, Location, Model, OpenCode, Prompt, Session, SessionMessage } from "../src/effect"
+
+const caughtUp = { type: "log.caught_up" as const, aggregateID: "ses_test", seq: Event.Seq.make(1) }
 
 test("session.get returns the decoded Effect projection", async () => {
   const httpClient = HttpClient.make((request) =>
@@ -60,29 +62,17 @@ test("event.subscribe terminates on Effect protocol decode failures", async () =
 })
 
 test("session methods retain decoded Effect inputs and outputs", async () => {
-  const historyQueries: Array<Record<string, string>> = []
-  let historyPage = 0
+  const logQueries: Array<Record<string, string>> = []
   const httpClient = HttpClient.make((request) => {
     const url = request.url
-    if (url.includes("/event")) {
+    if (url.includes("/log")) {
+      logQueries.push(Object.fromEntries(request.urlParams.params))
       return Effect.succeed(
         HttpClientResponse.fromWeb(
           request,
-          new Response(`data: ${JSON.stringify(modelSwitchedEvent)}\n\n`, {
+          new Response(`data: ${JSON.stringify(modelSwitchedEvent)}\n\ndata: ${JSON.stringify(caughtUp)}\n\n`, {
             headers: { "content-type": "text/event-stream" },
           }),
-        ),
-      )
-    }
-    if (url.includes("/history")) {
-      historyPage++
-      historyQueries.push(Object.fromEntries(request.urlParams.params))
-      return Effect.succeed(
-        HttpClientResponse.fromWeb(
-          request,
-          Response.json(
-            historyPage === 1 ? { data: [modelSwitchedEvent], hasMore: true } : { data: [], hasMore: false },
-          ),
         ),
       )
     }
@@ -97,7 +87,10 @@ test("session methods retain decoded Effect inputs and outputs", async () => {
     }
     if (url.endsWith("/api/session/active")) {
       return Effect.succeed(
-        HttpClientResponse.fromWeb(request, Response.json({ data: { ses_test: { type: "running" } } })),
+        HttpClientResponse.fromWeb(
+          request,
+          Response.json({ data: { ses_test: { type: "running" } }, watermarks: { ses_test: 3 } }),
+        ),
       )
     }
     if (request.method === "POST" && url.endsWith("/api/session")) {
@@ -107,7 +100,10 @@ test("session methods retain decoded Effect inputs and outputs", async () => {
       return Effect.succeed(HttpClientResponse.fromWeb(request, new Response(null, { status: 204 })))
     }
     return Effect.succeed(
-      HttpClientResponse.fromWeb(request, Response.json({ data: [session.data], cursor: { next: "next" } })),
+      HttpClientResponse.fromWeb(
+        request,
+        Response.json({ data: [session.data], watermarks: { ses_test: 3 }, cursor: { next: "next" } }),
+      ),
     )
   })
   const result = await Effect.gen(function* () {
@@ -130,31 +126,20 @@ test("session methods retain decoded Effect inputs and outputs", async () => {
     yield* client.session.compact({ sessionID: Session.ID.make("ses_test") })
     yield* client.session.wait({ sessionID: Session.ID.make("ses_test") })
     const context = yield* client.session.context({ sessionID: Session.ID.make("ses_test") })
-    const history = yield* client.session.history({
-      sessionID: Session.ID.make("ses_test"),
-      after: 0,
-      limit: 1,
-    })
-    const historyNext = history.hasMore
-      ? yield* client.session.history({
-          sessionID: Session.ID.make("ses_test"),
-          after: history.data.at(-1)?.durable?.seq,
-          limit: 2,
-        })
-      : undefined
-    const events = yield* client.session
-      .events({ sessionID: Session.ID.make("ses_test"), after: 0 })
+    const log = yield* client.session
+      .log({ sessionID: Session.ID.make("ses_test"), after: Event.Seq.make(0) })
       .pipe(Stream.runCollect)
     yield* client.session.interrupt({ sessionID: Session.ID.make("ses_test") })
     const message = yield* client.session.message({
       sessionID: Session.ID.make("ses_test"),
       messageID: SessionMessage.ID.make("msg_model"),
     })
-    return { page, active, created, admitted, context, history, historyNext, events, message }
+    return { page, active, created, admitted, context, log, message }
   }).pipe(Effect.provideService(HttpClient.HttpClient, httpClient), Effect.runPromise)
 
   expect(DateTime.toEpochMillis(result.page.data[0].time.created)).toBe(1_717_171_717_000)
-  expect(result.active).toEqual({ ses_test: { type: "running" } })
+  expect(result.active).toEqual({ data: { ses_test: { type: "running" } }, watermarks: { ses_test: 3 } })
+  expect(result.page.watermarks).toEqual({ ses_test: 3 })
   expect(Object.getPrototypeOf(result.page.data[0])).toBe(Object.prototype)
   expect(Object.getPrototypeOf(result.created)).toBe(Object.prototype)
   expect(result.created.id).toBe("ses_test")
@@ -162,16 +147,17 @@ test("session methods retain decoded Effect inputs and outputs", async () => {
   expect(Object.getPrototypeOf(result.admitted.prompt)).toBe(Object.prototype)
   expect(DateTime.toEpochMillis(result.admitted.timeCreated)).toBe(1_717_171_717_000)
   expect(result.context).toEqual([])
-  expect(DateTime.toEpochMillis(result.history.data[0].data.timestamp)).toBe(1_717_171_717_000)
-  expect(result.history).toEqual(expect.objectContaining({ hasMore: true }))
-  expect(result.historyNext).toEqual({ data: [], hasMore: false })
-  expect(historyQueries[0]).toEqual({ limit: "1", after: "0" })
-  expect(historyQueries[1]).toEqual({ limit: "2", after: "1" })
-  expect(DateTime.toEpochMillis(result.events[0].data.timestamp)).toBe(1_717_171_717_000)
+  expect(logQueries[0]).toEqual({ after: "0" })
+  const logged = Array.from(result.log)
+  expect(logged.map((item) => item.type)).toEqual(["session.next.model.switched", "log.caught_up"])
+  expect(logged[0]?.type === "session.next.model.switched" && DateTime.toEpochMillis(logged[0].data.timestamp)).toBe(
+    1_717_171_717_000,
+  )
+  expect(logged.at(-1)).toEqual(caughtUp)
   expect(result.message).toEqual(expect.objectContaining({ id: "msg_model", type: "model-switched" }))
 })
 
-test("session.history retains the typed SessionNotFoundError", async () => {
+test("session.log retains the typed SessionNotFoundError", async () => {
   const httpClient = HttpClient.make((request) =>
     Effect.succeed(
       HttpClientResponse.fromWeb(
@@ -185,11 +171,7 @@ test("session.history retains the typed SessionNotFoundError", async () => {
   )
   const error = await Effect.gen(function* () {
     const client = yield* OpenCode.make({ baseUrl: "http://localhost:3000" })
-    return yield* client.session
-      .history({
-        sessionID: Session.ID.make("ses_missing"),
-      })
-      .pipe(Effect.flip)
+    return yield* client.session.log({ sessionID: Session.ID.make("ses_missing") }).pipe(Stream.runCollect, Effect.flip)
   }).pipe(Effect.provideService(HttpClient.HttpClient, httpClient), Effect.runPromise)
 
   expect(error._tag).toBe("SessionNotFoundError")

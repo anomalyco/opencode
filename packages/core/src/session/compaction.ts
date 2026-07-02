@@ -321,12 +321,12 @@ export const layer = Layer.effect(
       compactIfNeeded: compaction.compactIfNeeded,
       compactAfterOverflow: compaction.compactAfterOverflow,
       compactManual: Effect.fn("SessionCompaction.compactManual")(function* (input) {
-        const model = yield* models.resolve(input.session).pipe(Effect.catch(() => Effect.succeed(undefined)))
-        if (!model) return false
+        const resolved = yield* models.resolve(input.session).pipe(Effect.catch(() => Effect.succeed(undefined)))
+        if (!resolved) return false
         return yield* compaction.compactManual({
           sessionID: input.session.id,
           messages: input.messages,
-          model,
+          model: resolved.model,
         })
       }),
     })

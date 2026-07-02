@@ -3,6 +3,7 @@ export * as EventV2 from "./event"
 import { Cause, Context, Effect, Layer, Option, PubSub, Queue, Schema, Stream } from "effect"
 import { Event } from "@opencode-ai/schema/event"
 import type { Data, Definition, Payload } from "@opencode-ai/schema/event"
+import type { EventLog } from "@opencode-ai/schema/event-log"
 import { and, asc, eq, gt, inArray, sql } from "drizzle-orm"
 import { Database } from "./database/database"
 import { EventSequenceTable, EventTable } from "./event/sql"
@@ -13,6 +14,10 @@ import { Durable } from "@opencode-ai/schema/durable-event-manifest"
 
 export const ID = Event.ID
 export type ID = import("@opencode-ai/schema/event").ID
+export const Seq = Event.Seq
+export type Seq = import("@opencode-ai/schema/event").Seq
+export const Version = Event.Version
+export type Version = import("@opencode-ai/schema/event").Version
 export type { Data, Definition, Payload } from "@opencode-ai/schema/event"
 
 export type Subscriber<D extends Definition = Definition> = (event: Payload<D>) => Effect.Effect<void>
@@ -63,6 +68,12 @@ export class InvalidDurableEventError extends Schema.TaggedErrorClass<InvalidDur
   },
 ) {}
 
+const envelope = (aggregateID: string, seq: number, version: number) => ({
+  aggregateID,
+  seq: Seq.make(seq),
+  version: Version.make(version),
+})
+
 const decodeSerializedEvent = (event: SerializedEvent): Payload => {
   const definition = Durable.get(event.type)
   if (!definition?.durable) {
@@ -71,57 +82,10 @@ const decodeSerializedEvent = (event: SerializedEvent): Payload => {
   return {
     id: event.id,
     type: definition.type,
-    durable: { aggregateID: event.aggregateID, seq: event.seq, version: definition.durable.version },
+    durable: envelope(event.aggregateID, event.seq, definition.durable.version),
     data: Schema.decodeUnknownSync(definition.data)(event.data),
   }
 }
-
-export const readAggregate = Effect.fn("EventV2.readAggregate")(function* <A>(
-  db: Database.Interface["db"],
-  input: {
-    readonly aggregateID: string
-    readonly after?: number
-    readonly limit: number
-    readonly manifest: {
-      readonly definitions: ReadonlyMap<string, Definition>
-      readonly schema: Schema.Decoder<A, never>
-    }
-  },
-) {
-  const after = input.after ?? -1
-  const rows = yield* db
-    .select()
-    .from(EventTable)
-    .where(
-      and(
-        eq(EventTable.aggregate_id, input.aggregateID),
-        gt(EventTable.seq, after),
-        inArray(EventTable.type, Array.from(input.manifest.definitions.keys())),
-      ),
-    )
-    .orderBy(asc(EventTable.seq))
-    .limit(input.limit + 1)
-    .all()
-    .pipe(Effect.orDie)
-  const page = rows.slice(0, input.limit)
-  const decode = Schema.decodeUnknownSync(input.manifest.schema)
-  const events = page.map((event) =>
-    decode({
-      id: event.id,
-      type: input.manifest.definitions.get(event.type)?.type ?? event.type,
-      durable: {
-        aggregateID: event.aggregate_id,
-        seq: event.seq,
-        version: input.manifest.definitions.get(event.type)?.durable?.version,
-      },
-      data: event.data,
-    }),
-  )
-  return {
-    events,
-    hasMore: rows.length > input.limit,
-  }
-})
 
 export class SubscriberOverflowError extends Schema.TaggedErrorClass<SubscriberOverflowError>()(
   "EventV2.SubscriberOverflow",
@@ -139,6 +103,11 @@ export interface PublishOptions {
   readonly commit?: (seq: number) => Effect.Effect<void>
 }
 
+/** Marker/event union emitted by `log`. Markers carry no event `id`. */
+export type LogItem = Payload | EventLog.CaughtUp
+
+export const isCaughtUp = (item: LogItem): item is EventLog.CaughtUp => !("id" in item)
+
 export interface Interface {
   readonly publish: <D extends Definition>(
     definition: D,
@@ -146,8 +115,31 @@ export interface Interface {
     options?: PublishOptions,
   ) => Effect.Effect<Payload<D>>
   readonly subscribe: <D extends Definition>(definition: D) => Stream.Stream<Payload<D>>
-  readonly all: () => Stream.Stream<Payload>
-  readonly durable: (input: { readonly aggregateID: string; readonly after?: number }) => Stream.Stream<Payload>
+  /**
+   * Volatile live channel: every event published from now on, nothing before,
+   * nothing across a disconnect. The only channel that carries non-durable
+   * events; consumers that need reliability combine `changes` with `log`.
+   */
+  readonly live: () => Stream.Stream<Payload>
+  /**
+   * Durable, ordered, gap-free per-aggregate log read. `follow: false`
+   * completes at the end of the log; `follow: true` replays then transitions
+   * to live. Both modes emit a `CaughtUp` marker at the replay boundary; the
+   * marker may be re-emitted after internal re-attaches.
+   */
+  readonly log: (input: {
+    readonly aggregateID: string
+    readonly after?: number
+    readonly follow?: boolean
+  }) => Stream.Stream<LogItem>
+  /**
+   * Coalescing hint channel: latest committed seq per aggregate, never a
+   * delivery guarantee. Emits `SweepRequired` first on every subscribe and
+   * whenever per-key retention is exceeded. Never fails under backpressure.
+   */
+  readonly changes: () => Stream.Stream<EventLog.Change>
+  /** Latest committed seq per aggregate. Aggregates without events are absent. */
+  readonly sequences: (aggregateIDs: ReadonlyArray<string>) => Effect.Effect<ReadonlyMap<string, Seq>>
   /** @deprecated Use `all()` and consume the returned stream. */
   readonly listen: (listener: Subscriber) => Effect.Effect<Unsubscribe>
   readonly project: <D extends Definition>(definition: D, projector: Subscriber<D>) => Effect.Effect<void>
@@ -165,7 +157,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Event") {}
 
-export const allBounded = (events: Interface, capacity: number) =>
+export const liveBounded = (events: Interface, capacity: number) =>
   Effect.gen(function* () {
     const queue = yield* Queue.dropping<Payload, SubscriberOverflowError>(capacity)
     const unsubscribe = yield* events.listen((event) =>
@@ -181,6 +173,11 @@ export const allBounded = (events: Interface, capacity: number) =>
 
 export interface LayerOptions {
   readonly beforeAggregateRead?: (aggregateID: string) => Effect.Effect<void>
+  /**
+   * Maximum distinct aggregates buffered per changes subscriber before the
+   * buffer is abandoned and the subscriber is told to sweep.
+   */
+  readonly changesKeyCapacity?: number
 }
 
 export const layerWith = (options?: LayerOptions) =>
@@ -188,13 +185,19 @@ export const layerWith = (options?: LayerOptions) =>
     Service,
     Effect.gen(function* () {
       const pubsub = {
-        all: yield* PubSub.unbounded<Payload>(),
+        live: yield* PubSub.unbounded<Payload>(),
         durable: new Map<string, Set<PubSub.PubSub<void>>>(),
         typed: new Map<string, PubSub.PubSub<Payload>>(),
       }
       const projectors = new Map<string, Subscriber[]>()
       // TODO: Bind durable projectors to exact type+version before supporting incompatible historical payloads.
       const listeners = new Array<Subscriber>()
+      const changesKeyCapacity = options?.changesKeyCapacity ?? 4096
+      const changesSubscribers = new Set<{
+        readonly hints: Map<string, number>
+        sweepRequired: boolean
+        readonly wake: PubSub.PubSub<void>
+      }>()
       const { db } = yield* Database.Service
 
       const getOrCreate = (definition: Definition) =>
@@ -208,13 +211,16 @@ export const layerWith = (options?: LayerOptions) =>
 
       yield* Effect.addFinalizer(() =>
         Effect.gen(function* () {
-          yield* PubSub.shutdown(pubsub.all)
+          yield* PubSub.shutdown(pubsub.live)
           yield* Effect.forEach(
             pubsub.durable.values(),
             (pubsubs) => Effect.forEach(pubsubs, PubSub.shutdown, { discard: true }),
             { discard: true },
           )
           yield* Effect.forEach(pubsub.typed.values(), PubSub.shutdown, { discard: true })
+          yield* Effect.forEach(changesSubscribers, (subscriber) => PubSub.shutdown(subscriber.wake), {
+            discard: true,
+          })
         }),
       )
 
@@ -373,6 +379,27 @@ export const layerWith = (options?: LayerOptions) =>
                       (wake) => PubSub.publish(wake, undefined),
                       { discard: true },
                     )
+                    yield* Effect.forEach(
+                      changesSubscribers,
+                      (subscriber) =>
+                        Effect.sync(() => {
+                          // Coalesce to the latest seq per aggregate. Overflowing key
+                          // cardinality abandons the buffer instead of dropping hints silently.
+                          if (
+                            subscriber.hints.size >= changesKeyCapacity &&
+                            !subscriber.hints.has(committed.aggregateID)
+                          ) {
+                            subscriber.hints.clear()
+                            subscriber.sweepRequired = true
+                          } else if (!subscriber.sweepRequired) {
+                            subscriber.hints.set(
+                              committed.aggregateID,
+                              Math.max(subscriber.hints.get(committed.aggregateID) ?? -1, committed.seq),
+                            )
+                          }
+                        }).pipe(Effect.andThen(PubSub.publish(subscriber.wake, undefined)), Effect.asVoid),
+                      { discard: true },
+                    )
                   }
                   return committed
                 }),
@@ -396,11 +423,7 @@ export const layerWith = (options?: LayerOptions) =>
             if (committed) {
               event = {
                 ...event,
-                durable: {
-                  aggregateID: committed.aggregateID,
-                  seq: committed.seq,
-                  version: definition.durable.version,
-                },
+                durable: envelope(committed.aggregateID, committed.seq, definition.durable.version),
               }
               yield* notify(event as Payload, true)
               return event
@@ -428,7 +451,7 @@ export const layerWith = (options?: LayerOptions) =>
           )
           const typed = pubsub.typed.get(event.type)
           if (typed) yield* PubSub.publish(typed, event)
-          yield* PubSub.publish(pubsub.all, event)
+          yield* PubSub.publish(pubsub.live, event)
         })
       }
 
@@ -480,11 +503,7 @@ export const layerWith = (options?: LayerOptions) =>
               yield* notify(
                 {
                   ...payload,
-                  durable: {
-                    aggregateID: committed.aggregateID,
-                    seq: committed.seq,
-                    version: definition.durable.version,
-                  },
+                  durable: envelope(committed.aggregateID, committed.seq, definition.durable.version),
                 },
                 true,
               )
@@ -552,7 +571,7 @@ export const layerWith = (options?: LayerOptions) =>
           Stream.map((event) => event as Payload<D>),
         )
 
-      const streamAll = (): Stream.Stream<Payload> => Stream.fromPubSub(pubsub.all)
+      const streamLive = (): Stream.Stream<Payload> => Stream.fromPubSub(pubsub.live)
 
       const readAfter = (aggregateID: string, after: number) =>
         (options?.beforeAggregateRead?.(aggregateID) ?? Effect.void).pipe(
@@ -565,17 +584,24 @@ export const layerWith = (options?: LayerOptions) =>
               .all(),
           ),
           Effect.orDie,
-          Effect.map((rows) =>
-            rows.map((event) =>
-              decodeSerializedEvent({
-                id: event.id,
-                aggregateID: event.aggregate_id,
-                seq: event.seq,
-                type: event.type,
-                data: event.data,
-              }),
-            ),
-          ),
+          // Skip types missing from the durable manifest instead of failing the
+          // read: the aggregate may hold events this process cannot decode. The
+          // raw tail seq keeps cursors advancing across the resulting gaps.
+          Effect.map((rows) => ({
+            seq: rows.at(-1)?.seq,
+            events: rows.flatMap((event) => {
+              if (!Durable.get(event.type)?.durable) return []
+              return [
+                decodeSerializedEvent({
+                  id: event.id,
+                  aggregateID: event.aggregate_id,
+                  seq: event.seq,
+                  type: event.type,
+                  data: event.data,
+                }),
+              ]
+            }),
+          })),
         )
 
       const subscribeDurable = (aggregateID: string) =>
@@ -598,26 +624,94 @@ export const layerWith = (options?: LayerOptions) =>
           return subscription
         })
 
-      const durable = (input: { readonly aggregateID: string; readonly after?: number }): Stream.Stream<Payload> =>
+      const log = (input: {
+        readonly aggregateID: string
+        readonly after?: number
+        readonly follow?: boolean
+      }): Stream.Stream<LogItem> =>
         Stream.unwrap(
           Effect.gen(function* () {
-            const wakes = yield* subscribeDurable(input.aggregateID)
             let sequence = input.after ?? -1
             const read = Effect.suspend(() => readAfter(input.aggregateID, sequence)).pipe(
-              Effect.tap((events) =>
+              Effect.tap((page) =>
                 Effect.sync(() => {
-                  sequence = events.at(-1)?.durable?.seq ?? sequence
+                  sequence = page.seq ?? sequence
                 }),
               ),
+              Effect.map((page) => page.events),
             )
+            // Subscribing before the historical read means events committed during
+            // replay either appear in the read or arrive through a post-marker wake.
+            const wakes = input.follow ? yield* subscribeDurable(input.aggregateID) : undefined
             const historical = yield* read
+            const marker: EventLog.CaughtUp = {
+              type: "log.caught_up",
+              aggregateID: input.aggregateID,
+              ...(sequence >= 0 ? { seq: Seq.make(sequence) } : {}),
+            }
+            const replay = Stream.fromIterable<LogItem>(historical).pipe(Stream.concat(Stream.make(marker)))
+            if (!wakes) return replay
             const live = Stream.fromSubscription(wakes).pipe(
               Stream.mapEffect(() => read),
               Stream.flattenIterable,
             )
-            return Stream.concat(Stream.fromIterable(historical), live)
+            return Stream.concat(replay, live)
           }),
         )
+
+      const changes = (): Stream.Stream<EventLog.Change> =>
+        Stream.unwrap(
+          Effect.gen(function* () {
+            const wake = yield* PubSub.sliding<void>(1)
+            const subscription = yield* PubSub.subscribe(wake)
+            const subscriber = { hints: new Map<string, number>(), sweepRequired: false, wake }
+            yield* Effect.acquireRelease(
+              Effect.sync(() => changesSubscribers.add(subscriber)),
+              () =>
+                Effect.sync(() => changesSubscribers.delete(subscriber)).pipe(
+                  Effect.andThen(PubSub.shutdown(wake)),
+                  Effect.asVoid,
+                ),
+            )
+            const drain = Effect.sync((): ReadonlyArray<EventLog.Change> => {
+              if (subscriber.sweepRequired) {
+                subscriber.sweepRequired = false
+                subscriber.hints.clear()
+                return [{ type: "log.sweep_required" }]
+              }
+              const hints = Array.from(
+                subscriber.hints,
+                ([aggregateID, seq]): EventLog.Change => ({ type: "log.hint", aggregateID, seq: Seq.make(seq) }),
+              )
+              subscriber.hints.clear()
+              return hints
+            })
+            // Hints missed while unsubscribed were never buffered, so every
+            // (re)subscribe starts from the sweep contract.
+            const initial: EventLog.Change = { type: "log.sweep_required" }
+            return Stream.make(initial).pipe(
+              Stream.concat(
+                Stream.fromSubscription(subscription).pipe(
+                  Stream.mapEffect(() => drain),
+                  Stream.flattenIterable,
+                ),
+              ),
+            )
+          }),
+        )
+
+      const sequences = (aggregateIDs: ReadonlyArray<string>): Effect.Effect<ReadonlyMap<string, Seq>> => {
+        if (aggregateIDs.length === 0) return Effect.succeed(new Map())
+        return db
+          .select({ aggregateID: EventSequenceTable.aggregate_id, seq: EventSequenceTable.seq })
+          .from(EventSequenceTable)
+          .where(inArray(EventSequenceTable.aggregate_id, Array.from(aggregateIDs)))
+          .all()
+          .pipe(
+            Effect.orDie,
+            Effect.map((rows) => new Map(rows.map((row) => [row.aggregateID, Seq.make(row.seq)]))),
+          )
+      }
 
       const listen = (listener: Subscriber): Effect.Effect<Unsubscribe> =>
         Effect.sync(() => {
@@ -638,8 +732,10 @@ export const layerWith = (options?: LayerOptions) =>
       return Service.of({
         publish,
         subscribe,
-        all: streamAll,
-        durable,
+        live: streamLive,
+        log,
+        changes,
+        sequences,
         listen,
         project,
         replay,

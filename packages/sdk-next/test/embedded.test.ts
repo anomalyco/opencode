@@ -77,16 +77,19 @@ it.live(
           sessionID: id,
           prompt: fixture.sdk.Prompt.make({ text: "Promote this input" }),
         })
-        const prompted = yield* opencode.sessions.events({ sessionID: id }).pipe(
+        const prompted = yield* opencode.sessions.log({ sessionID: id, follow: true }).pipe(
           Stream.filter((event) => event.type === "session.next.prompted" && event.data.messageID === wake.id),
           Stream.runHead,
           Effect.timeout("10 seconds"),
           Effect.map(Option.getOrThrow),
         )
         const wakeContext = yield* opencode.sessions.context({ sessionID: id })
-        const event = yield* opencode.sessions
-          .events({ sessionID: id })
-          .pipe(Stream.take(1), Stream.runHead, Effect.map(Option.getOrUndefined))
+        const event = yield* opencode.sessions.log({ sessionID: id }).pipe(
+          Stream.filter((item) => item.type !== "log.caught_up"),
+          Stream.take(1),
+          Stream.runHead,
+          Effect.map(Option.getOrUndefined),
+        )
         const modelMessage = Option.fromNullishOr(context.find((message) => message.type === "model-switched")).pipe(
           Option.getOrThrow,
         )
@@ -96,7 +99,7 @@ it.live(
         const missingSessionID = fixture.sdk.Session.ID.create()
         const missing = yield* Effect.all(
           [
-            opencode.sessions.events({ sessionID: missingSessionID }).pipe(Stream.runHead, Effect.flip),
+            opencode.sessions.log({ sessionID: missingSessionID }).pipe(Stream.runHead, Effect.flip),
             opencode.sessions.interrupt({ sessionID: missingSessionID }).pipe(Effect.flip),
             opencode.sessions.message({ sessionID: missingSessionID, messageID: modelMessage.id }).pipe(Effect.flip),
             opencode.sessions.listContextEntries({ sessionID: missingSessionID }).pipe(Effect.flip),
@@ -114,7 +117,7 @@ it.live(
         expect(selected.model?.id).toBe(model.id)
         expect(selected.model?.providerID).toBe(model.providerID)
         expect(page.data.some((session) => session.id === id)).toBe(true)
-        expect(active).toEqual({})
+        expect(active).toEqual({ data: {}, watermarks: {} })
         expect(admitted.sessionID).toBe(id)
         expect(prompted.type).toBe("session.next.prompted")
         expect(wakeContext).toContainEqual(expect.objectContaining({ id: wake.id, type: "user" }))

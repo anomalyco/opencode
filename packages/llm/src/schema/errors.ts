@@ -38,11 +38,7 @@ export class InvalidRequestReason extends Schema.Class<InvalidRequestReason>("LL
   classification: Schema.optional(ProviderFailureClassification),
   providerMetadata: Schema.optional(ProviderMetadata),
   http: Schema.optional(HttpContext),
-}) {
-  get retryable() {
-    return false
-  }
-}
+}) {}
 
 export class NoRouteReason extends Schema.Class<NoRouteReason>("LLM.Error.NoRoute")({
   _tag: Schema.tag("NoRoute"),
@@ -50,10 +46,6 @@ export class NoRouteReason extends Schema.Class<NoRouteReason>("LLM.Error.NoRout
   provider: ProviderID,
   model: ModelID,
 }) {
-  get retryable() {
-    return false
-  }
-
   get message() {
     return `No LLM route for ${this.provider}/${this.model} using ${this.route}`
   }
@@ -65,11 +57,7 @@ export class AuthenticationReason extends Schema.Class<AuthenticationReason>("LL
   kind: Schema.Literals(["missing", "invalid", "expired", "insufficient-permissions", "unknown"]),
   providerMetadata: Schema.optional(ProviderMetadata),
   http: Schema.optional(HttpContext),
-}) {
-  get retryable() {
-    return false
-  }
-}
+}) {}
 
 export class RateLimitReason extends Schema.Class<RateLimitReason>("LLM.Error.RateLimit")({
   _tag: Schema.tag("RateLimit"),
@@ -78,33 +66,21 @@ export class RateLimitReason extends Schema.Class<RateLimitReason>("LLM.Error.Ra
   rateLimit: Schema.optional(HttpRateLimitDetails),
   providerMetadata: Schema.optional(ProviderMetadata),
   http: Schema.optional(HttpContext),
-}) {
-  get retryable() {
-    return true
-  }
-}
+}) {}
 
 export class QuotaExceededReason extends Schema.Class<QuotaExceededReason>("LLM.Error.QuotaExceeded")({
   _tag: Schema.tag("QuotaExceeded"),
   message: Schema.String,
   providerMetadata: Schema.optional(ProviderMetadata),
   http: Schema.optional(HttpContext),
-}) {
-  get retryable() {
-    return false
-  }
-}
+}) {}
 
 export class ContentPolicyReason extends Schema.Class<ContentPolicyReason>("LLM.Error.ContentPolicy")({
   _tag: Schema.tag("ContentPolicy"),
   message: Schema.String,
   providerMetadata: Schema.optional(ProviderMetadata),
   http: Schema.optional(HttpContext),
-}) {
-  get retryable() {
-    return false
-  }
-}
+}) {}
 
 export class ProviderInternalReason extends Schema.Class<ProviderInternalReason>("LLM.Error.ProviderInternal")({
   _tag: Schema.tag("ProviderInternal"),
@@ -113,11 +89,7 @@ export class ProviderInternalReason extends Schema.Class<ProviderInternalReason>
   retryAfterMs: Schema.optional(Schema.Number),
   providerMetadata: Schema.optional(ProviderMetadata),
   http: Schema.optional(HttpContext),
-}) {
-  get retryable() {
-    return true
-  }
-}
+}) {}
 
 export class TransportReason extends Schema.Class<TransportReason>("LLM.Error.Transport")({
   _tag: Schema.tag("Transport"),
@@ -125,11 +97,7 @@ export class TransportReason extends Schema.Class<TransportReason>("LLM.Error.Tr
   kind: Schema.optional(Schema.String),
   url: Schema.optional(Schema.String),
   http: Schema.optional(HttpContext),
-}) {
-  get retryable() {
-    return false
-  }
-}
+}) {}
 
 export class InvalidProviderOutputReason extends Schema.Class<InvalidProviderOutputReason>(
   "LLM.Error.InvalidProviderOutput",
@@ -139,11 +107,7 @@ export class InvalidProviderOutputReason extends Schema.Class<InvalidProviderOut
   route: Schema.optional(Schema.String),
   raw: Schema.optional(Schema.String),
   providerMetadata: Schema.optional(ProviderMetadata),
-}) {
-  get retryable() {
-    return false
-  }
-}
+}) {}
 
 export class UnknownProviderReason extends Schema.Class<UnknownProviderReason>("LLM.Error.UnknownProvider")({
   _tag: Schema.tag("UnknownProvider"),
@@ -151,11 +115,7 @@ export class UnknownProviderReason extends Schema.Class<UnknownProviderReason>("
   status: Schema.optional(Schema.Number),
   providerMetadata: Schema.optional(ProviderMetadata),
   http: Schema.optional(HttpContext),
-}) {
-  get retryable() {
-    return false
-  }
-}
+}) {}
 
 export const LLMErrorReason = Schema.Union([
   InvalidRequestReason,
@@ -177,14 +137,6 @@ export class LLMError extends Schema.TaggedErrorClass<LLMError>()("LLM.Error", {
   reason: LLMErrorReason,
 }) {
   override readonly cause = this.reason
-
-  get retryable() {
-    return this.reason.retryable
-  }
-
-  get retryAfterMs() {
-    return "retryAfterMs" in this.reason ? this.reason.retryAfterMs : undefined
-  }
 
   override get message() {
     return `${this.module}.${this.method}: ${this.reason.message}`
