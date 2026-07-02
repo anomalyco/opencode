@@ -36,6 +36,7 @@ export function DialogSessionList() {
       search: query,
       limit: 50,
       order: "desc",
+      parentID: null,
       directory: location.directory,
       workspace: location.workspaceID,
     })
@@ -64,11 +65,7 @@ export function DialogSessionList() {
 
   const options = createMemo(() => {
     const today = new Date().toDateString()
-    const sessionMap = new Map(
-      sessions()
-        .filter((session) => !session.parentID)
-        .map((session) => [session.id, session]),
-    )
+    const sessionMap = new Map(sessions().map((session) => [session.id, session]))
     const pinned = local.session.pinned().filter((sessionID) => sessionMap.has(sessionID))
     const pinnedSet = new Set(pinned)
     const slotByID = new Map(local.session.slots().map((sessionID, index) => [sessionID, index + 1]))
@@ -82,17 +79,16 @@ export function DialogSessionList() {
         value: session.id,
         category,
         footer,
-        gutter:
-          data.session.family(session.id).some((id) => data.session.status(id) === "running")
-            ? () => <Spinner />
-            : slot === undefined
-              ? undefined
-              : () => <text fg={theme.accent}>{slot}</text>,
+        gutter: data.session.family(session.id).some((id) => data.session.status(id) === "running")
+          ? () => <Spinner />
+          : slot === undefined
+            ? undefined
+            : () => <text fg={theme.accent}>{slot}</text>,
       }
     }
 
     const remaining = sessions()
-      .filter((session) => !session.parentID && !pinnedSet.has(session.id))
+      .filter((session) => !pinnedSet.has(session.id))
       .map((session) => {
         const date = new Date(session.time.updated).toDateString()
         return option(session, date === today ? "Today" : date)
