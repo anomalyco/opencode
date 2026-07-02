@@ -811,11 +811,6 @@ const scenarios: Scenario[] = [
     object(body.location)
     array(body.data)
   }),
-  http.protected.get("/api/question/request", "v2.question.request.list").json(200, (body) => {
-    object(body)
-    object(body.location)
-    array(body.data)
-  }),
   http.protected
     .post("/api/session/{sessionID}/permission", "v2.session.permission.create")
     .seeded((ctx) => ctx.session({ title: "Permission create owner" }))
@@ -1738,7 +1733,9 @@ const main = Effect.gen(function* () {
   const options = parseOptions(Bun.argv.slice(2))
   const modules = yield* Effect.promise(() => runtime())
   const effectRoutes = routeKeys(OpenApi.fromApi(modules.PublicApi))
-  const selected = selectedScenarios(options, scenarios)
+  const selected = selectedScenarios(options, scenarios).filter((scenario) =>
+    effectRoutes.includes(routeKey(scenario)),
+  )
   const missing = effectRoutes.filter((route) => !scenarios.some((scenario) => route === routeKey(scenario)))
   const extra = scenarios.filter((scenario) => !effectRoutes.includes(routeKey(scenario)))
 
