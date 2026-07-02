@@ -69,7 +69,7 @@ describe("CommandV2", () => {
       const command = yield* CommandV2.Service
       yield* command.transform((editor) => {
         editor.update("review", (command) => {
-          command.template = "Output: !`printf command-output`"
+          command.template = "Output: !`bun -e \"process.stdout.write('command-output')\"`"
         })
       })
 
