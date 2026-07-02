@@ -809,6 +809,27 @@ export type SessionContextOutput = {
   >
 }["data"]
 
+export type SessionListContextEntriesInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
+
+export type SessionListContextEntriesOutput = {
+  readonly data: ReadonlyArray<{ readonly key: string; readonly value: JsonValue }>
+}["data"]
+
+export type SessionPutContextEntryInput = {
+  readonly sessionID: { readonly sessionID: string; readonly key: string }["sessionID"]
+  readonly key: { readonly sessionID: string; readonly key: string }["key"]
+  readonly value: { readonly value: JsonValue }["value"]
+}
+
+export type SessionPutContextEntryOutput = void
+
+export type SessionRemoveContextEntryInput = {
+  readonly sessionID: { readonly sessionID: string; readonly key: string }["sessionID"]
+  readonly key: { readonly sessionID: string; readonly key: string }["key"]
+}
+
+export type SessionRemoveContextEntryOutput = void
+
 export type SessionHistoryInput = {
   readonly sessionID: { readonly sessionID: string }["sessionID"]
   readonly limit?: { readonly limit?: number | undefined; readonly after?: number | undefined }["limit"]
