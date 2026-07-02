@@ -17,4 +17,21 @@ describe("util.model", () => {
       "Switched model to anthropic/sonnet/thinking",
     )
   })
+
+  test("uses the catalog display name in model switch notices", () => {
+    const models = [
+      { providerID: "openai", id: "gpt-5.5-fast", name: "GPT-5.5 Fast" },
+      { providerID: "anthropic", id: "sonnet", name: "Claude Sonnet" },
+    ]
+    expect(switchLabel({ providerID: "openai", id: "gpt-5.5-fast", variant: "high" }, models)).toBe(
+      "Switched model to GPT-5.5 Fast (high)",
+    )
+    expect(switchLabel({ providerID: "anthropic", id: "sonnet" }, models)).toBe("Switched model to Claude Sonnet")
+    expect(switchLabel({ providerID: "anthropic", id: "sonnet", variant: "default" }, models)).toBe(
+      "Switched model to Claude Sonnet",
+    )
+    expect(switchLabel({ providerID: "removed", id: "gone", variant: "high" }, models)).toBe(
+      "Switched model to removed/gone/high",
+    )
+  })
 })
