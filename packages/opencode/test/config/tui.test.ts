@@ -197,17 +197,19 @@ it.instance("migrates tui-specific keys from opencode.json when tui.json does no
       const source = path.join(test.directory, "opencode.json")
       yield* fs.writeJson(source, {
         theme: "migrated-theme",
-        tui: { scroll_speed: 5 },
+        tui: { scroll_speed: 5, sidebar: { width: 50 } },
         keybinds: { app_exit: "ctrl+q" },
       })
 
       const config = yield* getTuiConfig(test.directory)
       expect(config.theme).toBe("migrated-theme")
       expect(config.scroll_speed).toBe(5)
+      expect(config.sidebar.width).toBe(50)
       expect(config.keybinds.get("app.exit")?.[0]?.key).toBe("ctrl+q")
       expect(JSON.parse(yield* fs.readFileString(path.join(test.directory, "tui.json")))).toMatchObject({
         theme: "migrated-theme",
         scroll_speed: 5,
+        sidebar: { width: 50 },
       })
       const server = JSON.parse(yield* fs.readFileString(source))
       expect(server.theme).toBeUndefined()

@@ -15,6 +15,7 @@ const decodeRecord = Schema.decodeUnknownOption(Schema.Record(Schema.String, Sch
 const decodeScrollSpeed = Schema.decodeUnknownOption(TuiConfig.ScrollSpeed)
 const decodeScrollAcceleration = Schema.decodeUnknownOption(TuiConfig.ScrollAcceleration)
 const decodeDiffStyle = Schema.decodeUnknownOption(TuiConfig.DiffStyle)
+const decodeSidebar = Schema.decodeUnknownOption(TuiConfig.Sidebar)
 
 interface MigrateInput {
   cwd: string
@@ -72,16 +73,19 @@ function normalizeTui(data: Record<string, unknown>):
       scroll_speed: number | undefined
       scroll_acceleration: { enabled: boolean } | undefined
       diff_style: "auto" | "stacked" | undefined
+      sidebar: { width?: number } | undefined
     }
   | undefined {
   const parsed = {
     scroll_speed: Option.getOrUndefined(decodeScrollSpeed(data.scroll_speed)),
     scroll_acceleration: Option.getOrUndefined(decodeScrollAcceleration(data.scroll_acceleration)),
     diff_style: Option.getOrUndefined(decodeDiffStyle(data.diff_style)),
+    sidebar: Option.getOrUndefined(decodeSidebar(data.sidebar)),
   }
   return parsed.scroll_speed === undefined &&
     parsed.diff_style === undefined &&
-    parsed.scroll_acceleration === undefined
+    parsed.scroll_acceleration === undefined &&
+    parsed.sidebar === undefined
     ? undefined
     : parsed
 }

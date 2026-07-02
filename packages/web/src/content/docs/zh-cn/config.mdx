@@ -161,7 +161,10 @@ opencode run "Hello world"
     "scroll_acceleration": {
       "enabled": true
     },
-    "diff_style": "auto"
+    "diff_style": "auto",
+    "sidebar": {
+      "width": 50
+    }
   }
 }
 ```
@@ -171,6 +174,7 @@ opencode run "Hello world"
 - `scroll_acceleration.enabled` - 启用 macOS 风格的滚动加速。**优先于 `scroll_speed`。**
 - `scroll_speed` - 自定义滚动速度倍率（默认值：`3`，最小值：`1`）。如果 `scroll_acceleration.enabled` 为 `true`，则忽略此选项。
 - `diff_style` - 控制差异渲染方式。`"auto"` 根据终端宽度自适应，`"stacked"` 始终显示单列。
+- `sidebar.width` - 自定义会话侧栏宽度，单位是终端列数。默认值为 `42`。
 
 [在此了解更多关于 TUI 的信息](/docs/tui)。
 

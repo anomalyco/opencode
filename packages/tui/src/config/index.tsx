@@ -31,6 +31,15 @@ export const DiffStyle = Schema.Literals(["auto", "stacked"]).annotate({
   description: "Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column",
 })
 
+export const SidebarWidthDefault = 42
+export const SidebarWidthMin = 24
+const MainContentWidthMin = 40
+export const Sidebar = Schema.Struct({
+  width: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0))).annotate({
+    description: "Session sidebar width in terminal columns",
+  }),
+}).annotate({ description: "Session sidebar settings" })
+
 export const AttentionSounds = Schema.Record(AttentionSoundName, Schema.optionalKey(Schema.String))
 export type AttentionSoundPaths = Schema.Schema.Type<typeof AttentionSounds>
 export const Attention = Schema.Struct({
@@ -62,11 +71,12 @@ export const Info = Schema.Struct({
   scroll_speed: Schema.optional(ScrollSpeed).annotate({ description: "TUI scroll speed" }),
   scroll_acceleration: Schema.optional(ScrollAcceleration),
   diff_style: Schema.optional(DiffStyle),
+  sidebar: Schema.optional(Sidebar),
   mouse: Schema.optional(Schema.Boolean).annotate({ description: "Enable or disable mouse capture (default: true)" }),
 })
 export type Info = Schema.Schema.Type<typeof Info>
 
-export type Resolved = Omit<Info, "attention" | "keybinds" | "leader_timeout" | "mouse"> & {
+export type Resolved = Omit<Info, "attention" | "keybinds" | "leader_timeout" | "mouse" | "sidebar"> & {
   attention: {
     enabled: boolean
     notifications: boolean
@@ -74,6 +84,9 @@ export type Resolved = Omit<Info, "attention" | "keybinds" | "leader_timeout" | 
     volume: number
     sound_pack: string
     sounds: AttentionSoundPaths
+  }
+  sidebar: {
+    width: number
   }
   keybinds: TuiKeybind.BindingLookupView
   leader_timeout: number
@@ -112,8 +125,20 @@ export function resolve(input: Info, options: ResolveOptions): Resolved {
       bindingDefaults: TuiKeybind.bindingDefaults(),
     }),
     leader_timeout: input.leader_timeout ?? LeaderTimeoutDefault,
+    sidebar: {
+      width: input.sidebar?.width ?? SidebarWidthDefault,
+    },
     mouse: input.mouse ?? true,
   }
+}
+
+export function sidebarWidth(config: Pick<Resolved, "sidebar">, terminalWidth?: number) {
+  const configured = Math.max(1, Math.floor(config.sidebar.width || SidebarWidthDefault))
+  if (terminalWidth === undefined) return Math.max(SidebarWidthMin, configured)
+
+  const max = Math.max(1, terminalWidth - MainContentWidthMin - 4)
+  const min = Math.min(SidebarWidthMin, max)
+  return Math.max(min, Math.min(configured, max))
 }
 
 const ConfigContext = createContext<Resolved>()
