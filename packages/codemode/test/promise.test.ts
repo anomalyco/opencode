@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Schema } from "effect"
-import { CodeMode, Tool, toolError, type ExecuteResult } from "../src/index.js"
-import type { InternalExecutionLimits } from "../src/codemode.js"
+import { CodeMode, Tool, toolError, type ExecuteResult, type ExecutionLimits } from "../src/index.js"
 
 // Wave 5 acceptance suite: first-class promise values. Un-awaited tool calls start eagerly on
 // supervised fibers, `await` settles them, and Promise.all/allSettled/race/resolve/reject are
@@ -45,7 +44,7 @@ const failingTool = Tool.make({
   run: () => Effect.fail(toolError("Lookup refused")),
 })
 
-const run = (code: string, options: { trace?: Trace; limits?: InternalExecutionLimits } = {}): Promise<ExecuteResult> => {
+const run = (code: string, options: { trace?: Trace; limits?: ExecutionLimits } = {}): Promise<ExecuteResult> => {
   const trace = options.trace ?? makeTrace()
   return Effect.runPromise(CodeMode.execute({
     tools: { host: { sleepy: sleepyTool(trace), fail: failingTool } },
@@ -54,13 +53,13 @@ const run = (code: string, options: { trace?: Trace; limits?: InternalExecutionL
   }))
 }
 
-const value = async (code: string, options: { trace?: Trace; limits?: InternalExecutionLimits } = {}) => {
+const value = async (code: string, options: { trace?: Trace; limits?: ExecutionLimits } = {}) => {
   const result = await run(code, options)
   if (!result.ok) throw new Error(`expected success, got ${result.error.kind}: ${result.error.message}`)
   return result.value
 }
 
-const error = async (code: string, options: { trace?: Trace; limits?: InternalExecutionLimits } = {}) => {
+const error = async (code: string, options: { trace?: Trace; limits?: ExecutionLimits } = {}) => {
   const result = await run(code, options)
   if (result.ok) throw new Error(`expected failure, got value ${JSON.stringify(result.value)}`)
   return result.error
@@ -205,7 +204,6 @@ describe("Promise.all over arbitrary arrays", () => {
 
   test("runs items.map tool calls in parallel", async () => {
     const trace = makeTrace()
-    const startedAt = Date.now()
     const result = await value(
       `
         const ids = [1, 2, 3, 4]
@@ -214,12 +212,12 @@ describe("Promise.all over arbitrary arrays", () => {
       { trace },
     )
     expect(result).toEqual([1, 2, 3, 4])
+    // maxActive counts truly-overlapping live executions, so > 1 proves real
+    // parallelism deterministically — no wall-clock assertion needed.
     expect(trace.maxActive).toBeGreaterThan(1)
-    // Four 40ms sleeps in parallel finish well under the 160ms sequential floor.
-    expect(Date.now() - startedAt).toBeLessThan(150)
   })
 
-  test("caps live tool-call concurrency at the internal limit", async () => {
+  test("caps live tool-call concurrency at the fixed internal constant (8)", async () => {
     const trace = makeTrace()
     const result = await value(
       `

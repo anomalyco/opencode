@@ -1,19 +1,18 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import { CodeMode } from "../src/index.js"
-import type { InternalExecutionLimits as ExecutionLimits } from "../src/codemode.js"
 
 // Standard-library value types: Date, RegExp, Map, Set. Programs use them as ordinary JS;
 // at every data boundary (final result, tool arguments, JSON.stringify) they serialize exactly
 // as JSON.stringify would: Date -> ISO string (invalid -> null), RegExp/Map/Set -> {}.
-const run = (code: string, limits?: ExecutionLimits) => Effect.runPromise(CodeMode.execute({ code, tools: {}, ...(limits ? { limits } : {}) }))
-const value = async (code: string, limits?: ExecutionLimits) => {
-  const result = await run(code, limits)
+const run = (code: string) => Effect.runPromise(CodeMode.execute({ code, tools: {} }))
+const value = async (code: string) => {
+  const result = await run(code)
   if (!result.ok) throw new Error(`expected success, got ${result.error.kind}: ${result.error.message}`)
   return result.value
 }
-const error = async (code: string, limits?: ExecutionLimits) => {
-  const result = await run(code, limits)
+const error = async (code: string) => {
+  const result = await run(code)
   if (result.ok) throw new Error(`expected failure, got value ${JSON.stringify(result.value)}`)
   return result.error
 }
@@ -251,15 +250,6 @@ describe("Map", () => {
     expect(await value(`return JSON.stringify(new Map([["a", 1]]))`)).toBe("{}")
   })
 
-  test("collection-length limit rejects unbounded growth", async () => {
-    const failure = await error(
-      `const m = new Map(); for (let i = 0; i < 10; i += 1) m.set(i, i); return m.size`,
-      { maxCollectionLength: 3 },
-    )
-    expect(failure.kind).toBe("InvalidDataValue")
-    expect(failure.message).toMatch(/maximum collection length/)
-  })
-
   test("console.log renders map contents for debugging", async () => {
     const result = await run(`console.log(new Map([["a", 1]])); return null`)
     expect(result.ok).toBe(true)
@@ -300,14 +290,6 @@ describe("Set", () => {
 
   test("sets serialize to {} at the boundary, like JSON", async () => {
     expect(await value(`return { s: new Set([1]) }`)).toEqual({ s: {} })
-  })
-
-  test("collection-length limit rejects unbounded growth", async () => {
-    const failure = await error(
-      `const s = new Set(); for (let i = 0; i < 10; i += 1) s.add(i); return s.size`,
-      { maxCollectionLength: 3 },
-    )
-    expect(failure.kind).toBe("InvalidDataValue")
   })
 })
 

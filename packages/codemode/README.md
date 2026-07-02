@@ -61,7 +61,7 @@ const result = yield* runtime.execute(`
 `)
 ```
 
-`result` is always an `ExecuteResult`. Program, validation, budget, and tool failures are returned as diagnostics rather than failing the Effect. Host interruption remains interruption.
+`result` is always an `ExecuteResult`. Program, validation, limit, and tool failures are returned as diagnostics rather than failing the Effect. Host interruption remains interruption.
 
 Successful result values are JSON-safe data. A program that returns `undefined`, including by reaching the end without `return`, produces `null`; nested `undefined` values are normalized to `null` as well.
 
@@ -150,14 +150,14 @@ interface ExecuteFailure {
 
 ## Discovery
 
-The agent-tool instructions use a budgeted catalog. Every tool namespace is always listed with its tool count, and as many complete tool signatures (each with a one-line description) as fit a byte budget are inlined — cheapest-first within a namespace, namespaces processed alphabetically. Once one signature does not fit, inlining stops for every remaining namespace, which then show counts only. The instructions state exactly how comprehensive the list is, both overall (`COMPLETE list` vs `PARTIAL — N of M shown`) and per namespace (`(3 tools)`, `(3 tools, 1 shown)`, `(3 tools, none shown)`).
+The agent-tool instructions use a budgeted catalog. Every tool namespace is always listed with its tool count regardless of budget, and as many complete tool signatures (each with a one-line description) as fit an estimated-token budget are inlined. Selection is round-robin across namespaces for fairness: in each round (namespaces alphabetical), every namespace still holding un-inlined tools attempts to place its next-cheapest signature line against the shared budget, and a namespace whose next line does not fit drops out while the others keep going — so every namespace gets some representation before any namespace gets everything. The instructions state exactly how comprehensive the list is, both overall (`COMPLETE list` vs `PARTIAL — N of M shown`) and per namespace (`(3 tools)`, `(3 tools, 1 shown)`, `(3 tools, none shown)`).
 
-The default budget is 16,000 UTF-8 bytes. Override it when constructing a runtime:
+The default budget is 2,000 estimated tokens (characters / 4, the same heuristic OpenCode uses). Override it when constructing a runtime:
 
 ```ts
 const runtime = CodeMode.make({
   tools,
-  discovery: { maxInlineCatalogBytes: 24_000 },
+  discovery: { maxInlineCatalogTokens: 6_000 },
 })
 ```
 
@@ -173,11 +173,27 @@ const matches = await tools.$codemode.search({
 })
 ```
 
-`search` performs deterministic, additive field-weighted matching. The query is tokenized (camelCase boundaries split; every non-alphanumeric character is a separator; empties and `*` are dropped), and each term scores every tool: exact path or path-segment match (20), path substring (8), description substring (4), and searchable-text substring (2). The searchable text also includes the input schema's property names and their description strings, so a query naming a parameter finds its tool, and substring matching means partial words match. Scores sum across terms; matches are sorted by score (ties broken alphabetically by path) and capped at `limit` results (default 10).
+`search` performs deterministic, additive field-weighted matching. The query is tokenized (camelCase boundaries split; every non-alphanumeric character is a separator; empties and `*` are dropped), and each term scores every tool: exact path or path-segment match (20), path substring (8), description substring (4), and searchable-text substring (2). Each term also carries naive singular variants (trailing `s`/`es` stripped), and a field check passes when the term or any variant matches — so a plural query term (`issues`) still finds a tool whose text only says `issue`, without changing the weights. The searchable text also includes the input schema's property names and their description strings, so a query naming a parameter finds its tool, and substring matching means partial words match. Scores sum across terms; matches are sorted by score (ties broken alphabetically by path) and capped at `limit` results (default 10).
 
-Each result contains the path, description, and generated TypeScript signature, so no second lookup is needed. Result paths carry the `tools.` prefix (`tools.orders.lookup`), so each `path` is directly usable as the call site. An empty query browses the catalog alphabetically by path; combined with `namespace` (`{ query: "", namespace: "orders" }`) it lists everything in that namespace. A query that names one tool path exactly (with or without the `tools.` prefix) is treated as a lookup and returns that tool alone.
+Each result contains the path, description, and generated TypeScript signature, so no second lookup is needed. The result signature is the pretty, JSDoc-annotated multiline form: each described input/output field carries its schema `description` as a `/** … */` comment, and constraints TypeScript cannot express ride along as tags (`@deprecated`, `@default`, `@format`, `@minItems`, `@maxItems`). The inline catalog in the instructions keeps the compact single-line form.
 
-The instructions are structured markdown, ordered so the workflow sits at the top and the catalog at the bottom: a `## Workflow` section with numbered steps (find a tool via search when the catalog is partial, or pick from the inlined list when it is complete; call it by path; `JSON.parse` string results; return only the needed fields), a `## Rules` section (parse text results as JSON, return small instead of raw payloads, filter and aggregate large collections in code, inspect intermediates with `console.*` — captured as result logs — run independent calls through `Promise.all`, enumerate `tools` with `Object.keys`/`for...in`, and browse a namespace via search when it is advertised), a `## Syntax` section, and the budgeted `## Available tools` catalog. Every call form uses explicit `<namespace>.<tool>`/`<field>` placeholders — never a real or fabricated tool name.
+```ts
+tools.github.list_issues(input: {
+  /** Repository owner */
+  owner: string
+  /** Cursor from the previous response's pageInfo */
+  after?: string
+  /**
+   * Results per page
+   * @default 30
+   */
+  perPage?: number
+}): Promise<unknown>
+```
+
+Result paths carry the `tools.` prefix (`tools.orders.lookup`), so each `path` is directly usable as the call site. An empty query browses the catalog alphabetically by path; combined with `namespace` (`{ query: "", namespace: "orders" }`) it lists everything in that namespace. A query that names one tool path exactly (with or without the `tools.` prefix) is treated as a lookup and returns that tool alone.
+
+The instructions are structured markdown, ordered so the workflow sits at the top and the catalog at the bottom: a `## Workflow` section with numbered steps (find a tool via search when the catalog is partial, or pick from the inlined list when it is complete; call the exact path as-is; `JSON.parse` string results; return only the needed fields), a `## Rules` section holding only guidance the workflow does not already cover (filter and aggregate collections in code; treat `Promise<unknown>` results as shapeless until verified; run independent calls through `Promise.all`; enumerate `tools` with `Object.keys`/`for...in`; browse a namespace via search when it is advertised), a short `## Syntax` section that assumes standard JavaScript and names only what is unusual (TypeScript annotations stripped; the data-boundary serialization of Date/Map/Set/RegExp) or missing (classes, generators, `for await...of`, `.then`/`.catch`/`.finally`, `x instanceof Error`, `splice`), and the budgeted `## Available tools` catalog. Every call form uses explicit `<namespace>.<tool>`/`<field>` placeholders — never a real or fabricated tool name.
 
 A host cannot define its own `$codemode` top-level namespace.
 
@@ -196,7 +212,7 @@ CodeMode executes a deliberately bounded JavaScript subset. It supports:
 - First-class promises — an un-awaited `tools.ns.tool(...)` is a promise value whose call starts immediately on a supervised fiber; `await` resolves it (awaiting a non-promise value is a no-op, and `return tools.ns.tool(...)` resolves like an async-function return). `Promise.all`, `Promise.allSettled`, and `Promise.race` accept any array mixing promises and plain values (built inline, beforehand, or via spread); `Promise.resolve`/`Promise.reject` construct settled promises. `Promise.allSettled` rejection reasons are the same plain `{ name?, message }` data a `catch` binding sees, and `Promise.race` interrupts its losing in-flight calls. At most 8 tool calls run concurrently. When a program completes, still-running un-awaited calls are awaited before the execution ends; a failure from a call that was never awaited surfaces as an unhandled-rejection diagnostic.
 - `throw value` and `throw new Error(message)` for explicit program failure.
 
-At every data boundary (final result, tool arguments, `JSON.stringify`, and the internal data checkpoints of `Object.*`/coercion helpers) the four value types serialize exactly as `JSON.stringify` would: a Date becomes its ISO string (`null` when invalid) and RegExp/Map/Set become `{}`. Map and Set contents are charged against the internal data-size and collection-length budgets like any other collection. Promise values never cross a data boundary: an un-awaited promise in a result or tool argument produces a diagnostic that says to await it, instead of serializing to `{}`.
+At every data boundary (final result, tool arguments, `JSON.stringify`, and the internal data checkpoints of `Object.*`/coercion helpers) the four value types serialize exactly as `JSON.stringify` would: a Date becomes its ISO string (`null` when invalid) and RegExp/Map/Set become `{}`. Promise values never cross a data boundary: an un-awaited promise in a result or tool argument produces a diagnostic that says to await it, instead of serializing to `{}`.
 
 It does not expose `eval`, dynamic imports, modules, classes, generators, timers, host globals, prototype mutation, custom promise constructors (`new Promise`), promise chaining (`.then`/`.catch`/`.finally` — `await` with `try`/`catch` is the supported style), or arbitrary method calls. Unsupported syntax returns an `UnsupportedSyntax` diagnostic with a source location when available.
 
@@ -204,13 +220,15 @@ CodeMode is an orchestration language, not a general JavaScript runtime.
 
 ## Execution Limits
 
-The public limits are three knobs:
+The limits are exactly three knobs:
 
 | Limit | Default | Bounds |
 | --- | ---: | --- |
-| `timeoutMs` | 10,000 | Wall-clock execution time. |
-| `maxToolCalls` | 100 | Tool calls admitted during the execution. |
+| `timeoutMs` | none — no timeout | Wall-clock execution time. |
+| `maxToolCalls` | none — unlimited | Tool calls admitted during the execution. |
 | `maxOutputBytes` | 32,000 | Model-facing output: the serialized result value plus captured logs. |
+
+`timeoutMs` and `maxToolCalls` have no defaults on purpose: execution budgets are host policy, not library policy — a host that wants a bound sets one; a host that can interrupt the execution fiber (as OpenCode does on user cancel) may set none. `maxOutputBytes` keeps a default because truncation never breaks correctness, while its absence would silently flood model context.
 
 Pass only the overrides you need:
 
@@ -224,13 +242,13 @@ const runtime = CodeMode.make({
 })
 ```
 
-Limits are safe integers. `timeoutMs` must be at least `1`; the others may be `0`. Invalid configuration throws a `RangeError` when `CodeMode.make` or `CodeMode.execute` is called. An explicitly `undefined` override leaves the default intact.
+Limits are safe integers. `timeoutMs` must be at least `1`; the others may be `0`. Invalid configuration throws a `RangeError` when `CodeMode.make` or `CodeMode.execute` is called. An explicitly `undefined` value is the same as leaving the limit unset.
 
 Exceeding `maxOutputBytes` never fails the execution. An oversized result value is replaced by its truncated serialized text plus an explanatory marker, logs are kept from the start until the remaining budget is exhausted (with a final marker line noting the cut), and the result carries `truncated: true`.
 
-The timeout interrupts in-flight tool Effects, including eagerly started calls the program has not awaited (their fibers are supervised by the execution). Tool implementations remain responsible for making their external operations interruptible or independently bounded.
+When configured, the timeout interrupts in-flight tool Effects, including eagerly started calls the program has not awaited (their fibers are supervised by the execution). The interpreter yields cooperatively between steps, so the timeout also interrupts pure busy loops (`while (true) {}`) — no separate work budget exists. Tool implementations remain responsible for making their external operations interruptible or independently bounded.
 
-Interpreter internals stay bounded by fixed internal budgets (operation count 100,000; in-sandbox data 256,000 bytes; collection length 10,000; value depth 32; source size 32,000 bytes; audit data 1,000,000 bytes; tool-call concurrency 8). These are not part of the public contract.
+Two interpreter internals are fixed constants rather than knobs: at most 8 tool calls run concurrently, and values crossing a data boundary may nest at most 32 levels deep (deeper values fail as `InvalidDataValue`, which reads better than a native stack-overflow error). Neither is part of the public contract.
 
 ## Diagnostics
 
@@ -243,10 +261,8 @@ Failures are data:
 | `UnknownTool` | A program referenced a tool the host did not provide. |
 | `InvalidToolInput` | Tool input failed schema decoding or safe-data copying. |
 | `InvalidToolOutput` | Tool output failed schema decoding or safe-data copying. |
-| `InvalidDataValue` | Program data violated the plain-data or size contract. |
-| `OperationLimitExceeded` | Interpreter work exceeded the internal operation budget. |
+| `InvalidDataValue` | Program data violated the plain-data contract (depth, circularity, blocked properties, non-data values). |
 | `ToolCallLimitExceeded` | Calls exceeded `maxToolCalls`. |
-| `AuditLimitExceeded` | Retained call metadata exceeded the internal audit budget. |
 | `TimeoutExceeded` | Execution exceeded `timeoutMs`. |
 | `ToolFailure` | A tool refused or failed. |
 | `ExecutionFailure` | The program threw or another execution error occurred. |

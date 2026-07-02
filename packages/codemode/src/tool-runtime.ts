@@ -9,6 +9,7 @@ import {
   outputTypeScript,
   type Definition,
 } from "./tool.js"
+import { estimate } from "./token.js"
 import { SandboxDate, SandboxMap, SandboxPromise, SandboxRegExp, SandboxSet } from "./values.js"
 
 export type HostTool<R = never> = (...args: Array<unknown>) => Effect.Effect<unknown, unknown, R>
@@ -64,7 +65,7 @@ export type ToolDescription = {
 export type SafeObject = Record<string, unknown>
 
 const reservedNamespace = "$codemode"
-const defaultMaxInlineCatalogBytes = 16_000
+const defaultMaxInlineCatalogTokens = 2_000
 const defaultSearchLimit = 10
 const searchSignature = "tools.$codemode.search({ query?: string, namespace?: string, limit?: number }): Promise<{ items: Array<{ path: string; description: string; signature: string }>; total: number }>"
 
@@ -72,16 +73,16 @@ export class ToolReference {
   constructor(readonly path: ReadonlyArray<string>) {}
 }
 
-export type DataLimits = {
-  readonly maxValueDepth: number
-  readonly maxCollectionLength: number
-  readonly maxDataBytes: number
-  readonly maxAuditBytes: number
-}
+/**
+ * Maximum nesting depth for values crossing a data boundary. Fixed (not a configurable
+ * limit) purely because it produces a clearer diagnostic than a native stack-overflow
+ * RangeError would.
+ */
+const MAX_VALUE_DEPTH = 32
 
 export class ToolRuntimeError extends Error {
   constructor(
-    readonly kind: "UnknownTool" | "InvalidToolInput" | "InvalidToolOutput" | "InvalidDataValue" | "ToolCallLimitExceeded" | "AuditLimitExceeded",
+    readonly kind: "UnknownTool" | "InvalidToolInput" | "InvalidToolOutput" | "InvalidDataValue" | "ToolCallLimitExceeded",
     message: string,
     readonly suggestions: ReadonlyArray<string> = [],
   ) {
@@ -106,9 +107,9 @@ const blockedMemberNames = new Set(["__proto__", "constructor", "prototype"])
 
 export const isBlockedMember = (name: string): boolean => blockedMemberNames.has(name)
 
-export const copyIn = (value: unknown, label: string, limits?: DataLimits, depth = 0, seen = new Set<object>()): unknown => {
-  if (limits && depth > limits.maxValueDepth) {
-    throw new ToolRuntimeError("InvalidDataValue", `${label} exceeds the maximum value depth of ${limits.maxValueDepth}.`)
+export const copyIn = (value: unknown, label: string, depth = 0, seen = new Set<object>()): unknown => {
+  if (depth > MAX_VALUE_DEPTH) {
+    throw new ToolRuntimeError("InvalidDataValue", `${label} exceeds the maximum value depth of ${MAX_VALUE_DEPTH}.`)
   }
   if (
     value === null ||
@@ -160,10 +161,7 @@ export const copyIn = (value: unknown, label: string, limits?: DataLimits, depth
   seen.add(value)
 
   if (Array.isArray(value)) {
-    if (limits && value.length > limits.maxCollectionLength) {
-      throw new ToolRuntimeError("InvalidDataValue", `${label} exceeds the maximum collection length of ${limits.maxCollectionLength}.`)
-    }
-    const copied = value.map((item) => copyIn(item, label, limits, depth + 1, seen))
+    const copied = value.map((item) => copyIn(item, label, depth + 1, seen))
     seen.delete(value)
     return copied
   }
@@ -174,15 +172,11 @@ export const copyIn = (value: unknown, label: string, limits?: DataLimits, depth
   }
 
   const copied: SafeObject = Object.create(null) as SafeObject
-  const entries = Object.entries(value)
-  if (limits && entries.length > limits.maxCollectionLength) {
-    throw new ToolRuntimeError("InvalidDataValue", `${label} exceeds the maximum collection length of ${limits.maxCollectionLength}.`)
-  }
-  for (const [key, item] of entries) {
+  for (const [key, item] of Object.entries(value)) {
     if (isBlockedMember(key)) {
       throw new ToolRuntimeError("InvalidDataValue", `${label} contains blocked property '${key}'.`)
     }
-    copied[key] = copyIn(item, label, limits, depth + 1, seen)
+    copied[key] = copyIn(item, label, depth + 1, seen)
   }
   seen.delete(value)
   return copied
@@ -240,13 +234,16 @@ export type DiscoveryPlan = {
 
 export type SearchEntry = {
   readonly description: ToolDescription
+  /**
+   * JSDoc-annotated multiline signature shown on search-result items; the compact
+   * single-line form (inline catalog lines) stays in `description.signature`.
+   */
+  readonly signature: string
   /** Top-level namespace (first path segment), matched by the search `namespace` option. */
   readonly namespace: string
   /** Lowercased path + description + input property names/descriptions, for substring matching. */
   readonly searchText: string
 }
-
-const utf8ByteLength = (value: string) => new TextEncoder().encode(value).byteLength
 
 /**
  * Split a query into lowercased search terms. camelCase boundaries are split
@@ -260,6 +257,20 @@ const tokenize = (query: string): Array<string> =>
     .toLowerCase()
     .split(/[^a-z0-9]+/)
     .filter((term) => term.length > 0 && term !== "*")
+
+/**
+ * A term plus its naive singular variants (trailing "s"/"es" stripped), so a plural
+ * query term ("issues") still matches indexed text that only carries the singular
+ * ("issue"). Matching is one-directional substring containment, so the variants are
+ * needed only on the query side; scoring weights are unchanged — each field check
+ * passes when ANY form matches.
+ */
+const termForms = (term: string): Array<string> => {
+  const forms = [term]
+  if (term.endsWith("es") && term.length > 3) forms.push(term.slice(0, -2))
+  if (term.endsWith("s") && term.length > 2) forms.push(term.slice(0, -1))
+  return forms
+}
 
 const firstLine = (text: string) => text.split("\n", 1)[0]!.trim()
 
@@ -276,6 +287,7 @@ const catalogLine = (tool: ToolDescription) => {
 
 const toSearchEntry = <R>(path: string, definition: Definition<R>, description: ToolDescription): SearchEntry => ({
   description,
+  signature: `tools.${path}(input: ${inputTypeScript(definition, true)}): Promise<${outputTypeScript(definition, true)}>`,
   namespace: path.split(".", 1)[0]!,
   searchText: [
     path,
@@ -297,16 +309,21 @@ export const assertValidTools = <R>(tools: HostTools<R>): void => {
 
 /**
  * Budgeted catalog: every namespace is always listed with its tool count; full call
- * signatures are inlined cheapest-first within each namespace (namespaces processed
- * alphabetically) until `maxInlineCatalogBytes` is used, and the section states exactly
- * how comprehensive it is — overall (COMPLETE vs PARTIAL) and per namespace.
+ * signatures are inlined against the `maxInlineCatalogTokens` budget (estimated tokens,
+ * chars/4) round-robin across namespaces — in each round (namespaces alphabetical), every
+ * namespace still holding un-inlined tools attempts to place its next-cheapest line, and
+ * a namespace whose next line does not fit is done while the others keep going — so every
+ * namespace gets some representation before any namespace gets everything. The section
+ * states exactly how comprehensive it is — overall (COMPLETE vs PARTIAL) and per
+ * namespace. Namespace stub lines are never budgeted: every namespace appears with its
+ * tool count even at budget 0.
  */
 export const discoveryPlan = <R>(
   tools: HostTools<R>,
-  maxInlineCatalogBytes = defaultMaxInlineCatalogBytes,
+  maxInlineCatalogTokens = defaultMaxInlineCatalogTokens,
 ): DiscoveryPlan => {
-  if (!Number.isSafeInteger(maxInlineCatalogBytes) || maxInlineCatalogBytes < 0) {
-    throw new RangeError("discovery.maxInlineCatalogBytes must be a non-negative safe integer")
+  if (!Number.isSafeInteger(maxInlineCatalogTokens) || maxInlineCatalogTokens < 0) {
+    throw new RangeError("discovery.maxInlineCatalogTokens must be a non-negative safe integer")
   }
   const visible = visibleDefinitions(tools)
   const described = visible.map(({ description }) => description)
@@ -320,33 +337,38 @@ export const discoveryPlan = <R>(
   }
   const ordered = [...namespaces].sort(([left], [right]) => left.localeCompare(right))
 
-  // Select which signatures fit the budget (cheapest first within each namespace,
-  // namespaces alphabetical) before emitting, so the list can state exactly how
-  // comprehensive it is. Once one line does not fit, inlining stops for every
-  // remaining namespace — later namespaces show counts only.
-  const shown = new Map<string, ReadonlySet<ToolDescription>>()
+  // Select which signatures fit the budget before emitting, so the list can state
+  // exactly how comprehensive it is. Round-robin fairness: in each round (namespaces
+  // alphabetical), every namespace still holding un-inlined tools tries to place its
+  // next-cheapest line against the shared budget; a namespace whose next line does not
+  // fit is done — the others keep going — so every namespace gets some representation
+  // before any namespace gets everything.
+  const selections = ordered.map(([namespace, group]) => ({
+    namespace,
+    picked: new Set<ToolDescription>(),
+    queue: [...group].sort(
+      (left, right) => estimate(catalogLine(left)) - estimate(catalogLine(right)) || left.path.localeCompare(right.path),
+    ),
+  }))
   let used = 0
-  let budgetLeft = true
-  let totalShown = 0
-  for (const [namespace, group] of ordered) {
-    const picked = new Set<ToolDescription>()
-    if (budgetLeft) {
-      const cheapestFirst = [...group].sort(
-        (left, right) => utf8ByteLength(catalogLine(left)) - utf8ByteLength(catalogLine(right)) || left.path.localeCompare(right.path),
-      )
-      for (const tool of cheapestFirst) {
-        const cost = utf8ByteLength(catalogLine(tool)) + 1
-        if (used + cost > maxInlineCatalogBytes) {
-          budgetLeft = false
-          break
-        }
-        picked.add(tool)
-        used += cost
-      }
+  let active = selections.filter((selection) => selection.queue.length > 0)
+  while (active.length > 0) {
+    const stillActive: typeof active = []
+    for (const selection of active) {
+      const tool = selection.queue[0]!
+      const cost = estimate(catalogLine(tool))
+      if (used + cost > maxInlineCatalogTokens) continue
+      selection.queue.shift()
+      selection.picked.add(tool)
+      used += cost
+      if (selection.queue.length > 0) stillActive.push(selection)
     }
-    shown.set(namespace, picked)
-    totalShown += picked.size
+    active = stillActive
   }
+  const shown = new Map<string, ReadonlySet<ToolDescription>>(
+    selections.map(({ namespace, picked }) => [namespace, picked]),
+  )
+  const totalShown = selections.reduce((total, { picked }) => total + picked.size, 0)
   const complete = totalShown === described.length
 
   const empty = described.length === 0
@@ -372,17 +394,17 @@ export const discoveryPlan = <R>(
         "",
         ...(complete
           ? [
-              "1. Pick a tool from the list under `## Available tools` — each line is the exact call signature, followed by the tool's description.",
-              "2. Call it by path: `const res = await tools.<namespace>.<tool>(input)`",
-              '3. Parse text results: `const data = typeof res === "string" ? JSON.parse(res) : res`',
-              "4. Return only what you need: `return { <field>: data.<field> }`",
+              "1. Pick a tool from the list under `## Available tools` — each line is the exact call signature; use it as-is rather than guessing segments.",
+              "2. Call it: `const res = await tools.<namespace>.<tool>(input)`",
+              '3. Parse text results: `const data = typeof res === "string" ? JSON.parse(res) : res` — most tools return JSON as a string.',
+              "4. Return only the fields you need: `return { <field>: data.<field> }` — raw payloads get truncated and waste context.",
             ]
           : [
-              '1. Find a tool (skip when it is already listed below): `const { items } = await tools.$codemode.search({ query: "<intent + key nouns>" })`',
-              "2. Read the matches: each item is `{ path, description, signature }` — the signature is the exact call form; read the description before using an unfamiliar tool.",
-              "3. Call it by path: `const res = await tools.<namespace>.<tool>(input)`",
-              '4. Parse text results: `const data = typeof res === "string" ? JSON.parse(res) : res`',
-              "5. Return only what you need: `return { <field>: data.<field> }`",
+              '1. Find a tool (skip when it is already listed below): `const { items } = await tools.$codemode.search({ query: "<intent + key nouns>" })` — short phrases like "list issues" work best.',
+              "2. Read the matches: each item is `{ path, description, signature }` — read the description before using an unfamiliar tool.",
+              "3. Call it with the result's `path` as-is (never guess segments): `const res = await tools.<namespace>.<tool>(input)`",
+              '4. Parse text results: `const data = typeof res === "string" ? JSON.parse(res) : res` — most tools return JSON as a string.',
+              "5. Return only the fields you need: `return { <field>: data.<field> }` — raw payloads get truncated and waste context.",
             ]),
       ]
 
@@ -392,26 +414,21 @@ export const discoveryPlan = <R>(
         "",
         "## Rules",
         "",
-        complete
-          ? "- Call a tool by its path: `await tools.<namespace>.<tool>(input)`. The signatures listed below are exact — use them as-is rather than guessing segments."
-          : "- Call a tool by its path: `await tools.<namespace>.<tool>(input)`. The `path` in search results is exact — use it as-is rather than guessing segments.",
-        "- Most tools return TEXT that is actually JSON — if a result is a string, JSON.parse it before reading fields.",
-        "- Return small: extract only the fields you need. Do NOT return raw or large tool payloads — they get truncated and waste context.",
-        "- Filter, aggregate, and transform large collections in code instead of returning them or calling per-item tools one message at a time.",
-        "- Inspect intermediate values with console.log/warn/error/dir/table — logs come back with the result; `return` only the final, minimal answer.",
-        "- Run independent calls in parallel: `await Promise.all(items.map((item) => tools.<namespace>.<tool>(item)))` (allSettled/race/resolve/reject also work). No .then/.catch — use await with try/catch.",
+        "- Filter, aggregate, and transform collections in code — never return them raw or call a tool per item across messages.",
+        "- A result typed `Promise<unknown>` has no guaranteed shape — verify what actually came back before relying on its fields.",
+        "- Run independent calls in parallel: `await Promise.all(items.map((item) => tools.<namespace>.<tool>(item)))`.",
         "- `Object.keys(tools)` lists namespaces; `Object.keys(tools.<namespace>)` lists its tools; `for...in` works on both.",
         ...(complete ? [] : ['- Browse one namespace: `await tools.$codemode.search({ query: "", namespace: "<name>" })`.']),
-        "- Files/images produced by tools never enter the program — they are attached to the final result automatically; a call that returns only media yields a small text marker instead, and your returned value plus logs is what the model reads.",
       ]
 
   const syntax = [
     "",
     "## Syntax",
     "",
-    "Common syntax: arrow functions and `function` declarations (hoisted) with closures, default/rest parameters, destructuring (incl. rest/defaults), optional chaining, template literals, conditionals, switch, loops (for...of over arrays/strings/Maps/Sets, for...in over object keys), spread (arrays/objects/strings/Maps/Sets), try/catch, ternary, the `in` operator, logical assignment (??=/||=/&&=), and bitwise operators (& | ^ ~ << >> >>>). Signal failure with `throw` (any value) or `throw new Error(message)`.",
-    "Transform data with array methods (map/filter/reduce/reduceRight/flatMap/forEach/find/findIndex/findLast/findLastIndex/sort/toSorted/slice/concat/indexOf/at/flat/reverse/toReversed/with/includes/join, plus push/pop/shift/unshift for accumulation), string methods (toLowerCase/toUpperCase/trim/split/slice/substring/replace/replaceAll/includes/startsWith/endsWith/indexOf/padStart/padEnd/repeat/charCodeAt/match/matchAll/search), number methods (toFixed/toString(radix)/toPrecision), Object.keys/values/entries/fromEntries/hasOwn, Math.* (incl. PI/E), JSON.parse/stringify, Array.from/isArray/of, Number.isInteger/isNaN/parseInt, String.fromCharCode, parseInt/parseFloat, and Number/String/Boolean.",
-    "Also available: Date (Date.now(), new Date(...), getTime/toISOString/getFullYear/..., date arithmetic and comparison), regular expressions (/literals/ and new RegExp(...), with test/exec and string match/matchAll/replace/replaceAll/split/search), and Map/Set (new Map()/new Set(), get/set/add/has/delete/size/forEach; keys/values/entries return arrays). Dates serialize to ISO strings at data boundaries; Map/Set/RegExp serialize to {} like JSON.stringify.",
+    "Standard modern JavaScript works: functions/closures, destructuring, template literals, loops, try/catch, spread, optional chaining, the usual Array/String/Object/Math/JSON methods, plus Date, RegExp, Map, Set, and Promise.all/allSettled/race/resolve/reject.",
+    "TypeScript type annotations are allowed and stripped before execution (decorators are not supported).",
+    "Not supported (each fails with a message naming the alternative): classes, generators, for await...of, .then/.catch/.finally (use await with try/catch), `x instanceof Error` (caught errors are plain `{ name, message }` objects), splice.",
+    "Dates serialize to ISO strings at data boundaries; Map/Set/RegExp serialize to `{}`.",
   ]
 
   const toolSection: Array<string> = [""]
@@ -509,21 +526,17 @@ export type ToolRuntime<R = never> = {
   readonly keys: (path: ReadonlyArray<string>) => ReadonlyArray<string>
 }
 
-export const dataByteLength = (value: unknown): number =>
-  new TextEncoder().encode(JSON.stringify(value) ?? "").byteLength
-
 const failureMessage = (error: unknown): string =>
   error instanceof ToolError || error instanceof ToolRuntimeError ? error.message : "Tool execution failed"
 
 export const make = <R>(
   tools: HostTools<R>,
-  maxToolCalls: number,
-  dataLimits: DataLimits,
+  /** Undefined means unlimited tool calls. */
+  maxToolCalls: number | undefined,
   hooks?: ToolCallHooks<R>,
   searchIndex?: ReadonlyArray<SearchEntry>,
 ): ToolRuntime<R> => {
   const calls: Array<ToolCall> = []
-  let auditBytes = 0
   const searchEnabled = searchIndex !== undefined
 
   // Wraps the settling portion of a tool call so onToolCallEnd observes success and failure
@@ -539,29 +552,16 @@ export const make = <R>(
     )
   }
 
-  const checkedCopyIn = (value: unknown, label: string): unknown => {
-    const copied = copyIn(value, label, dataLimits)
-    if (dataByteLength(copied) > dataLimits.maxDataBytes) {
-      throw new ToolRuntimeError("InvalidDataValue", `${label} exceeds ${dataLimits.maxDataBytes} bytes.`)
-    }
-    return copied
-  }
-
   const decodeOutput = (value: unknown, name: string) =>
     Effect.try({
-      try: () => checkedCopyIn(value, `Result from tool '${name}'`),
+      try: () => copyIn(value, `Result from tool '${name}'`),
       catch: () => new ToolRuntimeError("InvalidToolOutput", `Invalid output from tool '${name}'.`),
     })
 
   const recordCall = (call: ToolCall): void => {
-    if (calls.length >= maxToolCalls) {
+    if (maxToolCalls !== undefined && calls.length >= maxToolCalls) {
       throw new ToolRuntimeError("ToolCallLimitExceeded", `Execution exceeded its tool-call limit of ${maxToolCalls}.`)
     }
-    const auditEntryBytes = dataByteLength(call)
-    if (auditBytes + auditEntryBytes > dataLimits.maxAuditBytes) {
-      throw new ToolRuntimeError("AuditLimitExceeded", `Execution exceeds its audit-trail limit of ${dataLimits.maxAuditBytes} bytes.`)
-    }
-    auditBytes += auditEntryBytes
     calls.push(call)
   }
 
@@ -572,11 +572,7 @@ export const make = <R>(
     invoke: (path, args) =>
       Effect.gen(function*() {
         const name = path.join(".")
-        const externalArgs = args.map((arg) => copyOut(copyIn(arg, `Arguments for tool '${name}'`, dataLimits)))
-        const argumentBytes = dataByteLength(externalArgs)
-        if (argumentBytes > dataLimits.maxDataBytes) {
-          throw new ToolRuntimeError("InvalidDataValue", `Arguments for tool '${name}' exceed ${dataLimits.maxDataBytes} bytes.`)
-        }
+        const externalArgs = args.map((arg) => copyOut(copyIn(arg, `Arguments for tool '${name}'`)))
         const call = { name }
         const recordAndObserve = (input: unknown) =>
           Effect.sync(() => {
@@ -612,11 +608,12 @@ export const make = <R>(
                 const trimmed = query.trim()
                 const pathQuery = trimmed.startsWith("tools.") ? trimmed.slice("tools.".length) : trimmed
                 const exact = pathQuery === "" ? undefined : scoped.find((entry) => entry.description.path === pathQuery)
-                const terms = tokenize(query)
+                const terms = tokenize(query).map(termForms)
                 // Additive field-weighted scoring, summed across terms: exact path or path
                 // segment (20) > path substring (8) > description substring (4) > any
-                // searchable text, incl. input parameter names/descriptions (2). An empty
-                // query browses everything, alphabetical by path.
+                // searchable text, incl. input parameter names/descriptions (2). Each term
+                // matches a field when any of its forms (the term or a singular variant)
+                // does. An empty query browses everything, alphabetical by path.
                 const ranked = exact !== undefined
                   ? [exact]
                   : scoped
@@ -624,12 +621,12 @@ export const make = <R>(
                         const path = entry.description.path.toLowerCase()
                         const description = entry.description.description.toLowerCase()
                         const score = terms.reduce(
-                          (total, term) =>
+                          (total, forms) =>
                             total +
-                            (path === term || path.endsWith(`.${term}`) ? 20 : 0) +
-                            (path.includes(term) ? 8 : 0) +
-                            (description.includes(term) ? 4 : 0) +
-                            (entry.searchText.includes(term) ? 2 : 0),
+                            (forms.some((form) => path === form || path.endsWith(`.${form}`)) ? 20 : 0) +
+                            (forms.some((form) => path.includes(form)) ? 8 : 0) +
+                            (forms.some((form) => description.includes(form)) ? 4 : 0) +
+                            (forms.some((form) => entry.searchText.includes(form)) ? 2 : 0),
                           0,
                         )
                         return { entry, score }
@@ -639,9 +636,15 @@ export const make = <R>(
                         right.score - left.score || left.entry.description.path.localeCompare(right.entry.description.path))
                       .map(({ entry }) => entry)
                 // Result paths carry the `tools.` prefix so each `path` is directly usable
-                // as the call site (`await tools.github.list({ ... })`).
-                const items = ranked.slice(0, limit).map(({ description }) => ({ ...description, path: `tools.${description.path}` }))
-                return checkedCopyIn({ items, total: ranked.length }, "Result from tool '$codemode.search'")
+                // as the call site (`await tools.github.list({ ... })`); the signature is
+                // the pretty, JSDoc-annotated form (schema descriptions and constraints
+                // ride along as field comments).
+                const items = ranked.slice(0, limit).map(({ description, signature }) => ({
+                  ...description,
+                  path: `tools.${description.path}`,
+                  signature,
+                }))
+                return copyIn({ items, total: ranked.length }, "Result from tool '$codemode.search'")
               },
               catch: (cause) => cause,
             }),

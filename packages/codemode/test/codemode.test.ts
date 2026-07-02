@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Cause, Effect, Schema } from "effect"
-import { CodeMode, ExecuteInputSchema, ExecuteResultSchema, Tool, toolError } from "../src/index.js"
-import type { InternalExecutionLimits } from "../src/codemode.js"
+import { CodeMode, ExecuteInputSchema, ExecuteResultSchema, Tool, toolError, type ExecutionLimits } from "../src/index.js"
 import type { Definition } from "../src/tool.js"
 
 const run = (tool: Definition<never>) =>
@@ -239,7 +238,7 @@ describe("CodeMode console capture", () => {
 
 describe("CodeMode output budget", () => {
   test("truncates an oversized result value with a marker instead of failing", async () => {
-    const limits: InternalExecutionLimits = { maxOutputBytes: 40 }
+    const limits: ExecutionLimits = { maxOutputBytes: 40 }
     const result = await Effect.runPromise(CodeMode.execute({
       code: `return { data: "${"x".repeat(200)}" }`,
       limits,
@@ -254,7 +253,7 @@ describe("CodeMode output budget", () => {
   })
 
   test("keeps leading logs within the remaining budget and marks the cut", async () => {
-    const limits: InternalExecutionLimits = { maxOutputBytes: 40 }
+    const limits: ExecutionLimits = { maxOutputBytes: 40 }
     const result = await Effect.runPromise(CodeMode.execute({
       code: `
         console.log("first line")
@@ -398,7 +397,8 @@ describe("CodeMode public contract", () => {
     // A fully inlined catalog does not advertise search in the instructions...
     expect(runtime.instructions()).not.toMatch(/\$codemode/)
 
-    // ...but the search tool stays registered, so a speculative call still works.
+    // ...but the search tool stays registered, so a speculative call still works. Search
+    // results carry the pretty multiline signature; the inline catalog stays compact.
     const result = await Effect.runPromise(runtime.execute(`return await tools.$codemode.search({ query: "order" })`))
     expect(result.ok).toBe(true)
     if (result.ok) {
@@ -406,7 +406,7 @@ describe("CodeMode public contract", () => {
         items: [{
           path: "tools.orders.lookup",
           description: "Look up an order by ID",
-          signature: "tools.orders.lookup(input: { id: string }): Promise<{ id: string; status: string }>",
+          signature: "tools.orders.lookup(input: {\n  id: string\n}): Promise<{\n  id: string\n  status: string\n}>",
         }],
         total: 1,
       })
@@ -423,10 +423,11 @@ describe("CodeMode public contract", () => {
     expect(instructions.indexOf("## Workflow")).toBeLessThan(instructions.indexOf("## Rules"))
     expect(instructions.indexOf("## Rules")).toBeLessThan(instructions.indexOf("## Syntax"))
     expect(instructions.indexOf("## Syntax")).toBeLessThan(instructions.indexOf("\n## Available tools (COMPLETE list"))
-    // Rules carry the result-shape guidance.
-    expect(instructions).toContain("if a result is a string, JSON.parse it before reading fields")
-    expect(instructions).toContain("Return small: extract only the fields you need")
-    expect(instructions).toContain("Call a tool by its path: `await tools.<namespace>.<tool>(input)`.")
+    // The workflow carries the result-shape guidance; Rules only add content beyond it.
+    expect(instructions).toContain('`const data = typeof res === "string" ? JSON.parse(res) : res` — most tools return JSON as a string')
+    expect(instructions).toContain("Return only the fields you need")
+    expect(instructions).toContain("raw payloads get truncated and waste context")
+    expect(instructions).toContain("`const res = await tools.<namespace>.<tool>(input)`")
     // Placeholders use the <namespace>.<tool>/<field> style ONLY — no fabricated tool
     // names, and no real catalog tools cherry-picked into example lines.
     expect(instructions).toContain("`return { <field>: data.<field> }`")
@@ -437,14 +438,29 @@ describe("CodeMode public contract", () => {
     expect(instructions).toContain("1. Pick a tool from the list under `## Available tools`")
     expect(instructions).not.toContain("Browse one namespace")
 
-    const partial = CodeMode.make({ tools, discovery: { maxInlineCatalogBytes: 0 } }).instructions()
-    // PARTIAL: the workflow starts with search and the browse-namespace rule appears.
+    const partial = CodeMode.make({ tools, discovery: { maxInlineCatalogTokens: 0 } }).instructions()
+    // PARTIAL: the workflow starts with search (with query-style guidance that is clearly
+    // a query string, never a tool name) and the browse-namespace rule appears.
     expect(partial).toContain(
-      '1. Find a tool (skip when it is already listed below): `const { items } = await tools.$codemode.search({ query: "<intent + key nouns>" })`',
+      '1. Find a tool (skip when it is already listed below): `const { items } = await tools.$codemode.search({ query: "<intent + key nouns>" })` — short phrases like "list issues" work best.',
     )
     expect(partial).toContain('- Browse one namespace: `await tools.$codemode.search({ query: "", namespace: "<name>" })`.')
     expect(partial).not.toContain("total_count")
     expect(partial).not.toContain("tools.orders.lookup({")
+  })
+
+  test("the syntax section names what is unusual or missing, not an allowlist", () => {
+    const instructions = CodeMode.make({ tools }).instructions()
+    // Models already know JavaScript; the section leads with that.
+    expect(instructions).toContain("Standard modern JavaScript works")
+    expect(instructions).toContain("TypeScript type annotations are allowed and stripped before execution")
+    // The not-supported list is derived from (and verified against) the interpreter.
+    expect(instructions).toContain("Not supported")
+    for (const missing of ["classes", "generators", "for await...of", ".then/.catch/.finally", "`x instanceof Error`", "splice"]) {
+      expect(instructions).toContain(missing)
+    }
+    // The data-boundary note survives.
+    expect(instructions).toContain("Dates serialize to ISO strings at data boundaries; Map/Set/RegExp serialize to `{}`.")
   })
 
   test("zero tools keep minimal sections and the no-tools notice", () => {
@@ -473,7 +489,7 @@ describe("CodeMode public contract", () => {
     })
     const runtime = CodeMode.make({
       tools: { thread: { uploadFile: upload, generateImage: generate }, orders: { lookup } },
-      discovery: { maxInlineCatalogBytes: 0 },
+      discovery: { maxInlineCatalogTokens: 0 },
     })
     expect(runtime.instructions()).toContain("Available tools (PARTIAL — 0 of 3 shown; find the rest with tools.$codemode.search)")
     expect(runtime.instructions()).toContain("- thread (2 tools, none shown)")
@@ -494,12 +510,12 @@ describe("CodeMode public contract", () => {
         {
           path: "tools.thread.uploadFile",
           description: "Upload one readable local file to the current Discord thread",
-          signature: "tools.thread.uploadFile(input: { path: string }): Promise<{ sent: boolean }>",
+          signature: "tools.thread.uploadFile(input: {\n  path: string\n}): Promise<{\n  sent: boolean\n}>",
         },
         {
           path: "tools.thread.generateImage",
           description: "Generate an image and upload it to the current Discord thread",
-          signature: "tools.thread.generateImage(input: { prompt: string }): Promise<{ sent: boolean }>",
+          signature: "tools.thread.generateImage(input: {\n  prompt: string\n}): Promise<{\n  sent: boolean\n}>",
         },
       ],
       total: 2,
@@ -553,7 +569,7 @@ describe("CodeMode public contract", () => {
           items: [{
             path: "tools.many.tool13",
             description: "Numbered tool 13",
-            signature: "tools.many.tool13(input: { id: string }): Promise<string>",
+            signature: "tools.many.tool13(input: {\n  id: string\n}): Promise<string>",
           }],
           total: 1,
         })
@@ -647,6 +663,46 @@ describe("CodeMode public contract", () => {
     }
   })
 
+  test("a plural query term matches singular-only tool text", async () => {
+    const simple = (description: string) =>
+      Tool.make({
+        description,
+        input: Schema.Struct({ id: Schema.String }),
+        output: Schema.String,
+        run: () => Effect.succeed("ok"),
+      })
+    const runtime = CodeMode.make({
+      tools: {
+        // Neither path nor description contains "issues" — only the singular "issue".
+        tracker: { fetch_all: simple("Fetch every open issue in the project") },
+        github: { list_issues: simple("List issues") },
+        misc: { rename: simple("Rename the workspace") },
+      },
+    })
+
+    // "issues" still finds the singular-only tool (term OR singular(term) per field)...
+    const plural = await Effect.runPromise(runtime.execute(
+      `return await tools.$codemode.search({ query: "issues", namespace: "tracker" })`,
+    ))
+    expect(plural.ok).toBe(true)
+    if (plural.ok) {
+      const value = plural.value as { items: Array<{ path: string }>; total: number }
+      expect(value.total).toBe(1)
+      expect(value.items[0]?.path).toBe("tools.tracker.fetch_all")
+    }
+
+    // ...while a true "issues" path match still outranks the singular-only description match.
+    const ranked = await Effect.runPromise(runtime.execute(
+      `return await tools.$codemode.search({ query: "issues" })`,
+    ))
+    expect(ranked.ok).toBe(true)
+    if (ranked.ok) {
+      const value = ranked.value as { items: Array<{ path: string }>; total: number }
+      expect(value.total).toBe(2)
+      expect(value.items.map((item) => item.path)).toStrictEqual(["tools.github.list_issues", "tools.tracker.fetch_all"])
+    }
+  })
+
   test("empty query lists everything alphabetically by path", async () => {
     const simple = (description: string) =>
       Tool.make({
@@ -674,7 +730,7 @@ describe("CodeMode public contract", () => {
     }
   })
 
-  test("inlines cheapest signatures first within the byte budget and labels every namespace", () => {
+  test("inlines round-robin across namespaces so one expensive namespace cannot starve the rest", () => {
     const cheap = Tool.make({
       description: "Cheap",
       input: Schema.Struct({ q: Schema.String }),
@@ -687,20 +743,22 @@ describe("CodeMode public contract", () => {
       output: Schema.String,
       run: () => Effect.succeed("ok"),
     })
-    // Budget fits alpha.cheap (70 bytes incl. newline) and would numerically fit
-    // beta.cheap, but alpha.expensive exhausts the budget first — inlining stops for
-    // every remaining namespace, exactly like the ported preview algorithm.
+    // Round 1 places alpha.cheap (~17 estimated tokens) and beta.cheap (~17); in round 2
+    // alpha.expensive does not fit, which marks only alpha done — it must NOT prevent
+    // other namespaces from inlining (beta already got its line in the same round).
     const runtime = CodeMode.make({
       tools: { alpha: { cheap, expensive }, beta: { cheap } },
-      discovery: { maxInlineCatalogBytes: 145 },
+      discovery: { maxInlineCatalogTokens: 40 },
     })
 
     const instructions = runtime.instructions()
-    expect(instructions).toContain("Available tools (PARTIAL — 1 of 3 shown; find the rest with tools.$codemode.search)")
+    expect(instructions).toContain("Available tools (PARTIAL — 2 of 3 shown; find the rest with tools.$codemode.search)")
     expect(instructions).toContain("- alpha (2 tools, 1 shown)")
     expect(instructions).toContain("  - tools.alpha.cheap(input: { q: string }): Promise<string> // Cheap")
     expect(instructions).not.toContain("tools.alpha.expensive(")
-    expect(instructions).toContain("- beta (1 tool, none shown)")
+    // Fully shown namespaces read cleanly (no "shown" annotation).
+    expect(instructions).toContain("- beta (1 tool)")
+    expect(instructions).toContain("  - tools.beta.cheap(input: { q: string }): Promise<string> // Cheap")
     expect(instructions).toMatch(/\$codemode\.search/)
   })
 
@@ -741,27 +799,19 @@ describe("CodeMode public contract", () => {
       toolCalls: [],
     })
     expect(Schema.decodeUnknownSync(ExecuteResultSchema)(JSON.parse(JSON.stringify(result)))).toStrictEqual(result)
-
-    const dataLimits: InternalExecutionLimits = { maxDataBytes: 5 }
-    const oversized = await Effect.runPromise(CodeMode.execute({
-      code: `return { value: undefined }`,
-      limits: dataLimits,
-    }))
-    expect(oversized.ok).toBe(false)
-    if (!oversized.ok) expect(oversized.error.kind).toBe("InvalidDataValue")
   })
 
   test("rejects invalid configuration and discovery limits", async () => {
-    const invalidConcurrency: InternalExecutionLimits = { maxConcurrency: 0 }
-    expect(() => CodeMode.make({ limits: invalidConcurrency })).toThrow(RangeError)
+    expect(() => CodeMode.execute({ code: "return 1", limits: { timeoutMs: 0 } })).toThrow(RangeError)
     expect(() => CodeMode.execute({ code: "return 1", limits: { timeoutMs: Number.POSITIVE_INFINITY } })).toThrow(RangeError)
+    expect(() => CodeMode.execute({ code: "return 1", limits: { maxToolCalls: -1 } })).toThrow(RangeError)
     expect(() => CodeMode.execute({ code: "return 1", limits: { maxOutputBytes: -1 } })).toThrow(RangeError)
 
-    expect(() => CodeMode.make({ tools, discovery: { maxInlineCatalogBytes: -1 } })).toThrow(RangeError)
+    expect(() => CodeMode.make({ tools, discovery: { maxInlineCatalogTokens: -1 } })).toThrow(RangeError)
 
     const result = await Effect.runPromise(CodeMode.make({
       tools,
-      discovery: { maxInlineCatalogBytes: 0 },
+      discovery: { maxInlineCatalogTokens: 0 },
     }).execute(
       `return await tools.$codemode.search({ query: "order", limit: 0.5 })`,
     ))
@@ -770,20 +820,47 @@ describe("CodeMode public contract", () => {
     expect(result.error.kind).toBe("InvalidToolInput")
   })
 
-  test("enforces source, operation, and tool-call limits as diagnostics", async () => {
-    const sourceLimits: InternalExecutionLimits = { maxSourceBytes: 1 }
-    const operationLimits: InternalExecutionLimits = { maxOperations: 10 }
-    const cases = [
-      [CodeMode.execute({ code: "return 1", limits: sourceLimits }), "InvalidDataValue"],
-      [CodeMode.execute({ code: "while (true) {}", limits: operationLimits }), "OperationLimitExceeded"],
-      [CodeMode.execute({ tools, code: source, limits: { maxToolCalls: 0 } }), "ToolCallLimitExceeded"],
-    ] as const
+  test("enforces the tool-call limit as a diagnostic", async () => {
+    const result = await Effect.runPromise(CodeMode.execute({ tools, code: source, limits: { maxToolCalls: 0 } }))
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.error.kind).toBe("ToolCallLimitExceeded")
+  })
 
-    for (const [effect, kind] of cases) {
-      const result = await Effect.runPromise(effect)
-      expect(result.ok).toBe(false)
-      if (!result.ok) expect(result.error.kind).toBe(kind)
+  test("timeoutMs and maxToolCalls have no defaults: absent means unlimited", async () => {
+    // 150 tool calls would have exceeded the old default cap of 100; with no limits
+    // provided, there is no cap and no timeout — budgets are host policy.
+    const counter = Tool.make({
+      description: "Count invocations",
+      input: Schema.Struct({}),
+      output: Schema.Number,
+      run: () => Effect.succeed(1),
+    })
+    const result = await Effect.runPromise(CodeMode.execute({
+      tools: { host: { count: counter } },
+      code: `
+        let total = 0
+        for (let i = 0; i < 150; i += 1) total += await tools.host.count({})
+        return total
+      `,
+    }))
+    expect(result).toMatchObject({ ok: true, value: 150 })
+    if (result.ok) expect(result.toolCalls.length).toBe(150)
+  })
+
+  test("the timeout interrupts a busy loop without any operation budget", async () => {
+    // Regression: timeout interruption must not depend on interpreter-side work accounting.
+    // The Effect fiber runtime auto-yields between interpreter steps, so a pure `while
+    // (true) {}` loop is interrupted by `timeoutMs` alone.
+    const startedAt = Date.now()
+    const result = await Effect.runPromise(CodeMode.execute({ code: "while (true) {}", limits: { timeoutMs: 200 } }))
+    const elapsedMs = Date.now() - startedAt
+
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.error.kind).toBe("TimeoutExceeded")
+      expect(result.error.message).toContain("timed out after 200ms")
     }
+    expect(elapsedMs).toBeLessThan(3_000)
   })
 
   test("reserves the discovery namespace", () => {

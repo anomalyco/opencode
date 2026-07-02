@@ -4,7 +4,6 @@ import { DiagnosticCategory, ModuleKind, ScriptTarget, flattenDiagnosticMessageT
 import {
   copyIn,
   copyOut,
-  dataByteLength,
   isBlockedMember,
   ToolReference,
   ToolRuntime,
@@ -25,50 +24,28 @@ export { ToolError, toolError } from "./tool-error.js"
 
 /** Resource budgets enforced independently during each CodeMode program execution. */
 export type ExecutionLimits = {
-  /** Maximum wall-clock execution time in milliseconds. */
+  /** Maximum wall-clock execution time in milliseconds. No default: absent means no timeout. */
   readonly timeoutMs?: number
-  /** Maximum number of tool calls admitted by the runtime. */
+  /** Maximum number of tool calls admitted by the runtime. No default: absent means unlimited. */
   readonly maxToolCalls?: number
   /**
    * Maximum UTF-8 bytes of model-facing output: the serialized result value plus captured
-   * logs. Excess output is truncated with an explanatory marker instead of failing.
+   * logs (default 32,000). Excess output is truncated with an explanatory marker instead of
+   * failing.
    */
   readonly maxOutputBytes?: number
-}
-
-/**
- * Internal execution knobs kept as fixed defaults behind the public limits.
- * Not part of the public contract; exposed only for tests and embedders that must tune
- * interpreter internals.
- *
- * @internal
- */
-export type InternalExecutionLimits = ExecutionLimits & {
-  /** Maximum interpreter work, including collection and string traversal. */
-  readonly maxOperations?: number
-  /** Maximum number of tool calls executing simultaneously. */
-  readonly maxConcurrency?: number
-  /** Maximum UTF-8 source size. */
-  readonly maxSourceBytes?: number
-  /** Maximum size of program values and the final result. */
-  readonly maxDataBytes?: number
-  /** Maximum retained tool-call audit data. */
-  readonly maxAuditBytes?: number
-  /** Maximum nesting depth for arrays and objects crossing data boundaries. */
-  readonly maxValueDepth?: number
-  /** Maximum array length or object field count. */
-  readonly maxCollectionLength?: number
 }
 
 /** Controls how much of the tool catalog is inlined in agent instructions. */
 export type DiscoveryOptions = {
   /**
-   * Byte budget for inlined full tool signatures in agent instructions. Every namespace is
-   * always listed with its tool count; as many full signatures as fit this budget are inlined
-   * (cheapest-first within a namespace, namespaces alphabetical), and the instructions state
-   * whether the list is COMPLETE or PARTIAL. `tools.$codemode.search` is always registered.
+   * Estimated-token budget (chars/4, default 4000) for inlined full tool signatures in agent
+   * instructions. Every namespace is always listed with its tool count regardless of budget;
+   * as many full signatures as fit this budget are inlined (cheapest-first within a
+   * namespace, namespaces alphabetical), and the instructions state whether the list is
+   * COMPLETE or PARTIAL. `tools.$codemode.search` is always registered.
    */
-  readonly maxInlineCatalogBytes?: number
+  readonly maxInlineCatalogTokens?: number
 }
 
 type ToolTree<R = never> = {
@@ -76,16 +53,11 @@ type ToolTree<R = never> = {
 }
 
 type ResolvedExecutionLimits = {
-  readonly timeoutMs: number
-  readonly maxToolCalls: number
+  /** Undefined means no timeout. */
+  readonly timeoutMs: number | undefined
+  /** Undefined means unlimited tool calls. */
+  readonly maxToolCalls: number | undefined
   readonly maxOutputBytes: number
-  readonly maxOperations: number
-  readonly maxConcurrency: number
-  readonly maxSourceBytes: number
-  readonly maxDataBytes: number
-  readonly maxAuditBytes: number
-  readonly maxValueDepth: number
-  readonly maxCollectionLength: number
 }
 
 /** Options for one CodeMode execution. */
@@ -147,7 +119,7 @@ export const ExecuteInputSchema = Schema.Struct({ code: Schema.String })
 
 const DiagnosticKindSchema = Schema.Literals([
   "ParseError", "UnsupportedSyntax", "UnknownTool", "InvalidToolInput", "InvalidToolOutput", "InvalidDataValue",
-  "OperationLimitExceeded", "ToolCallLimitExceeded", "AuditLimitExceeded", "TimeoutExceeded",
+  "ToolCallLimitExceeded", "TimeoutExceeded",
   "ToolFailure", "ExecutionFailure",
 ])
 
@@ -286,7 +258,7 @@ class ProgramThrow {
   constructor(readonly value: unknown) {}
 }
 
-/** Stable categories produced by program, schema, tool, and budget failures. */
+/** Stable categories produced by program, schema, tool, and limit failures. */
 export type DiagnosticKind =
   | "ParseError"
   | "UnsupportedSyntax"
@@ -294,9 +266,7 @@ export type DiagnosticKind =
   | "InvalidToolInput"
   | "InvalidToolOutput"
   | "InvalidDataValue"
-  | "OperationLimitExceeded"
   | "ToolCallLimitExceeded"
-  | "AuditLimitExceeded"
   | "TimeoutExceeded"
   | "ToolFailure"
   | "ExecutionFailure"
@@ -307,13 +277,6 @@ const arrayMethods = new Set([
   "at", "flat", "reverse", "toReversed", "with", "push", "pop", "shift", "unshift",
 ])
 const retryableArrayMethods = new Set(["splice", "fill", "copyWithin", "keys", "values", "entries"])
-
-/**
- * Array methods whose cost is O(1) (or bounded by the argument count), so they must
- * NOT be charged the receiver's length. Charging `push` per element would make an
- * accumulation loop quadratic in the operation budget and trip it on legitimate code.
- */
-const cheapArrayMethods = new Set(["push", "pop", "at"])
 
 const mathConstants = new Set(["PI", "E", "LN2", "LN10", "LOG2E", "LOG10E", "SQRT2", "SQRT1_2"])
 
@@ -363,45 +326,24 @@ const supportedSyntaxMessage =
 const unsupportedSyntax = (kind: string, node: AstNode): InterpreterRuntimeError =>
   new InterpreterRuntimeError(`Syntax '${kind}' is not supported in CodeMode. ${supportedSyntaxMessage}`, node, "UnsupportedSyntax", [supportedSyntaxMessage])
 
-const defaultExecutionLimits = (): ResolvedExecutionLimits => ({
-  timeoutMs: 10_000,
-  maxToolCalls: 100,
-  maxOutputBytes: 32_000,
-  maxOperations: 100_000,
-  maxConcurrency: 8,
-  maxSourceBytes: 32_000,
-  maxDataBytes: 256_000,
-  maxAuditBytes: 1_000_000,
-  maxValueDepth: 32,
-  maxCollectionLength: 10_000,
-})
+/** How many eagerly forked tool calls may run at once. Fixed; not a configurable knob. */
+const TOOL_CALL_CONCURRENCY = 8
 
-const resolveLimit = (name: keyof InternalExecutionLimits, value: number | undefined, fallback: number, minimum: number): number => {
-  if (value === undefined) return fallback
-  if (!Number.isSafeInteger(value) || value < minimum) {
+const validateLimit = <Value extends number | undefined>(name: keyof ExecutionLimits, value: Value, minimum: number): Value => {
+  if (value !== undefined && (!Number.isSafeInteger(value) || value < minimum)) {
     throw new RangeError(`${name} must be a safe integer greater than or equal to ${minimum}.`)
   }
   return value
 }
 
-const resolveExecutionLimits = (publicLimits?: ExecutionLimits): ResolvedExecutionLimits => {
-  const defaults = defaultExecutionLimits()
-  // The public contract is the three documented knobs; the remaining internal knobs are still
-  // read (and validated) when supplied through InternalExecutionLimits, primarily by tests.
-  const limits = publicLimits as InternalExecutionLimits | undefined
-  return {
-    timeoutMs: resolveLimit("timeoutMs", limits?.timeoutMs, defaults.timeoutMs, 1),
-    maxToolCalls: resolveLimit("maxToolCalls", limits?.maxToolCalls, defaults.maxToolCalls, 0),
-    maxOutputBytes: resolveLimit("maxOutputBytes", limits?.maxOutputBytes, defaults.maxOutputBytes, 0),
-    maxOperations: resolveLimit("maxOperations", limits?.maxOperations, defaults.maxOperations, 0),
-    maxConcurrency: resolveLimit("maxConcurrency", limits?.maxConcurrency, defaults.maxConcurrency, 1),
-    maxSourceBytes: resolveLimit("maxSourceBytes", limits?.maxSourceBytes, defaults.maxSourceBytes, 0),
-    maxDataBytes: resolveLimit("maxDataBytes", limits?.maxDataBytes, defaults.maxDataBytes, 0),
-    maxAuditBytes: resolveLimit("maxAuditBytes", limits?.maxAuditBytes, defaults.maxAuditBytes, 0),
-    maxValueDepth: resolveLimit("maxValueDepth", limits?.maxValueDepth, defaults.maxValueDepth, 0),
-    maxCollectionLength: resolveLimit("maxCollectionLength", limits?.maxCollectionLength, defaults.maxCollectionLength, 0),
-  }
-}
+// timeoutMs and maxToolCalls have NO defaults: absent means no timeout / unlimited calls —
+// budgets are host policy, not library policy. maxOutputBytes keeps a default because
+// truncation never breaks correctness and its absence silently floods model context.
+const resolveExecutionLimits = (limits?: ExecutionLimits): ResolvedExecutionLimits => ({
+  timeoutMs: validateLimit("timeoutMs", limits?.timeoutMs, 1),
+  maxToolCalls: validateLimit("maxToolCalls", limits?.maxToolCalls, 0),
+  maxOutputBytes: validateLimit("maxOutputBytes", limits?.maxOutputBytes, 0) ?? 32_000,
+})
 
 class InterpreterRuntimeError extends Error {
   readonly node?: AstNode
@@ -604,13 +546,10 @@ const caughtErrorValue = (thrown: unknown): unknown =>
 // pure (string/Object/Math/JSON/coercion) and so live as free functions; array
 // Methods that run CodeMode callbacks live on the interpreter (they need invokeFunction).
 
-const boundedData = (value: unknown, label: string, node: AstNode, limits: ResolvedExecutionLimits): unknown => {
-  const copied = copyIn(value, label, limits)
-  if (dataByteLength(copied) > limits.maxDataBytes) {
-    throw new InterpreterRuntimeError(`${label} exceeds the maximum data size of ${limits.maxDataBytes} bytes.`, node, "InvalidDataValue")
-  }
-  return copied
-}
+// The intra-sandbox data checkpoint: copies a value through `copyIn`, which validates the
+// plain-data contract (depth, circularity, plain objects only, blocked properties) and
+// serializes sandbox value types to their JSON forms.
+const boundedData = (value: unknown, label: string): unknown => copyIn(value, label)
 
 const isRuntimeReference = (value: unknown): boolean =>
     value instanceof CodeModeFunction || value instanceof ToolReference || value instanceof IntrinsicReference ||
@@ -661,80 +600,6 @@ const typeofValue = (value: unknown): string => {
   return typeof value
 }
 
-const runtimeValueBytes = (
-  value: unknown,
-  label: string,
-  node: AstNode,
-  limits: ResolvedExecutionLimits,
-  depth = 0,
-  seen = new Set<object>(),
-): number => {
-  if (depth > limits.maxValueDepth) {
-    throw new InterpreterRuntimeError(`${label} exceeds the maximum value depth of ${limits.maxValueDepth}.`, node, "InvalidDataValue")
-  }
-  // Sandbox values are charged real sizes (a Map/Set can hold arbitrary program data, so a
-  // zero-cost reference would be an unaccounted-memory hole), and their walks are cycle-checked.
-  if (value instanceof SandboxDate) return 26
-  if (value instanceof SandboxRegExp) return dataByteLength(value.regex.source) + value.regex.flags.length + 2
-  if (value instanceof SandboxMap || value instanceof SandboxSet) {
-    if (seen.has(value)) throw new InterpreterRuntimeError(`${label} contains a circular value.`, node, "InvalidDataValue")
-    seen.add(value)
-    const entries = value instanceof SandboxMap
-      ? Array.from(value.map.entries())
-      : Array.from(value.set.values(), (item): [unknown, unknown] => [item, null])
-    if (entries.length > limits.maxCollectionLength) {
-      throw new InterpreterRuntimeError(`${label} exceeds the maximum collection length of ${limits.maxCollectionLength}.`, node, "InvalidDataValue")
-    }
-    let bytes = 2
-    for (const [key, item] of entries) {
-      bytes += runtimeValueBytes(key, label, node, limits, depth + 1, seen) + runtimeValueBytes(item, label, node, limits, depth + 1, seen) + 2
-    }
-    seen.delete(value)
-    return bytes
-  }
-  if (isRuntimeReference(value)) return 0
-  if (value === null || value === undefined || typeof value === "string" || typeof value === "boolean" || typeof value === "number") {
-    return dataByteLength(value)
-  }
-  if (typeof value !== "object") {
-    throw new InterpreterRuntimeError(`${label} must contain data or CodeMode references only.`, node, "InvalidDataValue")
-  }
-  if (seen.has(value)) throw new InterpreterRuntimeError(`${label} contains a circular value.`, node, "InvalidDataValue")
-  seen.add(value)
-  let bytes = 2
-  if (Array.isArray(value)) {
-    if (value.length > limits.maxCollectionLength) {
-      throw new InterpreterRuntimeError(`${label} exceeds the maximum collection length of ${limits.maxCollectionLength}.`, node, "InvalidDataValue")
-    }
-    for (const item of value) bytes += runtimeValueBytes(item, label, node, limits, depth + 1, seen) + 1
-  } else {
-    const entries = Object.entries(value)
-    if (entries.length > limits.maxCollectionLength) {
-      throw new InterpreterRuntimeError(`${label} exceeds the maximum collection length of ${limits.maxCollectionLength}.`, node, "InvalidDataValue")
-    }
-    for (const [key, item] of entries) {
-      if (isBlockedMember(key)) throw new InterpreterRuntimeError(`${label} contains blocked property '${key}'.`, node, "InvalidDataValue")
-      bytes += dataByteLength(key) + runtimeValueBytes(item, label, node, limits, depth + 1, seen) + 1
-    }
-  }
-  seen.delete(value)
-  return bytes
-}
-
-const boundedProgramValue = (value: unknown, label: string, node: AstNode, limits: ResolvedExecutionLimits): unknown => {
-  if (runtimeValueBytes(value, label, node, limits) > limits.maxDataBytes) {
-    throw new InterpreterRuntimeError(`${label} exceeds the maximum data size of ${limits.maxDataBytes} bytes.`, node, "InvalidDataValue")
-  }
-  return value
-}
-
-// A cheap proxy for the work an O(n) built-in performed, used to charge the operation budget.
-const workUnits = (value: unknown): number => {
-  if (typeof value === "string" || Array.isArray(value)) return value.length
-  if (value !== null && typeof value === "object") return Object.keys(value).length
-  return 1
-}
-
 // A string method's pattern argument as a host regex: a sandbox regex passes its own host
 // instance through (so `g` lastIndex semantics follow the spec across calls); a string becomes
 // a pattern, exactly as String.prototype.match/matchAll/search do (`extraFlags` adds matchAll's
@@ -768,7 +633,7 @@ const matchToValue = (match: RegExpMatchArray): Array<unknown> => {
   return result
 }
 
-const invokeStringMethod = (value: string, name: string, args: Array<unknown>, node: AstNode, limits: ResolvedExecutionLimits): unknown => {
+const invokeStringMethod = (value: string, name: string, args: Array<unknown>, node: AstNode): unknown => {
   const str = (index: number): string => {
     const arg = args[index]
     if (typeof arg !== "string") throw new InterpreterRuntimeError(`String.${name} expects argument ${index + 1} to be a string.`, node)
@@ -781,22 +646,6 @@ const invokeStringMethod = (value: string, name: string, args: Array<unknown>, n
   }
   const optNum = (index: number): number | undefined => (args[index] === undefined ? undefined : num(index))
   const optStr = (index: number): string | undefined => (args[index] === undefined ? undefined : str(index))
-  const byteLength = (text: string): number => new TextEncoder().encode(text).byteLength
-  const limitString = (bytes: number): void => {
-    if (bytes > limits.maxDataBytes) {
-      throw new InterpreterRuntimeError(`String.${name} exceeds the maximum data size of ${limits.maxDataBytes} bytes.`, node, "InvalidDataValue")
-    }
-  }
-  const replacementCount = (search: string): number => {
-    if (search === "") return value.length + 1
-    let count = 0
-    let offset = 0
-    while ((offset = value.indexOf(search, offset)) !== -1) {
-      count += 1
-      offset += search.length
-    }
-    return count
-  }
 
   let result: unknown
   switch (name) {
@@ -811,22 +660,11 @@ const invokeStringMethod = (value: string, name: string, args: Array<unknown>, n
         break
       }
       if (args[0] instanceof SandboxRegExp) {
-        const parts = value.split((args[0] as SandboxRegExp).regex, optNum(1))
-        if (parts.length > limits.maxCollectionLength) {
-          throw new InterpreterRuntimeError(`String.split exceeds the maximum collection length of ${limits.maxCollectionLength}.`, node, "InvalidDataValue")
-        }
-        result = parts
+        result = value.split((args[0] as SandboxRegExp).regex, optNum(1))
         break
       }
-      const separator = str(0)
       const requestedLimit = optNum(1)
-      const effectiveLimit = requestedLimit === undefined ? undefined : requestedLimit >>> 0
-      const maximumParts = separator === "" ? value.length : replacementCount(separator) + 1
-      const parts = effectiveLimit === undefined ? maximumParts : Math.min(maximumParts, effectiveLimit)
-      if (parts > limits.maxCollectionLength) {
-        throw new InterpreterRuntimeError(`String.split exceeds the maximum collection length of ${limits.maxCollectionLength}.`, node, "InvalidDataValue")
-      }
-      result = value.split(separator, effectiveLimit)
+      result = value.split(str(0), requestedLimit === undefined ? undefined : requestedLimit >>> 0)
       break
     }
     case "slice": result = value.slice(optNum(0), optNum(1)); break
@@ -846,22 +684,14 @@ const invokeStringMethod = (value: string, name: string, args: Array<unknown>, n
         if (name === "replaceAll" && !pattern.global) {
           throw new InterpreterRuntimeError("String.replaceAll requires a regular expression with the global (g) flag.", node)
         }
-        // Growth cannot be pre-computed for patterns; the input and replacement are already
-        // byte-bounded, so bound the produced string instead.
-        const replaced = name === "replace" ? value.replace(pattern, replacement) : value.replaceAll(pattern, replacement)
-        limitString(byteLength(replaced))
-        result = replaced
+        result = name === "replace" ? value.replace(pattern, replacement) : value.replaceAll(pattern, replacement)
         break
       }
       if (name === "replace") {
         result = value.replace(str(0), str(1))
         break
       }
-      const search = str(0)
-      const replacement = str(1)
-      const growth = Math.max(0, byteLength(replacement) - byteLength(search))
-      limitString(byteLength(value) + replacementCount(search) * growth)
-      result = value.replaceAll(search, replacement)
+      result = value.replaceAll(str(0), str(1))
       break
     }
     case "match": {
@@ -870,8 +700,8 @@ const invokeStringMethod = (value: string, name: string, args: Array<unknown>, n
       if (matched === null) return null
       // A global match is a plain array of matched strings; a non-global match carries
       // index/groups own properties, so bypass the copying data checkpoint to keep them.
-      if (pattern.global) return boundedData(matched, "String.match result", node, limits)
-      return boundedProgramValue(matchToValue(matched), "String.match result", node, limits)
+      if (pattern.global) return boundedData(matched, "String.match result")
+      return matchToValue(matched)
     }
     case "matchAll": {
       const pattern = toHostRegex(args[0], name, node, "g")
@@ -880,11 +710,7 @@ const invokeStringMethod = (value: string, name: string, args: Array<unknown>, n
       }
       // Materialized as an array (not an iterator); each entry is a match array with
       // index/groups own properties. Match count is bounded by the subject length.
-      const matches = Array.from(value.matchAll(pattern), matchToValue)
-      if (matches.length > limits.maxCollectionLength) {
-        throw new InterpreterRuntimeError(`String.matchAll exceeds the maximum collection length of ${limits.maxCollectionLength}.`, node, "InvalidDataValue")
-      }
-      return boundedProgramValue(matches, "String.matchAll result", node, limits)
+      return Array.from(value.matchAll(pattern), matchToValue)
     }
     case "search": {
       result = value.search(toHostRegex(args[0], name, node))
@@ -893,22 +719,11 @@ const invokeStringMethod = (value: string, name: string, args: Array<unknown>, n
     case "repeat": {
       const count = num(0)
       if (!Number.isFinite(count) || count < 0) throw new InterpreterRuntimeError("String.repeat expects a finite non-negative count.", node)
-      limitString(byteLength(value) * Math.floor(count))
       result = value.repeat(count)
       break
     }
-    case "padStart": {
-      const length = num(0)
-      limitString(Math.max(0, length))
-      result = value.padStart(length, optStr(1))
-      break
-    }
-    case "padEnd": {
-      const length = num(0)
-      limitString(Math.max(0, length))
-      result = value.padEnd(length, optStr(1))
-      break
-    }
+    case "padStart": result = value.padStart(num(0), optStr(1)); break
+    case "padEnd": result = value.padEnd(num(0), optStr(1)); break
     case "charAt": result = value.charAt(optNum(0) ?? 0); break
     case "at": result = value.at(optNum(0) ?? 0); break
     case "substring": result = value.substring(optNum(0) ?? 0, optNum(1)); break
@@ -919,17 +734,15 @@ const invokeStringMethod = (value: string, name: string, args: Array<unknown>, n
     case "codePointAt": result = value.codePointAt(optNum(0) ?? 0); break
     case "toString": result = value; break
     case "concat": {
-      const pieces = args.map((_, index) => str(index))
-      limitString(byteLength(value) + pieces.reduce((size, piece) => size + byteLength(piece), 0))
-      result = value.concat(...pieces)
+      result = value.concat(...args.map((_, index) => str(index)))
       break
     }
     default: throw new InterpreterRuntimeError(`String method '${name}' is not available in CodeMode.`, node)
   }
-  return boundedData(result, `String.${name} result`, node, limits)
+  return boundedData(result, `String.${name} result`)
 }
 
-const invokeNumberMethod = (value: number, name: string, args: Array<unknown>, node: AstNode, limits: ResolvedExecutionLimits): unknown => {
+const invokeNumberMethod = (value: number, name: string, args: Array<unknown>, node: AstNode): unknown => {
   const optNum = (index: number): number | undefined => {
     const arg = args[index]
     if (arg === undefined) return undefined
@@ -955,7 +768,7 @@ const invokeNumberMethod = (value: number, name: string, args: Array<unknown>, n
     }
     default: throw new InterpreterRuntimeError(`Number method '${name}' is not available in CodeMode.`, node)
   }
-  return boundedData(result, `Number.${name} result`, node, limits)
+  return boundedData(result, `Number.${name} result`)
 }
 
 // JavaScript's String(...) without tripping over CodeMode's null-prototype data objects.
@@ -982,7 +795,7 @@ const coerceToNumber = (value: unknown): number => {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? Number.NaN : Number(value)
 }
 
-const invokeCoercion = (ref: CoercionFunction, args: Array<unknown>, node: AstNode, limits: ResolvedExecutionLimits): unknown => {
+const invokeCoercion = (ref: CoercionFunction, args: Array<unknown>, node: AstNode): unknown => {
   // Sandbox values coerce before the data checkpoint (which would JSON-serialize them):
   // Number(date) is its time value, String(date) its ISO form, Boolean(x) is true.
   const raw = args[0]
@@ -993,7 +806,7 @@ const invokeCoercion = (ref: CoercionFunction, args: Array<unknown>, node: AstNo
     if (ref.name === "parseInt") return parseInt(coerceToString(raw))
     return parseFloat(coerceToString(raw))
   }
-  const value = boundedData(args[0], `${ref.name} input`, node, limits)
+  const value = boundedData(args[0], `${ref.name} input`)
   if (ref.name === "Number") return coerceToNumber(value)
   if (ref.name === "Boolean") return Boolean(value)
   if (ref.name === "parseInt") {
@@ -1005,9 +818,9 @@ const invokeCoercion = (ref: CoercionFunction, args: Array<unknown>, node: AstNo
   return coerceToString(value)
 }
 
-const invokeObjectMethod = (name: string, args: Array<unknown>, node: AstNode, limits: ResolvedExecutionLimits): unknown => {
+const invokeObjectMethod = (name: string, args: Array<unknown>, node: AstNode): unknown => {
   const requireObject = (): Record<string, unknown> => {
-    const value = boundedData(args[0], `Object.${name} input`, node, limits)
+    const value = boundedData(args[0], `Object.${name} input`)
     if (value === null || typeof value !== "object" || Array.isArray(value)) {
       throw new InterpreterRuntimeError(`Object.${name} expects a data object.`, node)
     }
@@ -1022,7 +835,7 @@ const invokeObjectMethod = (name: string, args: Array<unknown>, node: AstNode, l
       // Object.keys(array) yields index strings (["0", "1", ...]) exactly as in JS; objects
       // yield their own enumerable keys. (Tool references never reach here — the interpreter
       // resolves them against the host tool tree first.)
-      const value = boundedData(args[0], "Object.keys input", node, limits)
+      const value = boundedData(args[0], "Object.keys input")
       if (Array.isArray(value)) return Object.keys(value)
       if (value === null || typeof value !== "object") {
         throw new InterpreterRuntimeError("Object.keys expects a data object or array.", node)
@@ -1036,7 +849,7 @@ const invokeObjectMethod = (name: string, args: Array<unknown>, node: AstNode, l
       const out: Record<string, unknown> = Object.create(null)
       for (const source of args) {
         if (source === null || source === undefined) continue
-        const value = boundedData(source, "Object.assign input", node, limits)
+        const value = boundedData(source, "Object.assign input")
         if (value === null || typeof value !== "object" || Array.isArray(value)) throw new InterpreterRuntimeError("Object.assign expects data objects.", node)
         for (const [key, item] of Object.entries(value)) guardedSet(out, key, item)
       }
@@ -1050,7 +863,7 @@ const invokeObjectMethod = (name: string, args: Array<unknown>, node: AstNode, l
         for (const [key, item] of (args[0] as SandboxMap).map.entries()) guardedSet(out, coerceToString(key), item)
         return out
       }
-      const pairs = boundedData(args[0], "Object.fromEntries input", node, limits)
+      const pairs = boundedData(args[0], "Object.fromEntries input")
       if (!Array.isArray(pairs)) throw new InterpreterRuntimeError("Object.fromEntries expects an array of [key, value] pairs.", node)
       const out: Record<string, unknown> = Object.create(null)
       for (const pair of pairs) {
@@ -1090,7 +903,7 @@ const invokeMathMethod = (name: string, args: Array<unknown>, node: AstNode): nu
   }
 }
 
-const invokeJsonMethod = (name: string, args: Array<unknown>, node: AstNode, limits: ResolvedExecutionLimits): unknown => {
+const invokeJsonMethod = (name: string, args: Array<unknown>, node: AstNode): unknown => {
   switch (name) {
     case "stringify": {
       const replacer = args[1]
@@ -1100,7 +913,7 @@ const invokeJsonMethod = (name: string, args: Array<unknown>, node: AstNode, lim
       const space = args[2]
       const indent = typeof space === "number" || typeof space === "string" ? space : undefined
       // copyIn first so only Data Values serialize, never a CodeModeFunction/ToolReference.
-      return JSON.stringify(copyOut(copyIn(args[0], "JSON.stringify value", limits)), null, indent)
+      return JSON.stringify(copyOut(copyIn(args[0], "JSON.stringify value")), null, indent)
     }
     case "parse": {
       const text = args[0]
@@ -1111,13 +924,13 @@ const invokeJsonMethod = (name: string, args: Array<unknown>, node: AstNode, lim
       } catch {
         throw new InterpreterRuntimeError("JSON.parse received invalid JSON.", node)
       }
-      return copyIn(parsed, "JSON.parse result", limits)
+      return copyIn(parsed, "JSON.parse result")
     }
     default: throw new InterpreterRuntimeError(`JSON.${name} is not available in CodeMode.`, node)
   }
 }
 
-const invokeArrayStatic = (name: string, args: Array<unknown>, node: AstNode, limits: ResolvedExecutionLimits): unknown => {
+const invokeArrayStatic = (name: string, args: Array<unknown>, node: AstNode): unknown => {
   switch (name) {
     case "isArray":
       return Array.isArray(args[0])
@@ -1135,7 +948,7 @@ const invokeArrayStatic = (name: string, args: Array<unknown>, node: AstNode, li
       // Map/Set materialize directly (the data checkpoint would serialize them to {}).
       if (args[0] instanceof SandboxMap) return Array.from((args[0] as SandboxMap).map.entries(), ([key, item]) => [key, item])
       if (args[0] instanceof SandboxSet) return Array.from((args[0] as SandboxSet).set.values())
-      const source = boundedData(args[0], "Array.from input", node, limits)
+      const source = boundedData(args[0], "Array.from input")
       if (typeof source === "string") return Array.from(source)
       if (Array.isArray(source)) return [...source]
       if (source !== null && typeof source === "object" && typeof (source as { length?: unknown }).length === "number") {
@@ -1222,7 +1035,7 @@ const invokeDateMethod = (value: SandboxDate, name: string, node: AstNode): unkn
   }
 }
 
-const invokeRegExpMethod = (value: SandboxRegExp, name: string, args: Array<unknown>, node: AstNode, limits: ResolvedExecutionLimits): unknown => {
+const invokeRegExpMethod = (value: SandboxRegExp, name: string, args: Array<unknown>, node: AstNode): unknown => {
   switch (name) {
     // test/exec run on the sandbox regex's own host instance, so `g`-flag lastIndex advances
     // across calls per the spec.
@@ -1230,18 +1043,18 @@ const invokeRegExpMethod = (value: SandboxRegExp, name: string, args: Array<unkn
     case "exec": {
       const matched = value.regex.exec(coerceToString(args[0]))
       if (matched === null) return null
-      return boundedProgramValue(matchToValue(matched), "RegExp.exec result", node, limits)
+      return matchToValue(matched)
     }
     case "toString": return coerceToString(value)
     default: throw new InterpreterRuntimeError(`RegExp method '${name}' is not available in CodeMode.`, node)
   }
 }
 
-const invokeGlobalMethod = (ref: GlobalMethodReference, args: Array<unknown>, node: AstNode, limits: ResolvedExecutionLimits): unknown => {
+const invokeGlobalMethod = (ref: GlobalMethodReference, args: Array<unknown>, node: AstNode): unknown => {
   if (ref.namespace === "console") throw new InterpreterRuntimeError(`console.${ref.name} is not available in CodeMode.`, node)
-  if (ref.namespace === "Object") return invokeObjectMethod(ref.name, args, node, limits)
+  if (ref.namespace === "Object") return invokeObjectMethod(ref.name, args, node)
   if (ref.namespace === "Math") return invokeMathMethod(ref.name, args, node)
-  if (ref.namespace === "Array") return invokeArrayStatic(ref.name, args, node, limits)
+  if (ref.namespace === "Array") return invokeArrayStatic(ref.name, args, node)
   if (ref.namespace === "Number") return invokeNumberStatic(ref.name, args, node)
   if (ref.namespace === "String") return invokeStringStatic(ref.name, args, node)
   if (ref.namespace === "Date") {
@@ -1251,7 +1064,7 @@ const invokeGlobalMethod = (ref: GlobalMethodReference, args: Array<unknown>, no
   if (ref.namespace === "RegExp" || ref.namespace === "Map" || ref.namespace === "Set") {
     throw new InterpreterRuntimeError(`${ref.namespace}.${ref.name} is not available in CodeMode.`, node)
   }
-  return invokeJsonMethod(ref.name, args, node, limits)
+  return invokeJsonMethod(ref.name, args, node)
 }
 
 // Iterable spread sources: arrays, strings (code points), Maps (entry pairs), and Sets (values).
@@ -1292,46 +1105,31 @@ const collectPatternNames = (pattern: AstNode, out: Array<string> = []): Array<s
 
 class Interpreter<R> {
   private scopes: Array<Map<string, Binding>>
-  private readonly limits: ResolvedExecutionLimits
   private readonly invokeTool: (path: ReadonlyArray<string>, args: Array<unknown>) => Effect.Effect<unknown, unknown, R>
   // Enumerable namespace/tool names at a node of the host tool tree, threaded from
   // ToolRuntime.make like invokeTool: the interpreter never holds the tree itself.
   private readonly toolKeys: (path: ReadonlyArray<string>) => ReadonlyArray<string>
-  private readonly budget: { operations: number }
   private readonly logs: Array<string>
-  private readonly logBudget: { bytes: number }
   private lastValue: unknown
-  // Caps how many eagerly forked tool calls run at once (the parallel-call concurrency limit).
+  // Caps how many eagerly forked tool calls run at once (the parallel-call concurrency cap).
   private readonly callPermits: Semaphore.Semaphore
   // Fiber-backed promises whose settlement no program construct has observed yet. Successful
   // program completion drains these (like a runtime waiting on in-flight work at exit) and
   // surfaces a never-awaited failure as an unhandled-rejection diagnostic.
   private readonly pendingSettlements = new Set<SandboxPromise>()
-  // Cached byte size (and, for objects, key count) of each live container, maintained incrementally
-  // by the mutation helpers so appending in a loop is O(1)/op rather than re-walking the whole
-  // container each time (which made push/index-assign/key-assign loops O(n^2) — a CPU DoS). These
-  // are a fast path under the authoritative copyIn/copyOut boundary checks, never a replacement.
-  private readonly containerSizes = new WeakMap<object, number>()
-  private readonly objectCounts = new WeakMap<object, number>()
 
   constructor(
-    limits: ResolvedExecutionLimits,
     invokeTool: (path: ReadonlyArray<string>, args: Array<unknown>) => Effect.Effect<unknown, unknown, R>,
     toolKeys: (path: ReadonlyArray<string>) => ReadonlyArray<string>,
-    budget: { operations: number } = { operations: 0 },
     logs: Array<string> = [],
-    logBudget: { bytes: number } = { bytes: 0 },
   ) {
     const globalScope = new Map<string, Binding>()
     this.scopes = [globalScope]
-    this.limits = limits
     this.invokeTool = invokeTool
     this.toolKeys = toolKeys
-    this.budget = budget
     this.logs = logs
-    this.logBudget = logBudget
     this.lastValue = undefined
-    this.callPermits = Semaphore.makeUnsafe(limits.maxConcurrency)
+    this.callPermits = Semaphore.makeUnsafe(TOOL_CALL_CONCURRENCY)
     globalScope.set("tools", { mutable: false, value: new ToolReference([]) })
     globalScope.set("Promise", { mutable: false, value: new PromiseNamespace() })
     globalScope.set("undefined", { mutable: false, value: undefined })
@@ -1460,8 +1258,6 @@ class Interpreter<R> {
   }
 
   private evaluateStatement(node: AstNode): Effect.Effect<StatementResult, unknown, R> {
-    this.recordOperation(node)
-
     switch (node.type) {
       case "ExpressionStatement":
         return Effect.map(this.evaluateExpression(getNode(node, "expression")), (value) => ({ kind: "value", value }))
@@ -1746,7 +1542,6 @@ class Interpreter<R> {
       if (iterable === undefined) {
         throw new InterpreterRuntimeError("for...of requires an array, string, Map, or Set value in CodeMode.", node)
       }
-      if (iterable !== right) self.recordWork(iterable.length, node)
 
       let declaration: { readonly pattern: AstNode; readonly mutable: boolean } | undefined
       let assignmentName: string | undefined
@@ -1805,20 +1600,15 @@ class Interpreter<R> {
   // any own non-index properties, e.g. match results' index/groups — exactly Object.keys in
   // JS), and a tool reference the namespace/tool names at its path in the host tool tree.
   // Returns undefined for everything else so callers can raise a contextual error.
-  private enumerableKeys(value: unknown, node: AstNode): Array<string> | undefined {
+  private enumerableKeys(value: unknown): Array<string> | undefined {
     if (value instanceof ToolReference) {
-      const keys = [...this.toolKeys(value.path)]
-      this.recordWork(keys.length, node)
-      return keys
+      return [...this.toolKeys(value.path)]
     }
     if (Array.isArray(value)) {
-      this.recordWork(value.length, node)
       return Object.keys(value)
     }
     if (value !== null && typeof value === "object" && !isRuntimeReference(value)) {
-      const keys = Object.keys(value)
-      this.recordWork(keys.length, node)
-      return keys
+      return Object.keys(value)
     }
     return undefined
   }
@@ -1836,7 +1626,7 @@ class Interpreter<R> {
       // Anything else (strings, Maps, Sets, numbers, null, ...) is a deliberate error rather
       // than real JS's surprising behavior (indices for strings, zero iterations for
       // Maps/Sets/null): the hint points at the constructs that do what the program means.
-      const keys = self.enumerableKeys(right, node)
+      const keys = self.enumerableKeys(right)
       if (keys === undefined) {
         throw new InterpreterRuntimeError(
           "for...in requires a plain object, array, or tools reference in CodeMode. Use for...of for arrays/strings/Maps/Sets, or Object.keys(value) for a key list.",
@@ -2056,8 +1846,6 @@ class Interpreter<R> {
   }
 
   private evaluateExpression(node: AstNode): Effect.Effect<unknown, unknown, R> {
-    this.recordOperation(node)
-
     switch (node.type) {
       case "Literal": {
         // A regex literal parses as a Literal node carrying { pattern, flags }; construct the
@@ -2066,7 +1854,7 @@ class Interpreter<R> {
         if (isRecord(regex) && typeof regex.pattern === "string") {
           return Effect.sync(() => this.constructRegExp([regex.pattern, typeof regex.flags === "string" ? regex.flags : ""], node))
         }
-        return Effect.sync(() => boundedData(node.value, "Literal", node, this.limits))
+        return Effect.sync(() => boundedData(node.value, "Literal"))
       }
       case "Identifier":
         return Effect.sync(() => this.getIdentifierValue(getString(node, "name"), node))
@@ -2174,8 +1962,6 @@ class Interpreter<R> {
       throw new InterpreterRuntimeError("RegExp flags must be a string.", node)
     }
     const flags = flagsArg ?? (first instanceof SandboxRegExp ? first.regex.flags : "")
-    boundedData(pattern, "RegExp pattern", node, this.limits)
-    this.recordWork(pattern.length, node)
     try {
       return new SandboxRegExp(pattern, flags)
     } catch (error) {
@@ -2194,12 +1980,11 @@ class Interpreter<R> {
     if (entries === undefined) {
       throw new InterpreterRuntimeError("new Map(...) expects an array of [key, value] pairs, a Map, or no argument.", node)
     }
-    this.recordWork(entries.length, node)
     for (const pair of entries) {
       if (!Array.isArray(pair)) {
         throw new InterpreterRuntimeError("new Map(...) expects [key, value] pairs.", node)
       }
-      this.mapSet(target, pair[0], pair[1], node)
+      target.map.set(pair[0], pair[1])
     }
     return target
   }
@@ -2217,48 +2002,11 @@ class Interpreter<R> {
     if (items === undefined) {
       throw new InterpreterRuntimeError("new Set(...) expects an array, Set, string, or no argument.", node)
     }
-    this.recordWork(items.length, node)
-    for (const item of items) this.setAdd(target, item, node)
+    for (const item of items) target.set.add(item)
     return target
   }
 
-  // Map/Set mutations maintain the instance's incremental byte total (the same fast path the
-  // array/object mutation helpers use) and enforce collection-length and data-size limits
-  // before mutating; the authoritative copyIn/copyOut boundary checks remain underneath.
-  private mapSet(target: SandboxMap, key: unknown, value: unknown, node: AstNode): void {
-    const valueBytes = this.nestedValueBytes(value, "Map entry", node)
-    if (target.map.has(key)) {
-      const previous = this.nestedValueBytes(target.map.get(key), "Map entry", node)
-      const next = target.bytes - previous + valueBytes
-      if (next > this.limits.maxDataBytes) {
-        throw new InterpreterRuntimeError(`Map exceeds the maximum data size of ${this.limits.maxDataBytes} bytes.`, node, "InvalidDataValue")
-      }
-      target.bytes = next
-    } else {
-      if (target.map.size >= this.limits.maxCollectionLength) {
-        throw new InterpreterRuntimeError(`Map exceeds the maximum collection length of ${this.limits.maxCollectionLength}.`, node, "InvalidDataValue")
-      }
-      const next = target.bytes + this.nestedValueBytes(key, "Map entry", node) + valueBytes + 2
-      if (next > this.limits.maxDataBytes) {
-        throw new InterpreterRuntimeError(`Map exceeds the maximum data size of ${this.limits.maxDataBytes} bytes.`, node, "InvalidDataValue")
-      }
-      target.bytes = next
-    }
-    target.map.set(key, value)
-  }
 
-  private setAdd(target: SandboxSet, value: unknown, node: AstNode): void {
-    if (target.set.has(value)) return
-    if (target.set.size >= this.limits.maxCollectionLength) {
-      throw new InterpreterRuntimeError(`Set exceeds the maximum collection length of ${this.limits.maxCollectionLength}.`, node, "InvalidDataValue")
-    }
-    const next = target.bytes + this.nestedValueBytes(value, "Set entry", node) + 2
-    if (next > this.limits.maxDataBytes) {
-      throw new InterpreterRuntimeError(`Set exceeds the maximum data size of ${this.limits.maxDataBytes} bytes.`, node, "InvalidDataValue")
-    }
-    target.bytes = next
-    target.set.add(value)
-  }
 
   private evaluateBinaryExpression(node: AstNode): Effect.Effect<unknown, unknown, R> {
     const operator = getString(node, "operator")
@@ -2313,7 +2061,7 @@ class Interpreter<R> {
           result = Object.hasOwn(rhs as object, coerceOperand(lhs) as PropertyKey); break
         default: throw new InterpreterRuntimeError(`Unsupported binary operator '${operator}'.`, node)
       }
-      return boundedData(result, "Binary expression result", node, self.limits)
+      return boundedData(result, "Binary expression result")
     })
   }
 
@@ -2360,7 +2108,7 @@ class Interpreter<R> {
         case "~": result = ~operand; break
         default: throw new InterpreterRuntimeError(`Unsupported unary operator '${operator}'.`, node)
       }
-      return boundedData(result, "Unary expression result", node, this.limits)
+      return boundedData(result, "Unary expression result")
     })
   }
 
@@ -2376,13 +2124,13 @@ class Interpreter<R> {
       if (left.type === "Identifier") {
         const name = getString(left, "name")
         if (operator === "=") return self.setIdentifierValue(name, rightValue, left)
-        const next = boundedData(self.applyCompoundAssignment(operator, self.getIdentifierValue(name, left), rightValue, node), "Assignment result", node, self.limits)
+        const next = boundedData(self.applyCompoundAssignment(operator, self.getIdentifierValue(name, left), rightValue, node), "Assignment result")
         return self.setIdentifierValue(name, next, left)
       }
       if (left.type === "MemberExpression") {
         if (operator === "=") return yield* self.writeMember(left, rightValue)
         return yield* self.modifyMember(left, (current) => {
-          const next = boundedData(self.applyCompoundAssignment(operator, current, rightValue, node), "Assignment result", node, self.limits)
+          const next = boundedData(self.applyCompoundAssignment(operator, current, rightValue, node), "Assignment result")
           return Effect.succeed({ write: true, next, result: next })
         })
       }
@@ -2428,7 +2176,7 @@ class Interpreter<R> {
       return Effect.sync(() => {
         const name = getString(argument, "name")
         const current = Number(this.getIdentifierValue(name, argument))
-        const next = boundedData(current + increment, "Update result", node, this.limits) as number
+        const next = current + increment
         this.setIdentifierValue(name, next, argument)
         return prefix ? next : current
       })
@@ -2437,7 +2185,7 @@ class Interpreter<R> {
     if (argument.type === "MemberExpression") {
       return this.modifyMember(argument, (current) => {
         const value = Number(current)
-        const next = boundedData(value + increment, "Update result", node, this.limits) as number
+        const next = value + increment
         return Effect.succeed({ write: true, next, result: prefix ? next : value })
       })
     }
@@ -2476,14 +2224,10 @@ class Interpreter<R> {
         if (callable.namespace === "Object" && args[0] instanceof ToolReference) {
           return self.invokeObjectMethodOnTools(callable.name, args[0] as ToolReference, node)
         }
-        const globalResult = invokeGlobalMethod(callable, args, node, self.limits)
-        self.recordWork(workUnits(globalResult), node)
-        return boundedData(globalResult, `${callable.namespace}.${callable.name} result`, node, self.limits)
+        return boundedData(invokeGlobalMethod(callable, args, node), `${callable.namespace}.${callable.name} result`)
       }
       if (callable instanceof CoercionFunction) {
-        const coercionResult = invokeCoercion(callable, args, node, self.limits)
-        self.recordWork(workUnits(coercionResult), node)
-        return boundedData(coercionResult, `${callable.name} result`, node, self.limits)
+        return boundedData(invokeCoercion(callable, args, node), `${callable.name} result`)
       }
         throw new InterpreterRuntimeError("Only tools are callable in CodeMode.", callee)
     })
@@ -2495,8 +2239,7 @@ class Interpreter<R> {
   // with a pointer at the working idioms instead of the generic plain-objects-only message.
   private invokeObjectMethodOnTools(name: string, ref: ToolReference, node: AstNode): unknown {
     if (name === "keys") {
-      const keys = this.enumerableKeys(ref, node)!
-      return boundedData(keys, "Object.keys result", node, this.limits)
+      return boundedData(this.enumerableKeys(ref)!, "Object.keys result")
     }
     throw new InterpreterRuntimeError(
       `Object.${name}(...) cannot read tool references: they are not plain data. Use Object.keys(tools) for names, or tools.$codemode.search({ query }) for signatures.`,
@@ -2507,13 +2250,7 @@ class Interpreter<R> {
 
   private invokeConsole(name: string, args: Array<unknown>, node: AstNode): undefined {
     if (!consoleMethods.has(name)) throw new InterpreterRuntimeError(`console.${name} is not available in CodeMode.`, node)
-    const line = publicErrorMessage(this.formatConsoleMessage(name, args, node))
-    const bytes = dataByteLength(line)
-    if (this.logBudget.bytes + bytes > this.limits.maxAuditBytes) {
-      throw new InterpreterRuntimeError(`Execution exceeds its log limit of ${this.limits.maxAuditBytes} bytes.`, node, "AuditLimitExceeded")
-    }
-    this.logBudget.bytes += bytes
-    this.logs.push(line)
+    this.logs.push(publicErrorMessage(this.formatConsoleMessage(name, args, node)))
     return undefined
   }
 
@@ -2537,7 +2274,7 @@ class Interpreter<R> {
       return `Set(${value.set.size}) ${this.formatConsoleArgument(Array.from(value.set.values()), node)}`
     }
     if (containsRuntimeReference(value)) return "[CodeMode reference]"
-    const copied = copyOut(copyIn(value, "console argument", this.limits), true)
+    const copied = copyOut(copyIn(value, "console argument"), true)
     if (typeof copied === "string") return copied
     if (copied === null || typeof copied === "number" || typeof copied === "boolean") return String(copied)
     try {
@@ -2550,7 +2287,7 @@ class Interpreter<R> {
   private formatConsoleTable(value: unknown, columnsArgument: unknown, node: AstNode): string {
     if (value === undefined) return "undefined"
     if (containsRuntimeReference(value)) return "[CodeMode reference]"
-    const data = copyOut(copyIn(value, "console.table argument", this.limits), true)
+    const data = copyOut(copyIn(value, "console.table argument"), true)
     const columns = this.consoleTableColumns(columnsArgument, node)
     const rows = this.consoleTableRows(data, columns)
     const keys = columns ?? Array.from(new Set(rows.flatMap((row) => Object.keys(row.values))))
@@ -2561,7 +2298,7 @@ class Interpreter<R> {
   private consoleTableColumns(value: unknown, node: AstNode): ReadonlyArray<string> | undefined {
     if (value === undefined) return undefined
     if (containsRuntimeReference(value)) return undefined
-    const columns = copyOut(copyIn(value, "console.table columns", this.limits), true)
+    const columns = copyOut(copyIn(value, "console.table columns"), true)
     return Array.isArray(columns) ? columns.map((column) => String(column)) : undefined
   }
 
@@ -2601,16 +2338,9 @@ class Interpreter<R> {
           const spread = yield* self.evaluateExpression(getNode(argNode, "argument"))
           const items = spreadItems(spread)
           if (items === undefined) throw new InterpreterRuntimeError("Spread arguments require an array, string, Map, or Set in CodeMode.", argNode)
-          if (args.length + items.length > self.limits.maxCollectionLength) {
-            throw new InterpreterRuntimeError(`Call arguments exceed the maximum collection length of ${self.limits.maxCollectionLength}.`, argNode, "InvalidDataValue")
-          }
           args.push(...items)
-          self.recordWork(items.length, argNode)
         } else {
           args.push(yield* self.evaluateExpression(argNode))
-          if (args.length > self.limits.maxCollectionLength) {
-            throw new InterpreterRuntimeError(`Call arguments exceed the maximum collection length of ${self.limits.maxCollectionLength}.`, argNode, "InvalidDataValue")
-          }
         }
       }
       return args
@@ -2641,7 +2371,6 @@ class Interpreter<R> {
         node,
       )
     }
-    this.recordWork(items.length, node)
 
     switch (ref.name) {
       case "all": {
@@ -2652,7 +2381,7 @@ class Interpreter<R> {
         return Effect.gen(function*() {
           const values: Array<unknown> = []
           for (const settle of settles) values.push(yield* settle)
-          return boundedProgramValue(values, "Promise.all result", node, self.limits)
+          return values
         })
       }
       case "allSettled": {
@@ -2678,7 +2407,7 @@ class Interpreter<R> {
               : Cause.squash(exit.cause)
             outcomes.push(Object.assign(Object.create(null) as SafeObject, { status: "rejected", reason: caughtErrorValue(thrown) }))
           }
-          return boundedProgramValue(outcomes, "Promise.allSettled result", node, self.limits)
+          return outcomes
         })
       }
       case "race": {
@@ -2741,29 +2470,19 @@ class Interpreter<R> {
 
   private invokeIntrinsic(ref: IntrinsicReference, args: Array<unknown>, node: AstNode): Effect.Effect<unknown, unknown, R> {
     if (typeof ref.receiver === "string") {
-      this.recordWork(ref.receiver.length, node)
-      const result = invokeStringMethod(ref.receiver, ref.name, args, node, this.limits)
-      if (typeof result === "string") this.recordWork(result.length, node)
-      return Effect.succeed(result)
+      return Effect.succeed(invokeStringMethod(ref.receiver, ref.name, args, node))
     }
     if (typeof ref.receiver === "number") {
-      return Effect.succeed(invokeNumberMethod(ref.receiver, ref.name, args, node, this.limits))
+      return Effect.succeed(invokeNumberMethod(ref.receiver, ref.name, args, node))
     }
     if (Array.isArray(ref.receiver)) {
-      if (!cheapArrayMethods.has(ref.name)) this.recordWork(ref.receiver.length, node)
-      const self = this
-      return Effect.map(this.invokeArrayMethod(ref.receiver, ref.name, args, node), (result) => {
-        if (Array.isArray(result)) self.recordWork(result.length, node)
-        return result
-      })
+      return this.invokeArrayMethod(ref.receiver, ref.name, args, node)
     }
     if (ref.receiver instanceof SandboxDate) {
       return Effect.succeed(invokeDateMethod(ref.receiver, ref.name, node))
     }
     if (ref.receiver instanceof SandboxRegExp) {
-      // Regex work scales with the subject; the pattern itself runs on the host engine.
-      this.recordWork(typeof args[0] === "string" ? args[0].length : 1, node)
-      return Effect.succeed(invokeRegExpMethod(ref.receiver, ref.name, args, node, this.limits))
+      return Effect.succeed(invokeRegExpMethod(ref.receiver, ref.name, args, node))
     }
     if (ref.receiver instanceof SandboxMap) {
       return this.invokeMapMethod(ref.receiver, ref.name, args, node)
@@ -2782,46 +2501,29 @@ class Interpreter<R> {
     }
     return (callbackArgs) =>
       callback instanceof CoercionFunction
-        ? Effect.succeed(invokeCoercion(callback, callbackArgs, node, this.limits))
+        ? Effect.succeed(invokeCoercion(callback, callbackArgs, node))
         : this.invokeFunction(callback, callbackArgs)
   }
 
   private invokeMapMethod(target: SandboxMap, name: string, args: Array<unknown>, node: AstNode): Effect.Effect<unknown, unknown, R> {
-    const self = this
     switch (name) {
       case "get": return Effect.succeed(target.map.get(args[0]))
       case "has": return Effect.succeed(target.map.has(args[0]))
       case "set": return Effect.sync(() => {
-        this.recordOperation(node)
-        this.mapSet(target, args[0], args[1], node)
+        target.map.set(args[0], args[1])
         return target
       })
-      case "delete": return Effect.sync(() => {
-        if (!target.map.has(args[0])) return false
-        target.bytes -= this.nestedValueBytes(args[0], "Map entry", node) + this.nestedValueBytes(target.map.get(args[0]), "Map entry", node) + 2
-        return target.map.delete(args[0])
-      })
+      case "delete": return Effect.sync(() => target.map.delete(args[0]))
       case "clear": return Effect.sync(() => {
         target.map.clear()
-        target.bytes = 2
         return undefined
       })
-      case "keys": return Effect.sync(() => {
-        this.recordWork(target.map.size, node)
-        return boundedProgramValue(Array.from(target.map.keys()), "Map.keys result", node, this.limits)
-      })
-      case "values": return Effect.sync(() => {
-        this.recordWork(target.map.size, node)
-        return boundedProgramValue(Array.from(target.map.values()), "Map.values result", node, this.limits)
-      })
-      case "entries": return Effect.sync(() => {
-        this.recordWork(target.map.size, node)
-        return boundedProgramValue(Array.from(target.map.entries(), ([key, item]): Array<unknown> => [key, item]), "Map.entries result", node, this.limits)
-      })
+      case "keys": return Effect.sync(() => Array.from(target.map.keys()))
+      case "values": return Effect.sync(() => Array.from(target.map.values()))
+      case "entries": return Effect.sync(() => Array.from(target.map.entries(), ([key, item]): Array<unknown> => [key, item]))
       case "forEach": {
         const apply = this.applyCollectionCallback(args[0], "Map.forEach", node)
         return Effect.gen(function*() {
-          self.recordWork(target.map.size, node)
           // Snapshot iteration, matching the array-method callback contract.
           for (const [key, item] of Array.from(target.map.entries())) yield* apply([item, key, target])
           return undefined
@@ -2832,37 +2534,23 @@ class Interpreter<R> {
   }
 
   private invokeSetMethod(target: SandboxSet, name: string, args: Array<unknown>, node: AstNode): Effect.Effect<unknown, unknown, R> {
-    const self = this
     switch (name) {
       case "has": return Effect.succeed(target.set.has(args[0]))
       case "add": return Effect.sync(() => {
-        this.recordOperation(node)
-        this.setAdd(target, args[0], node)
+        target.set.add(args[0])
         return target
       })
-      case "delete": return Effect.sync(() => {
-        if (!target.set.has(args[0])) return false
-        target.bytes -= this.nestedValueBytes(args[0], "Set entry", node) + 2
-        return target.set.delete(args[0])
-      })
+      case "delete": return Effect.sync(() => target.set.delete(args[0]))
       case "clear": return Effect.sync(() => {
         target.set.clear()
-        target.bytes = 2
         return undefined
       })
       case "keys":
-      case "values": return Effect.sync(() => {
-        this.recordWork(target.set.size, node)
-        return boundedProgramValue(Array.from(target.set.values()), `Set.${name} result`, node, this.limits)
-      })
-      case "entries": return Effect.sync(() => {
-        this.recordWork(target.set.size, node)
-        return boundedProgramValue(Array.from(target.set.values(), (item): Array<unknown> => [item, item]), "Set.entries result", node, this.limits)
-      })
+      case "values": return Effect.sync(() => Array.from(target.set.values()))
+      case "entries": return Effect.sync(() => Array.from(target.set.values(), (item): Array<unknown> => [item, item]))
       case "forEach": {
         const apply = this.applyCollectionCallback(args[0], "Set.forEach", node)
         return Effect.gen(function*() {
-          self.recordWork(target.set.size, node)
           for (const item of Array.from(target.set.values())) yield* apply([item, item, target])
           return undefined
         })
@@ -2872,12 +2560,6 @@ class Interpreter<R> {
   }
 
   private invokeArrayMethod(target: Array<unknown>, name: string, args: Array<unknown>, node: AstNode): Effect.Effect<unknown, unknown, R> {
-    const boundedCollection = (items: Array<unknown>): Array<unknown> => {
-      if (items.length > this.limits.maxCollectionLength) {
-        throw new InterpreterRuntimeError(`Array.${name} exceeds the maximum collection length of ${this.limits.maxCollectionLength}.`, node, "InvalidDataValue")
-      }
-      return boundedProgramValue(items, `Array.${name} result`, node, this.limits) as Array<unknown>
-    }
     const optNumber = (value: unknown, label: string): number | undefined => {
       if (value === undefined) return undefined
       if (typeof value !== "number") throw new InterpreterRuntimeError(`Array.${name} expects ${label} to be a number.`, node)
@@ -2888,8 +2570,8 @@ class Interpreter<R> {
         if (args.length > 1 || (args.length === 1 && typeof args[0] !== "string")) {
           throw new InterpreterRuntimeError("Array.join expects zero arguments or one string separator.", node)
         }
-        const input = boundedData(target, "Array.join input", node, this.limits) as Array<unknown>
-        return Effect.succeed(boundedData(input.map((item) => coerceToString(item ?? "")).join(args.length === 0 ? "," : args[0] as string), "Array.join result", node, this.limits))
+        const input = boundedData(target, "Array.join input") as Array<unknown>
+        return Effect.succeed(input.map((item) => coerceToString(item ?? "")).join(args.length === 0 ? "," : args[0] as string))
       }
       case "includes":
         if (args.length === 0 || args.length > 2) throw new InterpreterRuntimeError("Array.includes expects a value and optional start index.", node)
@@ -2901,18 +2583,18 @@ class Interpreter<R> {
       case "at":
         return Effect.succeed(target.at(optNumber(args[0], "index") ?? 0))
       case "slice":
-        return Effect.succeed(boundedCollection(target.slice(optNumber(args[0], "start"), optNumber(args[1], "end"))))
+        return Effect.succeed(target.slice(optNumber(args[0], "start"), optNumber(args[1], "end")))
       case "concat":
-        return Effect.succeed(boundedCollection(target.concat(...args)))
+        return Effect.succeed(target.concat(...args))
       case "flat":
-        return Effect.succeed(boundedCollection(target.flat(optNumber(args[0], "depth") ?? 1)))
+        return Effect.succeed(target.flat(optNumber(args[0], "depth") ?? 1))
       case "reverse":
-        return Effect.succeed(boundedCollection([...target].reverse()))
+        return Effect.succeed([...target].reverse())
       case "sort":
       case "toSorted":
         return this.sortArray(target, args[0], node)
       case "toReversed":
-        return Effect.succeed(boundedCollection([...target].reverse()))
+        return Effect.succeed([...target].reverse())
       case "with": {
         const index = optNumber(args[0], "index") ?? 0
         const resolved = index < 0 ? target.length + index : index
@@ -2921,42 +2603,23 @@ class Interpreter<R> {
         }
         const copied = [...target]
         copied[resolved] = args[1]
-        return Effect.succeed(boundedCollection(copied))
+        return Effect.succeed(copied)
       }
       case "push": {
-        if (target.length + args.length > this.limits.maxCollectionLength) {
-          throw new InterpreterRuntimeError(`Array.push exceeds the maximum collection length of ${this.limits.maxCollectionLength}.`, node, "InvalidDataValue")
-        }
-        // Validate before mutating (so no rollback is needed) and charge only the new elements,
-        // keeping a push loop O(1)/element instead of re-walking the whole array each call.
-        let added = 0
-        for (const item of args) {
-          this.rejectCircularInsertion(target, item, "Array.push result", node)
-          added += this.nestedValueBytes(item, "Array.push result", node) + 1
-        }
-        this.growContainerBytes(target, added, node, "Array.push result")
+        // Validate before mutating (so no rollback is needed): inserting a container into
+        // itself would create a cycle no later walk could survive.
+        for (const item of args) this.rejectCircularInsertion(target, item, "Array.push result", node)
         target.push(...args)
         return Effect.succeed(target.length)
       }
       case "unshift": {
-        if (target.length + args.length > this.limits.maxCollectionLength) {
-          throw new InterpreterRuntimeError(`Array.unshift exceeds the maximum collection length of ${this.limits.maxCollectionLength}.`, node, "InvalidDataValue")
-        }
-        let added = 0
-        for (const item of args) {
-          this.rejectCircularInsertion(target, item, "Array.unshift result", node)
-          added += this.nestedValueBytes(item, "Array.unshift result", node) + 1
-        }
-        this.growContainerBytes(target, added, node, "Array.unshift result")
+        for (const item of args) this.rejectCircularInsertion(target, item, "Array.unshift result", node)
         target.unshift(...args)
         return Effect.succeed(target.length)
       }
-      // Removals only shrink the array; drop the cached size so the next growth recomputes it.
       case "pop":
-        this.containerSizes.delete(target)
         return Effect.succeed(target.pop())
       case "shift":
-        this.containerSizes.delete(target)
         return Effect.succeed(target.shift())
     }
 
@@ -2970,7 +2633,7 @@ class Interpreter<R> {
     // synchronous; only CodeModeFunctions can await tool calls.
     const apply = (callbackArgs: Array<unknown>): Effect.Effect<unknown, unknown, R> =>
       callback instanceof CoercionFunction
-        ? Effect.succeed(invokeCoercion(callback, callbackArgs, node, self.limits))
+        ? Effect.succeed(invokeCoercion(callback, callbackArgs, node))
         : self.invokeFunction(callback, callbackArgs)
     return Effect.gen(function*() {
       // Iterate a snapshot taken at call time so a callback that mutates the array can't
@@ -2980,7 +2643,7 @@ class Interpreter<R> {
         case "map": {
           const values: Array<unknown> = []
           for (const [index, item] of items.entries()) values.push(yield* apply([item, index, items]))
-          return boundedCollection(values)
+          return values
         }
         case "flatMap": {
           const values: Array<unknown> = []
@@ -2988,16 +2651,15 @@ class Interpreter<R> {
             const mapped = yield* apply([item, index, items])
             if (Array.isArray(mapped)) values.push(...mapped)
             else values.push(mapped)
-            boundedCollection(values)
           }
-          return boundedCollection(values)
+          return values
         }
         case "filter": {
           const values: Array<unknown> = []
           for (const [index, item] of items.entries()) {
             if (yield* apply([item, index, items])) values.push(item)
           }
-          return boundedCollection(values)
+          return values
         }
         case "find":
           for (const [index, item] of items.entries()) {
@@ -3074,16 +2736,12 @@ class Interpreter<R> {
       throw new InterpreterRuntimeError("Array.sort expects an arrow function comparator.", node)
     }
     if (!(comparator instanceof CodeModeFunction)) {
-      return Effect.sync(() => boundedProgramValue(
+      return Effect.sync(() =>
         [...target].sort((a, b) => {
           const left = coerceToString(a)
           const right = coerceToString(b)
           return left < right ? -1 : left > right ? 1 : 0
-        }),
-        "Array.sort result",
-        node,
-        this.limits,
-      ) as Array<unknown>)
+        }))
     }
     const self = this
     const mergeSort = (items: Array<unknown>): Effect.Effect<Array<unknown>, unknown, R> => {
@@ -3108,13 +2766,11 @@ class Interpreter<R> {
     // Per spec, undefined elements sort to the end and the comparator is never called on them.
     const defined = target.filter((item) => item !== undefined)
     const undefinedCount = target.length - defined.length
-    return Effect.map(mergeSort(defined), (items) =>
-      boundedProgramValue([...items, ...Array(undefinedCount).fill(undefined)], "Array.sort result", node, this.limits) as Array<unknown>)
+    return Effect.map(mergeSort(defined), (items) => [...items, ...Array(undefinedCount).fill(undefined)])
   }
 
   private evaluateObjectExpression(node: AstNode): Effect.Effect<Record<string, unknown>, unknown, R> {
     const objectValue: Record<string, unknown> = Object.create(null) as Record<string, unknown>
-    const keys = new Set<string>()
     const properties = getArray(node, "properties")
     const self = this
     return Effect.gen(function*() {
@@ -3133,10 +2789,6 @@ class Interpreter<R> {
           for (const [key, value] of Object.entries(spread)) {
             if (isBlockedMember(key)) throw new InterpreterRuntimeError(`Property '${key}' is not available in CodeMode.`, property)
             objectValue[key] = value
-            keys.add(key)
-            if (keys.size > self.limits.maxCollectionLength) {
-              throw new InterpreterRuntimeError(`Object expression exceeds the maximum collection length of ${self.limits.maxCollectionLength}.`, property, "InvalidDataValue")
-            }
           }
           continue
         }
@@ -3169,13 +2821,9 @@ class Interpreter<R> {
           throw new InterpreterRuntimeError(`Property '${String(key)}' is not available in CodeMode.`, keyNode)
         }
         objectValue[String(key)] = yield* self.evaluateExpression(valueNode)
-        keys.add(String(key))
-        if (keys.size > self.limits.maxCollectionLength) {
-          throw new InterpreterRuntimeError(`Object expression exceeds the maximum collection length of ${self.limits.maxCollectionLength}.`, property, "InvalidDataValue")
-        }
       }
 
-      return boundedProgramValue(objectValue, "Object expression result", node, self.limits) as Record<string, unknown>
+      return objectValue
     })
   }
 
@@ -3188,9 +2836,6 @@ class Interpreter<R> {
       for (const elementValue of elements) {
         if (elementValue === null) {
           values.push(undefined)
-          if (values.length > self.limits.maxCollectionLength) {
-            throw new InterpreterRuntimeError(`Array expression exceeds the maximum collection length of ${self.limits.maxCollectionLength}.`, node, "InvalidDataValue")
-          }
           continue
         }
         const element = asNode(elementValue, "elements")
@@ -3199,15 +2844,11 @@ class Interpreter<R> {
           const items = spreadItems(spread)
           if (items === undefined) throw new InterpreterRuntimeError("Array spread requires an array, string, Map, or Set in CodeMode.", element)
           values.push(...items)
-          self.recordWork(items.length, element)
         } else {
           values.push(yield* self.evaluateExpression(element))
         }
-        if (values.length > self.limits.maxCollectionLength) {
-          throw new InterpreterRuntimeError(`Array expression exceeds the maximum collection length of ${self.limits.maxCollectionLength}.`, node, "InvalidDataValue")
-        }
       }
-      return boundedProgramValue(values, "Array expression result", node, self.limits) as Array<unknown>
+      return values
     })
   }
 
@@ -3228,15 +2869,13 @@ class Interpreter<R> {
         }
 
         output += rawValue.cooked
-        boundedData(output, "Template literal result", node, self.limits)
 
         if (index < expressions.length) {
           const raw = yield* self.evaluateExpression(asNode(expressions[index], "expressions"))
           // Sandbox values stringify directly (ISO date, /regex/ form) — the data checkpoint
           // would JSON-serialize them first (a regex would render "[object Object]" via {}).
-          const value = isSandboxValue(raw) ? raw : boundedData(raw, "Template interpolation", node, self.limits)
+          const value = isSandboxValue(raw) ? raw : boundedData(raw, "Template interpolation")
           output += coerceToString(value)
-          boundedData(output, "Template literal result", node, self.limits)
         }
       }
 
@@ -3501,25 +3140,8 @@ class Interpreter<R> {
     })
   }
 
-  // Writes `next` to a resolved member, enforcing index/capacity/byte limits and rolling
-  // back the mutation if the bound is exceeded (so a caught error can't leave it grown).
-  // Byte size of a container, cached after the first walk and maintained incrementally by the
-  // mutation helpers. O(1) on a cache hit; O(container) once on the first touch.
-  private cachedContainerBytes(container: object, node: AstNode): number {
-    const cached = this.containerSizes.get(container)
-    if (cached !== undefined) return cached
-    const bytes = runtimeValueBytes(container, "value", node, this.limits)
-    this.recordWork(workUnits(container), node)
-    this.containerSizes.set(container, bytes)
-    return bytes
-  }
-
-  // Bytes a value contributes when nested one level inside a container; also enforces that the
-  // nested value's depth stays within maxValueDepth. O(value), independent of the container size.
-  private nestedValueBytes(value: unknown, label: string, node: AstNode): number {
-    return runtimeValueBytes(value, label, node, this.limits, 1)
-  }
-
+  // Rejects inserting a value that (transitively) contains the container it is being inserted
+  // into — the mutation that would create a circular structure no later walk could survive.
   private rejectCircularInsertion(container: object, value: unknown, label: string, node: AstNode, seen = new Set<object>()): void {
     if (value === container) throw new InterpreterRuntimeError(`${label} contains a circular value.`, node, "InvalidDataValue")
     if (value === null || typeof value !== "object" || isRuntimeReference(value) || seen.has(value)) return
@@ -3529,73 +3151,20 @@ class Interpreter<R> {
     seen.delete(value)
   }
 
-  // Add `addedBytes` of new entries to a container, rejecting (before any mutation) if that would
-  // exceed maxDataBytes, then record the container's new cached size.
-  private growContainerBytes(container: object, addedBytes: number, node: AstNode, label: string): void {
-    const next = this.cachedContainerBytes(container, node) + addedBytes
-    if (next > this.limits.maxDataBytes) {
-      throw new InterpreterRuntimeError(`${label} exceeds the maximum data size of ${this.limits.maxDataBytes} bytes.`, node, "InvalidDataValue")
-    }
-    this.containerSizes.set(container, next)
-  }
-
   private assignToReference(reference: MemberReference, key: number | string, next: unknown, node: AstNode): void {
     if (Array.isArray(reference.target)) {
       const target = reference.target
       const index = key as number
-      if (!Number.isInteger(index) || index < 0 || index >= this.limits.maxCollectionLength) {
-        throw new InterpreterRuntimeError(`Array assignment index must be between 0 and ${this.limits.maxCollectionLength - 1}.`, node, "InvalidDataValue")
+      if (!Number.isInteger(index) || index < 0) {
+        throw new InterpreterRuntimeError("Array assignment index must be a non-negative integer.", node, "InvalidDataValue")
       }
       this.rejectCircularInsertion(target, next, "Array assignment result", node)
-      const addedBytes = this.nestedValueBytes(next, "Array assignment result", node)
-      if (index === target.length) {
-        // Append — the hot path; O(1) incremental size update (this is the O(n^2)-loop fix).
-        this.growContainerBytes(target, addedBytes + 1, node, "Array assignment result")
-        target[index] = next
-      } else if (index < target.length) {
-        // Replace an existing slot (value or hole): adjust by the byte delta.
-        const oldBytes = this.nestedValueBytes(target[index], "Array assignment result", node)
-        const nextSize = this.cachedContainerBytes(target, node) + addedBytes - oldBytes
-        if (nextSize > this.limits.maxDataBytes) {
-          throw new InterpreterRuntimeError(`Array assignment result exceeds the maximum data size of ${this.limits.maxDataBytes} bytes.`, node, "InvalidDataValue")
-        }
-        this.containerSizes.set(target, nextSize)
-        target[index] = next
-      } else {
-        // index > length introduces holes; fall back to a full revalidation and reset the cache.
-        const previousLength = target.length
-        target[index] = next
-        try {
-          boundedProgramValue(target, "Array assignment result", node, this.limits)
-          this.containerSizes.set(target, runtimeValueBytes(target, "value", node, this.limits))
-        } catch (error) {
-          delete target[index]
-          target.length = previousLength
-          throw error
-        }
-      }
+      target[index] = next
       return
     }
     const target = reference.target as SafeObject
     const objectKey = key as string
     this.rejectCircularInsertion(target, next, "Object assignment result", node)
-    const addedBytes = this.nestedValueBytes(next, "Object assignment result", node)
-    if (Object.hasOwn(target, objectKey)) {
-      const oldBytes = this.nestedValueBytes(target[objectKey], "Object assignment result", node)
-      const nextSize = this.cachedContainerBytes(target, node) + addedBytes - oldBytes
-      if (nextSize > this.limits.maxDataBytes) {
-        throw new InterpreterRuntimeError(`Object assignment result exceeds the maximum data size of ${this.limits.maxDataBytes} bytes.`, node, "InvalidDataValue")
-      }
-      this.containerSizes.set(target, nextSize)
-      target[objectKey] = next
-      return
-    }
-    const count = (this.objectCounts.get(target) ?? Object.keys(target).length) + 1
-    if (count > this.limits.maxCollectionLength) {
-      throw new InterpreterRuntimeError(`Object assignment exceeds the maximum collection length of ${this.limits.maxCollectionLength}.`, node, "InvalidDataValue")
-    }
-    this.growContainerBytes(target, dataByteLength(objectKey) + addedBytes + 1, node, "Object assignment result")
-    this.objectCounts.set(target, count)
     target[objectKey] = next
   }
 
@@ -3681,19 +3250,6 @@ class Interpreter<R> {
     this.scopes.pop()
   }
 
-  private recordOperation(node: AstNode): void {
-    this.recordWork(1, node)
-  }
-
-  // Charge `units` of work to the operation budget so O(n) built-ins (collection/string
-  // walks and spreads) are bounded by maxOperations, not only by the wall-clock timeout.
-  private recordWork(units: number, node?: AstNode): void {
-    this.budget.operations += Math.max(1, Math.ceil(units))
-
-    if (this.budget.operations > this.limits.maxOperations) {
-      throw new InterpreterRuntimeError(`Execution exceeded its operation limit of ${this.limits.maxOperations}.`, node, "OperationLimitExceeded")
-    }
-  }
 }
 
 /**
@@ -3716,17 +3272,9 @@ const executeWithLimits = <const Tools extends Record<string, unknown>>(
     ...(options.onToolCallStart === undefined ? {} : { onToolCallStart: options.onToolCallStart }),
     ...(options.onToolCallEnd === undefined ? {} : { onToolCallEnd: options.onToolCallEnd }),
   }
-  const tools = ToolRuntime.make((options.tools ?? {}) as HostTools<Services<Tools>>, limits.maxToolCalls, limits, hooks, searchIndex)
+  const tools = ToolRuntime.make((options.tools ?? {}) as HostTools<Services<Tools>>, limits.maxToolCalls, hooks, searchIndex)
   const logs: Array<string> = []
   const logged = () => logs.length > 0 ? { logs: [...logs] } : {}
-
-  if (new TextEncoder().encode(options.code).byteLength > limits.maxSourceBytes) {
-    return Effect.succeed({
-      ok: false,
-      error: { kind: "InvalidDataValue", message: `Code exceeds the maximum source size of ${limits.maxSourceBytes} bytes.` },
-      toolCalls: tools.calls,
-    })
-  }
 
   if (options.code.trim().length === 0) {
     return Effect.succeed({
@@ -3738,12 +3286,9 @@ const executeWithLimits = <const Tools extends Record<string, unknown>>(
 
   const operation = Effect.gen(function*() {
     const program = parseProgram(options.code)
-    const interpreter = new Interpreter<Services<Tools>>(limits, tools.invoke, tools.keys, { operations: 0 }, logs, { bytes: 0 })
+    const interpreter = new Interpreter<Services<Tools>>(tools.invoke, tools.keys, logs)
     const value = yield* interpreter.run(program)
-    const result = copyOut(copyIn(value, "Execution result", limits), true) as DataValue
-    if (dataByteLength(result) > limits.maxDataBytes) {
-      throw new InterpreterRuntimeError(`Execution result exceeds the maximum data size of ${limits.maxDataBytes} bytes.`, undefined, "InvalidDataValue")
-    }
+    const result = copyOut(copyIn(value, "Execution result"), true) as DataValue
     return {
       ok: true,
       value: result,
@@ -3751,15 +3296,21 @@ const executeWithLimits = <const Tools extends Record<string, unknown>>(
       toolCalls: tools.calls,
     } satisfies ExecuteResult
   }).pipe(
-    Effect.timeoutOrElse({
-      duration: limits.timeoutMs,
-      orElse: () => Effect.succeed({
-        ok: false,
-        error: { kind: "TimeoutExceeded", message: `Execution timed out after ${limits.timeoutMs}ms.` },
-        ...logged(),
-        toolCalls: tools.calls,
-      } satisfies ExecuteResult),
-    }),
+    (program) => {
+      const timeoutMs = limits.timeoutMs
+      if (timeoutMs === undefined) return program
+      return program.pipe(
+        Effect.timeoutOrElse({
+          duration: timeoutMs,
+          orElse: () => Effect.succeed({
+            ok: false,
+            error: { kind: "TimeoutExceeded", message: `Execution timed out after ${timeoutMs}ms.` },
+            ...logged(),
+            toolCalls: tools.calls,
+          } satisfies ExecuteResult),
+        }),
+      )
+    },
   )
 
   return operation.pipe(
@@ -3856,7 +3407,7 @@ export const make = <const Tools extends Record<string, unknown> = {}>(options: 
   const tools = (options.tools ?? {}) as HostTools<Services<Tools>>
   ToolRuntime.assertValidTools(tools)
   const limits = resolveExecutionLimits(options.limits)
-  const discovery = ToolRuntime.discoveryPlan(tools, options.discovery?.maxInlineCatalogBytes)
+  const discovery = ToolRuntime.discoveryPlan(tools, options.discovery?.maxInlineCatalogTokens)
   const executeProgram = (code: string) => executeWithLimits<Tools>({ ...options, code }, limits, discovery.searchIndex)
   const catalog = discovery.catalog
   const instructions = discovery.instructions

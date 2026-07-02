@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Schema } from "effect"
 import { CodeMode, Tool } from "../src/index.js"
-import type { InternalExecutionLimits } from "../src/codemode.js"
 
 // Key enumeration: Object.keys and for...in share one surface over plain objects, arrays
 // (index strings), and tool references (namespace/tool names from the host tool tree), so a
@@ -23,15 +22,14 @@ const tools = {
   playwright: { navigate: echo("Navigate somewhere") },
 }
 
-const run = (code: string, limits?: InternalExecutionLimits) =>
-  Effect.runPromise(CodeMode.execute({ tools, code, ...(limits ? { limits } : {}) }))
-const value = async (code: string, limits?: InternalExecutionLimits) => {
-  const result = await run(code, limits)
+const run = (code: string) => Effect.runPromise(CodeMode.execute({ tools, code }))
+const value = async (code: string) => {
+  const result = await run(code)
   if (!result.ok) throw new Error(`expected success, got ${result.error.kind}: ${result.error.message}`)
   return result.value
 }
-const error = async (code: string, limits?: InternalExecutionLimits) => {
-  const result = await run(code, limits)
+const error = async (code: string) => {
+  const result = await run(code)
   if (result.ok) throw new Error(`expected failure, got value ${JSON.stringify(result.value)}`)
   return result.error
 }
@@ -145,15 +143,5 @@ describe("for...in", () => {
       expect(failure.message).toContain("for...in requires a plain object, array, or tools reference")
       expect(failure.message).toContain("Use for...of for arrays/strings/Maps/Sets, or Object.keys(value)")
     }
-  })
-
-  test("charges the operation budget per iteration", async () => {
-    const limits: InternalExecutionLimits = { maxOperations: 60 }
-    const build = `const obj = { ${Array.from({ length: 20 }, (_, index) => `k${index}: ${index}`).join(", ")} }`
-
-    // The object itself fits comfortably; the for...in walk is what exhausts the budget.
-    expect(await value(`${build}; return 1`, limits)).toBe(1)
-    const failure = await error(`${build}; let n = 0; for (const key in obj) n += 1; return n`, limits)
-    expect(failure.kind).toBe("OperationLimitExceeded")
   })
 })

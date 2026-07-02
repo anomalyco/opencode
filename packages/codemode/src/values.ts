@@ -38,16 +38,14 @@ export class SandboxRegExp {
   }
 }
 
-/** A keyed collection with SameValueZero keys; `bytes` caches its incremental size accounting. */
+/** A keyed collection with SameValueZero keys. */
 export class SandboxMap {
   readonly map = new Map<unknown, unknown>()
-  bytes = 2
 }
 
-/** A unique-value collection; `bytes` caches its incremental size accounting. */
+/** A unique-value collection. */
 export class SandboxSet {
   readonly set = new Set<unknown>()
-  bytes = 2
 }
 
 export const isSandboxValue = (value: unknown): value is SandboxDate | SandboxRegExp | SandboxMap | SandboxSet =>

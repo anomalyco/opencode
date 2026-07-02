@@ -63,11 +63,15 @@ From issue #34787 and design discussion. Do not relitigate these casually.
 ### Discovery / search
 - **Search only — no separate `describe`.** `tools.$codemode.search({ query?, namespace?,
   limit? })` over the final tool tree, owned by this package.
-- Search result item shape: `{ path, description, signature }`. The `signature` string embeds
-  the full input/output TypeScript types, so separate `input`/`output` fields were dropped as
-  redundant (the issue listed them; we resolved the redundancy in favor of signature-only).
-  Result `path`s carry the `tools.` prefix (post-wave fix) so each is directly usable as the
-  call site; the internal `ToolDescription.path` stays unprefixed.
+- Search result item shape: `{ path, description, signature }` in an `{ items, total }`
+  wrapper. The `signature` string embeds the full input/output TypeScript types — in search
+  results it is the pretty, JSDoc-annotated multiline form (Fix 7), so per-field schema
+  `description`s and constraints (`@default`, `@format`, `@deprecated`, `@minItems`,
+  `@maxItems`) ride along as field comments. The original spec's separate `input`/`output`
+  raw-schema fields are deliberately NOT added: shapes are already fully expressed in the
+  TypeScript signature and schema annotations now arrive as JSDoc — intent satisfied, letter
+  deviated. Result `path`s carry the `tools.` prefix (post-wave fix) so each is directly
+  usable as the call site; the internal `ToolDescription.path` stays unprefixed.
 - Default limit: **10** (done). Exact-path lookup goes through search too: a query equal to a
   tool path (with or without the `tools.` prefix) returns that tool alone (done).
 - Signatures render **native payloads**: `Promise<Issue>`, NOT `Promise<Result<Issue>>`.
@@ -94,11 +98,21 @@ From issue #34787 and design discussion. Do not relitigate these casually.
   image bytes into context or drop attachments.
 
 ### Runtime behavior
-- Public limits are simple: `{ timeoutMs, maxToolCalls, maxOutputBytes }`. The other knobs
-  (maxOperations, maxDataBytes, maxValueDepth, maxCollectionLength, maxSourceBytes,
-  maxAuditBytes, maxConcurrency) are internal constants, still reachable for tests via the
-  `@internal` `InternalExecutionLimits` type (exported from `codemode.ts`, not from the package
-  index). (Done in Wave 2.)
+- Limits are EXACTLY the three public knobs: `{ timeoutMs, maxToolCalls, maxOutputBytes }` —
+  matching the original locked spec exactly. `timeoutMs` and `maxToolCalls` have NO defaults
+  (absent = no timeout / unlimited calls — budgets are host policy; user direction, Fix 6);
+  `maxOutputBytes` defaults to 32,000 because truncation never breaks correctness and its
+  absence silently floods model context. OpenCode's adapter policy (user direction): NO
+  limits at all — no timeout, unlimited tool calls (each child call is permission-gated;
+  user cancel interrupts the execution fiber and its children), default output truncation
+  only.
+  The internal limit system that Wave 2 kept behind
+  an `@internal` `InternalExecutionLimits` type (maxOperations, maxDataBytes, maxValueDepth,
+  maxCollectionLength, maxSourceBytes, maxAuditBytes, maxConcurrency) was deleted outright in
+  Fix 5 (see Post-wave fixes). Two internals survive as fixed constants, not knobs:
+  `TOOL_CALL_CONCURRENCY = 8` (the fork semaphore) and `MAX_VALUE_DEPTH = 32` (the `copyIn`
+  boundary depth check, kept only because it beats a native stack-overflow RangeError as an
+  error message; still reports `InvalidDataValue`).
 - CodeMode owns truncation of its own returned output (`maxOutputBytes`). OpenCode's native
   tool-output truncation (50KB / 2000 lines in `tool.ts` + `truncate.ts`) stays on as the
   outer safety net for now; we may remove that layering later.
@@ -118,11 +132,11 @@ From issue #34787 and design discussion. Do not relitigate these casually.
 ## 3. Current status (what is already done on `codemode-v2`)
 
 Waves 0–5 and the post-wave fixes below are committed on `codemode-v2` (two commits: the
-generic package, then the OpenCode integration). Verification: from
-`packages/codemode`, `bun test` (156 pass / 0 fail across
-`codemode/parity/stdlib/promise/enumeration`) and `bun run typecheck`; from
+generic package, then the OpenCode integration); Fixes 4–8 are uncommitted working-tree
+changes. Verification: from `packages/codemode`, `bun test` (169 pass / 0 fail across
+`codemode/parity/stdlib/promise/enumeration/signature`) and `bun run typecheck`; from
 `packages/opencode`, `bun run typecheck` and `bun test test/session/` (all green — the
-adapter suites are `code-mode.test.ts`, 35 tests, and `code-mode-integration.test.ts`,
+adapter suites are `code-mode.test.ts`, 34 tests, and `code-mode-integration.test.ts`,
 16 tests).
 
 ### Wave 0 — scaffold (done)
@@ -156,7 +170,8 @@ spec. The seeded interpreter was deliberately strict; these behaviors replaced t
 
 - Opaque-by-default: all four join `isRuntimeReference`, with explicit carve-outs (member
   access allowlists, Date in binary/unary ops, Map/Set in spread/for...of, console formatting,
-  byte accounting in `runtimeValueBytes`, `containsOpaqueReference` for operator guards).
+  `containsOpaqueReference` for operator guards; the `runtimeValueBytes` byte-accounting
+  carve-out died with that machinery in Fix 5).
 - **JSON semantics at every boundary and checkpoint**: Date → ISO string (invalid → null),
   RegExp/Map/Set → `{}`. `copyIn` also converts host `Date`/`RegExp`/`Map`/`Set` instances the
   same way (a host tool may legitimately return them).
@@ -170,8 +185,8 @@ spec. The seeded interpreter was deliberately strict; these behaviors replaced t
   README).
 - Map/Set: full method sets; `keys/values/entries` return **arrays** (not iterators);
   `for...of` + spread work; `Object.fromEntries(map)`, `Array.from(map|set)`; SameValueZero
-  keys (NaN findable); mutations maintain incremental byte totals and enforce
-  `maxCollectionLength`/`maxDataBytes`.
+  keys (NaN findable). (The incremental byte totals and `maxCollectionLength`/`maxDataBytes`
+  enforcement this wave added were deleted in Fix 5.)
 - Rode along, same spirit: `typeof` never throws for any value (`typeof fn` → `"function"`),
   `!` works on any value, `for...of` over strings, `{...sandboxValue}` no-op, template
   interpolation renders `/regex/` and ISO dates directly.
@@ -203,18 +218,17 @@ wave; both packages typecheck clean.
   (`ToolError`/`ToolRuntimeError` message, else "Tool execution failed"). Interrupted calls
   fire no end event (timeout kills the whole execution anyway).
 - **Limits collapse**: public `ExecutionLimits` = `{ timeoutMs?, maxToolCalls?,
-  maxOutputBytes? }` (defaults 10_000 / 100 / 32_000). All other knobs are internal defaults
-  (unchanged values) on `ResolvedExecutionLimits`, still validated + reachable through the
-  `@internal` `InternalExecutionLimits` type exported from `src/codemode.ts` only — tests pass
-  internal knobs via typed variables (assignment from a wider variable skips excess-property
-  checks).
+  maxOutputBytes? }` (defaults 10_000 / 100 / 32_000). This wave kept the other knobs as
+  internal defaults reachable through an `@internal` `InternalExecutionLimits` type; Fix 5
+  later deleted that type and the internal limit system entirely.
 - **`maxOutputBytes` truncation** (CodeMode-owned, never fails): applied via `boundOutput` in
   a final `Effect.map` over every result path (success/timeout/normalized failure). Oversized
   serialized values become truncated text + ` [result truncated: N bytes exceeds the M-byte
   output limit; return a smaller value]`; logs keep leading lines within the remaining budget
   + `[logs truncated: showing K of N lines]`; result gains `truncated: true` (also added to
-  `ExecuteResultSchema`). UTF-8-safe truncation (no split code points). The in-sandbox
-  `maxDataBytes` check on the final result still throws first if the raw value exceeds it.
+  `ExecuteResultSchema`). UTF-8-safe truncation (no split code points). (The in-sandbox
+  `maxDataBytes` check that used to throw first on oversized raw values died in Fix 5 —
+  truncation is now the only result-size mechanism.)
 - **Search polish**: default limit 12 → **10** (`defaultSearchLimit`); exact-path lookup — a
   trimmed query equal to one tool path (optionally `tools.`-prefixed) returns that tool alone
   (`total: 1`), bypassing ranking. Tokenization/ranking/shape unchanged.
@@ -243,14 +257,16 @@ per-MCP registration; MCP resource tools unaffected) is unchanged.
   are stripped into a per-execution `Attachment[]` accumulator, and a media-only result
   becomes a marker payload (`"[1 image attached to the result]"`, noun/count adjusted). An
   MCP-shaped result with nothing extractable becomes `null`; non-MCP values pass through.
-  No handles, no `Result<T>` envelope, no base64 in the sandbox, no raised `maxDataBytes`.
+  No handles, no `Result<T>` envelope, no base64 in the sandbox, no data-size tuning (the
+  `maxDataBytes` budget that existed at the time was deleted in Fix 5).
 - **Execute result**: `{ output: formatValue(value) + trailing "Logs:" section (success AND
   error — logs are plain pre-formatted lines now), attachments: accumulated }` through the
   existing `Tool.ExecuteResult.attachments` → `message-v2.ts` vision plumbing; attachments
   ride on both success and error results. Diagnostic `suggestions` not already contained in
   the message are appended to error output. Native outer truncation stays on (adapter never
   sets `metadata.truncated`); CodeMode's own `maxOutputBytes` (32 KB default) cuts first.
-  Limits: `{ timeoutMs: 30_000 }` (matches the default MCP request timeout), rest defaults.
+  Limits: `{ timeoutMs: 30_000 }` at the time (matched the default MCP request timeout);
+  killed in Fix 6 — the adapter now passes no limits at all.
 - **Progress**: `onToolCallStart`/`onToolCallEnd` → `ctx.metadata({ toolCalls })` with
   `{ tool, status: running|completed|error, input? }` per call index — the exact shape the
   TUI `Execute` component (`packages/tui/src/routes/session/index.tsx`) already renders.
@@ -275,13 +291,16 @@ packages typecheck clean.
 
 - **Budgeted catalog** (`discoveryPlan` in `tool-runtime.ts`): the all-or-nothing
   inline/search modes are gone — `DiscoveryMode` deleted, `DiscoveryOptions` is just
-  `{ maxInlineCatalogBytes? }` (default 16,000 UTF-8 bytes). Port of the old opencode
+  `{ maxInlineCatalogBytes? }` (default 16,000 UTF-8 bytes; later converted to
+  `maxInlineCatalogTokens`, default 4,000 estimated tokens — see Post-wave fixes). Port of
+  the old opencode
   `describe()` `PREVIEW_BUDGET` algorithm, adapted to `ToolDescription`: every namespace is
   ALWAYS listed with its tool count; full signature lines
   (`  - <signature> // <first line of description, capped at 120 chars>`) are inlined
   cheapest-first (line byte length, path tiebreak) within each namespace, namespaces processed
   alphabetically; once one line does not fit, inlining stops for every remaining namespace
-  (counts only), exactly like the ported algorithm. The header states comprehensiveness
+  (counts only), exactly like the ported algorithm (this stop-everything behavior was later
+  replaced by round-robin fairness in Fix 8). The header states comprehensiveness
   precisely: "Available tools (COMPLETE list — …)" vs "Available tools (PARTIAL — N of M
   shown; find the rest with tools.$codemode.search)"; namespace labels are `(N tools)` /
   `(N tools, K shown)` / `(N tools, none shown)`. An empty tree renders "No tools are
@@ -315,7 +334,8 @@ packages typecheck clean.
   resource tools unaffected); the live description read back as "Available tools (PARTIAL —
   56 of 88 shown; find the rest with tools.$codemode.search):" with correct per-namespace
   labels (context7/github/memory fully shown; playwright/sentry/sequential-thinking "none
-  shown" — alphabetical exhaustion); programs executed with in-program `$codemode.search`
+  shown" — the alphabetical-exhaustion starvation Fix 8 later replaced with round-robin
+  fairness); programs executed with in-program `$codemode.search`
   calls and returned the correct answer. NOT verified e2e (headless only; covered by
   unit/integration tests instead): TUI child-call rendering, attachments becoming visible
   images, output truncation.
@@ -340,10 +360,10 @@ adapter needed **no changes**.
 - **Mechanics**: `SandboxPromise` in `values.ts` (fiber-backed for tool calls; fiberless
   `immediate` effect for `Promise.resolve`/`reject`). Forks run
   `semaphore.withPermit(invoke)` with `startImmediately: true` — a per-execution
-  `Semaphore.makeUnsafe(maxConcurrency)` (8) caps live calls (the "Effect.all or equivalent"
-  cap lives where the work is, so combinator joins can be sequential without losing
-  parallelism), and the budget/audit charge (`recordCall`) plus `onToolCallStart` fire at the
-  call site before any await. `await` of a non-promise is a passthrough no-op; a returned
+  `Semaphore.makeUnsafe(TOOL_CALL_CONCURRENCY)` (fixed 8, see Fix 5) caps live calls (the
+  "Effect.all or equivalent" cap lives where the work is, so combinator joins can be
+  sequential without losing parallelism), and the tool-call-count charge (`recordCall`) plus
+  `onToolCallStart` fire at the call site before any await. `await` of a non-promise is a passthrough no-op; a returned
   top-level promise resolves like an async-function return (`return tools.a.b(x)` works
   without await).
 - **Promise combinators are normal functions over values**: `Promise.all`/`allSettled`/`race`
@@ -409,12 +429,11 @@ adapter needed **no changes**.
   - `for...in` (ForInStatement) iterates own enumerable string keys of plain objects, index
     strings of arrays, and namespace/tool names of tool references — sharing the interpreter's
     `enumerableKeys` helper with the `Object.keys` tool path. const/let declarations and bare
-    identifiers bind the key; break/continue work; iterations charge the operation budget like
-    the other loops. Anything else (strings, Map/Set, numbers, null, ...) is a clear error
-    suggesting `for...of` or `Object.keys` — deliberately smaller than real JS (which yields
-    indices for strings and zero iterations for Maps/Sets/null).
+    identifiers bind the key; break/continue work. Anything else (strings, Map/Set, numbers,
+    null, ...) is a clear error suggesting `for...of` or `Object.keys` — deliberately smaller
+    than real JS (which yields indices for strings and zero iterations for Maps/Sets/null).
   - `supportedSyntaxMessage`, the instructions loops line, and README "Supported Programs"
-    mention the new surface; tests in `test/enumeration.test.ts` (15, incl. the exact
+    mention the new surface; tests in `test/enumeration.test.ts` (14, incl. the exact
     transcript program) plus one adapter-level assertion that `Object.keys(tools)` returns
     MCP server names.
 
@@ -432,7 +451,8 @@ adapter needed **no changes**.
     path + description). Queries tokenize on camelCase boundaries + non-alphanumeric
     separators (empties and `*` dropped). Additive per-term scoring: exact path or
     path-segment match 20, path substring 8, description substring 4, searchable-text
-    substring 2; summed across terms, filtered to score > 0, sorted score desc then path asc.
+    substring 2; summed across terms, filtered to score > 0, sorted score desc then path asc
+    (Fix 8 later made each field check accept the term OR a naive singular variant).
     An empty query now browses ALPHABETICALLY by path (was declaration order). Kept:
     `{ path, description, signature }` result items, default limit 10, exact-path instant
     lookup, input validation errors.
@@ -455,7 +475,8 @@ adapter needed **no changes**.
   The flat prose instructions (which mixed a real catalog tool with fabricated result
   fields in the worked example) are replaced by structured markdown in `discoveryPlan`,
   ordered so the workflow sits at the top (the least likely part of a long description to
-  be truncated or skimmed away) and the catalog at the bottom:
+  be truncated or skimmed away) and the catalog at the bottom (the per-section content
+  described here was later condensed by Fix 8 — Workflow/Rules deduped, Syntax inverted):
   - **Intro** (2 lines): "Write a CodeMode program… Return code only." + "Execute
     JavaScript in a confined runtime with access to the tools listed below under
     `tools.*`." (the second line drops the tools clause when the tree is empty).
@@ -490,32 +511,255 @@ adapter needed **no changes**.
     zero-tool minimal sections) — 156 pass / 0 fail; adapter suites gain the same
     assertions on the built description (still 35 + 16, green).
 
+**Fix 4 — token-budgeted catalog (was bytes)** (user direction: signatures need a token
+budget; namespaces must always be present):
+  - `src/token.ts` added: copy of `@opencode-ai/core/util/token` (`round(chars / 4)`), so
+    the package stays dependency-free; keep in sync if the core heuristic changes.
+  - `DiscoveryOptions.maxInlineCatalogBytes` → `maxInlineCatalogTokens` (default 4,000
+    estimated tokens ≈ the old 16,000 bytes at 4 chars/token — behavior parity, not a size
+    reduction). `discoveryPlan` charges `estimate(catalogLine(tool))` per line; cheapest-first
+    + stop-on-first-miss unchanged at the time (stop-on-first-miss replaced by round-robin in
+    Fix 8). Namespace stub lines were and remain unbudgeted — every
+    namespace always appears with its tool count, even at budget 0 (asserted in package and
+    adapter tests).
+  - Ripple: chars/4 rounding erases small line-length differences, so equal-cost lines fall
+    to the lexicographic path tiebreak; the adapter's PARTIAL test now asserts the
+    lexicographic tail (`op_99`) is excluded instead of `op_149`. Fixed-prose measurements
+    (2026-07): preamble ~44 + Workflow ~146 + Rules ~362 + Syntax ~453 ≈ 1,100 tokens fixed;
+    worst-case net description ≈ fixed + 4,000 ≈ 5,100 estimated tokens.
+
+**Fix 5 — internal limits removed** (user direction: only the three PUBLIC limits survive as
+configurable knobs; the internal limit system dies):
+  - `ExecutionLimits` (`timeoutMs` 10_000 / `maxToolCalls` 100 / `maxOutputBytes` 32_000 at
+    the time; Fix 6 later removed the first two defaults. Same validation: safe integers,
+    timeoutMs >= 1, others >= 0, RangeError otherwise) is now
+    the ENTIRE limit surface — exactly the shape §2's original locked spec named.
+    `ResolvedExecutionLimits` shrank to those three fields; the `@internal`
+    `InternalExecutionLimits` type is deleted.
+  - **Deleted outright**: `maxOperations` and the whole operation-budget machinery
+    (`recordWork`/`recordOperation`/`budget.operations`, plus the `workUnits`/
+    `cheapArrayMethods` cost helpers); `maxSourceBytes` (the pre-parse source-size check);
+    `maxDataBytes` (every byte-accounting path: `runtimeValueBytes`, `boundedProgramValue`,
+    the container-size caches (`containerSizes`/`objectCounts`), Map/Set incremental `bytes`
+    fields in `values.ts`, string-growth `limitString` checks, tool-argument/result byte
+    checks in `tool-runtime.ts`, and the final-result size check); `maxAuditBytes` (log and
+    audit-trail byte accounting — `toolCalls` records and the start/end hooks are unchanged);
+    `maxCollectionLength` (every array-length/object-field-count check — this knob was
+    actively harmful: an MCP tool returning 20k rows failed). The `OperationLimitExceeded`
+    and `AuditLimitExceeded` diagnostic kinds are gone from the `DiagnosticKind` union and
+    `ExecuteResultSchema` (fine — the package is unreleased).
+  - **Fixed constants, not knobs**: `TOOL_CALL_CONCURRENCY = 8` (codemode.ts; the fork
+    semaphore) and `MAX_VALUE_DEPTH = 32` (tool-runtime.ts; the `copyIn` depth check — kept
+    only because it produces a clearer error than a native stack-overflow RangeError; still
+    `InvalidDataValue`). The `DataLimits` plumbing through `tool-runtime.ts` is gone —
+    `copyIn(value, label)` needs no limits argument, and `ToolRuntime.make` takes just
+    `(tools, maxToolCalls, hooks?, searchIndex?)`.
+  - **Verified fact**: timeout interruption does NOT depend on the operation budget — the
+    Effect fiber runtime auto-yields between interpreter steps, so `timeoutMs` interrupts
+    even a pure `while (true) {}` loop (empirically verified: a 200ms timeout fired at
+    ~225ms with maxOperations set to MAX_SAFE_INTEGER before the deletion). A regression
+    test in `codemode.test.ts` asserts exactly this (`while(true){}` + `timeoutMs: 200` →
+    `TimeoutExceeded`, elapsed well under a few seconds).
+  - **Kept (correctness, not budgets)**: circular detection (`copyIn` walks +
+    `rejectCircularInsertion` on mutations), plain-objects-only, blocked properties
+    (`__proto__`/`constructor`/`prototype`), data-only checks, and all three public-limit
+    behaviors unchanged.
+  - Behavior deltas beyond the intended kills: in-sandbox structures deeper than 32 levels
+    now fail at the data boundary (`copyIn`) instead of at construction; array index
+    assignment allows any non-negative integer index (holes permitted, message now "must be
+    a non-negative integer"); interpreter-produced deep/hostile structures that overflow the
+    native stack during a walk still normalize to the existing "Execution exceeded the
+    maximum nesting depth." data diagnostic — failures remain data everywhere.
+  - Tests: deleted the knob-only tests (stdlib Map/Set collection-length growth ×2,
+    enumeration operation-budget, codemode maxDataBytes/maxSourceBytes/maxOperations/
+    maxConcurrency-RangeError assertions, and the adapter's runaway-loop-via-operation-limit
+    test — superseded by the package timeout regression test); rewrote the helpers that used
+    `InternalExecutionLimits` as a convenience to plain `ExecutionLimits`
+    (promise/enumeration/stdlib run helpers). Package suite: 154 pass / 0 fail; adapter
+    suites: 34 + 16.
+
+**Fix 6 — no default timeout / tool-call cap** (user direction): `timeoutMs` and
+`maxToolCalls` lost their defaults (were 10_000 / 100) — absent now means no timeout /
+unlimited calls. Budgets are host policy, not library policy; `maxOutputBytes` keeps its
+32,000 default because truncation never breaks correctness and its absence would silently
+flood model context. `ResolvedExecutionLimits` carries `number | undefined` for both, the
+timeout wrapper is only applied when configured, and `ToolRuntime.make` treats undefined
+`maxToolCalls` as uncapped. Validation is unchanged when values ARE provided (safe integers,
+timeoutMs >= 1, others >= 0). The OpenCode adapter is unaffected in behavior it sets
+(explicit 30s timeout) but now runs with unlimited tool calls. Immediately after, per user
+direction, the adapter's 30s timeout was killed too: `CODE_LIMITS` is deleted and OpenCode
+passes NO limits — no timeout, no tool-call cap. Rationale: user cancel interrupts the
+execution fiber and structured concurrency takes the program and in-flight child calls down
+with it; every child call is permission-gated; output truncation (32KB default) is the only
+active bound. New regression test: 150 tool calls succeed with no limits configured (would
+have tripped the old default 100). Package suite: 155 pass / 0 fail.
+
+**Fix 7 — JSDoc-annotated search signatures**: `tools.$codemode.search` result signatures are
+now the pretty, indented multiline form with per-field JSDoc — ported from the pre-rebuild
+rune renderer in this repo's git history (`renderType(def, { pretty })`/`docTags`/`jsdoc`/
+`renderObject`), adapted to the current renderer's conventions (`Array<T>`, `unknown`
+fallback, existing `$defs`/`$ref` handling and empty-object `{}` collapse; the old
+`Result<T>`/`returnType` machinery was deliberately not ported — payloads stay native).
+Semantics: each described input/output field carries its schema `description` as a
+`/** … */` comment at the right indent (nested objects recurse deeper); constraints TS can't
+express surface as JSDoc tags — `@deprecated`, `@default <json>` (unserializable defaults
+skipped), `@format`, `@minItems`/`@maxItems`; `*/` inside text is neutralized to `* /`;
+multiline descriptions become `*`-prefixed blocks with blank edges trimmed; undescribed,
+untagged fields get no comment. Implementation: `renderSchema` in `tool.ts` grew a
+`RenderContext` (`{ definitions, pretty }`), a `MAX_RENDER_DEPTH = 8` recursion ceiling plus
+a `$ref` `seen` guard (the renderer previously had neither — a cyclic `$defs` would have
+looped; it now degrades to the ref name/`unknown`), and try/catch totality on the public
+helpers (`toTypeScript`/`jsonSchemaToTypeScript`/`inputTypeScript`/`outputTypeScript` never
+throw — pathological schemas render `unknown`); each helper takes an optional trailing
+`pretty = false` parameter, so existing callers are unchanged and compact output stays
+byte-identical (inline `catalogLine`s and the token budget depend on it). `SearchEntry`
+gained an eagerly-computed `signature` field (built once per tool at index-build time in
+`toSearchEntry` — rendering is cheap and the search hot path stays allocation-free); both
+ranked results and exact-path lookups serve it. Works for both tool kinds: Effect Schema
+annotations (`Schema.String.annotate({ description })`) flow through the emitted JSON
+Schema, and raw JSON Schema (MCP) property metadata is read directly — both covered in
+`test/signature.test.ts` (12 tests) plus one strengthened adapter assertion (MCP property
+description appears as JSDoc in a live search result; the tool description/catalog contains
+no `/**`). README search section updated with an example. Package suite: 167 pass / 0 fail;
+adapter suites: 34 + 16.
+
+**Fix 8 — condensed instructions + round-robin catalog fairness + plural-aware search**
+(user direction: the fixed instruction prose was too verbose; two discovery fixes ride
+along). All in `tool-runtime.ts`; no interpreter changes.
+  - **Syntax section inverted**: the three dense allowlist lines (~453 estimated tokens)
+    are replaced by four short lines (~188) built on "models already know JavaScript; name
+    only what is unusual or missing": (1) standard modern JS works — functions/closures,
+    destructuring, template literals, loops, try/catch, spread, optional chaining, the
+    usual Array/String/Object/Math/JSON methods, plus Date/RegExp/Map/Set and
+    Promise.all/allSettled/race/resolve/reject; (2) TypeScript type annotations are
+    stripped before execution, decorators are not supported; (3) NOT supported (each fails
+    with a message naming the alternative): classes, generators, for await...of,
+    .then/.catch/.finally (use await with try/catch), `x instanceof Error` (caught errors
+    are plain `{ name, message }` objects), splice; (4) the data-boundary note (Dates →
+    ISO strings; Map/Set/RegExp → `{}`). Every claim was verified against the interpreter
+    before writing: probed empirically — classes/generators/for-await/.then/.catch/
+    .finally/`instanceof Error`/splice/decorators/BigInt/labeled statements/tagged
+    templates/object getters all fail with clear diagnostics; TS annotations/`as`/
+    interfaces/type aliases are stripped and TS **enums actually work** (transpileModule
+    compiles them to an IIFE the interpreter runs), hence enums deliberately unmentioned.
+    `supportedSyntaxMessage` (the in-diagnostic text in `codemode.ts`) is untouched.
+  - **Workflow/Rules deduped**: the call-by-exact-path, JSON.parse-string-results, and
+    return-small content now lives ONLY in the numbered Workflow steps (with their
+    compliance-driving justifications inline: "most tools return JSON as a string", "raw
+    payloads get truncated and waste context"); Rules keeps only bullets adding new
+    content — filter/aggregate collections in code, console.* intermediates (logs ride
+    back), Promise.all parallelism, Object.keys/for...in enumeration, browse-namespace
+    (PARTIAL only), and the media rule compressed to one line. The no-.then/.catch
+    guidance moved to the Syntax not-supported line. Content upgrades: the PARTIAL search
+    step gained query-style guidance (`— short phrases like "list issues" work best`; a
+    clearly-a-query-string example, not a tool name), and the exact-path guidance is now
+    "call it with the result's `path` as-is (never guess segments)" / COMPLETE: "use it
+    as-is rather than guessing segments".
+  - **Fixed-prose measurements** (instructions split on `"\n## "`, catalog budget 0,
+    bytes/3.7 — same method as Fix 4; chars/4 in parentheses):
+    preamble 44 → 44 (41 → 41), Workflow 146 → 187 (135 → 171), Rules 362 → 191
+    (332 → 176), Syntax 453 → 188 (419 → 174); fixed prose total 1,005 → 610 (927 → 562),
+    ≈ 40% reduction with no behavioral content dropped. Workflow grew slightly because it
+    absorbed the deduped parse/return-small justifications.
+  - **Round-robin namespace inlining** (`discoveryPlan`): the ported stop-on-first-miss
+    behavior (alphabetically-late namespaces starved to "none shown" while an early
+    namespace inlines everything) is replaced by round-robin fairness — in each round
+    (namespaces alphabetical), every namespace still holding un-inlined tools attempts to
+    place its next-cheapest line against the shared token budget; a namespace whose next
+    line does not fit is done while the others keep going; stop when all are done. Every
+    namespace gets some representation before any namespace gets everything. Kept:
+    `estimate` (chars/4) budget accounting, unbudgeted namespace stub lines, per-namespace
+    `(N tools)`/`(N tools, K shown)`/`(N tools, none shown)` labels, COMPLETE vs PARTIAL
+    header, alphabetical namespace order in the output, cheapest-first within each
+    namespace's shown set.
+  - **Plural/singular search fix**: `tokenize`d terms matched one-directionally (term must
+    be substring of indexed text), so query "issues" missed a tool whose text only says
+    "issue". Now each term expands to `termForms` — the term plus naive singular variants
+    (trailing "es" stripped when length > 3, trailing "s" when length > 2) — and each of
+    the four field checks passes when ANY form matches. Weights, exact-path lookup, and
+    namespace scoping untouched. A true plural path match still outranks a singular-only
+    description match (path substring 8 + searchable 2 > description 4 + searchable 2).
+  - **Tests**: package instruction/structure assertions updated to the new text; new
+    syntax-section test (leads with "Standard modern JavaScript works", names the
+    verified not-supported list, keeps the data-boundary note); the budget-exhaustion
+    test rewritten to assert the new fairness (alpha.expensive not fitting must NOT
+    prevent beta.cheap from showing: PARTIAL 2 of 3, `- beta (1 tool)` fully shown); new
+    plural/singular test (query "issues" finds a singular-only tool; ranking still
+    prefers the true "issues" path match). Adapter: description assertions updated; the
+    large-catalog PARTIAL test now asserts `zeta_only_tool` IS shown (`- zeta (1 tool)` +
+    its inlined line) — it was "none shown" under starvation. README updated (budgeted
+    catalog paragraph → round-robin; search paragraph → singular variants;
+    instructions-structure paragraph → new section contents). Package suite: 169 pass /
+    0 fail; adapter suites: 34 + 16.
+
+**Fix 9 — prompting trims per user review of Fix 8** (user reviewed the condensed
+instructions and directed further cuts):
+  - Default `maxInlineCatalogTokens` 4,000 → **2,000** (user wants ~2k tokens of signatures
+    auto-inlined; round-robin fairness from Fix 8 spreads it across all namespaces).
+  - Console rule and files/images rule DROPPED from `## Rules`. Replaced by a single
+    `unknown`-treatment warning: "A result typed `Promise<unknown>` has no guaranteed
+    shape — verify what actually came back before relying on its fields." (Deliberately
+    does NOT suggest console.log — user review: naming it there nudges models to log AND
+    return the same data; the prompt stays console-neutral, neither for nor against.)
+    The media-stripping MECHANISM is unchanged and still tested; only the prose about it
+    is gone — the `[N images attached]` marker is self-explanatory in context.
+  - Kept as-is per user: the JSON.parse workflow step (maps to the original motivating
+    transcript failure; NOT copied from prior art — see §5 note), the browse-namespace rule
+    (undecided), no no-fetch/ambient-authority rule added (proposed, not approved).
+  - Explicitly REJECTED for now: auto-parsing JSON-looking text results at the adapter
+    boundary ("could get weird" — type flips, program-sees vs tool-sent divergence). Logged
+    as a next-iteration follow-up below.
+
 ---
 
 ## 4. Remaining work (detailed TODO)
 
-### Backlog / loose ends (non-blocking, any order)
+### Next DSL-expansion pass
+Batch these together — per user direction: important, but deliberately deferred to one
+focused interpreter-surface pass rather than picked off piecemeal.
 - [ ] Medium-tier JS parity items deferred from the original audit: caught errors are plain
       `{ name, message }` objects, not `instanceof Error` (and `Error` isn't a value —
       `x instanceof Error` is unsupported syntax); `splice` (still a
       "rewrite using map/filter" hint) and array `entries()/keys()/values()`;
       `localeCompare`/`normalize`/`trimLeft`/`trimRight`; friendlier regex-y error messages.
+- [ ] `Date`/`Map`/`Set`/`RegExp` values passing through `Object.*` helpers and coercion
+      checkpoints take their JSON forms (e.g. `Object.values({ d: date })` yields the ISO
+      string, not the Date — calling `.getTime()` on it then fails). Currently deliberate
+      (documented in README) but flagged as important: fix in this pass by letting sandbox
+      values survive `Object.*`/spread checkpoints instead of JSON-serializing them.
 - [ ] `console.log(NaN)` prints `"null"` (goes through the boundary chokepoint) — could
       special-case number formatting in `formatConsoleArgument`.
 - [ ] Sandbox values nested inside logged containers print `[CodeMode reference]`
       (`console.log({ m: map })`) — could deep-format instead.
-- [ ] `Date`/`Map`/`Set`/`RegExp` values passing through `Object.*` helpers and coercion
-      checkpoints take their JSON forms (e.g. `Object.values({ d: date })` yields the ISO
-      string, not the Date). Deliberate (documented in README); revisit only if it bites.
+
+### Next iteration: text-result handling (deliberate follow-up, user-directed)
+- [ ] Revisit how MCP text results reach the program. Today: `structuredContent` when the
+      server sends it, else joined text as a plain string (the program JSON.parses it,
+      guided by a workflow step). Considered and deferred: (a) conservative boundary
+      auto-parse (text starting with `{`/`[` that parses cleanly becomes an object) —
+      rejected for now as potentially confusing (type flips; program sees something other
+      than what the tool sent); (b) raw-envelope passthrough with the envelope shape
+      stamped into every output schema — rejected (more digging per call, verbose
+      signatures). Result quality is dominated by whether servers declare output schemas;
+      revisit once real usage shows which failure modes matter.
+
+### Backlog / loose ends (non-blocking, any order)
+- [ ] Media-only marker could name what it attached when MCP provides names: `image`/`audio`
+      blocks carry no filename (mime + data only) so the generic
+      `[N images attached to the result]` stays, but `resource`/`resource_link` blocks have
+      URIs/names we could surface, e.g. `[2 files attached: chart.png, data.csv]`. Minor.
 - [ ] Decide whether OpenCode's outer native truncation gets disabled for `execute` once
       `maxOutputBytes` exists (issue says CodeMode reimplements it; "maybe we kill \[the outer
       one\] later").
-- [ ] Two timing-based tests in `test/promise.test.ts` (a `< 150ms` parallelism bound and
-      100ms-timeout interruption) could flake on a very slow CI host; primary assertions are
-      counter-based, but loosen margins if they ever flake.
-- [ ] Interactive e2e still unverified (Wave 4 verified headless only): TUI child-call
-      rendering via `metadata.toolCalls`, and stripped media becoming visible images through
-      `Tool.ExecuteResult.attachments`. Run one interactive session before merging.
+- [x] Flaky wall-clock assertion removed from `test/promise.test.ts`: the parallelism test
+      now relies solely on the deterministic `trace.maxActive > 1` counter (which proves
+      true temporal overlap). The timeout tests were never flaky — 100ms timeout vs 60s
+      tool sleeps (600x margin) with counter-based assertions.
+- [ ] Attachment propagation believed correct but unverified end-to-end at the OpenCode
+      wiring layer (codemode strips → `Tool.ExecuteResult.attachments` → processor
+      normalizes → `FilePart`s visible to the model). Code-reviewed as sound; confirm with
+      one interactive session (an image-returning MCP tool) when convenient. Same session
+      can eyeball TUI child-call rendering via `metadata.toolCalls`.
 - [x] Commit hygiene: Waves 0–5 + post-wave fixes committed on `codemode-v2` as two units
       (the generic package; the OpenCode integration). Future work: commit only when
       explicitly asked; push with `--no-verify` per repo convention. The scratch
@@ -534,10 +778,10 @@ adapter needed **no changes**.
 - Realistically **all MCP tools render `Promise<unknown>`** (no outputSchema), so the
   instructions prose is the only lever for result-shape behavior in the dominant case.
 - **`copyIn` has two roles**: host↔sandbox boundary AND intra-sandbox data checkpoint
-  (`boundedData`). Sandbox value types are converted to JSON forms wherever it runs — that's
-  the documented model. If you add a new value type, follow the Wave 1b-i pattern: class in
-  `values.ts`, opaque-by-default via `isRuntimeReference`, explicit carve-outs, real byte
-  accounting in `runtimeValueBytes`, JSON form in `copyIn`, console formatting, tests.
+  (`boundedData` is now just a `copyIn` alias). Sandbox value types are converted to JSON
+  forms wherever it runs — that's the documented model. If you add a new value type, follow
+  the Wave 1b-i pattern: class in `values.ts`, opaque-by-default via `isRuntimeReference`,
+  explicit carve-outs, JSON form in `copyIn`, console formatting, tests.
 - The interpreter throws synchronously inside `Effect.gen`/`Effect.sync` freely; everything is
   normalized by `catchCause` → `normalizeError` into `Diagnostic` data. Program failures are
   **data, never Effect failures**; only interruption propagates.
