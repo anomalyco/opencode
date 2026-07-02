@@ -302,30 +302,26 @@ export function SessionSidePanel(props: {
                         <SortableProvider ids={openedTabs()}>
                           <For each={openedTabs()}>{(tab) => <SortableTab tab={tab} onTabClose={tabs().close} />}</For>
                         </SortableProvider>
-                        {/* Hidden in the v2 layout until its inline file picker returns;
-                            the dialog fallback is not the intended v2 experience. */}
-                        <Show when={!settings.general.newLayoutDesigns()}>
-                          <div class="bg-background-stronger h-full shrink-0 sticky right-0 z-10 flex items-center justify-center pr-3">
-                            <TooltipKeybind
-                              title={language.t("command.file.open")}
-                              keybind={command.keybind("file.open")}
-                              class="flex items-center"
-                            >
-                              <IconButton
-                                icon="plus-small"
-                                variant="ghost"
-                                iconSize="large"
-                                class="!rounded-md"
-                                onClick={() => {
-                                  void import("@/components/dialog-select-file").then((x) => {
-                                    dialog.show(() => <x.DialogSelectFile mode="files" onOpenFile={showAllFiles} />)
-                                  })
-                                }}
-                                aria-label={language.t("command.file.open")}
-                              />
-                            </TooltipKeybind>
-                          </div>
-                        </Show>
+                        <div class="bg-background-stronger h-full shrink-0 sticky right-0 z-10 flex items-center justify-center pr-3">
+                          <TooltipKeybind
+                            title={language.t("command.file.open")}
+                            keybind={command.keybind("file.open")}
+                            class="flex items-center"
+                          >
+                            <IconButton
+                              icon="plus-small"
+                              variant="ghost"
+                              iconSize="large"
+                              class="!rounded-md"
+                              onClick={() => {
+                                void import("@/components/dialog-select-file").then((x) => {
+                                  dialog.show(() => <x.DialogSelectFile mode="files" onOpenFile={showAllFiles} />)
+                                })
+                              }}
+                              aria-label={language.t("command.file.open")}
+                            />
+                          </TooltipKeybind>
+                        </div>
                       </Tabs.List>
                     </div>
 

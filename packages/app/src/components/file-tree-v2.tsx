@@ -294,7 +294,9 @@ export default function FileTreeV2(props: {
       filter: current,
       expanded: (dir) => untrack(() => file.tree.state(dir)?.expanded) ?? false,
     })
-    for (const dir of dirs) file.tree.expand(dir)
+    // Nodes come from the `allowed` filter; skip listing so directories that only
+    // exist on the diff's base branch do not each fail with an error toast.
+    for (const dir of dirs) file.tree.expand(dir, { list: false })
   })
 
   createEffect(
@@ -329,7 +331,9 @@ export default function FileTreeV2(props: {
                   data-scope="file-tree-v2"
                   forceMount={false}
                   open={expanded()}
-                  onOpenChange={(open) => (open ? file.tree.expand(node.path) : file.tree.collapse(node.path))}
+                  onOpenChange={(open) =>
+                    open ? file.tree.expand(node.path, { list: false }) : file.tree.collapse(node.path)
+                  }
                 >
                   <Collapsible.Trigger>
                     <FileTreeNodeV2
