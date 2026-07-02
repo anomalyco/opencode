@@ -2,6 +2,7 @@ export * as EventManifest from "./event-manifest.js"
 
 import { Agent } from "./agent.js"
 import { Catalog } from "./catalog.js"
+import { Command } from "./command.js"
 import { Durable } from "./durable-event-manifest.js"
 import { Event } from "./event.js"
 import { FileSystem } from "./filesystem.js"
@@ -53,6 +54,7 @@ const featureDefinitions = Event.inventory(
   ...Permission.Event.Definitions,
   ...Plugin.Event.Definitions,
   ...ProjectDirectories.Event.Definitions,
+  ...Command.Event.Definitions,
   ...Skill.Event.Definitions,
   ...FileSystemWatcher.Event.Definitions,
   ...Pty.Event.Definitions,

@@ -8,14 +8,23 @@ import { ConfigCommandPlugin } from "@opencode-ai/core/config/plugin/command"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { FSUtil } from "@opencode-ai/core/fs-util"
+import { Location } from "@opencode-ai/core/location"
+import { MCP } from "@opencode-ai/core/mcp/index"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
+import { emptyConfigLayer, emptyMcpLayer, testLocationLayer } from "../fixture/mcp"
 import { tmpdir } from "../fixture/tmpdir"
 import { testEffect } from "../lib/effect"
 import { host } from "../plugin/host"
 
-const it = testEffect(AppNodeBuilder.build(LayerNode.group([CommandV2.node, FSUtil.node])))
+const it = testEffect(
+  AppNodeBuilder.build(LayerNode.group([CommandV2.node, FSUtil.node]), [
+    [MCP.node, emptyMcpLayer],
+    [Config.node, emptyConfigLayer],
+    [Location.node, testLocationLayer],
+  ]),
+)
 const decode = Schema.decodeUnknownSync(Config.Info)
 
 describe("ConfigCommandPlugin.Plugin", () => {

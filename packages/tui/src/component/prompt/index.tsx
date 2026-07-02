@@ -1125,15 +1125,46 @@ export function Prompt(props: PromptProps) {
       const restOfInput = firstLineEnd === -1 ? "" : inputText.slice(firstLineEnd + 1)
       const args = firstLineArgs.join(" ") + (restOfInput ? "\n" + restOfInput : "")
 
-      void sdk.client.session.command({
-        sessionID,
-        command: command.slice(1),
-        arguments: args,
-        agent: agent.id,
-        model: `${selectedModel.providerID}/${selectedModel.modelID}`,
-        variant,
-        parts: nonTextParts.filter((x) => x.type === "file"),
-      })
+      void sdk.api.session
+        .command({
+          sessionID,
+          command: command.slice(1),
+          arguments: args,
+          agent: agent.id,
+          model: { providerID: selectedModel.providerID, id: selectedModel.modelID, variant },
+          files: nonTextParts.flatMap((part) =>
+            part.type === "file"
+              ? [
+                  {
+                    uri: part.url,
+                    name: part.filename,
+                    source: part.source
+                      ? {
+                          start: part.source.text.start,
+                          end: part.source.text.end,
+                          text: part.source.text.value,
+                        }
+                      : undefined,
+                  },
+                ]
+              : [],
+          ),
+          agents: nonTextParts.flatMap((part) =>
+            part.type === "agent"
+              ? [
+                  {
+                    name: part.name,
+                    source: part.source
+                      ? { start: part.source.start, end: part.source.end, text: part.source.value }
+                      : undefined,
+                  },
+                ]
+              : [],
+          ),
+        })
+        .catch((error) => {
+          toast.show({ title: "Failed to run command", message: errorMessage(error), variant: "error" })
+        })
     } else if (
       inputText.startsWith("/") &&
       (data.location.skill.list(currentLocation()) ?? []).some(

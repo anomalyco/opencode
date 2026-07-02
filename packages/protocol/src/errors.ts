@@ -89,6 +89,24 @@ export class SkillNotFoundError extends Schema.TaggedErrorClass<SkillNotFoundErr
   { httpApiStatus: 404 },
 ) {}
 
+export class CommandNotFoundError extends Schema.TaggedErrorClass<CommandNotFoundError>()(
+  "CommandNotFoundError",
+  {
+    command: Schema.String,
+    message: Schema.String,
+  },
+  { httpApiStatus: 404 },
+) {}
+
+export class CommandEvaluationError extends Schema.TaggedErrorClass<CommandEvaluationError>()(
+  "CommandEvaluationError",
+  {
+    command: Schema.String,
+    message: Schema.String,
+  },
+  { httpApiStatus: 500 },
+) {}
+
 export class InvalidCursorError extends Schema.TaggedErrorClass<InvalidCursorError>()(
   "InvalidCursorError",
   { message: Schema.String },

@@ -2,6 +2,7 @@ export * as MCP from "./index"
 
 import { Mcp } from "@opencode-ai/schema/mcp"
 import { McpEvent } from "@opencode-ai/schema/mcp-event"
+import { Command } from "@opencode-ai/schema/command"
 import { createHash } from "node:crypto"
 import { Cause, Context, Deferred, Effect, Exit, FiberSet, Layer, Schema, Scope, Stream } from "effect"
 import { makeLocationNode } from "../effect/app-node"
@@ -139,6 +140,7 @@ type ServerEntry = {
   scope?: Scope.Closeable
   client?: MCPClient.Connection
   tools?: ReadonlyArray<Tool>
+  prompts?: ReadonlyArray<Prompt>
   // Set when a remote server is registered as an OAuth integration; the credential lives in the global store.
   integrationID?: Integration.ID
 }
@@ -309,11 +311,37 @@ export const layer = Layer.effect(
     const toTool = (server: ServerName, def: MCPClient.ToolDefinition) =>
       new Tool({ server, name: def.name, description: def.description, inputSchema: def.inputSchema })
 
+    const toPrompt = (server: ServerName, def: MCPClient.PromptDefinition) =>
+      new Prompt({
+        server,
+        name: def.name,
+        description: def.description,
+        arguments: def.arguments?.map(
+          (argument) =>
+            new PromptArgument({
+              name: argument.name,
+              description: argument.description,
+              required: argument.required,
+            }),
+        ),
+      })
+
     const refreshTools = (name: ServerName, entry: ServerEntry, connection: MCPClient.Connection) =>
       connection.tools().pipe(
         Effect.map((defs) => {
           entry.tools = defs.map((def) => toTool(name, def))
         }),
+      )
+
+    const refreshPrompts = (name: ServerName, entry: ServerEntry, connection: MCPClient.Connection) =>
+      connection.prompts().pipe(
+        Effect.map((defs) => {
+          entry.prompts = defs.map((def) => toPrompt(name, def))
+        }),
+        Effect.andThen(events.publish(Command.Event.Updated, {})),
+        Effect.catch(() =>
+          Effect.sync(() => (entry.prompts = [])).pipe(Effect.andThen(events.publish(Command.Event.Updated, {}))),
+        ),
       )
 
     const watch = (name: ServerName, entry: ServerEntry, connection: MCPClient.Connection) => {
@@ -323,8 +351,10 @@ export const layer = Layer.effect(
         if (entry.client !== connection) return
         entry.client = undefined
         entry.tools = undefined
+        entry.prompts = undefined
         entry.status = { status: "failed", error: "Connection closed" }
         fork(events.publish(McpEvent.ToolsChanged, { server: name }).pipe(Effect.ignore))
+        fork(events.publish(Command.Event.Updated, {}).pipe(Effect.ignore))
         fork(events.publish(McpEvent.StatusChanged, { server: name }).pipe(Effect.ignore))
       })
       connection.onLog((message) => fork(serverLog(name, message).pipe(Effect.ignore)))
@@ -335,6 +365,9 @@ export const layer = Layer.effect(
             Effect.ignore,
           ),
         )
+      })
+      connection.onPromptsChanged(() => {
+        fork(refreshPrompts(name, entry, connection).pipe(Effect.ignore))
       })
     }
 
@@ -364,13 +397,14 @@ export const layer = Layer.effect(
         // List tools as part of connect so a failure here marks the server failed rather than
         // leaving it connected with a silently empty tool list and no path to recover.
         const result = yield* MCPClient.connect(name, entry.config, location.directory, authProvider).pipe(
-          Effect.flatMap((connection) => connection.tools().pipe(Effect.map((defs) => ({ connection, defs })))),
+          Effect.flatMap((connection) => connection.tools().pipe(Effect.map((tools) => ({ connection, tools })))),
           Scope.provide(scope),
           Effect.exit,
         )
         if (Exit.isSuccess(result)) {
           entry.client = result.value.connection
-          entry.tools = result.value.defs.map((def) => toTool(name, def))
+          entry.tools = result.value.tools.map((def) => toTool(name, def))
+          entry.prompts = []
           entry.status = { status: "connected" }
           watch(name, entry, result.value.connection)
           yield* Effect.logInfo("mcp connected", { server: name, tools: entry.tools.length })
@@ -379,6 +413,7 @@ export const layer = Layer.effect(
           // stay invisible to the model.
           yield* events.publish(McpEvent.ToolsChanged, { server: name }).pipe(Effect.ignore)
           yield* events.publish(McpEvent.StatusChanged, { server: name }).pipe(Effect.ignore)
+          fork(refreshPrompts(name, entry, result.value.connection).pipe(Effect.ignore))
           return
         }
         yield* Scope.close(scope, Exit.void)
@@ -416,6 +451,8 @@ export const layer = Layer.effect(
           entry.scope = undefined
           entry.client = undefined
           entry.tools = undefined
+          entry.prompts = undefined
+          yield* events.publish(Command.Event.Updated, {}).pipe(Effect.ignore)
         }
         yield* startServer(name, entry)
       })
@@ -489,12 +526,25 @@ export const layer = Layer.effect(
           .toSorted((a, b) => a.server.localeCompare(b.server))
       }),
       prompts: Effect.fn("MCP.prompts")(function* () {
-        yield* whenAllReady
-        return []
+        return Array.from(runtime.values())
+          .flatMap((entry) => entry.prompts ?? [])
+          .toSorted((a, b) => a.server.localeCompare(b.server) || a.name.localeCompare(b.name))
       }),
       prompt: Effect.fn("MCP.prompt")(function* (input) {
-        yield* gate(input.server)
-        return undefined
+        const target = yield* requireServer(input.server)
+        yield* Deferred.await(target.entry.startup)
+        if (!target.entry.client) return undefined
+        const result = yield* target.entry.client
+          .prompt({ name: input.name, args: input.args })
+          .pipe(Effect.catch(() => Effect.succeed(undefined)))
+        if (!result) return undefined
+        return new PromptResult({
+          server: target.name,
+          name: input.name,
+          messages: result.messages.map(
+            (message) => new PromptMessage({ role: message.role, content: message.content }),
+          ),
+        })
       }),
       resourceCatalog: Effect.fn("MCP.resourceCatalog")(function* () {
         yield* whenAllReady

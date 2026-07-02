@@ -6,6 +6,8 @@ import { Api } from "../api"
 import { SessionsCursor } from "@opencode-ai/protocol/groups/session"
 import {
   ConflictError,
+  CommandEvaluationError,
+  CommandNotFoundError,
   InvalidCursorError,
   MessageNotFoundError,
   ServiceUnavailableError,
@@ -201,6 +203,60 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                     new SessionNotFoundError({
                       sessionID: error.sessionID,
                       message: `Session not found: ${error.sessionID}`,
+                    }),
+                  ),
+                ),
+                Effect.catchTag("Session.PromptConflictError", (error) =>
+                  Effect.fail(
+                    new ConflictError({
+                      message: `Prompt message ID conflicts with an existing durable record: ${error.messageID}`,
+                      resource: error.messageID,
+                    }),
+                  ),
+                ),
+              ),
+          }
+        }),
+      )
+      .handle(
+        "session.command",
+        Effect.fn(function* (ctx) {
+          return {
+            data: yield* session
+              .command({
+                sessionID: ctx.params.sessionID,
+                id: ctx.payload.id,
+                command: ctx.payload.command,
+                arguments: ctx.payload.arguments,
+                agent: ctx.payload.agent,
+                model: ctx.payload.model,
+                files: ctx.payload.files,
+                agents: ctx.payload.agents,
+                delivery: ctx.payload.delivery,
+                resume: ctx.payload.resume,
+              })
+              .pipe(
+                Effect.catchTag("Session.NotFoundError", (error) =>
+                  Effect.fail(
+                    new SessionNotFoundError({
+                      sessionID: error.sessionID,
+                      message: `Session not found: ${error.sessionID}`,
+                    }),
+                  ),
+                ),
+                Effect.catchTag("Command.NotFoundError", (error) =>
+                  Effect.fail(
+                    new CommandNotFoundError({
+                      command: error.command,
+                      message: error.message,
+                    }),
+                  ),
+                ),
+                Effect.catchTag("Command.EvaluationError", (error) =>
+                  Effect.fail(
+                    new CommandEvaluationError({
+                      command: error.command,
+                      message: error.message,
                     }),
                   ),
                 ),

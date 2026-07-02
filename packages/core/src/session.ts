@@ -40,6 +40,7 @@ import { FSUtil } from "./fs-util"
 import { SessionDurable } from "@opencode-ai/schema/durable-event-manifest"
 import { SkillV2 } from "./skill"
 import { Job } from "./job"
+import { CommandV2 } from "./command"
 
 export const RevertState = Revert.State
 export type RevertState = Revert.State
@@ -130,6 +131,8 @@ export type Error =
   | PromptConflictError
   | BusyError
   | SkillNotFoundError
+  | CommandV2.NotFoundError
+  | CommandV2.EvaluationError
   | MessageNotFoundError
 
 export interface Interface {
@@ -175,6 +178,18 @@ export interface Interface {
     delivery?: SessionInput.Delivery
     resume?: boolean
   }) => Effect.Effect<SessionInput.Admitted, NotFoundError | PromptConflictError>
+  readonly command: (input: {
+    id?: SessionMessage.ID
+    sessionID: SessionSchema.ID
+    command: string
+    arguments?: string
+    agent?: string
+    model?: ModelV2.Ref
+    files?: PromptInput.Prompt["files"]
+    agents?: PromptInput.Prompt["agents"]
+    delivery?: SessionInput.Delivery
+    resume?: boolean
+  }) => Effect.Effect<SessionInput.Admitted, NotFoundError | PromptConflictError | CommandV2.NotFoundError | CommandV2.EvaluationError>
   readonly shell: (input: {
     id?: EventV2.ID
     sessionID: SessionSchema.ID
@@ -450,6 +465,37 @@ const layer = Layer.effect(
           }),
         ),
       ),
+      command: Effect.fn("V2Session.command")(function* (input) {
+        const session = yield* result.get(input.sessionID)
+        const commands = yield* CommandV2.Service.pipe(Effect.provide(locations.get(session.location)))
+        const command = yield* commands.get(input.command)
+        if (!command)
+          return yield* new CommandV2.NotFoundError({
+            command: input.command,
+            message: `Command not found: ${input.command}`,
+          })
+        const evaluated = yield* commands.evaluate({ name: input.command, arguments: input.arguments })
+
+        // TODO(v2 commands): decide whether command-level subtask/background execution belongs in v2 commands.
+        const agent = command.agent ?? input.agent
+        const commandAgent = yield* Effect.gen(function* () {
+          if (!command.agent) return undefined
+          const agents = yield* AgentV2.Service.pipe(Effect.provide(locations.get(session.location)))
+          return yield* agents.get(AgentV2.ID.make(command.agent))
+        })
+        const model = command.model ?? commandAgent?.model ?? input.model
+        if (agent !== undefined && session.agent !== AgentV2.ID.make(agent))
+          yield* result.switchAgent({ sessionID: input.sessionID, agent })
+        if (model !== undefined) yield* result.switchModel({ sessionID: input.sessionID, model })
+
+        return yield* result.prompt({
+          id: input.id,
+          sessionID: input.sessionID,
+          prompt: { text: evaluated.text, files: input.files, agents: input.agents },
+          delivery: input.delivery,
+          resume: input.resume,
+        })
+      }),
       shell: Effect.fn("V2Session.shell")(function* () {
         return yield* new OperationUnavailableError({ operation: "shell" })
       }),

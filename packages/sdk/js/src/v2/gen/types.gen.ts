@@ -64,6 +64,7 @@ export type Event =
   | EventPermissionV2Replied
   | EventPluginAdded
   | EventProjectDirectoriesUpdated
+  | EventCommandUpdated
   | EventSkillUpdated
   | EventFileWatcherUpdated
   | EventPtyCreated
@@ -1368,6 +1369,13 @@ export type GlobalEvent = {
         type: "project.directories.updated"
         properties: {
           projectID: string
+        }
+      }
+    | {
+        id: string
+        type: "command.updated"
+        properties: {
+          [key: string]: unknown
         }
       }
     | {
@@ -2834,6 +2842,18 @@ export type ConflictError = {
   resource?: string
 }
 
+export type CommandNotFoundError = {
+  _tag: "CommandNotFoundError"
+  command: string
+  message: string
+}
+
+export type CommandEvaluationError = {
+  _tag: "CommandEvaluationError"
+  command: string
+  message: string
+}
+
 export type SkillNotFoundError = {
   _tag: "SkillNotFoundError"
   skill: string
@@ -3073,6 +3093,7 @@ export type V2Event =
   | PermissionV2Replied
   | PluginAdded
   | ProjectDirectoriesUpdated
+  | CommandUpdated
   | SkillUpdated
   | FileWatcherUpdated
   | PtyCreated
@@ -4518,6 +4539,13 @@ export type SessionMessage =
   | SessionMessageShell
   | SessionMessageAssistant
   | SessionMessageCompaction
+
+export type SessionContextEntryKey = string
+
+export type SessionContextEntryInfo = {
+  key: SessionContextEntryKey
+  value: unknown
+}
 
 export type SessionNextAgentSwitched = {
   id: string
@@ -6040,6 +6068,23 @@ export type ProjectDirectoriesUpdated = {
   }
 }
 
+export type CommandUpdated = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "command.updated"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    [key: string]: unknown
+  }
+}
+
 export type SkillUpdated = {
   id: string
   metadata?: {
@@ -7437,6 +7482,14 @@ export type EventProjectDirectoriesUpdated = {
   type: "project.directories.updated"
   properties: {
     projectID: string
+  }
+}
+
+export type EventCommandUpdated = {
+  id: string
+  type: "command.updated"
+  properties: {
+    [key: string]: unknown
   }
 }
 
@@ -12445,6 +12498,61 @@ export type V2SessionPromptResponses = {
 
 export type V2SessionPromptResponse = V2SessionPromptResponses[keyof V2SessionPromptResponses]
 
+export type V2SessionCommandData = {
+  body: {
+    id?: string
+    command: string
+    arguments?: string
+    agent?: string
+    model?: ModelRef
+    files?: Array<PromptInputFileAttachment>
+    agents?: Array<PromptAgentAttachment>
+    delivery?: "steer" | "queue"
+    resume?: boolean
+  }
+  path: {
+    sessionID: string
+  }
+  query?: never
+  url: "/api/session/{sessionID}/command"
+}
+
+export type V2SessionCommandErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * SessionNotFoundError | CommandNotFoundError
+   */
+  404: CommandNotFoundError | SessionNotFoundError
+  /**
+   * ConflictError
+   */
+  409: ConflictError
+  /**
+   * CommandEvaluationError
+   */
+  500: CommandEvaluationError
+}
+
+export type V2SessionCommandError = V2SessionCommandErrors[keyof V2SessionCommandErrors]
+
+export type V2SessionCommandResponses = {
+  /**
+   * Success
+   */
+  200: {
+    data: SessionInputAdmitted
+  }
+}
+
+export type V2SessionCommandResponse = V2SessionCommandResponses[keyof V2SessionCommandResponses]
+
 export type V2SessionSkillData = {
   body: {
     id?: string
@@ -12781,6 +12889,121 @@ export type V2SessionContextResponses = {
 }
 
 export type V2SessionContextResponse = V2SessionContextResponses[keyof V2SessionContextResponses]
+
+export type V2SessionContextEntryListData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: never
+  url: "/api/session/{sessionID}/context-entry"
+}
+
+export type V2SessionContextEntryListErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * SessionNotFoundError
+   */
+  404: SessionNotFoundError
+}
+
+export type V2SessionContextEntryListError = V2SessionContextEntryListErrors[keyof V2SessionContextEntryListErrors]
+
+export type V2SessionContextEntryListResponses = {
+  /**
+   * Success
+   */
+  200: {
+    data: Array<SessionContextEntryInfo>
+  }
+}
+
+export type V2SessionContextEntryListResponse =
+  V2SessionContextEntryListResponses[keyof V2SessionContextEntryListResponses]
+
+export type V2SessionContextEntryRemoveData = {
+  body?: never
+  path: {
+    sessionID: string
+    key: SessionContextEntryKey
+  }
+  query?: never
+  url: "/api/session/{sessionID}/context-entry/{key}"
+}
+
+export type V2SessionContextEntryRemoveErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * SessionNotFoundError
+   */
+  404: SessionNotFoundError
+}
+
+export type V2SessionContextEntryRemoveError =
+  V2SessionContextEntryRemoveErrors[keyof V2SessionContextEntryRemoveErrors]
+
+export type V2SessionContextEntryRemoveResponses = {
+  /**
+   * <No Content>
+   */
+  204: void
+}
+
+export type V2SessionContextEntryRemoveResponse =
+  V2SessionContextEntryRemoveResponses[keyof V2SessionContextEntryRemoveResponses]
+
+export type V2SessionContextEntryPutData = {
+  body: {
+    value: unknown
+  }
+  path: {
+    sessionID: string
+    key: SessionContextEntryKey
+  }
+  query?: never
+  url: "/api/session/{sessionID}/context-entry/{key}"
+}
+
+export type V2SessionContextEntryPutErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * SessionNotFoundError
+   */
+  404: SessionNotFoundError
+}
+
+export type V2SessionContextEntryPutError = V2SessionContextEntryPutErrors[keyof V2SessionContextEntryPutErrors]
+
+export type V2SessionContextEntryPutResponses = {
+  /**
+   * <No Content>
+   */
+  204: void
+}
+
+export type V2SessionContextEntryPutResponse =
+  V2SessionContextEntryPutResponses[keyof V2SessionContextEntryPutResponses]
 
 export type V2SessionHistoryData = {
   body?: never

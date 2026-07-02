@@ -208,6 +208,9 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         case "agent.updated":
           void result.location.agent.refresh(event.location)
           break
+        case "command.updated":
+          void result.location.command.refresh(event.location)
+          break
         case "skill.updated":
           void result.location.skill.refresh(event.location)
           break
