@@ -824,6 +824,41 @@ Nested agent prompt`,
   }),
 )
 
+it.instance("substitutes {file:} tokens in markdown agent body", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* FSUtil.use.writeWithDirs(
+      path.join(test.directory, ".opencode", "agents", "python-coder.md"),
+      `---
+mode: subagent
+---
+{file:./skill.txt}`,
+    )
+    yield* FSUtil.use.writeWithDirs(path.join(test.directory, ".opencode", "agents", "skill.txt"), "Loaded from file")
+
+    const config = yield* Config.use.get()
+    expect(config.agent?.["python-coder"]?.prompt).toBe("Loaded from file")
+  }),
+)
+
+it.instance("falls back to frontmatter prompt when body is empty and substitutes {file:} tokens", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* FSUtil.use.writeWithDirs(
+      path.join(test.directory, ".opencode", "agents", "python-coder.md"),
+      `---
+mode: subagent
+prompt: "{file:./skill.txt}"
+---
+`,
+    )
+    yield* FSUtil.use.writeWithDirs(path.join(test.directory, ".opencode", "agents", "skill.txt"), "Frontmatter prompt")
+
+    const config = yield* Config.use.get()
+    expect(config.agent?.["python-coder"]?.prompt).toBe("Frontmatter prompt")
+  }),
+)
+
 it.instance("loads commands from .opencode/command (singular)", () =>
   Effect.gen(function* () {
     const test = yield* TestInstance
