@@ -51,11 +51,14 @@ export async function read() {
   }
 
   if (platform() === "win32" || release().includes("WSL")) {
+    // PowerShell 5.1 calls SetConsoleTitle() on startup, overwriting the TUI's title.
+    // Save and restore the console title to prevent permanent title change.
+    const savedTitle = platform() === "win32" ? process.title : undefined
     const script =
       "Add-Type -AssemblyName System.Windows.Forms; $img = [System.Windows.Forms.Clipboard]::GetImage(); if ($img) { $ms = New-Object System.IO.MemoryStream; $img.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png); [System.Convert]::ToBase64String($ms.ToArray()) }"
-    const image = await command("powershell.exe", ["-NonInteractive", "-NoProfile", "-command", script]).catch(() =>
-      Buffer.alloc(0),
-    )
+    const image = await command("powershell.exe", ["-NonInteractive", "-NoProfile", "-command", script])
+      .catch(() => Buffer.alloc(0))
+      .finally(() => { if (savedTitle) process.title = savedTitle })
     if (image.length) return { data: image.toString().trim(), mime: "image/png" }
   }
 
