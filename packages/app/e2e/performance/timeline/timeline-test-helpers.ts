@@ -21,7 +21,10 @@ export async function installTimelineSettings(page: Page) {
 
 export function mockStressTimeline(
   page: Page,
-  input?: { onMessages?: (input: { sessionID: string; before?: string; phase: "start" | "end" }) => void },
+  input?: {
+    onMessages?: (input: { sessionID: string; before?: string; phase: "start" | "end" }) => void
+    vcsDiff?: unknown[]
+  },
 ) {
   return mockOpenCodeServer(page, {
     sessions: fixture.sessions,
@@ -30,6 +33,7 @@ export function mockStressTimeline(
     project: fixture.project,
     pageMessages,
     onMessages: input?.onMessages,
+    vcsDiff: input?.vcsDiff,
   })
 }
 
