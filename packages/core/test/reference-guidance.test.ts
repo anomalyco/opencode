@@ -73,4 +73,41 @@ describe("ReferenceGuidance", () => {
       ),
     ),
   )
+
+  it.effect("announces added and removed references as deltas", () => {
+    const reference = (name: string, description: string) =>
+      new Reference.Info({
+        name,
+        path: AbsolutePath.make(`/${name}`),
+        description,
+        source: Reference.LocalSource.make({ type: "local", path: AbsolutePath.make(`/${name}`), description }),
+      })
+    let references = [reference("docs", "Use for product documentation")]
+    return Effect.gen(function* () {
+      const guidance = yield* ReferenceGuidance.Service
+      const initialized = yield* SystemContext.initialize(yield* guidance.load())
+
+      references = [reference("docs", "Use for product documentation"), reference("examples", "Use for examples")]
+      const added = yield* SystemContext.reconcile(yield* guidance.load(), initialized.applied)
+      expect(added).toMatchObject({
+        _tag: "Updated",
+        text: [
+          "New project references are available in addition to those previously listed:",
+          "  <reference>",
+          "    <name>examples</name>",
+          "    <path>/examples</path>",
+          "    <description>Use for examples</description>",
+          "  </reference>",
+        ].join("\n"),
+      })
+
+      references = [reference("examples", "Use for examples")]
+      expect(
+        yield* SystemContext.reconcile(yield* guidance.load(), added._tag === "Updated" ? added.applied : {}),
+      ).toMatchObject({
+        _tag: "Updated",
+        text: "The following project references are no longer available and must not be used: docs.",
+      })
+    }).pipe(Effect.provide(guidanceLayer(Layer.mock(Reference.Service, { list: () => Effect.succeed(references) }))))
+  })
 })

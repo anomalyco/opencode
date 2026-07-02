@@ -13,23 +13,49 @@ const Summary = Schema.Struct({
 })
 type Summary = typeof Summary.Type
 
+const entries = (skills: ReadonlyArray<Summary>) =>
+  skills.flatMap((skill) => [
+    "  <skill>",
+    `    <name>${skill.name}</name>`,
+    `    <description>${skill.description}</description>`,
+    "  </skill>",
+  ])
+
 const render = (skills: ReadonlyArray<Summary>) =>
   [
     "Skills provide specialized instructions and workflows for specific tasks.",
     "Use the skill tool to load a skill when a task matches its description.",
     ...(skills.length === 0
       ? ["No skills are currently available."]
+      : ["<available_skills>", ...entries(skills), "</available_skills>"]),
+  ].join("\n")
+
+const update = (previous: ReadonlyArray<Summary>, current: ReadonlyArray<Summary>) => {
+  const names = new Set(current.map((skill) => skill.name))
+  const previousByName = new Map(previous.map((skill) => [skill.name, skill]))
+  const added = current.filter((skill) => !previousByName.has(skill.name))
+  const removed = previous.filter((skill) => !names.has(skill.name))
+  const changed = current.filter((skill) => {
+    const before = previousByName.get(skill.name)
+    return before !== undefined && before.description !== skill.description
+  })
+  // Additions and removals render as small deltas; anything else restates the full list.
+  if (changed.length > 0 || (added.length === 0 && removed.length === 0))
+    return [
+      "The available skills have changed. This list supersedes the previous available skills list.",
+      render(current),
+    ].join("\n")
+  return [
+    ...(added.length === 0
+      ? []
+      : ["New skills are available in addition to those previously listed:", ...entries(added)]),
+    ...(removed.length === 0
+      ? []
       : [
-          "<available_skills>",
-          ...skills.flatMap((skill) => [
-            "  <skill>",
-            `    <name>${skill.name}</name>`,
-            `    <description>${skill.description}</description>`,
-            "  </skill>",
-          ]),
-          "</available_skills>",
+          `The following skills are no longer available and must not be used: ${removed.map((skill) => skill.name).join(", ")}.`,
         ]),
   ].join("\n")
+}
 
 export interface Interface {
   readonly load: (agent: AgentV2.Selection) => Effect.Effect<SystemContext.SystemContext>
@@ -61,11 +87,7 @@ const layer = Layer.effect(
           codec: Schema.toCodecJson(Schema.Array(Summary)),
           load: Effect.succeed(available),
           baseline: render,
-          update: (_previous, current) =>
-            [
-              "The available skills have changed. This list supersedes the previous available skills list.",
-              render(current),
-            ].join("\n"),
+          update,
           removed: () => "Skill guidance is no longer available. Do not use any previously listed skill.",
         })
       }),
