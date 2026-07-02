@@ -2,6 +2,7 @@ export * as MCP from "./index"
 
 import { Mcp } from "@opencode-ai/schema/mcp"
 import { McpEvent } from "@opencode-ai/schema/mcp-event"
+import { Command } from "@opencode-ai/schema/command"
 import { createHash } from "node:crypto"
 import { Cause, Context, Deferred, Effect, Exit, FiberSet, Layer, Schema, Scope, Stream } from "effect"
 import { makeLocationNode } from "../effect/app-node"
@@ -337,7 +338,10 @@ export const layer = Layer.effect(
         Effect.map((defs) => {
           entry.prompts = defs.map((def) => toPrompt(name, def))
         }),
-        Effect.catch(() => Effect.sync(() => (entry.prompts = []))),
+        Effect.andThen(events.publish(Command.Event.Updated, {})),
+        Effect.catch(() =>
+          Effect.sync(() => (entry.prompts = [])).pipe(Effect.andThen(events.publish(Command.Event.Updated, {}))),
+        ),
       )
 
     const watch = (name: ServerName, entry: ServerEntry, connection: MCPClient.Connection) => {
@@ -350,6 +354,7 @@ export const layer = Layer.effect(
         entry.prompts = undefined
         entry.status = { status: "failed", error: "Connection closed" }
         fork(events.publish(McpEvent.ToolsChanged, { server: name }).pipe(Effect.ignore))
+        fork(events.publish(Command.Event.Updated, {}).pipe(Effect.ignore))
         fork(events.publish(McpEvent.StatusChanged, { server: name }).pipe(Effect.ignore))
       })
       connection.onLog((message) => fork(serverLog(name, message).pipe(Effect.ignore)))
@@ -392,31 +397,23 @@ export const layer = Layer.effect(
         // List tools as part of connect so a failure here marks the server failed rather than
         // leaving it connected with a silently empty tool list and no path to recover.
         const result = yield* MCPClient.connect(name, entry.config, location.directory, authProvider).pipe(
-          Effect.flatMap((connection) =>
-            connection.tools().pipe(
-              Effect.flatMap((tools) =>
-                connection.prompts().pipe(
-                  Effect.catch(() => Effect.succeed([] as MCPClient.PromptDefinition[])),
-                  Effect.map((prompts) => ({ connection, prompts, tools })),
-                ),
-              ),
-            ),
-          ),
+          Effect.flatMap((connection) => connection.tools().pipe(Effect.map((tools) => ({ connection, tools })))),
           Scope.provide(scope),
           Effect.exit,
         )
         if (Exit.isSuccess(result)) {
           entry.client = result.value.connection
           entry.tools = result.value.tools.map((def) => toTool(name, def))
-          entry.prompts = result.value.prompts.map((def) => toPrompt(name, def))
+          entry.prompts = []
           entry.status = { status: "connected" }
           watch(name, entry, result.value.connection)
-          yield* Effect.logInfo("mcp connected", { server: name, prompts: entry.prompts.length, tools: entry.tools.length })
+          yield* Effect.logInfo("mcp connected", { server: name, tools: entry.tools.length })
           // Announce the new tool set so the tool registry registers it. A server that finishes connecting
           // after the initial registration sweep and emits no list-changed notification would otherwise
           // stay invisible to the model.
           yield* events.publish(McpEvent.ToolsChanged, { server: name }).pipe(Effect.ignore)
           yield* events.publish(McpEvent.StatusChanged, { server: name }).pipe(Effect.ignore)
+          fork(refreshPrompts(name, entry, result.value.connection).pipe(Effect.ignore))
           return
         }
         yield* Scope.close(scope, Exit.void)
@@ -455,6 +452,7 @@ export const layer = Layer.effect(
           entry.client = undefined
           entry.tools = undefined
           entry.prompts = undefined
+          yield* events.publish(Command.Event.Updated, {}).pipe(Effect.ignore)
         }
         yield* startServer(name, entry)
       })

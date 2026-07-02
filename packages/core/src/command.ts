@@ -5,9 +5,11 @@ import { Context, Effect, Layer, Schema, Types } from "effect"
 import { Command } from "@opencode-ai/schema/command"
 import { State } from "./state"
 import { MCP } from "./mcp/index"
+import { EventV2 } from "./event"
 
 export const Info = Command.Info
 export type Info = Command.Info
+export const Event = Command.Event
 
 export type Data = {
   commands: Map<string, Types.DeepMutable<Info>>
@@ -44,6 +46,7 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const mcp = yield* MCP.Service
+    const events = yield* EventV2.Service
     const state = State.create<Data, Draft>({
       initial: () => ({ commands: new Map() }),
       draft: (draft) => ({
@@ -59,6 +62,7 @@ const layer = Layer.effect(
           draft.commands.delete(name)
         },
       }),
+      finalize: () => events.publish(Event.Updated, {}).pipe(Effect.asVoid),
     })
     const staticCommand = (name: string) => state.get().commands.get(name) as Info | undefined
     const mcpCommands = Effect.fnUntraced(function* () {
@@ -167,4 +171,4 @@ const argsRegex = /(?:\[Image\s+\d+\]|"[^"]*"|'[^']*'|[^\s"']+)/gi
 const placeholderRegex = /\$(\d+)/g
 const quoteTrimRegex = /^["']|["']$/g
 
-export const node = makeLocationNode({ service: Service, layer, deps: [MCP.node] })
+export const node = makeLocationNode({ service: Service, layer, deps: [MCP.node, EventV2.node] })
