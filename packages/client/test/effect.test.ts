@@ -3,7 +3,7 @@ import { DateTime, Effect, Stream } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/unstable/http"
 import { AbsolutePath, Agent, Event, Location, Model, OpenCode, Prompt, Session, SessionMessage } from "../src/effect"
 
-const caughtUp = { type: "log.caught_up" as const, aggregateID: "ses_test", seq: Event.Seq.make(1) }
+const synced = { type: "log.synced" as const, aggregateID: "ses_test", seq: Event.Seq.make(1) }
 
 test("session.get returns the decoded Effect projection", async () => {
   const httpClient = HttpClient.make((request) =>
@@ -70,7 +70,7 @@ test("session methods retain decoded Effect inputs and outputs", async () => {
       return Effect.succeed(
         HttpClientResponse.fromWeb(
           request,
-          new Response(`data: ${JSON.stringify(modelSwitchedEvent)}\n\ndata: ${JSON.stringify(caughtUp)}\n\n`, {
+          new Response(`data: ${JSON.stringify(modelSwitchedEvent)}\n\ndata: ${JSON.stringify(synced)}\n\n`, {
             headers: { "content-type": "text/event-stream" },
           }),
         ),
@@ -149,11 +149,11 @@ test("session methods retain decoded Effect inputs and outputs", async () => {
   expect(result.context).toEqual([])
   expect(logQueries[0]).toEqual({ after: "0" })
   const logged = Array.from(result.log)
-  expect(logged.map((item) => item.type)).toEqual(["session.next.model.switched", "log.caught_up"])
+  expect(logged.map((item) => item.type)).toEqual(["session.next.model.switched", "log.synced"])
   expect(logged[0]?.type === "session.next.model.switched" && DateTime.toEpochMillis(logged[0].data.timestamp)).toBe(
     1_717_171_717_000,
   )
-  expect(logged.at(-1)).toEqual(caughtUp)
+  expect(logged.at(-1)).toEqual(synced)
   expect(result.message).toEqual(expect.objectContaining({ id: "msg_model", type: "model-switched" }))
 })
 

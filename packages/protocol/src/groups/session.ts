@@ -472,7 +472,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
           follow: BooleanFromString.pipe(Schema.optional),
         },
         success: HttpApiSchema.StreamSse({
-          data: Schema.Union([SessionEvent.Durable, EventLog.CaughtUp]).annotate({ identifier: "SessionLogItem" }),
+          data: Schema.Union([SessionEvent.Durable, EventLog.Synced]).annotate({ identifier: "SessionLogItem" }),
         }),
         error: SessionNotFoundError,
       })
@@ -482,7 +482,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
             identifier: "v2.session.log",
             summary: "Read the session log",
             description:
-              "Durable, ordered, gap-free read of public session events after an exclusive aggregate sequence. Emits a caught-up marker once the replay reaches the end of the log, then completes; with follow=true it continues with live events instead. The only event API that promises reliability: attach after a snapshot watermark to compose fetch and stream without a race window.",
+              "Durable, ordered, gap-free read of public session events after an exclusive aggregate sequence. Emits a synced marker once replay reaches the captured watermark, then completes; with follow=true it continues with live events instead. The only event API that promises reliability: attach after a snapshot watermark to compose fetch and stream without a race window.",
           }),
         ),
     )

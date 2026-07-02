@@ -4,7 +4,7 @@ import { Cause, Context, Effect, Layer, Option, PubSub, Queue, Schema, Stream } 
 import { Event } from "@opencode-ai/schema/event"
 import type { Data, Definition, Payload } from "@opencode-ai/schema/event"
 import type { EventLog } from "@opencode-ai/schema/event-log"
-import { and, asc, eq, gt, inArray, sql } from "drizzle-orm"
+import { and, asc, eq, gt, inArray, lte, sql } from "drizzle-orm"
 import { Database } from "./database/database"
 import { EventSequenceTable, EventTable } from "./event/sql"
 import { Location } from "./location"
@@ -104,9 +104,9 @@ export interface PublishOptions {
 }
 
 /** Marker/event union emitted by `log`. Markers carry no event `id`. */
-export type LogItem = Payload | EventLog.CaughtUp
+export type LogItem = Payload | EventLog.Synced
 
-export const isCaughtUp = (item: LogItem): item is EventLog.CaughtUp => !("id" in item)
+export const isSynced = (item: LogItem): item is EventLog.Synced => !("id" in item)
 
 export interface Interface {
   readonly publish: <D extends Definition>(
@@ -124,8 +124,8 @@ export interface Interface {
   /**
    * Durable, ordered, gap-free per-aggregate log read. `follow: false`
    * completes at the end of the log; `follow: true` replays then transitions
-   * to live. Both modes emit a `CaughtUp` marker at the replay boundary; the
-   * marker may be re-emitted after internal re-attaches.
+   * to live. Both modes emit one `Synced` marker at the captured replay
+   * watermark.
    */
   readonly log: (input: {
     readonly aggregateID: string
@@ -178,6 +178,8 @@ export interface LayerOptions {
    * buffer is abandoned and the subscriber is told to sweep.
    */
   readonly changesKeyCapacity?: number
+  /** Maximum durable rows read per page while replaying or tailing an aggregate log. */
+  readonly logReadPageSize?: number
 }
 
 export const layerWith = (options?: LayerOptions) =>
@@ -199,6 +201,7 @@ export const layerWith = (options?: LayerOptions) =>
         readonly wake: PubSub.PubSub<void>
       }>()
       const { db } = yield* Database.Service
+      const logReadPageSize = options?.logReadPageSize ?? 512
 
       const getOrCreate = (definition: Definition) =>
         Effect.gen(function* () {
@@ -573,15 +576,27 @@ export const layerWith = (options?: LayerOptions) =>
 
       const streamLive = (): Stream.Stream<Payload> => Stream.fromPubSub(pubsub.live)
 
-      const readAfter = (aggregateID: string, after: number) =>
+      const readAfter = (
+        aggregateID: string,
+        after: number,
+        input: { readonly through: number; readonly limit: number },
+      ) =>
         (options?.beforeAggregateRead?.(aggregateID) ?? Effect.void).pipe(
           Effect.andThen(
-            db
-              .select()
-              .from(EventTable)
-              .where(and(eq(EventTable.aggregate_id, aggregateID), gt(EventTable.seq, after)))
-              .orderBy(asc(EventTable.seq))
-              .all(),
+            Effect.suspend(() => {
+              const query = db
+                .select()
+                .from(EventTable)
+                .where(
+                  and(
+                    eq(EventTable.aggregate_id, aggregateID),
+                    gt(EventTable.seq, after),
+                    lte(EventTable.seq, input.through),
+                  ),
+                )
+                .orderBy(asc(EventTable.seq))
+              return query.limit(input.limit).all()
+            }),
           ),
           Effect.orDie,
           // Skip types missing from the durable manifest instead of failing the
@@ -632,28 +647,41 @@ export const layerWith = (options?: LayerOptions) =>
         Stream.unwrap(
           Effect.gen(function* () {
             let sequence = input.after ?? -1
-            const read = Effect.suspend(() => readAfter(input.aggregateID, sequence)).pipe(
-              Effect.tap((page) =>
-                Effect.sync(() => {
-                  sequence = page.seq ?? sequence
-                }),
-              ),
-              Effect.map((page) => page.events),
-            )
+            const readThrough = (through: number): Stream.Stream<Payload> =>
+              Stream.paginate(sequence, (cursor) =>
+                readAfter(input.aggregateID, cursor, { through, limit: logReadPageSize }).pipe(
+                  Effect.tap((page) =>
+                    Effect.sync(() => {
+                      sequence = page.seq ?? sequence
+                    }),
+                  ),
+                  Effect.map(
+                    (page) =>
+                      [
+                        page.events,
+                        page.seq !== undefined && page.seq < through ? Option.some(page.seq) : Option.none<number>(),
+                      ] as const,
+                  ),
+                ),
+              )
             // Subscribing before the historical read means events committed during
             // replay either appear in the read or arrive through a post-marker wake.
             const wakes = input.follow ? yield* subscribeDurable(input.aggregateID) : undefined
-            const historical = yield* read
-            const marker: EventLog.CaughtUp = {
-              type: "log.caught_up",
+            const target = yield* latestSequence(db, input.aggregateID)
+            const marker: EventLog.Synced = {
+              type: "log.synced",
               aggregateID: input.aggregateID,
-              ...(sequence >= 0 ? { seq: Seq.make(sequence) } : {}),
+              ...(target >= 0 ? { seq: Seq.make(target) } : {}),
             }
-            const replay = Stream.fromIterable<LogItem>(historical).pipe(Stream.concat(Stream.make(marker)))
+            const replay: Stream.Stream<LogItem> = readThrough(target).pipe(
+              Stream.map((event): LogItem => event),
+              Stream.concat(Stream.make(marker)),
+            )
             if (!wakes) return replay
-            const live = Stream.fromSubscription(wakes).pipe(
-              Stream.mapEffect(() => read),
-              Stream.flattenIterable,
+            const live: Stream.Stream<LogItem> = Stream.fromSubscription(wakes).pipe(
+              Stream.mapEffect(() => latestSequence(db, input.aggregateID)),
+              Stream.flatMap((target) => readThrough(target)),
+              Stream.map((event): LogItem => event),
             )
             return Stream.concat(replay, live)
           }),

@@ -85,7 +85,7 @@ it.live(
         )
         const wakeContext = yield* opencode.sessions.context({ sessionID: id })
         const event = yield* opencode.sessions.log({ sessionID: id }).pipe(
-          Stream.filter((item) => item.type !== "log.caught_up"),
+          Stream.filter((item) => item.type !== "log.synced"),
           Stream.take(1),
           Stream.runHead,
           Effect.map(Option.getOrUndefined),

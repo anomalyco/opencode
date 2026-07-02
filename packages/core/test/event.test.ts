@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Cause, DateTime, Deferred, Effect, Exit, Fiber, Layer, Option, Schema, Stream } from "effect"
+import { Cause, DateTime, Deferred, Effect, Exit, Fiber, Layer, Option, Ref, Schema, Stream } from "effect"
 import { EventV2 } from "@opencode-ai/core/event"
 import { Event } from "@opencode-ai/schema/event"
 import { Session } from "@opencode-ai/schema/session"
@@ -80,9 +80,7 @@ const durableData = (sessionID: Session.ID, text: string) => ({
 
 /** Followed log read without markers: the old `durable` stream shape. */
 const tail = (events: EventV2.Interface, input: { aggregateID: string; after?: number }) =>
-  events
-    .log({ ...input, follow: true })
-    .pipe(Stream.filter((item): item is EventV2.Payload => !EventV2.isCaughtUp(item)))
+  events.log({ ...input, follow: true }).pipe(Stream.filter((item): item is EventV2.Payload => !EventV2.isSynced(item)))
 
 const it = testEffect(
   AppNodeBuilder.build(LayerNode.group([Database.node, EventV2.node, Location.node]), [[Location.node, locationLayer]]),
@@ -1128,7 +1126,7 @@ describe("EventV2", () => {
     }),
   )
 
-  it.effect("log without follow replays events and completes with a caught-up marker", () =>
+  it.effect("log without follow replays events and completes with a synced marker", () =>
     Effect.gen(function* () {
       const events = yield* EventV2.Service
       const aggregateID = Session.ID.create()
@@ -1137,16 +1135,16 @@ describe("EventV2", () => {
 
       const items = Array.from(yield* Stream.runCollect(events.log({ aggregateID })))
 
-      expect(items.map((item) => (EventV2.isCaughtUp(item) ? item.type : item.durable?.seq))).toEqual([
+      expect(items.map((item) => (EventV2.isSynced(item) ? item.type : item.durable?.seq))).toEqual([
         EventV2.Seq.make(0),
         EventV2.Seq.make(1),
-        "log.caught_up",
+        "log.synced",
       ])
-      expect(items.at(-1)).toEqual({ type: "log.caught_up", aggregateID, seq: EventV2.Seq.make(1) })
+      expect(items.at(-1)).toEqual({ type: "log.synced", aggregateID, seq: EventV2.Seq.make(1) })
     }),
   )
 
-  it.effect("log caught-up marker omits seq for an empty log and keeps the cursor otherwise", () =>
+  it.effect("log synced marker omits seq for an empty log and keeps the cursor otherwise", () =>
     Effect.gen(function* () {
       const events = yield* EventV2.Service
       const aggregateID = Session.ID.create()
@@ -1155,13 +1153,13 @@ describe("EventV2", () => {
       yield* events.publish(DurableMessage, durableData(aggregateID, "zero"))
       const drained = Array.from(yield* Stream.runCollect(events.log({ aggregateID, after: 0 })))
 
-      expect(empty).toEqual([{ type: "log.caught_up", aggregateID }])
+      expect(empty).toEqual([{ type: "log.synced", aggregateID }])
       expect(empty[0]).not.toHaveProperty("seq")
-      expect(drained).toEqual([{ type: "log.caught_up", aggregateID, seq: EventV2.Seq.make(0) }])
+      expect(drained).toEqual([{ type: "log.synced", aggregateID, seq: EventV2.Seq.make(0) }])
     }),
   )
 
-  it.effect("log with follow emits the caught-up marker at the replay-to-live boundary", () =>
+  it.effect("log with follow emits the synced marker at the replay-to-live boundary", () =>
     Effect.gen(function* () {
       const events = yield* EventV2.Service
       const aggregateID = Session.ID.create()
@@ -1174,11 +1172,76 @@ describe("EventV2", () => {
       yield* events.publish(DurableMessage, durableData(aggregateID, "one"))
 
       const items = Array.from(yield* Fiber.join(fiber))
-      expect(items.map((item) => (EventV2.isCaughtUp(item) ? item : item.durable?.seq))).toEqual([
+      expect(items.map((item) => (EventV2.isSynced(item) ? item : item.durable?.seq))).toEqual([
         EventV2.Seq.make(0),
-        { type: "log.caught_up", aggregateID, seq: EventV2.Seq.make(0) },
+        { type: "log.synced", aggregateID, seq: EventV2.Seq.make(0) },
         EventV2.Seq.make(1),
       ])
+    }),
+  )
+
+  it.effect("log replays across configured read pages", () =>
+    Effect.gen(function* () {
+      const eventLayer = EventV2.layerWith({ logReadPageSize: 2 }).pipe(Layer.provide(LayerNode.compile(Database.node)))
+
+      yield* Effect.gen(function* () {
+        const events = yield* EventV2.Service
+        const aggregateID = Session.ID.create()
+        yield* events.publish(DurableMessage, durableData(aggregateID, "zero"))
+        yield* events.publish(DurableMessage, durableData(aggregateID, "one"))
+        yield* events.publish(DurableMessage, durableData(aggregateID, "two"))
+        yield* events.publish(DurableMessage, durableData(aggregateID, "three"))
+        yield* events.publish(DurableMessage, durableData(aggregateID, "four"))
+
+        const items = Array.from(yield* Stream.runCollect(events.log({ aggregateID })))
+
+        expect(items.map((item) => (EventV2.isSynced(item) ? item.type : item.durable?.seq))).toEqual([
+          EventV2.Seq.make(0),
+          EventV2.Seq.make(1),
+          EventV2.Seq.make(2),
+          EventV2.Seq.make(3),
+          EventV2.Seq.make(4),
+          "log.synced",
+        ])
+        expect(items.at(-1)).toEqual({ type: "log.synced", aggregateID, seq: EventV2.Seq.make(4) })
+      }).pipe(Effect.provide(Layer.merge(LayerNode.compile(Database.node), eventLayer)))
+    }),
+  )
+
+  it.effect("log with follow emits events committed during replay after the synced marker", () =>
+    Effect.gen(function* () {
+      const readStarted = yield* Deferred.make<void>()
+      const releaseRead = yield* Deferred.make<void>()
+      const firstRead = yield* Ref.make(true)
+      const eventLayer = EventV2.layerWith({
+        beforeAggregateRead: () =>
+          Ref.getAndSet(firstRead, false).pipe(
+            Effect.flatMap((shouldBlock) => {
+              if (!shouldBlock) return Effect.void
+              return Deferred.succeed(readStarted, undefined).pipe(Effect.andThen(Deferred.await(releaseRead)))
+            }),
+          ),
+      }).pipe(Layer.provide(LayerNode.compile(Database.node)))
+
+      yield* Effect.gen(function* () {
+        const events = yield* EventV2.Service
+        const aggregateID = Session.ID.create()
+        yield* events.publish(DurableMessage, durableData(aggregateID, "zero"))
+        const fiber = yield* events
+          .log({ aggregateID, follow: true })
+          .pipe(Stream.take(3), Stream.runCollect, Effect.forkScoped)
+
+        yield* Deferred.await(readStarted)
+        yield* events.publish(DurableMessage, durableData(aggregateID, "one"))
+        yield* Deferred.succeed(releaseRead, undefined)
+
+        const items = Array.from(yield* Fiber.join(fiber))
+        expect(items.map((item) => (EventV2.isSynced(item) ? item : item.durable?.seq))).toEqual([
+          EventV2.Seq.make(0),
+          { type: "log.synced", aggregateID, seq: EventV2.Seq.make(0) },
+          EventV2.Seq.make(1),
+        ])
+      }).pipe(Effect.provide(Layer.merge(LayerNode.compile(Database.node), eventLayer)))
     }),
   )
 

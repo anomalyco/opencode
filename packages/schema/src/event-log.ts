@@ -6,20 +6,19 @@ import { optional } from "./schema.js"
 
 /**
  * Replay-to-live boundary marker for a durable log read. The reader now holds
- * every event committed at or below `seq`; `seq` is absent when the log holds
- * no events at or before the read position. May be re-emitted after the
- * reader internally re-attaches.
+ * every event committed at or below this watermark; `seq` is absent when the
+ * captured watermark is empty. Emitted once for the captured watermark.
  */
-export const CaughtUp = Schema.Struct({
-  type: Schema.Literal("log.caught_up"),
+export const Synced = Schema.Struct({
+  type: Schema.Literal("log.synced"),
   aggregateID: Schema.String,
   seq: optional(Event.Seq),
 }).annotate({
-  identifier: "EventLog.CaughtUp",
+  identifier: "EventLog.Synced",
   description:
-    "Marker emitted when a log read transitions from replay to live (or completes a finite read). The reader holds every event committed at or below seq.",
+    "Marker emitted once when a log read reaches its captured watermark. The reader holds every event committed at or below seq.",
 })
-export interface CaughtUp extends Schema.Schema.Type<typeof CaughtUp> {}
+export interface Synced extends Schema.Schema.Type<typeof Synced> {}
 
 /**
  * A payload-free doorbell: the aggregate's log advanced to at least `seq`.

@@ -162,8 +162,9 @@ export interface Interface {
   ) => Effect.Effect<SessionMessage.Message[], NotFoundError | MessageDecodeError>
   /**
    * Durable, ordered, gap-free session log read. Replays public durable
-   * session events after the exclusive `after` cursor, emits a `CaughtUp`
-   * marker at the replay boundary, then continues live when `follow` is set.
+   * session events after the exclusive `after` cursor, emits a `Synced`
+   * marker at the captured replay watermark, then continues live when `follow`
+   * is set.
    * The marker's seq may exceed the last emitted event because non-public
    * durable events share the aggregate's sequence space.
    */
@@ -171,7 +172,7 @@ export interface Interface {
     sessionID: SessionSchema.ID
     after?: number
     follow?: boolean
-  }) => Stream.Stream<SessionEvent.DurableEvent | EventLog.CaughtUp, NotFoundError>
+  }) => Stream.Stream<SessionEvent.DurableEvent | EventLog.Synced, NotFoundError>
   /** Latest durable log seq per session. Sessions without events are absent. */
   readonly watermarks: (sessionIDs: ReadonlyArray<SessionSchema.ID>) => Effect.Effect<ReadonlyMap<string, EventV2.Seq>>
   readonly switchAgent: (input: { sessionID: SessionSchema.ID; agent: string }) => Effect.Effect<void, NotFoundError>
@@ -450,8 +451,8 @@ const layer = Layer.effect(
             .pipe(Effect.as(events.log({ aggregateID: input.sessionID, after: input.after, follow: input.follow }))),
         ).pipe(
           Stream.filter(
-            (item): item is SessionEvent.DurableEvent | EventLog.CaughtUp =>
-              EventV2.isCaughtUp(item) || isDurableSessionEvent(item),
+            (item): item is SessionEvent.DurableEvent | EventLog.Synced =>
+              EventV2.isSynced(item) || isDurableSessionEvent(item),
           ),
         ),
       watermarks: Effect.fn("V2Session.watermarks")(function* (sessionIDs) {

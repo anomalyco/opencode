@@ -6,7 +6,6 @@ import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventV2 } from "@opencode-ai/core/event"
 import { EventTable } from "@opencode-ai/core/event/sql"
-import { Job } from "@opencode-ai/core/job"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
@@ -248,7 +247,7 @@ describe("SessionV2.prompt", () => {
       const publicEvents = (input: { sessionID: SessionV2.ID; after?: number }) =>
         session
           .log({ ...input, follow: true })
-          .pipe(Stream.filter((item): item is SessionEvent.DurableEvent => !EventV2.isCaughtUp(item)))
+          .pipe(Stream.filter((item): item is SessionEvent.DurableEvent => !EventV2.isSynced(item)))
       const fiber = yield* publicEvents({ sessionID }).pipe(Stream.take(4), Stream.runCollect, Effect.forkScoped)
       yield* Effect.yieldNow
 
@@ -265,7 +264,7 @@ describe("SessionV2.prompt", () => {
       ])
       expect(
         Array.from(
-          yield* publicEvents({ sessionID, after: streamed[0]!.durable?.seq }).pipe(Stream.take(1), Stream.runCollect),
+          yield* publicEvents({ sessionID, after: streamed[0].durable?.seq }).pipe(Stream.take(1), Stream.runCollect),
         ).map((event): [number | undefined, string] => [event.durable?.seq, event.type]),
       ).toEqual([[1, "session.next.prompt.admitted"]])
     }),

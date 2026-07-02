@@ -8,7 +8,6 @@ import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventV2 } from "@opencode-ai/core/event"
 import { EventTable } from "@opencode-ai/core/event/sql"
-import { Job } from "@opencode-ai/core/job"
 import { Location } from "@opencode-ai/core/location"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProjectV2 } from "@opencode-ai/core/project"
@@ -49,11 +48,11 @@ const it = testEffect(
 const location = Location.Ref.make({ directory: AbsolutePath.make("/project") })
 const id = SessionV2.ID.create()
 
-/** Public session events from a `log` read, without caught-up markers. */
+/** Public session events from a `log` read, without synced markers. */
 const logEvents = (session: SessionV2.Interface, sessionID: SessionV2.ID, follow?: boolean) =>
   session
     .log({ sessionID, follow })
-    .pipe(Stream.filter((item): item is SessionEvent.DurableEvent => !EventV2.isCaughtUp(item)))
+    .pipe(Stream.filter((item): item is SessionEvent.DurableEvent => !EventV2.isSynced(item)))
 
 const assertCreateInputTypes = (session: SessionV2.Interface) => {
   // @ts-expect-error location or parentID is required.
@@ -166,7 +165,7 @@ describe("SessionV2.create", () => {
         durable: { seq: 0 },
         data: { sessionID: forked.id, parentID: parent.id },
       })
-      expect(yield* SessionInput.find(db, forkContext[0]!.id)).toMatchObject({
+      expect(yield* SessionInput.find(db, forkContext[0].id)).toMatchObject({
         sessionID: forked.id,
         prompt: { text: "First" },
         promotedSeq: 2,

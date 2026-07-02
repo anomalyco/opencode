@@ -35,7 +35,7 @@ const it = testEffect(
 const location = Location.Ref.make({ directory: AbsolutePath.make("/project") })
 
 describe("SessionV2.log", () => {
-  it.effect("replays public session events and marks caught-up at the aggregate watermark", () =>
+  it.effect("replays public session events and marks synced at the aggregate watermark", () =>
     Effect.gen(function* () {
       const session = yield* SessionV2.Service
       const events = yield* EventV2.Service
@@ -47,8 +47,8 @@ describe("SessionV2.log", () => {
 
       // Session creation commits a non-public durable event, so the marker's
       // seq covers more of the aggregate than the public events emitted.
-      expect(items.map((item) => item.type)).toEqual(["session.next.renamed", "log.caught_up"])
-      expect(items.at(-1)).toEqual({ type: "log.caught_up", aggregateID: created.id, seq: watermark })
+      expect(items.map((item) => item.type)).toEqual(["session.next.renamed", "log.synced"])
+      expect(items.at(-1)).toEqual({ type: "log.synced", aggregateID: created.id, seq: watermark })
     }),
   )
 
@@ -64,7 +64,7 @@ describe("SessionV2.log", () => {
       yield* session.rename({ sessionID: created.id, title: "renamed live" })
 
       const items = Array.from(yield* Fiber.join(fiber))
-      expect(items.map((item) => item.type)).toEqual(["log.caught_up", "session.next.renamed"])
+      expect(items.map((item) => item.type)).toEqual(["log.synced", "session.next.renamed"])
     }),
   )
 
@@ -95,13 +95,13 @@ describe("SessionV2.log", () => {
       const items = Array.from(yield* Stream.runCollect(session.log({ sessionID: created.id, after: 1 })))
 
       expect(
-        items.map((item): number | string | undefined => (EventV2.isCaughtUp(item) ? item.type : item.durable?.seq)),
-      ).toEqual([3, 4, "log.caught_up"])
-      expect(items.at(-1)).toEqual({ type: "log.caught_up", aggregateID: created.id, seq: EventV2.Seq.make(4) })
+        items.map((item): number | string | undefined => (EventV2.isSynced(item) ? item.type : item.durable?.seq)),
+      ).toEqual([3, 4, "log.synced"])
+      expect(items.at(-1)).toEqual({ type: "log.synced", aggregateID: created.id, seq: EventV2.Seq.make(4) })
     }),
   )
 
-  it.effect("completes with a bare caught-up marker for a migrated Session with no event sequence", () =>
+  it.effect("completes with a bare synced marker for a migrated Session with no event sequence", () =>
     Effect.gen(function* () {
       const db = (yield* Database.Service).db
       const session = yield* SessionV2.Service
@@ -125,7 +125,7 @@ describe("SessionV2.log", () => {
 
       const items = Array.from(yield* Stream.runCollect(session.log({ sessionID })))
 
-      expect(items).toEqual([{ type: "log.caught_up", aggregateID: sessionID }])
+      expect(items).toEqual([{ type: "log.synced", aggregateID: sessionID }])
     }),
   )
 })
