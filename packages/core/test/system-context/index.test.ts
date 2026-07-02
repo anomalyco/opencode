@@ -301,6 +301,39 @@ describe("SystemContext", () => {
     }),
   )
 
+  it.effect("diffs list values by key with a changed comparator", () =>
+    Effect.sync(() => {
+      const previous = [
+        { name: "effect", description: "Build with Effect" },
+        { name: "debugging", description: "Diagnose bugs" },
+        { name: "retired", description: "Old" },
+      ]
+      const current = [
+        { name: "effect", description: "Build with Effect v4" },
+        { name: "debugging", description: "Diagnose bugs" },
+        { name: "writing", description: "Write prose" },
+      ]
+
+      expect(
+        SystemContext.diffByKey(
+          previous,
+          current,
+          (value) => value.name,
+          (before, after) => before.description !== after.description,
+        ),
+      ).toEqual({
+        added: [{ name: "writing", description: "Write prose" }],
+        removed: [{ name: "retired", description: "Old" }],
+        changed: [
+          {
+            previous: { name: "effect", description: "Build with Effect" },
+            current: { name: "effect", description: "Build with Effect v4" },
+          },
+        ],
+      })
+    }),
+  )
+
   it.effect("rejects duplicate source keys", () =>
     Effect.sync(() => {
       expect(() =>

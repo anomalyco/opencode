@@ -153,6 +153,32 @@ export function make<A>(source: Source<A>): SystemContext {
   ])
 }
 
+/**
+ * Keyed three-way diff for list-shaped sources rendering delta updates.
+ * `changed` compares two values sharing a key; entries equal under it are dropped.
+ */
+export function diffByKey<A>(
+  previous: ReadonlyArray<A>,
+  current: ReadonlyArray<A>,
+  key: (value: A) => string,
+  changed: (previous: A, current: A) => boolean,
+): {
+  readonly added: ReadonlyArray<A>
+  readonly removed: ReadonlyArray<A>
+  readonly changed: ReadonlyArray<{ readonly previous: A; readonly current: A }>
+} {
+  const currentKeys = new Set(current.map(key))
+  const previousByKey = new Map(previous.map((value) => [key(value), value] as const))
+  return {
+    added: current.filter((value) => !previousByKey.has(key(value))),
+    removed: previous.filter((value) => !currentKeys.has(key(value))),
+    changed: current.flatMap((value) => {
+      const before = previousByKey.get(key(value))
+      return before === undefined || !changed(before, value) ? [] : [{ previous: before, current: value }]
+    }),
+  }
+}
+
 /** Combines contexts in order and rejects duplicate source keys immediately. */
 export function combine(values: ReadonlyArray<SystemContext>): SystemContext {
   const sources = values.flatMap((value) => value[ContextTypeId])

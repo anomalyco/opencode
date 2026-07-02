@@ -25,28 +25,26 @@ const render = (servers: ReadonlyArray<Summary>) =>
   ["<mcp_instructions>", ...entries(servers), "</mcp_instructions>"].join("\n")
 
 const update = (previous: ReadonlyArray<Summary>, current: ReadonlyArray<Summary>) => {
-  const names = new Set(current.map((server) => server.server))
-  const previousByName = new Map(previous.map((server) => [server.server, server]))
-  const added = current.filter((server) => !previousByName.has(server.server))
-  const removed = previous.filter((server) => !names.has(server.server))
-  const changed = current.filter((server) => {
-    const before = previousByName.get(server.server)
-    return before !== undefined && before.instructions !== server.instructions
-  })
+  const diff = SystemContext.diffByKey(
+    previous,
+    current,
+    (server) => server.server,
+    (before, after) => before.instructions !== after.instructions,
+  )
   // Additions and removals render as small deltas; anything else restates the full list.
-  if (changed.length > 0 || (added.length === 0 && removed.length === 0))
+  if (diff.changed.length > 0 || (diff.added.length === 0 && diff.removed.length === 0))
     return [
       "The available MCP server instructions have changed. This list supersedes the previous one.",
       render(current),
     ].join("\n")
   return [
-    ...(added.length === 0
+    ...(diff.added.length === 0
       ? []
-      : ["New MCP server instructions are available in addition to those previously listed:", ...entries(added)]),
-    ...(removed.length === 0
+      : ["New MCP server instructions are available in addition to those previously listed:", ...entries(diff.added)]),
+    ...(diff.removed.length === 0
       ? []
       : [
-          `Instructions for the following MCP servers are no longer available: ${removed.map((server) => server.server).join(", ")}.`,
+          `Instructions for the following MCP servers are no longer available: ${diff.removed.map((server) => server.server).join(", ")}.`,
         ]),
   ].join("\n")
 }

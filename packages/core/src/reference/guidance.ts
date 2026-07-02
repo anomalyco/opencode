@@ -29,28 +29,26 @@ const render = (references: ReadonlyArray<typeof Summary.Type>) =>
   ].join("\n")
 
 const update = (previous: ReadonlyArray<typeof Summary.Type>, current: ReadonlyArray<typeof Summary.Type>) => {
-  const names = new Set(current.map((reference) => reference.name))
-  const previousByName = new Map(previous.map((reference) => [reference.name, reference]))
-  const added = current.filter((reference) => !previousByName.has(reference.name))
-  const removed = previous.filter((reference) => !names.has(reference.name))
-  const changed = current.filter((reference) => {
-    const before = previousByName.get(reference.name)
-    return before !== undefined && (before.path !== reference.path || before.description !== reference.description)
-  })
+  const diff = SystemContext.diffByKey(
+    previous,
+    current,
+    (reference) => reference.name,
+    (before, after) => before.path !== after.path || before.description !== after.description,
+  )
   // Additions and removals render as small deltas; anything else restates the full list.
-  if (changed.length > 0 || (added.length === 0 && removed.length === 0))
+  if (diff.changed.length > 0 || (diff.added.length === 0 && diff.removed.length === 0))
     return [
       "The available project references have changed. This list supersedes the previous reference list.",
       render(current),
     ].join("\n")
   return [
-    ...(added.length === 0
+    ...(diff.added.length === 0
       ? []
-      : ["New project references are available in addition to those previously listed:", ...entries(added)]),
-    ...(removed.length === 0
+      : ["New project references are available in addition to those previously listed:", ...entries(diff.added)]),
+    ...(diff.removed.length === 0
       ? []
       : [
-          `The following project references are no longer available and must not be used: ${removed.map((reference) => reference.name).join(", ")}.`,
+          `The following project references are no longer available and must not be used: ${diff.removed.map((reference) => reference.name).join(", ")}.`,
         ]),
   ].join("\n")
 }

@@ -31,28 +31,26 @@ const render = (skills: ReadonlyArray<Summary>) =>
   ].join("\n")
 
 const update = (previous: ReadonlyArray<Summary>, current: ReadonlyArray<Summary>) => {
-  const names = new Set(current.map((skill) => skill.name))
-  const previousByName = new Map(previous.map((skill) => [skill.name, skill]))
-  const added = current.filter((skill) => !previousByName.has(skill.name))
-  const removed = previous.filter((skill) => !names.has(skill.name))
-  const changed = current.filter((skill) => {
-    const before = previousByName.get(skill.name)
-    return before !== undefined && before.description !== skill.description
-  })
+  const diff = SystemContext.diffByKey(
+    previous,
+    current,
+    (skill) => skill.name,
+    (before, after) => before.description !== after.description,
+  )
   // Additions and removals render as small deltas; anything else restates the full list.
-  if (changed.length > 0 || (added.length === 0 && removed.length === 0))
+  if (diff.changed.length > 0 || (diff.added.length === 0 && diff.removed.length === 0))
     return [
       "The available skills have changed. This list supersedes the previous available skills list.",
       render(current),
     ].join("\n")
   return [
-    ...(added.length === 0
+    ...(diff.added.length === 0
       ? []
-      : ["New skills are available in addition to those previously listed:", ...entries(added)]),
-    ...(removed.length === 0
+      : ["New skills are available in addition to those previously listed:", ...entries(diff.added)]),
+    ...(diff.removed.length === 0
       ? []
       : [
-          `The following skills are no longer available and must not be used: ${removed.map((skill) => skill.name).join(", ")}.`,
+          `The following skills are no longer available and must not be used: ${diff.removed.map((skill) => skill.name).join(", ")}.`,
         ]),
   ].join("\n")
 }
