@@ -36,7 +36,7 @@ describe("AnthropicPlugin", () => {
         })
         catalog.provider.update(item.id, (draft) => {
           draft.api = item.api
-          draft.request = item.request
+          draft.request = { settings: {}, headers: { Existing: "1" }, body: {} }
         })
       })
       yield* addPlugin()

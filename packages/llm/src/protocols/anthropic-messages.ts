@@ -508,11 +508,13 @@ const lowerThinking = Effect.fn("AnthropicMessages.lowerThinking")(function* (re
   const thinking = anthropicOptions(request)?.thinking
   if (!ProviderShared.isRecord(thinking)) return undefined
   if (thinking.type === "adaptive") {
-    const display = thinking.display
-    return {
-      type: "adaptive" as const,
-      ...(display === "summarized" || display === "omitted" ? { display } : {}),
-    }
+    const display =
+      thinking.display === "summarized"
+        ? ("summarized" as const)
+        : thinking.display === "omitted"
+          ? ("omitted" as const)
+          : undefined
+    return { type: "adaptive" as const, ...(display === undefined ? {} : { display }) }
   }
   if (thinking.type === "disabled") return { type: "disabled" as const }
   if (thinking.type !== "enabled") return undefined

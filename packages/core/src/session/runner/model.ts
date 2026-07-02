@@ -103,7 +103,9 @@ const withDefaults = (model: ModelV2.Info, route: AnyRoute) => {
   })
 }
 
-const providerOptions = (model: ModelV2.Info) => {
+const providerOptions = (
+  model: ModelV2.Info,
+): { readonly [key: string]: { readonly [key: string]: unknown } } | undefined => {
   if (Object.keys(model.request.settings).length === 0) return undefined
   if (model.api.type !== "aisdk") return undefined
   if (model.api.package === "@ai-sdk/openai") return { openai: model.request.settings }

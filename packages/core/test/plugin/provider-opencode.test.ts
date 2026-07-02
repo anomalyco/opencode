@@ -373,7 +373,7 @@ describe("OpencodePlugin", () => {
             cost: cost(1),
           })
           catalog.provider.update(provider.id, (draft) => {
-            draft.request = provider.request
+            draft.request = { settings: {}, headers: {}, body: { apiKey: "configured" } }
           })
           catalog.model.update(provider.id, model.id, (draft) => {
             draft.cost = [...model.cost]

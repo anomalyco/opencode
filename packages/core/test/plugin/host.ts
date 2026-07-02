@@ -279,7 +279,11 @@ function agentInfo(value: AgentV2.Info) {
   return {
     ...value,
     model: value.model && { ...value.model },
-    request: { headers: { ...value.request.headers }, body: { ...value.request.body } },
+    request: {
+      settings: { ...value.request.settings },
+      headers: { ...value.request.headers },
+      body: { ...value.request.body },
+    },
     permissions: value.permissions.map((permission) => ({ ...permission })),
   }
 }
@@ -288,7 +292,11 @@ function providerInfo(value: ProviderV2.MutableInfo) {
   return {
     ...value,
     api: { ...value.api, settings: value.api.settings && { ...value.api.settings } },
-    request: { settings: { ...value.request.settings }, headers: { ...value.request.headers }, body: { ...value.request.body } },
+    request: {
+      settings: { ...value.request.settings },
+      headers: { ...value.request.headers },
+      body: { ...value.request.body },
+    },
   }
 }
 
