@@ -32,9 +32,7 @@ export function classifySessionSwitch(samples: SessionSwitchSample[]) {
     reviewFileHostMissingSamples: samples.filter((sample) => sample.review && !sample.review.fileHost).length,
     reviewFileHostReplacedSamples: samples.filter((sample) => sample.review?.fileHostReplaced).length,
     reviewHeaders: [...new Set(samples.flatMap((sample) => (sample.review ? [sample.review.header] : [])))],
-    reviewReplacedLevels: [
-      ...new Set(samples.flatMap((sample) => sample.review?.replacedLevels ?? [])),
-    ],
+    reviewReplacedLevels: [...new Set(samples.flatMap((sample) => sample.review?.replacedLevels ?? []))],
   }
 }
 

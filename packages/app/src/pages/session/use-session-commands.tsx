@@ -495,8 +495,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       title: language.t("command.terminal.toggle"),
       keybind: sessionV2Commands() ? "mod+j" : "ctrl+`",
       slash: "terminal",
-      onSelect: () =>
-        toggleSessionTerminal(view(), { openReviewPanel: sessionV2Commands() }),
+      onSelect: () => toggleSessionTerminal(view(), { openReviewPanel: sessionV2Commands() }),
     }),
     viewCommand({
       id: "review.toggle",

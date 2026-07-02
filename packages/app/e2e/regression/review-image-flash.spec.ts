@@ -98,7 +98,13 @@ async function openReview(page: Page) {
       }
       if (path === "src") {
         return [
-          { name: "example.ts", path: "src/example.ts", absolute: `${directory}/src/example.ts`, type: "file", ignored: false },
+          {
+            name: "example.ts",
+            path: "src/example.ts",
+            absolute: `${directory}/src/example.ts`,
+            type: "file",
+            ignored: false,
+          },
         ]
       }
       return []
@@ -147,9 +153,13 @@ async function installReviewFlashProbe(page: Page) {
     }> = []
     const startedAt = performance.now()
     const sample = () => {
-      const panel = document.querySelector<HTMLElement>('#review-panel [data-component="tabs-v2"].session-review-v2-tabs')
+      const panel = document.querySelector<HTMLElement>(
+        '#review-panel [data-component="tabs-v2"].session-review-v2-tabs',
+      )
       const rect = panel?.getBoundingClientRect()
-      const center = rect ? document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2) : undefined
+      const center = rect
+        ? document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)
+        : undefined
       const background = center instanceof Element ? getComputedStyle(center).backgroundColor : ""
       samples.push({
         observedAtMs: performance.now() - startedAt,

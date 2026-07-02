@@ -34,7 +34,7 @@ type HoverCommentLine = {
   side?: "additions" | "deletions"
 }
 
-type LineCommentStateProps<T> = {
+export type LineCommentStateProps<T> = {
   opened: Accessor<T | null>
   setOpened: (id: T | null) => void
   selected: Accessor<SelectedLineRange | null>
@@ -45,7 +45,7 @@ type LineCommentStateProps<T> = {
   hoverSelected?: (range: SelectedLineRange) => void
 }
 
-type LineCommentShape = {
+export type LineCommentShape = {
   id: string
   selection: SelectedLineRange
   comment: string
@@ -95,9 +95,14 @@ type DraftProps = {
   submitLabel?: string
 }
 
-export function createLineCommentAnnotationRenderer<T>(props: {
-  renderComment: (comment: T) => CommentProps
-  renderDraft: (range: SelectedLineRange) => DraftProps
+// Generic host machinery shared by the v1 and v2 annotation renderers: each
+// annotation key gets a detached DOM host with its own Solid root, updated in
+// place through a signal so Pierre can reparent the host without re-rendering.
+export function createLineCommentAnnotationRenderer<T, C, D>(props: {
+  renderComment: (comment: T) => C
+  renderDraft: (range: SelectedLineRange) => D
+  commentElement: (view: Accessor<C>) => JSX.Element
+  draftElement: (view: Accessor<D>) => JSX.Element
 }) {
   const nodes = new Map<
     string,
@@ -123,37 +128,7 @@ export function createLineCommentAnnotationRenderer<T>(props: {
           if (next.kind !== "comment") return props.renderComment(active.comment)
           return props.renderComment(next.comment)
         })
-        return (
-          <Show
-            when={view().editor}
-            fallback={
-              <LineComment
-                inline
-                id={view().id}
-                open={view().open}
-                comment={view().comment}
-                selection={view().selection}
-                actions={view().actions}
-                onClick={view().onClick}
-                onMouseEnter={view().onMouseEnter}
-              />
-            }
-          >
-            <LineCommentEditor
-              inline
-              id={view().id}
-              value={view().editor!.value}
-              selection={view().editor!.selection}
-              onInput={view().editor!.onInput}
-              onCancel={view().editor!.onCancel}
-              onSubmit={view().editor!.onSubmit}
-              onPopoverFocusOut={view().editor!.onPopoverFocusOut}
-              cancelLabel={view().editor!.cancelLabel}
-              submitLabel={view().editor!.submitLabel}
-              mention={view().editor!.mention}
-            />
-          </Show>
-        )
+        return props.commentElement(view)
       }
 
       const view = createMemo(() => {
@@ -161,18 +136,7 @@ export function createLineCommentAnnotationRenderer<T>(props: {
         if (next.kind !== "draft") return props.renderDraft(active.range)
         return props.renderDraft(next.range)
       })
-      return (
-        <LineCommentEditor
-          inline
-          value={view().value}
-          selection={view().selection}
-          onInput={view().onInput}
-          onCancel={view().onCancel}
-          onSubmit={view().onSubmit}
-          onPopoverFocusOut={view().onPopoverFocusOut}
-          mention={view().mention}
-        />
-      )
+      return props.draftElement(view)
     }, host)
 
     const node = { host, dispose, setMeta: setCurrent }
@@ -203,6 +167,55 @@ export function createLineCommentAnnotationRenderer<T>(props: {
   }
 
   return { render, reconcile, cleanup }
+}
+
+function lineCommentElement(view: Accessor<CommentProps>) {
+  return (
+    <Show
+      when={view().editor}
+      fallback={
+        <LineComment
+          inline
+          id={view().id}
+          open={view().open}
+          comment={view().comment}
+          selection={view().selection}
+          actions={view().actions}
+          onClick={view().onClick}
+          onMouseEnter={view().onMouseEnter}
+        />
+      }
+    >
+      <LineCommentEditor
+        inline
+        id={view().id}
+        value={view().editor!.value}
+        selection={view().editor!.selection}
+        onInput={view().editor!.onInput}
+        onCancel={view().editor!.onCancel}
+        onSubmit={view().editor!.onSubmit}
+        onPopoverFocusOut={view().editor!.onPopoverFocusOut}
+        cancelLabel={view().editor!.cancelLabel}
+        submitLabel={view().editor!.submitLabel}
+        mention={view().editor!.mention}
+      />
+    </Show>
+  )
+}
+
+function lineCommentDraftElement(view: Accessor<DraftProps>) {
+  return (
+    <LineCommentEditor
+      inline
+      value={view().value}
+      selection={view().selection}
+      onInput={view().onInput}
+      onCancel={view().onCancel}
+      onSubmit={view().onSubmit}
+      onPopoverFocusOut={view().onPopoverFocusOut}
+      mention={view().mention}
+    />
+  )
 }
 
 export function createLineCommentState<T>(props: LineCommentStateProps<T>) {
@@ -314,7 +327,7 @@ export function createLineCommentController<T extends LineCommentShape>(
 ): {
   note: ReturnType<typeof createLineCommentState<string>>
   annotations: Accessor<DiffLineAnnotation<LineCommentAnnotationMeta<T>>[]>
-  renderAnnotation: ReturnType<typeof createManagedLineCommentAnnotationRenderer<T>>["renderAnnotation"]
+  renderAnnotation: ReturnType<typeof createManagedLineCommentAnnotationRenderer<T, CommentProps, DraftProps>>["renderAnnotation"]
   renderGutterUtility: ReturnType<typeof createLineCommentGutterRenderer>
   onLineSelected: (range: SelectedLineRange | null) => void
   onLineSelectionEnd: (range: SelectedLineRange | null) => void
@@ -324,7 +337,7 @@ export function createLineCommentController<T extends LineCommentShape>(
 ): {
   note: ReturnType<typeof createLineCommentState<string>>
   annotations: Accessor<LineCommentAnnotation<T>[]>
-  renderAnnotation: ReturnType<typeof createManagedLineCommentAnnotationRenderer<T>>["renderAnnotation"]
+  renderAnnotation: ReturnType<typeof createManagedLineCommentAnnotationRenderer<T, CommentProps, DraftProps>>["renderAnnotation"]
   renderGutterUtility: ReturnType<typeof createLineCommentGutterRenderer>
   onLineSelected: (range: SelectedLineRange | null) => void
   onLineSelectionEnd: (range: SelectedLineRange | null) => void
@@ -353,8 +366,10 @@ export function createLineCommentController<T extends LineCommentShape>(
           draftKey: props.draftKey,
         })
 
-  const { renderAnnotation } = createManagedLineCommentAnnotationRenderer<T>({
+  const { renderAnnotation } = createManagedLineCommentAnnotationRenderer<T, CommentProps, DraftProps>({
     annotations,
+    commentElement: lineCommentElement,
+    draftElement: lineCommentDraftElement,
     renderComment: (comment) => {
       const edit = () => note.openEditor(comment.id, comment.selection, comment.comment)
       const remove = () => {
@@ -564,14 +579,18 @@ function sameAnnotationLists(previous: AnnotationListItem[], next: AnnotationLis
   })
 }
 
-export function createManagedLineCommentAnnotationRenderer<T>(props: {
+export function createManagedLineCommentAnnotationRenderer<T, C, D>(props: {
   annotations: Accessor<LineCommentAnnotation<T>[]>
-  renderComment: (comment: T) => CommentProps
-  renderDraft: (range: SelectedLineRange) => DraftProps
+  renderComment: (comment: T) => C
+  renderDraft: (range: SelectedLineRange) => D
+  commentElement: (view: Accessor<C>) => JSX.Element
+  draftElement: (view: Accessor<D>) => JSX.Element
 }) {
-  const renderer = createLineCommentAnnotationRenderer<T>({
+  const renderer = createLineCommentAnnotationRenderer<T, C, D>({
     renderComment: props.renderComment,
     renderDraft: props.renderDraft,
+    commentElement: props.commentElement,
+    draftElement: props.draftElement,
   })
 
   createEffect(() => {

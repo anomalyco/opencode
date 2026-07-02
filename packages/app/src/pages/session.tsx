@@ -2175,8 +2175,7 @@ export default function Page() {
               <div
                 class="shrink-0 overflow-hidden"
                 classList={{
-                  "rounded-[6px] shadow-[var(--v2-elevation-raised)] bg-background-stronger":
-                    view().terminal.opened(),
+                  "rounded-[6px] shadow-[var(--v2-elevation-raised)] bg-background-stronger": view().terminal.opened(),
                 }}
               >
                 <TerminalPanel

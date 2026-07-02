@@ -16,7 +16,10 @@ export function FileTabContentV2(props: { tab: string; review: () => ReviewPanel
   const diffItem = createMemo(() => {
     const value = path()
     if (!value) return
-    return review().diffs().filter(filterRenderableDiff).find((diff) => diff.file === value)
+    return review()
+      .diffs()
+      .filter(filterRenderableDiff)
+      .find((diff) => diff.file === value)
   })
 
   return (

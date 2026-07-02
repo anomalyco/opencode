@@ -8,9 +8,7 @@ export function SessionReviewEmptyChangesV2() {
   return (
     <div data-slot="session-review-v2-empty-changes">
       <Icon name="review" size="large" />
-      <div data-slot="session-review-v2-empty-changes-title">
-        {i18n.t("ui.sessionReviewV2.empty.changes.title")}
-      </div>
+      <div data-slot="session-review-v2-empty-changes-title">{i18n.t("ui.sessionReviewV2.empty.changes.title")}</div>
       <div data-slot="session-review-v2-empty-changes-description">
         {i18n.t("ui.sessionReviewV2.empty.changes.description")}
       </div>

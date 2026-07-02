@@ -31,8 +31,7 @@ import { SessionFileListV2 } from "@/pages/session/v2/session-file-list-v2"
 export function makeReadFile(sdk: ReturnType<typeof useSDK>) {
   return async (path: string) =>
     sdk()
-      .client.file
-      .read({ path })
+      .client.file.read({ path })
       .then((x) => x.data)
       .catch((error) => {
         console.debug("[session-review-v2] failed to read file", { path, error })

@@ -99,87 +99,87 @@ benchmark.describe("performance: review pane", () => {
 })
 
 async function runTimelineStreamBenchmark(page: Page, options: TimelineStreamOptions) {
-    const completionTimeoutMs = Number(process.env.TIMELINE_COMPLETION_TIMEOUT_MS ?? 420_000)
-    const cpuThrottle = Number(process.env.TIMELINE_CPU_THROTTLE ?? 30)
-    const deltaCount = Number(process.env.TIMELINE_DELTA_COUNT ?? 160)
-    const historyTurns = Number(process.env.TIMELINE_HISTORY_TURNS ?? 320)
-    const eventBatch = Number(process.env.TIMELINE_EVENT_BATCH ?? 1)
-    const minimal = process.env.TIMELINE_MINIMAL === "1"
-    const profileCPU = process.env.TIMELINE_CPU_PROFILE === "1"
-    const profileVisual = !minimal && profileCPU && process.env.TIMELINE_VISUAL_PROFILE !== "0"
-    const diffs = options.reviewDiffs || options.reviewPane ? createReviewDiffs() : undefined
-    const fixture = await setupTimelineBenchmark(page, {
+  const completionTimeoutMs = Number(process.env.TIMELINE_COMPLETION_TIMEOUT_MS ?? 420_000)
+  const cpuThrottle = Number(process.env.TIMELINE_CPU_THROTTLE ?? 30)
+  const deltaCount = Number(process.env.TIMELINE_DELTA_COUNT ?? 160)
+  const historyTurns = Number(process.env.TIMELINE_HISTORY_TURNS ?? 320)
+  const eventBatch = Number(process.env.TIMELINE_EVENT_BATCH ?? 1)
+  const minimal = process.env.TIMELINE_MINIMAL === "1"
+  const profileCPU = process.env.TIMELINE_CPU_PROFILE === "1"
+  const profileVisual = !minimal && profileCPU && process.env.TIMELINE_VISUAL_PROFILE !== "0"
+  const diffs = options.reviewDiffs || options.reviewPane ? createReviewDiffs() : undefined
+  const fixture = await setupTimelineBenchmark(page, {
+    historyTurns,
+    eventBatch,
+    newLayoutDesigns: options.newLayoutDesigns,
+    // Turn diffs exercise timeline data cost; the pane-open scenario serves the same
+    // diffs through the default git mode so it works across review implementations.
+    turnDiffs: options.reviewDiffs ? diffs : undefined,
+    vcsDiff: options.reviewPane ? diffs : undefined,
+  })
+
+  fixture.transport.enqueue(buildInitialStreamEvent(deltaCount))
+  const contentStart = performance.now()
+  await expect(fixture.text).toBeVisible()
+  await expect(fixture.text).toContainText("Implementation plan")
+  const initialContentObservedMs = performance.now() - contentStart
+  await fixture.scrollToBottom()
+  await fixture.waitForStableGeometry()
+
+  const reviewPane = options.reviewPane && diffs ? await measureReviewPaneLoad(page, diffs[0]!.file) : undefined
+  if (reviewPane) await fixture.waitForStableGeometry()
+
+  const profile = await startTimelineProfile(page, { cpuThrottle, profileCPU })
+  await installTimelineStreamProbe(page, { textPartID, finalIndex: deltaCount, profileVisual, minimal })
+  const deltas = buildStreamDeltaEvents(deltaCount)
+  await startTimelineStreamProbe(page)
+  fixture.transport.enqueue(deltas)
+
+  await page.waitForFunction(
+    (finalIndex) =>
+      (
+        window as Window & {
+          __timelineStreamBenchmark?: { applied: { index: number }[] }
+        }
+      ).__timelineStreamBenchmark?.applied.some((value) => value.index === finalIndex),
+    deltaCount,
+    { timeout: completionTimeoutMs },
+  )
+  await expect(fixture.text).toContainText("benchmark-complete")
+  await expect(fixture.text).toContainText("Streaming")
+  await fixture.waitForStableGeometry()
+  const metrics = await collectTimelineStreamMetrics(page, {
+    textPartID,
+    finalIndex: deltaCount,
+    navigations: benchmarkDiagnostics(page).navigations,
+  })
+  const delivered = deltas.length - fixture.transport.pendingCount()
+  await profile.stop()
+
+  const result = {
+    metrics: {
+      endToEndInitialContentObservedMs: initialContentObservedMs,
+      ...metrics,
+      deliveredDeltas: delivered,
+      pendingDeltas: fixture.transport.pendingCount(),
+      reviewPane: reviewPane ?? null,
+    },
+    context: {
+      cpuThrottle,
+      profileCPU,
+      profileVisual,
+      minimal,
+      queuedDeltas: deltas.length,
       historyTurns,
       eventBatch,
-      newLayoutDesigns: options.newLayoutDesigns,
-      // Turn diffs exercise timeline data cost; the pane-open scenario serves the same
-      // diffs through the default git mode so it works across review implementations.
-      turnDiffs: options.reviewDiffs ? diffs : undefined,
-      vcsDiff: options.reviewPane ? diffs : undefined,
-    })
+      newLayoutDesigns: options.newLayoutDesigns === true,
+      reviewPane: options.reviewPane === true ? "open" : "closed",
+      reviewDiffs: diffs?.length ?? 0,
+    },
+  }
 
-    fixture.transport.enqueue(buildInitialStreamEvent(deltaCount))
-    const contentStart = performance.now()
-    await expect(fixture.text).toBeVisible()
-    await expect(fixture.text).toContainText("Implementation plan")
-    const initialContentObservedMs = performance.now() - contentStart
-    await fixture.scrollToBottom()
-    await fixture.waitForStableGeometry()
-
-    const reviewPane = options.reviewPane && diffs ? await measureReviewPaneLoad(page, diffs[0]!.file) : undefined
-    if (reviewPane) await fixture.waitForStableGeometry()
-
-    const profile = await startTimelineProfile(page, { cpuThrottle, profileCPU })
-    await installTimelineStreamProbe(page, { textPartID, finalIndex: deltaCount, profileVisual, minimal })
-    const deltas = buildStreamDeltaEvents(deltaCount)
-    await startTimelineStreamProbe(page)
-    fixture.transport.enqueue(deltas)
-
-    await page.waitForFunction(
-      (finalIndex) =>
-        (
-          window as Window & {
-            __timelineStreamBenchmark?: { applied: { index: number }[] }
-          }
-        ).__timelineStreamBenchmark?.applied.some((value) => value.index === finalIndex),
-      deltaCount,
-      { timeout: completionTimeoutMs },
-    )
-    await expect(fixture.text).toContainText("benchmark-complete")
-    await expect(fixture.text).toContainText("Streaming")
-    await fixture.waitForStableGeometry()
-    const metrics = await collectTimelineStreamMetrics(page, {
-      textPartID,
-      finalIndex: deltaCount,
-      navigations: benchmarkDiagnostics(page).navigations,
-    })
-    const delivered = deltas.length - fixture.transport.pendingCount()
-    await profile.stop()
-
-    const result = {
-      metrics: {
-        endToEndInitialContentObservedMs: initialContentObservedMs,
-        ...metrics,
-        deliveredDeltas: delivered,
-        pendingDeltas: fixture.transport.pendingCount(),
-        reviewPane: reviewPane ?? null,
-      },
-      context: {
-        cpuThrottle,
-        profileCPU,
-        profileVisual,
-        minimal,
-        queuedDeltas: deltas.length,
-        historyTurns,
-        eventBatch,
-        newLayoutDesigns: options.newLayoutDesigns === true,
-        reviewPane: options.reviewPane === true ? "open" : "closed",
-        reviewDiffs: diffs?.length ?? 0,
-      },
-    }
-
-    await profile.reset()
-    return result
+  await profile.reset()
+  return result
 }
 
 async function measureReviewPaneLoad(page: Page, file: string) {
@@ -211,7 +211,9 @@ async function installReviewPaneProbe(page: Page, input: { file: string }) {
       const review = panel?.querySelector<HTMLElement>('[data-component="session-review-v2"]')
       const rect = (review ?? panel)?.getBoundingClientRect()
       const text = panel?.textContent ?? ""
-      const previewHeader = panel?.querySelector<HTMLElement>('[data-slot="session-review-v2-file-header"]')?.textContent
+      const previewHeader = panel?.querySelector<HTMLElement>(
+        '[data-slot="session-review-v2-file-header"]',
+      )?.textContent
       const header = previewHeader ?? text
       const viewers = panel ? [...panel.querySelectorAll<HTMLElement>('[data-component="file"][data-mode="diff"]')] : []
       const codeBlocks = panel?.querySelectorAll("code").length ?? 0
@@ -221,7 +223,8 @@ async function installReviewPaneProbe(page: Page, input: { file: string }) {
           (viewer.shadowRoot?.querySelectorAll("[data-line]").length ?? viewer.querySelectorAll("[data-line]").length),
         0,
       )
-      const panelVisible = !!panel && panel.getAttribute("aria-hidden") !== "true" && !!rect && rect.width > 0 && rect.height > 0
+      const panelVisible =
+        !!panel && panel.getAttribute("aria-hidden") !== "true" && !!rect && rect.width > 0 && rect.height > 0
       return {
         panelVisible,
         header: header.slice(0, 500),
@@ -229,7 +232,9 @@ async function installReviewPaneProbe(page: Page, input: { file: string }) {
         diffLines,
         codeBlocks,
         ready:
-          panelVisible && header.includes(basename) && (viewers.length > 0 || text.includes("+3") || diffLines > 0 || codeBlocks > 0),
+          panelVisible &&
+          header.includes(basename) &&
+          (viewers.length > 0 || text.includes("+3") || diffLines > 0 || codeBlocks > 0),
       }
     }
 
@@ -324,8 +329,7 @@ function createReviewDiffs() {
 function reviewSource(seed: number, lines: number) {
   return Array.from(
     { length: lines },
-    (_, index) =>
-      `export const value_${seed}_${index} = "${reviewWords(seed + index, index % 5 === 0 ? 180 : 42)}"`,
+    (_, index) => `export const value_${seed}_${index} = "${reviewWords(seed + index, index % 5 === 0 ? 180 : 42)}"`,
   ).join("\n")
 }
 

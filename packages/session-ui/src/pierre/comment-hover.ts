@@ -39,11 +39,15 @@ export function createHoverCommentUtility(props: {
     line = next
   }
 
-  // The hovered line can only change while the pointer moves, so track it with a
-  // passive listener instead of polling every animation frame.
-  const onPointerMove = () => {
+  // The hovered line changes when the pointer moves or when content scrolls under
+  // a stationary pointer, so track both with passive listeners instead of polling
+  // every animation frame. There is no teardown hook for this utility; like the
+  // rAF loop this replaced, the listeners self-detach on the first event after
+  // the button leaves the DOM.
+  const onHoverInvalidated = () => {
     if (!button.isConnected) {
-      document.removeEventListener("pointermove", onPointerMove)
+      document.removeEventListener("pointermove", onHoverInvalidated)
+      document.removeEventListener("scroll", onHoverInvalidated, true)
       return
     }
     sync()
@@ -55,7 +59,8 @@ export function createHoverCommentUtility(props: {
     props.onSelect(next)
   }
 
-  document.addEventListener("pointermove", onPointerMove, { passive: true })
+  document.addEventListener("pointermove", onHoverInvalidated, { passive: true })
+  document.addEventListener("scroll", onHoverInvalidated, { passive: true, capture: true })
   button.addEventListener("mouseenter", sync)
   button.addEventListener("mousemove", sync)
   button.addEventListener("pointerdown", (event) => {

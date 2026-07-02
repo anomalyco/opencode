@@ -163,10 +163,7 @@ export function useOpenInApp(input: { directory: () => string }) {
     ] as const
   })
 
-  const [prefs, setPrefs] = persisted(
-    Persist.global("open.app"),
-    createStore({ app: "finder" as OpenApp | "finder" }),
-  )
+  const [prefs, setPrefs] = persisted(Persist.global("open.app"), createStore({ app: "finder" as OpenApp | "finder" }))
   const [menu, setMenu] = createStore({ open: false })
   const [openRequest, setOpenRequest] = createStore({
     app: undefined as OpenApp | undefined,

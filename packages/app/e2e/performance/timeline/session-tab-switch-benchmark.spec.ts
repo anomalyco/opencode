@@ -2,7 +2,12 @@ import type { Page } from "@playwright/test"
 import { expectSessionTitle } from "../../utils/waits"
 import { benchmark, expect, withBenchmarkPage } from "../benchmark"
 import { fixture } from "./session-timeline-stress.fixture"
-import { installStressSessionTabs, installTimelineSettings, mockStressTimeline, stressSessionHref } from "./timeline-test-helpers"
+import {
+  installStressSessionTabs,
+  installTimelineSettings,
+  mockStressTimeline,
+  stressSessionHref,
+} from "./timeline-test-helpers"
 import { measureSessionSwitch, waitForStableTimeline } from "./session-tab-switch-probe"
 
 type Result = Awaited<ReturnType<typeof measureSessionSwitch>>
@@ -20,29 +25,32 @@ benchmark("benchmarks cold and hot session tab switching", async ({ browser, rep
   report({ results, summary: summarize(results) })
 })
 
-benchmark("benchmarks v2 session tab switching with and without the review pane", async ({ browser, report }, testInfo) => {
-  benchmark.setTimeout(360_000)
-  const runs = Number(process.env.SESSION_TAB_SWITCH_RUNS ?? 5)
-  const results = {
-    closed: { cold: [] as Result[], hot: [] as Result[] },
-    open: { cold: [] as Result[], hot: [] as Result[] },
-  }
-  for (const reviewPane of ["closed", "open"] as const) {
-    for (const mode of ["cold", "hot"] as const) {
-      for (let run = 0; run < runs; run++) {
-        results[reviewPane][mode].push(
-          await withBenchmarkPage(
-            browser,
-            `session-tab-switch-v2-${reviewPane}-${mode}-${run}`,
-            (page) => trial(page, mode, { newLayoutDesigns: true, reviewPane }),
-            testInfo,
-          ),
-        )
+benchmark(
+  "benchmarks v2 session tab switching with and without the review pane",
+  async ({ browser, report }, testInfo) => {
+    benchmark.setTimeout(360_000)
+    const runs = Number(process.env.SESSION_TAB_SWITCH_RUNS ?? 5)
+    const results = {
+      closed: { cold: [] as Result[], hot: [] as Result[] },
+      open: { cold: [] as Result[], hot: [] as Result[] },
+    }
+    for (const reviewPane of ["closed", "open"] as const) {
+      for (const mode of ["cold", "hot"] as const) {
+        for (let run = 0; run < runs; run++) {
+          results[reviewPane][mode].push(
+            await withBenchmarkPage(
+              browser,
+              `session-tab-switch-v2-${reviewPane}-${mode}-${run}`,
+              (page) => trial(page, mode, { newLayoutDesigns: true, reviewPane }),
+              testInfo,
+            ),
+          )
+        }
       }
     }
-  }
-  report({ results, summary: summarizeReviewPane(results) }, { runs, reviewDiffs: createReviewDiffs().length })
-})
+    report({ results, summary: summarizeReviewPane(results) }, { runs, reviewDiffs: createReviewDiffs().length })
+  },
+)
 
 async function trial(
   page: Page,
@@ -106,7 +114,10 @@ function summarize(results: Record<"cold" | "hot", Result[]>) {
 
 function summarizeReviewPane(results: Record<"closed" | "open", Record<"cold" | "hot", Result[]>>) {
   return Object.fromEntries(
-    Object.entries(results).map(([reviewPane, values]) => [reviewPane, summarize(values as Record<"cold" | "hot", Result[]>)]),
+    Object.entries(results).map(([reviewPane, values]) => [
+      reviewPane,
+      summarize(values as Record<"cold" | "hot", Result[]>),
+    ]),
   )
 }
 
@@ -156,8 +167,7 @@ function createReviewDiffs() {
 function reviewSource(seed: number, lines: number) {
   return Array.from(
     { length: lines },
-    (_, index) =>
-      `export const value_${seed}_${index} = "${reviewWords(seed + index, index % 5 === 0 ? 180 : 42)}"`,
+    (_, index) => `export const value_${seed}_${index} = "${reviewWords(seed + index, index % 5 === 0 ? 180 : 42)}"`,
   ).join("\n")
 }
 

@@ -70,8 +70,7 @@ export function FilesPanelV2Sidebar(props: FilesPanelV2SidebarProps) {
       setStore("loading", true)
 
       void sdk()
-        .client.find
-        .files({
+        .client.find.files({
           query: value,
           dirs: "false",
           fallback: "glob",

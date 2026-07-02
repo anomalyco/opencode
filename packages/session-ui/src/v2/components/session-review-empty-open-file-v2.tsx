@@ -17,22 +17,8 @@ function OpenFilePlaceholderIcon() {
         stroke="var(--v2-icon-icon-muted)"
         stroke-width="1.25"
       />
-      <rect
-        x="10.625"
-        y="4.02148"
-        width="7.5"
-        height="3.75"
-        stroke="var(--v2-icon-icon-base)"
-        stroke-width="1.25"
-      />
-      <rect
-        x="10.625"
-        y="13.4375"
-        width="7.5"
-        height="3.75"
-        stroke="var(--v2-icon-icon-base)"
-        stroke-width="1.25"
-      />
+      <rect x="10.625" y="4.02148" width="7.5" height="3.75" stroke="var(--v2-icon-icon-base)" stroke-width="1.25" />
+      <rect x="10.625" y="13.4375" width="7.5" height="3.75" stroke="var(--v2-icon-icon-base)" stroke-width="1.25" />
     </svg>
   )
 }
@@ -43,9 +29,7 @@ export function SessionReviewEmptyOpenFileV2() {
   return (
     <div data-slot="session-review-v2-empty-open-file">
       <OpenFilePlaceholderIcon />
-      <div data-slot="session-review-v2-empty-open-file-title">
-        {i18n.t("ui.sessionReviewV2.empty.openFile.title")}
-      </div>
+      <div data-slot="session-review-v2-empty-open-file-title">{i18n.t("ui.sessionReviewV2.empty.openFile.title")}</div>
       <div data-slot="session-review-v2-empty-open-file-description">
         {i18n.t("ui.sessionReviewV2.empty.openFile.description")}
       </div>

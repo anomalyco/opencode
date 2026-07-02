@@ -154,11 +154,7 @@ export function SessionReviewFilePreviewV2(props: SessionReviewFilePreviewV2Prop
     editSubmitLabel: props.lineCommentActions?.saveLabel,
     renderCommentActions: props.lineCommentActions
       ? (comment, controls) => (
-          <ReviewCommentMenuV2
-            labels={props.lineCommentActions!}
-            onEdit={controls.edit}
-            onDelete={controls.remove}
-          />
+          <ReviewCommentMenuV2 labels={props.lineCommentActions!} onEdit={controls.edit} onDelete={controls.remove} />
         )
       : undefined,
   })
@@ -229,7 +225,7 @@ export function SessionReviewFilePreviewV2(props: SessionReviewFilePreviewV2Prop
       </div>
       <div data-slot="session-review-v2-diff-scroll">
         <Show
-          when={diffCanRender()}
+          when={diffCanRender() || mediaKind()}
           fallback={
             <div data-slot="session-review-v2-empty">
               <span class="text-12-regular text-text-weak">{i18n.t("ui.fileMedia.binary.title")}</span>
@@ -238,7 +234,6 @@ export function SessionReviewFilePreviewV2(props: SessionReviewFilePreviewV2Prop
         >
           {diffViewer()}
         </Show>
-        <Show when={mediaKind() && !diffCanRender()}>{diffViewer()}</Show>
       </div>
     </>
   )

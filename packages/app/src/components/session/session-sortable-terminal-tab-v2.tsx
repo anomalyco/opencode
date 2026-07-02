@@ -116,7 +116,7 @@ export function SortableTerminalTabV2(props: {
       class="session-review-v2-file-tab-slot flex shrink-0 items-center touch-none"
       classList={{
         "pointer-events-none": props.dragActive,
-        "invisible": props.dragged,
+        invisible: props.dragged,
         "session-review-v2-file-tab-slot--pressed": props.pressed,
       }}
       onPointerDown={(event) => {

@@ -389,8 +389,7 @@ export default function FileTreeV2(props: {
         {(node) => {
           const expanded = () => file.tree.state(node.path)?.expanded ?? false
           const deep = () => deeps().get(node.path) ?? -1
-          const hasChildren = () =>
-            visibleNodesForPath(node.path, file.tree.children, filter(), props.query).length > 0
+          const hasChildren = () => visibleNodesForPath(node.path, file.tree.children, filter(), props.query).length > 0
           return (
             <Switch>
               <Match when={node.type === "directory"}>
@@ -491,9 +490,7 @@ export default function FileTreeV2(props: {
                   </Show>
                   <Show
                     when={!node.ignored}
-                    fallback={
-                      <FileIcon node={node} class="size-4 filetree-icon filetree-icon--mono" mono />
-                    }
+                    fallback={<FileIcon node={node} class="size-4 filetree-icon filetree-icon--mono" mono />}
                   >
                     <span class="filetree-iconpair size-4">
                       <FileIcon node={node} class="size-4 filetree-icon filetree-icon--color" />
