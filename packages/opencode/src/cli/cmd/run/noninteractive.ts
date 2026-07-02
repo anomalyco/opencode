@@ -67,6 +67,7 @@ export async function runNonInteractivePrompt(input: Input) {
   let submitted = false
   let promoted = false
   let emittedError = false
+  let questionRejected = false
   let permissionRejected = false
   let interrupted = false
   let admission: AbortController | undefined
@@ -111,6 +112,11 @@ export async function runNonInteractivePrompt(input: Input) {
     }
   }
 
+  const rejectQuestion = async (request: { id: string }) => {
+    questionRejected = true
+    await input.client.question.reject({ requestID: request.id }).catch(() => {})
+  }
+
   const consume = async () => {
     while (!controller.signal.aborted) {
       const next = await stream.next()
@@ -119,6 +125,10 @@ export async function runNonInteractivePrompt(input: Input) {
 
       if (event.type === "permission.v2.asked" && submitted && event.data.sessionID === input.sessionID) {
         await replyPermission(event.data)
+        continue
+      }
+      if (event.type === "question.asked" && submitted && event.data.sessionID === input.sessionID) {
+        await rejectQuestion(event.data)
         continue
       }
       if (!("sessionID" in event.data) || event.data.sessionID !== input.sessionID) continue
@@ -134,7 +144,7 @@ export async function runNonInteractivePrompt(input: Input) {
       if (
         event.type === "session.next.execution.settled" &&
         event.data.outcome === "interrupted" &&
-        (interrupted || permissionRejected)
+        (interrupted || permissionRejected || questionRejected)
       ) {
         return
       }
@@ -310,14 +320,14 @@ export async function runNonInteractivePrompt(input: Input) {
         continue
       }
       if (event.type === "session.next.step.failed") {
-        if (interrupted || permissionRejected) continue
+        if (interrupted || permissionRejected || questionRejected) continue
         emittedError = true
         process.exitCode = 1
         if (!emit("error", time, { error: event.data.error })) UI.error(event.data.error.message)
         continue
       }
       if (event.type === "session.next.execution.settled") {
-        if (event.data.outcome === "failure" && !emittedError) {
+        if (event.data.outcome === "failure" && !emittedError && !questionRejected) {
           emittedError = true
           process.exitCode = 1
           const error = event.data.error ?? { type: "unknown", message: "Session execution failed" }
@@ -396,8 +406,14 @@ export async function runNonInteractivePrompt(input: Input) {
     if (!response.data.data) throw new Error("Prompt was not admitted")
     if (interrupted) await input.client.v2.session.interrupt({ sessionID: input.sessionID }).catch(() => {})
 
-    const permissions = await input.client.v2.session.permission.list({ sessionID: input.sessionID }).catch(() => undefined)
-    await Promise.all((permissions?.data?.data ?? []).map(replyPermission))
+    const [permissions, questions] = await Promise.all([
+      input.client.v2.session.permission.list({ sessionID: input.sessionID }).catch(() => undefined),
+      input.client.question.list().catch(() => undefined),
+    ])
+    await Promise.all([
+      ...(permissions?.data?.data ?? []).map(replyPermission),
+      ...(questions?.data ?? []).filter((question) => question.sessionID === input.sessionID).map(rejectQuestion),
+    ])
     await completed
   } finally {
     process.off("SIGINT", interrupt)
