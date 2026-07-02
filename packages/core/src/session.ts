@@ -474,7 +474,12 @@ const layer = Layer.effect(
 
         // TODO(v2 commands): decide whether command-level subtask/background execution belongs in v2 commands.
         const agent = command.agent ?? input.agent
-        const model = command.model ?? input.model
+        const commandAgent = yield* Effect.gen(function* () {
+          if (!command.agent) return undefined
+          const agents = yield* AgentV2.Service.pipe(Effect.provide(locations.get(session.location)))
+          return yield* agents.get(AgentV2.ID.make(command.agent))
+        })
+        const model = command.model ?? commandAgent?.model ?? input.model
         if (agent !== undefined && session.agent !== AgentV2.ID.make(agent))
           yield* result.switchAgent({ sessionID: input.sessionID, agent })
         if (model !== undefined) yield* result.switchModel({ sessionID: input.sessionID, model })
