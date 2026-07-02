@@ -79,8 +79,12 @@ const historyTypesPatched = generatedTypes.replace(
   /(export type V2SessionHistoryData = \{[\s\S]*?query\?: \{\s*limit\?: )string([;,]\s*after\?: )string/,
   "$1number$2number",
 )
-if (historyTypesPatched === generatedTypes) {
-  throw new Error("Session history numeric query patch did not apply")
+if (
+  !/export type V2SessionHistoryData = \{[\s\S]*?query\?: \{\s*limit\?: number[;,]\s*after\?: number/.test(
+    historyTypesPatched,
+  )
+) {
+  throw new Error("Session history numeric query patch did not produce numeric query params")
 }
 await Bun.write("./src/v2/gen/types.gen.ts", historyTypesPatched)
 
@@ -89,8 +93,12 @@ const historySdkPatched = generatedSdk.replace(
   /(Get session history[\s\S]*?parameters: \{\s*sessionID: string[;,]\s*limit\?: )string([;,]\s*after\?: )string/,
   "$1number$2number",
 )
-if (historySdkPatched === generatedSdk) {
-  throw new Error("Session history numeric SDK patch did not apply")
+if (
+  !/Get session history[\s\S]*?parameters: \{\s*sessionID: string[;,]\s*limit\?: number[;,]\s*after\?: number/.test(
+    historySdkPatched,
+  )
+) {
+  throw new Error("Session history numeric SDK patch did not produce numeric query params")
 }
 await Bun.write("./src/v2/gen/sdk.gen.ts", historySdkPatched)
 
