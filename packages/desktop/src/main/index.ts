@@ -19,6 +19,8 @@ import { forwardInitializationFailure } from "./initialization"
 import { exportDebugLogs, initCrashReporter, initLogging, startNetLog, write as writeLog } from "./logging"
 import { parseMarkdown } from "./markdown"
 import { createMenu } from "./menu"
+import { getStore } from "./store"
+import { DISABLE_NATIVE_ACCELERATORS_KEY } from "./store-keys"
 import { finishFirstLaunchOnboarding, isFirstLaunchOnboardingPending } from "./onboarding"
 import {
   getDefaultServerUrl,
@@ -373,18 +375,25 @@ const main = Effect.gen(function* () {
 
   const windows = restoreMainWindows()
   if (windows.length) {
-    createMenu({
-      trigger: (id) => {
-        const win = getLastFocusedWindow()
-        if (win) sendMenuCommand(win, id)
+    const store = getStore()
+    const disabled = store.get(DISABLE_NATIVE_ACCELERATORS_KEY)
+    const disabledAccelerators: string[] = Array.isArray(disabled) ? disabled : []
+
+    createMenu(
+      {
+        trigger: (id) => {
+          const win = getLastFocusedWindow()
+          if (win) sendMenuCommand(win, id)
+        },
+        checkForUpdates: () => {
+          void showUpdaterDialog(updater, true)
+        },
+        relaunch: () => {
+          relaunch()
+        },
       },
-      checkForUpdates: () => {
-        void showUpdaterDialog(updater, true)
-      },
-      relaunch: () => {
-        relaunch()
-      },
-    })
+      disabledAccelerators.length > 0 ? { disabledAccelerators } : undefined,
+    )
   }
 })
 
