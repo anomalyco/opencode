@@ -30,6 +30,10 @@ export async function removeStoreFileIfEmpty(name: string) {
 }
 
 export function removeStoreFile(name: string) {
+  if (!name || name.includes("..") || name.includes("/") || name.includes("\\")) {
+    return
+  }
+
   rmSync(join(electron.app.getPath("userData"), name), { force: true })
   cache.delete(name)
 }
