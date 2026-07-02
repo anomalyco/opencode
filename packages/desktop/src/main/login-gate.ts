@@ -425,10 +425,8 @@ const HTML_LOGIN = `
 </div>
 
 <script>
-  const loginApi = window.loginApi
-
   document.addEventListener('DOMContentLoaded', () => {
-    if (!loginApi) {
+    if (!window.loginApi) {
       const error = document.getElementById('error')
       const adminBtn = document.getElementById('adminBtn')
       const microsoftBtn = document.getElementById('microsoftBtn')
@@ -456,7 +454,7 @@ const HTML_LOGIN = `
     microsoftBtn.disabled = true
 
     try {
-      const ok = await loginApi.submitAdmin(username, password)
+      const ok = await window.loginApi.submitAdmin(username, password)
       if (!ok) {
         error.textContent = 'Invalid credentials'
         error.classList.add('visible')
@@ -485,7 +483,7 @@ const HTML_LOGIN = `
     microsoftBtn.disabled = true
 
     try {
-      await loginApi.startMicrosoftOAuth()
+      await window.loginApi.startMicrosoftOAuth()
     } catch (e) {
       error.textContent = e.message || 'Authentication failed'
       error.classList.add('visible')
@@ -605,7 +603,7 @@ async function checkExistingAuth(): Promise<boolean> {
 
 function showLoginDialog(serverUrl: string, serverPassword: string): Promise<void> {
   const logger = getLogger()
-  const preloadPath = join(PRELOAD_ROOT, "../preload/login.js")
+  const preloadPath = join(PRELOAD_ROOT, "../preload/login.cjs")
   logger.log("login dialog preload path", { preloadPath, packaged: app.isPackaged })
 
   return new Promise<void>((resolve, reject) => {
