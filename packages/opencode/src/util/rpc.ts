@@ -19,16 +19,33 @@ export function emit(event: string, data: unknown) {
 export function client<T extends Definition>(target: {
   postMessage: (data: string) => void | null
   onmessage: ((this: Worker, ev: MessageEvent<any>) => any) | null
+  addEventListener?: (event: string, handler: (...args: any[]) => void) => void
 }) {
-  const pending = new Map<number, (result: any) => void>()
+  const pending = new Map<number, { resolve: (result: any) => void; reject: (error: unknown) => void }>()
   const listeners = new Map<string, Set<(data: any) => void>>()
   let id = 0
+  let closed = false
+
+  const rejectAll = () => {
+    closed = true
+    const err = new Error("RPC target disconnected")
+    for (const entry of pending.values()) {
+      entry.reject(err)
+    }
+    pending.clear()
+  }
+
+  if (typeof target.addEventListener === "function") {
+    target.addEventListener("error", rejectAll)
+    target.addEventListener("messageerror", rejectAll)
+  }
+
   target.onmessage = async (evt) => {
     const parsed = JSON.parse(evt.data)
     if (parsed.type === "rpc.result") {
-      const resolve = pending.get(parsed.id)
-      if (resolve) {
-        resolve(parsed.result)
+      const entry = pending.get(parsed.id)
+      if (entry) {
+        entry.resolve(parsed.result)
         pending.delete(parsed.id)
       }
     }
@@ -44,9 +61,15 @@ export function client<T extends Definition>(target: {
   return {
     call<Method extends keyof T>(method: Method, input: Parameters<T[Method]>[0]): Promise<ReturnType<T[Method]>> {
       const requestId = id++
-      return new Promise((resolve) => {
-        pending.set(requestId, resolve)
-        target.postMessage(JSON.stringify({ type: "rpc.request", method, input, id: requestId }))
+      if (closed) return Promise.reject(new Error("RPC target disconnected"))
+      return new Promise((resolve, reject) => {
+        pending.set(requestId, { resolve, reject })
+        try {
+          target.postMessage(JSON.stringify({ type: "rpc.request", method, input, id: requestId }))
+        } catch (err) {
+          pending.delete(requestId)
+          reject(err)
+        }
       })
     },
     on<Data>(event: string, handler: (data: Data) => void) {
