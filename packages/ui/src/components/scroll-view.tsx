@@ -271,7 +271,7 @@ export function ScrollView(props: ScrollViewProps) {
           markScrolling()
           const handler = events.onWheel
           if (typeof handler === "function") handler(e as any)
-          else if (Array.isArray(handler)) handler[0](handler[1], e as any)
+          if (Array.isArray(handler)) handler[0](handler[1], e as any)
         }}
         onTouchStart={events.onTouchStart as any}
         onTouchMove={events.onTouchMove as any}

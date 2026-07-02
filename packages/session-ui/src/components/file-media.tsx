@@ -92,7 +92,7 @@ export function FileMedia(props: { media?: FileMediaOptions; fallback: () => JSX
   createEffect(() => {
     const input = request()
     if (!input) {
-      setRemote({})
+      setRemote({ key: undefined, loading: false, error: false, src: undefined, mime: undefined })
       return
     }
 

@@ -121,11 +121,9 @@ const FileTreeNodeV2 = (
       node: FileNode
       level: number
       active?: string
-      nodeClass?: string
       draggable: boolean
       kinds?: ReadonlyMap<string, Kind>
       marks?: Set<string>
-      showFolderChangeIndicator?: boolean
       as?: "div" | "button"
     },
 ) => {
@@ -133,11 +131,9 @@ const FileTreeNodeV2 = (
     "node",
     "level",
     "active",
-    "nodeClass",
     "draggable",
     "kinds",
     "marks",
-    "showFolderChangeIndicator",
     "as",
     "children",
     "class",
@@ -154,7 +150,6 @@ const FileTreeNodeV2 = (
       classList={{
         ...local.classList,
         [local.class ?? ""]: !!local.class,
-        [local.nodeClass ?? ""]: !!local.nodeClass,
       }}
       style={`padding-left: ${rowPaddingLeft(local.level, local.node.type)}px`}
       draggable={local.draggable}
@@ -171,16 +166,12 @@ const FileTreeNodeV2 = (
       <span class="flex-1 min-w-0 text-12-medium whitespace-nowrap truncate">{local.node.name}</span>
       {(() => {
         const value = kind()
-        if (!value) return null
-        if (local.node.type === "file") {
-          return (
-            <span data-slot="file-tree-v2-change" data-change={kindChange(value)}>
-              {kindLabel(value)}
-            </span>
-          )
-        }
-        if (local.showFolderChangeIndicator === false) return null
-        return <span data-slot="file-tree-v2-descendant-change" aria-hidden="true" />
+        if (!value || local.node.type !== "file") return null
+        return (
+          <span data-slot="file-tree-v2-change" data-change={kindChange(value)}>
+            {kindLabel(value)}
+          </span>
+        )
       })()}
     </Dynamic>
   )
@@ -191,14 +182,10 @@ const FileTreeNodeV2 = (
 // synthesized from that list) for nested content to appear.
 export default function FileTreeV2(props: {
   path: string
-  class?: string
-  nodeClass?: string
   active?: string
   level?: number
   allowed?: readonly string[]
-  modified?: readonly string[]
   kinds?: ReadonlyMap<string, Kind>
-  showFolderChangeIndicator?: boolean
   draggable?: boolean
   onFileClick?: (file: FileNode) => void
 
@@ -243,9 +230,7 @@ export default function FileTreeV2(props: {
   const marks = createMemo(() => {
     if (props._marks) return props._marks
 
-    const out = new Set<string>()
-    for (const item of props.modified ?? []) out.add(item)
-    for (const item of props.kinds?.keys() ?? []) out.add(item)
+    const out = new Set<string>(props.kinds?.keys() ?? [])
     if (out.size === 0) return
     return out
   })
@@ -327,15 +312,9 @@ export default function FileTreeV2(props: {
   const nodes = createMemo(() => visibleNodesForPath(props.path, file.tree.children, filter()))
 
   return (
-    <div
-      data-component="file-tree-v2"
-      classList={{
-        // Scope for the group-hover guide lines below; hosts may add an outer
-        // group with the same name to widen the hover area.
-        "group/file-tree-v2": true,
-        [props.class ?? ""]: !!props.class,
-      }}
-    >
+    // group/file-tree-v2 scopes the group-hover guide lines below; hosts may add
+    // an outer group with the same name to widen the hover area.
+    <div data-component="file-tree-v2" class="group/file-tree-v2">
       <For each={nodes()}>
         {(node) => {
           const expanded = () => file.tree.state(node.path)?.expanded ?? false
@@ -357,11 +336,9 @@ export default function FileTreeV2(props: {
                       node={node}
                       level={level}
                       active={props.active}
-                      nodeClass={props.nodeClass}
                       draggable={draggable()}
                       kinds={kinds()}
                       marks={marks()}
-                      showFolderChangeIndicator={props.showFolderChangeIndicator}
                     >
                       <div
                         data-slot="file-tree-v2-chevron"
@@ -390,9 +367,7 @@ export default function FileTreeV2(props: {
                           path={node.path}
                           level={level + 1}
                           allowed={props.allowed}
-                          modified={props.modified}
                           kinds={props.kinds}
-                          showFolderChangeIndicator={props.showFolderChangeIndicator}
                           active={props.active}
                           draggable={props.draggable}
                           onFileClick={props.onFileClick}
@@ -412,11 +387,9 @@ export default function FileTreeV2(props: {
                   node={node}
                   level={level}
                   active={props.active}
-                  nodeClass={props.nodeClass}
                   draggable={draggable()}
                   kinds={kinds()}
                   marks={marks()}
-                  showFolderChangeIndicator={props.showFolderChangeIndicator}
                   as="button"
                   type="button"
                   onClick={() => props.onFileClick?.(node)}

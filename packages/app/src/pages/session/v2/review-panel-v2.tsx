@@ -159,7 +159,7 @@ function ReviewPanelV2Sidebar(props: {
   activeDiff: () => string | undefined
 }) {
   const language = useLanguage()
-  const [explicitHighlight, setHighlightedPath] = createSignal<string | undefined>()
+  const [explicitHighlight, setExplicitHighlight] = createSignal<string | undefined>()
   const highlightedPath = createMemo(() => {
     if (!props.searching()) return undefined
     const files = props.filteredFiles()
@@ -172,7 +172,7 @@ function ReviewPanelV2Sidebar(props: {
   const onFilterKeyDown = (event: KeyboardEvent & { currentTarget: HTMLInputElement }) => {
     if (!props.searching()) return
     applyFileListKeyDown(event, props.filteredFiles(), highlightedPath(), {
-      onHighlight: setHighlightedPath,
+      onHighlight: setExplicitHighlight,
       onSelect: props.onSelectFile,
     })
   }
@@ -206,7 +206,6 @@ function ReviewPanelV2Sidebar(props: {
               path=""
               allowed={props.filteredFiles()}
               kinds={props.kinds()}
-              showFolderChangeIndicator={false}
               draggable={false}
               active={props.activeDiff()}
               onFileClick={(node) => props.onSelectFile(node.path)}
@@ -223,7 +222,7 @@ function ReviewPanelV2Sidebar(props: {
               active={props.activeDiff()}
               highlighted={highlightedPath()}
               onFileClick={(path) => {
-                setHighlightedPath(path)
+                setExplicitHighlight(path)
                 props.onSelectFile(path)
               }}
             />

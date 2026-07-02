@@ -23,7 +23,6 @@ type LineCommentControllerV2Props<T extends LineCommentShape> = {
   onDelete?: (comment: T) => void
   renderCommentActions?: (comment: T, controls: { edit: VoidFunction; remove: VoidFunction }) => JSX.Element
   editSubmitLabel?: string
-  clearSelectionOnSelectionEndNull?: boolean
 }
 
 type CommentProps = {
@@ -190,7 +189,6 @@ export function createLineCommentControllerV2<T extends LineCommentShape>(props:
 
   const onLineSelectionEnd = (range: SelectedLineRange | null) => {
     if (!range) {
-      if (props.clearSelectionOnSelectionEndNull) note.select(null)
       note.cancelDraft()
       return
     }

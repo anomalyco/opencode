@@ -7,7 +7,7 @@ import { useI18n } from "@opencode-ai/ui/context/i18n"
 import { mediaKindFromPath } from "../../pierre/media"
 import { cloneSelectedLineRange, previewSelectedLines } from "../../pierre/selection-bridge"
 import type { FileContent, SnapshotFileDiff, VcsFileDiff } from "@opencode-ai/sdk/v2"
-import { createEffect, createMemo, Show, untrack } from "solid-js"
+import { createEffect, createMemo, onCleanup, Show, untrack } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
 import { normalize, text, type ViewDiff } from "../../components/session-diff"
@@ -34,7 +34,6 @@ export type SessionReviewFilePreviewV2Props = {
   diffStyle: SessionReviewDiffStyle
   expandMode?: SessionReviewExpandMode
   readFile?: (path: string) => Promise<FileContent | undefined>
-  onRendered?: VoidFunction
   onLineComment?: (comment: SessionReviewLineComment) => void
   onLineCommentUpdate?: (comment: SessionReviewCommentUpdate) => void
   onLineCommentDelete?: (comment: SessionReviewCommentDelete) => void
@@ -129,7 +128,6 @@ export function SessionReviewFilePreviewV2(props: SessionReviewFilePreviewV2Prop
       setCommenting: (range) => setStore("commenting", range),
     },
     getSide: selectionSide,
-    clearSelectionOnSelectionEndNull: false,
     onSubmit: ({ comment, selection }) => {
       props.onLineComment?.({
         file: props.file,
@@ -161,9 +159,26 @@ export function SessionReviewFilePreviewV2(props: SessionReviewFilePreviewV2Prop
       : undefined,
   })
 
+  onCleanup(() => {
+    focusToken++
+  })
+
   createEffect(() => {
     const focus = props.focusedComment
-    if (!focus || focus.file !== props.file) return
+    if (!focus) return
+    if (focus.file !== props.file) {
+      // The focused file has no mounted preview (e.g. not in the current diff
+      // set); clear the focus anyway so it cannot hijack a later diff refresh.
+      // V1 clears unconditionally the same way.
+      untrack(() => {
+        const token = focusToken
+        requestAnimationFrame(() => {
+          if (token !== focusToken) return
+          props.onFocusedCommentChange?.(null)
+        })
+      })
+      return
+    }
 
     untrack(() => {
       setStore("opened", focus.id)
@@ -187,7 +202,10 @@ export function SessionReviewFilePreviewV2(props: SessionReviewFilePreviewV2Prop
         requestAnimationFrame(() => scrollTo(attempt + 1))
       }
       requestAnimationFrame(() => scrollTo(0))
-      requestAnimationFrame(() => props.onFocusedCommentChange?.(null))
+      requestAnimationFrame(() => {
+        if (token !== focusToken) return
+        props.onFocusedCommentChange?.(null)
+      })
     })
   })
 
@@ -202,7 +220,6 @@ export function SessionReviewFilePreviewV2(props: SessionReviewFilePreviewV2Prop
       diffStyle={props.diffStyle}
       expandUnchanged={expandUnchanged()}
       hunkSeparators={view().fileDiff.isPartial ? "simple" : "line-info-basic"}
-      onRendered={props.onRendered}
       enableLineSelection={lineCommentsEnabled()}
       enableGutterUtility={lineCommentsEnabled()}
       onLineSelected={(range: SelectedLineRange | null) => {

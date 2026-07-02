@@ -1226,10 +1226,11 @@ export default function Page() {
     },
     onFocusedCommentChange: (focus: { file: string; id: string } | null) => {
       // The preview clears the focus once it has opened the comment; persist the
-      // focused file as the active selection so the preview stays on it.
+      // focused file as the active selection so the preview stays on it. Skip
+      // files outside the current diff set (their focus is cleared unhandled).
       if (!focus) {
         const current = comments.focus()
-        if (current) focusReviewDiff(current.file)
+        if (current && reviewDiffs().some((diff) => diff.file === current.file)) focusReviewDiff(current.file)
       }
       comments.setFocus(focus)
     },

@@ -118,23 +118,3 @@
 [data-component="file-tree-v2"] [data-slot="file-tree-v2-change"][data-change="deleted"] {
   color: var(--v2-state-fg-danger);
 }
-
-[data-component="file-tree-v2"] [data-slot="file-tree-v2-descendant-change"] {
-  box-sizing: border-box;
-  flex: none;
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  opacity: 0.5;
-}
-
-[data-component="file-tree-v2"] [data-slot="file-tree-v2-descendant-change"]::before {
-  content: "";
-  width: 37.5%;
-  height: 37.5%;
-  border-radius: 50%;
-  background-color: var(--v2-icon-icon-accent);
-}
