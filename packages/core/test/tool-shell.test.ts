@@ -2,7 +2,7 @@ import fs from "fs/promises"
 import { realpathSync } from "node:fs"
 import path from "path"
 import { describe, expect, test } from "bun:test"
-import { DateTime, Effect, Layer } from "effect"
+import { DateTime, Effect, Fiber, Layer, Scope } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { makeGlobalNode } from "@opencode-ai/core/effect/app-node"
@@ -118,23 +118,23 @@ const executionNode = makeGlobalNode({
 })
 
 const layer = AppNodeBuilder.build(
-  LayerNode.bind(
-    LayerNode.group([
-      Database.node,
-      EventV2.node,
-      Job.node,
-      ToolOutputStore.cleanupNode,
-      SessionV2.node,
-      PluginRuntime.providerNode,
-      LocationServiceMap.node,
-      filesystem,
-      FSUtil.node,
-      Global.node,
-    ]),
+  LayerNode.group([
+    Database.node,
+    EventV2.node,
+    Job.node,
+    ToolOutputStore.cleanupNode,
+    SessionV2.node,
     SessionExecution.node,
-    executionNode,
-  ),
-  [LayerNode.replace(PermissionV2.layer, permission)],
+    PluginRuntime.providerNode,
+    LocationServiceMap.node,
+    filesystem,
+    FSUtil.node,
+    Global.node,
+  ]),
+  [
+    [SessionExecution.node, executionNode],
+    [PermissionV2.node, permission],
+  ],
 )
 
 const it = testEffect(layer)
@@ -441,6 +441,51 @@ describe("ShellTool", () => {
             const structured = settled.output?.structured as Record<string, unknown> | undefined
             const shellID = typeof structured?.shellID === "string" ? structured.shellID : undefined
             expect(settled.output?.structured).toMatchObject({ truncated: false })
+            expect(shellID).toStartWith("sh_")
+
+            const shell = yield* Shell.Service
+            if (!shellID) return
+            const id = ShellSchema.ID.make(shellID)
+            expect((yield* shell.list()).map((info) => info.id)).toContain(id)
+            yield* shell.remove(id)
+          }),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
+    ),
+  )
+
+  it.live("backgrounds a foreground command when the session is signaled", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        return withSession(tmp.path, (registry) =>
+          Effect.gen(function* () {
+            const jobs = yield* Job.Service
+            const scope = yield* Scope.Scope
+            const waiting = yield* settleTool(registry, call({ command: idleCommand }, "call-background-signal")).pipe(
+              Effect.forkIn(scope, { startImmediately: true }),
+            )
+
+            const backgroundWhenReady = (remaining = 1000): Effect.Effect<Job.Info[], Error> =>
+              Effect.gen(function* () {
+                const backgrounded = yield* jobs.backgroundAll({ sessionID })
+                if (backgrounded.length > 0) return backgrounded
+                if (remaining <= 0) return yield* Effect.fail(new Error("Timed out waiting for foreground shell job"))
+                yield* Effect.promise(() => Bun.sleep(1))
+                return yield* backgroundWhenReady(remaining - 1)
+              })
+            expect(yield* backgroundWhenReady()).toMatchObject([{ id: "call-background-signal", type: "shell" }])
+
+            const settled = yield* Fiber.join(waiting)
+            const structured = settled.output?.structured as Record<string, unknown> | undefined
+            const shellID = typeof structured?.shellID === "string" ? structured.shellID : undefined
+            expect(settled.output?.structured).toMatchObject({ truncated: false })
+            expect(settled.output?.content[0]).toMatchObject({
+              type: "text",
+              text: expect.stringContaining("running in the background"),
+            })
             expect(shellID).toStartWith("sh_")
 
             const shell = yield* Shell.Service

@@ -1,7 +1,10 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventV2 } from "@opencode-ai/core/event"
+import { Job } from "@opencode-ai/core/job"
 import { Location } from "@opencode-ai/core/location"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { AbsolutePath } from "@opencode-ai/core/schema"
@@ -9,7 +12,6 @@ import { SessionV2 } from "@opencode-ai/core/session"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionStore } from "@opencode-ai/core/session/store"
-import { locationServiceMapLayer } from "@opencode-ai/core/location-services"
 import { testEffect } from "./lib/effect"
 
 const location = Location.Ref.make({ directory: AbsolutePath.make("/project") })
@@ -20,22 +22,13 @@ const projects = Layer.mock(ProjectV2.Service, {
 const execution = Layer.mock(SessionExecution.Service, {
   awaitIdle: (sessionID) => Effect.sync(() => awaited.push(sessionID)),
 })
-const sessions = SessionV2.layer.pipe(
-  Layer.provide(locationServiceMapLayer),
-  Layer.provide(EventV2.defaultLayer),
-  Layer.provide(Database.defaultLayer),
-  Layer.provide(SessionStore.defaultLayer),
-  Layer.provide(projects),
-  Layer.provide(execution),
-)
 const it = testEffect(
-  Layer.mergeAll(
-    Database.defaultLayer,
-    EventV2.defaultLayer,
-    projects,
-    SessionProjector.defaultLayer,
-    SessionStore.defaultLayer,
-    sessions,
+  AppNodeBuilder.build(
+    LayerNode.group([Database.node, EventV2.node, SessionProjector.node, SessionStore.node, SessionV2.node]),
+    [
+      [ProjectV2.node, projects],
+      [SessionExecution.node, execution],
+    ],
   ),
 )
 

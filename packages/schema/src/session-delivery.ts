@@ -1,4 +1,4 @@
-export * as SessionDelivery from "./session-delivery"
+export * as SessionDelivery from "./session-delivery.js"
 
 import { Schema } from "effect"
 

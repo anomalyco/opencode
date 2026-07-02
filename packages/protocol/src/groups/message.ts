@@ -2,7 +2,7 @@ import { Session } from "@opencode-ai/schema/session"
 import { SessionMessage } from "@opencode-ai/schema/session-message"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
-import { InvalidCursorError, SessionNotFoundError, UnknownError } from "../errors"
+import { InvalidCursorError, SessionNotFoundError, UnknownError } from "../errors.js"
 
 export const SessionMessagesQuery = Schema.Struct({
   limit: Schema.optional(

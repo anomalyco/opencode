@@ -313,8 +313,6 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(Global.defaultLayer))
-
 function serviceURL(config: ServiceConfig) {
   const hostname = config.hostname ?? "127.0.0.1"
   const result = new URL(`http://${hostname.includes(":") && !hostname.startsWith("[") ? `[${hostname}]` : hostname}`)

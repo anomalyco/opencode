@@ -83,7 +83,7 @@ export function DialogSessionList() {
         category,
         footer,
         gutter:
-          data.session.status(session.id) === "running"
+          data.session.family(session.id).some((id) => data.session.status(id) === "running")
             ? () => <Spinner />
             : slot === undefined
               ? undefined

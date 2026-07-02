@@ -1,11 +1,13 @@
 import fs from "fs/promises"
 import path from "path"
 import { describe, expect } from "bun:test"
-import { DateTime, Effect, Equal, Hash, Layer, Schema } from "effect"
+import { DateTime, Effect, Equal, Hash, Schema } from "effect"
 import { define } from "@opencode-ai/plugin/v2/effect"
 import { AgentV2 } from "@opencode-ai/core/agent"
 import { Catalog } from "@opencode-ai/core/catalog"
-import { LocationServiceMap, locationServiceMapLayer } from "@opencode-ai/core/location-services"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { LocationServiceMap } from "@opencode-ai/core/location-services"
 import { Location } from "@opencode-ai/core/location"
 import { PluginV2 } from "@opencode-ai/core/plugin"
 import { ModelV2 } from "@opencode-ai/core/model"
@@ -17,34 +19,13 @@ import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 import { toolDefinitions, waitForTool } from "./lib/tool"
-import { FSUtil } from "../src/fs-util"
-import { Credential } from "../src/credential"
 import { Database } from "../src/database/database"
 import { EventV2 } from "../src/event"
-import { Global } from "../src/global"
-import { ModelsDev } from "../src/models-dev"
-import { Npm } from "../src/npm"
-import { Project } from "../src/project"
 import { Reference } from "../src/reference"
 import { ToolRegistry } from "../src/tool/registry"
 
 const it = testEffect(
-  Layer.merge(
-    Layer.mergeAll(Database.defaultLayer, EventV2.defaultLayer),
-    locationServiceMapLayer.pipe(
-      Layer.provide(
-        Layer.mergeAll(
-          Project.defaultLayer,
-          EventV2.defaultLayer,
-          Credential.defaultLayer.pipe(Layer.fresh),
-          Npm.defaultLayer,
-          ModelsDev.defaultLayer,
-          FSUtil.defaultLayer,
-          Global.defaultLayer,
-        ),
-      ),
-    ),
-  ),
+  AppNodeBuilder.build(LayerNode.group([Database.node, EventV2.node, LocationServiceMap.node])),
 )
 
 describe("LocationServiceMap", () => {

@@ -34,7 +34,7 @@ Global definitions are also loaded from `~/.config/opencode/skills/*/SKILL.md`, 
 ## Write frontmatter
 
 Each `SKILL.md` must start with YAML frontmatter.
-Only these fields are recognized:
+Use these Agent Skills fields:
 
 - `name` (required)
 - `description` (required)
@@ -42,7 +42,15 @@ Only these fields are recognized:
 - `compatibility` (optional)
 - `metadata` (optional, string-to-string map)
 
-Unknown frontmatter fields are ignored.
+Put OpenCode-specific behavior in `metadata` instead of adding custom top-level fields.
+
+OpenCode recognizes these optional `metadata` keys:
+
+- `opencode/slash`: set to `"true"` to expose the skill as a `/name` command in the TUI
+- `opencode/autoinvoke`: set to `"false"` to keep the skill out of model-facing auto-selection guidance
+
+The Agent Skills spec defines `metadata` values as strings, so quoted values are the portable form.
+OpenCode also accepts YAML booleans like `opencode/slash: true` and `opencode/autoinvoke: false`.
 
 ---
 
@@ -84,6 +92,8 @@ compatibility: opencode
 metadata:
   audience: maintainers
   workflow: github
+  opencode/slash: "true"
+  opencode/autoinvoke: "false"
 ---
 
 ## What I do
@@ -119,6 +129,9 @@ The agent loads a skill by calling the tool:
 ```
 skill({ name: "git-release" })
 ```
+
+Skills with `metadata["opencode/autoinvoke"]` set to `"false"` are not included in `<available_skills>`.
+They can still be selected manually and loaded by exact name.
 
 ---
 
@@ -220,3 +233,4 @@ If a skill does not show up:
 2. Check that frontmatter includes `name` and `description`
 3. Ensure skill names are unique across all locations
 4. Check permissions—skills with `deny` are hidden from agents
+5. Check `metadata["opencode/autoinvoke"]`—skills set to `"false"` are hidden from model-facing guidance

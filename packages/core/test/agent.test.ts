@@ -2,6 +2,8 @@ import { describe, expect } from "bun:test"
 import { Effect, Exit, Fiber, Layer, Scope, Stream } from "effect"
 import { AgentV2 } from "@opencode-ai/core/agent"
 import { EventV2 } from "@opencode-ai/core/event"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Location } from "@opencode-ai/core/location"
 import { PermissionV2 } from "@opencode-ai/core/permission"
 import { AgentPlugin } from "@opencode-ai/core/plugin/agent"
@@ -14,10 +16,9 @@ const testLocation = location({ directory: AbsolutePath.make("/project") })
 const locationLayer = Layer.succeed(Location.Service, Location.Service.of(testLocation))
 
 const it = testEffect(
-  AgentV2.locationLayer.pipe(
-    Layer.provideMerge(EventV2.defaultLayer),
-    Layer.provideMerge(locationLayer),
-  ),
+  AppNodeBuilder.build(LayerNode.group([AgentV2.node, EventV2.node, Location.node]), [
+    [Location.node, locationLayer],
+  ]) as unknown as Layer.Layer<unknown, never>,
 )
 
 describe("AgentV2", () => {

@@ -1,13 +1,25 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode-ai/protocol",
-  "private": true,
+  "version": "1.17.11",
   "type": "module",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/anomalyco/opencode.git",
+    "directory": "packages/protocol"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist"
+  ],
   "exports": {
     "./*": "./src/*.ts"
   },
   "scripts": {
+    "build": "bun run script/build.ts",
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
@@ -17,6 +29,7 @@
   "devDependencies": {
     "@tsconfig/bun": "catalog:",
     "@types/bun": "catalog:",
-    "@typescript/native-preview": "catalog:"
+    "@typescript/native-preview": "catalog:",
+    "typescript": "catalog:"
   }
 }

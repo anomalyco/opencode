@@ -1,8 +1,8 @@
-export * as DurableEventManifest from "./durable-event-manifest"
+export * as DurableEventManifest from "./durable-event-manifest.js"
 
-import { Event } from "./event"
-import { SessionEvent } from "./session-event"
-import { SessionV1 } from "./session-v1"
+import { Event } from "./event.js"
+import { SessionEvent } from "./session-event.js"
+import { SessionV1 } from "./session-v1.js"
 
 export const SessionDurable = {
   definitions: Event.durable(SessionEvent.DurableDefinitions),

@@ -2,8 +2,8 @@ import { Integration } from "@opencode-ai/schema/integration"
 import { Location } from "@opencode-ai/schema/location"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
-import { InvalidRequestError } from "../errors"
-import { LocationQuery, locationQueryOpenApi } from "./location"
+import { InvalidRequestError } from "../errors.js"
+import { LocationQuery, locationQueryOpenApi } from "./location.js"
 
 const Inputs = Schema.Record(Schema.String, Schema.String)
 

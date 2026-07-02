@@ -1,8 +1,8 @@
 import { Model } from "@opencode-ai/schema/model"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
-import { InvalidRequestError, ServiceUnavailableError } from "../errors"
-import { LocationQuery, locationQueryOpenApi } from "./location"
+import { InvalidRequestError, ServiceUnavailableError } from "../errors.js"
+import { LocationQuery, locationQueryOpenApi } from "./location.js"
 
 export const GenerateGroup = HttpApiGroup.make("server.generate")
   .add(

@@ -89,7 +89,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Pty") {}
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const events = yield* EventV2.Service
@@ -312,7 +312,5 @@ export const layer = Layer.effect(
     return Service.of({ list, get, create, update, remove, write, attach })
   }),
 )
-
-export const locationLayer = layer.pipe(Layer.provide(Config.locationLayer))
 
 export const node = makeLocationNode({ service: Service, layer, deps: [EventV2.node, Location.node, Config.node] })

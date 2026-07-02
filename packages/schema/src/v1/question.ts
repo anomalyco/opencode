@@ -1,11 +1,11 @@
-export * as QuestionV1 from "./question"
+export * as QuestionV1 from "./question.js"
 
 import { Schema } from "effect"
-import { define, inventory } from "../event"
-import { ascending } from "../identifier"
-import { statics } from "../schema"
-import { SessionID } from "../session-id"
-import { SessionV1 } from "./session"
+import { define, inventory } from "../event.js"
+import { ascending } from "../identifier.js"
+import { statics } from "../schema.js"
+import { SessionID } from "../session-id.js"
+import { SessionV1 } from "./session.js"
 
 export const ID = Schema.String.check(Schema.isStartsWith("que")).pipe(
   Schema.brand("QuestionID"),

@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test"
-import { LegacyEvent } from "../src/legacy-event"
-import { PermissionV1 } from "../src/permission-v1"
-import { QuestionV1 } from "../src/question-v1"
-import { Project } from "../src/project"
-import { SessionV1 } from "../src/session-v1"
+import { LegacyEvent } from "../src/legacy-event.js"
+import { PermissionV1 } from "../src/permission-v1.js"
+import { QuestionV1 } from "../src/question-v1.js"
+import { Project } from "../src/project.js"
+import { SessionV1 } from "../src/session-v1.js"
 
 describe("legacy public event schemas", () => {
   test("owns all SessionV1 definitions", () => {

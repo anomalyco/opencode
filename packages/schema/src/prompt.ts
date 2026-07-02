@@ -1,6 +1,6 @@
 import { Schema } from "effect"
-import { optional } from "./schema"
-import { statics } from "./schema"
+import { optional } from "./schema.js"
+import { statics } from "./schema.js"
 
 export interface Source extends Schema.Schema.Type<typeof Source> {}
 export const Source = Schema.Struct({

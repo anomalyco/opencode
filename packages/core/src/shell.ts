@@ -300,8 +300,6 @@ export const layer = Layer.effect(
   }),
 )
 
-export const locationLayer = layer.pipe(Layer.provide(Config.locationLayer))
-
 export const node = makeLocationNode({
   service: Service,
   layer,

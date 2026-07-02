@@ -541,6 +541,7 @@ function SessionHeaderV2Actions(props: { state: SessionHeaderV2ActionsState }) {
       </Show>
       <Show when={props.state.reviewVisible}>
         <TooltipV2
+          class="shrink-0"
           placement="bottom"
           value={
             <>

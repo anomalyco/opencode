@@ -8,6 +8,7 @@ import { PermissionSaved } from "@opencode-ai/core/permission/saved"
 import { PtyTicket } from "@opencode-ai/core/pty/ticket"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
+import { Job } from "@opencode-ai/core/job"
 import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
 import { SessionExecutionLocal } from "@opencode-ai/core/session/execution/local"
 import { PluginRuntime } from "@opencode-ai/core/plugin/runtime"
@@ -30,6 +31,7 @@ const applicationServices = LayerNode.group([
   EventV2.node,
   httpClient,
   ToolOutputStore.cleanupNode,
+  Job.node,
   SessionV2.node,
   PluginRuntime.providerNode,
   PermissionSaved.node,
@@ -42,13 +44,13 @@ const applicationServices = LayerNode.group([
 export function createRoutes(password?: string) {
   return makeRoutes(
     password
-      ? ServerAuth.Config.layer({ username: "opencode", password: Option.some(password) })
-      : ServerAuth.Config.defaultLayer,
+      ? ServerAuth.Config.configLayer({ username: "opencode", password: Option.some(password) })
+      : ServerAuth.Config.layer,
   )
 }
 
 export function createEmbeddedRoutes(sdkPlugins?: SdkPlugins.Store) {
-  return makeRoutes(ServerAuth.Config.layer({ username: "opencode", password: Option.none() }), sdkPlugins)
+  return makeRoutes(ServerAuth.Config.configLayer({ username: "opencode", password: Option.none() }), sdkPlugins)
 }
 
 function makeRoutes<AuthError, AuthServices>(
@@ -57,11 +59,12 @@ function makeRoutes<AuthError, AuthServices>(
 ) {
   const pluginRuntimeCell = PluginRuntime.makeCell()
   const serviceLayer = AppNodeBuilder.build(
-    LayerNode.bind(applicationServices, SessionExecution.node, SessionExecutionLocal.node),
+    applicationServices,
     [
-      LayerNode.replace(PluginRuntime.layer, PluginRuntime.layerWithCell(pluginRuntimeCell)),
-      LayerNode.replace(PluginRuntime.providerLayer, PluginRuntime.providerLayerWithCell(pluginRuntimeCell)),
-      ...(sdkPlugins ? [LayerNode.replace(SdkPlugins.layer, SdkPlugins.layerWithStore(sdkPlugins))] : []),
+      [SessionExecution.node, SessionExecutionLocal.node],
+      [PluginRuntime.node, PluginRuntime.layerWithCell(pluginRuntimeCell)],
+      [PluginRuntime.providerNode, PluginRuntime.providerNodeWithCell(pluginRuntimeCell)],
+      ...(sdkPlugins ? [[SdkPlugins.node, SdkPlugins.layerWithStore(sdkPlugins)] as const] : []),
     ],
   )
 

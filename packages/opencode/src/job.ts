@@ -34,8 +34,6 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer
-
 export const node = LayerNode.make({ service: Service, layer, deps: [] })
 
 export * as Job from "./job"

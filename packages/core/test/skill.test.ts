@@ -1,14 +1,16 @@
 import fs from "fs/promises"
 import path from "path"
 import { describe, expect } from "bun:test"
-import { Effect, Layer } from "effect"
+import { Deferred, Effect, Fiber, Layer, Stream } from "effect"
 import { AgentV2 } from "@opencode-ai/core/agent"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { EventV2 } from "@opencode-ai/core/event"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SkillV2 } from "@opencode-ai/core/skill"
 import { SkillDiscovery } from "@opencode-ai/core/skill/discovery"
+import { FileSystemWatcher } from "@opencode-ai/schema/filesystem-watcher"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
@@ -24,8 +26,8 @@ const discovery = Layer.succeed(
   }),
 )
 const it = testEffect(
-  AppNodeBuilder.build(LayerNode.group([SkillV2.node, AgentV2.node]), [
-    LayerNode.replace(SkillDiscovery.layer, discovery),
+  AppNodeBuilder.build(LayerNode.group([SkillV2.node, AgentV2.node, EventV2.node]), [
+    [SkillDiscovery.node, discovery],
   ]),
 )
 
@@ -38,6 +40,19 @@ description: ${description}
 ---
 # ${name}`,
   )
+}
+
+function waitForSkillUpdate() {
+  return Effect.gen(function* () {
+    const events = yield* EventV2.Service
+    const deferred = yield* Deferred.make<void>()
+    const fiber = yield* events.subscribe(SkillV2.Event.Updated).pipe(
+      Stream.runForEach(() => Deferred.succeed(deferred, undefined).pipe(Effect.asVoid)),
+      Effect.forkScoped,
+    )
+    yield* Effect.yieldNow
+    return { deferred, fiber }
+  })
 }
 
 describe("SkillV2", () => {
@@ -120,6 +135,83 @@ describe("SkillV2", () => {
           expect((yield* skill.list()).map((item) => item.name)).toEqual(["deploy"])
           expect(pulls).toBe(1)
           expect(SkillV2.available(yield* skill.list(), (yield* agents.get(AgentV2.ID.make("reviewer")))!)).toEqual([])
+        }),
+      ),
+    ),
+  )
+
+  it.live("parses opencode metadata flags from skill frontmatter", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(async () => {
+            await fs.mkdir(path.join(tmp.path, "manual"), { recursive: true })
+            await fs.writeFile(
+              path.join(tmp.path, "manual", "SKILL.md"),
+              `---
+name: manual
+description: Manual only
+metadata:
+  opencode/slash: true
+  opencode/autoinvoke: false
+---
+# manual`,
+            )
+          })
+
+          const skill = yield* SkillV2.Service
+          yield* skill.transform((editor) => editor.source({ type: "directory", path: AbsolutePath.make(tmp.path) }))
+
+          expect(yield* skill.list()).toEqual([
+            {
+              name: "manual",
+              description: "Manual only",
+              slash: true,
+              autoinvoke: false,
+              location: AbsolutePath.make(path.join(tmp.path, "manual", "SKILL.md")),
+              content: "# manual",
+            },
+          ])
+        }),
+      ),
+    ),
+  )
+
+  it.live("invalidates cached skills and publishes updates for watcher changes", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(async () => {
+            await fs.mkdir(path.join(tmp.path, "deploy"), { recursive: true })
+            await write(tmp.path, "deploy", "Initial deploy")
+          })
+
+          const events = yield* EventV2.Service
+          const skill = yield* SkillV2.Service
+          yield* skill.transform((editor) => editor.source({ type: "directory", path: AbsolutePath.make(tmp.path) }))
+
+          expect((yield* skill.list()).find((item) => item.name === "deploy")?.description).toBe("Initial deploy")
+
+          const file = path.join(tmp.path, "deploy", "SKILL.md")
+          yield* Effect.promise(() => write(tmp.path, "deploy", "Updated deploy"))
+          expect((yield* skill.list()).find((item) => item.name === "deploy")?.description).toBe("Initial deploy")
+
+          yield* Effect.acquireUseRelease(
+            waitForSkillUpdate(),
+            ({ deferred }) =>
+              events
+                .publish(FileSystemWatcher.Event.Updated, { file, event: "change" })
+                .pipe(Effect.andThen(Deferred.await(deferred)), Effect.timeout("1 second")),
+            ({ fiber }) => Fiber.interrupt(fiber),
+          )
+
+          expect((yield* skill.list()).find((item) => item.name === "deploy")?.description).toBe("Updated deploy")
         }),
       ),
     ),

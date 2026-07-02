@@ -1,5 +1,23 @@
 # V2 Schema Changelog
 
+## 2026-07-01: Synthetic Message Metadata And Model-Visible Leak Fix
+
+- Add optional `metadata: Record<string, unknown>` to the durable `session.next.synthetic.1` event data so synthetic messages can carry a durable ledger (e.g. lazy-instruction dedup paths).
+- Add optional `metadata` to the `SessionV2.synthetic` method and the `POST /api/session/:sessionID/synthetic` HTTP endpoint payload.
+- Stop forwarding `SessionMessage.Synthetic.metadata` (inherited from `Base.metadata`) to the provider message in `to-llm-message`. Synthetic metadata is bookkeeping; the model must not see it.
+
+Change:
+
+- Give durable synthetic messages an optional metadata channel so Location-scoped services can stamp durable, model-hidden annotations (e.g. lazy-instruction dedup claims) without depending on `SessionV2`.
+- `to-llm-message` no longer includes `metadata` on the lowered synthetic user message. Previously `Base.metadata` was forwarded to the provider for every synthetic message; it is now withheld so the model only sees the synthetic text.
+
+Compatibility:
+
+- The added durable-event field is optional so previously recorded experimental events remain decodable; no durable-event version bump.
+- Existing projected synthetic messages decode without `metadata`; the lazy-instruction dedup treats absent metadata as no prior claim.
+- No database migration is required.
+- Provider-visible behavior changes: the model no longer receives synthetic message metadata. Existing sessions that relied on synthetic metadata being model-visible should move that information into the synthetic text.
+
 ## 2026-06-26: Add Finite Session History
 
 - Add `GET /api/session/:sessionID/history` and generated Promise, Effect, and legacy JavaScript client methods.

@@ -35,14 +35,17 @@ if (Script.release && !Script.preview) {
 
 await prepareReleaseFiles()
 
+console.log("\n=== schema ===\n")
+await $`bun ./packages/schema/script/publish.ts`
+
+console.log("\n=== protocol ===\n")
+await $`bun ./packages/protocol/script/publish.ts`
+
 console.log("\n=== cli ===\n")
 await $`bun ./packages/cli/script/publish.ts`
 
 console.log("\n=== sdk ===\n")
 await $`bun ./packages/sdk/js/script/publish.ts`
-
-console.log("\n=== plugin ===\n")
-await $`bun ./packages/plugin/script/publish.ts`
 
 console.log("\n=== ui ===\n")
 await $`bun ./packages/ui/script/publish.ts`

@@ -1,9 +1,9 @@
-export * as Model from "./model"
+export * as Model from "./model.js"
 
 import { Schema } from "effect"
-import { optional } from "./schema"
-import { Provider } from "./provider"
-import { statics } from "./schema"
+import { optional } from "./schema.js"
+import { Provider } from "./provider.js"
+import { statics } from "./schema.js"
 
 export const ID = Schema.String.pipe(Schema.brand("ModelV2.ID"))
 export type ID = typeof ID.Type

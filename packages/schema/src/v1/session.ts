@@ -1,16 +1,16 @@
-export * as SessionV1 from "./session"
+export * as SessionV1 from "./session.js"
 
 import { Effect, Schema, Types } from "effect"
-import { define, inventory } from "../event"
-import { FileDiff } from "../file-diff"
-import { Project } from "../project"
-import { Provider } from "../provider"
-import { Model } from "../model"
-import { NonNegativeInt, optional, statics } from "../schema"
-import { ascending } from "../identifier"
-import { SessionID } from "../session-id"
-import { WorkspaceID } from "../workspace-id"
-import { PermissionV1 } from "./permission"
+import { define, inventory } from "../event.js"
+import { FileDiff } from "../file-diff.js"
+import { Project } from "../project.js"
+import { Provider } from "../provider.js"
+import { Model } from "../model.js"
+import { NonNegativeInt, optional, statics } from "../schema.js"
+import { ascending } from "../identifier.js"
+import { SessionID } from "../session-id.js"
+import { WorkspaceID } from "../workspace-id.js"
+import { PermissionV1 } from "./permission.js"
 
 const Timestamp = Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0))
 

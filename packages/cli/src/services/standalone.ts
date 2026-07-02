@@ -1,5 +1,6 @@
 import { ServerAuth } from "@opencode-ai/server/auth"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Effect, Schema, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { randomBytes } from "node:crypto"
@@ -35,7 +36,7 @@ export const transport = Effect.fn("cli.standalone.transport")(
     const ready = yield* Effect.tryPromise(() => decodeReady(output))
     return { url: ready.url, headers: ServerAuth.headers({ password }), pid: proc.pid }
   },
-  Effect.provide(CrossSpawnSpawner.defaultLayer),
+  Effect.provide(AppNodeBuilder.build(CrossSpawnSpawner.node)),
 )
 
 export * as Standalone from "./standalone"

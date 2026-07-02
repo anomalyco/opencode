@@ -363,8 +363,6 @@ export const make = Effect.gen(function* () {
   return Service.of({ list, get, start, wait, block, background, backgroundAll, cancel })
 })
 
-export const layer = Layer.effect(Service, make)
-
-export const defaultLayer = layer
+const layer = Layer.effect(Service, make)
 
 export const node = makeGlobalNode({ service: Service, layer, deps: [] })

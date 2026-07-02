@@ -1,9 +1,9 @@
-export * as Project from "./project"
+export * as Project from "./project.js"
 
 import { Schema } from "effect"
-import { define, inventory } from "./event"
-import { AbsolutePath, NonNegativeInt, optional } from "./schema"
-import { ProjectID } from "./project-id"
+import { define, inventory } from "./event.js"
+import { AbsolutePath, NonNegativeInt, optional } from "./schema.js"
+import { ProjectID } from "./project-id.js"
 
 export const ID = ProjectID
 export type ID = typeof ID.Type

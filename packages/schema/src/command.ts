@@ -1,8 +1,8 @@
-export * as Command from "./command"
+export * as Command from "./command.js"
 
 import { Schema } from "effect"
-import { optional } from "./schema"
-import { Model } from "./model"
+import { optional } from "./schema.js"
+import { Model } from "./model.js"
 
 export interface Info extends Schema.Schema.Type<typeof Info> {}
 export const Info = Schema.Struct({

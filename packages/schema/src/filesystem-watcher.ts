@@ -1,7 +1,7 @@
-export * as FileSystemWatcher from "./filesystem-watcher"
+export * as FileSystemWatcher from "./filesystem-watcher.js"
 
 import { Schema } from "effect"
-import { define, inventory } from "./event"
+import { define, inventory } from "./event.js"
 
 const Updated = define({
   type: "file.watcher.updated",

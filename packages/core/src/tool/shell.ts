@@ -19,7 +19,7 @@ export const MAX_TIMEOUT_MS = 10 * 60 * 1_000
 export const MAX_CAPTURE_BYTES = 1024 * 1024
 
 const BACKGROUND_STARTED =
-  "The command is running in the background. You will be notified automatically when it completes. DO NOT sleep, poll, or proactively check on its progress."
+  "The command has not completed; it is now running in the background."
 
 export const Input = Schema.Struct({
   command: Schema.String.annotate({ description: "Shell command string to execute" }),
@@ -185,75 +185,80 @@ export const Plugin = {
                 return yield* Effect.fail(new Error(`Working directory is not a directory: ${target.canonical}`))
 
               const timeout = input.timeout ?? DEFAULT_TIMEOUT_MS
-
-              if (input.background === true) {
-                const background = yield* shell.create({
-                  command: input.command,
-                  cwd: target.canonical,
-                  timeout,
-                  metadata: { sessionID: context.sessionID },
-                })
-                const run = Effect.fn("ShellTool.run")(function* () {
-                  return yield* Effect.gen(function* () {
-                    const final = yield* shell.wait(background.id)
-                    const page = yield* shell.output(background.id, { limit: MAX_CAPTURE_BYTES })
-
-                    if (final.status === "timeout")
-                      return `Command exceeded timeout of ${timeout} ms. Retry with a larger timeout if the command is expected to take longer.`
-
-                    const truncated = page.size > page.cursor
-                    const body = page.output || "(no output)"
-                    const notice = truncated ? `\n\n[output truncated; full output saved to: ${final.file}]` : ""
-                    return `${body}${notice}`
-                  }).pipe(Effect.onInterrupt(() => shell.remove(background.id).pipe(Effect.ignore)))
-                })
-
-                const info = yield* runtime.job.start({
-                  id: context.toolCallID,
-                  type: name,
-                  title: input.command,
-                  metadata: { sessionID: context.sessionID },
-                  run: run(),
-                })
-                yield* runtime.job.background(info.id)
-                yield* notifyWhenDone(context.sessionID, context.toolCallID, input.command)
-                return {
-                  output: BACKGROUND_STARTED,
-                  shellID: background.id,
-                  truncated: false,
-                  status: "running" as const,
-                  ...(warnings.length ? { warnings } : {}),
-                }
-              }
-
               const info = yield* shell.create({
                 command: input.command,
                 cwd: target.canonical,
                 timeout,
                 metadata: { sessionID: context.sessionID },
               })
-              const final = yield* shell.wait(info.id)
-              const page = yield* shell.output(info.id, { limit: MAX_CAPTURE_BYTES })
 
-              if (final.status === "timeout") {
+              const settleShell = Effect.fn("ShellTool.settleShell")(function* () {
+                const final = yield* shell.wait(info.id)
+                const page = yield* shell.output(info.id, { limit: MAX_CAPTURE_BYTES })
+
+                if (final.status === "timeout") {
+                  return {
+                    exit: final.exit,
+                    output: `Command exceeded timeout of ${timeout} ms. Retry with a larger timeout if the command is expected to take longer.`,
+                    truncated: false,
+                    timeout: true,
+                    status: "completed" as const,
+                  }
+                }
+
+                const truncated = page.size > page.cursor
+                const body = page.output || "(no output)"
+                const notice = truncated ? `\n\n[output truncated; full output saved to: ${final.file}]` : ""
                 return {
                   exit: final.exit,
-                  output: `Command exceeded timeout of ${timeout} ms. Retry with a larger timeout if the command is expected to take longer.`,
-                  truncated: false,
-                  timeout: true,
+                  output: `${body}${notice}`,
+                  truncated,
                   status: "completed" as const,
+                }
+              })
+
+              const run = settleShell().pipe(
+                Effect.map((output) => output.output),
+                Effect.onInterrupt(() => shell.remove(info.id).pipe(Effect.ignore)),
+              )
+              const job = yield* runtime.job.start({
+                id: context.toolCallID,
+                type: name,
+                title: input.command,
+                metadata: { sessionID: context.sessionID, shellID: info.id },
+                run,
+              })
+
+              if (input.background === true) {
+                yield* runtime.job.background(job.id)
+                yield* notifyWhenDone(context.sessionID, context.toolCallID, input.command)
+                return {
+                  output: BACKGROUND_STARTED,
+                  shellID: info.id,
+                  truncated: false,
+                  status: "running" as const,
                   ...(warnings.length ? { warnings } : {}),
                 }
               }
 
-              const truncated = page.size > page.cursor
-              const body = page.output || "(no output)"
-              const notice = truncated ? `\n\n[output truncated; full output saved to: ${final.file}]` : ""
+              const result = yield* runtime.job.block({ id: job.id, sessionID: context.sessionID }).pipe(
+                Effect.onInterrupt(() => runtime.job.cancel(job.id).pipe(Effect.ignore)),
+              )
+              if (result?.type === "backgrounded") {
+                yield* notifyWhenDone(context.sessionID, context.toolCallID, input.command)
+                return {
+                  output: BACKGROUND_STARTED,
+                  shellID: info.id,
+                  truncated: false,
+                  status: "running" as const,
+                  ...(warnings.length ? { warnings } : {}),
+                }
+              }
+              if (result?.info.status === "error") return yield* Effect.fail(new Error(result.info.error ?? "Command failed"))
+              if (result?.info.status === "cancelled") return yield* Effect.fail(new Error("Command cancelled"))
+
               return {
-                exit: final.exit,
-                output: `${body}${notice}`,
-                truncated,
-                status: "completed" as const,
+                ...(yield* settleShell()),
                 ...(warnings.length ? { warnings } : {}),
               }
             }).pipe(Effect.mapError(() => new ToolFailure({ message: `Unable to execute command: ${input.command}` }))),

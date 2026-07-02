@@ -309,6 +309,8 @@ import type {
   V2PermissionSavedListResponses,
   V2PermissionSavedRemoveErrors,
   V2PermissionSavedRemoveResponses,
+  V2PluginListErrors,
+  V2PluginListResponses,
   V2ProjectCopyCreateErrors,
   V2ProjectCopyCreateResponses,
   V2ProjectCopyRefreshErrors,
@@ -343,6 +345,8 @@ import type {
   V2ReferenceListResponses,
   V2SessionActiveErrors,
   V2SessionActiveResponses,
+  V2SessionBackgroundErrors,
+  V2SessionBackgroundResponses,
   V2SessionCompactErrors,
   V2SessionCompactResponses,
   V2SessionContextErrors,
@@ -5107,6 +5111,30 @@ export class Agent extends HeyApiClient {
   }
 }
 
+export class Plugin extends HeyApiClient {
+  /**
+   * List plugins
+   *
+   * Retrieve currently loaded plugins.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      location?: {
+        directory?: string
+        workspace?: string
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "location" }] }])
+    return (options?.client ?? this.client).get<V2PluginListResponses, V2PluginListErrors, ThrowOnError>({
+      url: "/api/plugin",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Revert extends HeyApiClient {
   /**
    * Stage session revert
@@ -5924,6 +5952,27 @@ export class Session3 extends HeyApiClient {
       ...options,
       ...params,
     })
+  }
+
+  /**
+   * Background blocking session tools
+   *
+   * Move active foreground backgroundable tools for this session into background observation. Idle requests are a no-op.
+   */
+  public background<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "sessionID" }] }])
+    return (options?.client ?? this.client).post<V2SessionBackgroundResponses, V2SessionBackgroundErrors, ThrowOnError>(
+      {
+        url: "/api/session/{sessionID}/background",
+        ...options,
+        ...params,
+      },
+    )
   }
 
   /**
@@ -7434,6 +7483,11 @@ export class V2 extends HeyApiClient {
   private _agent?: Agent
   get agent(): Agent {
     return (this._agent ??= new Agent({ client: this.client }))
+  }
+
+  private _plugin?: Plugin
+  get plugin(): Plugin {
+    return (this._plugin ??= new Plugin({ client: this.client }))
   }
 
   private _session?: Session3

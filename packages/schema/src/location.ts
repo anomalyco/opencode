@@ -1,9 +1,9 @@
-export * as Location from "./location"
+export * as Location from "./location.js"
 
 import { Schema } from "effect"
-import { AbsolutePath, optional } from "./schema"
-import { ProjectID } from "./project-id"
-import { WorkspaceID } from "./workspace-id"
+import { AbsolutePath, optional } from "./schema.js"
+import { ProjectID } from "./project-id.js"
+import { WorkspaceID } from "./workspace-id.js"
 
 export interface Ref extends Schema.Schema.Type<typeof Ref> {}
 export const Ref = Schema.Struct({

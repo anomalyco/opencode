@@ -17,6 +17,7 @@ import { Reference } from "../reference"
 import { AbsolutePath, type DeepMutable } from "../schema"
 import { SkillV2 } from "../skill"
 import { Tools } from "../tool/tools"
+import { ToolHooks } from "../tool/hooks"
 import { WorkspaceV2 } from "../workspace"
 
 const mutable = <T>(value: T) => value as DeepMutable<T>
@@ -31,6 +32,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
   const reference = yield* Reference.Service
   const skill = yield* SkillV2.Service
   const tools = yield* Tools.Service
+  const toolHooks = yield* ToolHooks.Service
   const runtime = yield* PluginRuntime.Service
   const locationInfo = () =>
     new Location.Info({
@@ -247,6 +249,47 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
     },
     tool: {
       register: (input) => tools.register(input),
+      execute: {
+        before: (callback) =>
+          toolHooks.hook.before((event) => {
+            const output = {
+              tool: event.tool,
+              sessionID: event.sessionID,
+              agent: event.agent,
+              assistantMessageID: event.assistantMessageID,
+              toolCallID: event.toolCallID,
+              input: event.input,
+            }
+            const result = callback(output)
+            return Effect.suspend(() => (Effect.isEffect(result) ? result : Effect.void)).pipe(
+              Effect.tap(() => Effect.sync(() => (event.input = output.input))),
+            )
+          }),
+        after: (callback) =>
+          toolHooks.hook.after((event) => {
+            const output = {
+              tool: event.tool,
+              sessionID: event.sessionID,
+              agent: event.agent,
+              assistantMessageID: event.assistantMessageID,
+              toolCallID: event.toolCallID,
+              input: event.input,
+              result: event.result,
+              output: event.output,
+              outputPaths: event.outputPaths,
+            }
+            const result = callback(output)
+            return Effect.suspend(() => (Effect.isEffect(result) ? result : Effect.void)).pipe(
+              Effect.tap(() =>
+                Effect.sync(() => {
+                  event.result = output.result
+                  event.output = output.output
+                  event.outputPaths = output.outputPaths
+                }),
+              ),
+            )
+          }),
+      },
     },
     session: {
       create: (input) =>

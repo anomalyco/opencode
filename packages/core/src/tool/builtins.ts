@@ -14,18 +14,6 @@ import { TodoWriteTool } from "./todowrite"
 import { WebFetchTool } from "./webfetch"
 import { WebSearchTool } from "./websearch"
 import { WriteTool } from "./write"
-import { FSUtil } from "../fs-util"
-import { Location } from "../location"
-import { LocationMutation } from "../location-mutation"
-import { FileMutation } from "../file-mutation"
-import { PermissionV2 } from "../permission"
-import { Ripgrep } from "../ripgrep"
-import { Image } from "../image"
-import { QuestionV2 } from "../question"
-import { SkillV2 } from "../skill"
-import { SessionTodo } from "../session/todo"
-import { ToolRegistry } from "./registry"
-import { httpClient } from "../effect/app-node-platform"
 
 export class Service extends Context.Service<Service, Record<string, never>>()("@opencode/v2/BuiltInTools") {}
 
@@ -42,38 +30,24 @@ export class Service extends Context.Service<Service, Record<string, never>>()("
  * repo_clone, repo_overview, plan_exit, and Rune/code mode. Keep MCP and plugin
  * transforms separate from this static built-in list.
  */
-const registrations = Layer.mergeAll(
-  ApplyPatchTool.layer,
-  EditTool.layer,
-  GlobTool.layer,
-  GrepTool.layer,
-  QuestionTool.layer,
-  ReadTool.layer.pipe(Layer.provide(ReadToolFileSystem.layer)),
-  SkillTool.layer,
-  TodoWriteTool.layer,
-  WebFetchTool.layer,
-  WebSearchTool.layer.pipe(Layer.provide(WebSearchTool.defaultConfigLayer)),
-  WriteTool.layer,
-)
-
-export const locationLayer = Layer.succeed(Service, Service.of({})).pipe(Layer.provideMerge(registrations))
+const layer = Layer.succeed(Service, Service.of({}))
 
 export const node = makeLocationNode({
   service: Service,
-  layer: locationLayer,
+  layer,
   deps: [
-    ToolRegistry.toolsNode,
-    FSUtil.node,
-    Location.node,
-    LocationMutation.node,
-    FileMutation.node,
-    PermissionV2.node,
-    Ripgrep.node,
-    Image.node,
-    QuestionV2.node,
-    SkillV2.node,
-    SessionTodo.node,
+    ApplyPatchTool.node,
+    EditTool.node,
+    GlobTool.node,
+    GrepTool.node,
+    QuestionTool.node,
+    ReadTool.node,
     ReadToolFileSystem.node,
-    httpClient,
+    SkillTool.node,
+    TodoWriteTool.node,
+    WebFetchTool.node,
+    WebSearchTool.node,
+    WebSearchTool.configNode,
+    WriteTool.node,
   ],
 })

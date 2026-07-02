@@ -1,9 +1,9 @@
-export * as FileSystem from "./filesystem"
+export * as FileSystem from "./filesystem.js"
 
 import { Schema } from "effect"
-import { optional } from "./schema"
-import { define, inventory } from "./event"
-import { NonNegativeInt, PositiveInt, RelativePath } from "./schema"
+import { optional } from "./schema.js"
+import { define, inventory } from "./event.js"
+import { NonNegativeInt, PositiveInt, RelativePath } from "./schema.js"
 
 const Edited = define({
   type: "file.edited",

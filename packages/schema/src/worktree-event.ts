@@ -1,8 +1,8 @@
-export * as WorktreeEvent from "./worktree-event"
+export * as WorktreeEvent from "./worktree-event.js"
 
 import { Schema } from "effect"
-import { optional } from "./schema"
-import { Event } from "./event"
+import { optional } from "./schema.js"
+import { Event } from "./event.js"
 
 export const Ready = Event.define({
   type: "worktree.ready",

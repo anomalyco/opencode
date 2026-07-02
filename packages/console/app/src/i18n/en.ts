@@ -248,7 +248,6 @@ export const dict = {
   "zen.privacy.exceptionsLink": "following exceptions",
 
   "go.title": "OpenCode Go | Low cost coding models for everyone",
-  "go.banner.text": "MiniMax M3 gets 3× usage limits for a limited time",
   "go.meta.description":
     "Go starts at $5 for your first month, then $10/month, with generous 5-hour request limits for GLM-5.2, GLM-5.1, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro, and DeepSeek V4 Flash.",
   "go.hero.title": "Low cost coding models for everyone",
@@ -370,6 +369,8 @@ export const dict = {
   "zen.api.error.userMonthlyLimitReached":
     "You have reached your monthly spending limit of ${{amount}}. Manage your limits here: {{membersUrl}}",
   "zen.api.error.modelDisabled": "Model is disabled",
+  "zen.api.error.regionNotAllowed":
+    "This model is hosted in China. If you would like to use this model, enable it in your settings: {{consoleGoUrl}}",
   "zen.api.error.trialEnded":
     "Free promotion has ended for {{model}}. You can continue using the model by subscribing to OpenCode Go - {{link}}",
 
@@ -649,6 +650,9 @@ export const dict = {
   "workspace.lite.subscription.useBalance": "Use your available balance after reaching the usage limits",
   "workspace.lite.subscription.selectProvider":
     'Select "OpenCode Go" as the provider in your opencode configuration to use Go models.',
+  "workspace.lite.providers.title": "Providers",
+  "workspace.lite.providers.description": "Control which providers are used for routing.",
+  "workspace.lite.providers.useChina": "Enable models hosted in China",
   "workspace.lite.black.message":
     "You're currently subscribed to OpenCode Black or on the waitlist. Please unsubscribe first if you'd like to switch to Go.",
   "workspace.lite.other.message":

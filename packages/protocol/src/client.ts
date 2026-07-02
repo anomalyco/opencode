@@ -1,6 +1,9 @@
-import { InvalidRequestError, SessionNotFoundError } from "./errors"
-import { makeDefaultApi } from "./api"
+import { InvalidRequestError, SessionNotFoundError } from "./errors.js"
+import { makeDefaultApi } from "./api.js"
+import type { Api } from "./api.js"
+import type { Context } from "effect"
 import { HttpApiMiddleware } from "effect/unstable/httpapi"
+import type { EventGroup } from "./groups/event.js"
 
 class LocationMiddleware extends HttpApiMiddleware.Service<LocationMiddleware>()(
   "@opencode-ai/client/LocationMiddleware",
@@ -11,7 +14,15 @@ class SessionLocationMiddleware extends HttpApiMiddleware.Service<SessionLocatio
   { error: [InvalidRequestError, SessionNotFoundError] },
 ) {}
 
-export const ClientApi = makeDefaultApi({
+type ClientApiShape = Api<
+  Context.Service.Identifier<typeof LocationMiddleware>,
+  Context.Service.Shape<typeof LocationMiddleware>,
+  Context.Service.Identifier<typeof SessionLocationMiddleware>,
+  Context.Service.Shape<typeof SessionLocationMiddleware>,
+  typeof EventGroup
+>
+
+export const ClientApi: ClientApiShape = makeDefaultApi({
   locationMiddleware: LocationMiddleware,
   sessionLocationMiddleware: SessionLocationMiddleware,
 })

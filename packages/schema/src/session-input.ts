@@ -1,12 +1,12 @@
-export * as SessionInput from "./session-input"
+export * as SessionInput from "./session-input.js"
 
 import { Schema } from "effect"
-import { optional } from "./schema"
-import { Prompt } from "./prompt"
-import { DateTimeUtcFromMillis, NonNegativeInt } from "./schema"
-import { SessionDelivery } from "./session-delivery"
-import { SessionID } from "./session-id"
-import { SessionMessage } from "./session-message"
+import { optional } from "./schema.js"
+import { Prompt } from "./prompt.js"
+import { DateTimeUtcFromMillis, NonNegativeInt } from "./schema.js"
+import { SessionDelivery } from "./session-delivery.js"
+import { SessionID } from "./session-id.js"
+import { SessionMessage } from "./session-message.js"
 
 export const Delivery = SessionDelivery.Delivery
 export type Delivery = SessionDelivery.Delivery

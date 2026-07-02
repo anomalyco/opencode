@@ -1,6 +1,6 @@
-export * as LspEvent from "./lsp-event"
+export * as LspEvent from "./lsp-event.js"
 
-import { Event } from "./event"
+import { Event } from "./event.js"
 
 export const Updated = Event.define({ type: "lsp.updated", schema: {} })
 

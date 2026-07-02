@@ -1,10 +1,11 @@
 export * as Tool from "./tool.js"
 
-import { ToolDefinition, ToolFailure, ToolOutput, type ToolCall } from "@opencode-ai/llm"
+import { ToolDefinition, ToolFailure, ToolOutput, type ToolCall, type ToolResultValue } from "@opencode-ai/llm"
 import { Agent } from "@opencode-ai/schema/agent"
 import { Session } from "@opencode-ai/schema/session"
 import { SessionMessage } from "@opencode-ai/schema/session-message"
 import { Effect, JsonSchema, Schema, type Scope } from "effect"
+import type { Hooks } from "./registration.js"
 
 export interface Context {
   readonly sessionID: Session.ID
@@ -213,6 +214,28 @@ function toJsonSchema(schema: Schema.Top): JsonSchema.JsonSchema {
   return { ...document.schema, $defs: document.definitions }
 }
 
+export interface ToolExecuteBeforeEvent {
+  readonly tool: string
+  readonly sessionID: Session.ID
+  readonly agent: Agent.ID
+  readonly assistantMessageID: SessionMessage.ID
+  readonly toolCallID: string
+  input: unknown
+}
+
+export interface ToolExecuteAfterEvent {
+  readonly tool: string
+  readonly sessionID: Session.ID
+  readonly agent: Agent.ID
+  readonly assistantMessageID: SessionMessage.ID
+  readonly toolCallID: string
+  readonly input: unknown
+  result: ToolResultValue
+  output?: ToolOutput
+  outputPaths?: ReadonlyArray<string>
+}
+
 export interface ToolDomain {
   readonly register: (tools: Readonly<Record<string, AnyTool>>) => Effect.Effect<void, RegistrationError, Scope.Scope>
+  readonly execute: Hooks<{ before: ToolExecuteBeforeEvent; after: ToolExecuteAfterEvent }>
 }

@@ -1,9 +1,9 @@
-export * as Revert from "./revert"
+export * as Revert from "./revert.js"
 
 import { Schema } from "effect"
-import { optional } from "./schema"
-import { NonNegativeInt, RelativePath } from "./schema"
-import { SessionMessage } from "./session-message"
+import { optional } from "./schema.js"
+import { NonNegativeInt, RelativePath } from "./schema.js"
+import { SessionMessage } from "./session-message.js"
 
 export const FileDiff = Schema.Struct({
   path: RelativePath,

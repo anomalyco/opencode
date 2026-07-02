@@ -146,7 +146,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/AISDK") {}
 
-export const locationLayer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     let sdkHooks: ((event: SDKEvent) => Effect.Effect<void> | void)[] = []
@@ -232,6 +232,4 @@ export const locationLayer = Layer.effect(
   }),
 )
 
-export const node = makeLocationNode({ service: Service, layer: locationLayer, deps: [] })
-
-export const defaultLayer = locationLayer
+export const node = makeLocationNode({ service: Service, layer, deps: [] })

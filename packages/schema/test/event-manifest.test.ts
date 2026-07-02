@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test"
-import { Agent, FileSystem, Integration, Permission, Project, Reference, Session, Workspace } from "../src"
-import { EventManifest } from "../src/event-manifest"
-import { IdeEvent } from "../src/ide-event"
-import { SessionEvent } from "../src/session-event"
-import { SessionTodo } from "../src/session-todo"
-import { SessionV1 } from "../src/session-v1"
-import { WorkspaceEvent } from "../src/workspace-event"
+import { Agent, FileSystem, Integration, Permission, Project, Reference, Session, Workspace } from "../src/index.js"
+import { EventManifest } from "../src/event-manifest.js"
+import { IdeEvent } from "../src/ide-event.js"
+import { SessionEvent } from "../src/session-event.js"
+import { SessionTodo } from "../src/session-todo.js"
+import { SessionV1 } from "../src/session-v1.js"
+import { WorkspaceEvent } from "../src/workspace-event.js"
 
 describe("public event manifest", () => {
   test("owns the complete public event surface", () => {

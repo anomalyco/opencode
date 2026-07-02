@@ -10,7 +10,7 @@ export default Runtime.handler(Commands, (input) =>
     const directory = Option.getOrUndefined(input.directory)
     if (directory !== undefined) process.chdir(directory)
     const updater = yield* Updater.Service
-    yield* updater.check()
+    yield* updater.check().pipe(Effect.forkScoped)
     const daemon = yield* Daemon.Service
     const transport = yield* (input.standalone ? Standalone.transport() : daemon.transport())
     const { runTui } = yield* Effect.promise(() => import("../../tui"))

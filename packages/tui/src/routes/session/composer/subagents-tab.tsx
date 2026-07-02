@@ -3,6 +3,7 @@ import { createStore } from "solid-js/store"
 import { TextAttributes, RGBA, ScrollBoxRenderable } from "@opentui/core"
 import { useRoute, useRouteData } from "../../../context/route"
 import { useData } from "../../../context/data"
+import { useSDK } from "../../../context/sdk"
 import { useTheme, selectedForeground } from "../../../context/theme"
 import { Locale } from "../../../util/locale"
 import { useBindings, useCommandShortcut } from "../../../keymap"
@@ -19,12 +20,12 @@ interface SubagentEntry {
 export function SubagentsTab(props: { sessionID: string }) {
   const route = useRouteData("session")
   const data = useData()
+  const sdk = useSDK()
   const { theme } = useTheme()
   const fg = selectedForeground(theme)
   const navigate = useRoute().navigate
   const composer = useComposerTab()
   const interruptHint = useCommandShortcut("composer.subagent.interrupt")
-  const backgroundHint = useCommandShortcut("composer.background")
 
   const session = createMemo(() => data.session.get(props.sessionID))
 
@@ -132,10 +133,7 @@ export function SubagentsTab(props: { sessionID: string }) {
       hints: () => {
         const entry = selectedEntry()
         if (!entry || entry.status !== "running") return []
-        return [
-          { label: "interrupt", shortcut: interruptHint() },
-          ...(entry.current ? [{ label: "background", shortcut: backgroundHint() }] : []),
-        ]
+        return [{ label: "interrupt", shortcut: interruptHint() }]
       },
       onClose: () => {
         const parentID = session()?.parentID
@@ -185,15 +183,7 @@ export function SubagentsTab(props: { sessionID: string }) {
         run() {
           const entry = selectedEntry()
           if (!entry || entry.status !== "running") return
-        },
-      },
-      {
-        name: "composer.background",
-        title: "Background subagent",
-        category: "Composer",
-        run() {
-          const entry = selectedEntry()
-          if (!entry || entry.status !== "running" || !entry.current) return
+          void sdk.api.session.interrupt({ sessionID: entry.sessionID })
         },
       },
     ],
@@ -202,7 +192,6 @@ export function SubagentsTab(props: { sessionID: string }) {
       { key: "down", desc: "Next subagent", group: "Subagents", cmd: "composer.subagent.down" },
       { key: "return", desc: "Navigate to subagent", group: "Subagents", cmd: "composer.subagent.select" },
       { key: "ctrl+d", desc: "Interrupt subagent", group: "Subagents", cmd: "composer.subagent.interrupt" },
-      { key: "ctrl+b", desc: "Background subagent", group: "Subagents", cmd: "composer.background" },
     ],
   }))
 

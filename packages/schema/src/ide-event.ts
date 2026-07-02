@@ -1,7 +1,7 @@
-export * as IdeEvent from "./ide-event"
+export * as IdeEvent from "./ide-event.js"
 
 import { Schema } from "effect"
-import { Event } from "./event"
+import { Event } from "./event.js"
 
 export const Installed = Event.define({
   type: "ide.installed",

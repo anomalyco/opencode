@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Schema } from "effect"
-import { Event } from "../src/event"
+import { Event } from "../src/event.js"
 
 describe("public event schemas", () => {
   test("definition is pure", () => {

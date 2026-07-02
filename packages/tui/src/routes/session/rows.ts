@@ -73,8 +73,10 @@ export function createSessionRows(sessionID: Accessor<string>) {
     setRows(
       produce((draft) => {
         if (draft.some((row) => row.type === "message" && row.messageID === messageID)) return
-        completePrevious(draft)
-        draft.push({ type: "message", messageID })
+        const queued = isQueued(messageID)
+        const index = queued ? draft.length : queuedStart(draft)
+        if (!queued) completePrevious(draft, index)
+        draft.splice(index, 0, { type: "message", messageID })
       }),
     )
 
@@ -82,14 +84,15 @@ export function createSessionRows(sessionID: Accessor<string>) {
     setRows(
       produce((draft) => {
         if (hasPart(draft, ref)) return
+        const index = queuedStart(draft)
         if (name && exploration(name)) {
-          const previous = draft.at(-1)
+          const previous = draft[index - 1]
           if (previous?.type === "group" && previous.kind === "exploration") {
             previous.refs.push(ref)
             return
           }
-          completePrevious(draft)
-          draft.push({
+          completePrevious(draft, index)
+          draft.splice(index, 0, {
             type: "group",
             kind: "exploration",
             refs: [ref],
@@ -98,8 +101,8 @@ export function createSessionRows(sessionID: Accessor<string>) {
           })
           return
         }
-        completePrevious(draft)
-        draft.push({ type: "part", ref })
+        completePrevious(draft, index)
+        draft.splice(index, 0, { type: "part", ref })
       }),
     )
 
@@ -107,18 +110,32 @@ export function createSessionRows(sessionID: Accessor<string>) {
     setRows(
       produce((draft) => {
         if (draft.some((row) => row.type === "assistant-footer" && row.messageID === messageID)) return
-        completePrevious(draft)
-        draft.push({ type: "assistant-footer", messageID })
+        const index = queuedStart(draft)
+        completePrevious(draft, index)
+        draft.splice(index, 0, { type: "assistant-footer", messageID })
       }),
     )
+
+  const isQueued = (messageID: string) => {
+    const message = data.session.message.get(sessionID(), messageID)
+    return message?.type === "user" && message.metadata?.queued === true
+  }
+
+  const queuedStart = (rows: SessionRow[]) => {
+    const index = rows.findIndex((row) => row.type === "message" && isQueued(row.messageID))
+    return index === -1 ? rows.length : index
+  }
 
   const message = (event: { data: { sessionID: string; messageID: string } }) => {
     if (event.data.sessionID === sessionID()) appendMessage(event.data.messageID)
   }
   const subscriptions = [
+    data.on("session.next.prompt.admitted", message),
     data.on("session.next.prompted", message),
     data.on("session.next.context.updated", message),
-    data.on("session.next.synthetic", message),
+    data.on("session.next.synthetic", (event) => {
+      if (event.data.sessionID === sessionID() && event.data.description?.trim()) appendMessage(event.data.messageID)
+    }),
     data.on("session.next.shell.started", message),
     data.on("session.next.agent.switched", message),
     data.on("session.next.model.switched", message),
@@ -157,9 +174,12 @@ export function createSessionRows(sessionID: Accessor<string>) {
 }
 
 export function reduceSessionRows(messages: SessionMessage[]) {
-  return messages.reduce<SessionRow[]>((rows, message) => {
+  return [...messages.filter((message) => !isQueuedMessage(message)), ...messages.filter(isQueuedMessage)].reduce<
+    SessionRow[]
+  >((rows, message) => {
     if (message.type !== "assistant") {
-      completePrevious(rows)
+      if (message.type === "synthetic" && !message.description?.trim()) return rows
+      if (!isQueuedMessage(message)) completePrevious(rows)
       rows.push({ type: "message", messageID: message.id })
       return rows
     }
@@ -173,6 +193,10 @@ export function reduceSessionRows(messages: SessionMessage[]) {
     }
     return rows
   }, [])
+}
+
+function isQueuedMessage(message: SessionMessage) {
+  return message.type === "user" && message.metadata?.queued === true
 }
 
 function append(rows: SessionRow[], ref: PartRef, part: SessionMessageAssistant["content"][number]) {
@@ -192,8 +216,8 @@ function append(rows: SessionRow[], ref: PartRef, part: SessionMessageAssistant[
   rows.push({ type: "part", ref })
 }
 
-function completePrevious(rows: SessionRow[]) {
-  const previous = rows.at(-1)
+function completePrevious(rows: SessionRow[], index = rows.length) {
+  const previous = rows[index - 1]
   if (previous?.type === "group") previous.completed = true
 }
 

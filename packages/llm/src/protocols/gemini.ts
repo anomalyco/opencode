@@ -8,6 +8,7 @@ import {
   LLMEvent,
   Usage,
   type FinishReason,
+  type JsonSchema,
   type LLMRequest,
   type MediaPart,
   type ProviderMetadata,
@@ -19,6 +20,7 @@ import {
 import { JsonObject, optionalArray, ProviderShared } from "./shared"
 import { GeminiToolSchema } from "./utils/gemini-tool-schema"
 import { Lifecycle } from "./utils/lifecycle"
+import { ToolSchemaProjection } from "./utils/tool-schema"
 
 const ADAPTER = "gemini"
 const MEDIA_MIMES = new Set<string>(ProviderShared.MEDIA_MIMES)
@@ -166,10 +168,10 @@ interface ParserState {
 // =============================================================================
 // Request Lowering
 // =============================================================================
-const lowerTool = (tool: ToolDefinition) => ({
+const lowerTool = (tool: ToolDefinition, inputSchema: JsonSchema) => ({
   name: tool.name,
   description: tool.description,
-  parameters: GeminiToolSchema.convert(tool.inputSchema),
+  parameters: GeminiToolSchema.convert(inputSchema),
 })
 
 const lowerToolConfig = (toolChoice: NonNullable<LLMRequest["toolChoice"]>) =>
@@ -300,6 +302,7 @@ const thinkingConfig = (request: LLMRequest) => {
 const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMRequest) {
   const toolsEnabled = request.tools.length > 0 && request.toolChoice?.type !== "none"
   const generation = request.generation
+  const toolSchemaCompatibility = request.model.compatibility?.toolSchema
   const generationConfig = {
     maxOutputTokens: generation?.maxTokens,
     temperature: generation?.temperature,
@@ -313,7 +316,15 @@ const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMReque
     contents: yield* lowerMessages(request),
     systemInstruction:
       request.system.length === 0 ? undefined : { parts: [{ text: ProviderShared.joinText(request.system) }] },
-    tools: toolsEnabled ? [{ functionDeclarations: request.tools.map(lowerTool) }] : undefined,
+    tools: toolsEnabled
+      ? [
+          {
+            functionDeclarations: request.tools.map((tool) =>
+              lowerTool(tool, ToolSchemaProjection.modelCompatibility(tool.inputSchema, toolSchemaCompatibility)),
+            ),
+          },
+        ]
+      : undefined,
     toolConfig: toolsEnabled && request.toolChoice ? yield* lowerToolConfig(request.toolChoice) : undefined,
     generationConfig: Object.values(generationConfig).some((value) => value !== undefined)
       ? generationConfig

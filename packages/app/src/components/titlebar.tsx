@@ -229,7 +229,8 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
       }}
       style={{
         "min-height": minHeight(),
-        "padding-left": mac() && !mobile() ? `${84 / zoom()}px` : 0,
+        // Keep native macOS traffic lights clear even when the desktop window is narrow.
+        "padding-left": mac() ? `${84 / zoom()}px` : 0,
         width: electronWindows() ? `env(titlebar-area-width, calc(100vw - ${windowsControlsWidth()}))` : undefined,
         "max-width": electronWindows()
           ? `env(titlebar-area-width, calc(100vw - ${windowsControlsWidth()}))`
@@ -571,7 +572,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                           placement="bottom"
                           title={language.t("command.session.new")}
                           keybind={command.keybind("session.new")}
-                          openDelay={2000}
+                          openDelay={800}
                         >
                           <Button
                             variant="ghost"
@@ -601,7 +602,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                   >
                     <Show when={hasProjects() && nav()}>
                       <div class="flex items-center gap-0 transition-transform">
-                        <Tooltip placement="bottom" value={language.t("common.goBack")} openDelay={2000}>
+                        <Tooltip placement="bottom" value={language.t("common.goBack")} openDelay={800}>
                           <Button
                             variant="ghost"
                             icon="chevron-left"
@@ -611,7 +612,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                             aria-label={language.t("common.goBack")}
                           />
                         </Tooltip>
-                        <Tooltip placement="bottom" value={language.t("common.goForward")} openDelay={2000}>
+                        <Tooltip placement="bottom" value={language.t("common.goForward")} openDelay={800}>
                           <Button
                             variant="ghost"
                             icon="chevron-right"

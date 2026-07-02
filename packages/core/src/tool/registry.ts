@@ -10,6 +10,7 @@ import { ToolOutputStore } from "../tool-output-store"
 import { Wildcard } from "../util/wildcard"
 import { definition, permission, registrationEntries, settle, type AnyTool, type RegistrationError } from "./tool"
 import { Tools } from "./tools"
+import { ToolHooks } from "./hooks"
 import { makeLocationNode } from "../effect/app-node"
 
 export type ExecuteInput = {
@@ -47,6 +48,7 @@ const registryLayer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const resources = yield* ToolOutputStore.Service
+    const toolHooks = yield* ToolHooks.Service
     type Registration = { readonly identity: object; readonly tool: AnyTool }
     const local = new Map<string, Array<{ readonly token: object; readonly registration: Registration }>>()
 
@@ -61,7 +63,17 @@ const registryLayer = Layer.effect(
         }
       if (advertised && registration.identity !== advertised)
         return { result: { type: "error" as const, value: `Stale tool call: ${input.call.name}` } }
-      const pending = yield* settle(registration.tool, input.call, {
+      // Hooks fire only for hosted/local tools; provider-executed calls never reach settleWith.
+      const beforeEvent: ToolHooks.BeforeEvent = {
+        tool: input.call.name,
+        sessionID: input.sessionID,
+        agent: input.agent,
+        assistantMessageID: input.assistantMessageID,
+        toolCallID: input.call.id,
+        input: input.call.input,
+      }
+      yield* toolHooks.runBefore(beforeEvent)
+      const pending = yield* settle(registration.tool, { ...input.call, input: beforeEvent.input }, {
         sessionID: input.sessionID,
         agent: input.agent,
         assistantMessageID: input.assistantMessageID,
@@ -72,15 +84,38 @@ const registryLayer = Layer.effect(
           Effect.succeed({ result: { type: "error" as const, value: failure.message } }),
         ),
       )
-      if ("result" in pending) return pending
-      const output = pending.output
-      const bounded = yield* resources.bound({ sessionID: input.sessionID, toolCallID: input.call.id, output })
-      const result = ToolOutput.toResultValue(bounded.output)
-      if (result.type === "error")
-        return bounded.outputPaths.length > 0 ? { result, outputPaths: bounded.outputPaths } : { result }
-      return bounded.outputPaths.length > 0
-        ? { result, output: bounded.output, outputPaths: bounded.outputPaths }
-        : { result, output: bounded.output }
+      let settlement: Settlement
+      if ("result" in pending) {
+        settlement = pending
+      } else {
+        const bounded = yield* resources.bound({ sessionID: input.sessionID, toolCallID: input.call.id, output: pending.output })
+        const result = ToolOutput.toResultValue(bounded.output)
+        settlement =
+          result.type === "error"
+            ? bounded.outputPaths.length > 0
+              ? { result, outputPaths: bounded.outputPaths }
+              : { result }
+            : bounded.outputPaths.length > 0
+              ? { result, output: bounded.output, outputPaths: bounded.outputPaths }
+              : { result, output: bounded.output }
+      }
+      const afterEvent: ToolHooks.AfterEvent = {
+        tool: input.call.name,
+        sessionID: input.sessionID,
+        agent: input.agent,
+        assistantMessageID: input.assistantMessageID,
+        toolCallID: input.call.id,
+        input: beforeEvent.input,
+        result: settlement.result,
+        output: settlement.output,
+        outputPaths: settlement.outputPaths,
+      }
+      yield* toolHooks.runAfter(afterEvent)
+      return {
+        result: afterEvent.result,
+        ...(afterEvent.output !== undefined ? { output: afterEvent.output } : {}),
+        ...(afterEvent.outputPaths !== undefined ? { outputPaths: afterEvent.outputPaths } : {}),
+      }
     })
 
     return Service.of({
@@ -130,7 +165,7 @@ const registryLayer = Layer.effect(
   }),
 )
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Tools.Service,
   Service.use((registry) => Effect.succeed(Tools.Service.of({ register: registry.register }))),
 ).pipe(Layer.provideMerge(registryLayer))
@@ -140,16 +175,14 @@ function whollyDisabled(action: string, rules: PermissionV2.Ruleset) {
   return rule?.resource === "*" && rule.effect === "deny"
 }
 
-export const defaultLayer = layer.pipe(Layer.provide(ToolOutputStore.defaultLayer))
-
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [ToolOutputStore.node],
+  deps: [ToolOutputStore.node, ToolHooks.node],
 })
 
 export const toolsNode = makeLocationNode({
   service: Tools.Service,
   layer,
-  deps: [ToolOutputStore.node],
+  deps: [ToolOutputStore.node, ToolHooks.node],
 })

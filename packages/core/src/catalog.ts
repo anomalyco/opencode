@@ -61,7 +61,7 @@ export interface Interface extends State.Transformable<Draft> {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Catalog") {}
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const events = yield* EventV2.Service
@@ -292,10 +292,5 @@ export const layer = Layer.effect(
 )
 
 const SMALL_MODEL_RE = /\b(nano|flash|lite|mini|haiku|small|fast)\b/
-
-export const locationLayer = layer.pipe(
-  Layer.provideMerge(Integration.locationLayer),
-  Layer.provideMerge(Policy.locationLayer),
-)
 
 export const node = makeLocationNode({ service: Service, layer, deps: [EventV2.node, Policy.node, Integration.node] })

@@ -1,7 +1,7 @@
-export * as LLM from "./llm"
+export * as LLM from "./llm.js"
 
 import { Schema } from "effect"
-import { optional } from "./schema"
+import { optional } from "./schema.js"
 
 export const ProviderMetadata = Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Unknown)).annotate({
   identifier: "LLM.ProviderMetadata",

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Schema } from "effect"
-import { SessionHistoryQuery, SessionsCursor } from "../src/groups/session"
+import { SessionHistoryQuery, SessionsCursor } from "../src/groups/session.js"
 import { Session } from "@opencode-ai/schema/session"
 
 describe("SessionsCursor", () => {

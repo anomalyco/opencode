@@ -71,7 +71,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/v2
  * write under the same process-local lock so cooperating OpenCode mutations do
  * not overwrite changes made from the same stale content.
  */
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
@@ -190,8 +190,6 @@ function sameBytes(left: Uint8Array, right: Uint8Array) {
   if (left.length !== right.length) return false
   return left.every((byte, index) => byte === right[index])
 }
-
-export const locationLayer = layer
 
 export const node = makeLocationNode({ service: Service, layer, deps: [FSUtil.node] })
 

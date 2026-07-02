@@ -12,7 +12,6 @@ export function ShellTab(props: { sessionID: string }) {
   const fg = selectedForeground(theme)
   const composer = useComposerTab()
   const killHint = useCommandShortcut("composer.shell.kill")
-  const backgroundHint = useCommandShortcut("composer.background")
 
   const entries = createMemo(() =>
     data.shell
@@ -44,13 +43,7 @@ export function ShellTab(props: { sessionID: string }) {
     const cleanup = composer.register({
       id: "shell",
       label: "Shell",
-      hints: () =>
-        selectedEntry()
-          ? [
-              { label: "kill", shortcut: killHint() },
-              { label: "background", shortcut: backgroundHint() },
-            ]
-          : [],
+      hints: () => (selectedEntry() ? [{ label: "kill", shortcut: killHint() }] : []),
     })
     onCleanup(cleanup)
   })
@@ -89,18 +82,11 @@ export function ShellTab(props: { sessionID: string }) {
           void data.shell.remove(entry.id)
         },
       },
-      {
-        name: "composer.background",
-        title: "Background shell command",
-        category: "Composer",
-        run() {},
-      },
     ],
     bindings: [
       { key: "up", desc: "Previous shell", group: "Shell", cmd: "composer.shell.up" },
       { key: "down", desc: "Next shell", group: "Shell", cmd: "composer.shell.down" },
       { key: "ctrl+d", desc: "Kill shell command", group: "Shell", cmd: "composer.shell.kill" },
-      { key: "ctrl+b", desc: "Background shell command", group: "Shell", cmd: "composer.background" },
     ],
   }))
 

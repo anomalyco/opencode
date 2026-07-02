@@ -3,6 +3,8 @@ import type { BuiltinTuiPlugin } from "../builtins"
 import { createMemo, Show } from "solid-js"
 import { Tips } from "./tips-view"
 import { useBindings } from "../../keymap"
+import { useData } from "../../context/data"
+import { hasConnectedProvider } from "../../util/connected-provider"
 
 const id = "internal:home-tips"
 
@@ -37,13 +39,10 @@ const tui: TuiPlugin = async (api) => {
     order: 100,
     slots: {
       home_bottom() {
+        const data = useData()
         const hidden = createMemo(() => api.kv.get("tips_hidden", false))
         const first = createMemo(() => api.state.session.count() === 0)
-        const connected = createMemo(() =>
-          api.state.provider.some(
-            (item) => item.id !== "opencode" || Object.values(item.models).some((model) => model.cost?.input !== 0),
-          ),
-        )
+        const connected = createMemo(() => hasConnectedProvider(data.location.integration.list() ?? []))
         const show = createMemo(() => (!first() || !connected()) && !hidden())
         return <View api={api} hidden={hidden()} show={show()} connected={connected()} />
       },

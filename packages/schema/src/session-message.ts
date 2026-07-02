@@ -1,13 +1,13 @@
-export * as SessionMessage from "./session-message"
+export * as SessionMessage from "./session-message.js"
 
 import { Schema } from "effect"
-import { optional } from "./schema"
-import { ProviderMetadata, ToolContent } from "./llm"
-import { Model } from "./model"
-import { FileAttachment, Prompt } from "./prompt"
-import { DateTimeUtcFromMillis, RelativePath, statics } from "./schema"
-import { SessionID } from "./session-id"
-import { ascending } from "./identifier"
+import { optional } from "./schema.js"
+import { ProviderMetadata, ToolContent } from "./llm.js"
+import { Model } from "./model.js"
+import { FileAttachment, Prompt } from "./prompt.js"
+import { DateTimeUtcFromMillis, RelativePath, statics } from "./schema.js"
+import { SessionID } from "./session-id.js"
+import { ascending } from "./identifier.js"
 
 export const ID = Schema.String.check(Schema.isStartsWith("msg_")).pipe(
   Schema.brand("Session.Message.ID"),
@@ -55,6 +55,7 @@ export const Synthetic = Schema.Struct({
   ...Base,
   sessionID: SessionID,
   text: Schema.String,
+  description: Schema.String.pipe(optional),
   type: Schema.Literal("synthetic"),
 }).annotate({ identifier: "Session.Message.Synthetic" })
 

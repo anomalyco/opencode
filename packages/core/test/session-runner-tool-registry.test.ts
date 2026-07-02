@@ -2,6 +2,7 @@ import { describe, expect } from "bun:test"
 import { Tool } from "@opencode-ai/core/tool/tool"
 import { AgentV2 } from "@opencode-ai/core/agent"
 import type { PermissionV2 } from "@opencode-ai/core/permission"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
@@ -27,8 +28,8 @@ const outputStore = Layer.mock(ToolOutputStore.Service, {
     )
   },
 })
-const registry = ToolRegistry.layer.pipe(Layer.provide(outputStore))
-const it = testEffect(registry)
+const registryLayer = AppNodeBuilder.build(ToolRegistry.node, [[ToolOutputStore.node, outputStore]])
+const it = testEffect(registryLayer)
 const identity = {
   agent: AgentV2.ID.make("build"),
   assistantMessageID: SessionMessage.ID.make("msg_registry"),
