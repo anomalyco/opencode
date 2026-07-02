@@ -197,7 +197,7 @@ describe("SessionV2.prompt", () => {
         prompt: Prompt.make({ text: "boundary" }),
         resume: false,
       })
-      yield* SessionInput.promoteSteers(db, events, sessionID, Number.MAX_SAFE_INTEGER)
+      yield* SessionInput.promoteSteers(db, events, sessionID)
       const stale = SessionMessage.ID.make("msg_stale_assistant")
       yield* db.insert(SessionMessageTable).values(assistantRow(stale, 100)).run().pipe(Effect.orDie)
       yield* events.publish(SessionEvent.RevertEvent.Staged, {
@@ -254,7 +254,7 @@ describe("SessionV2.prompt", () => {
 
       yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "First" }), resume: false })
       yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Second" }), resume: false })
-      yield* SessionInput.promoteSteers(db, events, sessionID, Number.MAX_SAFE_INTEGER)
+      yield* SessionInput.promoteSteers(db, events, sessionID)
       const streamed = Array.from(yield* Fiber.join(fiber))
 
       expect(streamed.map((event): [number | undefined, string] => [event.durable?.seq, event.type])).toEqual([
@@ -426,10 +426,7 @@ describe("SessionV2.prompt", () => {
       yield* session.prompt({ id: messageID, sessionID, prompt: Prompt.make({ text: "Promote once" }), resume: false })
 
       yield* Effect.all(
-        [
-          SessionInput.promoteSteers(db, events, sessionID, Number.MAX_SAFE_INTEGER),
-          SessionInput.promoteSteers(db, events, sessionID, Number.MAX_SAFE_INTEGER),
-        ],
+        [SessionInput.promoteSteers(db, events, sessionID), SessionInput.promoteSteers(db, events, sessionID)],
         { concurrency: "unbounded" },
       )
 
@@ -438,23 +435,6 @@ describe("SessionV2.prompt", () => {
       expect(yield* session.messages({ sessionID })).toMatchObject([
         { id: messageID, type: "user", text: "Promote once" },
       ])
-    }),
-  )
-
-  it.effect("promotes steers only through the captured inbox cutoff", () =>
-    Effect.gen(function* () {
-      yield* setup
-      const { db } = yield* Database.Service
-      const session = yield* SessionV2.Service
-      const events = yield* EventV2.Service
-      const first = yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Before cutoff" }), resume: false })
-      const cutoff = first.admittedSeq
-      const second = yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "After cutoff" }), resume: false })
-
-      yield* SessionInput.promoteSteers(db, events, sessionID, cutoff)
-
-      expect(yield* admitted(first.id)).toHaveProperty("promotedSeq")
-      expect(yield* admitted(second.id)).not.toHaveProperty("promotedSeq")
     }),
   )
 
@@ -498,48 +478,6 @@ describe("SessionV2.prompt", () => {
       expect(yield* admitted(messageID)).toMatchObject({ id: messageID, prompt: { text: "Replay pending" } })
       expect(yield* session.messages({ sessionID })).toEqual([])
       expect(wakeCalls).toEqual([])
-    }),
-  )
-
-  it.effect("returns an exact retry of a legacy projected prompt", () =>
-    Effect.gen(function* () {
-      yield* setup
-      const session = yield* SessionV2.Service
-      const events = yield* EventV2.Service
-      const prompt = Prompt.make({ text: "Historical prompt" })
-      yield* events.publish(SessionEvent.Prompted, {
-        sessionID,
-        messageID,
-        timestamp: yield* DateTime.now,
-        prompt,
-        delivery: "steer",
-      })
-
-      const retried = yield* session.prompt({ id: messageID, sessionID, prompt, resume: false })
-
-      expect(retried).toMatchObject({ id: messageID, prompt: { text: "Historical prompt" } })
-      expect(yield* admitted(messageID)).toHaveProperty("promotedSeq")
-    }),
-  )
-
-  it.effect("returns an exact retry of a legacy projected queued prompt", () =>
-    Effect.gen(function* () {
-      yield* setup
-      const session = yield* SessionV2.Service
-      const events = yield* EventV2.Service
-      const prompt = Prompt.make({ text: "Historical queued prompt" })
-      yield* events.publish(SessionEvent.Prompted, {
-        sessionID,
-        messageID,
-        timestamp: yield* DateTime.now,
-        prompt,
-        delivery: "queue",
-      })
-
-      const retried = yield* session.prompt({ id: messageID, sessionID, prompt, delivery: "queue", resume: false })
-
-      expect(retried).toMatchObject({ id: messageID, prompt: { text: "Historical queued prompt" } })
-      expect(yield* admitted(messageID)).toMatchObject({ delivery: "queue" })
     }),
   )
 

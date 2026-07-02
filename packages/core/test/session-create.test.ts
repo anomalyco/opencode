@@ -188,7 +188,7 @@ describe("SessionV2.create", () => {
         prompt: Prompt.make({ text: "First" }),
         resume: false,
       })
-      yield* SessionInput.promoteSteers(db, events, parent.id, Number.MAX_SAFE_INTEGER)
+      yield* SessionInput.promoteSteers(db, events, parent.id)
       yield* events.publish(SessionEvent.Synthetic, {
         sessionID: parent.id,
         messageID: SessionMessage.ID.create(),
@@ -220,9 +220,9 @@ describe("SessionV2.create", () => {
       })
 
       yield* session.prompt({ sessionID: parent.id, prompt: Prompt.make({ text: "Parent changed" }), resume: false })
-      yield* SessionInput.promoteSteers(db, events, parent.id, Number.MAX_SAFE_INTEGER)
+      yield* SessionInput.promoteSteers(db, events, parent.id)
       yield* session.prompt({ sessionID: forked.id, prompt: Prompt.make({ text: "Child continues" }), resume: false })
-      yield* SessionInput.promoteSteers(db, events, forked.id, Number.MAX_SAFE_INTEGER)
+      yield* SessionInput.promoteSteers(db, events, forked.id)
 
       expect((yield* session.context(parent.id)).map((message) => message.type)).toEqual(["user", "synthetic", "user"])
       expect((yield* session.context(forked.id)).map((message) => message.type)).toEqual(["user", "synthetic", "user"])
@@ -247,13 +247,13 @@ describe("SessionV2.create", () => {
         prompt: Prompt.make({ text: "First" }),
         resume: false,
       })
-      yield* SessionInput.promoteSteers(db, events, parent.id, Number.MAX_SAFE_INTEGER)
+      yield* SessionInput.promoteSteers(db, events, parent.id)
       const second = yield* session.prompt({
         sessionID: parent.id,
         prompt: Prompt.make({ text: "Second" }),
         resume: false,
       })
-      yield* SessionInput.promoteSteers(db, events, parent.id, Number.MAX_SAFE_INTEGER)
+      yield* SessionInput.promoteSteers(db, events, parent.id)
 
       const forked = yield* session.fork({ sessionID: parent.id, messageID: second.id })
 
@@ -369,7 +369,7 @@ describe("SessionV2.create", () => {
       const { db } = yield* Database.Service
       const created = yield* session.create({ location })
       yield* session.prompt({ sessionID: created.id, prompt: Prompt.make({ text: "Hello" }), resume: false })
-      yield* SessionInput.promoteSteers(db, events, created.id, Number.MAX_SAFE_INTEGER)
+      yield* SessionInput.promoteSteers(db, events, created.id)
 
       expect(
         Array.from(yield* logEvents(session, created.id, true).pipe(Stream.take(2), Stream.runCollect)),
@@ -391,7 +391,7 @@ describe("SessionV2.create", () => {
         prompt: Prompt.make({ text: "Replay lifecycle" }),
         resume: false,
       })
-      yield* SessionInput.promoteSteers(sourceDb, sourceEvents, created.id, Number.MAX_SAFE_INTEGER)
+      yield* SessionInput.promoteSteers(sourceDb, sourceEvents, created.id)
       const serialized = (yield* sourceDb
         .select()
         .from(EventTable)

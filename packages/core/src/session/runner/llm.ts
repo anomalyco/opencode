@@ -192,12 +192,11 @@ const layer = Layer.effect(
       let needsContinuation = false
       let currentStep = step
       if (promotion) {
-        const cutoff = yield* EventV2.latestSequence(db, session.id)
         let promoted = 0
-        if (promotion === "steer") promoted = yield* SessionInput.promoteSteers(db, events, session.id, cutoff)
+        if (promotion === "steer") promoted = yield* SessionInput.promoteSteers(db, events, session.id)
         if (promotion === "queue") {
           promoted += Number(yield* SessionInput.promoteNextQueued(db, events, session.id))
-          promoted += yield* SessionInput.promoteSteers(db, events, session.id, cutoff)
+          promoted += yield* SessionInput.promoteSteers(db, events, session.id)
         }
         if (promoted > 0) currentStep = 1
       }

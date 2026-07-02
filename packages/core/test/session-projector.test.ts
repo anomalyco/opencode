@@ -129,6 +129,13 @@ describe("SessionProjector", () => {
         .pipe(Effect.orDie)
       const events = yield* EventV2.Service
 
+      yield* events.publish(SessionEvent.PromptAdmitted, {
+        sessionID,
+        messageID: SessionMessage.ID.make("msg_first"),
+        timestamp: created,
+        prompt: Prompt.make({ text: "first" }),
+        delivery: "steer",
+      })
       yield* events.publish(
         SessionEvent.Prompted,
         {
@@ -140,6 +147,13 @@ describe("SessionProjector", () => {
         },
         { id: EventV2.ID.make("evt_z") },
       )
+      yield* events.publish(SessionEvent.PromptAdmitted, {
+        sessionID,
+        messageID: SessionMessage.ID.make("msg_second"),
+        timestamp: created,
+        prompt: Prompt.make({ text: "second" }),
+        delivery: "steer",
+      })
       yield* events.publish(
         SessionEvent.Prompted,
         {
