@@ -18,7 +18,7 @@ export function createTimelineModel(input: {
 
   const [resource] = createResource(
     () => input.sessionID(),
-    (id) => {
+    async (id) => {
       clearRefresh()
       if (!id) return
 
@@ -36,7 +36,18 @@ export function createTimelineModel(input: {
         }, 0)
       })
 
-      return sync().session.sync(id)
+      if (cached) return sync().session.sync(id)
+
+      // Cold load for the session being viewed. A concurrent background load can
+      // be deduped by the shared in-flight map or dropped on a generation change,
+      // which leaves the transcript permanently blank with no retry. Force a load
+      // and re-drive it until the session's messages are in the store (or the view
+      // moves on).
+      for (let attempt = 0; attempt < 5; attempt++) {
+        await sync().session.sync(id, { force: true })
+        if (input.sessionID() !== id) return
+        if (untrack(() => sync().data.message[id] !== undefined)) return
+      }
     },
   )
   const messages = createMemo(() => {

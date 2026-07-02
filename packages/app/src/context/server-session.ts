@@ -596,7 +596,8 @@ export function createServerSession(client: OpencodeClient, options?: { retry?: 
         applied = true
       })
       .finally(() => {
-        if (!applied && generations.get(sessionID) === active && messageLoads.get(sessionID) === load) {
+        const owns = messageLoads.get(sessionID) === load
+        if (!applied && generations.get(sessionID) === active && owns) {
           for (const messageID of load.orphanParents) {
             if (!orphanParts.get(sessionID)?.has(messageID)) continue
             setData(produce((draft) => deleteMessageParts(draft, messageID)))
@@ -604,8 +605,13 @@ export function createServerSession(client: OpencodeClient, options?: { retry?: 
           }
           if (orphanParts.get(sessionID)?.size === 0) orphanParts.delete(sessionID)
         }
-        if (messageLoads.get(sessionID) === load) messageLoads.delete(sessionID)
-        if (generations.get(sessionID) === active) setMeta("loading", sessionID, false)
+        if (owns) messageLoads.delete(sessionID)
+        // Release the loading flag whenever this load still owns the slot, even if
+        // the generation changed mid-load. Gating this on the generation alone let
+        // `loading` stick true forever after a generation change, which made every
+        // later load (including a forced one) no-op at the `meta.loading` guard and
+        // left the session's transcript permanently blank.
+        if (owns || generations.get(sessionID) === active) setMeta("loading", sessionID, false)
       })
   }
 
