@@ -50,6 +50,7 @@ import {
   SessionMessageTable,
   SessionTable,
 } from "@opencode-ai/core/session/sql"
+import { SessionContextEntry } from "@opencode-ai/core/session/context-entry"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { SystemContext } from "@opencode-ai/core/system-context"
 import { SystemContextBuiltIns } from "@opencode-ai/core/system-context/builtins"
@@ -270,6 +271,7 @@ const it = testEffect(
       SessionRunnerModel.node,
       SystemContextBuiltIns.node,
       InstructionContext.node,
+      SessionContextEntry.node,
       SkillGuidance.node,
       ReferenceGuidance.node,
       Config.node,
@@ -1088,6 +1090,65 @@ describe("SessionRunnerLLM", () => {
         { type: "text", text: "System context source removed: test/context" },
       ])
       expect(yield* session.messages({ sessionID })).toHaveLength(3)
+    }),
+  )
+
+  it.effect("renders API context entries through the belief lifecycle", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const contextEntries = yield* SessionContextEntry.Service
+      yield* contextEntries.put({ sessionID, key: "deploy-target", value: "production" })
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "First" }), resume: false })
+
+      requests.length = 0
+      response = []
+      yield* session.resume(sessionID)
+
+      // String values render verbatim inside the tagged block at baseline.
+      expect(requests[0]?.system.map((part) => part.text)).toEqual([
+        defaultSystem,
+        [
+          "Initial context",
+          "",
+          'An API client attached the following context to this session under "deploy-target":',
+          '<context key="deploy-target">',
+          "production",
+          "</context>",
+        ].join("\n"),
+      ])
+
+      // Non-string JSON pretty-prints; the change narrates as a System update.
+      yield* contextEntries.put({ sessionID, key: "deploy-target", value: { region: "us-east-1" } })
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Second" }), resume: false })
+      yield* session.resume(sessionID)
+
+      expect(requests[1]?.messages.map((message) => message.role)).toEqual(["user", "system", "user"])
+      expect(requests[1]?.messages.at(1)?.content).toEqual([
+        {
+          type: "text",
+          text: [
+            'The attached context "deploy-target" changed. This value supersedes the previous one:',
+            '<context key="deploy-target">',
+            "{",
+            '  "region": "us-east-1"',
+            "}",
+            "</context>",
+          ].join("\n"),
+        },
+      ])
+      expect(yield* contextEntries.list(sessionID)).toEqual([{ key: "deploy-target", value: { region: "us-east-1" } }])
+
+      // Deleting the row announces removal through the stored removal text.
+      yield* contextEntries.remove({ sessionID, key: "deploy-target" })
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Third" }), resume: false })
+      yield* session.resume(sessionID)
+
+      expect(requests[2]?.messages.map((message) => message.role)).toEqual(["user", "system", "user", "system", "user"])
+      expect(requests[2]?.messages.at(-2)?.content).toEqual([
+        { type: "text", text: 'The attached context "deploy-target" was removed. Disregard it.' },
+      ])
+      expect(yield* contextEntries.list(sessionID)).toEqual([])
     }),
   )
 

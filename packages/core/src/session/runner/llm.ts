@@ -23,6 +23,7 @@ import { InstructionContext } from "../../instruction-context"
 import { SkillGuidance } from "../../skill/guidance"
 import { ReferenceGuidance } from "../../reference/guidance"
 import { McpGuidance } from "../../mcp/guidance"
+import { SessionContextEntry } from "../context-entry"
 import { ToolRegistry } from "../../tool/registry"
 import { ToolOutputStore } from "../../tool-output-store"
 import { SessionContextCheckpoint } from "../context-checkpoint"
@@ -108,6 +109,7 @@ const layer = Layer.effect(
     const skillGuidance = yield* SkillGuidance.Service
     const referenceGuidance = yield* ReferenceGuidance.Service
     const mcpGuidance = yield* McpGuidance.Service
+    const contextEntries = yield* SessionContextEntry.Service
     const snapshots = yield* Snapshot.Service
     const db = (yield* Database.Service).db
     const compaction = yield* SessionCompaction.Service
@@ -171,7 +173,7 @@ const layer = Layer.effect(
     const continueAfterOverflowCompaction = (step: number) =>
       new TurnTransitionError({ _tag: "ContinueAfterOverflowCompaction", step })
 
-    const loadSystemContext = (agent: AgentV2.Selection) =>
+    const loadSystemContext = (agent: AgentV2.Selection, sessionID: SessionSchema.ID) =>
       Effect.all(
         [
           builtins.load(),
@@ -179,6 +181,7 @@ const layer = Layer.effect(
           skillGuidance.load(agent),
           referenceGuidance.load(),
           mcpGuidance.load(agent),
+          contextEntries.load(sessionID),
         ],
         { concurrency: "unbounded" },
       ).pipe(Effect.map(SystemContext.combine))
@@ -195,7 +198,12 @@ const layer = Layer.effect(
       const agent = yield* agents.select(session.agent)
       // Establish what the model knows before admitting what the user said, so
       // a blocked first turn leaves pending inputs untouched.
-      const checkpoint = yield* SessionContextCheckpoint.prepare(db, events, loadSystemContext(agent), session.id)
+      const checkpoint = yield* SessionContextCheckpoint.prepare(
+        db,
+        events,
+        loadSystemContext(agent, session.id),
+        session.id,
+      )
       const toolFibers = yield* FiberSet.make<void, ToolOutputStore.Error>()
       let needsContinuation = false
       let currentStep = step
@@ -437,18 +445,15 @@ const layer = Layer.effect(
             Effect.gen(function* () {
               const failure =
                 Exit.isFailure(exit) && !Cause.hasInterrupts(exit.cause) ? Cause.squash(exit.cause) : undefined
-              yield* events.publish(
-                SessionEvent.ExecutionSettled,
-                {
-                  sessionID: input.sessionID,
-                  timestamp: yield* DateTime.now,
-                  outcome: Exit.isSuccess(exit) ? "success" : Cause.hasInterrupts(exit.cause) ? "interrupted" : "failure",
-                  error:
-                    failure !== undefined
-                      ? { type: "unknown", message: failure instanceof Error ? failure.message : String(failure) }
-                      : undefined,
-                },
-              )
+              yield* events.publish(SessionEvent.ExecutionSettled, {
+                sessionID: input.sessionID,
+                timestamp: yield* DateTime.now,
+                outcome: Exit.isSuccess(exit) ? "success" : Cause.hasInterrupts(exit.cause) ? "interrupted" : "failure",
+                error:
+                  failure !== undefined
+                    ? { type: "unknown", message: failure instanceof Error ? failure.message : String(failure) }
+                    : undefined,
+              })
             }).pipe(
               Effect.catchCause(() => Effect.void),
               Effect.asVoid,
@@ -479,6 +484,7 @@ export const node = makeLocationNode({
     SkillGuidance.node,
     ReferenceGuidance.node,
     McpGuidance.node,
+    SessionContextEntry.node,
     SessionCompaction.node,
     SessionTitle.node,
     Config.node,
