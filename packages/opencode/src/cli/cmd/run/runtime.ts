@@ -20,7 +20,7 @@ import { resolveModelInfo, resolveRunTuiConfig, resolveSessionInfo } from "./run
 import { createRuntimeLifecycle } from "./runtime.lifecycle"
 import { trace } from "./trace"
 import { cycleVariant, formatModelLabel, resolveSavedVariant, resolveVariant, saveVariant } from "./variant.shared"
-import type { LocalReplayAnchor, LocalReplayRow, RunInput, RunPrompt, RunProvider, StreamCommit } from "./types"
+import type { FooterApi, LocalReplayAnchor, LocalReplayRow, RunInput, RunPrompt, RunProvider, StreamCommit } from "./types"
 
 /** @internal Exported for testing */
 export { pickVariant, resolveVariant } from "./variant.shared"
@@ -120,6 +120,7 @@ type RuntimeState = {
   shown: boolean
   aborting: boolean
   abortActiveTurn?: () => void
+  pendingQueuedCount?: () => number
   model: RunInput["model"]
   providers: RunProvider[]
   variants: string[]
@@ -225,6 +226,8 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
     })
     return state.session
   }
+
+  const interruptFooter: { api?: FooterApi } = {}
 
   const shell = await (deps.createRuntimeLifecycle ?? createRuntimeLifecycle)({
     directory: ctx.directory,
@@ -344,6 +347,16 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
       }
 
       state.aborting = true
+      const pending = state.pendingQueuedCount?.() ?? 0
+      if (pending > 0) {
+        interruptFooter.api?.event({
+          type: "stream.patch",
+          patch: {
+            queue: pending,
+            status: pending === 1 ? "interrupting · 1 queued" : `interrupting · ${pending} queued`,
+          },
+        })
+      }
       state.abortActiveTurn?.()
       void ctx.sdk.session
         .abort({
@@ -366,6 +379,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
     },
   })
   const footer = shell.footer
+  interruptFooter.api = footer
   const rememberLocal = (commit: StreamCommit, after?: LocalReplayAnchor) => {
     state.localRows = [...state.localRows, { commit, after }].slice(-LOCAL_REPLAY_ROW_LIMIT)
   }
@@ -548,8 +562,9 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
       footer,
       initialInput: input.initialInput,
       trace: log,
-      bindInterrupt: (abortActive) => {
-        state.abortActiveTurn = abortActive
+      bindInterrupt: (handle) => {
+        state.abortActiveTurn = handle.abortActive
+        state.pendingQueuedCount = handle.pendingQueue
       },
       onSend: (prompt) => {
         state.shown = true

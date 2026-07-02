@@ -431,11 +431,13 @@ describe("run runtime queue", () => {
     const ui = footer()
     const seen: string[] = []
     let abortActive: (() => void) | undefined
+    let pendingQueue: (() => number) | undefined
 
     const task = runPromptQueue({
       footer: ui.api,
-      bindInterrupt: (abort) => {
-        abortActive = abort
+      bindInterrupt: (handle) => {
+        abortActive = handle.abortActive
+        pendingQueue = handle.pendingQueue
       },
       run: async (input, signal) => {
         seen.push(input.text)
@@ -459,6 +461,7 @@ describe("run runtime queue", () => {
     await Promise.resolve()
     ui.submit("two")
     await Promise.resolve()
+    expect(pendingQueue?.()).toBe(1)
     abortActive?.()
     await task
 

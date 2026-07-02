@@ -1811,6 +1811,7 @@ export default function Page() {
     if (!item) return
     if (followupBusy(sessionID)) return
     if (followup.failed[sessionID] === item.id) return
+    if (followup.paused[sessionID]) return
     if (isChildSession()) return
     if (composer.blocked()) return
     if (busy(sessionID)) return
@@ -1957,6 +1958,11 @@ export default function Page() {
             onEditLoaded={clearFollowupEdit}
             shouldQueue={queueEnabled}
             onQueue={queueFollowup}
+            onAbort={() => {
+              const id = params.id
+              if (!id) return
+              setFollowup("paused", id, true)
+            }}
           />
         }
       />

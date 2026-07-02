@@ -7,6 +7,10 @@
 // The queue also handles /exit, /quit, and /new commands, empty-prompt rejection,
 // and tracks per-turn wall-clock duration for the footer status line.
 //
+// Interrupt (Esc) must abort the active turn's local AbortSignal, not only the
+// server session. Otherwise a queued prompt stays blocked behind a run() that
+// never observes cancellation.
+//
 // Resolves when the footer closes and all in-flight work finishes.
 import * as Locale from "@/util/locale"
 import { MessageID, PartID } from "@/session/schema"
@@ -29,7 +33,7 @@ export type QueueInput = {
   trace?: Trace
   onSend?: (prompt: RunPrompt) => void
   onNewSession?: () => void | Promise<void>
-  bindInterrupt?: (abortActive: () => void) => void
+  bindInterrupt?: (handle: { abortActive: () => void; pendingQueue: () => number }) => void
   run: (prompt: RunPrompt, signal: AbortSignal) => Promise<void>
 }
 
@@ -315,8 +319,11 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
     drain()
   }
 
-  input.bindInterrupt?.(() => {
-    state.ctrl?.abort()
+  input.bindInterrupt?.({
+    abortActive: () => {
+      state.ctrl?.abort()
+    },
+    pendingQueue: () => state.queue.length,
   })
 
   const offPrompt = input.footer.onPrompt((prompt) => {
