@@ -84,7 +84,7 @@ export const TuiThreadCommand = cmd({
         describe: "model to use in the format of provider/model",
       })
       .option("continue", {
-        alias: ["c"],
+        alias: ["c", "resume"],
         describe: "continue the last session",
         type: "boolean",
       })
@@ -95,7 +95,7 @@ export const TuiThreadCommand = cmd({
       })
       .option("fork", {
         type: "boolean",
-        describe: "fork the session when continuing (use with --continue or --session)",
+        describe: "fork the session when continuing (use with --continue, --resume, or --session)",
       })
       .option("prompt", {
         type: "string",
@@ -190,7 +190,7 @@ export const TuiThreadCommand = cmd({
     try {
       const { TuiConfig } = await import("@/config/tui")
       if (args.fork && !args.continue && !args.session) {
-        UI.error("--fork requires --continue or --session")
+        UI.error("--fork requires --continue, --resume, or --session")
         process.exitCode = 1
         return
       }
