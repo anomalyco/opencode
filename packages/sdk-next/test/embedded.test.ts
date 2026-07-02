@@ -114,7 +114,7 @@ it.live(
         expect(selected.model?.id).toBe(model.id)
         expect(selected.model?.providerID).toBe(model.providerID)
         expect(page.data.some((session) => session.id === id)).toBe(true)
-        expect(active).toEqual({})
+        expect(active).toEqual({ data: {}, watermarks: {} })
         expect(admitted.sessionID).toBe(id)
         expect(prompted.type).toBe("session.next.prompted")
         expect(wakeContext).toContainEqual(expect.objectContaining({ id: wake.id, type: "user" }))

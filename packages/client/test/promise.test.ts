@@ -194,7 +194,8 @@ test("session methods use the public HTTP contract", async () => {
       if (url.includes("/prompt")) return Response.json(admission)
       if (url.includes("/context")) return Response.json({ data: [] })
       if (url.includes("/message/")) return Response.json({ data: modelSwitchedMessage })
-      if (url.endsWith("/api/session/active")) return Response.json({ data: { ses_test: { type: "running" } } })
+      if (url.endsWith("/api/session/active"))
+        return Response.json({ data: { ses_test: { type: "running" } }, watermarks: { ses_test: 3 } })
       if (init?.method === "POST" && url.endsWith("/api/session")) return Response.json(session)
       if (init?.method === "POST") return new Response(null, { status: 204 })
       return Response.json({ data: [session.data], cursor: { next: "next" } })
@@ -228,7 +229,7 @@ test("session methods use the public HTTP contract", async () => {
   const message = await client.session.message({ sessionID: "ses_test", messageID: "msg_model" })
 
   expect(page.cursor.next).toBe("next")
-  expect(active).toEqual({ ses_test: { type: "running" } })
+  expect(active).toEqual({ data: { ses_test: { type: "running" } }, watermarks: { ses_test: 3 } })
   expect(created.id).toBe("ses_test")
   expect(admitted.id).toBe("msg_test")
   expect(context).toEqual([])

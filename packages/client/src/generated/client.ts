@@ -51,6 +51,8 @@ import type {
   SessionHistoryOutput,
   SessionEventsInput,
   SessionEventsOutput,
+  SessionLogInput,
+  SessionLogOutput,
   SessionInterruptInput,
   SessionInterruptOutput,
   SessionBackgroundInput,
@@ -118,6 +120,7 @@ import type {
   SkillListInput,
   SkillListOutput,
   EventSubscribeOutput,
+  EventChangesOutput,
   PtyListInput,
   PtyListOutput,
   PtyCreateInput,
@@ -380,7 +383,7 @@ export function make(options: ClientOptions) {
           requestOptions,
         ).then((value) => value.data),
       active: (requestOptions?: RequestOptions) =>
-        request<{ readonly data: SessionActiveOutput }>(
+        request<SessionActiveOutput>(
           {
             method: "GET",
             path: `/api/session/active`,
@@ -389,7 +392,7 @@ export function make(options: ClientOptions) {
             empty: false,
           },
           requestOptions,
-        ).then((value) => value.data),
+        ),
       get: (input: SessionGetInput, requestOptions?: RequestOptions) =>
         request<{ readonly data: SessionGetOutput }>(
           {
@@ -626,6 +629,18 @@ export function make(options: ClientOptions) {
             method: "GET",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/event`,
             query: { after: input["after"] },
+            successStatus: 200,
+            declaredStatuses: [404, 400, 401],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      log: (input: SessionLogInput, requestOptions?: RequestOptions): AsyncIterable<SessionLogOutput> =>
+        sse<SessionLogOutput>(
+          {
+            method: "GET",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/log`,
+            query: { after: input["after"], follow: input["follow"] },
             successStatus: 200,
             declaredStatuses: [404, 400, 401],
             empty: false,
@@ -1065,6 +1080,11 @@ export function make(options: ClientOptions) {
       subscribe: (requestOptions?: RequestOptions): AsyncIterable<EventSubscribeOutput> =>
         sse<EventSubscribeOutput>(
           { method: "GET", path: `/api/event`, successStatus: 200, declaredStatuses: [401, 400], empty: false },
+          requestOptions,
+        ),
+      changes: (requestOptions?: RequestOptions): AsyncIterable<EventChangesOutput> =>
+        sse<EventChangesOutput>(
+          { method: "GET", path: `/api/event/changes`, successStatus: 200, declaredStatuses: [401, 400], empty: false },
           requestOptions,
         ),
     },
