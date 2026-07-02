@@ -1,7 +1,7 @@
 export * as XaiCache from "./xai-cache"
 
-// @ai-sdk/xai has no provider option for the Responses API's prompt_cache_key,
-// so mirror the x-grok-conv-id header set by LLMRequestPrep into the body here.
+// Copies the x-grok-conv-id header set by LLMRequestPrep into the request
+// body as prompt_cache_key, because @ai-sdk/xai has no option for that field.
 // https://docs.x.ai/developers/advanced-api-usage/prompt-caching/maximizing-cache-hits
 export function withPromptCacheKey(baseFetch?: typeof fetch): typeof fetch {
   const inner = baseFetch ?? fetch

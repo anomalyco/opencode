@@ -1217,8 +1217,8 @@ export function options(input: {
     result["promptCacheKey"] = input.sessionID
   }
 
-  // No-op until @ai-sdk/xai supports promptCacheKey; Provider.resolveSDK
-  // injects prompt_cache_key at the fetch boundary meanwhile.
+  // @ai-sdk/xai ignores this option today; Provider.resolveSDK adds
+  // prompt_cache_key to the request body instead.
   if (input.model.api.npm === "@ai-sdk/xai") {
     result["promptCacheKey"] = input.sessionID
   }

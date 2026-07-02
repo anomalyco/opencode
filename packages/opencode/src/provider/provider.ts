@@ -1705,7 +1705,8 @@ const layer = Layer.effect(
         const existing = s.sdk.get(key)
         if (existing) return existing
 
-        // Rewrites the body before any auth fetch from options (e.g. the xAI OAuth loader) runs.
+        // Rewrites the request body before any auth fetch from options, such
+        // as the xAI OAuth loader, runs.
         const customFetch =
           model.api.npm === "@ai-sdk/xai" ? XaiCache.withPromptCacheKey(options["fetch"]) : options["fetch"]
         const chunkTimeout = options["chunkTimeout"]
