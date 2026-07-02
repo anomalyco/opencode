@@ -156,6 +156,14 @@ const echo = Layer.effectDiscard(
         output: Schema.Struct({}),
         execute: () => Effect.die("unexpected tool defect"),
       }),
+      // BigInt output with no model content forces ToolOutputStore.bound onto its
+      // JSON.stringify encode path, which fails with a typed StorageError.
+      storefail: Tool.make({
+        description: "Produce output that cannot be persisted",
+        input: Schema.Struct({}),
+        output: Schema.Any,
+        execute: () => Effect.succeed({ big: 1n }),
+      }),
     }),
   ),
 )
@@ -677,7 +685,7 @@ describe("SessionRunnerLLM", () => {
 
       expect(requests).toHaveLength(1)
       expect(requests[0]?.model).toBe(model)
-      expect(requests[0]?.tools.map((tool) => tool.name)).toEqual(["echo", "defect"])
+      expect(requests[0]?.tools.map((tool) => tool.name)).toEqual(["echo", "defect", "storefail"])
       expect(requests[0]?.messages.map((message) => ({ role: message.role, content: message.content }))).toEqual([
         { role: "user", content: [{ type: "text", text: "First" }] },
         { role: "user", content: [{ type: "text", text: "Second" }] },
@@ -1553,7 +1561,7 @@ describe("SessionRunnerLLM", () => {
       yield* session.resume(sessionID)
 
       expect(requests).toHaveLength(1)
-      expect(requests[0]?.tools.map((tool) => tool.name)).toEqual(["echo", "defect"])
+      expect(requests[0]?.tools.map((tool) => tool.name)).toEqual(["echo", "defect", "storefail"])
       expect(yield* session.context(sessionID)).toMatchObject([
         { type: "user", text: "Use tools" },
         {
@@ -2793,6 +2801,49 @@ describe("SessionRunnerLLM", () => {
           ],
         },
         { type: "assistant", finish: "stop", content: [{ type: "text", text: "Recovered" }] },
+      ])
+    }),
+  )
+
+  it.effect("fails the drain when tool output persistence fails", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Call storefail" }), resume: false })
+
+      requests.length = 0
+      responses = [
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.toolCall({ id: "call-storefail", name: "storefail", input: {} }),
+          LLMEvent.stepFinish({ index: 0, reason: "tool-calls" }),
+          LLMEvent.finish({ reason: "tool-calls" }),
+        ],
+        [],
+      ]
+
+      const exit = yield* session.resume(sessionID).pipe(Effect.exit)
+
+      expect(Exit.isFailure(exit)).toBe(true)
+      expect(requests).toHaveLength(1)
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Call storefail" },
+        {
+          type: "assistant",
+          content: [
+            {
+              type: "tool",
+              id: "call-storefail",
+              state: {
+                status: "error",
+                error: {
+                  type: "unknown",
+                  message: expect.stringContaining("Tool execution failed: Failed to encode tool output"),
+                },
+              },
+            },
+          ],
+        },
       ])
     }),
   )
