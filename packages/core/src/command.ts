@@ -12,7 +12,6 @@ import { ChildProcess } from "effect/unstable/process"
 import { Config } from "./config"
 import { Location } from "./location"
 import { ShellSelect } from "./shell/select"
-import { stat } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
@@ -166,11 +165,11 @@ function evaluateTemplate(
 ) {
   return Effect.gen(function* () {
     const expanded = evaluateArguments(template, input)
-    const [text, files] = yield* Effect.all([
-      evaluateShell(command, expanded, services),
-      resolveFiles(expanded, services.location.directory),
-    ])
-    return { text, ...(files.length === 0 ? {} : { files }) }
+    const evaluated = yield* Effect.all({
+      text: evaluateShell(command, expanded, services),
+      files: resolveFiles(expanded, services.location.directory),
+    })
+    return { text: evaluated.text, ...(evaluated.files.length === 0 ? {} : { files: evaluated.files }) }
   })
 }
 
@@ -220,8 +219,8 @@ const evaluateShell = Effect.fnUntraced(function* (
     },
     { concurrency: 2 },
   )
-  let index = 0
-  return text.replace(shellRegex, () => outputs[index++] ?? "")
+  const iterator = outputs[Symbol.iterator]()
+  return text.replace(shellRegex, () => iterator.next().value ?? "")
 })
 
 const resolveFiles = Effect.fnUntraced(function* (text: string, directory: string) {
@@ -229,10 +228,9 @@ const resolveFiles = Effect.fnUntraced(function* (text: string, directory: strin
   return yield* Effect.forEach(
     names,
     (name) =>
-      Effect.promise(async () => {
+      Effect.gen(function* () {
         const filepath = name.startsWith("~/") ? path.join(os.homedir(), name.slice(2)) : path.resolve(directory, name)
-        const info = await stat(filepath).catch(() => undefined)
-        if (!info) return
+        if (!(yield* Effect.promise(() => Bun.file(filepath).exists()))) return
         return PromptInput.FileAttachment.make({
           uri: pathToFileURL(filepath).href,
           name,
