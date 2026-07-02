@@ -10,12 +10,31 @@ import path from "path"
 import { createClient } from "@hey-api/openapi-ts"
 
 const opencode = path.resolve(dir, "../../opencode")
+const client = path.resolve(dir, "../../client")
 
 await $`bun dev generate > ${dir}/openapi.json`.cwd(opencode)
+await $`bun -e ${`
+  import { OpenApi } from "effect/unstable/httpapi"
+  import { ClientApi } from "@opencode-ai/protocol/client"
+
+  const output = process.argv.at(-1)
+  if (!output) throw new Error("Missing OpenAPI output path")
+  await Bun.write(output, JSON.stringify(OpenApi.fromApi(ClientApi)))
+`} ${path.join(dir, "openapi-v2.json")}`.cwd(client)
 
 const document = (await Bun.file("./openapi.json").json()) as {
   components?: { schemas?: Record<string, unknown> }
+  paths?: Record<string, unknown>
   [key: string]: unknown
+}
+const v2Document = (await Bun.file("./openapi-v2.json").json()) as {
+  components?: { schemas?: Record<string, unknown> }
+  paths?: Record<string, unknown>
+}
+document.paths = { ...document.paths, ...v2Document.paths }
+document.components = {
+  ...document.components,
+  schemas: { ...document.components?.schemas, ...v2Document.components?.schemas },
 }
 const schemas = document.components?.schemas
 if (schemas) {
@@ -75,32 +94,24 @@ const generatedTypes = await Bun.file("./src/v2/gen/types.gen.ts").text()
 if (/export type SessionNext\w+1 =/.test(generatedTypes)) {
   throw new Error("Session history generated duplicate Session event variants")
 }
-const historyTypesPatched = generatedTypes.replace(
-  /(export type V2SessionHistoryData = \{[\s\S]*?query\?: \{\s*limit\?: )string([;,]\s*after\?: )string/,
-  "$1number$2number",
+const logTypesPatched = generatedTypes.replace(
+  /(export type V2SessionLogData = \{[\s\S]*?query\?: \{\s*after\?: )string/,
+  "$1number",
 )
-if (
-  !/export type V2SessionHistoryData = \{[\s\S]*?query\?: \{\s*limit\?: number[;,]\s*after\?: number/.test(
-    historyTypesPatched,
-  )
-) {
-  throw new Error("Session history numeric query patch did not produce numeric query params")
+if (logTypesPatched === generatedTypes) {
+  throw new Error("Session log numeric query patch did not apply")
 }
-await Bun.write("./src/v2/gen/types.gen.ts", historyTypesPatched)
+await Bun.write("./src/v2/gen/types.gen.ts", logTypesPatched)
 
 const generatedSdk = await Bun.file("./src/v2/gen/sdk.gen.ts").text()
-const historySdkPatched = generatedSdk.replace(
-  /(Get session history[\s\S]*?parameters: \{\s*sessionID: string[;,]\s*limit\?: )string([;,]\s*after\?: )string/,
-  "$1number$2number",
+const logSdkPatched = generatedSdk.replace(
+  /(Read the session log[\s\S]*?parameters: \{[\s\S]*?after\?: )string(\s*\|\s*null)?/,
+  "$1number$2",
 )
-if (
-  !/Get session history[\s\S]*?parameters: \{\s*sessionID: string[;,]\s*limit\?: number[;,]\s*after\?: number/.test(
-    historySdkPatched,
-  )
-) {
-  throw new Error("Session history numeric SDK patch did not produce numeric query params")
+if (logSdkPatched === generatedSdk) {
+  throw new Error("Session log numeric SDK patch did not apply")
 }
-await Bun.write("./src/v2/gen/sdk.gen.ts", historySdkPatched)
+await Bun.write("./src/v2/gen/sdk.gen.ts", logSdkPatched)
 
 // Patch a @hey-api/openapi-ts codegen bug: SseFn incorrectly passes the
 // endpoint's TError into the second generic of ServerSentEventsResult, which
@@ -124,4 +135,4 @@ await $`bun prettier --write src/gen`
 await $`bun prettier --write src/v2`
 await $`rm -rf dist`
 await $`bun tsc`
-await $`rm openapi.json`
+await $`rm openapi.json openapi-v2.json`

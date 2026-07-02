@@ -92,7 +92,7 @@ import type {
   GlobalUpgradeResponses,
   InstanceDisposeErrors,
   InstanceDisposeResponses,
-  LocationRef,
+  LocationRef2,
   LspStatusErrors,
   LspStatusResponses,
   McpAddErrors,
@@ -113,7 +113,7 @@ import type {
   McpRemoteConfig,
   McpStatusErrors,
   McpStatusResponses,
-  ModelRef,
+  ModelRef2,
   MoveSessionDestination,
   OutputFormat,
   Part as Part2,
@@ -130,8 +130,8 @@ import type {
   PermissionRespondErrors,
   PermissionRespondResponses,
   PermissionRuleset,
-  PermissionV2Reply,
-  PermissionV2Source,
+  PermissionV2Reply2,
+  PermissionV2Source2,
   ProjectCommands,
   ProjectCurrentErrors,
   ProjectCurrentResponses,
@@ -144,7 +144,7 @@ import type {
   ProjectListResponses,
   ProjectUpdateErrors,
   ProjectUpdateResponses,
-  PromptAgentAttachment,
+  PromptAgentAttachment2,
   PromptInput,
   PromptInputFileAttachment,
   ProviderAuthErrors,
@@ -275,6 +275,8 @@ import type {
   V2CredentialRemoveResponses,
   V2CredentialUpdateErrors,
   V2CredentialUpdateResponses,
+  V2EventChangesErrors,
+  V2EventChangesResponses,
   V2EventSubscribeErrors,
   V2EventSubscribeResponses,
   V2FormRequestListErrors,
@@ -367,8 +369,6 @@ import type {
   V2SessionContextResponses,
   V2SessionCreateErrors,
   V2SessionCreateResponses,
-  V2SessionEventsErrors,
-  V2SessionEventsResponses,
   V2SessionForkErrors,
   V2SessionForkResponses,
   V2SessionFormCancelErrors,
@@ -385,12 +385,12 @@ import type {
   V2SessionFormStateResponses,
   V2SessionGetErrors,
   V2SessionGetResponses,
-  V2SessionHistoryErrors,
-  V2SessionHistoryResponses,
   V2SessionInterruptErrors,
   V2SessionInterruptResponses,
   V2SessionListErrors,
   V2SessionListResponses,
+  V2SessionLogErrors,
+  V2SessionLogResponses,
   V2SessionMessageErrors,
   V2SessionMessageResponses,
   V2SessionMessagesErrors,
@@ -5094,9 +5094,9 @@ export class Location extends HeyApiClient {
   public get<ThrowOnError extends boolean = false>(
     parameters?: {
       location?: {
-        directory?: string
-        workspace?: string
-      }
+        directory?: string | null
+        workspace?: string | null
+      } | null
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -5118,9 +5118,9 @@ export class Agent extends HeyApiClient {
   public list<ThrowOnError extends boolean = false>(
     parameters?: {
       location?: {
-        directory?: string
-        workspace?: string
-      }
+        directory?: string | null
+        workspace?: string | null
+      } | null
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -5142,9 +5142,9 @@ export class Plugin extends HeyApiClient {
   public list<ThrowOnError extends boolean = false>(
     parameters?: {
       location?: {
-        directory?: string
-        workspace?: string
-      }
+        directory?: string | null
+        workspace?: string | null
+      } | null
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -5165,9 +5165,9 @@ export class Revert extends HeyApiClient {
    */
   public stage<ThrowOnError extends boolean = false>(
     parameters: {
-      sessionID: string
-      messageID?: string
-      files?: boolean
+      sessionID: unknown
+      messageID?: unknown
+      files?: boolean | null
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -5204,7 +5204,7 @@ export class Revert extends HeyApiClient {
    */
   public clear<ThrowOnError extends boolean = false>(
     parameters: {
-      sessionID: string
+      sessionID: unknown
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -5225,7 +5225,7 @@ export class Revert extends HeyApiClient {
    */
   public commit<ThrowOnError extends boolean = false>(
     parameters: {
-      sessionID: string
+      sessionID: unknown
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -5250,7 +5250,7 @@ export class Entry extends HeyApiClient {
    */
   public list<ThrowOnError extends boolean = false>(
     parameters: {
-      sessionID: string
+      sessionID: unknown
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -5273,7 +5273,7 @@ export class Entry extends HeyApiClient {
    */
   public remove<ThrowOnError extends boolean = false>(
     parameters: {
-      sessionID: string
+      sessionID: unknown
       key: SessionContextEntryKey
     },
     options?: Options<never, ThrowOnError>,
@@ -5307,7 +5307,7 @@ export class Entry extends HeyApiClient {
    */
   public put<ThrowOnError extends boolean = false>(
     parameters: {
-      sessionID: string
+      sessionID: unknown
       key: SessionContextEntryKey
       value?: unknown
     },
@@ -5359,9 +5359,9 @@ export class Form extends HeyApiClient {
     parameters: {
       sessionID: string
       location?: {
-        directory?: string
-        workspace?: string
-      }
+        directory?: string | null
+        workspace?: string | null
+      } | null
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -5392,9 +5392,9 @@ export class Form extends HeyApiClient {
     parameters: {
       sessionID: string
       location?: {
-        directory?: string
-        workspace?: string
-      }
+        directory?: string | null
+        workspace?: string | null
+      } | null
       formCreatePayload: FormCreatePayload
     },
     options?: Options<never, ThrowOnError>,
@@ -5433,11 +5433,11 @@ export class Form extends HeyApiClient {
   public get<ThrowOnError extends boolean = false>(
     parameters: {
       sessionID: string
-      formID: string
+      formID: unknown
       location?: {
-        directory?: string
-        workspace?: string
-      }
+        directory?: string | null
+        workspace?: string | null
+      } | null
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -5468,11 +5468,11 @@ export class Form extends HeyApiClient {
   public state<ThrowOnError extends boolean = false>(
     parameters: {
       sessionID: string
-      formID: string
+      formID: unknown
       location?: {
-        directory?: string
-        workspace?: string
-      }
+        directory?: string | null
+        workspace?: string | null
+      } | null
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -5503,11 +5503,11 @@ export class Form extends HeyApiClient {
   public reply<ThrowOnError extends boolean = false>(
     parameters: {
       sessionID: string
-      formID: string
+      formID: unknown
       location?: {
-        directory?: string
-        workspace?: string
-      }
+        directory?: string | null
+        workspace?: string | null
+      } | null
       formReply: FormReply
     },
     options?: Options<never, ThrowOnError>,
@@ -5545,11 +5545,11 @@ export class Form extends HeyApiClient {
   public cancel<ThrowOnError extends boolean = false>(
     parameters: {
       sessionID: string
-      formID: string
+      formID: unknown
       location?: {
-        directory?: string
-        workspace?: string
-      }
+        directory?: string | null
+        workspace?: string | null
+      } | null
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -5583,7 +5583,7 @@ export class Permission2 extends HeyApiClient {
    */
   public list<ThrowOnError extends boolean = false>(
     parameters: {
-      sessionID: string
+      sessionID: unknown
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -5606,16 +5606,16 @@ export class Permission2 extends HeyApiClient {
    */
   public create<ThrowOnError extends boolean = false>(
     parameters: {
-      sessionID: string
-      id?: string
+      sessionID: unknown
+      id?: unknown | null
       action?: string
       resources?: Array<string>
       save?: Array<string>
       metadata?: {
         [key: string]: unknown
       }
-      source?: PermissionV2Source
-      agent?: string
+      source?: PermissionV2Source2
+      agent?: string | null
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -5659,8 +5659,8 @@ export class Permission2 extends HeyApiClient {
    */
   public get<ThrowOnError extends boolean = false>(
     parameters: {
-      sessionID: string
-      requestID: string
+      sessionID: unknown
+      requestID: unknown
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -5693,10 +5693,10 @@ export class Permission2 extends HeyApiClient {
    */
   public reply<ThrowOnError extends boolean = false>(
     parameters: {
-      sessionID: string
-      requestID: string
-      reply?: PermissionV2Reply
-      message?: string
+      sessionID: unknown
+      requestID: unknown
+      reply?: PermissionV2Reply2
+      message?: string | null
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -5738,14 +5738,14 @@ export class Session3 extends HeyApiClient {
    */
   public list<ThrowOnError extends boolean = false>(
     parameters?: {
-      workspace?: string
-      limit?: number
-      order?: "asc" | "desc"
-      search?: string
-      directory?: string
-      project?: string
-      subpath?: string
-      cursor?: string
+      workspace?: unknown | null
+      limit?: string | null
+      order?: "asc" | "desc" | null
+      search?: string | null
+      directory?: string | null
+      project?: string | null
+      subpath?: string | null
+      cursor?: string | null
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -5780,10 +5780,10 @@ export class Session3 extends HeyApiClient {
    */
   public create<ThrowOnError extends boolean = false>(
     parameters?: {
-      id?: string
-      agent?: string
-      model?: ModelRef
-      location?: LocationRef
+      id?: unknown | null
+      agent?: string | null
+      model?: ModelRef2 | null
+      location?: LocationRef2 | null
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -5815,7 +5815,7 @@ export class Session3 extends HeyApiClient {
   /**
    * List active sessions
    *
-   * Retrieve foreground Session drains currently owned by this OpenCode process. Sessions absent from the result are inactive.
+   * Retrieve foreground Session drains currently owned by this OpenCode process. Sessions absent from the result are inactive. Watermarks are the durable log positions read alongside the activity snapshot; activity itself is process state, so the pairing is advisory rather than transactional.
    */
   public active<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
     return (options?.client ?? this.client).get<V2SessionActiveResponses, V2SessionActiveErrors, ThrowOnError>({
@@ -5831,7 +5831,7 @@ export class Session3 extends HeyApiClient {
    */
   public get<ThrowOnError extends boolean = false>(
     parameters: {
-      sessionID: string
+      sessionID: unknown
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -5850,8 +5850,8 @@ export class Session3 extends HeyApiClient {
    */
   public fork<ThrowOnError extends boolean = false>(
     parameters: {
-      sessionID: string
-      messageID?: string
+      sessionID: unknown
+      messageID?: unknown | null
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -5885,7 +5885,7 @@ export class Session3 extends HeyApiClient {
    */
   public switchAgent<ThrowOnError extends boolean = false>(
     parameters: {
-      sessionID: string
+      sessionID: unknown
       agent?: string
     },
     options?: Options<never, ThrowOnError>,
@@ -5924,8 +5924,8 @@ export class Session3 extends HeyApiClient {
    */
   public switchModel<ThrowOnError extends boolean = false>(
     parameters: {
-      sessionID: string
-      model?: ModelRef
+      sessionID: unknown
+      model?: ModelRef2
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -5963,7 +5963,7 @@ export class Session3 extends HeyApiClient {
    */
   public rename<ThrowOnError extends boolean = false>(
     parameters: {
-      sessionID: string
+      sessionID: unknown
       title?: string
     },
     options?: Options<never, ThrowOnError>,
@@ -5998,11 +5998,11 @@ export class Session3 extends HeyApiClient {
    */
   public prompt<ThrowOnError extends boolean = false>(
     parameters: {
-      sessionID: string
-      id?: string
+      sessionID: unknown
+      id?: unknown | null
       prompt?: PromptInput
-      delivery?: "steer" | "queue"
-      resume?: boolean
+      delivery?: "steer" | "queue" | null
+      resume?: boolean | null
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -6039,16 +6039,16 @@ export class Session3 extends HeyApiClient {
    */
   public command<ThrowOnError extends boolean = false>(
     parameters: {
-      sessionID: string
-      id?: string
+      sessionID: unknown
+      id?: unknown | null
       command?: string
-      arguments?: string
-      agent?: string
-      model?: ModelRef
+      arguments?: string | null
+      agent?: string | null
+      model?: ModelRef2 | null
       files?: Array<PromptInputFileAttachment>
-      agents?: Array<PromptAgentAttachment>
-      delivery?: "steer" | "queue"
-      resume?: boolean
+      agents?: Array<PromptAgentAttachment2>
+      delivery?: "steer" | "queue" | null
+      resume?: boolean | null
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -6090,10 +6090,10 @@ export class Session3 extends HeyApiClient {
    */
   public skill<ThrowOnError extends boolean = false>(
     parameters: {
-      sessionID: string
-      id?: string
+      sessionID: unknown
+      id?: unknown | null
       skill?: string
-      resume?: boolean
+      resume?: boolean | null
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -6129,9 +6129,9 @@ export class Session3 extends HeyApiClient {
    */
   public synthetic<ThrowOnError extends boolean = false>(
     parameters: {
-      sessionID: string
+      sessionID: unknown
       text?: string
-      description?: string
+      description?: string | null
       metadata?: {
         [key: string]: unknown
       }
@@ -6170,7 +6170,7 @@ export class Session3 extends HeyApiClient {
    */
   public compact<ThrowOnError extends boolean = false>(
     parameters: {
-      sessionID: string
+      sessionID: unknown
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -6189,7 +6189,7 @@ export class Session3 extends HeyApiClient {
    */
   public wait<ThrowOnError extends boolean = false>(
     parameters: {
-      sessionID: string
+      sessionID: unknown
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -6208,7 +6208,7 @@ export class Session3 extends HeyApiClient {
    */
   public context<ThrowOnError extends boolean = false>(
     parameters: {
-      sessionID: string
+      sessionID: unknown
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -6221,46 +6221,15 @@ export class Session3 extends HeyApiClient {
   }
 
   /**
-   * Get session history
+   * Read the session log
    *
-   * Read one finite page of public durable Session events after an exclusive aggregate sequence. Newly committed events may appear on later pages.
+   * Durable, ordered, gap-free read of public session events after an exclusive aggregate sequence. Emits a caught-up marker once the replay reaches the end of the log, then completes; with follow=true it continues with live events instead. The only event API that promises reliability: attach after a snapshot watermark to compose fetch and stream without a race window.
    */
-  public history<ThrowOnError extends boolean = false>(
+  public log<ThrowOnError extends boolean = false>(
     parameters: {
-      sessionID: string
-      limit?: number
-      after?: number
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "sessionID" },
-            { in: "query", key: "limit" },
-            { in: "query", key: "after" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).get<V2SessionHistoryResponses, V2SessionHistoryErrors, ThrowOnError>({
-      url: "/api/session/{sessionID}/history",
-      ...options,
-      ...params,
-    })
-  }
-
-  /**
-   * Subscribe to session events
-   *
-   * Replay durable events after an aggregate sequence, then continue with new durable events.
-   */
-  public events<ThrowOnError extends boolean = false>(
-    parameters: {
-      sessionID: string
-      after?: string
+      sessionID: unknown
+      after?: number | null
+      follow?: "true" | "false" | null
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -6271,12 +6240,13 @@ export class Session3 extends HeyApiClient {
           args: [
             { in: "path", key: "sessionID" },
             { in: "query", key: "after" },
+            { in: "query", key: "follow" },
           ],
         },
       ],
     )
-    return (options?.client ?? this.client).sse.get<V2SessionEventsResponses, V2SessionEventsErrors, ThrowOnError>({
-      url: "/api/session/{sessionID}/event",
+    return (options?.client ?? this.client).sse.get<V2SessionLogResponses, V2SessionLogErrors, ThrowOnError>({
+      url: "/api/session/{sessionID}/log",
       ...options,
       ...params,
     })
@@ -6289,7 +6259,7 @@ export class Session3 extends HeyApiClient {
    */
   public interrupt<ThrowOnError extends boolean = false>(
     parameters: {
-      sessionID: string
+      sessionID: unknown
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -6308,7 +6278,7 @@ export class Session3 extends HeyApiClient {
    */
   public background<ThrowOnError extends boolean = false>(
     parameters: {
-      sessionID: string
+      sessionID: unknown
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -6329,8 +6299,8 @@ export class Session3 extends HeyApiClient {
    */
   public message<ThrowOnError extends boolean = false>(
     parameters: {
-      sessionID: string
-      messageID: string
+      sessionID: unknown
+      messageID: unknown
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -6359,10 +6329,10 @@ export class Session3 extends HeyApiClient {
    */
   public messages<ThrowOnError extends boolean = false>(
     parameters: {
-      sessionID: string
-      limit?: number
-      order?: "asc" | "desc"
-      cursor?: string
+      sessionID: unknown
+      limit?: string | null
+      order?: "asc" | "desc" | null
+      cursor?: string | null
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -6416,9 +6386,9 @@ export class Model extends HeyApiClient {
   public list<ThrowOnError extends boolean = false>(
     parameters?: {
       location?: {
-        directory?: string
-        workspace?: string
-      }
+        directory?: string | null
+        workspace?: string | null
+      } | null
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -6438,9 +6408,9 @@ export class Model extends HeyApiClient {
   public default<ThrowOnError extends boolean = false>(
     parameters?: {
       location?: {
-        directory?: string
-        workspace?: string
-      }
+        directory?: string | null
+        workspace?: string | null
+      } | null
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -6462,11 +6432,11 @@ export class Generate extends HeyApiClient {
   public text<ThrowOnError extends boolean = false>(
     parameters?: {
       location?: {
-        directory?: string
-        workspace?: string
-      }
+        directory?: string | null
+        workspace?: string | null
+      } | null
       prompt?: string
-      model?: ModelRef
+      model?: ModelRef2 | null
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -6504,9 +6474,9 @@ export class Provider2 extends HeyApiClient {
   public list<ThrowOnError extends boolean = false>(
     parameters?: {
       location?: {
-        directory?: string
-        workspace?: string
-      }
+        directory?: string | null
+        workspace?: string | null
+      } | null
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -6527,9 +6497,9 @@ export class Provider2 extends HeyApiClient {
     parameters: {
       providerID: string
       location?: {
-        directory?: string
-        workspace?: string
-      }
+        directory?: string | null
+        workspace?: string | null
+      } | null
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -6562,11 +6532,11 @@ export class Connect extends HeyApiClient {
     parameters: {
       integrationID: string
       location?: {
-        directory?: string
-        workspace?: string
-      }
+        directory?: string | null
+        workspace?: string | null
+      } | null
       key?: string
-      label?: string
+      label?: string | null
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -6608,14 +6578,14 @@ export class Connect extends HeyApiClient {
     parameters: {
       integrationID: string
       location?: {
-        directory?: string
-        workspace?: string
-      }
+        directory?: string | null
+        workspace?: string | null
+      } | null
       methodID?: string
       inputs?: {
         [key: string]: string
       }
-      label?: string
+      label?: string | null
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -6660,9 +6630,9 @@ export class Attempt extends HeyApiClient {
     parameters: {
       attemptID: string
       location?: {
-        directory?: string
-        workspace?: string
-      }
+        directory?: string | null
+        workspace?: string | null
+      } | null
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -6697,9 +6667,9 @@ export class Attempt extends HeyApiClient {
     parameters: {
       attemptID: string
       location?: {
-        directory?: string
-        workspace?: string
-      }
+        directory?: string | null
+        workspace?: string | null
+      } | null
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -6734,10 +6704,10 @@ export class Attempt extends HeyApiClient {
     parameters: {
       attemptID: string
       location?: {
-        directory?: string
-        workspace?: string
-      }
-      code?: string
+        directory?: string | null
+        workspace?: string | null
+      } | null
+      code?: string | null
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -6779,9 +6749,9 @@ export class Integration extends HeyApiClient {
   public list<ThrowOnError extends boolean = false>(
     parameters?: {
       location?: {
-        directory?: string
-        workspace?: string
-      }
+        directory?: string | null
+        workspace?: string | null
+      } | null
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -6802,9 +6772,9 @@ export class Integration extends HeyApiClient {
     parameters: {
       integrationID: string
       location?: {
-        directory?: string
-        workspace?: string
-      }
+        directory?: string | null
+        workspace?: string | null
+      } | null
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -6846,9 +6816,9 @@ export class Mcp2 extends HeyApiClient {
   public list<ThrowOnError extends boolean = false>(
     parameters?: {
       location?: {
-        directory?: string
-        workspace?: string
-      }
+        directory?: string | null
+        workspace?: string | null
+      } | null
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -6871,9 +6841,9 @@ export class Credential extends HeyApiClient {
     parameters: {
       credentialID: string
       location?: {
-        directory?: string
-        workspace?: string
-      }
+        directory?: string | null
+        workspace?: string | null
+      } | null
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -6906,9 +6876,9 @@ export class Credential extends HeyApiClient {
     parameters: {
       credentialID: string
       location?: {
-        directory?: string
-        workspace?: string
-      }
+        directory?: string | null
+        workspace?: string | null
+      } | null
       label?: string
     },
     options?: Options<never, ThrowOnError>,
@@ -6947,9 +6917,9 @@ export class Project2 extends HeyApiClient {
   public current<ThrowOnError extends boolean = false>(
     parameters?: {
       location?: {
-        directory?: string
-        workspace?: string
-      }
+        directory?: string | null
+        workspace?: string | null
+      } | null
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -6970,9 +6940,9 @@ export class Project2 extends HeyApiClient {
     parameters: {
       projectID: string
       location?: {
-        directory?: string
-        workspace?: string
-      }
+        directory?: string | null
+        workspace?: string | null
+      } | null
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -7008,9 +6978,9 @@ export class Request extends HeyApiClient {
   public list<ThrowOnError extends boolean = false>(
     parameters?: {
       location?: {
-        directory?: string
-        workspace?: string
-      }
+        directory?: string | null
+        workspace?: string | null
+      } | null
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -7039,9 +7009,9 @@ export class Request2 extends HeyApiClient {
   public list<ThrowOnError extends boolean = false>(
     parameters?: {
       location?: {
-        directory?: string
-        workspace?: string
-      }
+        directory?: string | null
+        workspace?: string | null
+      } | null
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -7066,7 +7036,7 @@ export class Saved extends HeyApiClient {
    */
   public list<ThrowOnError extends boolean = false>(
     parameters?: {
-      projectID?: string
+      projectID?: string | null
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -7127,9 +7097,9 @@ export class Fs extends HeyApiClient {
   public read<ThrowOnError extends boolean = false>(
     parameters?: {
       location?: {
-        directory?: string
-        workspace?: string
-      }
+        directory?: string | null
+        workspace?: string | null
+      } | null
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -7149,10 +7119,10 @@ export class Fs extends HeyApiClient {
   public list<ThrowOnError extends boolean = false>(
     parameters?: {
       location?: {
-        directory?: string
-        workspace?: string
-      }
-      path?: string
+        directory?: string | null
+        workspace?: string | null
+      } | null
+      path?: string | null
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -7182,12 +7152,12 @@ export class Fs extends HeyApiClient {
   public find<ThrowOnError extends boolean = false>(
     parameters: {
       location?: {
-        directory?: string
-        workspace?: string
-      }
+        directory?: string | null
+        workspace?: string | null
+      } | null
       query: string
       type?: "file" | "directory"
-      limit?: string
+      limit?: string | null
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -7221,9 +7191,9 @@ export class Command2 extends HeyApiClient {
   public list<ThrowOnError extends boolean = false>(
     parameters?: {
       location?: {
-        directory?: string
-        workspace?: string
-      }
+        directory?: string | null
+        workspace?: string | null
+      } | null
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -7245,9 +7215,9 @@ export class Skill extends HeyApiClient {
   public list<ThrowOnError extends boolean = false>(
     parameters?: {
       location?: {
-        directory?: string
-        workspace?: string
-      }
+        directory?: string | null
+        workspace?: string | null
+      } | null
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -7264,11 +7234,23 @@ export class Event2 extends HeyApiClient {
   /**
    * Subscribe to events
    *
-   * Subscribe to native event payloads for the server.
+   * Subscribe to native event payloads for the server. Volatile by contract: a slow consumer overflows and fails the stream, and events during disconnection are missed. Consumers that need reliability should combine the changes feed with durable session log reads.
    */
   public subscribe<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
     return (options?.client ?? this.client).sse.get<V2EventSubscribeResponses, V2EventSubscribeErrors, ThrowOnError>({
       url: "/api/event",
+      ...options,
+    })
+  }
+
+  /**
+   * Subscribe to change hints
+   *
+   * Payload-free hint channel: after an event commits, a subscriber eventually receives a hint for that aggregate with seq at or beyond the event, or a sweep-required marker. Hints coalesce to the latest seq per aggregate under backpressure and the stream never fails from overflow. No consumer may derive correctness from receiving a hint; correctness always comes from durable log reads plus the consumer's own checkpoint. A sweep-required marker is emitted first on every (re)subscribe and whenever hint retention is exceeded: treat every aggregate as potentially dirty and recover via bounded sweep plus log reads.
+   */
+  public changes<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).sse.get<V2EventChangesResponses, V2EventChangesErrors, ThrowOnError>({
+      url: "/api/event/changes",
       ...options,
     })
   }
@@ -7283,9 +7265,9 @@ export class Pty2 extends HeyApiClient {
   public list<ThrowOnError extends boolean = false>(
     parameters?: {
       location?: {
-        directory?: string
-        workspace?: string
-      }
+        directory?: string | null
+        workspace?: string | null
+      } | null
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -7305,9 +7287,9 @@ export class Pty2 extends HeyApiClient {
   public create<ThrowOnError extends boolean = false>(
     parameters?: {
       location?: {
-        directory?: string
-        workspace?: string
-      }
+        directory?: string | null
+        workspace?: string | null
+      } | null
       command?: string
       args?: Array<string>
       cwd?: string
@@ -7352,11 +7334,11 @@ export class Pty2 extends HeyApiClient {
    */
   public remove<ThrowOnError extends boolean = false>(
     parameters: {
-      ptyID: string
+      ptyID: unknown
       location?: {
-        directory?: string
-        workspace?: string
-      }
+        directory?: string | null
+        workspace?: string | null
+      } | null
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -7385,11 +7367,11 @@ export class Pty2 extends HeyApiClient {
    */
   public get<ThrowOnError extends boolean = false>(
     parameters: {
-      ptyID: string
+      ptyID: unknown
       location?: {
-        directory?: string
-        workspace?: string
-      }
+        directory?: string | null
+        workspace?: string | null
+      } | null
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -7418,15 +7400,15 @@ export class Pty2 extends HeyApiClient {
    */
   public update<ThrowOnError extends boolean = false>(
     parameters: {
-      ptyID: string
+      ptyID: unknown
       location?: {
-        directory?: string
-        workspace?: string
-      }
+        directory?: string | null
+        workspace?: string | null
+      } | null
       title?: string
       size?: {
-        rows: number
-        cols: number
+        rows: unknown
+        cols: unknown
       }
     },
     options?: Options<never, ThrowOnError>,
@@ -7463,11 +7445,11 @@ export class Pty2 extends HeyApiClient {
    */
   public connectToken<ThrowOnError extends boolean = false>(
     parameters: {
-      ptyID: string
+      ptyID: unknown
       location?: {
-        directory?: string
-        workspace?: string
-      }
+        directory?: string | null
+        workspace?: string | null
+      } | null
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -7496,7 +7478,7 @@ export class Pty2 extends HeyApiClient {
    */
   public connect<ThrowOnError extends boolean = false>(
     parameters: {
-      ptyID: string
+      ptyID: unknown
       "location[directory]"?: string
       "location[workspace]"?: string
       cursor?: string
@@ -7535,9 +7517,9 @@ export class Shell extends HeyApiClient {
   public list<ThrowOnError extends boolean = false>(
     parameters?: {
       location?: {
-        directory?: string
-        workspace?: string
-      }
+        directory?: string | null
+        workspace?: string | null
+      } | null
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -7557,12 +7539,12 @@ export class Shell extends HeyApiClient {
   public create<ThrowOnError extends boolean = false>(
     parameters?: {
       location?: {
-        directory?: string
-        workspace?: string
-      }
+        directory?: string | null
+        workspace?: string | null
+      } | null
       command?: string
       cwd?: string
-      timeout?: number
+      timeout?: unknown
       metadata?: {
         [key: string]: unknown
       }
@@ -7602,11 +7584,11 @@ export class Shell extends HeyApiClient {
    */
   public remove<ThrowOnError extends boolean = false>(
     parameters: {
-      id: string
+      id: unknown
       location?: {
-        directory?: string
-        workspace?: string
-      }
+        directory?: string | null
+        workspace?: string | null
+      } | null
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -7635,11 +7617,11 @@ export class Shell extends HeyApiClient {
    */
   public get<ThrowOnError extends boolean = false>(
     parameters: {
-      id: string
+      id: unknown
       location?: {
-        directory?: string
-        workspace?: string
-      }
+        directory?: string | null
+        workspace?: string | null
+      } | null
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -7668,13 +7650,13 @@ export class Shell extends HeyApiClient {
    */
   public output<ThrowOnError extends boolean = false>(
     parameters: {
-      id: string
+      id: unknown
       location?: {
-        directory?: string
-        workspace?: string
-      }
-      cursor?: string
-      limit?: string
+        directory?: string | null
+        workspace?: string | null
+      } | null
+      cursor?: unknown
+      limit?: unknown
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -7708,9 +7690,9 @@ export class Reference extends HeyApiClient {
   public list<ThrowOnError extends boolean = false>(
     parameters?: {
       location?: {
-        directory?: string
-        workspace?: string
-      }
+        directory?: string | null
+        workspace?: string | null
+      } | null
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -7728,9 +7710,9 @@ export class ProjectCopy2 extends HeyApiClient {
     parameters: {
       projectID: string
       location?: {
-        directory?: string
-        workspace?: string
-      }
+        directory?: string | null
+        workspace?: string | null
+      } | null
       directory?: string
       force?: boolean
     },
@@ -7769,9 +7751,9 @@ export class ProjectCopy2 extends HeyApiClient {
     parameters: {
       projectID: string
       location?: {
-        directory?: string
-        workspace?: string
-      }
+        directory?: string | null
+        workspace?: string | null
+      } | null
       strategy?: string
       directory?: string
       name?: string
@@ -7810,9 +7792,9 @@ export class ProjectCopy2 extends HeyApiClient {
     parameters: {
       projectID: string
       location?: {
-        directory?: string
-        workspace?: string
-      }
+        directory?: string | null
+        workspace?: string | null
+      } | null
     },
     options?: Options<never, ThrowOnError>,
   ) {
