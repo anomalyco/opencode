@@ -6,20 +6,16 @@ import {
   CodeMode,
   Tool as CodeModeTool,
   toolError,
-  type ExecutionLimits,
   type JsonSchema,
   type ToolDefinition,
 } from "@opencode-ai/codemode"
 
 export const CODE_MODE_TOOL = "execute"
 
-/**
- * Execution limits for CodeMode programs. The timeout matches the default MCP
- * request timeout; everything else uses the CodeMode defaults.
- */
-const CODE_LIMITS: ExecutionLimits = {
-  timeoutMs: 30_000,
-}
+// OpenCode sets NO execution limits: no timeout and no tool-call cap. Cancelling the tool
+// call interrupts the execution fiber, and structured concurrency takes the program and its
+// in-flight child calls down with it; every child call is permission-gated anyway. The only
+// active bound is CodeMode's default 32KB output truncation.
 
 export const Parameters = Schema.Struct({
   code: Schema.String.annotate({
@@ -298,7 +294,6 @@ export function define(
 
         const runtime = CodeMode.make({
           tools: toolTree(catalog, callTool),
-          limits: CODE_LIMITS,
           onToolCallStart: ({ index, name, input }) =>
             Effect.suspend(() => {
               const shown = displayInput(input)

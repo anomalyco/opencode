@@ -116,8 +116,8 @@ describe("code mode execute", () => {
     // never cherry-picks a catalog tool or fabricates result fields.
     expect(tool.description).toContain("## Workflow")
     expect(tool.description).toContain("1. Pick a tool from the list under `## Available tools`")
-    expect(tool.description).toContain("if a result is a string, JSON.parse it before reading fields")
-    expect(tool.description).toContain("Return small: extract only the fields you need")
+    expect(tool.description).toContain('`const data = typeof res === "string" ? JSON.parse(res) : res` — most tools return JSON as a string')
+    expect(tool.description).toContain("Return only the fields you need")
     expect(tool.description).not.toContain("total_count")
   })
 
@@ -153,22 +153,32 @@ describe("code mode execute", () => {
         client as any,
       )
     }
-    tools["zeta_only_tool"] = mcpTool("only_tool", () => "")
+    tools["zeta_only_tool"] = mcpTool("only_tool", () => "", {
+      type: "object",
+      properties: { topic: { type: "string", description: "Subject to look up" } },
+      required: ["topic"],
+    })
     const tool = await build(tools, {}, ["alpha", "zeta"])
 
-    // Every namespace is listed with counts; signatures inline cheapest-first until the
-    // budget runs out, and the description states exactly how comprehensive the list is.
+    // Every namespace is listed with counts; signatures inline round-robin across
+    // namespaces (cheapest-first within each) until the budget runs out, and the
+    // description states exactly how comprehensive the list is. Round-robin fairness:
+    // the small zeta namespace is fully shown even though alpha alone could exhaust
+    // the whole budget.
     expect(tool.description).toContain("Available tools (PARTIAL — ")
     expect(tool.description).toMatch(/- alpha \(150 tools, \d+ shown\)/)
-    expect(tool.description).toContain("- zeta (1 tool, none shown)")
+    expect(tool.description).toContain("- zeta (1 tool)\n")
+    expect(tool.description).toContain("tools.zeta.only_tool(input: { topic: string }): Promise<unknown>")
     expect(tool.description).toContain("tools.$codemode.search(")
     // PARTIAL catalogs put search first in the workflow and advertise namespace browsing.
     expect(tool.description).toContain("1. Find a tool (skip when it is already listed below)")
     expect(tool.description).toContain('- Browse one namespace: `await tools.$codemode.search({ query: "", namespace: "<name>" })`.')
     expect(tool.description).not.toContain("total_count")
-    // Cheapest signatures (single-digit ops) made the cut; the most expensive did not.
+    // All op lines cost the same estimated tokens (chars/4 rounds away the 1- vs 3-digit
+    // name difference), so the path tiebreak decides: the lexicographically-first ops made
+    // the cut and the lexicographic tail (op_99 is maximal) did not.
     expect(tool.description).toContain("tools.alpha.op_0(")
-    expect(tool.description).not.toContain("tools.alpha.op_149(")
+    expect(tool.description).not.toContain("tools.alpha.op_99(")
 
     // The runtime search tool works in-program and returns complete signatures.
     const out = await Effect.runPromise(
@@ -178,6 +188,12 @@ describe("code mode execute", () => {
     // Search-result paths carry the `tools.` prefix so each is directly usable as a call site.
     expect(result.items.map((i: any) => i.path)).toContain("tools.zeta.only_tool")
     expect(result.items[0].signature).toContain("tools.")
+    // Search results render the pretty multiline signature: MCP input-property
+    // descriptions ride along as JSDoc field comments. The inline catalog stays compact.
+    const signature = result.items.find((i: any) => i.path === "tools.zeta.only_tool").signature
+    expect(signature).toContain("tools.zeta.only_tool(input: {\n")
+    expect(signature).toContain("  /** Subject to look up */\n  topic: string")
+    expect(tool.description).not.toContain("/**")
     expect(out.metadata.toolCalls).toEqual([
       { tool: "$codemode.search", status: "completed", input: { query: "only tool", limit: 3 } },
     ])
@@ -399,13 +415,6 @@ describe("code mode execute", () => {
     )
     expect(out.output).toBe("captured")
     expect(out.attachments).toHaveLength(1)
-  })
-
-  test("terminates a runaway loop via the operation limit instead of hanging", async () => {
-    const tool = await build({})
-    const output = await Effect.runPromise(tool.execute({ code: "while (true) {}" }, ctx))
-    expect(output.metadata.error).toBe(true)
-    expect(output.output.toLowerCase()).toContain("operation")
   })
 
   test("isolates the sandbox from host globals", async () => {
