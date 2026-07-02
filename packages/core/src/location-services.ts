@@ -111,5 +111,3 @@ export function buildLocationServiceMap(
   )
 }
 
-// This is temporary for backwards compatibility
-export const locationServiceMapLayer = buildLocationServiceMap()
