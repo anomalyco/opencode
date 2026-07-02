@@ -128,6 +128,10 @@ const withVariant = (
 const apiName = (model: ModelV2.Info) =>
   model.api.type === "aisdk" ? `${model.api.type}:${model.api.package}` : model.api.type
 
+// Catalog xAI models may omit an explicit URL; the OpenAIResponses route
+// default points at OpenAI, so fall back to xAI's endpoint explicitly.
+const XAI_DEFAULT_BASE_URL = "https://api.x.ai/v1"
+
 export const fromCatalogModel = (
   model: ModelV2.Info,
   credential?: Credential.Value,
@@ -143,6 +147,18 @@ export const fromCatalogModel = (
     return Effect.succeed(
       withDefaults(resolved, OpenAIResponses.route)
         .with({ auth: key === undefined ? Auth.none : Auth.bearer(key) })
+        .model({ id: resolved.api.id }),
+    )
+  }
+  if (resolved.api.type === "aisdk" && resolved.api.package === "@ai-sdk/xai") {
+    // xAI's Responses API is OpenAI-shaped, including prompt_cache_key, which
+    // the runner already populates for prompt cache routing.
+    return Effect.succeed(
+      withDefaults(resolved, OpenAIResponses.route)
+        .with({
+          auth: key === undefined ? Auth.none : Auth.bearer(key),
+          ...(resolved.api.url === undefined ? { endpoint: { baseURL: XAI_DEFAULT_BASE_URL } } : {}),
+        })
         .model({ id: resolved.api.id }),
     )
   }
@@ -176,6 +192,7 @@ export const supported = (model: ModelV2.Info) =>
   model.api.type === "aisdk" &&
   (model.api.package === "@ai-sdk/openai" ||
     model.api.package === "@ai-sdk/anthropic" ||
+    model.api.package === "@ai-sdk/xai" ||
     (model.api.package === "@ai-sdk/openai-compatible" && model.api.url !== undefined))
 
 /** Resolves models from the catalog belonging to the current Location runtime. */

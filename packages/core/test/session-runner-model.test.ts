@@ -234,6 +234,47 @@ describe("SessionRunnerModel", () => {
     }),
   )
 
+  it.effect("maps catalog xAI AI SDK models into native Responses routes", () =>
+    Effect.gen(function* () {
+      const resolved = yield* SessionRunnerModel.fromCatalogModel(
+        model({ type: "aisdk", package: "@ai-sdk/xai", url: "https://xai.example/v1" }),
+      )
+
+      expect(resolved.route).toMatchObject({
+        id: "openai-responses",
+        endpoint: { baseURL: "https://xai.example/v1" },
+      })
+    }),
+  )
+
+  it.effect("defaults catalog xAI models without a URL to the xAI endpoint", () =>
+    Effect.gen(function* () {
+      const resolved = yield* SessionRunnerModel.fromCatalogModel(model({ type: "aisdk", package: "@ai-sdk/xai" }))
+
+      expect(resolved.route).toMatchObject({
+        id: "openai-responses",
+        endpoint: { baseURL: "https://api.x.ai/v1" },
+      })
+    }),
+  )
+
+  it.effect("lowers the runner prompt cache key into xAI request bodies", () =>
+    Effect.gen(function* () {
+      const resolved = yield* SessionRunnerModel.fromCatalogModel(
+        model({ type: "aisdk", package: "@ai-sdk/xai", url: "https://xai.example/v1" }),
+      )
+      const prepared = yield* LLMClient.prepare(
+        LLM.request({
+          model: resolved,
+          prompt: "Hello",
+          providerOptions: { openai: { promptCacheKey: "ses_cache_key" } },
+        }),
+      )
+
+      expect(prepared.body).toMatchObject({ prompt_cache_key: "ses_cache_key" })
+    }),
+  )
+
   it.effect("maps catalog Anthropic AI SDK models into native routes", () =>
     Effect.gen(function* () {
       const resolved = yield* SessionRunnerModel.fromCatalogModel(
@@ -336,6 +377,7 @@ describe("SessionRunnerModel", () => {
           model({ type: "aisdk", package: "@ai-sdk/openai", url: "https://openai.example/v1" }),
         ),
       ).toBe(true)
+      expect(SessionRunnerModel.supported(model({ type: "aisdk", package: "@ai-sdk/xai" }))).toBe(true)
       expect(
         SessionRunnerModel.supported(
           model({ type: "aisdk", package: "@ai-sdk/google", url: "https://google.example/v1" }),
