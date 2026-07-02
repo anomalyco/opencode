@@ -68,9 +68,15 @@ mainWindow = createMainWindow()
 
 `url` and `password` are the Basic-auth credentials the sidecar uses to
 expose the local HTTP API. The login window's renderer is loaded from a
-`data:text/html` URL containing an inline `HTML_LOGIN` template, with the
-preload script at `packages/desktop/src/preload/login.ts` exposing
+**temp file** (`win.loadFile`) written with the inline `HTML_LOGIN` template,
+with the preload script at `packages/desktop/src/preload/login.ts` exposing
 `window.loginApi`.
+
+> **Why a temp file and not `data:text/html`?** Electron 42 packaged builds
+> on Windows may not execute preload scripts when the page is loaded via a
+> `data:` URL (opaque origin). Writing the HTML to a temp file and loading
+> it with `win.loadFile()` gives the page a proper `file://` origin and
+> eliminates the edge case entirely.
 
 ### Wiring (CLI)
 
@@ -640,6 +646,11 @@ inside the packaged app's asar archive. This is silent unless the
 **Resolution.** Restart the application. If the error persists, ensure the
 `out/preload/login.js` file is bundled in the asar (it should be included by
 the `out/**/*` glob in the `files` config of `electron-builder.config.ts`).
+
+**July 2026 fix.** The login HTML was switched from `data:text/html` to a
+temp file loaded via `win.loadFile()` because `data:` URLs + preload scripts
+are unreliable in packaged Electron 42 on Windows. If you still see this
+error after the fix, open an issue with the electron-log output.
 
 ### Clearing state for a fresh start
 
