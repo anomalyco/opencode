@@ -1,6 +1,6 @@
 import { Context, Effect, Layer, Option, Schema } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { EventV2 } from "@opencode-ai/core/event"
+import { InterruptEvent } from "@opencode-ai/schema"
 import { InstanceState } from "@/effect/instance-state"
 import { MessageID, PartID, SessionID } from "@/session/schema"
 import { EventV2Bridge } from "@/event-v2-bridge"
@@ -18,33 +18,16 @@ export const CANCEL_GRACE_TURNS = 2
 // over-long inputs are truncated rather than rejected.
 export const MAX_REASON_LENGTH = 16000
 
-export const Intent = Schema.Literals(["steer", "cancel"])
-export type Intent = typeof Intent.Type
+export const Intent = InterruptEvent.Intent
+export type Intent = Schema.Schema.Type<typeof Intent>
 
-export const Origin = Schema.Literals(["user", "parent"])
-export type Origin = typeof Origin.Type
-
-export const Requested = Schema.Struct({
-  sessionID: SessionID,
-  intent: Intent,
-  reason: Schema.String,
-  origin: Origin,
-}).annotate({ identifier: "InterruptRequested" })
-
-export const Consumed = Schema.Struct({
-  sessionID: SessionID,
-  intent: Intent,
-}).annotate({ identifier: "InterruptConsumed" })
-
-export const Terminal = Schema.Struct({
-  sessionID: SessionID,
-  reason: Schema.String,
-}).annotate({ identifier: "InterruptTerminal" })
+export const Origin = InterruptEvent.Origin
+export type Origin = Schema.Schema.Type<typeof Origin>
 
 export const Event = {
-  Requested: EventV2.define({ type: "interrupt.requested", schema: Requested.fields }),
-  Consumed: EventV2.define({ type: "interrupt.consumed", schema: Consumed.fields }),
-  Terminal: EventV2.define({ type: "interrupt.terminal", schema: Terminal.fields }),
+  Requested: InterruptEvent.Requested,
+  Consumed: InterruptEvent.Consumed,
+  Terminal: InterruptEvent.Terminal,
 }
 
 export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("Interrupt.NotFoundError", {
@@ -141,9 +124,7 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(EventV2Bridge.defaultLayer))
-
-export const node = LayerNode.make(layer, [EventV2Bridge.node])
+export const node = LayerNode.make({ service: Service, layer, deps: [EventV2Bridge.node] })
 
 // --- visible-marker renderer (untrusted reason is XML-escaped) ----------------
 

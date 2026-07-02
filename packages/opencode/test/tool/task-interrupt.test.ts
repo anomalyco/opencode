@@ -1,5 +1,5 @@
 import { afterEach, describe, expect } from "bun:test"
-import { Effect, Exit, Layer, Option } from "effect"
+import { Effect, Exit, Option } from "effect"
 import { TaskSteerTool, TaskCancelTool, TaskAbortTool } from "../../src/tool/task-interrupt"
 import { Interrupt } from "../../src/session/interrupt"
 import { Session } from "../../src/session/session"
@@ -20,24 +20,34 @@ import { SessionStatus } from "@/session/status"
 import { Truncate } from "@/tool/truncate"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Permission } from "@/permission"
+import { SessionProjector } from "@opencode-ai/core/session/projector"
+import { ToolRegistry } from "@/tool/registry"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 
-const layer = Layer.mergeAll(
-  Agent.defaultLayer,
-  BackgroundJob.defaultLayer,
-  EventV2Bridge.defaultLayer,
-  Config.defaultLayer,
-  CrossSpawnSpawner.defaultLayer,
-  Session.defaultLayer,
-  SessionRunState.defaultLayer,
-  SessionStatus.defaultLayer,
-  Truncate.defaultLayer,
-  Interrupt.defaultLayer,
-  Permission.defaultLayer,
-  Database.defaultLayer,
-  RuntimeFlags.layer({}),
-).pipe(Layer.provide(Ripgrep.defaultLayer))
+const layer = (flags: Partial<RuntimeFlags.Info> = {}) =>
+  LayerNode.compile(
+    LayerNode.group([
+      Agent.node,
+      BackgroundJob.node,
+      EventV2Bridge.node,
+      Config.node,
+      CrossSpawnSpawner.node,
+      Permission.node,
+      Interrupt.node,
+      Session.node,
+      SessionProjector.node,
+      SessionRunState.node,
+      SessionStatus.node,
+      Truncate.node,
+      ToolRegistry.node,
+      Database.node,
+      RuntimeFlags.node,
+      Ripgrep.node,
+    ]),
+    [[RuntimeFlags.node, RuntimeFlags.layer(flags)]],
+  )
 
-const it = testEffect(layer)
+const it = testEffect(layer({ experimentalSubagentInterrupt: true }))
 
 afterEach(async () => {
   await disposeAllInstances()

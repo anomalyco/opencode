@@ -1,12 +1,12 @@
 import { afterEach, expect } from "bun:test"
-import { Effect, Layer, Option } from "effect"
+import { Effect, Option } from "effect"
 import { Interrupt, renderCancel, renderSteer, renderMarker } from "../../src/session/interrupt"
 import { disposeAllInstances } from "../fixture/fixture"
 import { SessionID } from "../../src/session/schema"
 import { testEffect } from "../lib/effect"
-import { EventV2Bridge } from "../../src/event-v2-bridge"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 
-const it = testEffect(Layer.mergeAll(Interrupt.layer.pipe(Layer.provideMerge(EventV2Bridge.defaultLayer))))
+const it = testEffect(LayerNode.compile(LayerNode.group([Interrupt.node])))
 
 const CHILD = SessionID.make("ses_child")
 

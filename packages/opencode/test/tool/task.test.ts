@@ -16,6 +16,7 @@ import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { SessionRunState } from "@/session/run-state"
 import { SessionStatus } from "@/session/status"
 
+import { Interrupt } from "../../src/session/interrupt"
 import { TaskTool, renderOutput, type TaskPromptOps } from "../../src/tool/task"
 import { Truncate } from "@/tool/truncate"
 import { ToolRegistry } from "@/tool/registry"
@@ -48,6 +49,7 @@ const layer = (flags: Partial<RuntimeFlags.Info> = {}) =>
       SessionStatus.node,
       Truncate.node,
       ToolRegistry.node,
+      Interrupt.node,
       Database.node,
       RuntimeFlags.node,
       Ripgrep.node,
