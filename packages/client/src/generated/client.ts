@@ -25,6 +25,8 @@ import type {
   SessionPromptOutput,
   SessionSkillInput,
   SessionSkillOutput,
+  SessionSyntheticInput,
+  SessionSyntheticOutput,
   SessionCompactInput,
   SessionCompactOutput,
   SessionWaitInput,
@@ -43,6 +45,8 @@ import type {
   SessionEventsOutput,
   SessionInterruptInput,
   SessionInterruptOutput,
+  SessionBackgroundInput,
+  SessionBackgroundOutput,
   SessionMessageInput,
   SessionMessageOutput,
   MessageListInput,
@@ -471,6 +475,18 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
+      synthetic: (input: SessionSyntheticInput, requestOptions?: RequestOptions) =>
+        request<SessionSyntheticOutput>(
+          {
+            method: "POST",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/synthetic`,
+            body: { text: input["text"], description: input["description"], metadata: input["metadata"] },
+            successStatus: 204,
+            declaredStatuses: [404, 400, 401],
+            empty: true,
+          },
+          requestOptions,
+        ),
       compact: (input: SessionCompactInput, requestOptions?: RequestOptions) =>
         request<SessionCompactOutput>(
           {
@@ -567,6 +583,17 @@ export function make(options: ClientOptions) {
           {
             method: "POST",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/interrupt`,
+            successStatus: 204,
+            declaredStatuses: [404, 400, 401],
+            empty: true,
+          },
+          requestOptions,
+        ),
+      background: (input: SessionBackgroundInput, requestOptions?: RequestOptions) =>
+        request<SessionBackgroundOutput>(
+          {
+            method: "POST",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/background`,
             successStatus: 204,
             declaredStatuses: [404, 400, 401],
             empty: true,

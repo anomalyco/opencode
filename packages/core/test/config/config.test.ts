@@ -5,6 +5,8 @@ import { Effect, Layer, Schema } from "effect"
 import { FastCheck } from "effect/testing"
 import { Config } from "@opencode-ai/core/config"
 import { ConfigProvider } from "@opencode-ai/core/config/provider"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { ConfigMigrateV1 } from "@opencode-ai/core/v1/config/migrate"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import { FSUtil } from "@opencode-ai/core/fs-util"
@@ -25,21 +27,19 @@ function testLayer(
   projectDirectory = directory,
   vcs?: Project.Vcs,
 ) {
-  return Config.locationLayer.pipe(
-    Layer.provide(FSUtil.defaultLayer),
-    Layer.provide(Global.layerWith({ config: globalDirectory })),
-    Layer.provide(
-      Layer.succeed(
-        Location.Service,
-        Location.Service.of(
-          location(
-            { directory: AbsolutePath.make(directory) },
-            { projectDirectory: AbsolutePath.make(projectDirectory), vcs },
-          ),
-        ),
+  const locationLayer = Layer.succeed(
+    Location.Service,
+    Location.Service.of(
+      location(
+        { directory: AbsolutePath.make(directory) },
+        { projectDirectory: AbsolutePath.make(projectDirectory), vcs },
       ),
     ),
   )
+  return AppNodeBuilder.build(LayerNode.group([Config.node, Policy.node]), [
+    [Location.node, locationLayer],
+    [Global.node, Global.layerWith({ config: globalDirectory })],
+  ])
 }
 
 const provider = {

@@ -3,8 +3,8 @@ import { Location } from "@opencode-ai/schema/location"
 import { Session } from "@opencode-ai/schema/session"
 import { Context, Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
-import { QuestionNotFoundError, SessionNotFoundError } from "../errors"
-import { LocationQuery, locationQueryOpenApi } from "./location"
+import { QuestionNotFoundError, SessionNotFoundError } from "../errors.js"
+import { LocationQuery, locationQueryOpenApi } from "./location.js"
 
 export const makeQuestionGroup = <
   LocationId extends HttpApiMiddleware.AnyId,

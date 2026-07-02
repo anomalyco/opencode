@@ -1,19 +1,19 @@
 import { describe, expect, test } from "bun:test"
-import { Agent, FileSystem, Form, Integration, Permission, Project, Reference, Session, Workspace } from "../src"
-import { EventManifest } from "../src/event-manifest"
-import { IdeEvent } from "../src/ide-event"
-import { SessionEvent } from "../src/session-event"
-import { SessionTodo } from "../src/session-todo"
-import { SessionV1 } from "../src/session-v1"
-import { WorkspaceEvent } from "../src/workspace-event"
+import { Agent, FileSystem, Form, Integration, Permission, Project, Reference, Session, Workspace } from "../src/index.js"
+import { EventManifest } from "../src/event-manifest.js"
+import { IdeEvent } from "../src/ide-event.js"
+import { SessionEvent } from "../src/session-event.js"
+import { SessionTodo } from "../src/session-todo.js"
+import { SessionV1 } from "../src/session-v1.js"
+import { WorkspaceEvent } from "../src/workspace-event.js"
 
 describe("public event manifest", () => {
   test("owns the complete public event surface", () => {
-    expect(EventManifest.ServerDefinitions.filter((definition) => definition.type !== "agent.updated").length).toBe(67)
+    expect(EventManifest.ServerDefinitions.filter((definition) => definition.type !== "agent.updated").length).toBe(68)
     expect(EventManifest.ServerDefinitions.filter((definition) => definition.type === "agent.updated")).toEqual([
       Agent.Event.Updated,
     ])
-    expect(EventManifest.Definitions.filter((definition) => definition.type !== "agent.updated").length).toBe(98)
+    expect(EventManifest.Definitions.filter((definition) => definition.type !== "agent.updated").length).toBe(99)
     expect(EventManifest.Definitions.filter((definition) => definition.type === "agent.updated")).toEqual([
       Agent.Event.Updated,
     ])
@@ -29,7 +29,7 @@ describe("public event manifest", () => {
       SessionV1.Event.Diff,
       SessionV1.Event.Error,
     ])
-    expect(Array.from(EventManifest.Latest.keys()).filter((type) => type !== "agent.updated").length).toBe(98)
+    expect(Array.from(EventManifest.Latest.keys()).filter((type) => type !== "agent.updated").length).toBe(99)
     expect(EventManifest.Latest.get("agent.updated")).toBe(Agent.Event.Updated)
     expect(Agent.Event.Updated.durable).toBeUndefined()
     expect(EventManifest.Durable.has("agent.updated")).toBe(false)

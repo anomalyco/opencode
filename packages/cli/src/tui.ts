@@ -1,6 +1,7 @@
 import { run } from "@opencode-ai/tui"
 import { TuiConfig } from "@opencode-ai/tui/config"
 import { Effect } from "effect"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Global } from "@opencode-ai/core/global"
 import { loadBuiltinPlugins } from "@opencode-ai/tui/builtins"
 import { OpenCode } from "@opencode-ai/client"
@@ -44,5 +45,5 @@ export function runTui(transport: Transport, args: Args, reload?: () => Promise<
         },
       },
     })
-  }).pipe(Effect.provide(Global.defaultLayer))
+  }).pipe(Effect.provide(AppNodeBuilder.build(Global.node)))
 }

@@ -63,6 +63,7 @@ export type Event =
   | EventPermissionV2Replied
   | EventPluginAdded
   | EventProjectDirectoriesUpdated
+  | EventSkillUpdated
   | EventFileWatcherUpdated
   | EventPtyCreated
   | EventPtyUpdated
@@ -940,6 +941,7 @@ export type GlobalEvent = {
           sessionID: string
           messageID: string
           text: string
+          description?: string
         }
       }
     | {
@@ -1356,6 +1358,13 @@ export type GlobalEvent = {
       }
     | {
         id: string
+        type: "skill.updated"
+        properties: {
+          [key: string]: unknown
+        }
+      }
+    | {
+        id: string
         type: "file.watcher.updated"
         properties: {
           file: string
@@ -1502,6 +1511,7 @@ export type GlobalEvent = {
             | "session.new"
             | "session.share"
             | "session.interrupt"
+            | "session.background"
             | "session.compact"
             | "session.page.up"
             | "session.page.down"
@@ -2707,6 +2717,7 @@ export type EventTuiCommandExecute = {
       | "session.new"
       | "session.share"
       | "session.interrupt"
+      | "session.background"
       | "session.compact"
       | "session.page.up"
       | "session.page.down"
@@ -3035,6 +3046,7 @@ export type V2Event =
   | PermissionV2Replied
   | PluginAdded
   | ProjectDirectoriesUpdated
+  | SkillUpdated
   | FileWatcherUpdated
   | PtyCreated
   | PtyUpdated
@@ -3134,6 +3146,7 @@ export type EventTuiCommandExecute2 = {
       | "session.new"
       | "session.share"
       | "session.interrupt"
+      | "session.background"
       | "session.compact"
       | "session.page.up"
       | "session.page.down"
@@ -3604,6 +3617,7 @@ export type SyncEventSessionNextSynthetic = {
       sessionID: string
       messageID: string
       text: string
+      description?: string
     }
   }
 }
@@ -4111,6 +4125,10 @@ export type AgentV2Info = {
   permissions: PermissionV2Ruleset
 }
 
+export type PluginInfo = {
+  id: string
+}
+
 export type SessionV2Info = {
   id: string
   parentID?: string
@@ -4203,6 +4221,7 @@ export type SessionMessageSynthetic = {
   }
   sessionID: string
   text: string
+  description?: string
   type: "synthetic"
 }
 
@@ -4563,6 +4582,7 @@ export type SessionNextSynthetic = {
     sessionID: string
     messageID: string
     text: string
+    description?: string
   }
 }
 
@@ -5343,6 +5363,7 @@ export type SkillV2Info = {
   name: string
   description?: string
   slash?: boolean
+  autoinvoke?: boolean
   location: string
   content: string
 }
@@ -5854,6 +5875,23 @@ export type ProjectDirectoriesUpdated = {
   }
 }
 
+export type SkillUpdated = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "skill.updated"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    [key: string]: unknown
+  }
+}
+
 export type FileWatcherUpdated = {
   id: string
   metadata?: {
@@ -6171,6 +6209,7 @@ export type TuiCommandExecute = {
       | "session.new"
       | "session.share"
       | "session.interrupt"
+      | "session.background"
       | "session.compact"
       | "session.page.up"
       | "session.page.down"
@@ -6766,6 +6805,7 @@ export type EventSessionNextSynthetic = {
     sessionID: string
     messageID: string
     text: string
+    description?: string
   }
 }
 
@@ -7215,6 +7255,14 @@ export type EventProjectDirectoriesUpdated = {
   type: "project.directories.updated"
   properties: {
     projectID: string
+  }
+}
+
+export type EventSkillUpdated = {
+  id: string
+  type: "skill.updated"
+  properties: {
+    [key: string]: unknown
   }
 }
 
@@ -11817,6 +11865,43 @@ export type V2AgentListResponses = {
 
 export type V2AgentListResponse = V2AgentListResponses[keyof V2AgentListResponses]
 
+export type V2PluginListData = {
+  body?: never
+  path?: never
+  query?: {
+    location?: {
+      directory?: string
+      workspace?: string
+    }
+  }
+  url: "/api/plugin"
+}
+
+export type V2PluginListErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+}
+
+export type V2PluginListError = V2PluginListErrors[keyof V2PluginListErrors]
+
+export type V2PluginListResponses = {
+  /**
+   * Success
+   */
+  200: {
+    location: LocationInfo
+    data: Array<PluginInfo>
+  }
+}
+
+export type V2PluginListResponse = V2PluginListResponses[keyof V2PluginListResponses]
+
 export type V2SessionListData = {
   body?: never
   path?: never
@@ -12569,6 +12654,41 @@ export type V2SessionInterruptResponses = {
 }
 
 export type V2SessionInterruptResponse = V2SessionInterruptResponses[keyof V2SessionInterruptResponses]
+
+export type V2SessionBackgroundData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: never
+  url: "/api/session/{sessionID}/background"
+}
+
+export type V2SessionBackgroundErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * SessionNotFoundError
+   */
+  404: SessionNotFoundError
+}
+
+export type V2SessionBackgroundError = V2SessionBackgroundErrors[keyof V2SessionBackgroundErrors]
+
+export type V2SessionBackgroundResponses = {
+  /**
+   * <No Content>
+   */
+  204: void
+}
+
+export type V2SessionBackgroundResponse = V2SessionBackgroundResponses[keyof V2SessionBackgroundResponses]
 
 export type V2SessionMessageData = {
   body?: never

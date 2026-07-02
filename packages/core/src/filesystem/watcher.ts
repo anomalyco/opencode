@@ -6,6 +6,7 @@ import type ParcelWatcher from "@parcel/watcher"
 import { makeLocationNode } from "../effect/app-node"
 import { Cause, Context, Effect, Layer } from "effect"
 import { FileSystemWatcher } from "@opencode-ai/schema/filesystem-watcher"
+import os from "os"
 import path from "path"
 import { Config } from "../config"
 import { EventV2 } from "../event"
@@ -54,13 +55,17 @@ export interface Interface {}
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/FileWatcher") {}
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    if (yield* Flag.OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER) return Service.of({})
+    if (Flag.OPENCODE_DISABLE_FILEWATCHER) return Service.of({})
 
     const backend = getBackend()
     const location = yield* Location.Service
+    if (path.resolve(location.directory) === path.resolve(os.homedir())) {
+      yield* Effect.logInfo("watcher skipped home directory", { directory: location.directory })
+      return Service.of({})
+    }
     if (!backend) {
       yield* Effect.logError("watcher backend not supported", {
         directory: location.directory,
@@ -84,6 +89,7 @@ export const layer = Layer.effect(
     )
 
     const callback: ParcelWatcher.SubscribeCallback = (_error, updates) => {
+      if (_error) runFork(Effect.logError("watcher callback failed", { error: _error }))
       for (const update of updates) {
         if (update.type === "create") runFork(events.publish(Event.Updated, { file: update.path, event: "add" }))
         if (update.type === "update") runFork(events.publish(Event.Updated, { file: update.path, event: "change" }))
@@ -94,7 +100,11 @@ export const layer = Layer.effect(
     const subscribe = (directory: string, ignore: string[]) => {
       const pending = w.subscribe(directory, callback, { ignore, backend })
       return Effect.promise(() => pending).pipe(
-        Effect.tap((subscription) => Effect.sync(() => subscriptions.push(subscription))),
+        Effect.tap((subscription) =>
+          Effect.sync(() => subscriptions.push(subscription)).pipe(
+            Effect.andThen(Effect.logInfo("watcher subscribed", { directory, backend, ignores: ignore.length })),
+          ),
+        ),
         Effect.timeout(SUBSCRIBE_TIMEOUT_MS),
         Effect.catchCause((cause) => {
           pending.then((subscription) => subscription.unsubscribe()).catch(() => {})
@@ -106,11 +116,9 @@ export const layer = Layer.effect(
     const config = (yield* (yield* Config.Service).entries())
       .filter((entry): entry is Config.Document => entry.type === "document")
       .flatMap((item) => item.info.watcher?.ignore ?? [])
-    if (yield* Flag.OPENCODE_EXPERIMENTAL_FILEWATCHER) {
-      yield* Effect.forkScoped(
-        subscribe(location.directory, [...Ignore.PATTERNS, ...config, ...protecteds(location.directory)]),
-      )
-    }
+    yield* Effect.forkScoped(
+      subscribe(location.directory, [...Ignore.PATTERNS, ...config, ...protecteds(location.directory)]),
+    )
 
     if (location.vcs?.type === "git") {
       const resolved = (yield* git.repo.discover(location.directory))?.gitDirectory
@@ -132,8 +140,6 @@ export const layer = Layer.effect(
     }),
   ),
 )
-
-export const locationLayer = layer.pipe(Layer.provide(Config.locationLayer), Layer.provide(Git.defaultLayer))
 
 export const node = makeLocationNode({
   service: Service,

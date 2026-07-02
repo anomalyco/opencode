@@ -1,8 +1,8 @@
-export * as WorkspaceEvent from "./workspace-event"
+export * as WorkspaceEvent from "./workspace-event.js"
 
 import { Schema } from "effect"
-import { Event } from "./event"
-import { WorkspaceID } from "./workspace-id"
+import { Event } from "./event.js"
+import { WorkspaceID } from "./workspace-id.js"
 
 export const ConnectionStatus = Schema.Struct({
   workspaceID: WorkspaceID,

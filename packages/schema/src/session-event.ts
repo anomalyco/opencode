@@ -1,17 +1,17 @@
-export * as SessionEvent from "./session-event"
+export * as SessionEvent from "./session-event.js"
 
 import { Schema } from "effect"
-import { optional } from "./schema"
-import { Event } from "./event"
-import { ProviderMetadata, ToolContent } from "./llm"
-import { Delivery } from "./session-delivery"
-import { Model } from "./model"
-import { DateTimeUtcFromMillis, NonNegativeInt, RelativePath } from "./schema"
-import { FileAttachment, Prompt } from "./prompt"
-import { SessionID } from "./session-id"
-import { Location } from "./location"
-import { SessionMessage } from "./session-message"
-import { Revert } from "./revert"
+import { optional } from "./schema.js"
+import { Event } from "./event.js"
+import { ProviderMetadata, ToolContent } from "./llm.js"
+import { Delivery } from "./session-delivery.js"
+import { Model } from "./model.js"
+import { DateTimeUtcFromMillis, NonNegativeInt, RelativePath } from "./schema.js"
+import { FileAttachment, Prompt } from "./prompt.js"
+import { SessionID } from "./session-id.js"
+import { Location } from "./location.js"
+import { SessionMessage } from "./session-message.js"
+import { Revert } from "./revert.js"
 
 export { FileAttachment }
 
@@ -137,6 +137,8 @@ export const Synthetic = Event.define({
     ...Base,
     messageID: SessionMessage.ID,
     text: Schema.String,
+    description: Schema.String.pipe(optional),
+    metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(optional),
   },
 })
 export type Synthetic = typeof Synthetic.Type

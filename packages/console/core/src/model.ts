@@ -37,7 +37,7 @@ export namespace ZenData {
         priority: z.number().optional(),
         tpmLimit: z.number().optional(),
         tpsGoal: z.number().optional(),
-        budgetMode: z.enum(["always", "fill"]).optional(),
+        budgetPriority: z.number().optional(),
         budgetContribution: z.number().optional(),
         weight: z.number().optional(),
         disabled: z.boolean().optional(),

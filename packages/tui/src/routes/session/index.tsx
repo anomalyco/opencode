@@ -22,7 +22,7 @@ import { useData } from "../../context/data"
 import { SplitBorder } from "../../ui/border"
 import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
 import { Spinner } from "../../component/spinner"
-import { createSyntaxStyleMemo, generateSubtleSyntax, useTheme } from "../../context/theme"
+import { createSyntaxStyleMemo, generateSubtleSyntax, selectedForeground, useTheme } from "../../context/theme"
 import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers, TextAttributes, RGBA } from "@opentui/core"
 import { Prompt, type PromptRef } from "../../component/prompt"
 import type {
@@ -172,16 +172,7 @@ export function Session() {
   const messages = sessionMessages
   const descendantSessionIDs = createMemo(() => {
     if (session()?.parentID) return []
-    const sessions = data.session.list()
-    const childrenByParent = sessions.reduce((acc, item) => {
-      if (!item.parentID) return acc
-      acc.set(item.parentID, [...(acc.get(item.parentID) ?? []), item.id])
-      return acc
-    }, new Map<string, string[]>())
-    function collect(sessionID: string): string[] {
-      return (childrenByParent.get(sessionID) ?? []).flatMap((id) => [id, ...collect(id)])
-    }
-    return collect(route.sessionID)
+    return data.session.family(route.sessionID).filter((id) => id !== route.sessionID)
   })
   const permissions = createMemo(() => {
     if (session()?.parentID) return []
@@ -782,11 +773,14 @@ export function Session() {
       },
     },
     {
-      title: "Background subagents",
+      title: "Background blocking tools",
       value: "session.background",
       category: "Session",
       hidden: true,
-      run: () => unavailable("Backgrounding subagents"),
+      run: () => {
+        void sdk.api.session.background({ sessionID: route.sessionID })
+        dialog.clear()
+      },
     },
     {
       title: "Toggle subagent picker",
@@ -920,6 +914,7 @@ export function Session() {
                     />
                   )}
                 </For>
+                <BackgroundToolHint messages={messages()} />
                 <Show when={session()?.revert?.messageID}>
                   <RevertMessage
                     count={
@@ -1034,6 +1029,34 @@ function SessionRowView(props: { row: SessionRow; message: (messageID: string) =
         </Match>
       </Switch>
     </box>
+  )
+}
+
+function BackgroundToolHint(props: { messages: SessionMessage[] }) {
+  const { theme } = useTheme()
+  const shortcut = useCommandShortcut("session.background")
+  const visible = createMemo(() => {
+    const current = props.messages.findLast(
+      (message): message is SessionMessageAssistant => message.type === "assistant" && !message.time.completed,
+    )
+    return (
+      current?.content.some((part) => {
+        if (part.type !== "tool" || part.state.status !== "running") return false
+        const display = toolDisplay(part.name)
+        return display === "shell" || display === "subagent"
+      }) ?? false
+    )
+  })
+  return (
+    <Show when={visible() && shortcut()}>
+      {(value) => (
+        <box marginTop={1} paddingLeft={3} flexShrink={0}>
+          <text fg={theme.textMuted}>
+            Press <span style={{ fg: theme.text }}>{value()}</span> to move running work to the background
+          </text>
+        </box>
+      )}
+    </Show>
   )
 }
 
@@ -1218,10 +1241,15 @@ function SessionSwitchMessageV2(props: { message: SessionMessage }) {
 function SessionNoticeMessageV2(props: { message: SessionMessage }) {
   const { theme } = useTheme()
   const text = () => {
-    if (props.message.type === "system" || props.message.type === "synthetic") return props.message.text
+    if (props.message.type === "system") return "Instructions updated"
+    if (props.message.type === "synthetic") return props.message.description ?? ""
     return ""
   }
-  return <text fg={theme.textMuted}>{text()}</text>
+  return (
+    <InlineToolRow icon="◈" color={theme.textMuted} pending="Notice" complete={true}>
+      {text()}
+    </InlineToolRow>
+  )
 }
 
 function SessionSkillMessage(props: { message: Extract<SessionMessage, { type: "skill" }> }) {
@@ -1319,11 +1347,15 @@ function RevertMessage(props: {
 
 function UserMessage(props: { message: SessionMessageUser }) {
   const ctx = use()
+  const data = useData()
   const local = useLocal()
   const files = createMemo(() => props.message.files ?? [])
   const { theme } = useTheme()
   const [hover, setHover] = createSignal(false)
-  const color = createMemo(() => local.agent.color(useData().session.get(ctx.sessionID)?.agent ?? "build"))
+  const color = createMemo(() => local.agent.color(data.session.get(ctx.sessionID)?.agent ?? "build"))
+  const queued = createMemo(() => props.message.metadata?.queued === true)
+  const queuedFg = createMemo(() => selectedForeground(theme, color()))
+  const metadataVisible = createMemo(() => queued() || ctx.showTimestamps())
   const dialog = useDialog()
   const renderer = useRenderer()
 
@@ -1356,7 +1388,7 @@ function UserMessage(props: { message: SessionMessageUser }) {
           <Show when={files().length}>
             <box
               flexDirection="row"
-              paddingBottom={ctx.showTimestamps() ? 1 : 0}
+              paddingBottom={metadataVisible() ? 1 : 0}
               paddingTop={1}
               gap={1}
               flexWrap="wrap"
@@ -1379,9 +1411,18 @@ function UserMessage(props: { message: SessionMessageUser }) {
               </For>
             </box>
           </Show>
-          <Show when={ctx.showTimestamps()}>
+          <Show
+            when={queued()}
+            fallback={
+              <Show when={ctx.showTimestamps()}>
+                <text fg={theme.textMuted}>
+                  <span style={{ fg: theme.textMuted }}>{Locale.todayTimeOrDateTime(props.message.time.created)}</span>
+                </text>
+              </Show>
+            }
+          >
             <text fg={theme.textMuted}>
-              <span style={{ fg: theme.textMuted }}>{Locale.todayTimeOrDateTime(props.message.time.created)}</span>
+              <span style={{ bg: color(), fg: queuedFg(), bold: true }}> QUEUED </span>
             </text>
           </Show>
         </box>
@@ -1674,18 +1715,23 @@ function ToolPart(props: { part: SessionMessageAssistantTool }) {
   const ctx = use()
   const data = useData()
   const display = createMemo(() => toolDisplay(props.part.name))
-  const runningShell = createMemo(
-    () => {
-      if (display() !== "shell" || props.part.state.status === "pending") return false
+  const activeBackgroundWork = createMemo(() => {
+    if (props.part.state.status === "pending") return false
+    if (display() === "shell") {
       const shellID = stringValue(props.part.state.structured.shellID)
       return Boolean(shellID && data.shell.get(shellID))
-    },
-  )
+    }
+    if (display() === "subagent") {
+      const sessionID = stringValue(props.part.state.structured.sessionID) ?? stringValue(props.part.state.structured.sessionId)
+      return Boolean(sessionID && data.session.status(sessionID) === "running")
+    }
+    return false
+  })
 
   // Hide tool if showDetails is false and tool completed successfully
   const shouldHide = createMemo(() => {
     if (ctx.showDetails()) return false
-    if (runningShell()) return false
+    if (activeBackgroundWork()) return false
     if (props.part.state.status !== "completed") return false
     if (display() === "shell") return false
     return true
@@ -1709,9 +1755,6 @@ function ToolPart(props: { part: SessionMessageAssistantTool }) {
     },
     get part() {
       return props.part
-    },
-    get runningShell() {
-      return runningShell()
     },
   }
 
@@ -1743,7 +1786,7 @@ function ToolPart(props: { part: SessionMessageAssistantTool }) {
           <Edit {...toolprops} />
         </Match>
         <Match when={display() === "subagent"}>
-          <Task {...toolprops} />
+          <Subagent {...toolprops} />
         </Match>
         <Match when={display() === "apply_patch"}>
           <ApplyPatch {...toolprops} />
@@ -1771,7 +1814,6 @@ type ToolProps = {
   tool: string
   output?: string
   part: SessionMessageAssistantTool
-  runningShell?: boolean
 }
 function GenericTool(props: ToolProps) {
   const { theme } = useTheme()
@@ -2017,7 +2059,11 @@ function Shell(props: ToolProps) {
     return request?.source?.type === "tool" && request.source.callID === props.part.id
   })
   const color = createMemo(() => (permission() ? theme.warning : theme.text))
-  const isRunning = createMemo(() => props.part.state.status === "running" || props.runningShell === true)
+  const isRunning = createMemo(() => {
+    if (props.part.state.status === "running") return true
+    const shellID = stringValue(props.metadata.shellID)
+    return Boolean(shellID && data.shell.get(shellID))
+  })
   const command = createMemo(() => stringValue(props.input.command))
   const output = createMemo(() => {
     if (props.part.state.status === "pending") return ""
@@ -2180,15 +2226,20 @@ function WebSearch(props: ToolProps) {
   )
 }
 
-function Task(props: ToolProps) {
+function Subagent(props: ToolProps) {
   const { navigate } = useRoute()
+  const data = useData()
   const sessionID = createMemo(() => stringValue(props.metadata.sessionID) ?? stringValue(props.metadata.sessionId))
   const description = createMemo(() => stringValue(props.input.description))
+  const isRunning = createMemo(() => {
+    const id = sessionID()
+    return props.part.state.status === "running" || Boolean(id && data.session.status(id) === "running")
+  })
 
   return (
     <InlineTool
-      icon={props.part.state.status === "completed" ? "✓" : "│"}
-      spinner={props.part.state.status === "running"}
+      icon={isRunning() ? "│" : props.part.state.status === "completed" ? "✓" : "│"}
+      spinner={isRunning()}
       complete={description()}
       pending="Delegating..."
       part={props.part}
@@ -2211,7 +2262,7 @@ export function formatSubagentToolcalls(count: number) {
 }
 
 export function formatSubagentTitle(agent: string, description: string, background: boolean) {
-  return `${agent} Subagent${background ? " (background)" : ""} — ${description}`
+  return `${agent} Subagent — ${description}${background ? " [background]" : ""}`
 }
 
 export function formatSubagentRetry(attempt: number, message: string) {

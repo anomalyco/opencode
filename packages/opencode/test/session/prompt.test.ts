@@ -1,10 +1,10 @@
-import { NodeFileSystem } from "@effect/platform-node"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Database } from "@opencode-ai/core/database/database"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { eq } from "drizzle-orm"
 import { EventV2Bridge } from "@/event-v2-bridge"
-import { FetchHttpClient } from "effect/unstable/http"
 import { expect } from "bun:test"
 import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer } from "effect"
 import path from "path"
@@ -56,7 +56,7 @@ import { reply, TestLLMServer } from "../lib/llm-server"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
-import { locationServiceMapLayer } from "@opencode-ai/core/location-services"
+import { LocationServiceMap, locationServiceMapLayer } from "@opencode-ai/core/location-services"
 
 const summary = Layer.succeed(
   SessionSummary.Service,
@@ -156,10 +156,6 @@ const lsp = Layer.succeed(
   }),
 )
 
-const status = SessionStatus.layer.pipe(Layer.provideMerge(EventV2Bridge.defaultLayer))
-const run = SessionRunState.layer.pipe(Layer.provide(status))
-const infra = Layer.mergeAll(NodeFileSystem.layer, CrossSpawnSpawner.defaultLayer)
-
 const processorCreateStarted: Array<() => void> = []
 const blockingProcessor = Layer.succeed(
   SessionProcessor.Service,
@@ -168,80 +164,75 @@ const blockingProcessor = Layer.succeed(
   }),
 )
 
+const runtimeFlags = RuntimeFlags.layer({ experimentalEventSystem: true })
+
+const testLLMServerNode = LayerNode.make({ service: TestLLMServer, layer: TestLLMServer.layer, deps: [] })
+
+const promptRoot = LayerNode.group([
+  SessionPrompt.node,
+  Session.node,
+  SessionProjector.node,
+  MessageV2.node,
+  Snapshot.node,
+  LLM.node,
+  Env.node,
+  AgentSvc.node,
+  Command.node,
+  Permission.node,
+  Plugin.node,
+  Config.node,
+  ProviderSvc.node,
+  LSP.node,
+  MCP.node,
+  FSUtil.node,
+  Job.node,
+  SessionStatus.node,
+  SessionRunState.node,
+  Database.node,
+  EventV2Bridge.node,
+  Question.node,
+  Todo.node,
+  ToolRegistry.node,
+  Skill.node,
+  Git.node,
+  Ripgrep.node,
+  Format.node,
+  Truncate.node,
+  SessionProcessor.node,
+  Image.node,
+  SessionCompaction.node,
+  SessionRevert.node,
+  Instruction.node,
+  SystemPrompt.node,
+  CrossSpawnSpawner.node,
+  RuntimeFlags.node,
+])
+
 function makePrompt(input?: { mcpInstructions?: MCP.ServerInstructions[]; processor?: "blocking" }) {
-  const deps = Layer.mergeAll(
-    Session.defaultLayer,
-    Snapshot.defaultLayer,
-    LLM.defaultLayer,
-    Env.defaultLayer,
-    AgentSvc.defaultLayer,
-    Command.defaultLayer,
-    Permission.defaultLayer,
-    Plugin.defaultLayer,
-    Config.defaultLayer,
-    ProviderSvc.defaultLayer,
-    lsp,
-    makeMcp(input?.mcpInstructions),
-    FSUtil.defaultLayer,
-    Job.defaultLayer,
-    status,
-    Database.defaultLayer,
-    EventV2Bridge.defaultLayer,
-  ).pipe(Layer.provideMerge(infra))
-  const question = Question.layer.pipe(Layer.provideMerge(deps))
-  const todo = Todo.layer.pipe(Layer.provideMerge(deps))
-  const registry = ToolRegistry.layer.pipe(
-    Layer.provide(Skill.defaultLayer),
-    Layer.provide(FetchHttpClient.layer),
-    Layer.provide(CrossSpawnSpawner.defaultLayer),
-    Layer.provide(Git.defaultLayer),
-    Layer.provide(Ripgrep.defaultLayer),
-    Layer.provide(Format.defaultLayer),
-    Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
-    Layer.provideMerge(todo),
-    Layer.provideMerge(question),
-    Layer.provideMerge(deps),
-  )
-  const trunc = Truncate.layer.pipe(Layer.provideMerge(deps))
-  const proc =
-    input?.processor === "blocking"
-      ? blockingProcessor
-      : SessionProcessor.layer.pipe(
-          Layer.provide(summary),
-          Layer.provide(Image.defaultLayer),
-          Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
-          Layer.provideMerge(deps),
-        )
-  const compact = SessionCompaction.layer.pipe(
-    Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
-    Layer.provideMerge(proc),
-    Layer.provideMerge(deps),
-  )
-  return SessionPrompt.layer.pipe(
-    Layer.provide(SessionRevert.defaultLayer),
-    Layer.provide(Image.defaultLayer),
-    Layer.provide(summary),
-    Layer.provideMerge(run),
-    Layer.provideMerge(compact),
-    Layer.provideMerge(proc),
-    Layer.provideMerge(registry),
-    Layer.provideMerge(trunc),
-    Layer.provide(Instruction.defaultLayer),
-    Layer.provide(
-      SystemPrompt.layer.pipe(
-        Layer.provide(Skill.defaultLayer),
-        Layer.provide(locationServiceMapLayer),
-        Layer.provide(deps),
-      ),
-    ),
-    Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
-    Layer.provideMerge(deps),
-    Layer.provide(summary),
-  )
+  const replacements = [
+    [SessionSummary.node, summary],
+    [LSP.node, lsp],
+    [MCP.node, makeMcp(input?.mcpInstructions)],
+    [RuntimeFlags.node, runtimeFlags],
+  ] as const
+  if (input?.processor === "blocking") {
+    return LayerNode.compile(promptRoot, [...replacements, [SessionProcessor.node, blockingProcessor]])
+  }
+  return LayerNode.compile(promptRoot, replacements)
 }
 
 function makeHttp(input?: { mcpInstructions?: MCP.ServerInstructions[]; processor?: "blocking" }) {
-  return Layer.mergeAll(TestLLMServer.layer, makePrompt(input))
+  const root = LayerNode.group([promptRoot, testLLMServerNode])
+  const replacements = [
+    [SessionSummary.node, summary],
+    [LSP.node, lsp],
+    [MCP.node, makeMcp(input?.mcpInstructions)],
+    [RuntimeFlags.node, runtimeFlags],
+  ] as const
+  if (input?.processor === "blocking") {
+    return LayerNode.compile(root, [...replacements, [SessionProcessor.node, blockingProcessor]])
+  }
+  return LayerNode.compile(root, replacements)
 }
 
 function makeHttpNoLLMServer(input?: { mcpInstructions?: MCP.ServerInstructions[]; processor?: "blocking" }) {
@@ -697,9 +688,12 @@ noLLMServer.instance.skip(
       })
 
       const messages = yield* SessionV2.Service.use((session) => session.messages({ sessionID: chat.id })).pipe(
-        Effect.provide(SessionV2.defaultLayer),
-        Effect.provide(SessionExecution.noopLayer),
-        Effect.provide(locationServiceMapLayer),
+        Effect.provide(
+          LayerNode.compile(SessionV2.node, [
+            [SessionExecution.node, SessionExecution.noopLayer],
+            [LocationServiceMap.node, locationServiceMapLayer],
+          ]),
+        ),
       )
       const { db } = yield* Database.Service
       const row = yield* db

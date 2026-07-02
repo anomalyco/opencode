@@ -99,21 +99,31 @@ export function buildRequestParts(input: BuildRequestPartsInput) {
 
   const files = input.prompt.filter(isFileAttachment).map((attachment) => {
     const path = absolute(input.sessionDirectory, attachment.path)
+    const source = attachment.source
+      ? {
+          ...attachment.source,
+          text: {
+            value: attachment.content,
+            start: attachment.start,
+            end: attachment.end,
+          },
+        }
+      : {
+          type: "file" as const,
+          text: {
+            value: attachment.content,
+            start: attachment.start,
+            end: attachment.end,
+          },
+          path,
+        }
     return {
       id: Identifier.ascending("part"),
       type: "file",
-      mime: "text/plain",
-      url: `file://${encodeFilePath(path)}${fileQuery(attachment.selection)}`,
-      filename: getFilename(attachment.path),
-      source: {
-        type: "file",
-        text: {
-          value: attachment.content,
-          start: attachment.start,
-          end: attachment.end,
-        },
-        path,
-      },
+      mime: attachment.mime ?? "text/plain",
+      url: attachment.url ?? `file://${encodeFilePath(path)}${fileQuery(attachment.selection)}`,
+      filename: attachment.filename ?? getFilename(attachment.path),
+      source,
     } satisfies PromptRequestPart
   })
 

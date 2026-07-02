@@ -1,8 +1,8 @@
-export * as SessionTodo from "./session-todo"
+export * as SessionTodo from "./session-todo.js"
 
 import { Schema } from "effect"
-import { define, inventory } from "./event"
-import { SessionID } from "./session-id"
+import { define, inventory } from "./event.js"
+import { SessionID } from "./session-id.js"
 
 export const Info = Schema.Struct({
   content: Schema.String.annotate({ description: "Brief description of the task" }),

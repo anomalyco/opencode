@@ -2,8 +2,8 @@ import { Form } from "@opencode-ai/schema/form"
 import { Location } from "@opencode-ai/schema/location"
 import { Context, Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
-import { ConflictError, FormAlreadySettledError, FormInvalidAnswerError, FormNotFoundError, InvalidRequestError } from "../errors"
-import { LocationQuery, locationQueryOpenApi } from "./location"
+import { ConflictError, FormAlreadySettledError, FormInvalidAnswerError, FormNotFoundError, InvalidRequestError } from "../errors.js"
+import { LocationQuery, locationQueryOpenApi } from "./location.js"
 
 const CreatePayload = Schema.Struct({
   id: Form.ID.pipe(Schema.optional),

@@ -1,10 +1,10 @@
-export * as Shell from "./shell"
+export * as Shell from "./shell.js"
 
 import { Schema } from "effect"
-import { optional } from "./schema"
-import { define, inventory } from "./event"
-import { ascending } from "./identifier"
-import { NonNegativeInt, statics } from "./schema"
+import { optional } from "./schema.js"
+import { define, inventory } from "./event.js"
+import { ascending } from "./identifier.js"
+import { NonNegativeInt, statics } from "./schema.js"
 
 const IDSchema = Schema.String.check(Schema.isStartsWith("sh_")).pipe(Schema.brand("ShellID"))
 

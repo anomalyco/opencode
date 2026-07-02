@@ -37,7 +37,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/SkillGuidance") {}
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const skills = yield* SkillV2.Service
@@ -51,7 +51,9 @@ export const layer = Layer.effect(
           return SystemContext.empty
         const available = permitted
           .flatMap((skill) =>
-            skill.description === undefined ? [] : [{ name: skill.name, description: skill.description }],
+            skill.description === undefined || skill.autoinvoke === false
+              ? []
+              : [{ name: skill.name, description: skill.description }],
           )
           .toSorted((a, b) => a.name.localeCompare(b.name))
         return SystemContext.make({
@@ -70,7 +72,5 @@ export const layer = Layer.effect(
     })
   }),
 )
-
-export const locationLayer = layer
 
 export const node = makeLocationNode({ service: Service, layer, deps: [SkillV2.node] })

@@ -1,7 +1,7 @@
-export * as Plugin from "./plugin"
+export * as Plugin from "./plugin.js"
 
 import { Schema } from "effect"
-import { define, inventory } from "./event"
+import { define, inventory } from "./event.js"
 
 export const ID = Schema.String.pipe(Schema.brand("Plugin.ID"))
 export type ID = typeof ID.Type

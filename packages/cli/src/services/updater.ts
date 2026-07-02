@@ -153,6 +153,4 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(AppProcess.defaultLayer), Layer.provide(Global.defaultLayer))
-
 export * as Updater from "./updater"

@@ -5,10 +5,10 @@ import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { Location } from "@opencode-ai/core/location"
+import { Effect } from "effect"
 import { SkillPlugin } from "@opencode-ai/core/plugin/skill"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SkillV2 } from "@opencode-ai/core/skill"
-import { Effect } from "effect"
 import { location } from "../fixture/location"
 import { testEffect } from "../lib/effect"
 import { host } from "./host"
@@ -25,7 +25,7 @@ describe("SkillPlugin.Plugin", () => {
           Location.Service,
           Location.Service.of(location({ directory: AbsolutePath.make(import.meta.dir) })),
         ),
-        Effect.provide(FSUtil.defaultLayer),
+        Effect.provide(AppNodeBuilder.build(FSUtil.node)),
         Effect.provide(NodeFileSystem.layer),
       )
       const skills = yield* skill.list()

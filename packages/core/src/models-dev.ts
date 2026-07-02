@@ -1,6 +1,6 @@
 import path from "path"
 import { Context, Duration, Effect, Layer, Option, Schedule, Schema } from "effect"
-import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/http"
+import { HttpClient, HttpClientRequest } from "effect/unstable/http"
 import { ModelsDev } from "@opencode-ai/schema/models-dev"
 import { Global } from "./global"
 import { Flag } from "./flag/flag"
@@ -136,7 +136,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ModelsDev") {}
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
@@ -255,11 +255,6 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer.pipe(
-  Layer.provide(FetchHttpClient.layer),
-  Layer.provide(FSUtil.defaultLayer),
-  Layer.provide(EventV2.defaultLayer),
-)
 export const node = makeGlobalNode({ service: Service, layer: layer, deps: [FSUtil.node, EventV2.node, httpClient] })
 
 export * as ModelsDev from "./models-dev"

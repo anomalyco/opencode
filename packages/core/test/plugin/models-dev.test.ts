@@ -3,32 +3,27 @@ import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Integration } from "@opencode-ai/core/integration"
-import { Credential } from "@opencode-ai/core/credential"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventV2 } from "@opencode-ai/core/event"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Location } from "@opencode-ai/core/location"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { ModelsDevPlugin } from "@opencode-ai/core/plugin/models-dev"
-import { Policy } from "@opencode-ai/core/policy"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { location } from "../fixture/location"
 import { testEffect } from "../lib/effect"
 import { catalogHost, host, integrationHost } from "./host"
 
-const events = EventV2.defaultLayer
 const locationLayer = Layer.succeed(
   Location.Service,
   Location.Service.of(location({ directory: AbsolutePath.make(import.meta.dir) })),
 )
-const policy = Policy.layer.pipe(Layer.provide(locationLayer))
-const connections = Credential.defaultLayer.pipe(Layer.fresh)
-const integrations = Integration.locationLayer.pipe(Layer.provide(events), Layer.provide(connections))
-const catalog = Catalog.layer.pipe(
-  Layer.provide(Layer.mergeAll(events, locationLayer, policy, connections, integrations)),
-)
-const layer = Layer.mergeAll(catalog.pipe(Layer.provide(connections)), integrations, connections, events, locationLayer)
+const layer = AppNodeBuilder.build(LayerNode.group([Catalog.node, Integration.node, EventV2.node]), [
+  [Location.node, locationLayer],
+])
 const it = testEffect(layer)
 
 describe("ModelsDevPlugin", () => {
@@ -164,7 +159,7 @@ describe("ModelsDevPlugin", () => {
               connections: [],
             }),
           ])
-        }).pipe(Effect.provide(ModelsDev.defaultLayer)),
+        }).pipe(Effect.provide(AppNodeBuilder.build(ModelsDev.node))),
       (previous) =>
         Effect.sync(() => {
           Flag.OPENCODE_MODELS_PATH = previous.path
@@ -242,7 +237,7 @@ describe("ModelsDevPlugin", () => {
               },
             }),
           ])
-        }).pipe(Effect.provide(ModelsDev.defaultLayer)),
+        }).pipe(Effect.provide(AppNodeBuilder.build(ModelsDev.node))),
       (previous) =>
         Effect.sync(() => {
           Flag.OPENCODE_MODELS_PATH = previous.path

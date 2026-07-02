@@ -604,6 +604,27 @@ export type SessionSkillInput = {
 
 export type SessionSkillOutput = void
 
+export type SessionSyntheticInput = {
+  readonly sessionID: { readonly sessionID: string }["sessionID"]
+  readonly text: {
+    readonly text: string
+    readonly description?: string | null
+    readonly metadata?: { readonly [x: string]: JsonValue }
+  }["text"]
+  readonly description?: {
+    readonly text: string
+    readonly description?: string | null
+    readonly metadata?: { readonly [x: string]: JsonValue }
+  }["description"]
+  readonly metadata?: {
+    readonly text: string
+    readonly description?: string | null
+    readonly metadata?: { readonly [x: string]: JsonValue }
+  }["metadata"]
+}
+
+export type SessionSyntheticOutput = void
+
 export type SessionCompactInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
 
 export type SessionCompactOutput = void
@@ -684,6 +705,7 @@ export type SessionContextOutput = {
         readonly time: { readonly created: number }
         readonly sessionID: string
         readonly text: string
+        readonly description?: string
         readonly type: "synthetic"
       }
     | {
@@ -952,6 +974,8 @@ export type SessionHistoryOutput = {
           readonly sessionID: string
           readonly messageID: string
           readonly text: string
+          readonly description?: string
+          readonly metadata?: { readonly [x: string]: JsonValue }
         }
       }
     | {
@@ -1445,6 +1469,8 @@ export type SessionEventsOutput =
         readonly sessionID: string
         readonly messageID: string
         readonly text: string
+        readonly description?: string
+        readonly metadata?: { readonly [x: string]: unknown }
       }
     }
   | {
@@ -1795,6 +1821,10 @@ export type SessionInterruptInput = { readonly sessionID: { readonly sessionID: 
 
 export type SessionInterruptOutput = void
 
+export type SessionBackgroundInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
+
+export type SessionBackgroundOutput = void
+
 export type SessionMessageInput = {
   readonly sessionID: { readonly sessionID: string; readonly messageID: string }["sessionID"]
   readonly messageID: { readonly sessionID: string; readonly messageID: string }["messageID"]
@@ -1840,6 +1870,7 @@ export type SessionMessageOutput = {
         readonly time: { readonly created: number }
         readonly sessionID: string
         readonly text: string
+        readonly description?: string
         readonly type: "synthetic"
       }
     | {
@@ -2020,6 +2051,7 @@ export type MessageListOutput = {
         readonly time: { readonly created: number }
         readonly sessionID: string
         readonly text: string
+        readonly description?: string
         readonly type: "synthetic"
       }
     | {
@@ -3629,6 +3661,7 @@ export type SkillListOutput = {
     readonly name: string
     readonly description?: string
     readonly slash?: boolean
+    readonly autoinvoke?: boolean
     readonly location: string
     readonly content: string
   }>
@@ -4354,6 +4387,8 @@ export type EventSubscribeOutput =
         readonly sessionID: string
         readonly messageID: string
         readonly text: string
+        readonly description?: string
+        readonly metadata?: { readonly [x: string]: unknown }
       }
     }
   | {
@@ -4813,6 +4848,14 @@ export type EventSubscribeOutput =
       readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
       readonly location?: { readonly directory: string; readonly workspaceID?: string }
       readonly data: { readonly projectID: string }
+    }
+  | {
+      readonly id: string
+      readonly metadata?: { readonly [x: string]: unknown }
+      readonly type: "skill.updated"
+      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
+      readonly location?: { readonly directory: string; readonly workspaceID?: string }
+      readonly data: {}
     }
   | {
       readonly id: string

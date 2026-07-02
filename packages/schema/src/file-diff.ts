@@ -1,7 +1,7 @@
-export * as FileDiff from "./file-diff"
+export * as FileDiff from "./file-diff.js"
 
 import { Schema } from "effect"
-import { optional } from "./schema"
+import { optional } from "./schema.js"
 
 export const Info = Schema.Struct({
   file: optional(Schema.String),

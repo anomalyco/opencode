@@ -17,7 +17,7 @@ import {
   SessionNotFoundError,
   SkillNotFoundError,
   UnknownError,
-} from "../errors"
+} from "../errors.js"
 import { Agent } from "@opencode-ai/schema/agent"
 import { Model } from "@opencode-ai/schema/model"
 import { Location } from "@opencode-ai/schema/location"
@@ -278,6 +278,26 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
         ),
     )
     .add(
+      HttpApiEndpoint.post("session.synthetic", "/api/session/:sessionID/synthetic", {
+        params: { sessionID: Session.ID },
+        payload: Schema.Struct({
+          text: Schema.String,
+          description: Schema.String.pipe(Schema.optional),
+          metadata: SessionMessage.Synthetic.fields.metadata,
+        }),
+        success: HttpApiSchema.NoContent,
+        error: SessionNotFoundError,
+      })
+        .middleware(sessionLocationMiddleware)
+        .annotateMerge(
+          OpenApi.annotations({
+            identifier: "v2.session.synthetic",
+            summary: "Add synthetic message",
+            description: "Append a synthetic message to a session and resume execution.",
+          }),
+        ),
+    )
+    .add(
       HttpApiEndpoint.post("session.compact", "/api/session/:sessionID/compact", {
         params: { sessionID: Session.ID },
         success: HttpApiSchema.NoContent,
@@ -408,6 +428,22 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
             identifier: "v2.session.interrupt",
             summary: "Interrupt session execution",
             description: "Interrupt active execution owned by this OpenCode process. Idle interruption is a no-op.",
+          }),
+        ),
+    )
+    .add(
+      HttpApiEndpoint.post("session.background", "/api/session/:sessionID/background", {
+        params: { sessionID: Session.ID },
+        success: HttpApiSchema.NoContent,
+        error: SessionNotFoundError,
+      })
+        .middleware(sessionLocationMiddleware)
+        .annotateMerge(
+          OpenApi.annotations({
+            identifier: "v2.session.background",
+            summary: "Background blocking session tools",
+            description:
+              "Move active foreground backgroundable tools for this session into background observation. Idle requests are a no-op.",
           }),
         ),
     )

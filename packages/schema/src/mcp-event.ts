@@ -1,7 +1,7 @@
-export * as McpEvent from "./mcp-event"
+export * as McpEvent from "./mcp-event.js"
 
 import { Schema } from "effect"
-import { Event } from "./event"
+import { Event } from "./event.js"
 
 export const ToolsChanged = Event.define({
   type: "mcp.tools.changed",

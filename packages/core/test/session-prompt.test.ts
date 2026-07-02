@@ -2,8 +2,11 @@ import { describe, expect } from "bun:test"
 import { DateTime, Effect, Fiber, Layer, Schema, Stream } from "effect"
 import { eq } from "drizzle-orm"
 import { Database } from "@opencode-ai/core/database/database"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventV2 } from "@opencode-ai/core/event"
 import { EventTable } from "@opencode-ai/core/event/sql"
+import { Job } from "@opencode-ai/core/job"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
@@ -11,7 +14,6 @@ import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
-import { locationServiceMapLayer } from "@opencode-ai/core/location-services"
 import { Prompt } from "@opencode-ai/core/session/prompt"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
@@ -44,22 +46,10 @@ const execution = Layer.succeed(
     awaitIdle: () => Effect.void,
   }),
 )
-const sessions = SessionV2.layer.pipe(
-  Layer.provide(locationServiceMapLayer),
-  Layer.provide(EventV2.defaultLayer),
-  Layer.provide(Database.defaultLayer),
-  Layer.provide(SessionStore.defaultLayer),
-  Layer.provide(Project.defaultLayer),
-  Layer.provide(execution),
-)
 const it = testEffect(
-  Layer.mergeAll(
-    Database.defaultLayer,
-    EventV2.defaultLayer,
-    SessionProjector.defaultLayer,
-    SessionStore.defaultLayer,
-    execution,
-    sessions,
+  AppNodeBuilder.build(
+    LayerNode.group([Database.node, EventV2.node, SessionProjector.node, SessionStore.node, SessionV2.node]),
+    [[SessionExecution.node, execution]],
   ),
 )
 const sessionID = SessionV2.ID.make("ses_prompt_test")
@@ -114,7 +104,11 @@ const eventCount = (type: string) =>
 
 const encodeMessage = Schema.encodeSync(SessionMessage.Message)
 const assistantRow = (id: SessionMessage.ID, seq: number) => {
-  const { id: _, type, ...data } = encodeMessage(
+  const {
+    id: _,
+    type,
+    ...data
+  } = encodeMessage(
     SessionMessage.Assistant.make({
       id,
       type: "assistant",

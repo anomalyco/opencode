@@ -1,14 +1,14 @@
-export * as Session from "./session"
+export * as Session from "./session.js"
 
 import { Schema } from "effect"
-import { Agent } from "./agent"
-import { Location } from "./location"
-import { Model } from "./model"
-import { Project } from "./project"
-import { DateTimeUtcFromMillis, optional, RelativePath } from "./schema"
-import { SessionEvent } from "./session-event"
-import { SessionID } from "./session-id"
-import { Revert } from "./revert"
+import { Agent } from "./agent.js"
+import { Location } from "./location.js"
+import { Model } from "./model.js"
+import { Project } from "./project.js"
+import { DateTimeUtcFromMillis, optional, RelativePath } from "./schema.js"
+import { SessionEvent } from "./session-event.js"
+import { SessionID } from "./session-id.js"
+import { Revert } from "./revert.js"
 
 export const ID = SessionID
 export type ID = SessionID

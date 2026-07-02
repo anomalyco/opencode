@@ -32,7 +32,7 @@ import { SkillV2 } from "../skill"
 import { State } from "../state"
 import { ToolRegistry } from "../tool/registry"
 import { Tools } from "../tool/tools"
-import { FetchHttpClient, HttpClient } from "effect/unstable/http"
+import { HttpClient } from "effect/unstable/http"
 import { AgentPlugin } from "./agent"
 import { CommandPlugin } from "./command"
 import { ModelsDevPlugin } from "./models-dev"
@@ -151,13 +151,6 @@ const layer = Layer.effectDiscard(
       }),
     ).pipe(Effect.withSpan("PluginInternal.boot"), Effect.forkScoped({ startImmediately: true }))
   }),
-)
-
-export const locationLayer = layer.pipe(
-  Layer.provideMerge(PluginV2.locationLayer),
-  Layer.provideMerge(Config.locationLayer),
-  Layer.provideMerge(FileSystem.locationLayer),
-  Layer.provideMerge(FetchHttpClient.layer),
 )
 
 export const node = makeLocationNode({

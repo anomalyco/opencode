@@ -75,7 +75,7 @@ export const providerLayerWithCell = (cell: Cell) =>
       const sessions = yield* SessionV2.Service
       const jobs = yield* Job.Service
       const locations = yield* LocationServiceMap.Service
-      const runtime = {
+      const runtime: Interface = {
         session: sessions,
         job: jobs,
         location: {
@@ -92,10 +92,10 @@ export const providerLayerWithCell = (cell: Cell) =>
                   }),
                   data: yield* agents.list(),
                 }
-              }).pipe(Effect.provide(locations.get(ref))),
+              }).pipe(Effect.provide(locations.get(ref)), Effect.orDie),
           },
         },
-      } satisfies Interface
+      }
       cell.runtime = runtime
       yield* Effect.addFinalizer(() =>
         Effect.sync(() => {
@@ -110,8 +110,13 @@ export const providerLayer = providerLayerWithCell(defaultCell)
 
 export const node = makeGlobalNode({ service: Service, layer, deps: [] })
 
-export const providerNode = makeGlobalNode({
-  name: "plugin-runtime-provider",
-  layer: providerLayer,
-  deps: [node, SessionV2.node, Job.node, LocationServiceMap.node],
-})
+// Raw layer replacements are compiled without dependencies, so cell-scoped
+// provider replacements must go through this node to keep their deps wired.
+export const providerNodeWithCell = (cell: Cell) =>
+  makeGlobalNode({
+    name: "plugin-runtime-provider",
+    layer: providerLayerWithCell(cell),
+    deps: [node, SessionV2.node, Job.node, LocationServiceMap.node],
+  })
+
+export const providerNode = providerNodeWithCell(defaultCell)

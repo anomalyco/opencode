@@ -72,7 +72,7 @@ interface Pending {
  * layer once per embedded Location so replies cannot settle another Location's
  * deferred request.
  */
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const events = yield* EventV2.Service
@@ -147,7 +147,5 @@ export const layer = Layer.effect(
     return Service.of({ ask, reply, reject, list })
   }),
 )
-
-export const locationLayer = layer
 
 export const node = makeLocationNode({ service: Service, layer, deps: [EventV2.node] })

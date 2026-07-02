@@ -175,7 +175,7 @@ describe("TUI inline tool wrapping", () => {
   test("keeps background state attached to the subagent identity", () => {
     expect(formatSubagentTitle("Explore", "Inspect renderer", false)).toBe("Explore Subagent — Inspect renderer")
     expect(formatSubagentTitle("Explore", "Inspect renderer", true)).toBe(
-      "Explore Subagent (background) — Inspect renderer",
+      "Explore Subagent — Inspect renderer [background]",
     )
   })
 

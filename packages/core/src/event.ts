@@ -652,5 +652,3 @@ export const layerWith = (options?: LayerOptions) =>
 
 export const layer = layerWith()
 export const node = makeGlobalNode({ service: Service, layer: layer, deps: [Database.node] })
-
-export const defaultLayer = layer.pipe(Layer.provide(Database.defaultLayer))

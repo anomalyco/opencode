@@ -1,17 +1,24 @@
 export * as ReadTool from "./read"
 
+import { dirname } from "path"
 import { ToolFailure } from "@opencode-ai/llm"
 import { Effect, Layer, Schema } from "effect"
+import { makeLocationNode } from "../effect/app-node"
 import { FileSystem } from "../filesystem"
+import { FSUtil } from "../fs-util"
 import { Image } from "../image"
+import { Location } from "../location"
 import { LocationMutation } from "../location-mutation"
 import { PermissionV2 } from "../permission"
+import { SessionInstructions } from "../session/instructions"
 import { AbsolutePath } from "../schema"
 import { ReadToolFileSystem } from "./read-filesystem"
+import { ToolRegistry } from "./registry"
 import { Tool } from "./tool"
 import { Tools } from "./tools"
 
 export const name = "read"
+const FILENAME = "AGENTS.md"
 const SUPPORTED_IMAGE_MIMES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"])
 const LocationInput = Schema.Struct({
   path: Schema.String,
@@ -25,13 +32,16 @@ const LocationInput = Schema.Struct({
 const Input = LocationInput
 const Output = Schema.Union([FileSystem.Content, ReadToolFileSystem.TextPage, ReadToolFileSystem.ListPage])
 
-export const layer = Layer.effectDiscard(
+const layer = Layer.effectDiscard(
   Effect.gen(function* () {
     const tools = yield* Tools.Service
     const reader = yield* ReadToolFileSystem.Service
     const mutation = yield* LocationMutation.Service
     const image = yield* Image.Service
     const permission = yield* PermissionV2.Service
+    const sessionInstructions = yield* SessionInstructions.Service
+    const fs = yield* FSUtil.Service
+    const location = yield* Location.Service
 
     yield* tools
       .register({
@@ -75,12 +85,33 @@ export const layer = Layer.effectDiscard(
                 agent: context.agent,
                 source,
               })
-              if (type === "directory")
-                return yield* reader.list(absolute, { offset: input.offset, limit: input.limit })
-              const content = yield* reader.read(absolute, resource, {
-                offset: input.offset,
-                limit: input.limit,
-              })
+              const content =
+                type === "directory"
+                  ? yield* reader.list(absolute, { offset: input.offset, limit: input.limit })
+                  : yield* reader.read(absolute, resource, {
+                      offset: input.offset,
+                      limit: input.limit,
+                    })
+              // After a successful read, discover nearby AGENTS.md walking up to the Location
+              // root exclusive and inject them as durable synthetic instructions. For a
+              // directory listing the walk starts at the directory itself (so its own AGENTS.md
+              // is discovered); for a file it starts at the file's dirname. External reads are
+              // skipped, and discovery failures never fail the read.
+              yield* Effect.gen(function* () {
+                if (target.externalDirectory !== undefined) return
+                const resolved = FSUtil.resolve(target.canonical)
+                const root = FSUtil.resolve(location.directory)
+                // up() searches its stop directory, so the Location-root AGENTS.md (already
+                // supplied by the core/instructions baseline) is dropped by the dirname filter.
+                const discovered = yield* fs.up({
+                  targets: [FILENAME],
+                  start: type === "directory" ? resolved : dirname(resolved),
+                  stop: root,
+                })
+                const candidates = discovered.map(FSUtil.resolve).filter((file) => dirname(file) !== root)
+                if (candidates.length === 0) return
+                yield* sessionInstructions.load({ sessionID: context.sessionID, paths: candidates })
+              }).pipe(Effect.catch(() => Effect.void), Effect.catchDefect(() => Effect.void))
               if ("encoding" in content && content.encoding === "base64" && SUPPORTED_IMAGE_MIMES.has(content.mime)) {
                 return yield* image
                   .normalize(resource, { ...content, encoding: "base64" })
@@ -107,3 +138,18 @@ export const layer = Layer.effectDiscard(
       .pipe(Effect.orDie)
   }),
 )
+
+export const node = makeLocationNode({
+  name: "tool/read",
+  layer,
+  deps: [
+    ToolRegistry.node,
+    ReadToolFileSystem.node,
+    LocationMutation.node,
+    Image.node,
+    PermissionV2.node,
+    SessionInstructions.node,
+    FSUtil.node,
+    Location.node,
+  ],
+})

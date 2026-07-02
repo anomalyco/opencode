@@ -1,8 +1,8 @@
-export * as Mcp from "./mcp"
+export * as Mcp from "./mcp.js"
 
 import { Schema } from "effect"
-import { optional } from "./schema"
-import { IntegrationID } from "./integration-id"
+import { optional } from "./schema.js"
+import { IntegrationID } from "./integration-id.js"
 
 const Connected = Schema.Struct({ status: Schema.Literal("connected") }).annotate({
   identifier: "Mcp.Status.Connected",

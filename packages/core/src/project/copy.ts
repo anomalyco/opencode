@@ -125,7 +125,7 @@ export const refreshAfterBoot = Effect.gen(function* () {
   )
 })
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
@@ -278,7 +278,6 @@ export const layer = Layer.effect(
   }),
 )
 
-export const locationLayer = layer
 export const node = makeLocationNode({
   service: Service,
   layer: layer,

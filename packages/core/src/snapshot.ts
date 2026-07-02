@@ -83,7 +83,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Snapshot") {}
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const config = yield* Config.Service
@@ -226,8 +226,6 @@ export const layer = Layer.effect(
     return Service.of({ capture, files, diff, preview, restore, checkout })
   }),
 )
-
-export const locationLayer = layer.pipe(Layer.provideMerge(Config.locationLayer))
 
 export const node = makeLocationNode({
   service: Service,

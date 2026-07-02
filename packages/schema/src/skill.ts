@@ -1,8 +1,9 @@
-export * as Skill from "./skill"
+export * as Skill from "./skill.js"
 
 import { Schema } from "effect"
-import { optional } from "./schema"
-import { AbsolutePath } from "./schema"
+import { optional } from "./schema.js"
+import { AbsolutePath } from "./schema.js"
+import { define, inventory } from "./event.js"
 
 export interface DirectorySource extends Schema.Schema.Type<typeof DirectorySource> {}
 export const DirectorySource = Schema.Struct({
@@ -21,9 +22,13 @@ export const Info = Schema.Struct({
   name: Schema.String,
   description: Schema.String.pipe(optional),
   slash: Schema.Boolean.pipe(optional),
+  autoinvoke: Schema.Boolean.pipe(optional),
   location: AbsolutePath,
   content: Schema.String,
 }).annotate({ identifier: "SkillV2.Info" })
+
+const Updated = define({ type: "skill.updated", schema: {} })
+export const Event = { Updated, Definitions: inventory(Updated) }
 
 export interface EmbeddedSource extends Schema.Schema.Type<typeof EmbeddedSource> {}
 export const EmbeddedSource = Schema.Struct({

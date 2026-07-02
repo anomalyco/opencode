@@ -130,7 +130,7 @@ function toLLMMessage(message: SessionMessage.Message, model: Model): Message[] 
         }),
       ]
     case "synthetic":
-      return [Message.make({ id: message.id, role: "user", content: message.text, metadata: message.metadata })]
+      return [Message.make({ id: message.id, role: "user", content: message.text })]
     case "skill":
       return [Message.make({ id: message.id, role: "user", content: message.text, metadata: message.metadata })]
     case "system":

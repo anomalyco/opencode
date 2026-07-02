@@ -1,8 +1,8 @@
-export * as PromptInput from "./prompt-input"
+export * as PromptInput from "./prompt-input.js"
 
 import { Schema } from "effect"
-import { AgentAttachment, Source } from "./prompt"
-import { optional, statics } from "./schema"
+import { AgentAttachment, Source } from "./prompt.js"
+import { optional, statics } from "./schema.js"
 
 export interface FileAttachment extends Schema.Schema.Type<typeof FileAttachment> {}
 export const FileAttachment = Schema.Struct({

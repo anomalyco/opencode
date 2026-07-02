@@ -1,11 +1,13 @@
 import { describe, expect } from "bun:test"
-import { Effect, Exit, Layer } from "effect"
+import { Effect, Exit } from "effect"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventV2 } from "@opencode-ai/core/event"
 import { Form } from "@opencode-ai/core/form"
 import { testEffect } from "./lib/effect"
 
-const layer = Form.locationLayer.pipe(Layer.provideMerge(EventV2.defaultLayer))
-const it = testEffect(layer)
+const forms = AppNodeBuilder.build(LayerNode.group([EventV2.node, Form.node]))
+const it = testEffect(forms)
 
 const formID = Form.ID.create("frm_test")
 const input = {

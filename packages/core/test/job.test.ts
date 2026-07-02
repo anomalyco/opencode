@@ -1,10 +1,11 @@
 import { describe, expect } from "bun:test"
 import { Job } from "@opencode-ai/core/job"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Deferred, Effect, Exit, Fiber, Scope } from "effect"
 import { SessionSchema } from "@opencode-ai/core/session/schema"
 import { testEffect } from "./lib/effect"
 
-const it = testEffect(Job.layer)
+const it = testEffect(AppNodeBuilder.build(Job.node))
 
 describe("Job", () => {
   it.live("tracks process-local work through explicit observation", () =>

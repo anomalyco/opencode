@@ -3,7 +3,7 @@ import { Location } from "@opencode-ai/schema/location"
 import { PositiveInt, RelativePath } from "@opencode-ai/schema/schema"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
-import { LocationQuery, locationQueryOpenApi } from "./location"
+import { LocationQuery, locationQueryOpenApi } from "./location.js"
 
 const ListQuery = Schema.Struct({
   ...LocationQuery.fields,

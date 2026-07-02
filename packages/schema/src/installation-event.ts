@@ -1,7 +1,7 @@
-export * as InstallationEvent from "./installation-event"
+export * as InstallationEvent from "./installation-event.js"
 
 import { Schema } from "effect"
-import { Event } from "./event"
+import { Event } from "./event.js"
 
 export const Updated = Event.define({
   type: "installation.updated",

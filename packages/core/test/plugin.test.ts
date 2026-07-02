@@ -3,6 +3,8 @@ import { Effect, Exit, Fiber, Schema } from "effect"
 import { define } from "@opencode-ai/plugin/v2/effect"
 import { AgentV2 } from "@opencode-ai/core/agent"
 import { PluginV2 } from "@opencode-ai/core/plugin"
+import { SessionV2 } from "@opencode-ai/core/session"
+import { SessionMessage } from "@opencode-ai/core/session/message"
 import { Tool } from "@opencode-ai/core/tool/tool"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { testEffect } from "./lib/effect"
@@ -100,6 +102,70 @@ describe("PluginV2", () => {
       expect((yield* registry.materialize({ model: testModel })).definitions.map((tool) => tool.name)).not.toContain(
         "plugin_tool",
       )
+    }),
+  )
+
+  it.effect("fires before/after tool hooks with mutable events around settlement", () =>
+    Effect.gen(function* () {
+      const plugins = yield* PluginV2.Service
+      const registry = yield* ToolRegistry.Service
+      const executed: unknown[] = []
+      const seen: {
+        before?: unknown
+        after?: { input: unknown; result: unknown; output: unknown }
+      } = {}
+
+      const plugin = define({
+        id: "tool-hooks",
+        effect: (ctx) =>
+          Effect.gen(function* () {
+            yield* ctx.tool
+              .register({
+                echo: Tool.make({
+                  description: "Echo",
+                  input: Schema.Struct({ text: Schema.String }),
+                  output: Schema.Struct({ text: Schema.String }),
+                  execute: ({ text }) => Effect.sync(() => executed.push({ text })).pipe(Effect.as({ text })),
+                }),
+              })
+              .pipe(Effect.orDie)
+
+            yield* ctx.tool.execute
+              .before((event) => {
+                seen.before = event.input
+                event.input = { text: "before-mutated" }
+              })
+              .pipe(Effect.asVoid)
+
+            yield* ctx.tool.execute
+              .after((event) => {
+                seen.after = { input: event.input, result: event.result, output: event.output }
+                event.result = { type: "text", value: "after-mutated" }
+                event.output = { structured: { rewritten: true }, content: [] }
+              })
+              .pipe(Effect.asVoid)
+          }),
+      })
+
+      yield* plugins.add(PluginV2.ID.make(plugin.id), plugin.effect)
+
+      const materialized = yield* registry.materialize({ model: testModel })
+      const settlement = yield* materialized.settle({
+        sessionID: SessionV2.ID.make("ses_hooks"),
+        agent: AgentV2.ID.make("build"),
+        assistantMessageID: SessionMessage.ID.make("msg_hooks"),
+        call: { type: "tool-call", id: "call-hooks", name: "echo", input: { text: "original" } },
+      })
+
+      expect(seen.before).toEqual({ text: "original" })
+      expect(executed).toEqual([{ text: "before-mutated" }])
+      expect(seen.after).toEqual({
+        input: { text: "before-mutated" },
+        result: { type: "json", value: { text: "before-mutated" } },
+        output: { structured: { text: "before-mutated" }, content: [] },
+      })
+      expect(settlement.result).toEqual({ type: "text", value: "after-mutated" })
+      expect(settlement.output).toEqual({ structured: { rewritten: true }, content: [] })
     }),
   )
 })

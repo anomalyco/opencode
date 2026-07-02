@@ -44,6 +44,10 @@ type LocationData = {
 type Data = {
   session: {
     info: Record<string, SessionV2Info>
+    // Family index keyed by a family's root (or furthest-known-ancestor when the
+    // true root is not yet loaded). The value is a flat deduplicated list of every
+    // session ID in that family, including the key itself once its info arrives.
+    family: Record<string, string[]>
     status: Record<string, DataSessionStatus>
     message: Record<string, SessionMessage[]>
     permission: Record<string, PermissionV2Request[]>
@@ -77,6 +81,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
     const [store, setStore] = createStore<Data>({
       session: {
         info: {},
+        family: {},
         status: {},
         message: {},
         permission: {},
@@ -149,6 +154,46 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
       return created
     }
 
+    // Walk parentID upward through loaded session info to the family root. When a
+    // parent's info is missing, that missing ID is the furthest-known ancestor and
+    // is returned so orphan subtrees group under it until the parent arrives. A
+    // seen set guards against parent cycles, stopping at the last non-repeating
+    // ancestor.
+    function resolveRoot(sessionID: string) {
+      let current = sessionID
+      let parentID = store.session.info[sessionID]?.parentID
+      const seen = new Set([sessionID])
+      while (parentID) {
+        if (seen.has(parentID)) break
+        seen.add(parentID)
+        current = parentID
+        parentID = store.session.info[parentID]?.parentID
+      }
+      return current
+    }
+
+    // Register one session into the family index. Idempotent: refreshing an
+    // existing session never duplicates its ID. When a tentative family keyed by
+    // sessionID exists (descendants arrived while sessionID's own info was
+    // absent) but sessionID turns out to have a parent, fold the orphan subtree
+    // into the resolved root's family and drop the tentative entry.
+    function registerSession(sessionID: string) {
+      const info = store.session.info[sessionID]
+      if (!info) return
+      const rootID = resolveRoot(sessionID)
+      setStore("session", "family", produce((draft) => {
+        if (sessionID !== rootID && draft[sessionID]) {
+          const members = draft[rootID] ??= []
+          for (const id of draft[sessionID]) {
+            if (!members.includes(id)) members.push(id)
+          }
+          delete draft[sessionID]
+        }
+        const family = draft[rootID] ??= []
+        if (!family.includes(sessionID)) family.push(sessionID)
+      }))
+    }
+
     function handleEvent(event: V2Event) {
       switch (event.type) {
         case "session.created":
@@ -162,6 +207,9 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           break
         case "agent.updated":
           void result.location.agent.refresh(event.location)
+          break
+        case "skill.updated":
+          void result.location.skill.refresh(event.location)
           break
         case "session.next.agent.switched":
           if (store.session.info[event.data.sessionID])
@@ -194,6 +242,19 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         case "session.next.prompted": {
           setStore("session", "status", event.data.sessionID, "running")
           message.update(event.data.sessionID, (draft, index) => {
+            const position = index.get(event.data.messageID)
+            const existing = position === undefined ? undefined : draft[position]
+            if (existing?.type === "user") {
+              existing.text = event.data.prompt.text
+              existing.files = event.data.prompt.files
+              existing.agents = event.data.prompt.agents
+              existing.time.created = event.data.timestamp
+              if (existing.metadata?.queued === true) {
+                delete existing.metadata.queued
+                if (Object.keys(existing.metadata).length === 0) existing.metadata = undefined
+              }
+              return
+            }
             message.append(draft, index, {
               id: event.data.messageID,
               type: "user",
@@ -206,6 +267,17 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           break
         }
         case "session.next.prompt.admitted":
+          message.update(event.data.sessionID, (draft, index) => {
+            message.append(draft, index, {
+              id: event.data.messageID,
+              type: "user",
+              text: event.data.prompt.text,
+              files: event.data.prompt.files,
+              agents: event.data.prompt.agents,
+              metadata: { queued: true },
+              time: { created: event.data.timestamp },
+            })
+          })
           break
         case "session.next.context.updated":
           message.update(event.data.sessionID, (draft, index) => {
@@ -224,6 +296,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
               type: "synthetic",
               sessionID: event.data.sessionID,
               text: event.data.text,
+              description: event.data.description,
               time: { created: event.data.timestamp },
             })
           })
@@ -571,11 +644,18 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         get(sessionID: string) {
           return store.session.info[sessionID]
         },
+        root(sessionID: string) {
+          return resolveRoot(sessionID)
+        },
+        family(sessionID: string) {
+          return store.session.family[resolveRoot(sessionID)] ?? []
+        },
         status(sessionID: string) {
           return store.session.status[sessionID] ?? "idle"
         },
         async refresh(sessionID: string) {
           setStore("session", "info", sessionID, mutable(await sdk.api.session.get({ sessionID })))
+          registerSession(sessionID)
         },
         message: {
           ids(sessionID: string) {
@@ -590,15 +670,21 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             return position === undefined ? undefined : messages?.[position]
           },
           async refresh(sessionID: string) {
+            const live = [...(store.session.message[sessionID] ?? [])]
             setStore("session", "message", sessionID, [])
             messageIndex.set(sessionID, new Map())
             const loaded = mutable(
               (await sdk.api.message.list({ sessionID, limit: 200, order: "desc" })).data,
             ).toReversed()
-            const live = store.session.message[sessionID] ?? []
+            const loadedIDs = new Set(loaded.map((message) => message.id))
             const liveByID = new Map(live.map((message) => [message.id, message]))
-            const messages = [...loaded.map((message) => liveByID.get(message.id) ?? message), ...live]
-              .filter((message, index, messages) => messages.findIndex((item) => item.id === message.id) === index)
+            const messages = [
+              ...loaded.map((message) => {
+                if (message.type === "user") return message
+                return liveByID.get(message.id) ?? message
+              }),
+              ...live.filter((message) => !loadedIDs.has(message.id)),
+            ]
               .toSorted((a, b) => a.time.created - b.time.created)
             messageIndex.set(sessionID, new Map(messages.map((message, index) => [message.id, index])))
             setStore("session", "message", sessionID, messages)
@@ -761,15 +847,16 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             directory: defaultLocation().directory,
             workspace: defaultLocation().workspaceID,
           })
-          .then((response) =>
+          .then((response) => {
             setStore(
               "session",
               "info",
               produce((draft) => {
                 for (const session of response.data) draft[session.id] = mutable(session)
               }),
-            ),
-          ),
+            )
+            for (const session of response.data) registerSession(session.id)
+          }),
         sdk.api.session
           .active()
           .then((active) =>

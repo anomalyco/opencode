@@ -1,12 +1,12 @@
-export * as Integration from "./integration"
+export * as Integration from "./integration.js"
 
 import { Schema } from "effect"
-import { optional } from "./schema"
-import { define, inventory } from "./event"
-import { Connection } from "./connection"
-import { ascending } from "./identifier"
-import { statics } from "./schema"
-import { IntegrationID, IntegrationMethodID } from "./integration-id"
+import { optional } from "./schema.js"
+import { define, inventory } from "./event.js"
+import { Connection } from "./connection.js"
+import { ascending } from "./identifier.js"
+import { statics } from "./schema.js"
+import { IntegrationID, IntegrationMethodID } from "./integration-id.js"
 
 export const ID = IntegrationID
 export type ID = typeof ID.Type

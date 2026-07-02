@@ -160,13 +160,12 @@ export function Prompt(props: PromptProps) {
   const dialog = useDialog()
   const toast = useToast()
   const status = createMemo(() => data.session.status(props.sessionID ?? ""))
-  const activeSubagents = createMemo(
-    () =>
-      data.session
-        .list()
-        .filter((session) => session.parentID === props.sessionID && data.session.status(session.id) === "running")
-        .length,
-  )
+  const activeSubagents = createMemo(() => {
+    if (!props.sessionID) return 0
+    return data.session.family(props.sessionID).filter(
+      (id) => id !== props.sessionID && data.session.status(id) === "running",
+    ).length
+  })
   const runningShells = createMemo(
     () => data.shell.list(currentLocation()).filter((shell) => shell.metadata.sessionID === props.sessionID).length,
   )
@@ -290,18 +289,23 @@ export function Prompt(props: PromptProps) {
     }
   })
 
-  // Far-right footer cluster: live work counts lead, then context/cost usage, all dot-joined.
+  const subagentStatusLabel = createMemo(() => {
+    const agents = activeSubagents()
+    if (!agents) return undefined
+    return `${agents} subagent${agents === 1 ? "" : "s"}`
+  })
+  const shellStatusLabel = createMemo(() => {
+    const shells = runningShells()
+    if (!shells) return undefined
+    return `${shells} shell${shells === 1 ? "" : "s"}`
+  })
+  const liveWorkStatusVisible = createMemo(() => Boolean(subagentStatusLabel() || shellStatusLabel()))
+
+  // Far-right footer cluster: live work counts lead, then context/cost usage.
   // When empty, the cluster falls back to the hotkey hints.
   const statusItems = createMemo(() => {
-    const agents = activeSubagents()
-    const shells = runningShells()
     const stats = usage()
-    return [
-      agents ? `${agents} subagent${agents === 1 ? "" : "s"}` : undefined,
-      shells ? `${shells} shell${shells === 1 ? "" : "s"}` : undefined,
-      stats?.context,
-      stats?.cost,
-    ].filter(Boolean)
+    return [stats?.context, stats?.cost].filter(Boolean)
   })
 
   const [store, setStore] = createStore<{
@@ -432,6 +436,23 @@ export function Prompt(props: PromptProps) {
             })
             setStore("interrupt", 0)
           }
+          dialog.clear()
+        },
+      },
+      {
+        title: "Background blocking tools",
+        name: "session.background",
+        category: "Session",
+        hidden: true,
+        enabled: status() === "running",
+        run: () => {
+          if (auto()?.visible) return
+          if (!input.focused) return
+          if (!props.sessionID) return
+
+          void sdk.api.session.background({
+            sessionID: props.sessionID,
+          })
           dialog.clear()
         },
       },
@@ -590,6 +611,7 @@ export function Prompt(props: PromptProps) {
       "prompt.stash.list",
       "prompt.skills",
       "session.interrupt",
+      "session.background",
       "workspace.set",
       "session.move",
     ]),
@@ -1526,6 +1548,9 @@ export function Prompt(props: PromptProps) {
                       <text fg={fadeColor(highlight(), agentMetaAlpha())}>
                         {store.mode === "shell" ? "Shell" : Locale.titlecase(agent().id)}
                       </text>
+                      <Show when={store.mode === "normal" && local.permission.mode === "auto"}>
+                        <text fg={fadeColor(theme.textMuted, agentMetaAlpha())}>auto</text>
+                      </Show>
                       <Show when={store.mode === "normal"}>
                         <box flexDirection="row" gap={1}>
                           <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>·</text>
@@ -1662,9 +1687,23 @@ export function Prompt(props: PromptProps) {
             <Switch>
               <Match when={store.mode === "normal"}>
                 <Switch>
-                  <Match when={statusItems().length > 0}>
+                  <Match when={liveWorkStatusVisible() || statusItems().length > 0}>
                     <text fg={theme.textMuted} wrapMode="none">
-                      {statusItems().join(" · ")}
+                      <Show when={subagentStatusLabel()}>
+                        {(label) => <span style={{ fg: theme.textMuted }}>{label()}</span>}
+                      </Show>
+                      <Show when={subagentStatusLabel() && shellStatusLabel()}>
+                        <span style={{ fg: theme.textMuted }}> · </span>
+                      </Show>
+                      <Show when={shellStatusLabel()}>
+                        {(label) => <span style={{ fg: theme.textMuted }}>{label()}</span>}
+                      </Show>
+                      <Show when={liveWorkStatusVisible() && statusItems().length > 0}>
+                        <span style={{ fg: theme.textMuted }}> · </span>
+                      </Show>
+                      <Show when={statusItems().length > 0}>
+                        <span style={{ fg: theme.textMuted }}>{statusItems().join(" · ")}</span>
+                      </Show>
                     </text>
                   </Match>
                   <Match when={true}>

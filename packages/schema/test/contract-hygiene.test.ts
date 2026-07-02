@@ -1,14 +1,14 @@
 import { describe, expect, test } from "bun:test"
 import { Schema } from "effect"
-import { Agent } from "../src/agent"
-import { FileSystem } from "../src/filesystem"
-import { Model } from "../src/model"
-import { Project } from "../src/project"
-import { Pty } from "../src/pty"
-import { Question } from "../src/question"
-import { Session } from "../src/session"
-import { SessionTodo } from "../src/session-todo"
-import { optional } from "../src/schema"
+import { Agent } from "../src/agent.js"
+import { FileSystem } from "../src/filesystem.js"
+import { Model } from "../src/model.js"
+import { Project } from "../src/project.js"
+import { Pty } from "../src/pty.js"
+import { Question } from "../src/question.js"
+import { Session } from "../src/session.js"
+import { SessionTodo } from "../src/session-todo.js"
+import { optional } from "../src/schema.js"
 
 describe("contract hygiene", () => {
   test("optional properties preserve transformations and omit undefined while encoding", () => {
