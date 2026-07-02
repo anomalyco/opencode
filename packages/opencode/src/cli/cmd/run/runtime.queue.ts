@@ -248,17 +248,19 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
         return
       } finally {
         draining = undefined
-        emit(
-          {
-            type: "turn.idle",
-            queue: state.queue.length,
-          },
-          {
-            phase: "idle",
-            status: "",
-            queue: state.queue.length,
-          },
-        )
+        if (state.active === undefined && state.ctrl === undefined) {
+          emit(
+            {
+              type: "turn.idle",
+              queue: state.queue.length,
+            },
+            {
+              phase: "idle",
+              status: "",
+              queue: state.queue.length,
+            },
+          )
+        }
       }
 
       finish()
