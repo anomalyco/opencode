@@ -81,18 +81,26 @@ function footer() {
   return { api, commits, events }
 }
 
-function sdk(input: { streams: ReturnType<typeof feed>[]; active?: () => Record<string, { type: "running" }> }) {
+type SessionMessages = NonNullable<
+  Awaited<ReturnType<OpencodeClient["v2"]["session"]["messages"]>>["data"]
+>["data"][number][]
+
+function sdk(input: {
+  streams: ReturnType<typeof feed>[]
+  active?: () => Record<string, { type: "running" }>
+  messages?: Record<string, SessionMessages>
+}) {
   const client = new OpencodeClient()
   let subscription = 0
   spyOn(client.v2.event, "subscribe").mockImplementation(
     () => Promise.resolve({ stream: input.streams[subscription++]?.stream ?? feed().stream }) as ReturnType<typeof client.v2.event.subscribe>,
   )
-  spyOn(client.v2.session, "messages").mockImplementation(() =>
+  spyOn(client.v2.session, "messages").mockImplementation((request) =>
     ok({
-      data: [
+      data: input.messages?.[request.sessionID] ?? [
         {
           id: "msg_old",
-          type: "user",
+          type: "user" as const,
           text: "previous prompt",
           files: [],
           agents: [],
@@ -960,6 +968,294 @@ describe("V2 mini transport", () => {
     await turn
 
     expect(interrupted).toHaveBeenCalledWith({ sessionID: "ses_1" })
+    await transport.close()
+  })
+
+  test("discovers a live child session and tracks its tab and selected detail", async () => {
+    const events = feed()
+    events.push(connected())
+    const client = sdk({
+      streams: [events],
+      messages: {
+        ses_child: [
+          {
+            id: "msg_task",
+            type: "user" as const,
+            text: "task prompt",
+            files: [],
+            agents: [],
+            time: { created: 1 },
+          },
+        ],
+      },
+    })
+    spyOn(client.v2.session, "get").mockImplementation(() =>
+      ok({
+        data: {
+          id: "ses_child",
+          parentID: "ses_1",
+          projectID: "proj_1",
+          agent: "explore",
+          cost: 0,
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          time: { created: 1, updated: 1 },
+          title: "Find files",
+          location: { directory: "/tmp", project: { id: "proj_1", directory: "/tmp" } },
+        },
+      }),
+    )
+    const ui = footer()
+    const transport = await createSessionTransport({
+      sdk: client,
+      sessionID: "ses_1",
+      thinking: false,
+      limits: () => ({}),
+      footer: ui.api,
+    })
+    const states = () =>
+      ui.events.flatMap((event) => (event.type === "stream.subagent" ? [event.state] : []))
+    transport.selectSubagent("ses_child")
+
+    events.push({
+      id: "evt_child_step",
+      type: "session.next.step.started",
+      data: {
+        timestamp: 2,
+        sessionID: "ses_child",
+        assistantMessageID: "msg_child_a",
+        agent: "explore",
+        model: { providerID: "test", id: "model" },
+      },
+    })
+    while (!states().some((state) => state.details.ses_child?.commits.some((item) => item.text === "task prompt")))
+      await Bun.sleep(0)
+    expect(states().at(-1)?.tabs).toMatchObject([
+      { sessionID: "ses_child", label: "Explore", title: "Find files", status: "running" },
+    ])
+
+    events.push({
+      id: "evt_child_text",
+      type: "session.next.text.delta",
+      data: {
+        timestamp: 3,
+        sessionID: "ses_child",
+        assistantMessageID: "msg_child_a",
+        textID: "txt_child",
+        delta: "child answer",
+      },
+    })
+    while (!states().some((state) => state.details.ses_child?.commits.some((item) => item.text === "child answer")))
+      await Bun.sleep(0)
+
+    events.push({
+      id: "evt_child_settled",
+      type: "session.next.execution.settled",
+      data: { timestamp: 4, sessionID: "ses_child", outcome: "success" },
+    })
+    while (!states().some((state) => state.tabs.some((tab) => tab.status === "completed"))) await Bun.sleep(0)
+    await transport.close()
+  })
+
+  test("keeps child terminal state observed during discovery", async () => {
+    const events = feed()
+    events.push(connected())
+    const client = sdk({ streams: [events] })
+    let resolveGet: (() => void) | undefined
+    const gate = new Promise<void>((resolve) => {
+      resolveGet = resolve
+    })
+    spyOn(client.v2.session, "get").mockImplementation(async () => {
+      await gate
+      return ok({
+        data: {
+          id: "ses_child",
+          parentID: "ses_1",
+          projectID: "proj_1",
+          agent: "explore",
+          cost: 0,
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          time: { created: 1, updated: 1 },
+          title: "Find files",
+          location: { directory: "/tmp", project: { id: "proj_1", directory: "/tmp" } },
+        },
+      })
+    })
+    const ui = footer()
+    const transport = await createSessionTransport({
+      sdk: client,
+      sessionID: "ses_1",
+      thinking: false,
+      limits: () => ({}),
+      footer: ui.api,
+    })
+    const states = () =>
+      ui.events.flatMap((event) => (event.type === "stream.subagent" ? [event.state] : []))
+
+    // Both events arrive while session.get is still in flight.
+    events.push({
+      id: "evt_child_step",
+      type: "session.next.step.started",
+      data: {
+        timestamp: 2,
+        sessionID: "ses_child",
+        assistantMessageID: "msg_child_a",
+        agent: "explore",
+        model: { providerID: "test", id: "model" },
+      },
+    })
+    events.push({
+      id: "evt_child_settled",
+      type: "session.next.execution.settled",
+      data: { timestamp: 3, sessionID: "ses_child", outcome: "interrupted" },
+    })
+    await Bun.sleep(0)
+    resolveGet?.()
+    while (!states().some((state) => state.tabs.some((tab) => tab.status === "cancelled"))) await Bun.sleep(0)
+    await transport.close()
+  })
+
+  test("does not resurrect a settled child from stale discovery buffer", async () => {
+    const events = feed()
+    events.push(connected())
+    const client = sdk({ streams: [events] })
+    let resolveGet: (() => void) | undefined
+    const gate = new Promise<void>((resolve) => {
+      resolveGet = resolve
+    })
+    spyOn(client.v2.session, "get").mockImplementation(async () => {
+      await gate
+      return ok({
+        data: {
+          id: "ses_child",
+          parentID: "ses_1",
+          projectID: "proj_1",
+          agent: "explore",
+          cost: 0,
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          time: { created: 1, updated: 1 },
+          title: "Find files",
+          location: { directory: "/tmp", project: { id: "proj_1", directory: "/tmp" } },
+        },
+      })
+    })
+    const ui = footer()
+    const transport = await createSessionTransport({
+      sdk: client,
+      sessionID: "ses_1",
+      thinking: false,
+      limits: () => ({}),
+      footer: ui.api,
+    })
+    const states = () =>
+      ui.events.flatMap((event) => (event.type === "stream.subagent" ? [event.state] : []))
+
+    // Child event arrives first and gets buffered behind the gated session.get.
+    events.push({
+      id: "evt_child_step",
+      type: "session.next.step.started",
+      data: {
+        timestamp: 2,
+        sessionID: "ses_child",
+        assistantMessageID: "msg_child_a",
+        agent: "explore",
+        model: { providerID: "test", id: "model" },
+      },
+    })
+    // Parent's background subagent tool.success adopts the child mid-discovery.
+    events.push({
+      id: "evt_parent_call",
+      type: "session.next.tool.called",
+      data: {
+        timestamp: 3,
+        sessionID: "ses_1",
+        assistantMessageID: "msg_parent_a",
+        callID: "call_sub",
+        tool: "subagent",
+        input: { agent: "explore", description: "Find things", prompt: "go", background: true },
+        provider: { executed: true },
+      },
+    })
+    events.push({
+      id: "evt_parent_success",
+      type: "session.next.tool.success",
+      data: {
+        timestamp: 4,
+        sessionID: "ses_1",
+        assistantMessageID: "msg_parent_a",
+        callID: "call_sub",
+        structured: { sessionID: "ses_child", status: "running", output: "" },
+        content: [],
+        provider: { executed: true },
+      },
+    })
+    // The settled event arrives after adoption, so it applies directly.
+    events.push({
+      id: "evt_child_settled",
+      type: "session.next.execution.settled",
+      data: { timestamp: 5, sessionID: "ses_child", outcome: "interrupted" },
+    })
+    while (!states().some((state) => state.tabs.some((tab) => tab.status === "cancelled"))) await Bun.sleep(0)
+
+    // Resolving discovery must not replay the buffered step.started over the
+    // terminal status.
+    const before = states().length
+    resolveGet?.()
+    while (states().length === before) await Bun.sleep(0)
+    await Bun.sleep(0)
+    await Bun.sleep(0)
+    expect(states().at(-1)?.tabs).toMatchObject([{ sessionID: "ses_child", status: "cancelled" }])
+    await transport.close()
+  })
+
+  test("hydrates completed subagent children from projected tool output", async () => {
+    const events = feed()
+    events.push(connected())
+    const client = sdk({
+      streams: [events],
+      messages: {
+        ses_1: [
+          {
+            id: "msg_parent",
+            type: "assistant" as const,
+            agent: "build",
+            model: { providerID: "test", id: "model" },
+            time: { created: 1, completed: 3 },
+            content: [
+              {
+                type: "tool" as const,
+                id: "call_sub",
+                name: "subagent",
+                state: {
+                  status: "completed" as const,
+                  input: { agent: "explore", description: "Find things", prompt: "go" },
+                  content: [{ type: "text" as const, text: "done" }],
+                  structured: { sessionID: "ses_child", status: "completed", output: "done" },
+                },
+                time: { created: 1, ran: 1, completed: 2 },
+              },
+            ],
+          },
+        ],
+      },
+    })
+    const ui = footer()
+    const transport = await createSessionTransport({
+      sdk: client,
+      sessionID: "ses_1",
+      thinking: false,
+      limits: () => ({}),
+      footer: ui.api,
+    })
+    const states = ui.events.flatMap((event) => (event.type === "stream.subagent" ? [event.state] : []))
+    expect(states.at(-1)?.tabs).toMatchObject([
+      {
+        sessionID: "ses_child",
+        label: "Explore",
+        description: "Find things",
+        status: "completed",
+        toolCalls: undefined,
+      },
+    ])
     await transport.close()
   })
 })

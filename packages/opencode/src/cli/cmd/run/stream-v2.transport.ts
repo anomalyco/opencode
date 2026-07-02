@@ -7,11 +7,11 @@ import type {
   SessionMessage,
   SessionMessageAssistant,
   SessionMessageAssistantTool,
-  ToolPart,
   V2Event,
 } from "@opencode-ai/sdk/v2"
 import { blockerStatus, pickBlockerView } from "./session-data"
 import { writeSessionOutput } from "./stream"
+import { createSubagentTracker, legacyTool, toolCommit } from "./stream-v2.subagent"
 import type {
   FooterApi,
   FooterView,
@@ -142,107 +142,6 @@ function question(request: QuestionV2Request): QuestionRequest {
   }
 }
 
-function outputText(content: Array<{ type: string; text?: string }>) {
-  return content.flatMap((item) => (item.type === "text" && item.text ? [item.text] : [])).join("\n")
-}
-
-function legacyTool(input: {
-  sessionID: string
-  messageID: string
-  callID: string
-  name: string
-  state: SessionMessageAssistantTool["state"]
-  time: SessionMessageAssistantTool["time"]
-  provider?: SessionMessageAssistantTool["provider"]
-}): ToolPart {
-  const base = {
-    id: `prt_${input.callID}`,
-    sessionID: input.sessionID,
-    messageID: input.messageID,
-    type: "tool" as const,
-    callID: input.callID,
-    tool: input.name,
-  }
-  if (input.state.status === "pending") {
-    return {
-      ...base,
-      state: { status: "pending", input: {}, raw: input.state.input },
-    }
-  }
-  if (input.state.status === "running") {
-    return {
-      ...base,
-      state: {
-        status: "running",
-        input: input.state.input,
-        title: input.name,
-        metadata: { structured: input.state.structured, content: input.state.content, providerCall: input.provider },
-        time: { start: input.time.ran ?? input.time.created },
-      },
-    }
-  }
-  if (input.state.status === "completed") {
-    return {
-      ...base,
-      state: {
-        status: "completed",
-        input: input.state.input,
-        output: outputText(input.state.content),
-        title: input.name,
-        metadata: {
-          structured: input.state.structured,
-          content: input.state.content,
-          outputPaths: input.state.outputPaths,
-          result: input.state.result,
-          providerCall: input.provider,
-        },
-        time: { start: input.time.ran ?? input.time.created, end: input.time.completed ?? input.time.created },
-      },
-    }
-  }
-  return {
-    ...base,
-    state: {
-      status: "error",
-      input: input.state.input,
-      error: input.state.error.message,
-      metadata: {
-        structured: input.state.structured,
-        content: input.state.content,
-        result: input.state.result,
-        providerCall: input.provider,
-      },
-      time: { start: input.time.ran ?? input.time.created, end: input.time.completed ?? input.time.created },
-    },
-  }
-}
-
-function toolCommit(part: ToolPart, phase: "start" | "progress" | "final"): StreamCommit {
-  const status = part.state.status
-  const text =
-    status === "running"
-      ? part.tool === "task"
-        ? "running task"
-        : `running ${part.tool}`
-      : status === "completed"
-        ? part.state.output
-        : status === "error"
-          ? part.state.error
-          : ""
-  return {
-    kind: "tool",
-    source: "tool",
-    text,
-    phase,
-    messageID: part.messageID,
-    partID: part.id,
-    tool: part.tool,
-    part,
-    toolState: status === "error" ? "error" : status === "completed" ? "completed" : "running",
-    toolError: status === "error" ? part.state.error : undefined,
-  }
-}
-
 function sessionID(event: RunV2Event) {
   return "sessionID" in event.data && typeof event.data.sessionID === "string" ? event.data.sessionID : undefined
 }
@@ -333,6 +232,19 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
   const abortReady = () => readyReject(new Error("Mini closed before the event stream connected"))
   controller.signal.addEventListener("abort", abortReady, { once: true })
   const offFooterClose = input.footer.onClose(() => controller.abort())
+
+  const subagents = createSubagentTracker({
+    sdk: input.sdk,
+    sessionID: input.sessionID,
+    thinking: input.thinking,
+    emit: () => {
+      if (state.closed || input.footer.isClosed) return
+      writeSessionOutput(
+        { footer: input.footer, trace: input.trace },
+        { commits: [], footer: { subagent: subagents.snapshot() } },
+      )
+    },
+  })
 
   const write = (commits: StreamCommit[], patch?: { phase?: "idle" | "running"; status?: string; usage?: string }) => {
     const visible = commits.at(-1)
@@ -465,10 +377,12 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       input.sdk.v2.session.question.list({ sessionID: input.sessionID }, { throwOnError: true }),
       input.sdk.v2.session.active({ throwOnError: true }),
     ])
-    for (const message of messages.data.data.toReversed()) renderMessage(message, next.render, next.reuseVisibleWait)
+    const projected = messages.data.data.toReversed()
+    for (const message of projected) renderMessage(message, next.render, next.reuseVisibleWait)
     state.permissions = permissions.data.data.map(permission)
     state.questions = questions.data.data.map(question)
     syncBlockers()
+    await subagents.hydrate({ messages: projected, active: active.data.data })
     const running = input.sessionID in active.data.data
     write([], { phase: running ? "running" : "idle", status: running ? "assistant responding" : "" })
     if (!running && state.wait && (state.wait.promoted || state.wait.interrupted)) {
@@ -479,8 +393,13 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
   }
 
   const apply = (event: RunV2Event) => {
-    if (sessionID(event) !== input.sessionID) return
+    const source = sessionID(event)
+    if (source !== input.sessionID) {
+      if (source) subagents.foreign(source, event)
+      return
+    }
     input.trace?.write("recv.event", event)
+    subagents.main(event)
     if (event.type === "session.next.prompted") {
       if (state.wait?.messageID === event.data.messageID) state.wait.promoted = true
       state.messageIDs.add(event.data.messageID)
@@ -845,7 +764,9 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       if (state.wait) state.wait.interrupted = true
       await input.sdk.v2.session.interrupt({ sessionID: input.sessionID }).catch(() => {})
     },
-    selectSubagent() {},
+    selectSubagent(sessionID) {
+      subagents.select(sessionID)
+    },
     async replayOnResize(next) {
       if (!input.replay || state.closed || input.footer.isClosed) return false
       const buffered: RunV2Event[] = []

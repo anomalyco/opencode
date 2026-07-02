@@ -354,6 +354,18 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
         })
       return true
     },
+    onBackground: () => {
+      if (!hasSession(input, state)) {
+        return
+      }
+
+      log?.write("send.background", { sessionID: state.sessionID })
+      void ctx.sdk.v2.session.background({ sessionID: state.sessionID }).catch(() => {})
+    },
+    onSubagentInterrupt: (sessionID) => {
+      log?.write("send.subagent.interrupt", { sessionID })
+      void ctx.sdk.v2.session.interrupt({ sessionID }).catch(() => {})
+    },
     onSubagentSelect: (sessionID) => {
       state.selectSubagent?.(sessionID)
       log?.write("subagent.select", {
