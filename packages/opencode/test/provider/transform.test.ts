@@ -4792,3 +4792,42 @@ describe("ProviderTransform.providerOptions - ai-gateway-provider", () => {
     expect(result).toEqual({ openaiCompatible: { reasoningEffort: "high" } })
   })
 })
+
+describe("ProviderTransform.maxOutputTokens", () => {
+  const model = (output: number) =>
+    ({
+      limit: { context: 200_000, input: undefined, output },
+      capabilities: { toolcall: true, reasoning: false, temperature: true, attachment: false },
+      api: { npm: "@ai-sdk/anthropic" },
+      cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+      options: {},
+    }) as any
+
+  test("respects model limit.output when no env var is set", () => {
+    expect(ProviderTransform.maxOutputTokens(model(131_071))).toBe(131_071)
+  })
+
+  test("caps at env var ceiling when explicitly set below model limit", () => {
+    expect(ProviderTransform.maxOutputTokens(model(131_071), 32_000)).toBe(32_000)
+  })
+
+  test("env var ceiling above model limit has no effect", () => {
+    expect(ProviderTransform.maxOutputTokens(model(131_071), 200_000)).toBe(131_071)
+  })
+
+  test("falls back to OUTPUT_TOKEN_MAX when limit.output is 0 and no env var", () => {
+    expect(ProviderTransform.maxOutputTokens(model(0))).toBe(ProviderTransform.OUTPUT_TOKEN_MAX)
+  })
+
+  test("falls back to env var when limit.output is 0", () => {
+    expect(ProviderTransform.maxOutputTokens(model(0), 64_000)).toBe(64_000)
+  })
+
+  test("falls back to OUTPUT_TOKEN_MAX when limit.output is negative", () => {
+    expect(ProviderTransform.maxOutputTokens(model(-1))).toBe(ProviderTransform.OUTPUT_TOKEN_MAX)
+  })
+
+  test("falls back to OUTPUT_TOKEN_MAX when limit.output is undefined", () => {
+    expect(ProviderTransform.maxOutputTokens(model(undefined as any))).toBe(ProviderTransform.OUTPUT_TOKEN_MAX)
+  })
+})
