@@ -16,7 +16,7 @@ import { SdkPlugins } from "@opencode-ai/core/plugin/sdk"
 import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
 import { HttpRouter, HttpServer } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
-import { Layer, Option } from "effect"
+import { Effect, Layer, Option } from "effect"
 import { Api } from "./api"
 import { ServerAuth } from "./auth"
 import { handlers } from "./handlers"
@@ -58,15 +58,24 @@ function makeRoutes<AuthError, AuthServices>(
   sdkPlugins?: SdkPlugins.Store,
 ) {
   const pluginRuntimeCell = PluginRuntime.makeCell()
-  const serviceLayer = AppNodeBuilder.build(
-    applicationServices,
-    [
-      [SessionExecution.node, SessionExecutionLocal.node],
-      [PluginRuntime.node, PluginRuntime.layerWithCell(pluginRuntimeCell)],
-      [PluginRuntime.providerNode, PluginRuntime.providerNodeWithCell(pluginRuntimeCell)],
-      ...(sdkPlugins ? [[SdkPlugins.node, SdkPlugins.layerWithStore(sdkPlugins)] as const] : []),
-    ],
-  )
+  const replacements: LayerNode.Replacements = [
+    [SessionExecution.node, SessionExecutionLocal.node],
+    [PluginRuntime.node, PluginRuntime.layerWithCell(pluginRuntimeCell)],
+    [PluginRuntime.providerNode, PluginRuntime.providerNodeWithCell(pluginRuntimeCell)],
+    ...(sdkPlugins ? [[SdkPlugins.node, SdkPlugins.layerWithStore(sdkPlugins)] as const] : []),
+  ]
+  // Simulation replacements are loaded via dynamic import so the simulation
+  // module is never eagerly loaded. Layer.unwrap defers both the import and
+  // the app-node build to layer-build time; when simulation is off the branch
+  // is byte-for-byte identical to a plain AppNodeBuilder.build call.
+  const serviceLayer = simulationEnabled()
+    ? Layer.unwrap(
+        Effect.gen(function* () {
+          const { simulationReplacements } = yield* Effect.promise(() => import("./simulation"))
+          return AppNodeBuilder.build(applicationServices, [...replacements, ...simulationReplacements])
+        }),
+      )
+    : AppNodeBuilder.build(applicationServices, replacements)
 
   return HttpApiBuilder.layer(Api, { openapiPath: "/openapi.json" }).pipe(
     Layer.provide(handlers),
@@ -77,6 +86,10 @@ function makeRoutes<AuthError, AuthServices>(
     Layer.provide(auth),
     Layer.provide(serviceLayer),
   )
+}
+
+function simulationEnabled() {
+  return !!process.env.OPENCODE_SIMULATION
 }
 
 export const routes = createRoutes()
