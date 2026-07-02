@@ -67,6 +67,9 @@ export type Event =
   | EventQuestionV2Asked
   | EventQuestionV2Replied
   | EventQuestionV2Rejected
+  | EventInterruptRequested
+  | EventInterruptConsumed
+  | EventInterruptTerminal
   | EventTodoUpdated
   | EventLspUpdated
   | EventPermissionAsked
@@ -82,9 +85,6 @@ export type Event =
   | EventMessagingRejected
   | EventCommandExecuted
   | EventProjectUpdated
-  | EventInterruptRequested
-  | EventInterruptConsumed
-  | EventInterruptTerminal
   | EventSessionStatus
   | EventSessionIdle
   | EventQuestionAsked
@@ -1366,6 +1366,32 @@ export type GlobalEvent = {
       }
     | {
         id: string
+        type: "interrupt.requested"
+        properties: {
+          sessionID: string
+          intent: "steer" | "cancel"
+          reason: string
+          origin: "user" | "parent"
+        }
+      }
+    | {
+        id: string
+        type: "interrupt.consumed"
+        properties: {
+          sessionID: string
+          intent: "steer" | "cancel"
+        }
+      }
+    | {
+        id: string
+        type: "interrupt.terminal"
+        properties: {
+          sessionID: string
+          reason: string
+        }
+      }
+    | {
+        id: string
         type: "todo.updated"
         properties: {
           sessionID: string
@@ -1520,32 +1546,6 @@ export type GlobalEvent = {
           commands?: ProjectCommands
           time: ProjectTime
           sandboxes: Array<string>
-        }
-      }
-    | {
-        id: string
-        type: "interrupt.requested"
-        properties: {
-          sessionID: string
-          intent: "steer" | "cancel"
-          reason: string
-          origin: "user" | "parent"
-        }
-      }
-    | {
-        id: string
-        type: "interrupt.consumed"
-        properties: {
-          sessionID: string
-          intent: "steer" | "cancel"
-        }
-      }
-    | {
-        id: string
-        type: "interrupt.terminal"
-        properties: {
-          sessionID: string
-          reason: string
         }
       }
     | {
@@ -2972,6 +2972,9 @@ export type V2Event =
   | QuestionV2Asked
   | QuestionV2Replied
   | QuestionV2Rejected
+  | InterruptRequested
+  | InterruptConsumed
+  | InterruptTerminal
   | TodoUpdated
   | LspUpdated
   | PermissionAsked
@@ -5718,6 +5721,62 @@ export type QuestionV2Rejected = {
   }
 }
 
+export type InterruptRequested = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "interrupt.requested"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    sessionID: string
+    intent: "steer" | "cancel"
+    reason: string
+    origin: "user" | "parent"
+  }
+}
+
+export type InterruptConsumed = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "interrupt.consumed"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    sessionID: string
+    intent: "steer" | "cancel"
+  }
+}
+
+export type InterruptTerminal = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "interrupt.terminal"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    sessionID: string
+    reason: string
+  }
+}
+
 export type TodoUpdated = {
   id: string
   metadata?: {
@@ -6955,6 +7014,35 @@ export type EventQuestionV2Rejected = {
   }
 }
 
+export type EventInterruptRequested = {
+  id: string
+  type: "interrupt.requested"
+  properties: {
+    sessionID: string
+    intent: "steer" | "cancel"
+    reason: string
+    origin: "user" | "parent"
+  }
+}
+
+export type EventInterruptConsumed = {
+  id: string
+  type: "interrupt.consumed"
+  properties: {
+    sessionID: string
+    intent: "steer" | "cancel"
+  }
+}
+
+export type EventInterruptTerminal = {
+  id: string
+  type: "interrupt.terminal"
+  properties: {
+    sessionID: string
+    reason: string
+  }
+}
+
 export type EventTodoUpdated = {
   id: string
   type: "todo.updated"
@@ -7070,35 +7158,6 @@ export type EventProjectUpdated = {
     commands?: ProjectCommands
     time: ProjectTime
     sandboxes: Array<string>
-  }
-}
-
-export type EventInterruptRequested = {
-  id: string
-  type: "interrupt.requested"
-  properties: {
-    sessionID: string
-    intent: "steer" | "cancel"
-    reason: string
-    origin: "user" | "parent"
-  }
-}
-
-export type EventInterruptConsumed = {
-  id: string
-  type: "interrupt.consumed"
-  properties: {
-    sessionID: string
-    intent: "steer" | "cancel"
-  }
-}
-
-export type EventInterruptTerminal = {
-  id: string
-  type: "interrupt.terminal"
-  properties: {
-    sessionID: string
-    reason: string
   }
 }
 
