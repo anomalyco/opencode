@@ -24,6 +24,7 @@ export type Event =
   | EventSessionNextForked
   | EventSessionNextPrompted
   | EventSessionNextPromptAdmitted
+  | EventSessionNextExecutionSettled
   | EventSessionNextContextUpdated
   | EventSessionNextSynthetic
   | EventSessionNextSkillActivated
@@ -925,6 +926,16 @@ export type GlobalEvent = {
       }
     | {
         id: string
+        type: "session.next.execution.settled"
+        properties: {
+          timestamp: number
+          sessionID: string
+          outcome: "success" | "failure" | "interrupted"
+          error?: SessionErrorUnknown
+        }
+      }
+    | {
+        id: string
         type: "session.next.context.updated"
         properties: {
           timestamp: number
@@ -942,6 +953,9 @@ export type GlobalEvent = {
           messageID: string
           text: string
           description?: string
+          metadata?: {
+            [key: string]: unknown
+          }
         }
       }
     | {
@@ -3007,6 +3021,7 @@ export type V2Event =
   | SessionNextForked
   | SessionNextPrompted
   | SessionNextPromptAdmitted
+  | SessionNextExecutionSettled
   | SessionNextContextUpdated
   | SessionNextSynthetic
   | SessionNextSkillActivated
@@ -3618,6 +3633,9 @@ export type SyncEventSessionNextSynthetic = {
       messageID: string
       text: string
       description?: string
+      metadata?: {
+        [key: string]: unknown
+      }
     }
   }
 }
@@ -4091,7 +4109,12 @@ export type LocationInfo = {
   }
 }
 
+export type ProviderSettings = {
+  [key: string]: unknown
+}
+
 export type ProviderRequest = {
+  settings: ProviderSettings
   headers: {
     [key: string]: string
   }
@@ -4583,6 +4606,9 @@ export type SessionNextSynthetic = {
     messageID: string
     text: string
     description?: string
+    metadata?: {
+      [key: string]: unknown
+    }
   }
 }
 
@@ -5120,6 +5146,7 @@ export type ModelV2Info = {
   api: ModelApi
   capabilities: ModelCapabilities
   request: {
+    settings: ProviderSettings
     headers: {
       [key: string]: string
     }
@@ -5130,6 +5157,7 @@ export type ModelV2Info = {
   }
   variants: Array<{
     id: string
+    settings: ProviderSettings
     headers: {
       [key: string]: string
     }
@@ -5578,6 +5606,26 @@ export type MessagePartRemoved = {
     sessionID: string
     messageID: string
     partID: string
+  }
+}
+
+export type SessionNextExecutionSettled = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.execution.settled"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    outcome: "success" | "failure" | "interrupted"
+    error?: SessionErrorUnknown
   }
 }
 
@@ -6786,6 +6834,17 @@ export type EventSessionNextPromptAdmitted = {
   }
 }
 
+export type EventSessionNextExecutionSettled = {
+  id: string
+  type: "session.next.execution.settled"
+  properties: {
+    timestamp: number
+    sessionID: string
+    outcome: "success" | "failure" | "interrupted"
+    error?: SessionErrorUnknown
+  }
+}
+
 export type EventSessionNextContextUpdated = {
   id: string
   type: "session.next.context.updated"
@@ -6806,6 +6865,9 @@ export type EventSessionNextSynthetic = {
     messageID: string
     text: string
     description?: string
+    metadata?: {
+      [key: string]: unknown
+    }
   }
 }
 
@@ -12284,6 +12346,47 @@ export type V2SessionSkillResponses = {
 
 export type V2SessionSkillResponse = V2SessionSkillResponses[keyof V2SessionSkillResponses]
 
+export type V2SessionSyntheticData = {
+  body: {
+    text: string
+    description?: string
+    metadata?: {
+      [key: string]: unknown
+    }
+  }
+  path: {
+    sessionID: string
+  }
+  query?: never
+  url: "/api/session/{sessionID}/synthetic"
+}
+
+export type V2SessionSyntheticErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * SessionNotFoundError
+   */
+  404: SessionNotFoundError
+}
+
+export type V2SessionSyntheticError = V2SessionSyntheticErrors[keyof V2SessionSyntheticErrors]
+
+export type V2SessionSyntheticResponses = {
+  /**
+   * <No Content>
+   */
+  204: void
+}
+
+export type V2SessionSyntheticResponse = V2SessionSyntheticResponses[keyof V2SessionSyntheticResponses]
+
 export type V2SessionCompactData = {
   body?: never
   path: {
@@ -12814,6 +12917,47 @@ export type V2ModelListResponses = {
 }
 
 export type V2ModelListResponse = V2ModelListResponses[keyof V2ModelListResponses]
+
+export type V2ModelDefaultData = {
+  body?: never
+  path?: never
+  query?: {
+    location?: {
+      directory?: string
+      workspace?: string
+    }
+  }
+  url: "/api/model/default"
+}
+
+export type V2ModelDefaultErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * ServiceUnavailableError
+   */
+  503: ServiceUnavailableError
+}
+
+export type V2ModelDefaultError = V2ModelDefaultErrors[keyof V2ModelDefaultErrors]
+
+export type V2ModelDefaultResponses = {
+  /**
+   * Success
+   */
+  200: {
+    location: LocationInfo
+    data: ModelV2Info
+  }
+}
+
+export type V2ModelDefaultResponse = V2ModelDefaultResponses[keyof V2ModelDefaultResponses]
 
 export type V2GenerateTextData = {
   body: {

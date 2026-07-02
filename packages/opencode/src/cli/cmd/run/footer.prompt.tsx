@@ -1,7 +1,7 @@
 // Prompt composer and its state machine for direct interactive mode.
 //
 // createPromptState() wires keymap command layers, history navigation, and
-// `@` autocomplete for files, subagents, and MCP resources.
+// `@` autocomplete for files, subagents, and project references.
 // It produces a PromptState that RunPromptBody renders as a slim single-line
 // composer while the footer view renders any active menus below it.
 /** @jsxImportSource @opentui/solid */
@@ -27,7 +27,7 @@ import { OPENCODE_BASE_MODE, useBindings } from "@opencode-ai/tui/keymap"
 import { realignEditorPromptParts, resolveEditorSlashValue } from "./prompt.editor"
 import { FOOTER_MENU_ROWS, createFooterMenuState, type RunFooterMenuItem } from "./footer.menu"
 import type { RunFooterTheme } from "./theme"
-import type { FooterState, RunAgent, RunCommand, RunPrompt, RunPromptPart, RunResource, RunTuiConfig } from "./types"
+import type { FooterState, RunAgent, RunCommand, RunPrompt, RunPromptPart, RunReference, RunTuiConfig } from "./types"
 
 const AUTOCOMPLETE_ROWS = FOOTER_MENU_ROWS
 const AUTOCOMPLETE_BOTTOM_ROWS = 1
@@ -59,7 +59,7 @@ type PromptInput = {
   directory: string
   findFiles: (query: string) => Promise<string[]>
   agents: Accessor<RunAgent[]>
-  resources: Accessor<RunResource[]>
+  references: Accessor<RunReference[]>
   commands: Accessor<RunCommand[] | undefined>
   tuiConfig: RunTuiConfig
   state: Accessor<FooterState>
@@ -333,21 +333,20 @@ export function createPromptState(input: PromptInput): PromptState {
         },
       }))
   })
-  const resources = createMemo<Auto[]>(() => {
-    return input.resources().map((item) => ({
+  const references = createMemo<Auto[]>(() => {
+    return input.references().map((item) => ({
       kind: "mention",
-      display: Locale.truncateMiddle(`@${item.name} (${item.uri})`, width()),
+      display: Locale.truncateMiddle("@" + item.name, width()),
       value: item.name,
-      description: item.description,
+      description: item.description ?? (item.source.type === "git" ? item.source.repository : item.source.path),
       part: {
         type: "file",
-        mime: item.mimeType ?? "text/plain",
+        mime: "application/x-directory",
         filename: item.name,
-        url: item.uri,
+        url: pathToFileURL(item.path).href,
         source: {
-          type: "resource",
-          clientName: item.client,
-          uri: item.uri,
+          type: "file",
+          path: item.name,
           text: {
             start: 0,
             end: 0,
@@ -402,7 +401,7 @@ export function createPromptState(input: PromptInput): PromptState {
     },
     { initialValue: [] as Auto[] },
   )
-  const mentionOptions = createMemo(() => [...agents(), ...files(), ...resources()])
+  const mentionOptions = createMemo(() => [...agents(), ...files(), ...references()])
   const skillCommands = createMemo(() => (input.commands() ?? []).filter((item) => item.source === "skill"))
   const hasSkillsCommand = createMemo(() =>
     (input.commands() ?? []).some((item) => item.source !== "skill" && item.name === "skills"),
@@ -462,7 +461,7 @@ export function createPromptState(input: PromptInput): PromptState {
       return [
         ...fuzzysort.go(next, agents(), { keys: ["value", "display", "description"] }).map((item) => item.obj),
         ...files(),
-        ...fuzzysort.go(next, resources(), { keys: ["value", "display", "description"] }).map((item) => item.obj),
+        ...fuzzysort.go(next, references(), { keys: ["value", "display", "description"] }).map((item) => item.obj),
       ]
     }
 

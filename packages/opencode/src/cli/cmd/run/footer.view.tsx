@@ -50,7 +50,7 @@ import type {
   RunInput,
   RunPrompt,
   RunProvider,
-  RunResource,
+  RunReference,
   RunTuiConfig,
 } from "./types"
 import type { RunTheme } from "./theme"
@@ -74,7 +74,7 @@ type RunFooterViewProps = {
   directory: string
   findFiles: (query: string) => Promise<string[]>
   agents: () => RunAgent[]
-  resources: () => RunResource[]
+  references: () => RunReference[]
   commands: () => RunCommand[] | undefined
   providers: () => RunProvider[] | undefined
   currentModel: () => RunInput["model"]
@@ -108,6 +108,7 @@ type RunFooterViewProps = {
   onLayout: (input: { route: FooterPromptRoute; autocomplete: boolean; subagentRows: number }) => void
   onStatus: (text: string) => void
   onSubagentSelect?: (sessionID: string | undefined) => void
+  onSubagentInterrupt?: (sessionID: string) => void
   onQueuedRemove: (messageID: string) => Promise<boolean>
 }
 
@@ -210,6 +211,15 @@ export function RunFooterView(props: RunFooterViewProps) {
         keymap
           .getCommandBindings({ visibility: "registered", commands: ["session.background"] })
           .get("session.background")?.[0]?.sequence,
+        props.tuiConfig,
+      ) ?? "",
+  )
+  const subagentInterruptShortcut = useKeymapSelector(
+    (keymap: OpenTuiKeymap) =>
+      formatKeySequence(
+        keymap
+          .getCommandBindings({ visibility: "registered", commands: ["subagent.interrupt"] })
+          .get("subagent.interrupt")?.[0]?.sequence,
         props.tuiConfig,
       ) ?? "",
   )
@@ -358,7 +368,7 @@ export function RunFooterView(props: RunFooterViewProps) {
     directory: props.directory,
     findFiles: props.findFiles,
     agents: props.agents,
-    resources: props.resources,
+    references: props.references,
     commands: props.commands,
     tuiConfig: props.tuiConfig,
     state: props.state,
@@ -520,7 +530,7 @@ export function RunFooterView(props: RunFooterViewProps) {
 
   useBindings(() => ({
     mode: OPENCODE_BASE_MODE,
-    enabled: active().type === "prompt" && route().type === "composer" && foregroundSubagents(),
+    enabled: active().type === "prompt" && route().type === "composer" && foregroundSubagents() && !!props.onBackground,
     priority: 1,
     commands: [
       {
@@ -559,6 +569,32 @@ export function RunFooterView(props: RunFooterViewProps) {
       },
     ],
     bindings: props.tuiConfig.keybinds.get("session.queued_prompts"),
+  }))
+
+  useBindings(() => ({
+    mode: OPENCODE_BASE_MODE,
+    enabled:
+      active().type === "prompt" &&
+      route().type === "subagent" &&
+      selectedTab()?.status === "running" &&
+      !!props.onSubagentInterrupt,
+    priority: 1,
+    commands: [
+      {
+        name: "subagent.interrupt",
+        title: "Interrupt subagent",
+        category: "Session",
+        run: () => {
+          const current = selectedTab()
+          if (current?.status !== "running") {
+            return
+          }
+
+          props.onSubagentInterrupt?.(current.sessionID)
+        },
+      },
+    ],
+    bindings: [{ key: "ctrl+d", desc: "Interrupt subagent", group: "Subagents", cmd: "subagent.interrupt" }],
   }))
 
   createEffect(() => {
@@ -935,6 +971,7 @@ export function RunFooterView(props: RunFooterViewProps) {
             diffStyle={props.diffStyle}
             onCycle={cycleTab}
             onClose={closeTab}
+            interrupt={() => subagentInterruptShortcut() || undefined}
           />
         </box>
       </Show>

@@ -71,6 +71,7 @@ import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut } from "../../keyma
 import { usePathFormatter } from "../../context/path-format"
 import { LocationProvider } from "../../context/location"
 import { createSessionRows, type PartRef, type SessionRow } from "./rows"
+import { switchLabel } from "../../util/model"
 
 addDefaultParsers(parsers.parsers)
 
@@ -1231,8 +1232,7 @@ function SessionSwitchMessageV2(props: { message: SessionMessage }) {
   const { theme } = useTheme()
   const text = () => {
     if (props.message.type === "agent-switched") return `Switched agent to ${props.message.agent}`
-    if (props.message.type === "model-switched")
-      return `Switched model to ${props.message.model.providerID}/${props.message.model.id}`
+    if (props.message.type === "model-switched") return switchLabel(props.message.model)
     return ""
   }
   return <text fg={theme.textMuted}>{text()}</text>

@@ -2,11 +2,12 @@
 // These exercise the real CLI binary against a TestLLMServer running in the
 // same process. See `test/lib/cli-process.ts` for the harness — each test uses
 // `opencode.run(message, opts?)` to spawn `bun src/index.ts run ...` with
-// `OPENCODE_CONFIG_CONTENT` providing the test provider config inline.
+// an isolated test provider config under the fixture's temp home.
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { reply } from "../../lib/llm-server"
 import { cliIt } from "../../lib/cli-process"
+import { testProviderConfig } from "../../lib/test-provider"
 
 describe("opencode run (non-interactive subprocess)", () => {
   // Happy path: prompt completes, output reaches stdout, process exits 0.
@@ -28,7 +29,7 @@ describe("opencode run (non-interactive subprocess)", () => {
     ({ llm, opencode }) =>
       Effect.gen(function* () {
         yield* llm.push(
-          reply().text("  before tool  ").tool("bash", {
+          reply().text("  before tool  ").tool("shell", {
             command: "printf tool-output",
             description: "Print deterministic output",
           }),
@@ -89,7 +90,7 @@ describe("opencode run (non-interactive subprocess)", () => {
     ({ llm, opencode }) =>
       Effect.gen(function* () {
         yield* llm.push(
-          reply().text("partial response").tool("bash", {
+          reply().text("partial response").tool("shell", {
             command: "printf tool",
             description: "Print deterministic output",
           }),
@@ -168,7 +169,7 @@ describe("opencode run (non-interactive subprocess)", () => {
     ({ llm, opencode }) =>
       Effect.gen(function* () {
         yield* llm.push(
-          reply().reason("reasoning").text("before").tool("bash", {
+          reply().reason("reasoning").text("before").tool("shell", {
             command: "printf tool",
             description: "Print deterministic output",
           }),
@@ -198,7 +199,7 @@ describe("opencode run (non-interactive subprocess)", () => {
         expect(events.find((event) => event.type === "tool_use")?.part).toEqual(
           expect.objectContaining({
             type: "tool",
-            tool: "bash",
+            tool: "shell",
             state: expect.objectContaining({ status: "completed" }),
           }),
         )
@@ -217,7 +218,7 @@ describe("opencode run (non-interactive subprocess)", () => {
     ({ llm, opencode }) =>
       Effect.gen(function* () {
         yield* llm.push(
-          reply().text("partial json").tool("bash", {
+          reply().text("partial json").tool("shell", {
             command: "printf tool",
             description: "Print deterministic output",
           }),
@@ -227,16 +228,9 @@ describe("opencode run (non-interactive subprocess)", () => {
 
         const events = opencode.parseJsonEvents(result.stdout)
         expect(result.exitCode).toBe(0)
-        expect(events.map((event) => event.type)).toEqual([
-          "step_start",
-          "text",
-          "tool_use",
-          "step_finish",
-          "step_start",
-          "step_finish",
-        ])
+        expect(events.map((event) => event.type)).toEqual(["step_start", "text", "tool_use", "step_finish"])
         expect(events[1]?.part).toEqual(expect.objectContaining({ type: "text", text: "partial json" }))
-        expect(events.at(-1)?.part).toEqual(expect.objectContaining({ type: "step-finish", reason: "unknown" }))
+        expect(events.at(-1)?.part).toEqual(expect.objectContaining({ type: "step-finish" }))
       }),
     60_000,
   )
@@ -245,34 +239,163 @@ describe("opencode run (non-interactive subprocess)", () => {
     "rejects requested permissions by default and allows them with the dangerous flag",
     ({ home, llm, opencode }) =>
       Effect.gen(function* () {
-        yield* llm.tool("bash", { command: "rm -f denied-file", description: "Remove a test file" })
+        yield* llm.tool("shell", { command: "rm -f denied-file", description: "Remove a test file" })
         yield* llm.text("continued after rejection")
-        const denied = yield* opencode.run("request permission", { permission: { bash: "ask" } })
+        const denied = yield* opencode.run("request permission", { permission: { shell: "ask" } })
         opencode.expectExit(denied, 0)
-        expect(denied.stderr).toContain("permission requested: bash")
+        expect(denied.stderr).toContain("permission requested: shell")
         expect(denied.stdout).toBe("")
 
         yield* llm.reset
-        yield* llm.tool("bash", { command: "rm -f allowed-file", description: "Remove a test file" })
+        yield* llm.tool("shell", { command: "rm -f allowed-file", description: "Remove a test file" })
         yield* llm.text("continued after approval")
         const allowed = yield* opencode.run("request permission", {
-          permission: { bash: "ask" },
+          permission: { shell: "ask" },
           extraArgs: ["--dangerously-skip-permissions"],
         })
         opencode.expectExit(allowed, 0)
-        expect(allowed.stderr).not.toContain("permission requested: bash")
+        expect(allowed.stderr).not.toContain("permission requested: shell")
         expect(allowed.stdout).toContain("continued after approval")
 
         yield* llm.reset
-        yield* llm.tool("bash", { command: "touch explicitly-denied", description: "Create a denied marker" })
+        yield* llm.tool("shell", { command: "touch explicitly-denied", description: "Create a denied marker" })
         yield* llm.text("continued after explicit denial")
         const explicitlyDenied = yield* opencode.run("request denied permission", {
-          permission: { bash: "deny" },
+          permission: { shell: "deny" },
           extraArgs: ["--dangerously-skip-permissions"],
         })
         opencode.expectExit(explicitlyDenied, 0)
         expect(explicitlyDenied.stdout).toContain("continued after explicit denial")
         expect(yield* Effect.promise(() => Bun.file(`${home}/explicitly-denied`).exists())).toBe(false)
+      }),
+    60_000,
+  )
+
+  cliIt.concurrent(
+    "rejects unattended questions without hanging",
+    ({ llm, opencode }) =>
+      Effect.gen(function* () {
+        yield* llm.tool("question", {
+          questions: [
+            {
+              question: "Continue?",
+              header: "Continue",
+              options: [{ label: "Yes", description: "Continue execution" }],
+            },
+          ],
+        })
+        const result = yield* opencode.run("ask a question")
+
+        opencode.expectExit(result, 0)
+        expect(result.stdout).toBe("")
+      }),
+    60_000,
+  )
+
+  cliIt.concurrent(
+    "continues a current session with projected history",
+    ({ home, llm, opencode }) =>
+      Effect.gen(function* () {
+        const env = { OPENCODE_DB: `${home}/run-continue.sqlite` }
+        yield* llm.text("first response")
+        const first = yield* opencode.run("first prompt", { env })
+        opencode.expectExit(first, 0)
+
+        yield* llm.text("second response")
+        const second = yield* opencode.run("second prompt", { env, extraArgs: ["--continue"] })
+        opencode.expectExit(second, 0)
+        expect(second.stdout).toBe("second response\n")
+        expect(JSON.stringify((yield* llm.inputs).at(-1))).toContain("first prompt")
+      }),
+    60_000,
+  )
+
+  cliIt.concurrent(
+    "forks the latest current session for --continue",
+    ({ home, llm, opencode }) =>
+      Effect.gen(function* () {
+        const env = { OPENCODE_DB: `${home}/run-fork-continue.sqlite` }
+        yield* llm.text("first response")
+        const first = yield* opencode.run("first prompt", { env, format: "json" })
+        opencode.expectExit(first, 0)
+        const firstSessionID = opencode.parseJsonEvents(first.stdout)[0]?.sessionID
+        expect(typeof firstSessionID).toBe("string")
+
+        yield* llm.text("forked response")
+        const second = yield* opencode.run("second prompt", {
+          env,
+          format: "json",
+          extraArgs: ["--continue", "--fork"],
+        })
+
+        opencode.expectExit(second, 0)
+        const secondSessionID = String(opencode.parseJsonEvents(second.stdout)[0]?.sessionID)
+        expect(secondSessionID).not.toBe(String(firstSessionID))
+        expect(JSON.stringify((yield* llm.inputs).at(-1))).toContain("first prompt")
+      }),
+    60_000,
+  )
+
+  cliIt.concurrent(
+    "forks a current session selected by --session",
+    ({ home, llm, opencode }) =>
+      Effect.gen(function* () {
+        const env = { OPENCODE_DB: `${home}/run-fork-session.sqlite` }
+        yield* llm.text("first response")
+        const first = yield* opencode.run("first prompt", { env, format: "json" })
+        opencode.expectExit(first, 0)
+        const firstSessionID = opencode.parseJsonEvents(first.stdout)[0]?.sessionID
+        expect(typeof firstSessionID).toBe("string")
+
+        yield* llm.text("forked response")
+        const second = yield* opencode.run("second prompt", {
+          env,
+          format: "json",
+          extraArgs: ["--session", String(firstSessionID), "--fork"],
+        })
+
+        opencode.expectExit(second, 0)
+        const secondSessionID = String(opencode.parseJsonEvents(second.stdout)[0]?.sessionID)
+        expect(secondSessionID).not.toBe(String(firstSessionID))
+        expect(JSON.stringify((yield* llm.inputs).at(-1))).toContain("first prompt")
+      }),
+    60_000,
+  )
+
+  cliIt.concurrent(
+    "applies a variant to the configured default model",
+    ({ llm, opencode }) =>
+      Effect.gen(function* () {
+        yield* llm.text("variant response")
+        const result = yield* opencode.spawn(["run", "--variant", "default", "use the default model"], {
+          config: { ...testProviderConfig(llm.url), model: "test/test-model" },
+        })
+
+        opencode.expectExit(result, 0)
+        expect(result.stdout).toBe("variant response\n")
+      }),
+    60_000,
+  )
+
+  cliIt.live(
+    "preserves local image files as media attachments",
+    ({ home, llm, opencode }) =>
+      Effect.gen(function* () {
+        const source = `${home}/image.png`
+        yield* Effect.promise(() => Bun.write(source, Buffer.from("iVBORw0KGgo=", "base64")))
+        yield* llm.text("attachment received")
+        const config = testProviderConfig(llm.url)
+        config.provider.test.models["test-model"].attachment = true
+
+        const result = yield* opencode.run("read the attachment", {
+          extraArgs: [`--file=${source}`, "--"],
+          config,
+        })
+
+        opencode.expectExit(result, 0)
+        const input = JSON.stringify(yield* llm.inputs)
+        expect(input).toContain("image/png")
+        expect(input).not.toContain("<file name=\\\"image.png\\\">")
       }),
     60_000,
   )
@@ -325,6 +448,21 @@ describe("opencode run (non-interactive subprocess)", () => {
 
         expect(result.exitCode).not.toBe(0)
         expect(result.durationMs).toBeLessThan(30_000)
+      }),
+    30_000,
+  )
+
+  cliIt.live(
+    "SIGINT before admission prevents provider execution",
+    ({ llm, opencode }) =>
+      Effect.gen(function* () {
+        yield* llm.hang
+        const run = yield* opencode.startRun("do not start")
+        run.interrupt()
+        const result = yield* run.result
+
+        expect(result.exitCode).not.toBe(0)
+        expect(yield* llm.inputs).toHaveLength(0)
       }),
     30_000,
   )

@@ -249,8 +249,14 @@ export type Endpoint6_0Input = { readonly location?: Endpoint6_0Request["query"]
 export type Endpoint6_0Output = EffectValue<ReturnType<RawClient["server.model"]["model.list"]>>
 export type ModelListOperation<E = never> = (input?: Endpoint6_0Input) => Effect.Effect<Endpoint6_0Output, E>
 
+type Endpoint6_1Request = Parameters<RawClient["server.model"]["model.default"]>[0]
+export type Endpoint6_1Input = { readonly location?: Endpoint6_1Request["query"]["location"] }
+export type Endpoint6_1Output = EffectValue<ReturnType<RawClient["server.model"]["model.default"]>>
+export type ModelDefaultOperation<E = never> = (input?: Endpoint6_1Input) => Effect.Effect<Endpoint6_1Output, E>
+
 export interface ModelApi<E = never> {
   readonly list: ModelListOperation<E>
+  readonly default: ModelDefaultOperation<E>
 }
 
 type Endpoint7_0Request = Parameters<RawClient["server.generate"]["generate.text"]>[0]

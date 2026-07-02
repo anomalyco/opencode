@@ -69,6 +69,16 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("passes through custom OpenAI reasoning effort strings", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+        LLM.updateRequest(request, { providerOptions: { openai: { reasoningEffort: "experimental" } } }),
+      )
+
+      expect(prepared.body.reasoning).toEqual({ effort: "experimental" })
+    }),
+  )
+
   it.effect("omits unsupported semantic service tiers", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare(

@@ -1,0 +1,67 @@
+{
+  "openai": {
+    "id": "openai",
+    "name": "OpenAI",
+    "env": ["OPENAI_API_KEY"],
+    "npm": "@ai-sdk/openai",
+    "api": "https://api.openai.com/v1",
+    "models": {
+      "gpt-reasoning": {
+        "id": "gpt-reasoning",
+        "name": "GPT Reasoning",
+        "release_date": "2026-01-01",
+        "attachment": false,
+        "reasoning": true,
+        "reasoning_options": [
+          { "type": "effort", "values": ["low", "high"] },
+          { "type": "budget_tokens", "min": 1024, "max": 64000 },
+          { "type": "toggle" }
+        ],
+        "temperature": true,
+        "tool_call": true,
+        "limit": { "context": 128000, "output": 8192 },
+        "experimental": {
+          "modes": {
+            "high": {
+              "provider": {
+                "headers": { "x-mode": "high" },
+                "body": { "service_tier": "priority" }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "anthropic": {
+    "id": "anthropic",
+    "name": "Anthropic",
+    "env": ["ANTHROPIC_API_KEY"],
+    "npm": "@ai-sdk/anthropic",
+    "api": "https://api.anthropic.com/v1",
+    "models": {
+      "claude-budget": {
+        "id": "claude-budget",
+        "name": "Claude Budget",
+        "release_date": "2026-01-01",
+        "attachment": false,
+        "reasoning": true,
+        "reasoning_options": [{ "type": "budget_tokens", "min": 1024, "max": 64000 }],
+        "temperature": true,
+        "tool_call": true,
+        "limit": { "context": 128000, "output": 8192 }
+      },
+      "claude-effort": {
+        "id": "claude-effort",
+        "name": "Claude Effort",
+        "release_date": "2026-01-01",
+        "attachment": false,
+        "reasoning": true,
+        "reasoning_options": [{ "type": "effort", "values": ["low"] }],
+        "temperature": true,
+        "tool_call": true,
+        "limit": { "context": 128000, "output": 8192 }
+      }
+    }
+  }
+}

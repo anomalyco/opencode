@@ -8,9 +8,12 @@
 import { Context, Effect, Layer } from "effect"
 import { resolve } from "@opencode-ai/tui/config"
 import { TuiConfig } from "@/config/tui"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { makeGlobalNode } from "@opencode-ai/core/effect/app-node"
 import { makeRuntime } from "@/effect/run-service"
+import { loadRunProviders } from "./catalog.shared"
 import { reusePendingTask } from "./runtime.shared"
-import { resolveSession, sessionHistory } from "./session.shared"
+import { resolveCurrentSession, sessionHistory } from "./session.shared"
 import type { RunDiffStyle, RunInput, RunPrompt, RunProvider, RunTuiConfig } from "./types"
 import { pickVariant } from "./variant.shared"
 
@@ -95,20 +98,7 @@ const layer = Layer.effect(
       directory: string,
       model: RunInput["model"],
     ) {
-      const connected = yield* Effect.promise(() =>
-        sdk.config
-          .providers({ directory })
-          .then((item) => item.data?.providers)
-          .catch(() => undefined),
-      )
-      const providers = yield* Effect.promise(() =>
-        connected
-          ? Promise.resolve(connected)
-          : sdk.provider
-              .list()
-              .then((item) => item.data?.all ?? [])
-              .catch(() => []),
-      )
+      const providers = yield* Effect.promise(() => loadRunProviders(sdk, directory))
       const limits = Object.fromEntries(
         providers.flatMap((provider) =>
           Object.entries(provider.models ?? {}).flatMap(([modelID, info]) => {
@@ -143,7 +133,7 @@ const layer = Layer.effect(
       sessionID: string,
       model: RunInput["model"],
     ) {
-      const session = yield* Effect.promise(() => resolveSession(sdk, sessionID).catch(() => undefined))
+      const session = yield* Effect.promise(() => resolveCurrentSession(sdk, sessionID).catch(() => undefined))
       if (!session) {
         return emptySessionInfo()
       }
@@ -172,7 +162,8 @@ const layer = Layer.effect(
   }),
 )
 
-const runtime = makeRuntime(Service, layer)
+const node = makeGlobalNode({ service: Service, layer, deps: [] })
+const runtime = makeRuntime(Service, AppNodeBuilder.build(node))
 
 // Fetches available variants and context limits for every provider/model pair.
 export async function resolveModelInfo(

@@ -1,4 +1,4 @@
-// Shared type vocabulary for the direct interactive mode (`opencode --mini`).
+// Shared type vocabulary for the direct interactive mode (`opencode mini`).
 //
 // Direct mode uses a split-footer terminal layout: immutable scrollback for the
 // session transcript, and a mutable footer for prompt input, status, and
@@ -26,9 +26,63 @@ type PromptInput = Parameters<OpencodeClient["session"]["prompt"]>[0]
 
 export type RunPromptPart = NonNullable<PromptInput["parts"]>[number]
 
-export type RunCommand = NonNullable<Awaited<ReturnType<OpencodeClient["command"]["list"]>>["data"]>[number]
+export type RunCommand = {
+  name: string
+  description?: string
+  source?: string
+  template?: string
+  hints?: unknown[]
+  agent?: string
+  model?: {
+    [key: string]: unknown
+  }
+  subtask?: boolean
+}
 
-export type RunProvider = NonNullable<Awaited<ReturnType<OpencodeClient["provider"]["list"]>>["data"]>["all"][number]
+export type RunProviderModel = {
+  id: string
+  providerID: string
+  api?: {
+    [key: string]: unknown
+  }
+  name?: string
+  capabilities?: {
+    [key: string]: unknown
+  }
+  cost?: {
+    input: number
+    output?: number
+    cache?: {
+      read: number
+      write: number
+    }
+  }
+  limit?: {
+    context: number
+    input?: number
+    output?: number
+  }
+  status?: string
+  options?: {
+    [key: string]: unknown
+  }
+  headers?: {
+    [key: string]: string
+  }
+  release_date?: string
+  variants?: Record<string, unknown>
+}
+
+export type RunProvider = {
+  id: string
+  name: string
+  source?: string
+  env?: string[]
+  options?: {
+    [key: string]: unknown
+  }
+  models: Record<string, RunProviderModel>
+}
 
 export type RunPrompt = {
   messageID?: string
@@ -48,11 +102,16 @@ export type FooterQueuedPrompt = {
   prompt: RunPrompt
 }
 
-export type RunAgent = NonNullable<Awaited<ReturnType<OpencodeClient["app"]["agents"]>>["data"]>[number]
+export type RunAgent = {
+  name: string
+  description?: string
+  mode: "subagent" | "primary" | "all"
+  hidden: boolean
+}
 
-type RunResourceMap = NonNullable<Awaited<ReturnType<OpencodeClient["experimental"]["resource"]["list"]>>["data"]>
-
-export type RunResource = RunResourceMap[string]
+export type RunReference = NonNullable<
+  Awaited<ReturnType<OpencodeClient["v2"]["reference"]["list"]>>["data"]
+>["data"][number]
 
 export type RunInput = {
   sdk: OpencodeClient
@@ -224,7 +283,7 @@ export type FooterEvent =
   | {
       type: "catalog"
       agents: RunAgent[]
-      resources: RunResource[]
+      references: RunReference[]
       commands?: RunCommand[]
     }
   | {

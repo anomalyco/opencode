@@ -1,15 +1,17 @@
 import { createServer } from "node:http"
 import type { IntegrationOAuthMethodRegistration } from "@opencode-ai/plugin/v2/effect/integration"
 import { define } from "@opencode-ai/plugin/v2/effect/plugin"
-import { Deferred, Effect } from "effect"
+import { Deferred, Effect, Semaphore, Stream } from "effect"
 import type { Scope } from "effect"
 import { Credential } from "../../credential"
+import { EventV2 } from "../../event"
 import { InstallationVersion } from "../../installation/version"
 import { Integration } from "../../integration"
 import { ModelV2 } from "../../model"
 import { OauthCallbackPage } from "../../oauth/page"
 import { ProviderV2 } from "../../provider"
 import type { PluginInternal } from "../internal"
+import { OpenAICodex } from "./openai-codex"
 
 const clientID = "app_EMoamEEZ73f0CkXaXp7hrann"
 const issuer = "https://auth.openai.com"
@@ -154,6 +156,18 @@ const headless = {
 export const OpenAIPlugin = define({
   id: "openai",
   effect: Effect.fn(function* (ctx) {
+    const events = yield* EventV2.Service
+    const loading = Semaphore.makeUnsafe(1)
+    let chatgpt = false
+
+    const load = Effect.fn("OpenAIPlugin.load")(function* () {
+      const connection = yield* ctx.integration.connection.active("openai")
+      const credential = connection
+        ? yield* ctx.integration.connection.resolve(connection).pipe(Effect.catch(() => Effect.succeed(undefined)))
+        : undefined
+      chatgpt = OpenAICodex.isChatGPT(credential)
+    })
+
     yield* ctx.integration.transform((draft) => {
       draft.method.update(browser)
       draft.method.update(headless)
@@ -170,8 +184,30 @@ export const OpenAIPlugin = define({
             model.enabled = false
           })
         }
+        if (!chatgpt) return
+        const item = evt.provider.get(ProviderV2.ID.openai)
+        if (!item) return
+        for (const model of item.models.values()) {
+          // ChatGPT-plan tokens only authorize codex-eligible models, and the
+          // subscription covers usage, so hide the rest and zero the cost.
+          evt.model.update(item.provider.id, model.id, (draft) => {
+            if (!OpenAICodex.eligible(draft.api.id)) {
+              draft.enabled = false
+              return
+            }
+            draft.cost = []
+          })
+        }
       }),
     )
+
+    const refresh = () => loading.withPermit(load().pipe(Effect.andThen(ctx.catalog.reload())))
+    yield* events.subscribe(Integration.Event.ConnectionUpdated).pipe(
+      Stream.filter((event) => event.data.integrationID === Integration.ID.make("openai")),
+      Stream.runForEach(refresh),
+      Effect.forkScoped({ startImmediately: true }),
+    )
+    yield* refresh().pipe(Effect.forkScoped)
     yield* ctx.aisdk.sdk(
       Effect.fn(function* (evt) {
         if (evt.package !== "@ai-sdk/openai") return

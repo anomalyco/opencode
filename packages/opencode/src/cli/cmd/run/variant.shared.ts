@@ -10,6 +10,8 @@ import path from "path"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Context, Effect, Layer } from "effect"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { makeGlobalNode } from "@opencode-ai/core/effect/app-node"
 import { makeRuntime } from "@/effect/run-service"
 import { Global } from "@opencode-ai/core/global"
 import { isRecord } from "@/util/record"
@@ -136,69 +138,69 @@ function state(value: unknown): ModelState {
   }
 }
 
-function createLayer(fs = AppNodeBuilder.build(FSUtil.node)) {
-  return Layer.fresh(
-    Layer.effect(
-      Service,
-      Effect.gen(function* () {
-        const file = yield* FSUtil.Service
+const layer = Layer.fresh(
+  Layer.effect(
+    Service,
+    Effect.gen(function* () {
+      const file = yield* FSUtil.Service
 
-        const read = Effect.fn("RunVariant.read")(function* () {
-          return yield* file.readJson(MODEL_FILE).pipe(
-            Effect.map(state),
-            Effect.catchCause(() => Effect.succeed(state(undefined))),
-          )
-        })
+      const read = Effect.fn("RunVariant.read")(function* () {
+        return yield* file.readJson(MODEL_FILE).pipe(
+          Effect.map(state),
+          Effect.catchCause(() => Effect.succeed(state(undefined))),
+        )
+      })
 
-        const resolveSavedVariant = Effect.fn("RunVariant.resolveSavedVariant")(function* (model: RunInput["model"]) {
-          if (!model) {
-            return undefined
-          }
+      const resolveSavedVariant = Effect.fn("RunVariant.resolveSavedVariant")(function* (model: RunInput["model"]) {
+        if (!model) {
+          return undefined
+        }
 
-          return (yield* read()).variant?.[variantKey(model)]
-        })
+        return (yield* read()).variant?.[variantKey(model)]
+      })
 
-        const saveVariant = Effect.fn("RunVariant.saveVariant")(function* (
-          model: RunInput["model"],
-          variant: string | undefined,
-        ) {
-          if (!model) {
-            return
-          }
+      const saveVariant = Effect.fn("RunVariant.saveVariant")(function* (
+        model: RunInput["model"],
+        variant: string | undefined,
+      ) {
+        if (!model) {
+          return
+        }
 
-          const current = yield* read()
-          const next = {
-            ...current.variant,
-          }
-          const key = variantKey(model)
-          if (variant) {
-            next[key] = variant
-          }
+        const current = yield* read()
+        const next = {
+          ...current.variant,
+        }
+        const key = variantKey(model)
+        if (variant) {
+          next[key] = variant
+        }
 
-          if (!variant) {
-            delete next[key]
-          }
+        if (!variant) {
+          delete next[key]
+        }
 
-          yield* file
-            .writeJson(MODEL_FILE, {
-              ...current,
-              variant: next,
-            })
-            .pipe(Effect.orElseSucceed(() => undefined))
-        })
+        yield* file
+          .writeJson(MODEL_FILE, {
+            ...current,
+            variant: next,
+          })
+          .pipe(Effect.orElseSucceed(() => undefined))
+      })
 
-        return Service.of({
-          resolveSavedVariant,
-          saveVariant,
-        })
-      }),
-    ).pipe(Layer.provide(fs)),
-  )
-}
+      return Service.of({
+        resolveSavedVariant,
+        saveVariant,
+      })
+    }),
+  ),
+)
+
+const node = makeGlobalNode({ service: Service, layer, deps: [FSUtil.node] })
 
 /** @internal Exported for testing. */
-export function createVariantRuntime(fs = AppNodeBuilder.build(FSUtil.node)): VariantRuntime {
-  const runtime = makeRuntime(Service, createLayer(fs))
+export function createVariantRuntime(replacements?: readonly LayerNode.Replacement[]): VariantRuntime {
+  const runtime = makeRuntime(Service, AppNodeBuilder.build(node, replacements))
   return {
     resolveSavedVariant: (model) => runtime.runPromise((svc) => svc.resolveSavedVariant(model)).catch(() => undefined),
     saveVariant: (model, variant) => runtime.runPromise((svc) => svc.saveVariant(model, variant)).catch(() => {}),

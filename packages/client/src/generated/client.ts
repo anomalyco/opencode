@@ -53,6 +53,8 @@ import type {
   MessageListOutput,
   ModelListInput,
   ModelListOutput,
+  ModelDefaultInput,
+  ModelDefaultOutput,
   GenerateTextInput,
   GenerateTextOutput,
   ProviderListInput,
@@ -620,6 +622,18 @@ export function make(options: ClientOptions) {
           {
             method: "GET",
             path: `/api/model`,
+            query: { location: input?.["location"] },
+            successStatus: 200,
+            declaredStatuses: [503, 401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      default: (input?: ModelDefaultInput, requestOptions?: RequestOptions) =>
+        request<ModelDefaultOutput>(
+          {
+            method: "GET",
+            path: `/api/model/default`,
             query: { location: input?.["location"] },
             successStatus: 200,
             declaredStatuses: [503, 401, 400],
