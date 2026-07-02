@@ -3,12 +3,12 @@ import type {
   Message,
   Part,
   PermissionRequest,
-  QuestionRequest,
   SessionStatus,
   SnapshotFileDiff,
   Todo,
 } from "@opencode-ai/sdk/v2/client"
 import { dropSessionCaches, pickSessionCacheEvictions } from "./session-cache"
+import type { QuestionForm } from "@/utils/question-form"
 
 const msg = (id: string, sessionID: string) =>
   ({
@@ -38,7 +38,7 @@ describe("app session cache", () => {
       message: Record<string, Message[] | undefined>
       part: Record<string, Part[] | undefined>
       permission: Record<string, PermissionRequest[] | undefined>
-      question: Record<string, QuestionRequest[] | undefined>
+      question: Record<string, QuestionForm[] | undefined>
       part_text_accum_delta: Record<string, string | undefined>
     } = {
       session_status: { ses_1: { type: "busy" } as SessionStatus },
@@ -47,7 +47,7 @@ describe("app session cache", () => {
       message: {},
       part: { msg_1: [part("prt_1", "ses_1", "msg_1")] },
       permission: { ses_1: [] as PermissionRequest[] },
-      question: { ses_1: [] as QuestionRequest[] },
+      question: { ses_1: [] as QuestionForm[] },
       part_text_accum_delta: { prt_1: "streamed text" },
     }
 
@@ -72,7 +72,7 @@ describe("app session cache", () => {
       message: Record<string, Message[] | undefined>
       part: Record<string, Part[] | undefined>
       permission: Record<string, PermissionRequest[] | undefined>
-      question: Record<string, QuestionRequest[] | undefined>
+      question: Record<string, QuestionForm[] | undefined>
       part_text_accum_delta: Record<string, string | undefined>
     } = {
       session_status: {},

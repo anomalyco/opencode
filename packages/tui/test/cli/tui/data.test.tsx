@@ -611,37 +611,45 @@ test("adds and dismisses question requests from live events", async () => {
   try {
     await wait(() => data.connection.status() === "connected")
     emitEvent(events, {
-      id: "evt_question_asked_1",
-      type: "question.v2.asked",
+      id: "evt_form_created_1",
+      type: "form.created",
       data: {
-        id: "que_1",
-        sessionID: "ses_1",
-        questions: [{ question: "Which option?", header: "Option", options: [], multiple: false }],
+        form: {
+          id: "frm_1",
+          sessionID: "ses_1",
+          mode: "form",
+          metadata: { kind: "question" },
+          fields: [{ key: "question_0", title: "Which option?", description: "Option", type: "string", options: [] }],
+        },
       },
     })
     emitEvent(events, {
-      id: "evt_question_asked_2",
-      type: "question.v2.asked",
+      id: "evt_form_created_2",
+      type: "form.created",
       data: {
-        id: "que_2",
-        sessionID: "ses_1",
-        questions: [{ question: "Which environment?", header: "Environment", options: [], multiple: false }],
+        form: {
+          id: "frm_2",
+          sessionID: "ses_1",
+          mode: "form",
+          metadata: { kind: "question" },
+          fields: [{ key: "question_0", title: "Which environment?", description: "Environment", type: "string", options: [] }],
+        },
       },
     })
     await wait(() => data.session.question.list("ses_1")?.length === 2)
 
     emitEvent(events, {
-      id: "evt_question_replied_1",
-      type: "question.v2.replied",
-      data: { sessionID: "ses_1", requestID: "que_1", answers: [["First"]] },
+      id: "evt_form_replied_1",
+      type: "form.replied",
+      data: { id: "frm_1", sessionID: "ses_1", answer: { question_0: "First" } },
     })
     await wait(() => data.session.question.list("ses_1")?.length === 1)
-    expect(data.session.question.list("ses_1")?.[0]?.id).toBe("que_2")
+    expect(data.session.question.list("ses_1")?.[0]?.id).toBe("frm_2")
 
     emitEvent(events, {
-      id: "evt_question_rejected_2",
-      type: "question.v2.rejected",
-      data: { sessionID: "ses_1", requestID: "que_2" },
+      id: "evt_form_cancelled_2",
+      type: "form.cancelled",
+      data: { id: "frm_2", sessionID: "ses_1" },
     })
     await wait(() => data.session.question.list("ses_1")?.length === 0)
   } finally {

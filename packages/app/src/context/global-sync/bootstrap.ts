@@ -5,7 +5,6 @@ import type {
   PermissionRequest,
   Project,
   ProviderAuthResponse,
-  QuestionRequest,
   ReferenceInfo,
   Session,
 } from "@opencode-ai/sdk/v2/client"
@@ -22,6 +21,7 @@ import { QueryClient, queryOptions } from "@tanstack/solid-query"
 import { loadMcpQuery, loadMcpResourcesQuery } from "../server-sync"
 import { NormalizedProviderListResponse } from "@opencode-ai/session-ui/context"
 import { ScopedKey, type ServerScope } from "@/utils/server-scope"
+import { isQuestionForm, type QuestionForm } from "@/utils/question-form"
 
 type GlobalStore = {
   ready: boolean
@@ -319,9 +319,10 @@ export async function bootstrapDirectory(input: {
         ),
       () =>
         retry(() =>
-          input.sdk.question.list().then((x) => {
-            const ids = (x.data ?? []).map((question) => question?.sessionID).filter((id): id is string => !!id)
-            const grouped = groupBySession((x.data ?? []).filter((q): q is QuestionRequest => !!q?.id && !!q.sessionID))
+          input.sdk.v2.form.request.list().then((x) => {
+            const forms: QuestionForm[] = (x.data?.data ?? []).flatMap((form) => (isQuestionForm(form) ? [form] : []))
+            const ids = forms.map((question) => question.sessionID)
+            const grouped = groupBySession(forms)
             const warm = input.session
               ? Promise.all(ids.map((sessionID) => input.session!.resolve(sessionID))).then(() => undefined)
               : warmSessions({ ids, store: input.store, setStore: input.setStore, sdk: input.sdk })

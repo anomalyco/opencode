@@ -42,6 +42,12 @@ export const FormHandler = HttpApiBuilder.group(Api, "server.form", (handlers) =
 
     return handlers
       .handle(
+        "form.request.list",
+        Effect.fn(function* () {
+          return yield* response((yield* Form.Service).list())
+        }),
+      )
+      .handle(
         "session.form.list",
         Effect.fn(function* (ctx) {
           return yield* response((yield* Form.Service).list({ sessionID: ctx.params.sessionID }))

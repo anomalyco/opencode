@@ -1,4 +1,5 @@
-import type { PermissionRequest, QuestionRequest, Session } from "@opencode-ai/sdk/v2/client"
+import type { PermissionRequest, Session } from "@opencode-ai/sdk/v2/client"
+import type { QuestionForm } from "@/utils/question-form"
 
 function sessionTreeRequest<T>(
   session: Session[],
@@ -44,9 +45,9 @@ export function sessionPermissionRequest(
 
 export function sessionQuestionRequest(
   session: Session[],
-  request: Record<string, QuestionRequest[] | undefined>,
+  request: Record<string, QuestionForm[] | undefined>,
   sessionID?: string,
-  include?: (item: QuestionRequest) => boolean,
+  include?: (item: QuestionForm) => boolean,
 ) {
   return sessionTreeRequest(session, request, sessionID, include)
 }

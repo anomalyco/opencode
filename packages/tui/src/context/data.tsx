@@ -8,7 +8,6 @@ import type {
   PermissionSavedInfo,
   PermissionV2Request,
   ProviderV2Info,
-  QuestionV2Request,
   ReferenceInfo,
   SessionMessage,
   SessionMessageAssistant,
@@ -24,6 +23,7 @@ import { createStore, produce } from "solid-js/store"
 import { createSimpleContext } from "./helper"
 import { useSDK } from "./sdk"
 import { createSignal, onCleanup } from "solid-js"
+import { isQuestionForm, type QuestionForm } from "../util/question-form"
 
 export type DataSessionStatus = "idle" | "running"
 
@@ -51,7 +51,7 @@ type Data = {
     status: Record<string, DataSessionStatus>
     message: Record<string, SessionMessage[]>
     permission: Record<string, PermissionV2Request[]>
-    question: Record<string, QuestionV2Request[]>
+    question: Record<string, QuestionForm[]>
   }
   project: {
     permission: Record<string, PermissionSavedInfo[]>
@@ -564,21 +564,22 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             ),
           )
           break
-        case "question.v2.asked":
-          if (store.session.question[event.data.sessionID]?.some((request) => request.id === event.data.id)) break
-          setStore("session", "question", event.data.sessionID, [
-            ...(store.session.question[event.data.sessionID] ?? []),
-            event.data,
+        case "form.created":
+          if (!isQuestionForm(event.data.form)) break
+          if (store.session.question[event.data.form.sessionID]?.some((request) => request.id === event.data.form.id)) break
+          setStore("session", "question", event.data.form.sessionID, [
+            ...(store.session.question[event.data.form.sessionID] ?? []),
+            event.data.form,
           ])
           break
-        case "question.v2.replied":
-        case "question.v2.rejected":
+        case "form.replied":
+        case "form.cancelled":
           setStore(
             "session",
             "question",
             event.data.sessionID,
             (store.session.question[event.data.sessionID] ?? []).filter(
-              (request) => request.id !== event.data.requestID,
+              (request) => request.id !== event.data.id,
             ),
           )
           break
@@ -703,7 +704,12 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             return store.session.question[sessionID]
           },
           async refresh(sessionID: string) {
-            setStore("session", "question", sessionID, mutable(await sdk.api.question.list({ sessionID })))
+            setStore(
+              "session",
+              "question",
+              sessionID,
+              mutable((await sdk.api.form.list({ sessionID })).data.flatMap((form) => (isQuestionForm(form) ? [form] : []))),
+            )
           },
         },
       },

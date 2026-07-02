@@ -83,6 +83,8 @@ import type {
   ProjectCurrentOutput,
   ProjectDirectoriesInput,
   ProjectDirectoriesOutput,
+  FormListRequestsInput,
+  FormListRequestsOutput,
   FormListInput,
   FormListOutput,
   FormCreateInput,
@@ -140,14 +142,6 @@ import type {
   ShellOutputOutput,
   ShellRemoveInput,
   ShellRemoveOutput,
-  QuestionListRequestsInput,
-  QuestionListRequestsOutput,
-  QuestionListInput,
-  QuestionListOutput,
-  QuestionReplyInput,
-  QuestionReplyOutput,
-  QuestionRejectInput,
-  QuestionRejectOutput,
   ReferenceListInput,
   ReferenceListOutput,
   ProjectCopyCreateInput,
@@ -838,6 +832,18 @@ export function make(options: ClientOptions) {
         ),
     },
     form: {
+      listRequests: (input?: FormListRequestsInput, requestOptions?: RequestOptions) =>
+        request<FormListRequestsOutput>(
+          {
+            method: "GET",
+            path: `/api/form/request`,
+            query: { location: input?.["location"] },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
       list: (input: FormListInput, requestOptions?: RequestOptions) =>
         request<FormListOutput>(
           {
@@ -1218,54 +1224,6 @@ export function make(options: ClientOptions) {
             query: { location: input["location"] },
             successStatus: 204,
             declaredStatuses: [404, 401, 400],
-            empty: true,
-          },
-          requestOptions,
-        ),
-    },
-    question: {
-      listRequests: (input?: QuestionListRequestsInput, requestOptions?: RequestOptions) =>
-        request<QuestionListRequestsOutput>(
-          {
-            method: "GET",
-            path: `/api/question/request`,
-            query: { location: input?.["location"] },
-            successStatus: 200,
-            declaredStatuses: [401, 400],
-            empty: false,
-          },
-          requestOptions,
-        ),
-      list: (input: QuestionListInput, requestOptions?: RequestOptions) =>
-        request<{ readonly data: QuestionListOutput }>(
-          {
-            method: "GET",
-            path: `/api/session/${encodeURIComponent(input.sessionID)}/question`,
-            successStatus: 200,
-            declaredStatuses: [404, 400, 401],
-            empty: false,
-          },
-          requestOptions,
-        ).then((value) => value.data),
-      reply: (input: QuestionReplyInput, requestOptions?: RequestOptions) =>
-        request<QuestionReplyOutput>(
-          {
-            method: "POST",
-            path: `/api/session/${encodeURIComponent(input.sessionID)}/question/${encodeURIComponent(input.requestID)}/reply`,
-            body: { answers: input["answers"] },
-            successStatus: 204,
-            declaredStatuses: [404, 400, 401],
-            empty: true,
-          },
-          requestOptions,
-        ),
-      reject: (input: QuestionRejectInput, requestOptions?: RequestOptions) =>
-        request<QuestionRejectOutput>(
-          {
-            method: "POST",
-            path: `/api/session/${encodeURIComponent(input.sessionID)}/question/${encodeURIComponent(input.requestID)}/reject`,
-            successStatus: 204,
-            declaredStatuses: [404, 400, 401],
             empty: true,
           },
           requestOptions,

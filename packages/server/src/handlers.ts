@@ -15,7 +15,6 @@ import { PluginHandler } from "./handlers/plugin"
 import { HealthHandler } from "./handlers/health"
 import { PtyHandler } from "./handlers/pty"
 import { ShellHandler } from "./handlers/shell"
-import { QuestionHandler } from "./handlers/question"
 import { ReferenceHandler } from "./handlers/reference"
 import { LocationHandler } from "./handlers/location"
 import { IntegrationHandler } from "./handlers/integration"
@@ -46,7 +45,6 @@ export const handlers = Layer.mergeAll(
   EventHandler,
   PtyHandler,
   ShellHandler,
-  QuestionHandler,
   ReferenceHandler,
   ProjectCopyHandler,
 )

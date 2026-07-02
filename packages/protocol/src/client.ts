@@ -52,7 +52,6 @@ export const groupNames = {
   "server.event": "event",
   "server.pty": "pty",
   "server.shell": "shell",
-  "server.question": "question",
   "server.reference": "reference",
   "server.project": "project",
   "server.projectCopy": "projectCopy",
@@ -71,7 +70,7 @@ export const endpointNames = {
   "permission.request.list": "listRequests",
   "permission.saved.list": "listSaved",
   "permission.saved.remove": "removeSaved",
-  "question.request.list": "listRequests",
+  "form.request.list": "listRequests",
 } as const
 
 export const promiseOmitEndpoints = new Set(["pty.connect", "pty.connectToken"])

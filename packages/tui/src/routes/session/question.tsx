@@ -3,28 +3,28 @@ import { createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-j
 import { useRenderer } from "@opentui/solid"
 import type { TextareaRenderable } from "@opentui/core"
 import { selectedForeground, tint, useTheme } from "../../context/theme"
-import type { QuestionV2Answer, QuestionV2Request } from "@opencode-ai/sdk/v2"
 import { useSDK } from "../../context/sdk"
 import { SplitBorder } from "../../ui/border"
 import { useTuiConfig } from "../../config"
 import { useBindings, useOpencodeModeStack } from "../../keymap"
+import { questionAnswer, type QuestionAnswer, type QuestionForm } from "../../util/question-form"
 
 const QUESTION_MODE = "question"
 
-export function QuestionPrompt(props: { request: QuestionV2Request; directory?: string }) {
+export function QuestionPrompt(props: { request: QuestionForm; directory?: string }) {
   const sdk = useSDK()
   const { theme } = useTheme()
   const renderer = useRenderer()
   const tuiConfig = useTuiConfig()
   const modeStack = useOpencodeModeStack()
 
-  const questions = createMemo(() => props.request.questions)
-  const single = createMemo(() => questions().length === 1 && questions()[0]?.multiple !== true)
+  const questions = createMemo(() => props.request.fields)
+  const single = createMemo(() => questions().length === 1 && questions()[0]?.type !== "multiselect")
   const tabs = createMemo(() => (single() ? 1 : questions().length + 1)) // questions + confirm tab (no confirm for single select)
   const [tabHover, setTabHover] = createSignal<number | "confirm" | null>(null)
   const [store, setStore] = createStore({
     tab: 0,
-    answers: [] as QuestionV2Answer[],
+    answers: [] as QuestionAnswer[],
     custom: [] as string[],
     selected: 0,
     editing: false,
@@ -38,7 +38,7 @@ export function QuestionPrompt(props: { request: QuestionV2Request; directory?: 
   const custom = createMemo(() => question()?.custom !== false)
   const other = createMemo(() => custom() && store.selected === options().length)
   const input = createMemo(() => store.custom[store.tab] ?? "")
-  const multi = createMemo(() => question()?.multiple === true)
+  const multi = createMemo(() => question()?.type === "multiselect")
   const customPicked = createMemo(() => {
     const value = input()
     if (!value) return false
@@ -47,17 +47,17 @@ export function QuestionPrompt(props: { request: QuestionV2Request; directory?: 
 
   function submit() {
     const answers = questions().map((_, i) => store.answers[i] ?? [])
-    void sdk.api.question.reply({
+    void sdk.api.form.reply({
       sessionID: props.request.sessionID,
-      requestID: props.request.id,
-      answers,
+      formID: props.request.id,
+      answer: questionAnswer(questions(), answers),
     })
   }
 
   function reject() {
-    void sdk.api.question.reject({
+    void sdk.api.form.cancel({
       sessionID: props.request.sessionID,
-      requestID: props.request.id,
+      formID: props.request.id,
     })
   }
 
@@ -71,10 +71,10 @@ export function QuestionPrompt(props: { request: QuestionV2Request; directory?: 
       setStore("custom", inputs)
     }
     if (single()) {
-      void sdk.api.question.reply({
+      void sdk.api.form.reply({
         sessionID: props.request.sessionID,
-        requestID: props.request.id,
-        answers: [[answer]],
+        formID: props.request.id,
+        answer: questionAnswer(questions(), [[answer]]),
       })
       return
     }
@@ -328,7 +328,7 @@ export function QuestionPrompt(props: { request: QuestionV2Request; directory?: 
                             : theme.textMuted
                       }
                     >
-                      {q.header}
+                      {q.description ?? q.title}
                     </text>
                   </box>
                 )
@@ -356,7 +356,7 @@ export function QuestionPrompt(props: { request: QuestionV2Request; directory?: 
           <box paddingLeft={1} gap={1}>
             <box>
               <text fg={theme.text}>
-                {question()?.question}
+                {question()?.title}
                 {multi() ? " (select all that apply)" : ""}
               </text>
             </box>
@@ -466,7 +466,7 @@ export function QuestionPrompt(props: { request: QuestionV2Request; directory?: 
               return (
                 <box paddingLeft={1}>
                   <text>
-                    <span style={{ fg: theme.textMuted }}>{q.header}:</span>{" "}
+                    <span style={{ fg: theme.textMuted }}>{q.description ?? q.title}:</span>{" "}
                     <span style={{ fg: answered() ? theme.text : theme.error }}>
                       {answered() ? value() : "(not answered)"}
                     </span>

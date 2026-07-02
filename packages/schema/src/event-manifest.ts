@@ -19,7 +19,6 @@ import { Plugin } from "./plugin.js"
 import { Project } from "./project.js"
 import { ProjectDirectories } from "./project-directories.js"
 import { Pty } from "./pty.js"
-import { Question } from "./question.js"
 import { QuestionV1 } from "./question-v1.js"
 import { Reference } from "./reference.js"
 import { ServerEvent } from "./server-event.js"
@@ -58,7 +57,6 @@ const featureDefinitions = Event.inventory(
   ...FileSystemWatcher.Event.Definitions,
   ...Pty.Event.Definitions,
   ...Shell.Event.Definitions,
-  ...Question.Event.Definitions,
   ...Form.Event.Definitions,
 )
 

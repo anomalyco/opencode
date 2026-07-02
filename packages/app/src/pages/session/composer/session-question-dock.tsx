@@ -6,13 +6,13 @@ import { DockPrompt } from "@opencode-ai/session-ui/dock-prompt"
 import { Icon } from "@opencode-ai/ui/icon"
 import { useSpring } from "@opencode-ai/ui/motion-spring"
 import { showToast } from "@/utils/toast"
-import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
 import { useLanguage } from "@/context/language"
 import { useSDK } from "@/context/sdk"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { useServerSDK } from "@/context/server-sdk"
 import { ScopedKey } from "@/utils/server-scope"
+import { questionAnswer, type QuestionAnswer, type QuestionForm } from "@/utils/question-form"
 
 const cache = new Map<string, { tab: number; answers: QuestionAnswer[]; custom: string[]; customOn: boolean[] }>()
 
@@ -61,13 +61,13 @@ function Option(props: {
   )
 }
 
-export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit: () => void }> = (props) => {
+export const SessionQuestionDock: Component<{ request: QuestionForm; onSubmit: () => void }> = (props) => {
   const sdk = useSDK()
   const serverSDK = useServerSDK()
   const language = useLanguage()
   const cacheKey = ScopedKey.from(serverSDK().scope, props.request.id)
 
-  const questions = createMemo(() => props.request.questions)
+  const questions = createMemo(() => props.request.fields)
   const total = createMemo(() => questions().length)
 
   const cached = cache.get(cacheKey)
@@ -93,7 +93,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
   const options = createMemo(() => question()?.options ?? [])
   const input = createMemo(() => store.custom[store.tab] ?? "")
   const on = createMemo(() => store.customOn[store.tab] === true)
-  const multi = createMemo(() => question()?.multiple === true)
+  const multi = createMemo(() => question()?.type === "multiselect")
   const count = createMemo(() => options().length + 1)
 
   const summary = createMemo(() => {
@@ -223,7 +223,12 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
   }
 
   const replyMutation = useMutation(() => ({
-    mutationFn: (answers: QuestionAnswer[]) => sdk().client.question.reply({ requestID: props.request.id, answers }),
+    mutationFn: (answers: QuestionAnswer[]) =>
+      sdk().client.v2.session.form.reply({
+        sessionID: props.request.sessionID,
+        formID: props.request.id,
+        formReply: { answer: questionAnswer(props.request.fields, answers) },
+      }),
     onMutate: () => {
       props.onSubmit()
     },
@@ -235,7 +240,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
   }))
 
   const rejectMutation = useMutation(() => ({
-    mutationFn: () => sdk().client.question.reject({ requestID: props.request.id }),
+    mutationFn: () => sdk().client.v2.session.form.cancel({ sessionID: props.request.sessionID, formID: props.request.id }),
     onMutate: () => {
       props.onSubmit()
     },
@@ -526,7 +531,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
             overflow: store.minimized ? "hidden" : undefined,
           }}
         >
-          {question()?.question}
+          {question()?.title}
         </div>
         <Show when={!store.minimized}>
           <Show when={multi()} fallback={<div data-slot="question-hint">{language.t("ui.question.singleHint")}</div>}>

@@ -25,7 +25,6 @@ import { Policy } from "./policy"
 import { Project } from "./project"
 import { ProjectCopy } from "./project/copy"
 import { Pty } from "./pty"
-import { QuestionV2 } from "./question"
 import { Shell } from "./shell"
 import { Reference } from "./reference"
 import { ReferenceGuidance } from "./reference/guidance"
@@ -82,7 +81,6 @@ export const locationServices = LayerNode.group([
   SkillGuidance.node,
   ReferenceGuidance.node,
   SessionTodo.node,
-  QuestionV2.node,
   Form.node,
   Generate.node,
   ReadToolFileSystem.node,

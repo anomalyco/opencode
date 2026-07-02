@@ -5,7 +5,6 @@ import type {
   Part,
   PermissionRequest,
   Project,
-  QuestionRequest,
   Session,
   SessionStatus,
   SnapshotFileDiff,
@@ -15,6 +14,7 @@ import type { State, VcsCache } from "./types"
 import { trimSessions } from "./session-trim"
 import { dropSessionCaches } from "./session-cache"
 import { diffs as list, message as clean } from "@/utils/diffs"
+import { isQuestionForm } from "@/utils/question-form"
 
 const SKIP_PARTS = new Set(["patch", "step-start", "step-finish"])
 const SESSION_CONTENT_EVENTS = new Set([
@@ -28,9 +28,9 @@ const SESSION_CONTENT_EVENTS = new Set([
   "message.part.delta",
   "permission.asked",
   "permission.replied",
-  "question.asked",
-  "question.replied",
-  "question.rejected",
+  "form.created",
+  "form.replied",
+  "form.cancelled",
 ])
 
 export function applyGlobalEvent(input: {
@@ -364,8 +364,10 @@ export function applyDirectoryEvent(input: {
       )
       break
     }
-    case "question.asked": {
-      const question = event.properties as QuestionRequest
+    case "form.created": {
+      const properties = event.properties as { form?: unknown }
+      if (!isQuestionForm(properties.form)) break
+      const question = properties.form
       const questions = input.store.question[question.sessionID]
       if (!questions) {
         input.setStore("question", question.sessionID, [question])
@@ -385,12 +387,12 @@ export function applyDirectoryEvent(input: {
       )
       break
     }
-    case "question.replied":
-    case "question.rejected": {
-      const props = event.properties as { sessionID: string; requestID: string }
+    case "form.replied":
+    case "form.cancelled": {
+      const props = event.properties as { sessionID: string; id: string }
       const questions = input.store.question[props.sessionID]
       if (!questions) break
-      const result = Binary.search(questions, props.requestID, (q) => q.id)
+      const result = Binary.search(questions, props.id, (q) => q.id)
       if (!result.found) break
       input.setStore(
         "question",

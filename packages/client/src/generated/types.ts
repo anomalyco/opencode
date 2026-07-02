@@ -126,14 +126,6 @@ export type ShellNotFoundError = { readonly _tag: "ShellNotFoundError"; readonly
 export const isShellNotFoundError = (value: unknown): value is ShellNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ShellNotFoundError"
 
-export type QuestionNotFoundError = {
-  readonly _tag: "QuestionNotFoundError"
-  readonly requestID: string
-  readonly message: string
-}
-export const isQuestionNotFoundError = (value: unknown): value is QuestionNotFoundError =>
-  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "QuestionNotFoundError"
-
 export type ProjectCopyError = {
   readonly name: "ProjectCopyError"
   readonly data: { readonly message: string; readonly forceRequired?: boolean | undefined }
@@ -2594,6 +2586,107 @@ export type ProjectDirectoriesInput = {
 
 export type ProjectDirectoriesOutput = ReadonlyArray<{ readonly directory: string; readonly strategy?: string }>
 
+export type FormListRequestsInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
+
+export type FormListRequestsOutput = {
+  readonly location: {
+    readonly directory: string
+    readonly workspaceID?: string
+    readonly project: { readonly id: string; readonly directory: string }
+  }
+  readonly data: ReadonlyArray<
+    | {
+        readonly id: string
+        readonly sessionID: string
+        readonly title?: string
+        readonly metadata?: { readonly [x: string]: JsonValue }
+        readonly mode: "form"
+        readonly fields: ReadonlyArray<
+          | {
+              readonly key: string
+              readonly title?: string
+              readonly description?: string
+              readonly required?: boolean
+              readonly when?: { readonly key: string; readonly op: "eq" | "neq"; readonly value: string }
+              readonly type: "string"
+              readonly format?: "email" | "uri" | "date" | "date-time"
+              readonly minLength?: number
+              readonly maxLength?: number
+              readonly pattern?: string
+              readonly placeholder?: string
+              readonly default?: string
+              readonly options?: ReadonlyArray<{
+                readonly value: string
+                readonly label: string
+                readonly description?: string
+              }>
+              readonly custom?: boolean
+            }
+          | {
+              readonly key: string
+              readonly title?: string
+              readonly description?: string
+              readonly required?: boolean
+              readonly when?: { readonly key: string; readonly op: "eq" | "neq"; readonly value: string }
+              readonly type: "number"
+              readonly minimum?: number | "Infinity" | "-Infinity" | "NaN"
+              readonly maximum?: number | "Infinity" | "-Infinity" | "NaN"
+              readonly default?: number | "Infinity" | "-Infinity" | "NaN"
+            }
+          | {
+              readonly key: string
+              readonly title?: string
+              readonly description?: string
+              readonly required?: boolean
+              readonly when?: { readonly key: string; readonly op: "eq" | "neq"; readonly value: string }
+              readonly type: "integer"
+              readonly minimum?: number | "Infinity" | "-Infinity" | "NaN"
+              readonly maximum?: number | "Infinity" | "-Infinity" | "NaN"
+              readonly default?: number | "Infinity" | "-Infinity" | "NaN"
+            }
+          | {
+              readonly key: string
+              readonly title?: string
+              readonly description?: string
+              readonly required?: boolean
+              readonly when?: { readonly key: string; readonly op: "eq" | "neq"; readonly value: string }
+              readonly type: "boolean"
+              readonly default?: boolean
+            }
+          | {
+              readonly key: string
+              readonly title?: string
+              readonly description?: string
+              readonly required?: boolean
+              readonly when?: { readonly key: string; readonly op: "eq" | "neq"; readonly value: string }
+              readonly type: "multiselect"
+              readonly options: ReadonlyArray<{
+                readonly value: string
+                readonly label: string
+                readonly description?: string
+              }>
+              readonly minItems?: number
+              readonly maxItems?: number
+              readonly custom?: boolean
+              readonly default?: ReadonlyArray<string>
+            }
+        >
+      }
+    | {
+        readonly id: string
+        readonly sessionID: string
+        readonly title?: string
+        readonly metadata?: { readonly [x: string]: JsonValue }
+        readonly mode: "url"
+        readonly url: string
+      }
+  >
+}
+
 export type FormListInput = {
   readonly sessionID: { readonly sessionID: string }["sessionID"]
   readonly location?: {
@@ -4963,45 +5056,6 @@ export type EventSubscribeOutput =
   | {
       readonly id: string
       readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "question.v2.asked"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: {
-        readonly id: string
-        readonly sessionID: string
-        readonly questions: ReadonlyArray<{
-          readonly question: string
-          readonly header: string
-          readonly options: ReadonlyArray<{ readonly label: string; readonly description: string }>
-          readonly multiple?: boolean
-          readonly custom?: boolean
-        }>
-        readonly tool?: { readonly messageID: string; readonly callID: string }
-      }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "question.v2.replied"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: {
-        readonly sessionID: string
-        readonly requestID: string
-        readonly answers: ReadonlyArray<ReadonlyArray<string>>
-      }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "question.v2.rejected"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: { readonly sessionID: string; readonly requestID: string }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
       readonly type: "form.created"
       readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
       readonly location?: { readonly directory: string; readonly workspaceID?: string }
@@ -5434,64 +5488,6 @@ export type ShellRemoveInput = {
 }
 
 export type ShellRemoveOutput = void
-
-export type QuestionListRequestsInput = {
-  readonly location?: {
-    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-  }["location"]
-}
-
-export type QuestionListRequestsOutput = {
-  readonly location: {
-    readonly directory: string
-    readonly workspaceID?: string
-    readonly project: { readonly id: string; readonly directory: string }
-  }
-  readonly data: ReadonlyArray<{
-    readonly id: string
-    readonly sessionID: string
-    readonly questions: ReadonlyArray<{
-      readonly question: string
-      readonly header: string
-      readonly options: ReadonlyArray<{ readonly label: string; readonly description: string }>
-      readonly multiple?: boolean
-      readonly custom?: boolean
-    }>
-    readonly tool?: { readonly messageID: string; readonly callID: string }
-  }>
-}
-
-export type QuestionListInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
-
-export type QuestionListOutput = {
-  readonly data: ReadonlyArray<{
-    readonly id: string
-    readonly sessionID: string
-    readonly questions: ReadonlyArray<{
-      readonly question: string
-      readonly header: string
-      readonly options: ReadonlyArray<{ readonly label: string; readonly description: string }>
-      readonly multiple?: boolean
-      readonly custom?: boolean
-    }>
-    readonly tool?: { readonly messageID: string; readonly callID: string }
-  }>
-}["data"]
-
-export type QuestionReplyInput = {
-  readonly sessionID: { readonly sessionID: string; readonly requestID: string }["sessionID"]
-  readonly requestID: { readonly sessionID: string; readonly requestID: string }["requestID"]
-  readonly answers: { readonly answers: ReadonlyArray<ReadonlyArray<string>> }["answers"]
-}
-
-export type QuestionReplyOutput = void
-
-export type QuestionRejectInput = {
-  readonly sessionID: { readonly sessionID: string; readonly requestID: string }["sessionID"]
-  readonly requestID: { readonly sessionID: string; readonly requestID: string }["requestID"]
-}
-
-export type QuestionRejectOutput = void
 
 export type ReferenceListInput = {
   readonly location?: {

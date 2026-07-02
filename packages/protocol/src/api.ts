@@ -18,7 +18,6 @@ import { PluginGroup } from "./groups/plugin.js"
 import { HealthGroup } from "./groups/health.js"
 import { PtyGroup } from "./groups/pty.js"
 import { ShellGroup } from "./groups/shell.js"
-import { makeQuestionGroup } from "./groups/question.js"
 import { ReferenceGroup } from "./groups/reference.js"
 import { Authorization } from "./middleware/authorization.js"
 import { LocationGroup } from "./groups/location.js"
@@ -51,8 +50,13 @@ type SessionGroups<SessionLocationId extends HttpApiMiddleware.AnyId, SessionLoc
   | ReturnType<typeof makeSessionGroup<SessionLocationId, SessionLocationService>>
   | HttpApiGroup.AddMiddleware<typeof MessageGroup, SessionLocationId>
 
-type FormGroups<FormLocationId extends HttpApiMiddleware.AnyId, FormLocationService> = ReturnType<
-  typeof makeFormGroup<FormLocationId, FormLocationService>
+type FormGroups<
+  LocationId extends HttpApiMiddleware.AnyId,
+  LocationService,
+  FormLocationId extends HttpApiMiddleware.AnyId,
+  FormLocationService,
+> = ReturnType<
+  typeof makeFormGroup<LocationId, LocationService, FormLocationId, FormLocationService>
 >
 
 type MixedMiddlewareGroups<
@@ -61,10 +65,7 @@ type MixedMiddlewareGroups<
   SessionLocationId extends HttpApiMiddleware.AnyId,
   SessionLocationService,
 > =
-  | ReturnType<
-      typeof makePermissionGroup<LocationId, LocationService, SessionLocationId, SessionLocationService>
-    >
-  | ReturnType<typeof makeQuestionGroup<LocationId, LocationService, SessionLocationId, SessionLocationService>>
+  ReturnType<typeof makePermissionGroup<LocationId, LocationService, SessionLocationId, SessionLocationService>>
 
 type ApiGroups<
   LocationId extends HttpApiMiddleware.AnyId,
@@ -77,7 +78,7 @@ type ApiGroups<
 > =
   | typeof HealthGroup
   | LocationGroups<LocationId>
-  | FormGroups<FormLocationId, FormLocationService>
+  | FormGroups<LocationId, LocationService, FormLocationId, FormLocationService>
   | SessionGroups<SessionLocationId, SessionLocationService>
   | MixedMiddlewareGroups<LocationId, LocationService, SessionLocationId, SessionLocationService>
   | Event
@@ -132,7 +133,7 @@ const makeApiFromGroup = <
     .add(McpGroup.middleware(locationMiddleware))
     .add(CredentialGroup.middleware(locationMiddleware))
     .add(ProjectGroup.middleware(locationMiddleware))
-    .add(makeFormGroup(formLocationMiddleware))
+    .add(makeFormGroup(locationMiddleware, formLocationMiddleware))
     .add(makePermissionGroup(locationMiddleware, sessionLocationMiddleware))
     .add(FileSystemGroup.middleware(locationMiddleware))
     .add(CommandGroup.middleware(locationMiddleware))
@@ -140,7 +141,6 @@ const makeApiFromGroup = <
     .add(eventGroup)
     .add(PtyGroup.middleware(locationMiddleware))
     .add(ShellGroup.middleware(locationMiddleware))
-    .add(makeQuestionGroup(locationMiddleware, sessionLocationMiddleware))
     .add(ReferenceGroup.middleware(locationMiddleware))
     .add(ProjectCopyGroup.middleware(locationMiddleware))
     .annotateMerge(

@@ -491,28 +491,33 @@ const adaptGroup12 = (raw: RawClient["server.project"]) => ({
   directories: Endpoint12_1(raw),
 })
 
-type Endpoint13_0Request = Parameters<RawClient["server.form"]["session.form.list"]>[0]
-type Endpoint13_0Input = {
-  readonly sessionID: Endpoint13_0Request["params"]["sessionID"]
-  readonly location?: Endpoint13_0Request["query"]["location"]
+type Endpoint13_0Request = Parameters<RawClient["server.form"]["form.request.list"]>[0]
+type Endpoint13_0Input = { readonly location?: Endpoint13_0Request["query"]["location"] }
+const Endpoint13_0 = (raw: RawClient["server.form"]) => (input?: Endpoint13_0Input) =>
+  raw["form.request.list"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError))
+
+type Endpoint13_1Request = Parameters<RawClient["server.form"]["session.form.list"]>[0]
+type Endpoint13_1Input = {
+  readonly sessionID: Endpoint13_1Request["params"]["sessionID"]
+  readonly location?: Endpoint13_1Request["query"]["location"]
 }
-const Endpoint13_0 = (raw: RawClient["server.form"]) => (input: Endpoint13_0Input) =>
+const Endpoint13_1 = (raw: RawClient["server.form"]) => (input: Endpoint13_1Input) =>
   raw["session.form.list"]({ params: { sessionID: input["sessionID"] }, query: { location: input["location"] } }).pipe(
     Effect.mapError(mapClientError),
   )
 
-type Endpoint13_1Request = Parameters<RawClient["server.form"]["session.form.create"]>[0]
-type Endpoint13_1Input = {
-  readonly sessionID: Endpoint13_1Request["params"]["sessionID"]
-  readonly location?: Endpoint13_1Request["query"]["location"]
-  readonly id?: Endpoint13_1Request["payload"]["id"]
-  readonly title?: Endpoint13_1Request["payload"]["title"]
-  readonly metadata?: Endpoint13_1Request["payload"]["metadata"]
-  readonly mode: Endpoint13_1Request["payload"]["mode"]
-  readonly fields?: Endpoint13_1Request["payload"]["fields"]
-  readonly url?: Endpoint13_1Request["payload"]["url"]
+type Endpoint13_2Request = Parameters<RawClient["server.form"]["session.form.create"]>[0]
+type Endpoint13_2Input = {
+  readonly sessionID: Endpoint13_2Request["params"]["sessionID"]
+  readonly location?: Endpoint13_2Request["query"]["location"]
+  readonly id?: Endpoint13_2Request["payload"]["id"]
+  readonly title?: Endpoint13_2Request["payload"]["title"]
+  readonly metadata?: Endpoint13_2Request["payload"]["metadata"]
+  readonly mode: Endpoint13_2Request["payload"]["mode"]
+  readonly fields?: Endpoint13_2Request["payload"]["fields"]
+  readonly url?: Endpoint13_2Request["payload"]["url"]
 }
-const Endpoint13_1 = (raw: RawClient["server.form"]) => (input: Endpoint13_1Input) =>
+const Endpoint13_2 = (raw: RawClient["server.form"]) => (input: Endpoint13_2Input) =>
   raw["session.form.create"]({
     params: { sessionID: input["sessionID"] },
     query: { location: input["location"] },
@@ -526,63 +531,64 @@ const Endpoint13_1 = (raw: RawClient["server.form"]) => (input: Endpoint13_1Inpu
     },
   }).pipe(Effect.mapError(mapClientError))
 
-type Endpoint13_2Request = Parameters<RawClient["server.form"]["session.form.get"]>[0]
-type Endpoint13_2Input = {
-  readonly sessionID: Endpoint13_2Request["params"]["sessionID"]
-  readonly formID: Endpoint13_2Request["params"]["formID"]
-  readonly location?: Endpoint13_2Request["query"]["location"]
-}
-const Endpoint13_2 = (raw: RawClient["server.form"]) => (input: Endpoint13_2Input) =>
-  raw["session.form.get"]({
-    params: { sessionID: input["sessionID"], formID: input["formID"] },
-    query: { location: input["location"] },
-  }).pipe(Effect.mapError(mapClientError))
-
-type Endpoint13_3Request = Parameters<RawClient["server.form"]["session.form.state"]>[0]
+type Endpoint13_3Request = Parameters<RawClient["server.form"]["session.form.get"]>[0]
 type Endpoint13_3Input = {
   readonly sessionID: Endpoint13_3Request["params"]["sessionID"]
   readonly formID: Endpoint13_3Request["params"]["formID"]
   readonly location?: Endpoint13_3Request["query"]["location"]
 }
 const Endpoint13_3 = (raw: RawClient["server.form"]) => (input: Endpoint13_3Input) =>
+  raw["session.form.get"]({
+    params: { sessionID: input["sessionID"], formID: input["formID"] },
+    query: { location: input["location"] },
+  }).pipe(Effect.mapError(mapClientError))
+
+type Endpoint13_4Request = Parameters<RawClient["server.form"]["session.form.state"]>[0]
+type Endpoint13_4Input = {
+  readonly sessionID: Endpoint13_4Request["params"]["sessionID"]
+  readonly formID: Endpoint13_4Request["params"]["formID"]
+  readonly location?: Endpoint13_4Request["query"]["location"]
+}
+const Endpoint13_4 = (raw: RawClient["server.form"]) => (input: Endpoint13_4Input) =>
   raw["session.form.state"]({
     params: { sessionID: input["sessionID"], formID: input["formID"] },
     query: { location: input["location"] },
   }).pipe(Effect.mapError(mapClientError))
 
-type Endpoint13_4Request = Parameters<RawClient["server.form"]["session.form.reply"]>[0]
-type Endpoint13_4Input = {
-  readonly sessionID: Endpoint13_4Request["params"]["sessionID"]
-  readonly formID: Endpoint13_4Request["params"]["formID"]
-  readonly location?: Endpoint13_4Request["query"]["location"]
-  readonly answer: Endpoint13_4Request["payload"]["answer"]
+type Endpoint13_5Request = Parameters<RawClient["server.form"]["session.form.reply"]>[0]
+type Endpoint13_5Input = {
+  readonly sessionID: Endpoint13_5Request["params"]["sessionID"]
+  readonly formID: Endpoint13_5Request["params"]["formID"]
+  readonly location?: Endpoint13_5Request["query"]["location"]
+  readonly answer: Endpoint13_5Request["payload"]["answer"]
 }
-const Endpoint13_4 = (raw: RawClient["server.form"]) => (input: Endpoint13_4Input) =>
+const Endpoint13_5 = (raw: RawClient["server.form"]) => (input: Endpoint13_5Input) =>
   raw["session.form.reply"]({
     params: { sessionID: input["sessionID"], formID: input["formID"] },
     query: { location: input["location"] },
     payload: { answer: input["answer"] },
   }).pipe(Effect.mapError(mapClientError))
 
-type Endpoint13_5Request = Parameters<RawClient["server.form"]["session.form.cancel"]>[0]
-type Endpoint13_5Input = {
-  readonly sessionID: Endpoint13_5Request["params"]["sessionID"]
-  readonly formID: Endpoint13_5Request["params"]["formID"]
-  readonly location?: Endpoint13_5Request["query"]["location"]
+type Endpoint13_6Request = Parameters<RawClient["server.form"]["session.form.cancel"]>[0]
+type Endpoint13_6Input = {
+  readonly sessionID: Endpoint13_6Request["params"]["sessionID"]
+  readonly formID: Endpoint13_6Request["params"]["formID"]
+  readonly location?: Endpoint13_6Request["query"]["location"]
 }
-const Endpoint13_5 = (raw: RawClient["server.form"]) => (input: Endpoint13_5Input) =>
+const Endpoint13_6 = (raw: RawClient["server.form"]) => (input: Endpoint13_6Input) =>
   raw["session.form.cancel"]({
     params: { sessionID: input["sessionID"], formID: input["formID"] },
     query: { location: input["location"] },
   }).pipe(Effect.mapError(mapClientError))
 
 const adaptGroup13 = (raw: RawClient["server.form"]) => ({
-  list: Endpoint13_0(raw),
-  create: Endpoint13_1(raw),
-  get: Endpoint13_2(raw),
-  state: Endpoint13_3(raw),
-  reply: Endpoint13_4(raw),
-  cancel: Endpoint13_5(raw),
+  listRequests: Endpoint13_0(raw),
+  list: Endpoint13_1(raw),
+  create: Endpoint13_2(raw),
+  get: Endpoint13_3(raw),
+  state: Endpoint13_4(raw),
+  reply: Endpoint13_5(raw),
+  cancel: Endpoint13_6(raw),
 })
 
 type Endpoint14_0Request = Parameters<RawClient["server.permission"]["permission.request.list"]>[0]
@@ -849,99 +855,57 @@ const adaptGroup20 = (raw: RawClient["server.shell"]) => ({
   remove: Endpoint20_4(raw),
 })
 
-type Endpoint21_0Request = Parameters<RawClient["server.question"]["question.request.list"]>[0]
+type Endpoint21_0Request = Parameters<RawClient["server.reference"]["reference.list"]>[0]
 type Endpoint21_0Input = { readonly location?: Endpoint21_0Request["query"]["location"] }
-const Endpoint21_0 = (raw: RawClient["server.question"]) => (input?: Endpoint21_0Input) =>
-  raw["question.request.list"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError))
-
-type Endpoint21_1Request = Parameters<RawClient["server.question"]["session.question.list"]>[0]
-type Endpoint21_1Input = { readonly sessionID: Endpoint21_1Request["params"]["sessionID"] }
-const Endpoint21_1 = (raw: RawClient["server.question"]) => (input: Endpoint21_1Input) =>
-  raw["session.question.list"]({ params: { sessionID: input["sessionID"] } }).pipe(
-    Effect.mapError(mapClientError),
-    Effect.map((value) => value.data),
-  )
-
-type Endpoint21_2Request = Parameters<RawClient["server.question"]["session.question.reply"]>[0]
-type Endpoint21_2Input = {
-  readonly sessionID: Endpoint21_2Request["params"]["sessionID"]
-  readonly requestID: Endpoint21_2Request["params"]["requestID"]
-  readonly answers: Endpoint21_2Request["payload"]["answers"]
-}
-const Endpoint21_2 = (raw: RawClient["server.question"]) => (input: Endpoint21_2Input) =>
-  raw["session.question.reply"]({
-    params: { sessionID: input["sessionID"], requestID: input["requestID"] },
-    payload: { answers: input["answers"] },
-  }).pipe(Effect.mapError(mapClientError))
-
-type Endpoint21_3Request = Parameters<RawClient["server.question"]["session.question.reject"]>[0]
-type Endpoint21_3Input = {
-  readonly sessionID: Endpoint21_3Request["params"]["sessionID"]
-  readonly requestID: Endpoint21_3Request["params"]["requestID"]
-}
-const Endpoint21_3 = (raw: RawClient["server.question"]) => (input: Endpoint21_3Input) =>
-  raw["session.question.reject"]({ params: { sessionID: input["sessionID"], requestID: input["requestID"] } }).pipe(
-    Effect.mapError(mapClientError),
-  )
-
-const adaptGroup21 = (raw: RawClient["server.question"]) => ({
-  listRequests: Endpoint21_0(raw),
-  list: Endpoint21_1(raw),
-  reply: Endpoint21_2(raw),
-  reject: Endpoint21_3(raw),
-})
-
-type Endpoint22_0Request = Parameters<RawClient["server.reference"]["reference.list"]>[0]
-type Endpoint22_0Input = { readonly location?: Endpoint22_0Request["query"]["location"] }
-const Endpoint22_0 = (raw: RawClient["server.reference"]) => (input?: Endpoint22_0Input) =>
+const Endpoint21_0 = (raw: RawClient["server.reference"]) => (input?: Endpoint21_0Input) =>
   raw["reference.list"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError))
 
-const adaptGroup22 = (raw: RawClient["server.reference"]) => ({ list: Endpoint22_0(raw) })
+const adaptGroup21 = (raw: RawClient["server.reference"]) => ({ list: Endpoint21_0(raw) })
 
-type Endpoint23_0Request = Parameters<RawClient["server.projectCopy"]["projectCopy.create"]>[0]
-type Endpoint23_0Input = {
-  readonly projectID: Endpoint23_0Request["params"]["projectID"]
-  readonly location?: Endpoint23_0Request["query"]["location"]
-  readonly strategy: Endpoint23_0Request["payload"]["strategy"]
-  readonly directory: Endpoint23_0Request["payload"]["directory"]
-  readonly name?: Endpoint23_0Request["payload"]["name"]
+type Endpoint22_0Request = Parameters<RawClient["server.projectCopy"]["projectCopy.create"]>[0]
+type Endpoint22_0Input = {
+  readonly projectID: Endpoint22_0Request["params"]["projectID"]
+  readonly location?: Endpoint22_0Request["query"]["location"]
+  readonly strategy: Endpoint22_0Request["payload"]["strategy"]
+  readonly directory: Endpoint22_0Request["payload"]["directory"]
+  readonly name?: Endpoint22_0Request["payload"]["name"]
 }
-const Endpoint23_0 = (raw: RawClient["server.projectCopy"]) => (input: Endpoint23_0Input) =>
+const Endpoint22_0 = (raw: RawClient["server.projectCopy"]) => (input: Endpoint22_0Input) =>
   raw["projectCopy.create"]({
     params: { projectID: input["projectID"] },
     query: { location: input["location"] },
     payload: { strategy: input["strategy"], directory: input["directory"], name: input["name"] },
   }).pipe(Effect.mapError(mapClientError))
 
-type Endpoint23_1Request = Parameters<RawClient["server.projectCopy"]["projectCopy.remove"]>[0]
-type Endpoint23_1Input = {
-  readonly projectID: Endpoint23_1Request["params"]["projectID"]
-  readonly location?: Endpoint23_1Request["query"]["location"]
-  readonly directory: Endpoint23_1Request["payload"]["directory"]
-  readonly force: Endpoint23_1Request["payload"]["force"]
+type Endpoint22_1Request = Parameters<RawClient["server.projectCopy"]["projectCopy.remove"]>[0]
+type Endpoint22_1Input = {
+  readonly projectID: Endpoint22_1Request["params"]["projectID"]
+  readonly location?: Endpoint22_1Request["query"]["location"]
+  readonly directory: Endpoint22_1Request["payload"]["directory"]
+  readonly force: Endpoint22_1Request["payload"]["force"]
 }
-const Endpoint23_1 = (raw: RawClient["server.projectCopy"]) => (input: Endpoint23_1Input) =>
+const Endpoint22_1 = (raw: RawClient["server.projectCopy"]) => (input: Endpoint22_1Input) =>
   raw["projectCopy.remove"]({
     params: { projectID: input["projectID"] },
     query: { location: input["location"] },
     payload: { directory: input["directory"], force: input["force"] },
   }).pipe(Effect.mapError(mapClientError))
 
-type Endpoint23_2Request = Parameters<RawClient["server.projectCopy"]["projectCopy.refresh"]>[0]
-type Endpoint23_2Input = {
-  readonly projectID: Endpoint23_2Request["params"]["projectID"]
-  readonly location?: Endpoint23_2Request["query"]["location"]
+type Endpoint22_2Request = Parameters<RawClient["server.projectCopy"]["projectCopy.refresh"]>[0]
+type Endpoint22_2Input = {
+  readonly projectID: Endpoint22_2Request["params"]["projectID"]
+  readonly location?: Endpoint22_2Request["query"]["location"]
 }
-const Endpoint23_2 = (raw: RawClient["server.projectCopy"]) => (input: Endpoint23_2Input) =>
+const Endpoint22_2 = (raw: RawClient["server.projectCopy"]) => (input: Endpoint22_2Input) =>
   raw["projectCopy.refresh"]({
     params: { projectID: input["projectID"] },
     query: { location: input["location"] },
   }).pipe(Effect.mapError(mapClientError))
 
-const adaptGroup23 = (raw: RawClient["server.projectCopy"]) => ({
-  create: Endpoint23_0(raw),
-  remove: Endpoint23_1(raw),
-  refresh: Endpoint23_2(raw),
+const adaptGroup22 = (raw: RawClient["server.projectCopy"]) => ({
+  create: Endpoint22_0(raw),
+  remove: Endpoint22_1(raw),
+  refresh: Endpoint22_2(raw),
 })
 
 const adaptClient = (raw: RawClient) => ({
@@ -966,9 +930,8 @@ const adaptClient = (raw: RawClient) => ({
   event: adaptGroup18(raw["server.event"]),
   pty: adaptGroup19(raw["server.pty"]),
   shell: adaptGroup20(raw["server.shell"]),
-  question: adaptGroup21(raw["server.question"]),
-  reference: adaptGroup22(raw["server.reference"]),
-  projectCopy: adaptGroup23(raw["server.projectCopy"]),
+  reference: adaptGroup21(raw["server.reference"]),
+  projectCopy: adaptGroup22(raw["server.projectCopy"]),
 })
 
 export const make = (options?: { readonly baseUrl?: URL | string }) =>

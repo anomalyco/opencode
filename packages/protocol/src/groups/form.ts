@@ -20,10 +20,31 @@ export type CreatePayload = typeof CreatePayload.Type
 // SessionLocationMiddleware. The middleware treats real session IDs normally and has an
 // undocumented `global` sentinel branch for MCP elicitation forms that are still Location-scoped
 // but not session-owned. This is temporary and should disappear once elicitations are attributable.
-export const makeFormGroup = <FormLocationId extends HttpApiMiddleware.AnyId, FormLocationService>(
+export const makeFormGroup = <
+  LocationId extends HttpApiMiddleware.AnyId,
+  LocationService,
+  FormLocationId extends HttpApiMiddleware.AnyId,
+  FormLocationService,
+>(
+  locationMiddleware: Context.Key<LocationId, LocationService>,
   formLocationMiddleware: Context.Key<FormLocationId, FormLocationService>,
 ) =>
   HttpApiGroup.make("server.form")
+    .add(
+      HttpApiEndpoint.get("form.request.list", "/api/form/request", {
+        query: LocationQuery,
+        success: Location.response(Schema.Array(Form.Info)),
+      })
+        .annotateMerge(locationQueryOpenApi)
+        .annotateMerge(
+          OpenApi.annotations({
+            identifier: "v2.form.request.list",
+            summary: "List pending form requests",
+            description: "Retrieve pending forms for a location.",
+          }),
+        ),
+    )
+    .middleware(locationMiddleware)
     .add(
       HttpApiEndpoint.get("session.form.list", "/api/session/:sessionID/form", {
         params: { sessionID: Schema.String },
@@ -37,7 +58,8 @@ export const makeFormGroup = <FormLocationId extends HttpApiMiddleware.AnyId, Fo
             summary: "List session forms",
             description: "Retrieve pending forms for a session.",
           }),
-        ),
+        )
+        .middleware(formLocationMiddleware),
     )
     .add(
       HttpApiEndpoint.post("session.form.create", "/api/session/:sessionID/form", {
@@ -54,7 +76,8 @@ export const makeFormGroup = <FormLocationId extends HttpApiMiddleware.AnyId, Fo
             summary: "Create session form",
             description: "Create a form for a session.",
           }),
-        ),
+        )
+        .middleware(formLocationMiddleware),
     )
     .add(
       HttpApiEndpoint.get("session.form.get", "/api/session/:sessionID/form/:formID", {
@@ -70,7 +93,8 @@ export const makeFormGroup = <FormLocationId extends HttpApiMiddleware.AnyId, Fo
             summary: "Get session form",
             description: "Retrieve a form for a session.",
           }),
-        ),
+        )
+        .middleware(formLocationMiddleware),
     )
     .add(
       HttpApiEndpoint.get("session.form.state", "/api/session/:sessionID/form/:formID/state", {
@@ -86,7 +110,8 @@ export const makeFormGroup = <FormLocationId extends HttpApiMiddleware.AnyId, Fo
             summary: "Get form state",
             description: "Retrieve the current state for a form.",
           }),
-        ),
+        )
+        .middleware(formLocationMiddleware),
     )
     .add(
       HttpApiEndpoint.post("session.form.reply", "/api/session/:sessionID/form/:formID/reply", {
@@ -103,7 +128,8 @@ export const makeFormGroup = <FormLocationId extends HttpApiMiddleware.AnyId, Fo
             summary: "Reply to form",
             description: "Submit an answer to a pending form.",
           }),
-        ),
+        )
+        .middleware(formLocationMiddleware),
     )
     .add(
       HttpApiEndpoint.post("session.form.cancel", "/api/session/:sessionID/form/:formID/cancel", {
@@ -119,7 +145,7 @@ export const makeFormGroup = <FormLocationId extends HttpApiMiddleware.AnyId, Fo
             summary: "Cancel form",
             description: "Cancel a pending form.",
           }),
-        ),
+        )
+        .middleware(formLocationMiddleware),
     )
     .annotateMerge(OpenApi.annotations({ title: "forms", description: "Session form routes." }))
-    .middleware(formLocationMiddleware)
