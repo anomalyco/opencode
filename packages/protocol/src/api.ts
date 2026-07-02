@@ -8,6 +8,7 @@ import { ProviderGroup } from "./groups/provider"
 import { makeSessionGroup } from "./groups/session"
 import { makePermissionGroup } from "./groups/permission"
 import { FileSystemGroup } from "./groups/fs"
+import { makeFormGroup } from "./groups/form"
 import { CommandGroup } from "./groups/command"
 import { SkillGroup } from "./groups/skill"
 import { EventGroup, makeEventGroup } from "./groups/event"
@@ -32,11 +33,14 @@ const makeApiFromGroup = <
   const Group extends HttpApiGroup.Any,
   LocationId extends HttpApiMiddleware.AnyId,
   LocationService,
+  FormLocationId extends HttpApiMiddleware.AnyId,
+  FormLocationService,
   SessionLocationId extends HttpApiMiddleware.AnyId,
   SessionLocationService,
 >(
   eventGroup: Group,
   locationMiddleware: Context.Key<LocationId, LocationService>,
+  formLocationMiddleware: Context.Key<FormLocationId, FormLocationService>,
   sessionLocationMiddleware: Context.Key<SessionLocationId, SessionLocationService>,
 ) =>
   HttpApi.make("server")
@@ -53,6 +57,7 @@ const makeApiFromGroup = <
     .add(McpGroup.middleware(locationMiddleware))
     .add(CredentialGroup.middleware(locationMiddleware))
     .add(ProjectGroup.middleware(locationMiddleware))
+    .add(makeFormGroup(formLocationMiddleware))
     .add(makePermissionGroup(locationMiddleware, sessionLocationMiddleware))
     .add(FileSystemGroup.middleware(locationMiddleware))
     .add(CommandGroup.middleware(locationMiddleware))
@@ -76,21 +81,32 @@ const makeApiFromGroup = <
 export const makeApi = <
   LocationId extends HttpApiMiddleware.AnyId,
   LocationService,
+  FormLocationId extends HttpApiMiddleware.AnyId,
+  FormLocationService,
   SessionLocationId extends HttpApiMiddleware.AnyId,
   SessionLocationService,
 >(options: {
   readonly definitions: ReadonlyArray<Definition>
   readonly locationMiddleware: Context.Key<LocationId, LocationService>
+  readonly formLocationMiddleware: Context.Key<FormLocationId, FormLocationService>
   readonly sessionLocationMiddleware: Context.Key<SessionLocationId, SessionLocationService>
 }) =>
-  makeApiFromGroup(makeEventGroup(options.definitions), options.locationMiddleware, options.sessionLocationMiddleware)
+  makeApiFromGroup(
+    makeEventGroup(options.definitions),
+    options.locationMiddleware,
+    options.formLocationMiddleware,
+    options.sessionLocationMiddleware,
+  )
 
 export const makeDefaultApi = <
   LocationId extends HttpApiMiddleware.AnyId,
   LocationService,
+  FormLocationId extends HttpApiMiddleware.AnyId,
+  FormLocationService,
   SessionLocationId extends HttpApiMiddleware.AnyId,
   SessionLocationService,
 >(options: {
   readonly locationMiddleware: Context.Key<LocationId, LocationService>
+  readonly formLocationMiddleware: Context.Key<FormLocationId, FormLocationService>
   readonly sessionLocationMiddleware: Context.Key<SessionLocationId, SessionLocationService>
-}) => makeApiFromGroup(EventGroup, options.locationMiddleware, options.sessionLocationMiddleware)
+}) => makeApiFromGroup(EventGroup, options.locationMiddleware, options.formLocationMiddleware, options.sessionLocationMiddleware)

@@ -26,7 +26,7 @@ export function response<A, E, R>(data: Effect.Effect<A, E, R>) {
   })
 }
 
-function ref(request: HttpServerRequest.HttpServerRequest): Location.Ref {
+export function requestRef(request: HttpServerRequest.HttpServerRequest): Location.Ref {
   const query = new URL(request.url, "http://localhost").searchParams
   const workspaceID = query.get("location[workspace]") || request.headers["x-opencode-workspace"]
   const directory =
@@ -53,7 +53,7 @@ export const layer = Layer.effect(
     return LocationMiddleware.of((effect) =>
       Effect.gen(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest
-        return yield* effect.pipe(Effect.provide(locations.get(ref(request))))
+        return yield* effect.pipe(Effect.provide(locations.get(requestRef(request))))
       }),
     )
   }),

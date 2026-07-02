@@ -13,6 +13,9 @@ class SessionLocationMiddleware extends HttpApiMiddleware.Service<SessionLocatio
 
 export const ClientApi = makeDefaultApi({
   locationMiddleware: LocationMiddleware,
+  // The real server uses a form-specific middleware with an undocumented `global` sentinel branch.
+  // The generated client only needs a middleware identity for API typing.
+  formLocationMiddleware: SessionLocationMiddleware,
   sessionLocationMiddleware: SessionLocationMiddleware,
 })
 
@@ -29,6 +32,7 @@ export const groupNames = {
   "server.integration": "integration",
   "server.credential": "credential",
   "server.permission": "permission",
+  "server.form": "form",
   "server.fs": "file",
   "server.command": "command",
   "server.skill": "skill",

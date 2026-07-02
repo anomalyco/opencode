@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { SessionEvent } from "@opencode-ai/core/session/event"
-import { Agent } from "@opencode-ai/schema"
+import { Agent, Form } from "@opencode-ai/schema"
 import { EventManifest as SchemaEventManifest } from "@opencode-ai/schema/event-manifest"
 import { Todo } from "@/session/todo"
 import { EventManifest } from "@/event-manifest"
@@ -10,9 +10,12 @@ describe("public event manifest", () => {
     expect(EventManifest.Definitions).toBe(SchemaEventManifest.Definitions)
     expect(EventManifest.Latest).toBe(SchemaEventManifest.Latest)
     expect(EventManifest.Durable).toBe(SchemaEventManifest.Durable)
-    expect(Array.from(EventManifest.Latest.keys()).filter((type) => type !== "agent.updated").length).toBe(93)
+    expect(Array.from(EventManifest.Latest.keys()).filter((type) => type !== "agent.updated").length).toBe(98)
     expect(EventManifest.Latest.get("session.next.step.ended")).toBe(SessionEvent.Step.Ended)
     expect(EventManifest.Latest.get("agent.updated")).toBe(Agent.Event.Updated)
+    expect(EventManifest.Latest.get("form.created")).toBe(Form.Event.Created)
+    expect(EventManifest.Latest.get("form.replied")).toBe(Form.Event.Replied)
+    expect(EventManifest.Latest.get("form.cancelled")).toBe(Form.Event.Cancelled)
     expect(EventManifest.Latest.get("todo.updated")).toBe(Todo.Event.Updated)
     expect(EventManifest.Latest.has("ide.installed")).toBe(false)
     expect(EventManifest.Latest.has("server.connected")).toBe(true)
