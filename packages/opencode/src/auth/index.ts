@@ -11,6 +11,10 @@ const file = path.join(Global.Path.data, "auth.json")
 
 const fail = (message: string) => (cause: unknown) => new AuthError({ message, cause })
 
+// Identity fields decoded from the Microsoft ID token JWT (no signature
+// verification — trust comes from the Microsoft token response, not local
+// decode). Legacy `auth.json` files written before these fields existed
+// continue to parse: every field is optional on read.
 export class Oauth extends Schema.Class<Oauth>("OAuth")({
   type: Schema.Literal("oauth"),
   refresh: Schema.String,
@@ -18,6 +22,9 @@ export class Oauth extends Schema.Class<Oauth>("OAuth")({
   expires: NonNegativeInt,
   accountId: Schema.optional(Schema.String),
   enterpriseUrl: Schema.optional(Schema.String),
+  email: Schema.optional(Schema.String),
+  displayName: Schema.optional(Schema.String),
+  tenantId: Schema.optional(Schema.String),
 }) {}
 
 export class Api extends Schema.Class<Api>("ApiAuth")({
@@ -95,5 +102,7 @@ export const layer = Layer.effect(
 export const defaultLayer = layer.pipe(Layer.provide(FSUtil.defaultLayer))
 
 export const node = LayerNode.make(layer, [FSUtil.node])
+
+export { parseJwtClaims, type JwtClaims } from "./jwt"
 
 export * as Auth from "."
