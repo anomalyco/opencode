@@ -451,15 +451,20 @@ const layer = Layer.effect(
       )
 
       if (!client.getServerCapabilities()?.tools) return
+      let debounceTimer: ReturnType<typeof setTimeout> | undefined
       client.setNotificationHandler(ToolListChangedNotificationSchema, async () => {
-        if (s.clients[name] !== client || s.status[name]?.status !== "connected") return
+        if (debounceTimer) clearTimeout(debounceTimer)
+        debounceTimer = setTimeout(async () => {
+          debounceTimer = undefined
+          if (s.clients[name] !== client || s.status[name]?.status !== "connected") return
 
-        const listed = await bridge.promise(McpCatalog.defs(client, timeout))
-        if (!listed) return
-        if (s.clients[name] !== client || s.status[name]?.status !== "connected") return
+          const listed = await bridge.promise(McpCatalog.defs(client, timeout))
+          if (!listed) return
+          if (s.clients[name] !== client || s.status[name]?.status !== "connected") return
 
-        s.defs[name] = listed
-        await bridge.promise(events.publish(ToolsChanged, { server: name }).pipe(Effect.ignore))
+          s.defs[name] = listed
+          await bridge.promise(events.publish(ToolsChanged, { server: name }).pipe(Effect.ignore))
+        }, 1000)
       })
     }
 

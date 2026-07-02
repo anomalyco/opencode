@@ -101,6 +101,7 @@ const layer = Layer.effect(
 
       if (direction === "head") {
         for (i = 0; i < lines.length && i < maxLines; i++) {
+          if (i % 100 === 0) yield* Effect.yieldNow
           const size = Buffer.byteLength(lines[i], "utf-8") + (i > 0 ? 1 : 0)
           if (bytes + size > maxBytes) {
             hitBytes = true
@@ -111,6 +112,7 @@ const layer = Layer.effect(
         }
       } else {
         for (i = lines.length - 1; i >= 0 && out.length < maxLines; i--) {
+          if ((lines.length - 1 - i) % 100 === 0) yield* Effect.yieldNow
           const size = Buffer.byteLength(lines[i], "utf-8") + (out.length > 0 ? 1 : 0)
           if (bytes + size > maxBytes) {
             hitBytes = true

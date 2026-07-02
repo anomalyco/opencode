@@ -418,7 +418,9 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
 
           const textParts: string[] = []
           const attachments: Omit<SessionV1.FilePart, "id" | "sessionID" | "messageID">[] = []
+          let yieldCounter = 0
           for (const contentItem of result.content) {
+            if (++yieldCounter % 50 === 0) yield* Effect.yieldNow
             if (contentItem.type === "text") textParts.push(contentItem.text)
             else if (contentItem.type === "image") {
               attachments.push({
