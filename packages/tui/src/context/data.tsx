@@ -636,6 +636,9 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         error() {
           return sdk.connection.error()
         },
+        connectedOnce() {
+          return sdk.connection.connectedOnce()
+        },
       },
       session: {
         list() {

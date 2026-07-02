@@ -25,9 +25,11 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
       status: SDKConnectionStatus
       attempt: number
       error?: string
+      connectedOnce: boolean
     }>({
       status: "connecting",
       attempt: 0,
+      connectedOnce: false,
     })
     let stream: AbortController | undefined
     let pending: Promise<void> | undefined
@@ -68,7 +70,7 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
             clearTimeout(timeout)
             attempt = 0
             events.emit(first.value.type, first.value)
-            setConnection({ status: "connected", attempt: 0, error: undefined })
+            setConnection({ status: "connected", attempt: 0, error: undefined, connectedOnce: true })
             connected()
             while (!abort.signal.aborted && !controller.signal.aborted) {
               const event = await iterator.next()
@@ -139,6 +141,9 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
         },
         error() {
           return connection.error
+        },
+        connectedOnce() {
+          return connection.connectedOnce
         },
       },
       reload,
