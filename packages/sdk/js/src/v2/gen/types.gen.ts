@@ -12540,6 +12540,7 @@ export type V2SessionListData = {
      */
     order?: "asc" | "desc" | null
     search?: string | null
+    parentID?: string | "null" | null
     directory?: string | null
     project?: string | null
     subpath?: string | null

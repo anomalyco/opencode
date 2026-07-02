@@ -356,6 +356,7 @@ export function make(options: ClientOptions) {
               limit: input?.["limit"],
               order: input?.["order"],
               search: input?.["search"],
+              parentID: input?.["parentID"],
               directory: input?.["directory"],
               project: input?.["project"],
               subpath: input?.["subpath"],
@@ -1361,7 +1362,11 @@ function encodePath(value: string): string {
 }
 
 function appendQuery(params: URLSearchParams, key: string, value: unknown): void {
-  if (value === undefined || value === null) return
+  if (value === undefined) return
+  if (value === null) {
+    params.append(key, "null")
+    return
+  }
   if (Array.isArray(value)) {
     for (const item of value) appendQuery(params, key, item)
     return

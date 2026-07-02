@@ -14,7 +14,12 @@ export const createQuerySerializer = <T = unknown>({ parameters = {}, ...args }:
       for (const name in queryParams) {
         const value = queryParams[name]
 
-        if (value === undefined || value === null) {
+        if (value === undefined) {
+          continue
+        }
+
+        if (value === null) {
+          search.push(`${name}=null`)
           continue
         }
 
