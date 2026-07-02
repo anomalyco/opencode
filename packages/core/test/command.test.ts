@@ -2,11 +2,13 @@ import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { CommandV2 } from "@opencode-ai/core/command"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { MCP } from "@opencode-ai/core/mcp/index"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { emptyMcpLayer } from "./fixture/mcp"
 import { testEffect } from "./lib/effect"
 
-const it = testEffect(AppNodeBuilder.build(CommandV2.node))
+const it = testEffect(AppNodeBuilder.build(CommandV2.node, [[MCP.node, emptyMcpLayer]]))
 
 describe("CommandV2", () => {
   it.effect("applies command transforms and preserves later overrides", () =>

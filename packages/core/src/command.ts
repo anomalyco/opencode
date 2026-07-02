@@ -89,7 +89,7 @@ const layer = Layer.effect(
         return [
           ...commands,
           ...(yield* mcpCommands()).filter((command) => !names.has(command.name)),
-        ].toSorted((a, b) => a.name.localeCompare(b.name))
+        ]
       }),
       evaluate: Effect.fn("CommandV2.evaluate")(function* (input) {
         const command = staticCommand(input.name)

@@ -142,7 +142,9 @@ import type {
   ProjectListResponses,
   ProjectUpdateErrors,
   ProjectUpdateResponses,
+  PromptAgentAttachment,
   PromptInput,
+  PromptInputFileAttachment,
   ProviderAuthErrors,
   ProviderAuthResponses,
   ProviderListErrors,
@@ -347,6 +349,8 @@ import type {
   V2SessionActiveResponses,
   V2SessionBackgroundErrors,
   V2SessionBackgroundResponses,
+  V2SessionCommandErrors,
+  V2SessionCommandResponses,
   V2SessionCompactErrors,
   V2SessionCompactResponses,
   V2SessionContextErrors,
@@ -399,6 +403,8 @@ import type {
   V2SessionSwitchAgentResponses,
   V2SessionSwitchModelErrors,
   V2SessionSwitchModelResponses,
+  V2SessionSyntheticErrors,
+  V2SessionSyntheticResponses,
   V2SessionWaitErrors,
   V2SessionWaitResponses,
   V2ShellCreateErrors,
@@ -5778,6 +5784,57 @@ export class Session3 extends HeyApiClient {
   }
 
   /**
+   * Run command
+   *
+   * Resolve a slash command into prompt input, admit it durably, and schedule execution unless resume is false.
+   */
+  public command<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      id?: string
+      command?: string
+      arguments?: string
+      agent?: string
+      model?: ModelRef
+      files?: Array<PromptInputFileAttachment>
+      agents?: Array<PromptAgentAttachment>
+      delivery?: "steer" | "queue"
+      resume?: boolean
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "body", key: "id" },
+            { in: "body", key: "command" },
+            { in: "body", key: "arguments" },
+            { in: "body", key: "agent" },
+            { in: "body", key: "model" },
+            { in: "body", key: "files" },
+            { in: "body", key: "agents" },
+            { in: "body", key: "delivery" },
+            { in: "body", key: "resume" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<V2SessionCommandResponses, V2SessionCommandErrors, ThrowOnError>({
+      url: "/api/session/{sessionID}/command",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
    * Activate skill
    *
    * Activate a skill for a session by appending a skill message and resuming execution.
@@ -5806,6 +5863,47 @@ export class Session3 extends HeyApiClient {
     )
     return (options?.client ?? this.client).post<V2SessionSkillResponses, V2SessionSkillErrors, ThrowOnError>({
       url: "/api/session/{sessionID}/skill",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Add synthetic message
+   *
+   * Append a synthetic message to a session and resume execution.
+   */
+  public synthetic<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      text?: string
+      description?: string
+      metadata?: {
+        [key: string]: unknown
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "body", key: "text" },
+            { in: "body", key: "description" },
+            { in: "body", key: "metadata" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<V2SessionSyntheticResponses, V2SessionSyntheticErrors, ThrowOnError>({
+      url: "/api/session/{sessionID}/synthetic",
       ...options,
       ...params,
       headers: {

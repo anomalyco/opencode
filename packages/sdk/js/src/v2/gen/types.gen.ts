@@ -63,6 +63,7 @@ export type Event =
   | EventPermissionV2Replied
   | EventPluginAdded
   | EventProjectDirectoriesUpdated
+  | EventCommandUpdated
   | EventSkillUpdated
   | EventFileWatcherUpdated
   | EventPtyCreated
@@ -942,6 +943,9 @@ export type GlobalEvent = {
           messageID: string
           text: string
           description?: string
+          metadata?: {
+            [key: string]: unknown
+          }
         }
       }
     | {
@@ -1354,6 +1358,13 @@ export type GlobalEvent = {
         type: "project.directories.updated"
         properties: {
           projectID: string
+        }
+      }
+    | {
+        id: string
+        type: "command.updated"
+        properties: {
+          [key: string]: unknown
         }
       }
     | {
@@ -2826,6 +2837,18 @@ export type ConflictError = {
   resource?: string
 }
 
+export type CommandNotFoundError = {
+  _tag: "CommandNotFoundError"
+  command: string
+  message: string
+}
+
+export type CommandEvaluationError = {
+  _tag: "CommandEvaluationError"
+  command: string
+  message: string
+}
+
 export type SkillNotFoundError = {
   _tag: "SkillNotFoundError"
   skill: string
@@ -3046,6 +3069,7 @@ export type V2Event =
   | PermissionV2Replied
   | PluginAdded
   | ProjectDirectoriesUpdated
+  | CommandUpdated
   | SkillUpdated
   | FileWatcherUpdated
   | PtyCreated
@@ -3618,6 +3642,9 @@ export type SyncEventSessionNextSynthetic = {
       messageID: string
       text: string
       description?: string
+      metadata?: {
+        [key: string]: unknown
+      }
     }
   }
 }
@@ -4583,6 +4610,9 @@ export type SessionNextSynthetic = {
     messageID: string
     text: string
     description?: string
+    metadata?: {
+      [key: string]: unknown
+    }
   }
 }
 
@@ -5875,6 +5905,23 @@ export type ProjectDirectoriesUpdated = {
   }
 }
 
+export type CommandUpdated = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "command.updated"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    [key: string]: unknown
+  }
+}
+
 export type SkillUpdated = {
   id: string
   metadata?: {
@@ -6806,6 +6853,9 @@ export type EventSessionNextSynthetic = {
     messageID: string
     text: string
     description?: string
+    metadata?: {
+      [key: string]: unknown
+    }
   }
 }
 
@@ -7255,6 +7305,14 @@ export type EventProjectDirectoriesUpdated = {
   type: "project.directories.updated"
   properties: {
     projectID: string
+  }
+}
+
+export type EventCommandUpdated = {
+  id: string
+  type: "command.updated"
+  properties: {
+    [key: string]: unknown
   }
 }
 
@@ -12245,6 +12303,61 @@ export type V2SessionPromptResponses = {
 
 export type V2SessionPromptResponse = V2SessionPromptResponses[keyof V2SessionPromptResponses]
 
+export type V2SessionCommandData = {
+  body: {
+    id?: string
+    command: string
+    arguments?: string
+    agent?: string
+    model?: ModelRef
+    files?: Array<PromptInputFileAttachment>
+    agents?: Array<PromptAgentAttachment>
+    delivery?: "steer" | "queue"
+    resume?: boolean
+  }
+  path: {
+    sessionID: string
+  }
+  query?: never
+  url: "/api/session/{sessionID}/command"
+}
+
+export type V2SessionCommandErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * SessionNotFoundError | CommandNotFoundError
+   */
+  404: CommandNotFoundError | SessionNotFoundError
+  /**
+   * ConflictError
+   */
+  409: ConflictError
+  /**
+   * CommandEvaluationError
+   */
+  500: CommandEvaluationError
+}
+
+export type V2SessionCommandError = V2SessionCommandErrors[keyof V2SessionCommandErrors]
+
+export type V2SessionCommandResponses = {
+  /**
+   * Success
+   */
+  200: {
+    data: SessionInputAdmitted
+  }
+}
+
+export type V2SessionCommandResponse = V2SessionCommandResponses[keyof V2SessionCommandResponses]
+
 export type V2SessionSkillData = {
   body: {
     id?: string
@@ -12283,6 +12396,47 @@ export type V2SessionSkillResponses = {
 }
 
 export type V2SessionSkillResponse = V2SessionSkillResponses[keyof V2SessionSkillResponses]
+
+export type V2SessionSyntheticData = {
+  body: {
+    text: string
+    description?: string
+    metadata?: {
+      [key: string]: unknown
+    }
+  }
+  path: {
+    sessionID: string
+  }
+  query?: never
+  url: "/api/session/{sessionID}/synthetic"
+}
+
+export type V2SessionSyntheticErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * SessionNotFoundError
+   */
+  404: SessionNotFoundError
+}
+
+export type V2SessionSyntheticError = V2SessionSyntheticErrors[keyof V2SessionSyntheticErrors]
+
+export type V2SessionSyntheticResponses = {
+  /**
+   * <No Content>
+   */
+  204: void
+}
+
+export type V2SessionSyntheticResponse = V2SessionSyntheticResponses[keyof V2SessionSyntheticResponses]
 
 export type V2SessionCompactData = {
   body?: never
