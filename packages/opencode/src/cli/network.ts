@@ -30,6 +30,11 @@ const options = {
     describe: "additional domains to allow for CORS",
     default: [] as string[],
   },
+  "base-path": {
+    type: "string" as const,
+    describe: "base path for the web UI (e.g., /opencode/)",
+    default: "/",
+  },
 }
 
 export type NetworkOptions = InferredOptionTypes<typeof options>
@@ -75,6 +80,7 @@ export function resolveNetworkOptionsNoConfig(args: NetworkOptions, config?: Con
   const configCors = config?.server?.cors ?? []
   const argsCors = Array.isArray(args.cors) ? args.cors : args.cors ? [args.cors] : []
   const cors = [...configCors, ...argsCors]
+  const basePath = args["base-path"] ?? "/"
 
-  return { hostname, port, mdns, mdnsDomain, cors }
+  return { hostname, port, mdns, mdnsDomain, cors, basePath }
 }

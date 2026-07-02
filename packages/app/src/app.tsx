@@ -467,6 +467,7 @@ export function AppInterface(props: {
   servers?: Array<ServerConnection.Any>
   router?: Component<BaseRouterProps>
   disableHealthCheck?: boolean
+  basePath?: string
 }) {
   // The visual new layout lives in the router root so it remains mounted across
   // route changes. Draft and session routes override only their server-bound data
@@ -492,6 +493,7 @@ export function AppInterface(props: {
             <Show when={useSettings().general.newLayoutDesigns().toString()} keyed>
               <Dynamic
                 component={props.router ?? Router}
+                base={props.basePath || undefined}
                 root={(routerProps) => (
                   <TabsProvider>
                     <NotificationProvider>

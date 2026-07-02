@@ -52,11 +52,28 @@ function notFound() {
   return HttpServerResponse.jsonUnsafe({ error: "Not Found" }, { status: 404 })
 }
 
-function embeddedUIResponse(file: string, body: Uint8Array) {
+/**
+ * Inject the runtime base path into the HTML so the client can read it before
+ * the JS bundle executes. The `oc-base-path` script tag in index.html holds a
+ * JSON-encoded path (defaulting to "/"); here we replace its content with the
+ * configured base path so the frontend knows its mount point without needing a
+ * rebuild.
+ */
+function injectBasePath(html: string, basePath: string): string {
+  const normalized = basePath === "/" ? "/" : `/${basePath.replace(/^\/+|\/+$/g, "")}/`
+  return html.replace(
+    /(<script\s+id="oc-base-path"[^>]*>)([\s\S]*?)(<\/script>)/i,
+    `$1${JSON.stringify(normalized)}$3`,
+  )
+}
+
+function embeddedUIResponse(file: string, body: Uint8Array, basePath: string) {
   const mime = FSUtil.mimeType(file)
   const headers = new Headers({ "content-type": mime })
   if (mime.startsWith("text/html")) {
-    headers.set("content-security-policy", cspForHtml(new TextDecoder().decode(body)))
+    const html = injectBasePath(new TextDecoder().decode(body), basePath)
+    headers.set("content-security-policy", cspForHtml(html))
+    return HttpServerResponse.text(html, { headers })
   }
   return HttpServerResponse.raw(body, { headers })
 }
@@ -65,25 +82,27 @@ export function serveEmbeddedUIEffect(
   requestPath: string,
   fs: FSUtil.Interface,
   embeddedWebUI: Record<string, string>,
+  basePath: string = "/",
 ) {
   const file = embeddedWebUI[requestPath.replace(/^\//, "")] ?? embeddedWebUI["index.html"] ?? null
   if (!file) return Effect.succeed(notFound())
 
   return fs.readFile(file).pipe(
-    Effect.map((body) => embeddedUIResponse(file, body)),
+    Effect.map((body) => embeddedUIResponse(file, body, basePath)),
     Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(notFound())),
   )
 }
 
 export function serveUIEffect(
   request: HttpServerRequest.HttpServerRequest,
-  services: { fs: FSUtil.Interface; client: HttpClient.HttpClient; disableEmbeddedWebUi: boolean },
+  services: { fs: FSUtil.Interface; client: HttpClient.HttpClient; disableEmbeddedWebUi: boolean; basePath?: string },
 ) {
+  const basePath = services.basePath ?? "/"
   return Effect.gen(function* () {
     const embeddedWebUI = yield* Effect.promise(() => embeddedUI(services.disableEmbeddedWebUi))
     const path = new URL(request.url, "http://localhost").pathname
 
-    if (embeddedWebUI) return yield* serveEmbeddedUIEffect(path, services.fs, embeddedWebUI)
+    if (embeddedWebUI) return yield* serveEmbeddedUIEffect(path, services.fs, embeddedWebUI, basePath)
 
     const response = yield* services.client.execute(
       HttpClientRequest.make(request.method)(upstreamURL(path), {
@@ -94,7 +113,7 @@ export function serveUIEffect(
     const headers = proxyResponseHeaders(response.headers)
 
     if (response.headers["content-type"]?.includes("text/html")) {
-      const body = yield* response.text
+      const body = injectBasePath(yield* response.text, basePath)
       headers.set("Content-Security-Policy", cspForHtml(body))
       return HttpServerResponse.text(body, { status: response.status, headers })
     }
