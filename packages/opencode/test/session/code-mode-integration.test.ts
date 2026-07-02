@@ -8,7 +8,11 @@ import { MessageID, SessionID } from "@/session/schema"
 import { Server } from "@modelcontextprotocol/sdk/server/index.js"
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js"
 import { Client } from "@modelcontextprotocol/sdk/client/index.js"
-import { CallToolRequestSchema, ListToolsRequestSchema, type Tool as MCPToolDef } from "@modelcontextprotocol/sdk/types.js"
+import {
+  CallToolRequestSchema,
+  ListToolsRequestSchema,
+  type Tool as MCPToolDef,
+} from "@modelcontextprotocol/sdk/types.js"
 import type { Tool as AITool } from "ai"
 import { Effect, Layer } from "effect"
 
@@ -113,49 +117,41 @@ beforeAll(async () => {
 })
 
 describe("code mode integration (real MCP server)", () => {
-  test("describe exposes the typed return signature from the tool's outputSchema", async () => {
-    const out = await run("return await tools.$rune.describe('fixtures.add')")
-    const desc = JSON.parse(out.output)
-    expect(desc.path).toBe("fixtures.add")
-    expect(desc.signature).toBe(
-      "tools.fixtures.add(input: { a: number; b: number }): Promise<Result<{ sum: number }>>",
+  test("the tool description inlines full signatures with real MCP schemas", () => {
+    expect(tool.description).toContain("Available tools (COMPLETE list")
+    expect(tool.description).toContain("- fixtures (4 tools)")
+    expect(tool.description).toContain(
+      "tools.fixtures.add(input: { a: number; b: number }): Promise<{ sum: number }>",
     )
-    // describe returns TypeScript for the input/output types, not raw JSON Schema.
-    expect(desc.input).toBe("{\n  a: number\n  b: number\n}")
-    expect(desc.output).toBe("{\n  sum: number\n}")
-    expect(desc.outputSchema).toBeUndefined()
+    expect(tool.description).toContain("tools.fixtures.get_text(input: { name: string }): Promise<unknown>")
+    expect(tool.description).toContain("// Add two numbers and return the structured sum")
+    // Small catalog: everything is inline, so no discovery tool is advertised.
+    expect(tool.description).not.toContain("$codemode")
+    // The workflow section is present with placeholder-only call forms.
+    expect(tool.description).toContain("## Workflow")
+    expect(tool.description).toContain("`const res = await tools.<namespace>.<tool>(input)`")
+    expect(tool.description).not.toContain("total_count")
   })
 
-  test("describe falls back to result: unknown when no outputSchema is declared", async () => {
-    const out = await run("return await tools.$rune.describe('fixtures.get_text')")
-    const desc = JSON.parse(out.output)
-    expect(desc.signature).toContain("Promise<Result<unknown>>")
-  })
-
-  test("search finds a tool by keyword", async () => {
-    const out = await run("return await tools.$rune.search('screenshot')")
-    const result = JSON.parse(out.output)
-    expect(result.items.map((i: any) => i.path)).toContain("fixtures.screenshot")
-    expect(out.metadata.toolCalls).toEqual([{ tool: "$rune.search", status: "completed", input: { query: "screenshot" } }])
-  })
-
-  test("calls a text tool and unwraps the result envelope", async () => {
-    const out = await run("const r = await tools.fixtures.get_text({ name: 'world' }); return r.result")
+  test("calls a text tool and receives its text as the native result", async () => {
+    const out = await run("const r = await tools.fixtures.get_text({ name: 'world' }); return r")
     expect(out.output).toBe("hello world")
-    expect(out.metadata.toolCalls).toEqual([{ tool: "fixtures.get_text", status: "completed", input: { name: "world" } }])
+    expect(out.metadata.toolCalls).toEqual([
+      { tool: "fixtures.get_text", status: "completed", input: { name: "world" } },
+    ])
     expect(out.attachments).toBeUndefined()
   })
 
-  test("exposes structured data from a tool with an outputSchema", async () => {
-    const out = await run("const r = await tools.fixtures.add({ a: 2, b: 3 }); return r.result.sum")
+  test("exposes structured data natively from a tool with an outputSchema", async () => {
+    const out = await run("const r = await tools.fixtures.add({ a: 2, b: 3 }); return r.sum")
     expect(out.output).toBe("5")
   })
 
   test("composes multiple structured calls and returns a plain object", async () => {
     const out = await run(`
       const first = await tools.fixtures.add({ a: 1, b: 2 })
-      const second = await tools.fixtures.add({ a: first.result.sum, b: 10 })
-      return { total: second.result.sum }
+      const second = await tools.fixtures.add({ a: first.sum, b: 10 })
+      return { total: second.sum }
     `)
     expect(JSON.parse(out.output)).toEqual({ total: 13 })
     expect(out.metadata.toolCalls).toEqual([
@@ -164,43 +160,38 @@ describe("code mode integration (real MCP server)", () => {
     ])
   })
 
-  test("forwards an image as an attachment when the whole result is returned", async () => {
+  test("an image result becomes an execute attachment and a marker in the sandbox", async () => {
     const out = await run("return await tools.fixtures.screenshot({})")
+    expect(out.output).toBe("[1 image attached to the result]")
     expect(out.attachments).toEqual([{ type: "file", mime: "image/png", url: `data:image/png;base64,${PNG}` }])
   })
 
-  test("an attachment is an opaque handle: metadata only, no readable bytes", async () => {
-    // The program sees mime/bytes but NOT the data — a stray return can't leak base64.
+  test("image bytes never enter the sandbox or the model-facing output", async () => {
     const out = await run(`
       const shot = await tools.fixtures.screenshot({})
-      const a = shot.attachments[0]
-      return { result: { mime: a.mime, hasUrl: 'url' in a, hasData: 'data' in a, bytes: a.bytes, keys: Object.keys(a).sort() } }
+      return { sawMarker: typeof shot === 'string' && shot.includes('attached'), value: shot }
     `)
     expect(JSON.parse(out.output)).toEqual({
-      mime: "image/png",
-      hasUrl: false,
-      hasData: false,
-      bytes: Buffer.from(PNG, "base64").byteLength,
-      keys: ["bytes", "id", "mime", "type"],
+      sawMarker: true,
+      value: "[1 image attached to the result]",
     })
-    // Returning the handle inside `.result` (not as an attachment) surfaces no media
-    // and — crucially — carries no base64, so nothing large re-enters the conversation.
-    expect(out.attachments).toBeUndefined()
     expect(out.output).not.toContain(PNG)
+    // The stripped image still arrives as a real attachment.
+    expect(out.attachments).toHaveLength(1)
   })
 
-  test("drops media when only .result is returned", async () => {
-    const out = await run("const r = await tools.fixtures.screenshot({}); return { result: 'captured' }")
+  test("attachments accumulate even when the program returns something else", async () => {
+    const out = await run("await tools.fixtures.screenshot({}); return 'captured'")
     expect(out.output).toBe("captured")
-    expect(out.attachments).toBeUndefined()
+    expect(out.attachments).toHaveLength(1)
   })
 
-  test("runs calls in parallel and forwards multiple attachments the model curates", async () => {
+  test("runs calls in parallel and accumulates every attachment", async () => {
     const out = await run(`
-      const [a, b] = await Promise.all([tools.fixtures.screenshot({}), tools.fixtures.screenshot({})])
-      return { result: 'two shots', attachments: [...(a.attachments ?? []), ...(b.attachments ?? [])] }
+      const both = await Promise.all([tools.fixtures.screenshot({}), tools.fixtures.screenshot({})])
+      return 'two shots: ' + both.length
     `)
-    expect(out.output).toBe("two shots")
+    expect(out.output).toBe("two shots: 2")
     expect(out.attachments).toHaveLength(2)
     expect(out.metadata.toolCalls.map((c) => c.tool)).toEqual(["fixtures.screenshot", "fixtures.screenshot"])
   })
@@ -220,10 +211,10 @@ describe("code mode integration (real MCP server)", () => {
     const out = await run(`
       console.log("looking up", { name: "world" })
       const r = await tools.fixtures.get_text({ name: "world" })
-      console.warn("got", r.result)
-      return r.result
+      console.warn("got", r)
+      return r
     `)
-    expect(out.output).toBe('hello world\n\nLogs:\n[log] looking up {"name":"world"}\n[warn] got hello world')
+    expect(out.output).toBe('hello world\n\nLogs:\nlooking up {"name":"world"}\n[warn] got hello world')
     expect(out.metadata.error).toBeUndefined()
   })
 
@@ -235,7 +226,7 @@ describe("code mode integration (real MCP server)", () => {
     `)
     expect(out.metadata.error).toBe(true)
     expect(out.output).toContain("kaboom")
-    expect(out.output).toContain("Logs:\n[log] before the throw")
+    expect(out.output).toContain("Logs:\nbefore the throw")
   })
 
   test("a program that logs nothing gets no Logs section", async () => {
@@ -246,26 +237,42 @@ describe("code mode integration (real MCP server)", () => {
 
   test("console does not consume the tool-call metadata (logging is not a tool call)", async () => {
     const out = await run("console.log('hi'); console.error('bye'); return 'ok'")
-    expect(out.output).toBe("ok\n\nLogs:\n[log] hi\n[error] bye")
+    expect(out.output).toBe("ok\n\nLogs:\nhi\n[error] bye")
     expect(out.metadata.toolCalls).toEqual([])
   })
 
-  test("asks permission for each MCP call but not for discovery helpers", async () => {
+  test("asks permission for each MCP call, keyed by the flat catalog name", async () => {
     const asked: string[] = []
     const permCtx: Tool.Context = { ...ctx, ask: (req: any) => Effect.sync(() => void asked.push(req.permission)) }
     await Effect.runPromise(
       tool.execute(
         {
           code: `
-            await tools.$rune.search('add')
-            await tools.$rune.describe('fixtures.add')
             await tools.fixtures.add({ a: 1, b: 1 })
+            await tools.fixtures.get_text({ name: 'x' })
             return 'done'
           `,
         },
         permCtx,
       ),
     )
-    expect(asked).toEqual(["fixtures_add"])
+    expect(asked).toEqual(["fixtures_add", "fixtures_get_text"])
+  })
+
+  test("streams running/completed metadata for child calls over a real transport", async () => {
+    const snapshots: Array<{ toolCalls: { tool: string; status: string; input?: Record<string, unknown> }[] }> = []
+    const recordingCtx: Tool.Context = {
+      ...ctx,
+      metadata: (val: any) => Effect.sync(() => void snapshots.push(val.metadata)),
+    }
+    await Effect.runPromise(
+      tool.execute({ code: "await tools.fixtures.add({ a: 1, b: 2 }); return 'done'" }, recordingCtx),
+    )
+    expect(snapshots).toContainEqual({
+      toolCalls: [{ tool: "fixtures.add", status: "running", input: { a: 1, b: 2 } }],
+    })
+    expect(snapshots).toContainEqual({
+      toolCalls: [{ tool: "fixtures.add", status: "completed", input: { a: 1, b: 2 } }],
+    })
   })
 })

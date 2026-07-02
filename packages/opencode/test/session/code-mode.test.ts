@@ -1,16 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import {
   Parameters,
-  attachmentTable,
   define,
-  describe as describeTools,
   formatValue,
   groupByServer,
-  rankTools,
-  renderType,
-  toEnvelope,
+  toSandboxResult,
   withLogs,
-  type SearchEntry,
+  type Attachment,
 } from "@/session/code-mode"
 import type { Tool as MCPToolDef } from "@modelcontextprotocol/sdk/types.js"
 import { Agent } from "@/agent/agent"
@@ -32,7 +28,7 @@ const ctx: Tool.Context = {
   ask: () => Effect.void,
 }
 
-// Build a real MCP-derived AI SDK tool over a fake transport, so the proxy exercises
+// Build a real MCP-derived AI SDK tool over a fake transport, so the adapter exercises
 // the same `convertTool` execution path that `mcp.tools()` produces at runtime.
 function mcpTool(
   name: string,
@@ -68,60 +64,31 @@ describe("code mode execute", () => {
     await expect(Effect.runPromise(decode({}))).rejects.toThrow()
   })
 
-  test("lists all namespaces, previews tool signatures within budget, and documents discovery", () => {
-    const groups = groupByServer(
-      {
-        github_create_issue: mcpTool("create_issue", () => "", {
-          type: "object",
-          properties: { title: { type: "string" }, body: { type: "string" } },
-          required: ["title"],
-        }),
-        github_list_issues: mcpTool("list_issues", () => ""),
-        linear_search: mcpTool("search", () => ""),
-      },
-      ["github", "linear"],
-    )
-    const description = describeTools(groups)
-
-    expect(description).toContain("tools.$rune.search(query")
-    expect(description).toContain("tools.$rune.describe(path)")
-    // Small catalog: the list is comprehensive and says so, with clean counts.
-    expect(description).toContain("This is the COMPLETE list")
-    expect(description).toContain("- github (2 tools)")
-    expect(description).toContain("- linear (1 tool)")
-    // Tools are previewed inline as directly-callable signatures that now include the
-    // awaited return type (Result<T>) so the model sees the result shape up front.
-    expect(description).toContain("tools.github.create_issue(input: { title: string; body?: string }): Result<unknown>")
-    expect(description).toContain("tools.linear.search(input: object): Result<unknown>")
-    // The Result<T> envelope alias is defined once in the prose.
-    expect(description).toContain("type Result<T> = { result: T; attachments?: Attachment[] }")
-    // ...but the preview drops the uniform Promise<…> wrapper — that full form comes from describe.
-    expect(description).not.toContain("): Promise<")
+  test("groups multi-underscore server names by longest matching prefix", () => {
+    const groups = groupByServer({ my_server_do_thing: mcpTool("do_thing", () => "") }, ["my_server"])
+    expect([...groups.keys()]).toEqual(["my_server"])
+    expect(groups.get("my_server")![0]).toMatchObject({
+      path: "my_server.do_thing",
+      local: "do_thing",
+      key: "my_server_do_thing",
+    })
   })
 
-  test("falls back to namespaces-only when the catalog exceeds the preview budget", () => {
-    const tools: Record<string, AITool> = {}
-    for (let i = 0; i < 60; i++) {
-      tools[`alpha_op_${i}`] = mcpTool(`op_${i}`, () => "", {
-        type: "object",
-        properties: { value: { type: "string" }, count: { type: "number" } },
-      })
+  test("groupByServer carries the raw MCP schemas for rendering", () => {
+    const defs: Record<string, MCPToolDef> = {
+      weather_current: {
+        name: "current",
+        inputSchema: { type: "object", properties: { city: { type: "string" } }, required: ["city"] },
+        outputSchema: { type: "object", properties: { tempC: { type: "number" } }, required: ["tempC"] },
+      } as any,
     }
-    tools["zeta_only_tool"] = mcpTool("only_tool", () => "")
-    const groups = groupByServer(tools, ["alpha", "zeta"])
-    const description = describeTools(groups)
-
-    // The list states it is partial, and every namespace is still present with its total.
-    expect(description).toContain("This is a PARTIAL list")
-    expect(description).toContain("- alpha (60 tools")
-    // The later namespace is fully truncated, and says so.
-    expect(description).toContain("- zeta (1 tool, none shown)")
-    expect(description).not.toContain("tools.zeta.only_tool(")
-    // Some early signatures are still previewed.
-    expect(description).toContain("tools.alpha.op_0(")
+    const groups = groupByServer({ weather_current: mcpTool("current", () => "") }, ["weather"], defs)
+    const entry = groups.get("weather")![0]!
+    expect(entry.inputSchema).toEqual(defs.weather_current!.inputSchema as any)
+    expect(entry.outputSchema).toEqual(defs.weather_current!.outputSchema as any)
   })
 
-  test("tools.$rune.search and tools.$rune.describe expose the catalog on demand", async () => {
+  test("small catalogs inline every full signature in the tool description", async () => {
     const tool = await build({
       github_create_issue: mcpTool("create_issue", () => "", {
         type: "object",
@@ -132,58 +99,88 @@ describe("code mode execute", () => {
       linear_search: mcpTool("search", () => ""),
     })
 
-    const searched = await Effect.runPromise(
-      tool.execute({ code: "return await tools.$rune.search('issue', { namespace: 'github' })" }, ctx),
+    expect(tool.description).toContain("Available tools (COMPLETE list")
+    expect(tool.description).toContain("- github (2 tools)")
+    expect(tool.description).toContain("- linear (1 tool)")
+    expect(tool.description).toContain(
+      "tools.github.create_issue(input: { title: string; body?: string }): Promise<unknown>",
     )
-    const search = JSON.parse(searched.output)
-    expect(search.total).toBe(2)
-    expect(search.items.map((i: any) => i.path).sort()).toEqual(["github.create_issue", "github.list_issues"])
-    expect(searched.metadata.toolCalls).toEqual([
-      { tool: "$rune.search", status: "completed", input: { query: "issue", namespace: "github" } },
-    ])
-
-    const described = await Effect.runPromise(
-      tool.execute({ code: "return await tools.$rune.describe('github.create_issue')" }, ctx),
-    )
-    const desc = JSON.parse(described.output)
-    expect(desc.path).toBe("github.create_issue")
-    expect(desc.signature).toBe(
-      "tools.github.create_issue(input: { title: string; body?: string }): Promise<Result<unknown>>",
-    )
-    expect(described.metadata.toolCalls).toEqual([
-      { tool: "$rune.describe", status: "completed", input: { path: "github.create_issue" } },
-    ])
-
-    const missing = await Effect.runPromise(tool.execute({ code: "return await tools.$rune.describe('github.nope')" }, ctx))
-    expect(JSON.parse(missing.output).error.code).toBe("tool_not_found")
-    expect(missing.metadata.toolCalls).toEqual([
-      { tool: "$rune.describe", status: "completed", input: { path: "github.nope" } },
-    ])
+    expect(tool.description).toContain("tools.github.list_issues(")
+    expect(tool.description).toContain("tools.linear.search(")
+    // A schema with no properties renders as an empty object, not `{  }`.
+    expect(tool.description).toContain("tools.linear.search(input: {}): Promise<unknown>")
+    // Fully inlined catalog: no discovery round-trip is needed or advertised.
+    expect(tool.description).not.toContain("$codemode")
+    expect(tool.description).not.toContain("Browse one namespace")
+    // The workflow/rules sections use placeholder call forms only — the example machinery
+    // never cherry-picks a catalog tool or fabricates result fields.
+    expect(tool.description).toContain("## Workflow")
+    expect(tool.description).toContain("1. Pick a tool from the list under `## Available tools`")
+    expect(tool.description).toContain("if a result is a string, JSON.parse it before reading fields")
+    expect(tool.description).toContain("Return small: extract only the fields you need")
+    expect(tool.description).not.toContain("total_count")
   })
 
-  test("describe resolves a tool path regardless of separator (dot, slash, or underscore)", async () => {
-    const tool = await build({ "context7_resolve-library-id": mcpTool("resolve-library-id", () => "") })
-    for (const path of ["context7.resolve-library-id", "context7/resolve-library-id", "context7_resolve-library-id"]) {
-      const described = await Effect.runPromise(tool.execute({ code: `return await tools.$rune.describe(${JSON.stringify(path)})` }, ctx))
-      expect(JSON.parse(described.output).path).toBe("context7.resolve-library-id")
+  test("signatures render the declared outputSchema as the return type", async () => {
+    const defs: Record<string, MCPToolDef> = {
+      weather_current: {
+        name: "current",
+        inputSchema: { type: "object", properties: { city: { type: "string" } }, required: ["city"] },
+        outputSchema: {
+          type: "object",
+          properties: { tempC: { type: "number" }, summary: { type: "string" } },
+          required: ["tempC"],
+        },
+      } as any,
     }
-  })
-
-  test("describe suggests the real tool for a mistyped path (did-you-mean)", async () => {
-    const tool = await build({ "context7_resolve-library-id": mcpTool("resolve-library-id", () => "") })
-    // Wrong leaf within the right namespace falls back to a namespace-scoped search.
-    const missing = await Effect.runPromise(
-      tool.execute({ code: "return await tools.$rune.describe('context7/resolve-library')" }, ctx),
+    const tool = await build({ weather_current: mcpTool("current", () => "") }, defs)
+    expect(tool.description).toContain(
+      "tools.weather.current(input: { city: string }): Promise<{ tempC: number; summary?: string }>",
     )
-    const error = JSON.parse(missing.output).error
-    expect(error.code).toBe("tool_not_found")
-    expect(error.suggestions).toContain("context7.resolve-library-id")
   })
 
-  test("groups multi-underscore server names by longest matching prefix", () => {
-    const groups = groupByServer({ my_server_do_thing: mcpTool("do_thing", () => "") }, ["my_server"])
-    expect([...groups.keys()]).toEqual(["my_server"])
-    expect(groups.get("my_server")![0]).toMatchObject({ local: "do_thing", key: "my_server_do_thing" })
+  test("large catalogs inline a budgeted PARTIAL list plus runtime search", async () => {
+    const tools: Record<string, AITool> = {}
+    const filler = "a searchable description of this operation that consumes catalog budget ".repeat(3)
+    for (let i = 0; i < 150; i++) {
+      const client = { callTool: async () => ({ content: [] }) }
+      tools[`alpha_op_${i}`] = McpCatalog.convertTool(
+        {
+          name: `op_${i}`,
+          description: `${filler}${i}`,
+          inputSchema: { type: "object", properties: { value: { type: "string" }, count: { type: "number" } } },
+        } as any,
+        client as any,
+      )
+    }
+    tools["zeta_only_tool"] = mcpTool("only_tool", () => "")
+    const tool = await build(tools, {}, ["alpha", "zeta"])
+
+    // Every namespace is listed with counts; signatures inline cheapest-first until the
+    // budget runs out, and the description states exactly how comprehensive the list is.
+    expect(tool.description).toContain("Available tools (PARTIAL — ")
+    expect(tool.description).toMatch(/- alpha \(150 tools, \d+ shown\)/)
+    expect(tool.description).toContain("- zeta (1 tool, none shown)")
+    expect(tool.description).toContain("tools.$codemode.search(")
+    // PARTIAL catalogs put search first in the workflow and advertise namespace browsing.
+    expect(tool.description).toContain("1. Find a tool (skip when it is already listed below)")
+    expect(tool.description).toContain('- Browse one namespace: `await tools.$codemode.search({ query: "", namespace: "<name>" })`.')
+    expect(tool.description).not.toContain("total_count")
+    // Cheapest signatures (single-digit ops) made the cut; the most expensive did not.
+    expect(tool.description).toContain("tools.alpha.op_0(")
+    expect(tool.description).not.toContain("tools.alpha.op_149(")
+
+    // The runtime search tool works in-program and returns complete signatures.
+    const out = await Effect.runPromise(
+      tool.execute({ code: "return await tools.$codemode.search({ query: 'only tool', limit: 3 })" }, ctx),
+    )
+    const result = JSON.parse(out.output)
+    // Search-result paths carry the `tools.` prefix so each is directly usable as a call site.
+    expect(result.items.map((i: any) => i.path)).toContain("tools.zeta.only_tool")
+    expect(result.items[0].signature).toContain("tools.")
+    expect(out.metadata.toolCalls).toEqual([
+      { tool: "$codemode.search", status: "completed", input: { query: "only tool", limit: 3 } },
+    ])
   })
 
   test("runs plain JavaScript and returns the value as text", async () => {
@@ -191,6 +188,17 @@ describe("code mode execute", () => {
     const output = await Effect.runPromise(tool.execute({ code: "return 1 + 2" }, ctx))
     expect(output.output).toBe("3")
     expect(output.metadata.toolCalls).toEqual([])
+  })
+
+  test("Object.keys(tools) enumerates the MCP server namespaces", async () => {
+    const tool = await build({
+      github_list_issues: mcpTool("list_issues", () => ""),
+      linear_search: mcpTool("search", () => ""),
+    })
+    const output = await Effect.runPromise(
+      tool.execute({ code: "const namespaces = Object.keys(tools); return { namespaces, count: namespaces.length }" }, ctx),
+    )
+    expect(JSON.parse(output.output)).toEqual({ namespaces: ["github", "linear"], count: 2 })
   })
 
   test("calls a namespaced MCP tool and flows its text result back into the program", async () => {
@@ -203,15 +211,17 @@ describe("code mode execute", () => {
     })
 
     const output = await Effect.runPromise(
-      tool.execute({ code: "const r = await tools.greeter.hello({ name: 'world' }); return r.result.toUpperCase()" }, ctx),
+      tool.execute({ code: "const r = await tools.greeter.hello({ name: 'world' }); return r.toUpperCase()" }, ctx),
     )
 
     expect(seen).toEqual([{ name: "world" }])
     expect(output.output).toBe("HELLO WORLD")
-    expect(output.metadata.toolCalls).toEqual([{ tool: "greeter.hello", status: "completed", input: { name: "world" } }])
+    expect(output.metadata.toolCalls).toEqual([
+      { tool: "greeter.hello", status: "completed", input: { name: "world" } },
+    ])
   })
 
-  test("exposes structured content as data and composes multiple calls", async () => {
+  test("exposes structured content as native data and composes multiple calls", async () => {
     const tool = await build({
       math_add: mcpTool("add", (args) => ({
         content: [],
@@ -224,8 +234,8 @@ describe("code mode execute", () => {
         {
           code: `
             const first = await tools.math.add({ a: 1, b: 2 })
-            const second = await tools.math.add({ a: first.result.sum, b: 10 })
-            return { total: second.result.sum }
+            const second = await tools.math.add({ a: first.sum, b: 10 })
+            return { total: second.sum }
           `,
         },
         ctx,
@@ -247,7 +257,7 @@ describe("code mode execute", () => {
 
     const output = await Effect.runPromise(
       tool.execute(
-        { code: "const [a, b] = await Promise.all([tools.echo.one({}), tools.echo.two({})]); return a.result + b.result" },
+        { code: "const [a, b] = await Promise.all([tools.echo.one({}), tools.echo.two({})]); return a + b" },
         ctx,
       ),
     )
@@ -264,23 +274,19 @@ describe("code mode execute", () => {
     expect(output.metadata.error).toBe(true)
   })
 
-  test("reports an unknown tool and points to discovery", async () => {
+  test("reports an unknown tool as a failed execution", async () => {
     const tool = await build({ known_tool: mcpTool("tool", () => "ok") })
     const output = await Effect.runPromise(tool.execute({ code: "return await tools.known.missing({})" }, ctx))
     expect(output.metadata.error).toBe(true)
     expect(output.output).toContain("Unknown tool 'known.missing'")
-    expect(output.output).toContain("tools.$rune.search")
   })
 
-  test("propagates an MCP tool error into the program", async () => {
+  test("propagates an MCP tool error into the program as a catchable failure", async () => {
     const tool = await build({
       bad_tool: mcpTool("tool", () => ({ isError: true, content: [{ type: "text", text: "server exploded" }] })),
     })
     const output = await Effect.runPromise(
-      tool.execute(
-        { code: "try { await tools.bad.tool({}) } catch (e) { return 'caught: ' + e.message }" },
-        ctx,
-      ),
+      tool.execute({ code: "try { await tools.bad.tool({}) } catch (e) { return 'caught: ' + e.message }" }, ctx),
     )
     expect(output.output).toBe("caught: server exploded")
   })
@@ -298,6 +304,27 @@ describe("code mode execute", () => {
     expect(asked.map((req: any) => req.permission)).toEqual(["a_tool", "b_tool"])
   })
 
+  test("a denied permission fails the child call with a catchable message, not the whole execute", async () => {
+    const denyCtx: Tool.Context = { ...ctx, ask: () => Effect.die(new Error("permission denied by user")) }
+    const called: string[] = []
+    const tool = await build({
+      a_tool: mcpTool("a", () => {
+        called.push("a")
+        return { content: [{ type: "text", text: "ok" }] }
+      }),
+    })
+
+    const output = await Effect.runPromise(
+      tool.execute({ code: "try { await tools.a.tool({}) } catch (e) { return 'denied: ' + e.message }" }, denyCtx),
+    )
+
+    expect(output.output).toBe("denied: permission denied by user")
+    expect(output.metadata.error).toBeUndefined()
+    // The MCP tool itself never ran.
+    expect(called).toEqual([])
+    expect(output.metadata.toolCalls).toEqual([{ tool: "a.tool", status: "error" }])
+  })
+
   test("streams live per-call metadata as a call starts and finishes", async () => {
     const snapshots: Array<{ toolCalls: { tool: string; status: string; input?: Record<string, unknown> }[] }> = []
     const recordingCtx: Tool.Context = {
@@ -306,42 +333,16 @@ describe("code mode execute", () => {
     }
     const tool = await build({ greeter_hello: mcpTool("hello", () => ({ content: [{ type: "text", text: "hi" }] })) })
 
-    await Effect.runPromise(tool.execute({ code: "await tools.greeter.hello({ name: 'Ada' }); return 'done'" }, recordingCtx))
-
-    // The UI sees the call appear as running, then resolve to completed.
-    expect(snapshots).toContainEqual({ toolCalls: [{ tool: "greeter.hello", status: "running", input: { name: "Ada" } }] })
-    expect(snapshots).toContainEqual({ toolCalls: [{ tool: "greeter.hello", status: "completed", input: { name: "Ada" } }] })
-  })
-
-  test("streams discovery helpers with the same per-call metadata shape", async () => {
-    const snapshots: Array<{ toolCalls: { tool: string; status: string; input?: Record<string, unknown> }[] }> = []
-    const recordingCtx: Tool.Context = {
-      ...ctx,
-      metadata: (val: any) => Effect.sync(() => void snapshots.push(val.metadata)),
-    }
-    const tool = await build({ github_create_issue: mcpTool("create_issue", () => "") })
-
     await Effect.runPromise(
-      tool.execute(
-        {
-          code: `
-            await tools.$rune.search('issue', { namespace: 'github' })
-            await tools.$rune.describe('github.create_issue')
-            return 'done'
-          `,
-        },
-        recordingCtx,
-      ),
+      tool.execute({ code: "await tools.greeter.hello({ name: 'Ada' }); return 'done'" }, recordingCtx),
     )
 
+    // The UI sees the call appear as running, then resolve to completed.
     expect(snapshots).toContainEqual({
-      toolCalls: [{ tool: "$rune.search", status: "running", input: { query: "issue", namespace: "github" } }],
+      toolCalls: [{ tool: "greeter.hello", status: "running", input: { name: "Ada" } }],
     })
     expect(snapshots).toContainEqual({
-      toolCalls: [
-        { tool: "$rune.search", status: "completed", input: { query: "issue", namespace: "github" } },
-        { tool: "$rune.describe", status: "completed", input: { path: "github.create_issue" } },
-      ],
+      toolCalls: [{ tool: "greeter.hello", status: "completed", input: { name: "Ada" } }],
     })
   })
 
@@ -356,66 +357,48 @@ describe("code mode execute", () => {
     })
 
     await Effect.runPromise(
-      tool.execute({ code: "try { await tools.bad.tool({ reason: 'test' }) } catch (e) { return 'caught' }" }, recordingCtx),
+      tool.execute(
+        { code: "try { await tools.bad.tool({ reason: 'test' }) } catch (e) { return 'caught' }" },
+        recordingCtx,
+      ),
     )
 
     expect(snapshots).toContainEqual({ toolCalls: [{ tool: "bad.tool", status: "error", input: { reason: "test" } }] })
   })
 
-  test("unit: toEnvelope wraps result and extracts media as opaque attachment handles", () => {
-    const table = attachmentTable()
-    expect(toEnvelope({ structuredContent: { x: 1 }, content: [] }, table.seal)).toEqual({ result: { x: 1 } })
-    expect(toEnvelope({ content: [{ type: "text", text: "hi" }] }, table.seal)).toEqual({ result: "hi" })
-    expect(toEnvelope("raw", table.seal)).toEqual({ result: "raw" })
-
-    // image/audio blocks become OPAQUE handles (mime/bytes, NO url/data); text stays in result
-    const withImage = toEnvelope(
-      {
-        content: [
-          { type: "text", text: "see image" },
-          { type: "image", data: "AAAA", mimeType: "image/png" },
-        ],
-      },
-      table.seal,
-    )
-    expect(withImage.result).toBe("see image")
-    expect(withImage.attachments).toEqual([{ type: "file", id: "att_1", mime: "image/png", bytes: 3 }])
-    // The handle exposes no bytes, but resolves back to the real attachment host-side.
-    expect((withImage.attachments![0] as any).url).toBeUndefined()
-    expect(table.resolve(withImage.attachments![0])).toEqual({
-      type: "file",
-      mime: "image/png",
-      url: "data:image/png;base64,AAAA",
+  test("accumulates stripped media as execute attachments the sandbox never sees", async () => {
+    const tool = await build({
+      shot_take: mcpTool("take", () => ({
+        content: [{ type: "image", data: "PNGDATA", mimeType: "image/png" }],
+        structuredContent: { name: "shot.png" },
+      })),
     })
 
-    // media-only result: undefined result, still surfaces the handle
-    const mediaOnly = toEnvelope({ content: [{ type: "image", data: "BBBB", mimeType: "image/jpeg" }] }, table.seal)
-    expect(mediaOnly.result).toBeUndefined()
-    expect(mediaOnly.attachments).toEqual([{ type: "file", id: "att_2", mime: "image/jpeg", bytes: 3 }])
+    const out = await Effect.runPromise(tool.execute({ code: "return await tools.shot.take({})" }, ctx))
+    // The program received the structured content; the media rode along host-side.
+    expect(JSON.parse(out.output)).toEqual({ name: "shot.png" })
+    expect(out.attachments).toEqual([{ type: "file", mime: "image/png", url: "data:image/png;base64,PNGDATA" }])
+    expect(out.output).not.toContain("PNGDATA")
   })
 
-  test("unit: attachmentTable resolve drops fabricated or stale handles", () => {
-    const table = attachmentTable()
-    expect(table.resolve({ type: "file", id: "att_999", mime: "image/png" })).toBeUndefined()
-    expect(table.resolve({ type: "file" })).toBeUndefined()
-    expect(table.resolve("nope")).toBeUndefined()
+  test("a media-only result returns a text marker so the program knows it succeeded", async () => {
+    const tool = await build({
+      shot_take: mcpTool("take", () => ({ content: [{ type: "image", data: "PNGDATA", mimeType: "image/png" }] })),
+    })
+    const out = await Effect.runPromise(tool.execute({ code: "return await tools.shot.take({})" }, ctx))
+    expect(out.output).toBe("[1 image attached to the result]")
+    expect(out.attachments).toEqual([{ type: "file", mime: "image/png", url: "data:image/png;base64,PNGDATA" }])
   })
 
-  test("unit: formatValue", () => {
-    expect(formatValue("text")).toBe("text")
-    expect(formatValue({ a: 1 })).toBe(JSON.stringify({ a: 1 }, null, 2))
-    expect(formatValue(undefined)).toBe("undefined")
-  })
-
-  test("unit: withLogs", () => {
-    // No logs: output is returned untouched.
-    expect(withLogs("result", [])).toBe("result")
-    // Logs are appended as a trailing section, one `[level] message` line each.
-    expect(withLogs("result", [{ level: "log", message: "a" }, { level: "warn", message: "b" }])).toBe(
-      "result\n\nLogs:\n[log] a\n[warn] b",
+  test("attachments still flow when the program returns something else entirely", async () => {
+    const tool = await build({
+      shot_take: mcpTool("take", () => ({ content: [{ type: "image", data: "PNGDATA", mimeType: "image/png" }] })),
+    })
+    const out = await Effect.runPromise(
+      tool.execute({ code: "await tools.shot.take({}); return 'captured'" }, ctx),
     )
-    // Empty output still gets the section (no leading blank lines).
-    expect(withLogs("", [{ level: "error", message: "boom" }])).toBe("Logs:\n[error] boom")
+    expect(out.output).toBe("captured")
+    expect(out.attachments).toHaveLength(1)
   })
 
   test("terminates a runaway loop via the operation limit instead of hanging", async () => {
@@ -431,342 +414,162 @@ describe("code mode execute", () => {
     expect(output.metadata.error).toBe(true)
   })
 
-  test("describe shows the structured return type when the tool declares an outputSchema", async () => {
-    const tools = { weather_current: mcpTool("current", () => "", { type: "object", properties: { city: { type: "string" } } }) }
-    const defs: Record<string, MCPToolDef> = {
-      weather_current: {
-        name: "current",
-        inputSchema: { type: "object", properties: { city: { type: "string" } } },
-        outputSchema: { type: "object", properties: { tempC: { type: "number" }, summary: { type: "string" } }, required: ["tempC"] },
-      } as any,
-    }
-    const tool = await build(tools, defs)
-    const described = await Effect.runPromise(tool.execute({ code: "return await tools.$rune.describe('weather.current')" }, ctx))
-    const desc = JSON.parse(described.output)
-    expect(desc.signature).toBe(
-      "tools.weather.current(input: { city?: string }): Promise<Result<{ tempC: number; summary?: string }>>",
-    )
-    // describe now returns the return shape as pretty TypeScript, not raw JSON Schema.
-    expect(desc.output).toBe("{\n  tempC: number\n  summary?: string\n}")
-    expect(desc.outputSchema).toBeUndefined()
+  test("truncates an oversized result via the CodeMode output limit", async () => {
+    const tool = await build({})
+    const output = await Effect.runPromise(tool.execute({ code: "return 'x'.repeat(40000)" }, ctx))
+    expect(output.metadata.error).toBeUndefined()
+    expect(output.output).toContain("[result truncated:")
+    expect(output.output.length).toBeLessThan(40_000)
   })
 
-  test("describe returns the input type as TypeScript with JSDoc and enum literals", async () => {
-    const tool = await build({
-      docs_resolve: mcpTool("resolve", () => "", {
-        type: "object",
-        properties: {
-          library: { type: "string", description: "The library name to resolve" },
-          kind: { enum: ["react", "vue"] },
+  test("appends logs after the result on success and after the message on error", async () => {
+    const tool = await build({})
+
+    const ok = await Effect.runPromise(
+      tool.execute({ code: "console.log('step one'); console.warn('careful'); return 'done'" }, ctx),
+    )
+    expect(ok.output).toBe("done\n\nLogs:\nstep one\n[warn] careful")
+
+    const err = await Effect.runPromise(
+      tool.execute({ code: "console.log('before the throw'); throw new Error('boom')" }, ctx),
+    )
+    expect(err.metadata.error).toBe(true)
+    expect(err.output).toContain("Uncaught: boom")
+    expect(err.output).toContain("Logs:\nbefore the throw")
+  })
+})
+
+describe("toSandboxResult", () => {
+  const collector = () => {
+    const attachments: Attachment[] = []
+    return { attachments, collect: (a: Attachment) => void attachments.push(a) }
+  }
+
+  test("prefers structuredContent over text", () => {
+    const { collect } = collector()
+    expect(toSandboxResult({ structuredContent: { x: 1 }, content: [{ type: "text", text: "hi" }] }, collect)).toEqual(
+      { x: 1 },
+    )
+  })
+
+  test("joins text content when no structured content is present", () => {
+    const { collect } = collector()
+    expect(
+      toSandboxResult(
+        { content: [{ type: "text", text: "one" }, { type: "text", text: "two" }] },
+        collect,
+      ),
+    ).toBe("one\ntwo")
+  })
+
+  test("passes non-MCP values through untouched", () => {
+    const { collect } = collector()
+    expect(toSandboxResult("raw", collect)).toBe("raw")
+    expect(toSandboxResult(42, collect)).toBe(42)
+    expect(toSandboxResult(null, collect)).toBeNull()
+    expect(toSandboxResult({ some: "object" }, collect)).toEqual({ some: "object" })
+  })
+
+  test("strips media into the accumulator; text stays the sandbox value", () => {
+    const { attachments, collect } = collector()
+    const value = toSandboxResult(
+      {
+        content: [
+          { type: "text", text: "see image" },
+          { type: "image", data: "AAAA", mimeType: "image/png" },
+        ],
+      },
+      collect,
+    )
+    expect(value).toBe("see image")
+    expect(attachments).toEqual([{ type: "file", mime: "image/png", url: "data:image/png;base64,AAAA" }])
+  })
+
+  test("a media-only result yields a marker; counts and nouns follow the content", () => {
+    const one = collector()
+    expect(toSandboxResult({ content: [{ type: "image", data: "A", mimeType: "image/png" }] }, one.collect)).toBe(
+      "[1 image attached to the result]",
+    )
+
+    const two = collector()
+    expect(
+      toSandboxResult(
+        {
+          content: [
+            { type: "image", data: "A", mimeType: "image/png" },
+            { type: "image", data: "B", mimeType: "image/jpeg" },
+          ],
         },
-        required: ["library"],
-      }),
-    })
-    const described = await Effect.runPromise(tool.execute({ code: "return await tools.$rune.describe('docs.resolve')" }, ctx))
-    const desc = JSON.parse(described.output)
-    expect(desc.input).toBe(
-      '{\n  /** The library name to resolve */\n  library: string\n  kind?: "react" | "vue"\n}',
-    )
-    expect(desc.inputSchema).toBeUndefined()
+        two.collect,
+      ),
+    ).toBe("[2 images attached to the result]")
+    expect(two.attachments).toHaveLength(2)
+
+    const mixed = collector()
+    expect(
+      toSandboxResult(
+        {
+          content: [
+            { type: "image", data: "A", mimeType: "image/png" },
+            { type: "audio", data: "B", mimeType: "audio/wav" },
+          ],
+        },
+        mixed.collect,
+      ),
+    ).toBe("[2 files attached to the result]")
   })
 
-  test("forwards attachments from a returned tool result and drops them when only .result is returned", async () => {
-    const tool = await build({
-      shot_take: mcpTool("take", () => ({
-        content: [{ type: "image", data: "PNGDATA", mimeType: "image/png" }],
-        structuredContent: { name: "shot.png" },
-      })),
-    })
-
-    const forwarded = await Effect.runPromise(tool.execute({ code: "return await tools.shot.take({})" }, ctx))
-    expect(forwarded.attachments).toEqual([{ type: "file", mime: "image/png", url: "data:image/png;base64,PNGDATA" }])
-    expect(JSON.parse(forwarded.output)).toEqual({ name: "shot.png" })
-
-    const suppressed = await Effect.runPromise(
-      tool.execute({ code: "const r = await tools.shot.take({}); return { result: r.result }" }, ctx),
+  test("extracts embedded resources: text inline, blobs as attachments with filenames", () => {
+    const { attachments, collect } = collector()
+    const value = toSandboxResult(
+      {
+        content: [
+          { type: "resource", resource: { uri: "file:///tmp/notes.txt", mimeType: "text/plain", text: "note text" } },
+          { type: "resource", resource: { uri: "file:///tmp/doc.pdf", mimeType: "application/pdf", blob: "PDF" } },
+        ],
+      },
+      collect,
     )
-    expect(suppressed.attachments).toBeUndefined()
-    expect(JSON.parse(suppressed.output)).toEqual({ name: "shot.png" })
+    expect(value).toBe("note text")
+    expect(attachments).toEqual([
+      { type: "file", mime: "application/pdf", url: "data:application/pdf;base64,PDF", filename: "doc.pdf" },
+    ])
   })
 
-  test("indexes parameter names so tools are searchable by their inputs", async () => {
-    const tool = await build({
-      // The query word appears only as a parameter name, not in path or description.
-      traces_lookup: mcpTool("lookup", () => "", {
-        type: "object",
-        properties: { trace_id: { type: "string", description: "the distributed trace identifier" } },
-      }),
-      other_noop: mcpTool("noop", () => ""),
-    })
-    const out = await Effect.runPromise(tool.execute({ code: "return await tools.$rune.search('trace_id')" }, ctx))
-    const result = JSON.parse(out.output)
-    expect(result.items.map((i: any) => i.path)).toEqual(["traces.lookup"])
+  test("collects resource_link blocks as external-URL attachments", () => {
+    const { attachments, collect } = collector()
+    const value = toSandboxResult(
+      { content: [{ type: "resource_link", uri: "https://example.com/report.csv", mimeType: "text/csv" }] },
+      collect,
+    )
+    expect(value).toBe("[1 file attached to the result]")
+    expect(attachments).toEqual([
+      { type: "file", mime: "text/csv", url: "https://example.com/report.csv", filename: "report.csv" },
+    ])
+  })
+
+  test("an MCP-shaped result with nothing extractable becomes null", () => {
+    const { collect } = collector()
+    expect(toSandboxResult({ content: [] }, collect)).toBeNull()
+    expect(toSandboxResult({ content: [{ type: "mystery" }] }, collect)).toBeNull()
   })
 })
 
-describe("rankTools", () => {
-  const E = (path: string, description: string, params = ""): SearchEntry => ({
-    path,
-    server: path.split(".")[0]!,
-    description,
-    searchText: [path, description, params].join("\n").toLowerCase(),
+describe("formatting helpers", () => {
+  test("formatValue", () => {
+    expect(formatValue("text")).toBe("text")
+    expect(formatValue({ a: 1 })).toBe(JSON.stringify({ a: 1 }, null, 2))
+    expect(formatValue(null)).toBe("null")
+    expect(formatValue(undefined)).toBe("undefined")
   })
 
-  test("matches multiple non-contiguous terms (not just a contiguous substring)", () => {
-    const entries = [
-      E("github.create_issue", "Create a new issue on a repository"),
-      E("github.list_pulls", "List pull requests"),
-    ]
-    const { items, total } = rankTools(entries, "create issue")
-    expect(total).toBe(1)
-    expect(items[0]!.path).toBe("github.create_issue")
-  })
-
-  test("ranks an exact tool-name match above a substring match", () => {
-    const entries = [E("github.search_issues", "Search issues"), E("github.search", "Full text search")]
-    const { items } = rankTools(entries, "search")
-    expect(items[0]!.path).toBe("github.search")
-  })
-
-  test("ranks a name match above a description-only match", () => {
-    const entries = [
-      E("datadog.list_monitors", "Enumerate alerting definitions"),
-      E("datadog.get_dashboard", "List the monitors on a dashboard"),
-    ]
-    const { items } = rankTools(entries, "monitors")
-    expect(items[0]!.path).toBe("datadog.list_monitors")
-  })
-
-  test("matches against indexed parameter text", () => {
-    const entries = [E("traces.lookup", "Fetch a span", "trace_id the distributed trace id"), E("other.noop", "Does nothing")]
-    const { items, total } = rankTools(entries, "trace_id")
-    expect(total).toBe(1)
-    expect(items[0]!.path).toBe("traces.lookup")
-  })
-
-  test("respects the namespace filter", () => {
-    const entries = [E("github.search", "search"), E("linear.search", "search")]
-    const { items, total } = rankTools(entries, "search", "linear")
-    expect(total).toBe(1)
-    expect(items[0]!.path).toBe("linear.search")
-  })
-
-  test("an empty query (or bare wildcard) lists everything alphabetically", () => {
-    const entries = [E("b.two", "second"), E("a.one", "first")]
-    for (const q of ["", "*"]) {
-      const { items, total } = rankTools(entries, q)
-      expect(total).toBe(2)
-      expect(items.map((i) => i.path)).toEqual(["a.one", "b.two"])
-    }
-  })
-
-  test("honors the limit while reporting the full match total", () => {
-    const entries = Array.from({ length: 10 }, (_, i) => E(`s.tool_${i}`, "searchable tool"))
-    const { items, total } = rankTools(entries, "searchable", undefined, 3)
-    expect(total).toBe(10)
-    expect(items).toHaveLength(3)
-  })
-
-  test("returns nothing when no term matches", () => {
-    const entries = [E("github.search", "search")]
-    expect(rankTools(entries, "nonexistent")).toEqual({ items: [], total: 0 })
-  })
-})
-
-describe("renderType", () => {
-  test("renders primitives, integers, and arrays", () => {
-    expect(renderType({ type: "string" })).toBe("string")
-    expect(renderType({ type: "integer" })).toBe("number")
-    expect(renderType({ type: "array", items: { type: "string" } })).toBe("string[]")
-  })
-
-  test("renders enums and const as literal types", () => {
-    expect(renderType({ enum: ["a", "b", "c"] })).toBe('"a" | "b" | "c"')
-    expect(renderType({ const: 42 })).toBe("42")
-  })
-
-  test("renders a nullable type array as a union (does not drop null)", () => {
-    expect(renderType({ type: ["string", "null"] })).toBe("string | null")
-  })
-
-  test("parenthesizes a union inside an array", () => {
-    expect(renderType({ type: "array", items: { type: ["string", "null"] } })).toBe("(string | null)[]")
-  })
-
-  test("renders additionalProperties as an index signature", () => {
-    expect(renderType({ type: "object", additionalProperties: { type: "number" } })).toBe("{ [key: string]: number }")
-    expect(renderType({ type: "object", additionalProperties: true })).toBe("{ [key: string]: any }")
-  })
-
-  test("resolves a local $ref against the document root", () => {
-    const schema = {
-      type: "object",
-      properties: { node: { $ref: "#/$defs/Node" } },
-      required: ["node"],
-      $defs: { Node: { type: "object", properties: { id: { type: "string" } }, required: ["id"] } },
-    } as any
-    expect(renderType(schema)).toBe("{ node: { id: string } }")
-  })
-
-  test("collapses a self-referential $ref to its name instead of looping", () => {
-    const schema = {
-      $defs: { Node: { type: "object", properties: { next: { $ref: "#/$defs/Node" } } } },
-      $ref: "#/$defs/Node",
-    } as any
-    // Must terminate; the recursive position falls back to the ref name.
-    expect(renderType(schema)).toBe("{ next?: Node }")
-  })
-
-  test("pretty mode emits an indented block with JSDoc for described fields", () => {
-    const schema = {
-      type: "object",
-      properties: {
-        name: { type: "string", description: "The library name to resolve" },
-        kind: { enum: ["lib", "app"] },
-      },
-      required: ["name"],
-    } as any
-    expect(renderType(schema, { pretty: true })).toBe(
-      '{\n  /** The library name to resolve */\n  name: string\n  kind?: "lib" | "app"\n}',
-    )
-  })
-
-  test("renders anyOf / oneOf as a union", () => {
-    expect(renderType({ anyOf: [{ type: "string" }, { type: "number" }] })).toBe("string | number")
-    expect(renderType({ oneOf: [{ const: "a" }, { const: "b" }] })).toBe('"a" | "b"')
-  })
-
-  test("empty enum / anyOf / type arrays render as never, not an empty string", () => {
-    expect(renderType({ enum: [] })).toBe("never")
-    expect(renderType({ anyOf: [] })).toBe("never")
-    expect(renderType({ type: [] as any })).toBe("never")
-  })
-
-  test("renders a tuple's first item type", () => {
-    expect(renderType({ type: "array", items: [{ type: "string" }, { type: "number" }] as any })).toBe("string[]")
-  })
-
-  test("combines named properties with an additionalProperties index signature", () => {
-    const schema = {
-      type: "object",
-      properties: { id: { type: "string" } },
-      required: ["id"],
-      additionalProperties: { type: "number" },
-    } as any
-    expect(renderType(schema)).toBe("{ id: string; [key: string]: number }")
-  })
-
-  test("quotes non-identifier property names", () => {
-    const schema = { type: "object", properties: { "content-type": { type: "string" } } } as any
-    expect(renderType(schema)).toBe('{ "content-type"?: string }')
-  })
-
-  test("nests pretty objects with increasing indentation", () => {
-    const schema = {
-      type: "object",
-      properties: { outer: { type: "object", properties: { inner: { type: "string" } }, required: ["inner"] } },
-      required: ["outer"],
-    } as any
-    expect(renderType(schema, { pretty: true })).toBe("{\n  outer: {\n    inner: string\n  }\n}")
-  })
-
-  test("resolves mutually recursive $refs without looping", () => {
-    const schema = {
-      $ref: "#/$defs/A",
-      $defs: {
-        A: { type: "object", properties: { b: { $ref: "#/$defs/B" } } },
-        B: { type: "object", properties: { a: { $ref: "#/$defs/A" } } },
-      },
-    } as any
-    // A -> B -> A: the second A is on the resolution path, so it collapses to its name.
-    expect(renderType(schema)).toBe("{ b?: { a?: A } }")
-  })
-
-  test("preserves a multi-line description as a multi-line JSDoc block", () => {
-    const schema = {
-      type: "object",
-      properties: {
-        query: { type: "string", description: "The search query.\nSupports globs.\n\nExamples: *.ts" },
-      },
-      required: ["query"],
-    } as any
-    expect(renderType(schema, { pretty: true })).toBe(
-      "{\n  /**\n   * The search query.\n   * Supports globs.\n   *\n   * Examples: *.ts\n   */\n  query: string\n}",
-    )
-  })
-
-  test("emits JSDoc tags for schema constraints TypeScript can't express", () => {
-    const schema = {
-      type: "object",
-      properties: {
-        when: { type: "string", format: "date-time", default: "now", description: "start time" },
-        legacy: { type: "boolean", deprecated: true },
-        tags: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 5 },
-      },
-      required: ["when"],
-    } as any
-    expect(renderType(schema, { pretty: true })).toBe(
-      [
-        "{",
-        "  /**",
-        "   * start time",
-        '   * @default "now"',
-        "   * @format date-time",
-        "   */",
-        "  when: string",
-        "  /** @deprecated */",
-        "  legacy?: boolean",
-        "  /**",
-        "   * @minItems 1",
-        "   * @maxItems 5",
-        "   */",
-        "  tags?: string[]",
-        "}",
-      ].join("\n"),
-    )
-  })
-
-  test("neutralizes a comment terminator inside a JSDoc description", () => {
-    const schema = { type: "object", properties: { x: { type: "string", description: "danger */ oops" } } } as any
-    const out = renderType(schema, { pretty: true })
-    expect(out).toContain("/** danger * / oops */")
-    expect(out).not.toContain("*/ oops")
-  })
-
-  test("is total on a self-referential union (never throws)", () => {
-    const a: any = { anyOf: [] }
-    a.anyOf.push(a) // structural cycle with no $ref
-    expect(() => renderType(a)).not.toThrow()
-  })
-
-  test("unwraps the Pydantic allOf: [{ $ref }] shape with sibling description", () => {
-    const schema = {
-      type: "object",
-      properties: {
-        config: { allOf: [{ $ref: "#/$defs/Config" }], description: "the config block" },
-      },
-      required: ["config"],
-      $defs: { Config: { type: "object", properties: { level: { type: "integer" } }, required: ["level"] } },
-    } as any
-    expect(renderType(schema)).toBe("{ config: { level: number } }")
-  })
-
-  test("renders multi-member allOf as an intersection", () => {
-    const schema = {
-      allOf: [
-        { type: "object", properties: { a: { type: "string" } }, required: ["a"] },
-        { type: "object", properties: { b: { type: "number" } }, required: ["b"] },
-      ],
-    } as any
-    expect(renderType(schema)).toBe("{ a: string } & { b: number }")
-  })
-
-  test("renders a base object's properties even when it also carries a require-one-of anyOf", () => {
-    const schema = {
-      type: "object",
-      properties: { a: { type: "string" }, b: { type: "string" } },
-      anyOf: [{ required: ["a"] }, { required: ["b"] }],
-    } as any
-    expect(renderType(schema)).toBe("{ a?: string; b?: string }")
+  test("withLogs", () => {
+    // No logs: output is returned untouched.
+    expect(withLogs("result", [])).toBe("result")
+    expect(withLogs("result")).toBe("result")
+    // Logs are appended as a trailing section, one line each.
+    expect(withLogs("result", ["a", "[warn] b"])).toBe("result\n\nLogs:\na\n[warn] b")
+    // Empty output still gets the section (no leading blank lines).
+    expect(withLogs("", ["[error] boom"])).toBe("Logs:\n[error] boom")
   })
 })

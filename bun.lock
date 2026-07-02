@@ -138,6 +138,20 @@
         "effect",
       ],
     },
+    "packages/codemode": {
+      "name": "@opencode-ai/codemode",
+      "version": "0.0.1",
+      "dependencies": {
+        "acorn": "8.15.0",
+        "effect": "catalog:",
+        "typescript": "catalog:",
+      },
+      "devDependencies": {
+        "@tsconfig/bun": "catalog:",
+        "@types/bun": "catalog:",
+        "@typescript/native-preview": "catalog:",
+      },
+    },
     "packages/console/app": {
       "name": "@opencode-ai/console-app",
       "version": "1.17.11",
@@ -578,6 +592,7 @@
         "@octokit/graphql": "9.0.2",
         "@octokit/rest": "catalog:",
         "@openauthjs/openauth": "catalog:",
+        "@opencode-ai/codemode": "workspace:*",
         "@opencode-ai/llm": "workspace:*",
         "@opencode-ai/plugin": "workspace:*",
         "@opencode-ai/protocol": "workspace:*",
@@ -603,7 +618,6 @@
         "@standard-schema/spec": "1.0.0",
         "@types/ws": "8.18.1",
         "@zip.js/zip.js": "2.7.62",
-        "acorn": "8.15.0",
         "ai": "catalog:",
         "ai-gateway-provider": "3.1.2",
         "bonjour-service": "1.3.0",
@@ -637,7 +651,6 @@
         "tree-sitter-bash": "0.25.0",
         "tree-sitter-powershell": "0.25.10",
         "turndown": "7.2.0",
-        "typescript": "catalog:",
         "ulid": "catalog:",
         "venice-ai-sdk-provider": "2.0.2",
         "vscode-jsonrpc": "8.2.1",
@@ -666,6 +679,7 @@
         "@typescript/native-preview": "catalog:",
         "drizzle-orm": "catalog:",
         "prettier": "3.6.2",
+        "typescript": "catalog:",
         "vscode-languageserver-types": "3.17.5",
         "why-is-node-running": "3.2.2",
       },
@@ -1923,6 +1937,8 @@
     "@opencode-ai/cli": ["@opencode-ai/cli@workspace:packages/cli"],
 
     "@opencode-ai/client": ["@opencode-ai/client@workspace:packages/client"],
+
+    "@opencode-ai/codemode": ["@opencode-ai/codemode@workspace:packages/codemode"],
 
     "@opencode-ai/console-app": ["@opencode-ai/console-app@workspace:packages/console/app"],
 
