@@ -7,6 +7,7 @@ import { ConfigAgentV1 } from "@opencode-ai/core/v1/config/agent"
 import { configEntryNameFromPath } from "./entry-name"
 import * as ConfigMarkdown from "./markdown"
 import { ConfigParse } from "./parse"
+import { ConfigVariable } from "./variable"
 
 export async function load(dir: string) {
   const result: Record<string, ConfigAgentV1.Info> = {}
@@ -20,11 +21,16 @@ export async function load(dir: string) {
     if (!md) continue
 
     const name = configEntryNameFromPath(path.relative(dir, item), ["agent/", "agents/"])
+    const prompt = await ConfigVariable.substitute({
+      type: "path",
+      path: item,
+      text: md.content.trim() || String(md.data.prompt ?? ""),
+    })
 
     const config = {
       name,
       ...md.data,
-      prompt: md.content.trim(),
+      prompt,
     }
     result[config.name] = ConfigParse.schema(ConfigAgentV1.Info, config, item)
   }
@@ -42,10 +48,15 @@ export async function loadMode(dir: string) {
     const md = await ConfigMarkdown.parse(item).catch(() => undefined)
     if (!md) continue
 
+    const prompt = await ConfigVariable.substitute({
+      type: "path",
+      path: item,
+      text: md.content.trim() || String(md.data.prompt ?? ""),
+    })
     const config = {
       name: configEntryNameFromPath(path.relative(dir, item), ["mode/", "modes/"]),
       ...md.data,
-      prompt: md.content.trim(),
+      prompt,
     }
     const parsed = Schema.decodeUnknownExit(ConfigAgentV1.Info)(config, { errors: "all", propertyOrder: "original" })
     if (Exit.isSuccess(parsed)) {
