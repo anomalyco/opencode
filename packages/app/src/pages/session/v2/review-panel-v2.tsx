@@ -95,19 +95,19 @@ export function ReviewPanelV2(props: ReviewPanelV2Props) {
         <SessionReviewV2SidebarToggle opened={props.state.sidebarOpened()} onToggle={props.state.toggleSidebar} />
       }
       sidebar={
-        <Show when={diffs().length > 0}>
-          <ReviewPanelV2Sidebar
-            title={props.title}
-            state={props.state}
-            diffsReady={props.diffsReady}
-            onSelectFile={props.onSelectFile}
-            diffs={diffs}
-            filteredFiles={filteredFiles}
-            searching={searching}
-            kinds={kinds}
-            activeDiff={activeDiff}
-          />
-        </Show>
+        // Always mounted: the sidebar header hosts the changes-mode dropdown,
+        // which must stay reachable when the current mode has zero diffs.
+        <ReviewPanelV2Sidebar
+          title={props.title}
+          state={props.state}
+          diffsReady={props.diffsReady}
+          onSelectFile={props.onSelectFile}
+          diffs={diffs}
+          filteredFiles={filteredFiles}
+          searching={searching}
+          kinds={kinds}
+          activeDiff={activeDiff}
+        />
       }
       activeFile={activeDiff()}
       files={filteredFiles()}
