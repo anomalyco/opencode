@@ -319,17 +319,18 @@ const layer = Layer.effect(
 )
 
 export function fmt(list: Info[], opts: { verbose: boolean }) {
-  const described = list.filter((skill) => skill.description !== undefined)
-  if (described.length === 0) return "No skills are currently available."
+  if (list.length === 0) return "No skills are currently available."
   if (opts.verbose) {
     return [
       "<available_skills>",
-      ...described
+      ...list
         .toSorted((a, b) => a.name.localeCompare(b.name))
         .flatMap((skill) => [
           "  <skill>",
           `    <name>${skill.name}</name>`,
-          `    <description>${skill.description}</description>`,
+          ...(skill.description !== undefined
+            ? [`    <description>${skill.description}</description>`]
+            : []),
           `    <location>${escapeHtml(skill.location)}</location>`,
           "  </skill>",
         ]),
@@ -339,9 +340,13 @@ export function fmt(list: Info[], opts: { verbose: boolean }) {
 
   return [
     "## Available Skills",
-    ...described
+    ...list
       .toSorted((a, b) => a.name.localeCompare(b.name))
-      .map((skill) => `- **${skill.name}**: ${skill.description}`),
+      .map((skill) =>
+        skill.description !== undefined
+          ? `- **${skill.name}**: ${skill.description}`
+          : `- **${skill.name}**`,
+      ),
   ].join("\n")
 }
 
