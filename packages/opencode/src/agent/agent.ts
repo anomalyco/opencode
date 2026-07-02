@@ -85,7 +85,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Ag
 
 export const use = serviceUse(Service)
 
-const layer = Layer.effect(
+export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const config = yield* Config.Service
@@ -449,5 +449,6 @@ export const node = LayerNode.make({
   layer: layer,
   deps: [Config.node, Auth.node, Plugin.node, Skill.node, Provider.node, locationServiceMapNode],
 })
+export const defaultLayer = layer
 
 export * as Agent from "./agent"

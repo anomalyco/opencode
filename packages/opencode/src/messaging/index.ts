@@ -351,4 +351,6 @@ export const layer = Layer.effect(
 
 export const node = LayerNode.make({ service: Service, layer, deps: [EventV2Bridge.node] })
 
+export const defaultLayer = layer
+
 export * as Messaging from "."

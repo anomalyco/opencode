@@ -3,16 +3,17 @@ import { Effect, Option } from "effect"
 import { Messaging } from "../../src/messaging"
 import { SessionID } from "../../src/session/schema"
 import { testEffect } from "../lib/effect"
-import { Layer } from "effect"
-import { EventV2Bridge } from "../../src/event-v2-bridge"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { BackgroundJob } from "../../src/background/job"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 
 const it = testEffect(
-  Layer.mergeAll(
-    Messaging.layer.pipe(Layer.provideMerge(EventV2Bridge.defaultLayer)),
-    BackgroundJob.defaultLayer,
-    CrossSpawnSpawner.defaultLayer,
+  LayerNode.compile(
+    LayerNode.group([
+      Messaging.node,
+      BackgroundJob.node,
+      CrossSpawnSpawner.node,
+    ]),
   ),
 )
 

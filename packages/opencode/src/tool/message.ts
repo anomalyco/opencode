@@ -115,12 +115,7 @@ export const MessageTool = Tool.define<
         const fromSlug = yield* messaging.slugFor(ctx.sessionID)
         yield* messaging
           .enqueue({ target: targetID, from: ctx.sessionID, fromSlug, body: params.body })
-          .pipe(
-            Effect.catchTag("Messaging.AbuseError", (e) => Effect.fail(new Error(e.detail))),
-            Effect.catchTag("Messaging.NotFoundError", () =>
-              Effect.fail(new Error(`target "${params.target}" is no longer live`)),
-            ),
-          )
+          .pipe(Effect.catchTag("Messaging.AbuseError", (e) => Effect.fail(new Error(e.detail))))
         return {
           title: `Sent to ${params.target}`,
           metadata: { target: params.target, expect_reply: false },
