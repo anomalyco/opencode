@@ -32,6 +32,7 @@ export type Data = {
 
 export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("Command.NotFoundError", {
   command: Schema.String,
+  message: Schema.String,
 }) {}
 
 export class EvaluationError extends Schema.TaggedErrorClass<EvaluationError>()("Command.EvaluationError", {
@@ -118,7 +119,7 @@ const layer = Layer.effect(
         })
 
         const prompt = (yield* mcp.prompts()).find((prompt) => mcpCommandName(prompt.server, prompt.name) === input.name)
-        if (!prompt) return yield* new NotFoundError({ command: input.name })
+        if (!prompt) return yield* new NotFoundError({ command: input.name, message: `Command not found: ${input.name}` })
         const result = yield* mcp
           .prompt({
             server: prompt.server,
@@ -164,8 +165,11 @@ function evaluateTemplate(
   },
 ) {
   return Effect.gen(function* () {
-    const text = yield* evaluateShell(command, evaluateArguments(template, input), services)
-    const files = yield* resolveFiles(text, services.location.directory)
+    const expanded = evaluateArguments(template, input)
+    const [text, files] = yield* Effect.all([
+      evaluateShell(command, expanded, services),
+      resolveFiles(expanded, services.location.directory),
+    ])
     return { text, ...(files.length === 0 ? {} : { files }) }
   })
 }

@@ -247,7 +247,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                   Effect.fail(
                     new CommandNotFoundError({
                       command: error.command,
-                      message: `Command not found: ${error.command}`,
+                      message: error.message,
                     }),
                   ),
                 ),

@@ -469,7 +469,11 @@ const layer = Layer.effect(
         const session = yield* result.get(input.sessionID)
         const commands = yield* CommandV2.Service.pipe(Effect.provide(locations.get(session.location)))
         const command = yield* commands.get(input.command)
-        if (!command) return yield* new CommandV2.NotFoundError({ command: input.command })
+        if (!command)
+          return yield* new CommandV2.NotFoundError({
+            command: input.command,
+            message: `Command not found: ${input.command}`,
+          })
         const evaluated = yield* commands.evaluate({ name: input.command, arguments: input.arguments })
 
         // TODO(v2 commands): decide whether command-level subtask/background execution belongs in v2 commands.
