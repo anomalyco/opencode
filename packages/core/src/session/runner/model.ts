@@ -12,6 +12,7 @@ import { Catalog } from "../../catalog"
 import { Credential } from "../../credential"
 import { Integration } from "../../integration"
 import { ModelV2 } from "../../model"
+import { OpenAICodex } from "../../plugin/provider/openai-codex"
 import { ProviderV2 } from "../../provider"
 import { SessionSchema } from "../schema"
 
@@ -140,6 +141,21 @@ export const fromCatalogModel = (
         })
   const key = apiKey(resolved, credential)
   if (resolved.api.type === "aisdk" && resolved.api.package === "@ai-sdk/openai") {
+    // ChatGPT-plan OAuth tokens are not API-key credentials: the public API rejects
+    // them, so requests must target the codex backend with the account header.
+    if (OpenAICodex.isChatGPT(credential)) {
+      const account = OpenAICodex.accountID(credential)
+      return Effect.succeed(
+        withDefaults(resolved, OpenAIResponses.route)
+          .with({
+            endpoint: { baseURL: OpenAICodex.baseURL },
+            auth: (key === undefined ? Auth.none : Auth.bearer(key)).andThen(
+              account === undefined ? Auth.none : Auth.headers({ "chatgpt-account-id": account }),
+            ),
+          })
+          .model({ id: resolved.api.id }),
+      )
+    }
     return Effect.succeed(
       withDefaults(resolved, OpenAIResponses.route)
         .with({ auth: key === undefined ? Auth.none : Auth.bearer(key) })
