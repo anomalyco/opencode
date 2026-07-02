@@ -138,7 +138,7 @@ async function openReview(page: Page) {
   await page.goto(`/${base64Encode(directory)}/session/${sessionID}`)
   await expectSessionTitle(page, title)
   await page.getByRole("button", { name: "Toggle review" }).click()
-  await expectAppVisible(page.locator('#review-panel [data-component="tabs-v2"].session-review-v2-tabs'))
+  await expectAppVisible(page.locator('#review-panel [data-component="session-review-v2"]'))
   await expectAppVisible(page.getByRole("button", { name: /preview\.png/ }))
 }
 
@@ -153,9 +153,7 @@ async function installReviewFlashProbe(page: Page) {
     }> = []
     const startedAt = performance.now()
     const sample = () => {
-      const panel = document.querySelector<HTMLElement>(
-        '#review-panel [data-component="tabs-v2"].session-review-v2-tabs',
-      )
+      const panel = document.querySelector<HTMLElement>('#review-panel [data-component="session-review-v2"]')
       const rect = panel?.getBoundingClientRect()
       const center = rect
         ? document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)

@@ -26,7 +26,7 @@ function pathToFileUrl(filepath: string): string {
   return `file://${encodeFilePath(filepath)}`
 }
 
-type Kind = "add" | "del" | "mix"
+export type Kind = "add" | "del" | "mix"
 
 type Filter = {
   files: Set<string>
@@ -123,14 +123,14 @@ function guideLineLeft(level: number) {
 
 type ChangeState = "modified" | "added" | "deleted" | "renamed" | "untracked"
 
-const kindLabel = (kind: Kind, showModifiedLabel: boolean) => {
+export const kindLabel = (kind: Kind, showModifiedLabel: boolean) => {
   if (kind === "add") return "A"
   if (kind === "del") return "D"
   if (showModifiedLabel) return "M"
   return ""
 }
 
-const kindChangeState = (kind: Kind): ChangeState => {
+export const kindChange = (kind: Kind): ChangeState => {
   if (kind === "add") return "added"
   if (kind === "del") return "deleted"
   return "modified"
@@ -227,7 +227,7 @@ const FileTreeNodeV2 = (
         if (!value) return null
         if (local.node.type === "file") {
           return (
-            <span data-slot="file-tree-v2-change" data-change={kindChangeState(value)}>
+            <span data-slot="file-tree-v2-change" data-change={kindChange(value)}>
               {kindLabel(value, local.showModifiedLabel ?? false)}
             </span>
           )

@@ -1,40 +1,39 @@
-import type { SessionReviewExpandMode } from "@opencode-ai/session-ui/v2/session-review-v2"
+import {
+  SESSION_REVIEW_V2_SIDEBAR_WIDTH_DEFAULT,
+  SESSION_REVIEW_V2_SIDEBAR_WIDTH_MAX,
+  SESSION_REVIEW_V2_SIDEBAR_WIDTH_MIN,
+  type SessionReviewExpandMode,
+} from "@opencode-ai/session-ui/v2/session-review-v2"
+import { createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Persist, persisted } from "@/utils/persist"
-
-export const REVIEW_PANEL_V2_SIDEBAR_WIDTH_DEFAULT = 240
-export const REVIEW_PANEL_V2_SIDEBAR_WIDTH_MIN = 200
-export const REVIEW_PANEL_V2_SIDEBAR_WIDTH_MAX = 480
 
 export function createReviewPanelV2State() {
   const [store, setStore] = persisted(
     Persist.global("review-panel-v2"),
     createStore({
       sidebarOpened: true,
-      sidebarWidth: REVIEW_PANEL_V2_SIDEBAR_WIDTH_DEFAULT,
-      filter: "",
-      filesFilter: "",
+      sidebarWidth: SESSION_REVIEW_V2_SIDEBAR_WIDTH_DEFAULT,
       expandMode: "collapse" as SessionReviewExpandMode,
     }),
   )
+  // The filter is transient by design: a persisted filter would silently hide
+  // files after a reload.
+  const [filter, setFilter] = createSignal("")
 
   return {
     sidebarOpened: () => store.sidebarOpened,
     sidebarWidth: () => store.sidebarWidth,
-    filter: () => store.filter,
-    filesFilter: () => store.filesFilter,
+    filter,
+    setFilter,
     expandMode: () => store.expandMode,
-    setFilter: (value: string) => setStore("filter", value),
-    setFilesFilter: (value: string) => setStore("filesFilter", value),
     setExpandMode: (mode: SessionReviewExpandMode) => setStore("expandMode", mode),
     resizeSidebar: (width: number) =>
       setStore(
         "sidebarWidth",
-        Math.min(REVIEW_PANEL_V2_SIDEBAR_WIDTH_MAX, Math.max(REVIEW_PANEL_V2_SIDEBAR_WIDTH_MIN, width)),
+        Math.min(SESSION_REVIEW_V2_SIDEBAR_WIDTH_MAX, Math.max(SESSION_REVIEW_V2_SIDEBAR_WIDTH_MIN, width)),
       ),
     toggleSidebar: () => setStore("sidebarOpened", (opened) => !opened),
-    openSidebar: () => setStore("sidebarOpened", true),
-    closeSidebar: () => setStore("sidebarOpened", false),
   }
 }
 

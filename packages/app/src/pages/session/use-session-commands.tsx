@@ -14,10 +14,9 @@ import { useSync } from "@/context/sync"
 import { useTerminal } from "@/context/terminal"
 import { showToast } from "@/utils/toast"
 import { findLast } from "@opencode-ai/core/util/array"
-import { createSessionTabs, toggleSessionTerminal } from "@/pages/session/helpers"
+import { createSessionTabs } from "@/pages/session/helpers"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { UserMessage } from "@opencode-ai/sdk/v2"
-import { sessionV2CommandMode } from "@/pages/session/command-mode"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { useTabs } from "@/context/tabs"
 import { requireServerKey } from "@/utils/session-route"
@@ -90,8 +89,6 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   })
   const activeFileTab = tabState.activeFileTab
   const closableTab = tabState.closableTab
-  const sessionV2Commands = () =>
-    sessionV2CommandMode({ newLayoutDesigns: settings.general.newLayoutDesigns(), sessionID: params.id })
   const shown = settings.visibility.fileTree
 
   const messages = () => {
@@ -468,7 +465,6 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         onSelect: openFile,
       }),
       tab &&
-        !settings.general.newLayoutDesigns() &&
         fileCommand({
           id: "tab.close",
           title: language.t("command.tab.close"),
@@ -493,9 +489,9 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     viewCommand({
       id: "terminal.toggle",
       title: language.t("command.terminal.toggle"),
-      keybind: sessionV2Commands() ? "mod+j" : "ctrl+`",
+      keybind: "ctrl+`",
       slash: "terminal",
-      onSelect: () => toggleSessionTerminal(view(), { openReviewPanel: sessionV2Commands() }),
+      onSelect: () => view().terminal.toggle(),
     }),
     viewCommand({
       id: "review.toggle",

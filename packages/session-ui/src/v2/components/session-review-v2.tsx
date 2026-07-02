@@ -12,9 +12,9 @@ import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import { Show, createEffect, createSignal, onCleanup, type JSX } from "solid-js"
 import "./session-review-v2.css"
 
-const SIDEBAR_WIDTH_DEFAULT = 240
-const SIDEBAR_WIDTH_MIN = 200
-const SIDEBAR_WIDTH_MAX = 480
+export const SESSION_REVIEW_V2_SIDEBAR_WIDTH_DEFAULT = 240
+export const SESSION_REVIEW_V2_SIDEBAR_WIDTH_MIN = 200
+export const SESSION_REVIEW_V2_SIDEBAR_WIDTH_MAX = 480
 
 export type SessionReviewExpandMode = "expand" | "collapse"
 
@@ -23,30 +23,26 @@ export type SessionReviewV2Props = {
   stats?: JSX.Element
   empty?: JSX.Element
   sidebarOpen?: boolean
-  filter: string
-  onFilterChange: (value: string) => void
   sidebar?: JSX.Element
+  sidebarToggle?: JSX.Element
   activeFile?: string
   files: string[]
   onSelectFile: (file: string) => void
   diffStyle: SessionReviewDiffStyle
   onDiffStyleChange?: (style: SessionReviewDiffStyle) => void
-  expandMode?: SessionReviewExpandMode
-  onExpandModeChange?: (mode: SessionReviewExpandMode) => void
+  expandMode: SessionReviewExpandMode
+  onExpandModeChange: (mode: SessionReviewExpandMode) => void
   preview?: JSX.Element
   hasDiffs: boolean
-  hideSidebar?: boolean
 }
 
 export type SessionReviewV2SidebarProps = {
   open: boolean
-  variant?: "review" | "files"
   title?: JSX.Element
   stats?: JSX.Element
   filter: string
   onFilterChange: (value: string) => void
   onFilterKeyDown?: JSX.EventHandlerUnion<HTMLInputElement, KeyboardEvent>
-  focusFilterToken?: number
   width?: number
   onWidthChange?: (width: number) => void
   minWidth?: number
@@ -57,20 +53,9 @@ export type SessionReviewV2SidebarProps = {
 export function SessionReviewV2Sidebar(props: SessionReviewV2SidebarProps) {
   const i18n = useI18n()
   const [resizing, setResizing] = createSignal(false)
-  const width = () => props.width ?? SIDEBAR_WIDTH_DEFAULT
-  const minWidth = () => props.minWidth ?? SIDEBAR_WIDTH_MIN
-  const maxWidth = () => props.maxWidth ?? SIDEBAR_WIDTH_MAX
-  let filterInputRef: HTMLInputElement | undefined
-
-  createEffect(() => {
-    const token = props.focusFilterToken
-    if (!props.open || !token || token <= 0) return
-    queueMicrotask(() => {
-      if (!props.open) return
-      filterInputRef?.focus()
-      filterInputRef?.select()
-    })
-  })
+  const width = () => props.width ?? SESSION_REVIEW_V2_SIDEBAR_WIDTH_DEFAULT
+  const minWidth = () => props.minWidth ?? SESSION_REVIEW_V2_SIDEBAR_WIDTH_MIN
+  const maxWidth = () => props.maxWidth ?? SESSION_REVIEW_V2_SIDEBAR_WIDTH_MAX
 
   createEffect(() => {
     if (!resizing()) return
@@ -80,7 +65,7 @@ export function SessionReviewV2Sidebar(props: SessionReviewV2SidebarProps) {
   })
 
   return (
-    <div data-component="session-review-v2-sidebar-root" data-variant={props.variant ?? "review"}>
+    <div data-component="session-review-v2-sidebar-root">
       <aside
         data-slot="session-review-v2-sidebar"
         data-resizing={resizing() ? "" : undefined}
@@ -95,9 +80,6 @@ export function SessionReviewV2Sidebar(props: SessionReviewV2SidebarProps) {
           </div>
           <div data-slot="session-review-v2-sidebar-filter">
             <TextInputV2
-              ref={(el) => {
-                filterInputRef = el
-              }}
               type="search"
               value={props.filter}
               onInput={(event) => props.onFilterChange(event.currentTarget.value)}
@@ -147,13 +129,6 @@ export function SessionReviewV2Sidebar(props: SessionReviewV2SidebarProps) {
 
 export function SessionReviewV2(props: SessionReviewV2Props) {
   const i18n = useI18n()
-  const [localExpandMode, setLocalExpandMode] = createSignal<SessionReviewExpandMode>("collapse")
-
-  const expandMode = () => props.expandMode ?? localExpandMode()
-  const setExpandMode = (mode: SessionReviewExpandMode) => {
-    if (props.expandMode === undefined) setLocalExpandMode(mode)
-    props.onExpandModeChange?.(mode)
-  }
 
   const fileIndex = () => {
     const files = props.files
@@ -183,22 +158,13 @@ export function SessionReviewV2(props: SessionReviewV2Props) {
   return (
     <div data-component="session-review-v2">
       <div data-slot="session-review-v2-body">
-        <Show when={!props.hideSidebar}>
-          <SessionReviewV2Sidebar
-            open={props.sidebarOpen ?? true}
-            title={props.title}
-            stats={props.stats}
-            filter={props.filter}
-            onFilterChange={props.onFilterChange}
-          >
-            {props.sidebar}
-          </SessionReviewV2Sidebar>
-        </Show>
+        {props.sidebar}
 
         <div data-slot="session-review-v2-preview">
           <Show when={props.hasDiffs} fallback={props.empty}>
             <div data-slot="session-review-v2-toolbar">
               <div data-slot="session-review-v2-toolbar-group" class="session-review-v2-toolbar-group--start">
+                {props.sidebarToggle}
                 <Show when={showCollapsedMeta()}>
                   <div data-slot="session-review-v2-toolbar-collapsed-meta">
                     <Show when={props.title}>
@@ -263,10 +229,10 @@ export function SessionReviewV2(props: SessionReviewV2Props) {
               </div>
               <div data-slot="session-review-v2-toolbar-group" class="session-review-v2-toolbar-group--segments">
                 <SegmentedControlV2
-                  value={expandMode()}
+                  value={props.expandMode}
                   onChange={(value) => {
                     if (value !== "expand" && value !== "collapse") return
-                    setExpandMode(value)
+                    props.onExpandModeChange(value)
                   }}
                   class="session-review-v2-segmented-control session-review-v2-segmented-control--icon"
                   aria-label={i18n.t("ui.sessionReviewV2.expandMode")}

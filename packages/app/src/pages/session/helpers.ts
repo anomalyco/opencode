@@ -4,7 +4,6 @@ import { makeEventListener } from "@solid-primitives/event-listener"
 import { same } from "@/utils/same"
 
 const emptyTabs: string[] = []
-export const SESSION_OPEN_FILE_TAB = "open-file"
 
 type Tabs = {
   active: Accessor<string | undefined>
@@ -36,7 +35,7 @@ export const createSessionTabs = (input: TabsInput) => {
         .tabs()
         .all()
         .flatMap((tab) => {
-          if (tab === "context" || tab === "review" || tab === SESSION_OPEN_FILE_TAB) return []
+          if (tab === "context" || tab === "review") return []
           const value = input.pathFromTab(tab) ? input.normalizeTab(tab) : tab
           if (seen.has(value)) return []
           seen.add(value)
@@ -49,7 +48,6 @@ export const createSessionTabs = (input: TabsInput) => {
   const activeTab = createMemo(() => {
     const active = input.tabs().active()
     if (active === "context") return active
-    if (active === SESSION_OPEN_FILE_TAB) return active
     if (active === "review" && review()) return active
     if (active && input.pathFromTab(active)) return input.normalizeTab(active)
 
@@ -67,7 +65,6 @@ export const createSessionTabs = (input: TabsInput) => {
   const closableTab = createMemo(() => {
     const active = activeTab()
     if (active === "context") return active
-    if (active === SESSION_OPEN_FILE_TAB) return active
     if (!openedTabs().includes(active)) return
     return active
   })
@@ -79,20 +76,6 @@ export const createSessionTabs = (input: TabsInput) => {
     activeFileTab,
     closableTab,
   }
-}
-
-export const toggleSessionTerminal = (
-  view: {
-    terminal: { opened: () => boolean; toggle: () => void }
-    reviewPanel: { opened: () => boolean; open: () => void }
-  },
-  options?: { openReviewPanel?: boolean },
-) => {
-  const opening = !view.terminal.opened()
-  if (opening && options?.openReviewPanel && !view.reviewPanel.opened()) {
-    view.reviewPanel.open()
-  }
-  view.terminal.toggle()
 }
 
 export const focusTerminalById = (id: string) => {

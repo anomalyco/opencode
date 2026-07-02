@@ -29,8 +29,6 @@ export const dict: Record<string, string> = {
   "ui.sessionReviewV2.empty.noGit.description": "Track, review, and undo changes in this project",
   "ui.sessionReviewV2.empty.noGit.action": "Create Git repository",
   "ui.sessionReviewV2.empty.noGit.actionLoading": "Creating Git repository...",
-  "ui.sessionReviewV2.empty.openFile.title": "Open file",
-  "ui.sessionReviewV2.empty.openFile.description": "Search or select a file from file tree",
   "ui.sessionReviewV2.empty.changes.title": "No file changes yet",
   "ui.sessionReviewV2.empty.changes.description": "Project changes will appear here",
 

@@ -79,10 +79,9 @@ import { type DiffStyle, SessionReviewTab, type SessionReviewTabProps } from "@/
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { syncSessionModel } from "@/pages/session/session-model-helpers"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
-import { SessionSidePanelV2 } from "@/pages/session/v2/session-side-panel-v2"
 import { SessionReviewEmptyChangesV2 } from "@opencode-ai/session-ui/v2/session-review-empty-changes-v2"
 import { SessionReviewEmptyNoGitV2 } from "@opencode-ai/session-ui/v2/session-review-empty-no-git-v2"
-import { ReviewPanelV2, ReviewPanelV2Sidebar } from "@/pages/session/v2/review-panel-v2"
+import { ReviewPanelV2 } from "@/pages/session/v2/review-panel-v2"
 import { createReviewPanelV2State } from "@/pages/session/v2/review-panel-v2-state"
 import { TerminalPanel } from "@/pages/session/terminal-panel"
 import { useComposerCommands } from "@/pages/session/use-composer-commands"
@@ -1219,8 +1218,6 @@ export default function Page() {
     </div>
   )
 
-  const reviewSidebarV2 = () => <ReviewPanelV2Sidebar {...reviewPanelV2Props()} />
-
   const reviewPanel = () => (
     <div
       classList={{
@@ -2137,63 +2134,22 @@ export default function Page() {
           </Show>
         </div>
 
-        <Show
-          when={newSessionDesign() && !!params.id}
-          fallback={
-            <SessionSidePanel
-              canReview={canReview}
-              diffs={reviewDiffs}
-              diffsReady={reviewReady}
-              empty={reviewEmptyText}
-              hasReview={hasReview}
-              reviewCount={reviewCount}
-              reviewPanel={reviewPanel}
-              activeDiff={tree.activeDiff}
-              focusReviewDiff={focusReviewDiff}
-              reviewSnap={ui.reviewSnap}
-              size={size}
-            />
-          }
-        >
-          <div
-            class="flex flex-col min-h-0 h-full flex-1 min-w-0"
-            classList={{ "gap-2": desktopReviewOpen() && view().terminal.opened() }}
-          >
-            <div class="flex-1 min-h-0 min-w-0 flex">
-              <SessionSidePanelV2
-                canReview={canReview}
-                diffs={reviewDiffs}
-                diffsReady={reviewReady}
-                hasReview={hasReview}
-                reviewCount={reviewCount}
-                reviewPanel={reviewPanelV2}
-                reviewSidebar={reviewSidebarV2}
-                reviewV2State={reviewV2State}
-                fileTabReview={reviewPanelV2Props}
-                reviewSnap={ui.reviewSnap}
-                size={size}
-              />
-            </div>
-            <Show when={desktopReviewOpen()}>
-              <div
-                class="shrink-0 overflow-hidden"
-                classList={{
-                  "rounded-[6px] shadow-[var(--v2-elevation-raised)] bg-background-stronger": view().terminal.opened(),
-                }}
-              >
-                <TerminalPanel
-                  variant="v2"
-                  maxHeight={() => (typeof window === "undefined" ? 400 : window.innerHeight * 0.4)}
-                />
-              </div>
-            </Show>
-          </div>
-        </Show>
+        <SessionSidePanel
+          canReview={canReview}
+          diffs={reviewDiffs}
+          diffsReady={reviewReady}
+          empty={reviewEmptyText}
+          hasReview={hasReview}
+          reviewCount={reviewCount}
+          reviewPanel={() => (newSessionDesign() ? reviewPanelV2() : reviewPanel())}
+          activeDiff={tree.activeDiff}
+          focusReviewDiff={focusReviewDiff}
+          reviewSnap={ui.reviewSnap}
+          size={size}
+        />
       </div>
 
-      <Show when={!newSessionDesign() || !params.id}>
-        <TerminalPanel />
-      </Show>
+      <TerminalPanel />
     </SessionRouteFrame>
   )
 }

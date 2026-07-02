@@ -327,7 +327,9 @@ export function createLineCommentController<T extends LineCommentShape>(
 ): {
   note: ReturnType<typeof createLineCommentState<string>>
   annotations: Accessor<DiffLineAnnotation<LineCommentAnnotationMeta<T>>[]>
-  renderAnnotation: ReturnType<typeof createManagedLineCommentAnnotationRenderer<T, CommentProps, DraftProps>>["renderAnnotation"]
+  renderAnnotation: ReturnType<
+    typeof createManagedLineCommentAnnotationRenderer<T, CommentProps, DraftProps>
+  >["renderAnnotation"]
   renderGutterUtility: ReturnType<typeof createLineCommentGutterRenderer>
   onLineSelected: (range: SelectedLineRange | null) => void
   onLineSelectionEnd: (range: SelectedLineRange | null) => void
@@ -337,7 +339,9 @@ export function createLineCommentController<T extends LineCommentShape>(
 ): {
   note: ReturnType<typeof createLineCommentState<string>>
   annotations: Accessor<LineCommentAnnotation<T>[]>
-  renderAnnotation: ReturnType<typeof createManagedLineCommentAnnotationRenderer<T, CommentProps, DraftProps>>["renderAnnotation"]
+  renderAnnotation: ReturnType<
+    typeof createManagedLineCommentAnnotationRenderer<T, CommentProps, DraftProps>
+  >["renderAnnotation"]
   renderGutterUtility: ReturnType<typeof createLineCommentGutterRenderer>
   onLineSelected: (range: SelectedLineRange | null) => void
   onLineSelectionEnd: (range: SelectedLineRange | null) => void

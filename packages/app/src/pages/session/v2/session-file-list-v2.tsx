@@ -2,28 +2,14 @@ import { FileIcon } from "@opencode-ai/ui/file-icon"
 import "@opencode-ai/ui/v2/file-tree-v2.css"
 import { getDirectory, getFilename } from "@opencode-ai/core/util/path"
 import { createEffect, For, Show } from "solid-js"
+import { kindChange, kindLabel, type Kind } from "@/components/file-tree-v2"
 import { normalizePath } from "@/pages/session/v2/review-diff-kinds"
-
-type FileKind = "add" | "del" | "mix"
-
-function kindLabel(kind: FileKind, showModifiedLabel: boolean) {
-  if (kind === "add") return "A"
-  if (kind === "del") return "D"
-  if (!showModifiedLabel) return ""
-  return "M"
-}
-
-function kindChange(kind: FileKind) {
-  if (kind === "add") return "added"
-  if (kind === "del") return "deleted"
-  return "modified"
-}
 
 export function SessionFileListV2(props: {
   files: readonly string[]
   active?: string
   highlighted?: string
-  kinds?: ReadonlyMap<string, FileKind>
+  kinds?: ReadonlyMap<string, Kind>
   showModifiedLabel?: boolean
   onFileClick: (path: string) => void
   onFileDoubleClick?: (path: string) => void

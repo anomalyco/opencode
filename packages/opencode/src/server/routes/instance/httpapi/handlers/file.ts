@@ -11,10 +11,6 @@ import path from "path"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
 
-function escapeGlob(text: string) {
-  return text.replaceAll("\\", "\\\\").replace(/[?*\[\]{}()!]/g, "\\$&")
-}
-
 export const fileHandlers = HttpApiBuilder.group(InstanceHttpApi, "file", (handlers) =>
   Effect.gen(function* () {
     const ripgrep = yield* Ripgrep.Service
@@ -45,34 +41,16 @@ export const fileHandlers = HttpApiBuilder.group(InstanceHttpApi, "file", (handl
     })
 
     const findFile = Effect.fn("FileHttpApi.findFile")(function* (ctx: {
-      query: {
-        query: string
-        dirs?: "true" | "false"
-        type?: "file" | "directory"
-        fallback?: "none" | "glob"
-        limit?: number
-      }
+      query: { query: string; dirs?: "true" | "false"; type?: "file" | "directory"; limit?: number }
     }) {
       const directory = (yield* InstanceState.context).directory
       const limit = ctx.query.limit ?? 10
       const type = ctx.query.type ?? (ctx.query.dirs === "false" ? "file" : undefined)
-      const fallback = ctx.query.fallback ?? "none"
       const started = performance.now()
-      const found = yield* filesystem(
-        Effect.gen(function* () {
-          const fs = yield* FileSystem.Service
-          const found = yield* fs.find({ query: ctx.query.query, limit, type })
-          if (found.length > 0 || fallback !== "glob") return found
-          const globbed = yield* fs
-            .glob({ pattern: `**/*${escapeGlob(ctx.query.query)}*`, limit })
-            .pipe(Effect.catch(() => Effect.succeed([])))
-          return globbed.filter((item) => !type || item.type === type).slice(0, limit)
-        }),
-      )
+      const found = yield* filesystem(FileSystem.Service.use((fs) => fs.find({ query: ctx.query.query, limit, type })))
       yield* Effect.logInfo("find file", {
         query: ctx.query.query,
         type,
-        fallback,
         directory,
         limit,
         results: found.length,

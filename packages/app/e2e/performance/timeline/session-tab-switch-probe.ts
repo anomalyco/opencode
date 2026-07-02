@@ -18,8 +18,8 @@ async function installSessionSwitchProbe(
     let running = true
     const reviewLevels: Record<string, string> = {
       panel: "#review-panel",
-      tabs: '#review-panel [data-component="tabs-v2"]',
-      body: "#review-panel .session-review-v2-panel-body",
+      tabs: '#review-panel [data-component="tabs"]',
+      body: '#review-panel [data-slot="session-review-v2-body"]',
       review: '#review-panel [data-component="session-review-v2"]',
       preview: '#review-panel [data-slot="session-review-v2-preview"]',
       scroll: '#review-panel [data-slot="session-review-v2-diff-scroll"]',

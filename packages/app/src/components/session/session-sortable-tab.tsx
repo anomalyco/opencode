@@ -10,7 +10,7 @@ import { useFile } from "@/context/file"
 import { useLanguage } from "@/context/language"
 import { useCommand } from "@/context/command"
 
-export function FileVisual(props: { path: string; active?: boolean; textClass?: string }): JSX.Element {
+export function FileVisual(props: { path: string; active?: boolean }): JSX.Element {
   return (
     <div class="flex items-center gap-x-1.5 min-w-0">
       <Show
@@ -22,7 +22,7 @@ export function FileVisual(props: { path: string; active?: boolean; textClass?: 
           <FileIcon node={{ path: props.path, type: "file" }} mono class="absolute inset-0 size-4 tab-fileicon-mono" />
         </span>
       </Show>
-      <span class={props.textClass ?? "text-14-medium truncate"}>{getFilename(props.path)}</span>
+      <span class="text-14-medium truncate">{getFilename(props.path)}</span>
     </div>
   )
 }
