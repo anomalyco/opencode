@@ -94,7 +94,7 @@ export const Info = Schema.Struct({
           name: modelID,
           api: { id: modelID, type: "native", settings: {} },
           capabilities: { tools: false, input: [], output: [] },
-          request: { headers: {}, body: {} },
+          request: { settings: {}, headers: {}, body: {} },
           variants: [],
           time: { released: 0 },
           cost: [],

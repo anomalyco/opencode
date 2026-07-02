@@ -34,6 +34,8 @@ type OpenApiSchema = {
   additionalProperties?: OpenApiSchema | boolean
   allOf?: OpenApiSchema[]
   anyOf?: OpenApiSchema[]
+  contentMediaType?: string
+  contentSchema?: OpenApiSchema
   description?: string
   enum?: Array<string | boolean>
   items?: OpenApiSchema
@@ -97,6 +99,7 @@ function matchLegacyOpenApi(input: Record<string, unknown>) {
   }
   normalizeComponentNames(spec)
   collapseDuplicateComponents(spec)
+  normalizeV2EventSchemas(spec)
   applyLegacySchemaOverrides(spec)
   normalizeComponentDescriptions(spec)
   addLegacyErrorSchemas(spec)
@@ -227,6 +230,16 @@ function collapseDuplicateComponents(spec: OpenApiSpec) {
     rewriteRefs(spec, name, base)
     delete schemas[name]
   }
+}
+
+function normalizeV2EventSchemas(spec: OpenApiSpec) {
+  const schemas = spec.components?.schemas
+  if (!schemas?.V2Event1?.anyOf || schemas.V2Event?.type !== "string") return
+  schemas.V2EventStream = schemas.V2Event
+  rewriteRefs(spec, "V2Event", "V2EventStream")
+  schemas.V2Event = schemas.V2Event1
+  delete schemas.V2Event1
+  rewriteRefs(spec, "V2Event1", "V2Event")
 }
 
 function normalizeComponentNames(spec: OpenApiSpec) {

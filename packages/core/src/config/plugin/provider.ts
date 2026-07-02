@@ -4,7 +4,6 @@ import { define } from "../../plugin/internal"
 import { Effect } from "effect"
 import { Config } from "../../config"
 import { ModelV2 } from "../../model"
-import { ProviderV2 } from "../../provider"
 
 export const Plugin = define({
   id: "config-provider",
@@ -54,6 +53,7 @@ export const Plugin = define({
               if (item.name !== undefined) provider.name = item.name
               if (item.api !== undefined) provider.api = { ...item.api }
               if (item.request !== undefined) {
+                Object.assign(provider.request.settings, item.request.settings)
                 Object.assign(provider.request.headers, item.request.headers)
                 Object.assign(provider.request.body, item.request.body)
               }
@@ -71,6 +71,7 @@ export const Plugin = define({
                   }
                 }
                 if (config.request !== undefined) {
+                  Object.assign(model.request.settings, config.request.settings)
                   Object.assign(model.request.headers, config.request.headers)
                   Object.assign(model.request.body, config.request.body)
                   if (config.request.variant !== undefined) model.request.variant = config.request.variant
@@ -81,11 +82,13 @@ export const Plugin = define({
                     if (!existing) {
                       existing = {
                         id: variant.id,
+                        settings: {},
                         headers: {},
                         body: {},
                       }
                       model.variants.push(existing)
                     }
+                    Object.assign(existing.settings, variant.settings)
                     Object.assign(existing.headers, variant.headers)
                     Object.assign(existing.body, variant.body)
                   }

@@ -1,4 +1,4 @@
-// Top-level orchestrator for `opencode --mini`.
+// Top-level orchestrator for `opencode mini`.
 //
 // Wires the boot sequence, lifecycle (renderer + footer), stream transport,
 // and prompt queue together into a single session loop. Two entry points:
@@ -15,6 +15,7 @@
 import { createOpencodeClient } from "@opencode-ai/sdk/v2"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { MessageID } from "@/session/schema"
+import { loadRunAgents, loadRunCommands, loadRunReferences } from "./catalog.shared"
 import { createRunDemo } from "./demo"
 import { resolveModelInfo, resolveRunTuiConfig, resolveSessionInfo } from "./runtime.boot"
 import { createRuntimeLifecycle } from "./runtime.lifecycle"
@@ -62,7 +63,6 @@ type RunLocalInput = {
   fetch: typeof globalThis.fetch
   resolveAgent: () => Promise<string | undefined>
   session: (sdk: RunInput["sdk"]) => Promise<{ id: string; title?: string } | undefined>
-  share: (sdk: RunInput["sdk"], sessionID: string) => Promise<void>
   createSession?: CreateSession
   agent: RunInput["agent"]
   model: RunInput["model"]
@@ -77,7 +77,7 @@ type RunLocalInput = {
 }
 
 type StreamTransportModule = Pick<
-  Awaited<typeof import("./stream.transport")>,
+  Awaited<typeof import("./stream-v2.transport")>,
   "createSessionTransport" | "formatUnknownError"
 >
 
@@ -164,11 +164,9 @@ async function resolveExitTitle(
     return undefined
   }
 
-  return ctx.sdk.session
-    .get({
-      sessionID: state.sessionID,
-    })
-    .then((x) => x.data?.title)
+  return ctx.sdk.v2.session
+    .get({ sessionID: state.sessionID })
+    .then((x) => x.data?.data.title)
     .catch(() => undefined)
 }
 
@@ -233,7 +231,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
         .then((x) => x.data ?? [])
         .catch(() => []),
     agents: [],
-    resources: [],
+    references: [],
     sessionID: state.sessionID,
     sessionTitle: state.sessionTitle,
     getSessionID: () => state.sessionID,
@@ -250,21 +248,25 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
       }
 
       log?.write("send.permission.reply", next)
-      await ctx.sdk.permission.reply(next)
+      await ctx.sdk.v2.session.permission.reply({ sessionID: state.sessionID, ...next })
     },
     onQuestionReply: async (next) => {
       if (state.demo?.questionReply(next)) {
         return
       }
 
-      await ctx.sdk.question.reply(next)
+      await ctx.sdk.v2.session.question.reply({
+        sessionID: state.sessionID,
+        requestID: next.requestID,
+        questionV2Reply: { answers: next.answers ?? [] },
+      })
     },
     onQuestionReject: async (next) => {
       if (state.demo?.questionReject(next)) {
         return
       }
 
-      await ctx.sdk.question.reject(next)
+      await ctx.sdk.v2.session.question.reject({ sessionID: state.sessionID, ...next })
     },
     onCycleVariant: () => {
       if (!state.model || state.variants.length === 0) {
@@ -339,22 +341,30 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
     },
     onInterrupt: () => {
       if (!hasSession(input, state) || state.aborting) {
-        return
+        return false
       }
 
       state.aborting = true
-      void ctx.sdk.session
-        .abort({
-          sessionID: state.sessionID,
-        })
+      void (state.stream
+        ? state.stream.then((item) => item.handle.interruptActiveTurn())
+        : ctx.sdk.v2.session.interrupt({ sessionID: state.sessionID }))
         .catch(() => {})
         .finally(() => {
           state.aborting = false
         })
+      return true
     },
     onBackground: () => {
-      if (!hasSession(input, state)) return
-      void ctx.sdk.experimental.session.background({ sessionID: state.sessionID }).catch(() => {})
+      if (!hasSession(input, state)) {
+        return
+      }
+
+      log?.write("send.background", { sessionID: state.sessionID })
+      void ctx.sdk.v2.session.background({ sessionID: state.sessionID }).catch(() => {})
+    },
+    onSubagentInterrupt: (sessionID) => {
+      log?.write("send.subagent.interrupt", { sessionID })
+      void ctx.sdk.v2.session.interrupt({ sessionID }).catch(() => {})
     },
     onSubagentSelect: (sessionID) => {
       state.selectSubagent?.(sessionID)
@@ -373,19 +383,10 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
       return
     }
 
-    const [agents, resources, commands] = await Promise.all([
-      ctx.sdk.app
-        .agents({ directory: ctx.directory })
-        .then((x) => x.data ?? [])
-        .catch(() => []),
-      ctx.sdk.experimental.resource
-        .list({ directory: ctx.directory })
-        .then((x) => Object.values(x.data ?? {}))
-        .catch(() => []),
-      ctx.sdk.command
-        .list({ directory: ctx.directory })
-        .then((x) => x.data ?? [])
-        .catch(() => []),
+    const [agents, references, commands] = await Promise.all([
+      loadRunAgents(ctx.sdk, ctx.directory).catch(() => []),
+      loadRunReferences(ctx.sdk, ctx.directory).catch(() => []),
+      loadRunCommands(ctx.sdk, ctx.directory).catch(() => []),
     ])
     if (footer.isClosed) {
       return
@@ -394,7 +395,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
     footer.event({
       type: "catalog",
       agents,
-      resources,
+      references,
       commands,
     })
   }
@@ -453,7 +454,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
     })
   })
 
-  const streamTask = deps.streamTransport ?? import("./stream.transport")
+  const streamTask = deps.streamTransport ?? import("./stream-v2.transport")
   const ensureStream = () => {
     if (state.stream) {
       return state.stream
@@ -758,7 +759,6 @@ export async function runInteractiveLocalMode(input: RunLocalInput): Promise<voi
           throw new Error("Session not found")
         }
 
-        void input.share(sdk, next.id).catch(() => {})
         return {
           sessionID: next.id,
           sessionTitle: next.title,

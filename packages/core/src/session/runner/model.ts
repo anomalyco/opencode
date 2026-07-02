@@ -12,6 +12,7 @@ import { Catalog } from "../../catalog"
 import { Credential } from "../../credential"
 import { Integration } from "../../integration"
 import { ModelV2 } from "../../model"
+import { OpenAICodex } from "../../plugin/provider/openai-codex"
 import { ProviderV2 } from "../../provider"
 import { SessionSchema } from "../schema"
 
@@ -96,9 +97,20 @@ const withDefaults = (model: ModelV2.Info, route: AnyRoute) => {
     provider: model.providerID,
     endpoint: model.api.url === undefined ? undefined : { baseURL: model.api.url },
     headers: model.request.headers,
+    providerOptions: providerOptions(model),
     http: { body: httpBody },
     limits: { context: model.limit.context, output: model.limit.output },
   })
+}
+
+const providerOptions = (
+  model: ModelV2.Info,
+): { readonly [key: string]: { readonly [key: string]: unknown } } | undefined => {
+  if (Object.keys(model.request.settings).length === 0) return undefined
+  if (model.api.type !== "aisdk") return undefined
+  if (model.api.package === "@ai-sdk/openai") return { openai: model.request.settings }
+  if (model.api.package === "@ai-sdk/anthropic") return { anthropic: model.request.settings }
+  if (model.api.package === "@ai-sdk/openai-compatible") return { openai: model.request.settings }
 }
 
 export const withVariant = (
@@ -118,6 +130,7 @@ export const withVariant = (
   return Effect.succeed(
     variant
       ? produce(model, (draft) => {
+          Object.assign(draft.request.settings, variant.settings)
           Object.assign(draft.request.headers, variant.headers)
           Object.assign(draft.request.body, variant.body)
         })
@@ -140,6 +153,21 @@ export const fromCatalogModel = (
         })
   const key = apiKey(resolved, credential)
   if (resolved.api.type === "aisdk" && resolved.api.package === "@ai-sdk/openai") {
+    // ChatGPT-plan OAuth tokens are not API-key credentials: the public API rejects
+    // them, so requests must target the codex backend with the account header.
+    if (OpenAICodex.isChatGPT(credential)) {
+      const account = OpenAICodex.accountID(credential)
+      return Effect.succeed(
+        withDefaults(resolved, OpenAIResponses.route)
+          .with({
+            endpoint: { baseURL: OpenAICodex.baseURL },
+            auth: (key === undefined ? Auth.none : Auth.bearer(key)).andThen(
+              account === undefined ? Auth.none : Auth.headers({ "chatgpt-account-id": account }),
+            ),
+          })
+          .model({ id: resolved.api.id }),
+      )
+    }
     return Effect.succeed(
       withDefaults(resolved, OpenAIResponses.route)
         .with({ auth: key === undefined ? Auth.none : Auth.bearer(key) })

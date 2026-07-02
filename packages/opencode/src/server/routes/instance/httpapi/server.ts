@@ -66,6 +66,7 @@ import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import * as SessionExecutionLocal from "@opencode-ai/core/session/execution/local"
+import { PluginRuntime } from "@opencode-ai/core/plugin/runtime"
 import { lazy } from "@/util/lazy"
 import { CorsConfig, isAllowedCorsOrigin, type CorsOptions } from "@opencode-ai/server/cors"
 import { serveUIEffect } from "@/server/shared/ui"
@@ -297,8 +298,11 @@ export function createRoutes(
     Layer.provide(sessionLocationLayer),
     Layer.provide(locationLayer),
     Layer.provide(PtyEnvironment.layer),
+    // PluginRuntime.providerNode shares this build so plugin tools (subagent,
+    // shell jobs) capture the same SessionV2/Job instances the handlers use.
+    // Without it the plugin runtime cell stays empty and subagents cannot spawn.
     Layer.provide(
-      AppNodeBuilderV1.build(SessionV2.node, [
+      AppNodeBuilderV1.build(LayerNode.group([SessionV2.node, PluginRuntime.providerNode]), [
         [LocationServiceMap.node, locationServiceMapV2],
         [SessionExecution.node, SessionExecutionLocal.node],
       ]),

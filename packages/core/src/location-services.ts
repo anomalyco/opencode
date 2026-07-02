@@ -36,8 +36,9 @@ import { SessionTodo } from "./session/todo"
 import { SkillV2 } from "./skill"
 import { SkillGuidance } from "./skill/guidance"
 import { Snapshot } from "./snapshot"
+import { InstructionContext } from "./instruction-context"
 import { SystemContextBuiltIns } from "./system-context/builtins"
-import { SystemContextRegistry } from "./system-context/registry"
+import { SessionContextEntry } from "./session/context-entry"
 import { SessionInstructions } from "./session/instructions"
 import { BuiltInTools } from "./tool/builtins"
 import { McpTool } from "./tool/mcp"
@@ -68,8 +69,8 @@ export const locationServices = LayerNode.group([
   Pty.node,
   Shell.node,
   SkillV2.node,
-  SystemContextRegistry.node,
   SystemContextBuiltIns.node,
+  InstructionContext.node,
   LocationMutation.node,
   FileMutation.node,
   MCP.node,
@@ -81,6 +82,7 @@ export const locationServices = LayerNode.group([
   SkillGuidance.node,
   ReferenceGuidance.node,
   SessionTodo.node,
+  SessionContextEntry.node,
   QuestionV2.node,
   Generate.node,
   ReadToolFileSystem.node,

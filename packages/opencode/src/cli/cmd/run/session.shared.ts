@@ -152,12 +152,52 @@ export function createSession(messages: SessionMessages): RunSession {
   }
 }
 
-export async function resolveSession(sdk: RunInput["sdk"], sessionID: string, limit = LIMIT): Promise<RunSession> {
-  const response = await sdk.session.messages({
-    sessionID,
-    limit,
-  })
-  return createSession(response.data ?? [])
+export async function resolveCurrentSession(
+  sdk: RunInput["sdk"],
+  sessionID: string,
+  limit = LIMIT,
+): Promise<RunSession> {
+  const response = await sdk.v2.session.messages({ sessionID, limit, order: "desc" }, { throwOnError: true })
+  const messages = response.data.data.toReversed()
+  const session = await sdk.v2.session.get({ sessionID }, { throwOnError: true })
+  return {
+    first: messages.length === 0,
+    turns: messages.flatMap((message) => {
+      if (message.type !== "user") return []
+      return [
+        {
+          prompt: {
+            text: message.text,
+            parts: [
+              ...(message.files ?? []).map((file) => ({
+                type: "file" as const,
+                url: file.uri,
+                mime: file.mime,
+                filename: file.name,
+                source: file.source
+                  ? {
+                      type: "file" as const,
+                      path: file.name ?? file.uri,
+                      text: { start: file.source.start, end: file.source.end, value: file.source.text },
+                    }
+                  : undefined,
+              })),
+              ...(message.agents ?? []).map((agent) => ({
+                type: "agent" as const,
+                name: agent.name,
+                source: agent.source
+                  ? { start: agent.source.start, end: agent.source.end, value: agent.source.text }
+                  : undefined,
+              })),
+            ],
+          },
+          provider: session.data.data.model?.providerID,
+          model: session.data.data.model?.id,
+          variant: session.data.data.model?.variant,
+        },
+      ]
+    }),
+  }
 }
 
 export function sessionHistory(session: RunSession, limit = LIMIT): RunPrompt[] {

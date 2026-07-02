@@ -119,6 +119,16 @@ export const PromptAdmitted = Event.define({
 })
 export type PromptAdmitted = typeof PromptAdmitted.Type
 
+export const ExecutionSettled = Event.define({
+  type: "session.next.execution.settled",
+  schema: {
+    ...Base,
+    outcome: Schema.Literals(["success", "failure", "interrupted"]),
+    error: UnknownError.pipe(optional),
+  },
+})
+export type ExecutionSettled = typeof ExecutionSettled.Type
+
 export const ContextUpdated = Event.define({
   type: "session.next.context.updated",
   ...options,
@@ -524,6 +534,7 @@ export const Definitions = Event.inventory(
   Forked,
   Prompted,
   PromptAdmitted,
+  ExecutionSettled,
   ContextUpdated,
   Synthetic,
   Skill.Activated,

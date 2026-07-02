@@ -1,6 +1,6 @@
 export * as Provider from "./provider.js"
 
-import { Schema } from "effect"
+import { Effect, Schema } from "effect"
 import { optional } from "./schema.js"
 import { Integration } from "./integration.js"
 import { statics } from "./schema.js"
@@ -43,8 +43,12 @@ export const Api = Schema.Union([AISDK, Native])
   .annotate({ identifier: "Provider.Api" })
 export type Api = typeof Api.Type
 
+export const Settings = Schema.Record(Schema.String, Schema.Unknown).annotate({ identifier: "Provider.Settings" })
+export type Settings = typeof Settings.Type
+
 export interface Request extends Schema.Schema.Type<typeof Request> {}
 export const Request = Schema.Struct({
+  settings: Settings.pipe(Schema.withConstructorDefault(Effect.succeed({}))),
   headers: Schema.Record(Schema.String, Schema.String),
   body: Schema.Record(Schema.String, Schema.Json),
 }).annotate({ identifier: "Provider.Request" })
@@ -66,7 +70,7 @@ export const Info = Schema.Struct({
           id,
           name: id,
           api: { type: "native", settings: {} },
-          request: { headers: {}, body: {} },
+          request: { settings: {}, headers: {}, body: {} },
         }),
     })),
   )

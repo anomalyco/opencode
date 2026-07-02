@@ -21,6 +21,21 @@ export const ModelGroup = HttpApiGroup.make("server.model")
         }),
       ),
   )
+  .add(
+    HttpApiEndpoint.get("model.default", "/api/model/default", {
+      query: LocationQuery,
+      success: Location.response(Schema.UndefinedOr(Model.Info)),
+      error: ServiceUnavailableError,
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.model.default",
+          summary: "Get default model",
+          description: "Retrieve the model used when a session has no explicit model selection.",
+        }),
+      ),
+  )
   .annotateMerge(
     OpenApi.annotations({
       title: "models",

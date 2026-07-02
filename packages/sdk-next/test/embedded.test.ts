@@ -68,6 +68,11 @@ it.live(
           resume: false,
         })
         const context = yield* opencode.sessions.context({ sessionID: id })
+        yield* opencode.sessions.putContextEntry({ sessionID: id, key: "deploy-target", value: "production" })
+        yield* opencode.sessions.putContextEntry({ sessionID: id, key: "flags", value: { beta: true } })
+        const contextEntries = yield* opencode.sessions.listContextEntries({ sessionID: id })
+        yield* opencode.sessions.removeContextEntry({ sessionID: id, key: "flags" })
+        const remainingContextEntries = yield* opencode.sessions.listContextEntries({ sessionID: id })
         const wake = yield* opencode.sessions.prompt({
           sessionID: id,
           prompt: fixture.sdk.Prompt.make({ text: "Promote this input" }),
@@ -94,6 +99,7 @@ it.live(
             opencode.sessions.events({ sessionID: missingSessionID }).pipe(Stream.runHead, Effect.flip),
             opencode.sessions.interrupt({ sessionID: missingSessionID }).pipe(Effect.flip),
             opencode.sessions.message({ sessionID: missingSessionID, messageID: modelMessage.id }).pipe(Effect.flip),
+            opencode.sessions.listContextEntries({ sessionID: missingSessionID }).pipe(Effect.flip),
           ],
           { concurrency: "unbounded" },
         )
@@ -112,10 +118,16 @@ it.live(
         expect(admitted.sessionID).toBe(id)
         expect(prompted.type).toBe("session.next.prompted")
         expect(wakeContext).toContainEqual(expect.objectContaining({ id: wake.id, type: "user" }))
+        expect(contextEntries).toEqual([
+          { key: "deploy-target", value: "production" },
+          { key: "flags", value: { beta: true } },
+        ])
+        expect(remainingContextEntries).toEqual([{ key: "deploy-target", value: "production" }])
         expect(context.some((message) => message.type === "model-switched")).toBe(true)
         expect(event).toMatchObject({ type: "session.next.model.switched", durable: { seq: 1 } })
         expect(message).toEqual(modelMessage)
         expect(missing.map((error) => error._tag)).toEqual([
+          "SessionNotFoundError",
           "SessionNotFoundError",
           "SessionNotFoundError",
           "SessionNotFoundError",

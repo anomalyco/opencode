@@ -87,7 +87,7 @@ describe("AzurePlugin", () => {
           })
           catalog.provider.update(azure.id, (item) => {
             item.api = azure.api
-            item.request = azure.request
+            item.request = { settings: {}, headers: {}, body: { resourceName: "from-config" } }
           })
           catalog.provider.update(ProviderV2.ID.openai, () => {})
         })
@@ -110,7 +110,7 @@ describe("AzurePlugin", () => {
           })
           catalog.provider.update(azure.id, (item) => {
             item.api = azure.api
-            item.request = azure.request
+            item.request = { settings: {}, headers: {}, body: { resourceName: "" } }
           })
         })
         yield* addPlugin()
@@ -131,7 +131,7 @@ describe("AzurePlugin", () => {
           })
           catalog.provider.update(azure.id, (item) => {
             item.api = azure.api
-            item.request = azure.request
+            item.request = { settings: {}, headers: {}, body: { resourceName: "   " } }
           })
         })
         yield* addPlugin()

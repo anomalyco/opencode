@@ -1,13 +1,13 @@
 import type { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { FSUtil } from "@opencode-ai/core/fs-util"
-// CLI entry point for `opencode run` and `opencode --mini`.
+// CLI entry point for `opencode run` and `opencode mini`.
 //
 // Handles three modes:
 //   1. Non-interactive (default): sends a single prompt, streams events to
 //      stdout, and exits when the session goes idle.
-//   2. Interactive local (`opencode --mini`): boots the split-footer direct mode
+//   2. Interactive local (`opencode mini`): boots the split-footer direct mode
 //      with an in-process server (no external HTTP).
-//   3. Interactive attach (`opencode --mini --attach`): connects to a running
+//   3. Interactive attach (`opencode mini attach`): connects to a running
 //      opencode server and runs interactive mode against it.
 //
 // Also supports `--command` for slash-command execution, `--format json` for
@@ -25,6 +25,8 @@ import { Filesystem } from "@/util/filesystem"
 import { createOpencodeClient, type OpencodeClient, type ToolPart } from "@opencode-ai/sdk/v2"
 import { FormatError, FormatUnknownError } from "../error"
 import { INTERACTIVE_INPUT_ERROR, resolveInteractiveStdin } from "./run/runtime.stdin"
+import { isImageAttachment, isPdfAttachment } from "@/util/media"
+import { loadRunAgents } from "./run/catalog.shared"
 
 type ModelInput = Parameters<OpencodeClient["session"]["prompt"]>[0]["model"]
 
@@ -49,6 +51,14 @@ function resolveRunInput(value?: string, piped?: string): string | undefined {
   return value + "\n" + piped
 }
 
+function isBinaryContent(bytes: Uint8Array) {
+  if (bytes.length === 0) return false
+  if (bytes.includes(0)) return true
+  return (
+    bytes.reduce((count, byte) => count + Number(byte < 9 || (byte > 13 && byte < 32)), 0) / bytes.length > 0.3
+  )
+}
+
 type FilePart = {
   type: "file"
   url: string
@@ -68,6 +78,7 @@ type SessionInfo = {
   id: string
   title?: string
   directory?: string
+  current?: boolean
 }
 
 function inline(info: Inline) {
@@ -158,10 +169,6 @@ export const RunCommand = effectCmd({
         describe: "fork the session before continuing (requires --continue or --session)",
         type: "boolean",
       })
-      .option("share", {
-        type: "boolean",
-        describe: "share the session",
-      })
       .option("model", {
         type: "string",
         alias: ["m"],
@@ -217,11 +224,6 @@ export const RunCommand = effectCmd({
         type: "boolean",
         describe: "show thinking blocks",
       })
-      .option("mini", {
-        type: "boolean",
-        hidden: true,
-        default: false,
-      })
       .option("replay", {
         type: "boolean",
         default: true,
@@ -270,7 +272,7 @@ export const RunCommand = effectCmd({
     const localInstance = yield* InstanceRef
     yield* Effect.promise(async () => {
       const rawMessage = [...args.message, ...(args["--"] || [])].join(" ")
-      const interactive = args.mini
+      const interactive = (args as typeof args & { mini?: boolean }).mini === true
       const auto = args.auto || args.yolo || args["dangerously-skip-permissions"]
       const thinking = interactive ? (args.thinking ?? true) : (args.thinking ?? false)
       const die = (message: string): never => {
@@ -290,23 +292,23 @@ export const RunCommand = effectCmd({
         .join(" ")
 
       if (interactive && args.command) {
-        die("--mini cannot be used with --command")
+        die("opencode mini cannot be used with --command")
       }
 
       if (interactive && args._?.[0] !== "mini") {
-        die("--mini must be used without the run subcommand")
+        die("opencode mini must be run with the mini command")
       }
 
       if (args.demo && !interactive) {
-        die("--demo requires --mini")
+        die("--demo requires opencode mini")
       }
 
       if (interactive && args.format === "json") {
-        die("--mini cannot be used with --format json")
+        die("opencode mini cannot be used with --format json")
       }
 
       if (args["replay-limit"] !== undefined && !interactive) {
-        die("--replay-limit requires --mini")
+        die("--replay-limit requires opencode mini")
       }
 
       if (
@@ -317,7 +319,7 @@ export const RunCommand = effectCmd({
       }
 
       if (interactive && !process.stdout.isTTY) {
-        die("--mini requires a TTY stdout")
+        die("opencode mini requires a TTY stdout")
       }
 
       if (interactive) {
@@ -355,6 +357,12 @@ export const RunCommand = effectCmd({
       }
 
       const files: FilePart[] = []
+      const fileInputs: Array<{
+        filePath: string
+        resolvedPath: string
+        stat: ReturnType<typeof Filesystem.stat>
+        isDirectory: boolean
+      }> = []
       if (args.file) {
         const list = Array.isArray(args.file) ? args.file : [args.file]
 
@@ -371,45 +379,7 @@ export const RunCommand = effectCmd({
             UI.error(`Cannot attach local directory without a shared filesystem: ${filePath}`)
             process.exit(1)
           }
-
-          const content = await (async () => {
-            if (!args.attach) return
-            const handle = await open(resolvedPath, "r")
-            try {
-              const opened = await handle.stat()
-              if (!opened.isFile() || Number(opened.size) > ATTACH_FILE_MAX_BYTES) {
-                UI.error(`Cannot attach local file larger than 10 MiB or a special file: ${filePath}`)
-                process.exit(1)
-              }
-              if (opened.size === 0) return Buffer.alloc(0)
-              const buffer = Buffer.alloc(Number(opened.size))
-              let offset = 0
-              while (offset < buffer.length) {
-                const read = await handle.read(buffer, offset, buffer.length - offset, offset)
-                if (read.bytesRead === 0) break
-                offset += read.bytesRead
-              }
-              return buffer.subarray(0, offset)
-            } finally {
-              await handle.close()
-            }
-          })()
-          const detected = FSUtil.mimeType(resolvedPath)
-          const text = content?.toString("utf8")
-          const mime = !args.attach
-            ? isDirectory
-              ? "application/x-directory"
-              : "text/plain"
-            : content && text !== undefined && Buffer.from(text, "utf8").equals(content)
-              ? "text/plain"
-              : detected
-
-          files.push({
-            type: "file",
-            url: content ? `data:${mime};base64,${content.toString("base64")}` : pathToFileURL(resolvedPath).href,
-            filename: path.basename(resolvedPath),
-            mime,
-          })
+          fileInputs.push({ filePath, resolvedPath, stat, isDirectory })
         }
       }
 
@@ -446,6 +416,53 @@ export const RunCommand = effectCmd({
               pattern: "*",
             },
           ]
+      const currentPrompt = !interactive && !args.command && fileInputs.every((file) => !file.isDirectory)
+
+      const inlineFiles = interactive || currentPrompt
+      for (const file of fileInputs) {
+        const content = await (async () => {
+          if (file.isDirectory || !inlineFiles) return
+          if (!file.stat?.isFile() || file.stat.size > ATTACH_FILE_MAX_BYTES) {
+            UI.error(`Cannot attach local file larger than 10 MiB or a special file: ${file.filePath}`)
+            process.exit(1)
+          }
+          const handle = await open(file.resolvedPath, "r")
+          try {
+            const opened = await handle.stat()
+            if (!opened.isFile() || Number(opened.size) > ATTACH_FILE_MAX_BYTES) {
+              UI.error(`Cannot attach local file larger than 10 MiB or a special file: ${file.filePath}`)
+              process.exit(1)
+            }
+            if (opened.size === 0) return Buffer.alloc(0)
+            const buffer = Buffer.alloc(Number(opened.size))
+            let offset = 0
+            while (offset < buffer.length) {
+              const read = await handle.read(buffer, offset, buffer.length - offset, offset)
+              if (read.bytesRead === 0) break
+              offset += read.bytesRead
+            }
+            return buffer.subarray(0, offset)
+          } finally {
+            await handle.close()
+          }
+        })()
+        const detected = FSUtil.mimeType(file.resolvedPath)
+        const text = content?.toString("utf8")
+        const mime = file.isDirectory
+          ? "application/x-directory"
+          : isImageAttachment(detected) || isPdfAttachment(detected)
+            ? detected
+            : content && !isBinaryContent(content) && text !== undefined && Buffer.from(text, "utf8").equals(content)
+              ? "text/plain"
+              : detected
+
+        files.push({
+          type: "file",
+          url: content ? `data:${mime};base64,${content.toString("base64")}` : pathToFileURL(file.resolvedPath).href,
+          filename: path.basename(file.resolvedPath),
+          mime,
+        })
+      }
 
       function title() {
         if (args.title === undefined) return
@@ -453,58 +470,122 @@ export const RunCommand = effectCmd({
         return message.slice(0, 50) + (message.length > 50 ? "..." : "")
       }
 
-      async function session(sdk: OpencodeClient): Promise<SessionInfo | undefined> {
-        if (args.session) {
-          const current = await sdk.session
-            .get({
-              sessionID: args.session,
-            })
-            .catch(() => undefined)
+      async function currentSession(sdk: OpencodeClient, sessionID: string): Promise<SessionInfo | undefined> {
+        const listed = await sdk.v2.session
+          .list({
+            directory: await current(sdk),
+            limit: 50,
+            order: "desc",
+          })
+          .then((result) => result.data?.data.find((item) => item.id === sessionID))
+          .catch(() => undefined)
+        const selected =
+          listed ??
+          (await sdk.v2.session
+            .get({ sessionID })
+            .then((result) => result.data?.data)
+            .catch(() => undefined))
+        const legacy =
+          selected ??
+          (await sdk.session
+            .get({ sessionID })
+            .then((result) => result.data)
+            .catch(() => undefined))
+        const transcript = await transcriptKind(sdk, legacy?.id ?? sessionID)
+        if (!legacy && transcript === "empty") {
+          return
+        }
+        if (interactive && transcript === "legacy") {
+          throw new Error("Mini cannot resume a legacy Session transcript")
+        }
 
-          if (!current?.data) {
-            UI.error("Session not found")
-            process.exit(1)
-          }
+        return {
+          id: legacy?.id ?? sessionID,
+          title: legacy?.title,
+          directory: legacy ? ("location" in legacy ? legacy.location.directory : legacy.directory) : await current(sdk),
+          current: transcript !== "legacy",
+        }
+      }
 
-          if (args.fork) {
-            const forked = await sdk.session.fork({
-              sessionID: args.session,
-            })
-            const id = forked.data?.id
-            if (!id) {
-              return
-            }
-
-            return {
-              id,
-              title: forked.data?.title ?? current.data.title,
-              directory: forked.data?.directory ?? current.data.directory,
-            }
-          }
-
+      async function forkSession(sdk: OpencodeClient, session: SessionInfo): Promise<SessionInfo | undefined> {
+        if (session.current !== false) {
+          const forked = await sdk.v2.session.fork(
+            { sessionID: session.id, messageID: undefined },
+            { throwOnError: true },
+          )
+          await waitForFork(sdk, session.id, forked.data.data.id)
           return {
-            id: current.data.id,
-            title: current.data.title,
-            directory: current.data.directory,
+            id: forked.data.data.id,
+            title: forked.data.data.title,
+            directory: forked.data.data.location.directory,
+            current: true,
           }
         }
 
-        const base = args.continue ? (await sdk.session.list()).data?.find((item) => !item.parentID) : undefined
+        const forked = await sdk.session.fork({
+          sessionID: session.id,
+        })
+        const id = forked.data?.id
+        if (!id) {
+          return
+        }
 
-        if (base && args.fork) {
-          const forked = await sdk.session.fork({
-            sessionID: base.id,
-          })
-          const id = forked.data?.id
-          if (!id) {
+        return {
+          id,
+          title: forked.data?.title ?? session.title,
+          directory: forked.data?.directory ?? session.directory,
+          current: false,
+        }
+      }
+
+      async function waitForFork(sdk: OpencodeClient, parentID: string, sessionID: string) {
+        const parentHasMessages = await sdk.v2.session
+          .messages({ sessionID: parentID, limit: 1 })
+          .then((result) => (result.data?.data.length ?? 0) > 0)
+          .catch(() => false)
+        if (!parentHasMessages) {
+          return
+        }
+
+        const deadline = Date.now() + 3000
+        while (Date.now() < deadline) {
+          const forkedHasMessages = await sdk.v2.session
+            .messages({ sessionID, limit: 1 })
+            .then((result) => (result.data?.data.length ?? 0) > 0)
+            .catch(() => false)
+          if (forkedHasMessages) {
             return
           }
 
-          return {
-            id,
-            title: forked.data?.title ?? base.title,
-            directory: forked.data?.directory ?? base.directory,
+          await Bun.sleep(25)
+        }
+      }
+
+      async function session(sdk: OpencodeClient): Promise<SessionInfo | undefined> {
+        if (args.session) {
+          const current = await currentSession(sdk, args.session)
+          if (!current) {
+            UI.error("Session not found")
+            process.exit(1)
           }
+          if (!interactive && !currentPrompt && current.current !== false) {
+            throw new Error("This operation is not available for a current Session transcript")
+          }
+
+          if (args.fork) {
+            return forkSession(sdk, current)
+          }
+
+          return current
+        }
+
+        const base = args.continue ? await currentRootSession(sdk) : undefined
+        if (base && !interactive && !currentPrompt && base.current !== false) {
+          throw new Error("This operation is not available for a current Session transcript")
+        }
+
+        if (base && args.fork) {
+          return forkSession(sdk, base)
         }
 
         if (base) {
@@ -512,6 +593,23 @@ export const RunCommand = effectCmd({
             id: base.id,
             title: base.title,
             directory: base.directory,
+            current: "current" in base ? base.current : false,
+          }
+        }
+
+        if (interactive || currentPrompt) {
+          const name = title()
+          const result = await sdk.v2.session.create({
+            location: { directory: await current(sdk) },
+          })
+          const created = result.data?.data
+          if (!created) return
+          if (name) await sdk.v2.session.rename({ sessionID: created.id, title: name })
+          return {
+            id: created.id,
+            title: name ?? created.title,
+            directory: created.location.directory,
+            current: true,
           }
         }
 
@@ -529,30 +627,45 @@ export const RunCommand = effectCmd({
           id,
           title: result.data?.title ?? name,
           directory: result.data?.directory,
+          current: false,
         }
       }
 
-      async function share(sdk: OpencodeClient, sessionID: string) {
-        const cfg = await sdk.config.get()
-        if (!cfg.data) return
-        if (cfg.data.share !== "auto" && !flags.autoShare && !args.share) return
-        const res = await sdk.session.share({ sessionID }).catch((error) => {
-          if (error instanceof Error && error.message.includes("disabled")) {
-            UI.println(UI.Style.TEXT_DANGER_BOLD + "!  " + error.message)
-          }
-          return { error }
+      async function currentRootSession(sdk: OpencodeClient): Promise<SessionInfo | undefined> {
+        const response = await sdk.v2.session.list({
+          directory: await current(sdk),
+          limit: 50,
+          order: "desc",
         })
-        if (!res.error && "data" in res && res.data?.share?.url) {
-          UI.println(UI.Style.TEXT_INFO_BOLD + "~  " + res.data.share.url)
+        const root = (response.data?.data ?? [])
+          .filter((session) => !session.parentID)
+          .toSorted((a, b) => b.time.updated - a.time.updated)[0]
+        if (!root) return
+        return currentSession(sdk, root.id)
+      }
+
+      async function transcriptKind(sdk: OpencodeClient, sessionID: string) {
+        const current = await sdk.v2.session.messages({ sessionID, limit: 1 }).then((result) => (result.data?.data.length ?? 0) > 0)
+        // Ordinary prompt flows assume a transcript with current messages is
+        // current-owned; only legacy-only modes (--command, directory
+        // attachments) still probe legacy history for mixed transcripts.
+        if (current && (interactive || currentPrompt)) return "current" as const
+
+        const legacy = await sdk.session.messages({ sessionID, limit: 1 }).then((result) => (result.data?.length ?? 0) > 0)
+        if (current) {
+          if (legacy) throw new Error("Session contains mixed legacy and current transcripts")
+          return "current" as const
         }
+        if (legacy) return "legacy" as const
+        return "empty" as const
       }
 
       async function createFreshSession(
         sdk: OpencodeClient,
         input: { agent: string | undefined; model: ModelInput | undefined; variant: string | undefined },
       ): Promise<SessionInfo> {
-        const result = await sdk.session.create({
-          title: args.title !== undefined && args.title !== "" ? args.title : undefined,
+        const name = args.title !== undefined && args.title !== "" ? args.title : undefined
+        const result = await sdk.v2.session.create({
           agent: input.agent,
           model: input.model
             ? {
@@ -561,17 +674,18 @@ export const RunCommand = effectCmd({
                 variant: input.variant,
               }
             : undefined,
-          permission: [...rules],
+          location: { directory: await current(sdk) },
         })
-        const id = result.data?.id
+        const created = result.data?.data
+        const id = created?.id
         if (!id) {
           throw new Error("Failed to create session")
         }
+        if (name) await sdk.v2.session.rename({ sessionID: id, title: name })
 
-        void share(sdk, id).catch(() => {})
         return {
           id,
-          title: result.data?.title,
+          title: name ?? created.title,
         }
       }
 
@@ -580,8 +694,8 @@ export const RunCommand = effectCmd({
           return directory ?? root
         }
 
-        const next = await sdk.path
-          .get()
+        const next = await sdk.v2.location
+          .get(undefined, { throwOnError: true })
           .then((x) => x.data?.directory)
           .catch(() => undefined)
         if (next) {
@@ -622,10 +736,7 @@ export const RunCommand = effectCmd({
         if (!args.agent) return undefined
         const name = args.agent
 
-        const modes = await sdk.app
-          .agents(undefined, { throwOnError: true })
-          .then((x) => x.data ?? [])
-          .catch(() => undefined)
+        const modes = await loadRunAgents(sdk, await current(sdk)).catch(() => undefined)
 
         if (!modes) {
           UI.println(
@@ -636,7 +747,7 @@ export const RunCommand = effectCmd({
           return undefined
         }
 
-        const agent = modes.find((a) => a.name === name)
+        const agent = modes.find((item) => item.name === name)
         if (!agent) {
           UI.println(
             UI.Style.TEXT_WARNING_BOLD + "!",
@@ -823,9 +934,33 @@ export const RunCommand = effectCmd({
         // Validate agent if specified
         const agent = await pickAgent(client)
 
-        await share(client, sessionID)
-
         if (!interactive) {
+          if (currentPrompt && sess.current !== false) {
+            const model = pick(args.model)
+            const { runNonInteractivePrompt } = await import("./run/noninteractive")
+            try {
+              await runNonInteractivePrompt({
+                client,
+                sessionID,
+                message,
+                files,
+                agent,
+                model,
+                variant: args.variant,
+                thinking,
+                format: args.format === "json" ? "json" : "default",
+                dangerouslySkipPermissions: args["dangerously-skip-permissions"],
+                renderTool: tool,
+                renderToolError: toolError,
+              })
+            } catch (error) {
+              const output = error instanceof Error ? { type: "unknown", message: error.message } : error
+              if (!emit("error", { error: output })) UI.error(formatRunError(error))
+              process.exitCode = 1
+            }
+            return
+          }
+
           const events = await client.event.subscribe()
           const completed = loop(client, events).catch((e) => {
             console.error(e)
@@ -880,7 +1015,7 @@ export const RunCommand = effectCmd({
             directory: cwd,
             sessionID,
             sessionTitle: sess.title,
-            resume: Boolean(args.session || args.continue) && !args.fork,
+            resume: Boolean(args.session || args.continue),
             replay,
             replayLimit: args["replay-limit"],
             agent,
@@ -917,7 +1052,6 @@ export const RunCommand = effectCmd({
             fetch: fetchFn,
             resolveAgent: localAgent,
             session,
-            share,
             createSession: createFreshSession,
             agent: args.agent,
             model,
@@ -984,7 +1118,6 @@ export async function runMini(input: MiniCommandInput) {
     continue: input.continue,
     session: input.session,
     fork: input.fork,
-    share: undefined,
     model: input.model,
     agent: input.agent,
     format: "default",
@@ -1007,5 +1140,5 @@ export async function runMini(input: MiniCommandInput) {
     "dangerously-skip-permissions": false,
     dangerouslySkipPermissions: false,
     demo: input.demo ?? false,
-  })
+  } as Parameters<NonNullable<typeof RunCommand.handler>>[0] & { mini: boolean })
 }

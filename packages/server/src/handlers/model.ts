@@ -6,12 +6,20 @@ import { response } from "../location"
 
 export const ModelHandler = HttpApiBuilder.group(Api, "server.model", (handlers) =>
   Effect.gen(function* () {
-    return handlers.handle(
-      "model.list",
-      Effect.fn(function* () {
-        const catalog = yield* Catalog.Service
-        return yield* response(catalog.model.available())
-      }),
-    )
+    return handlers
+      .handle(
+        "model.list",
+        Effect.fn(function* () {
+          const catalog = yield* Catalog.Service
+          return yield* response(catalog.model.available())
+        }),
+      )
+      .handle(
+        "model.default",
+        Effect.fn(function* () {
+          const catalog = yield* Catalog.Service
+          return yield* response(catalog.model.default())
+        }),
+      )
   }),
 )

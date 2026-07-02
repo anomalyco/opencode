@@ -3,44 +3,18 @@ import { OpencodeClient } from "@opencode-ai/sdk/v2"
 import { runInteractiveMode } from "@/cli/cmd/run/runtime"
 import type { FooterApi, RunProvider } from "@/cli/cmd/run/types"
 
-type SessionMessage = NonNullable<Awaited<ReturnType<OpencodeClient["session"]["messages"]>>["data"]>[number]
-
 const provider: RunProvider = {
   id: "openai",
   name: "OpenAI",
-  source: "api",
-  env: [],
-  options: {},
   models: {
     "gpt-5": {
       id: "gpt-5",
       providerID: "openai",
-      api: {
-        id: "openai",
-        url: "https://openai.test",
-        npm: "@ai-sdk/openai",
-      },
       name: "Little Frank",
       capabilities: {
-        temperature: true,
-        reasoning: true,
-        attachment: true,
-        toolcall: true,
-        input: {
-          text: true,
-          audio: false,
-          image: false,
-          video: false,
-          pdf: false,
-        },
-        output: {
-          text: true,
-          audio: false,
-          image: false,
-          video: false,
-          pdf: false,
-        },
-        interleaved: false,
+        tools: true,
+        input: ["text"],
+        output: ["text"],
       },
       cost: {
         input: 0,
@@ -55,9 +29,7 @@ const provider: RunProvider = {
         output: 8192,
       },
       status: "active",
-      options: {},
-      headers: {},
-      release_date: "2026-01-01",
+      variants: {},
     },
   },
 }
@@ -141,44 +113,129 @@ describe("run interactive runtime", () => {
     const providers = defer<void>()
 
     const sdk = new OpencodeClient()
-    spyOn(sdk.config, "providers").mockImplementation(async () => {
+    const legacyProviders = spyOn(sdk.config, "providers").mockRejectedValue(new Error("legacy providers should stay unused"))
+    const legacyAgents = spyOn(sdk.app, "agents").mockRejectedValue(new Error("legacy agents should stay unused"))
+    const legacyCommands = spyOn(sdk.command, "list").mockRejectedValue(new Error("legacy commands should stay unused"))
+    spyOn(sdk.v2.provider, "list").mockImplementation(async () => {
       providersStarted.resolve()
       await providers.promise
-      return ok({ providers: [provider], default: {} })
+      return ok({
+        location: {
+          directory: "/tmp",
+        },
+        data: [
+          {
+            id: "openai",
+            name: "OpenAI",
+            api: {
+              type: "native",
+              settings: {},
+            },
+            request: {
+              headers: {},
+              body: {},
+            },
+          },
+        ],
+      }) as never
     })
-    spyOn(sdk.session, "messages").mockImplementation(() =>
-      ok([
-        {
-          info: {
+    spyOn(sdk.v2.model, "list").mockImplementation(() =>
+      ok({
+        location: {
+          directory: "/tmp",
+        },
+        data: [
+          {
+            id: "gpt-5",
+            providerID: "openai",
+            name: "Little Frank",
+            api: {
+              id: "openai",
+              type: "native",
+              settings: {},
+            },
+            capabilities: {
+              tools: true,
+              input: ["text"],
+              output: ["text"],
+            },
+            request: {
+              headers: {},
+              body: {},
+            },
+            variants: [],
+            time: {
+              released: 1,
+            },
+            cost: [
+              {
+                input: 0,
+                output: 0,
+                cache: {
+                  read: 0,
+                  write: 0,
+                },
+              },
+            ],
+            status: "active",
+            enabled: true,
+            limit: {
+              context: 128000,
+              output: 8192,
+            },
+          },
+        ],
+      }) as never,
+    )
+    spyOn(sdk.v2.session, "messages").mockImplementation(() =>
+      ok({
+        data: [
+          {
             id: "msg-user-1",
-            sessionID: "ses-1",
-            role: "user",
+            type: "user",
+            text: "hello",
             time: {
               created: 1,
             },
-            agent: "build",
-            model: {
-              providerID: "openai",
-              modelID: "gpt-5",
-              variant: undefined,
+          },
+        ],
+        cursor: {},
+      }),
+    )
+    spyOn(sdk.v2.session, "get").mockImplementation(() =>
+      ok({
+        data: {
+          id: "ses-1",
+          projectID: "pro-1",
+          title: "Session",
+          cost: 0,
+          tokens: {
+            input: 0,
+            output: 0,
+            reasoning: 0,
+            cache: {
+              read: 0,
+              write: 0,
             },
           },
-          parts: [
-            {
-              id: "part-user-1",
-              sessionID: "ses-1",
-              messageID: "msg-user-1",
-              type: "text",
-              text: "hello",
-            },
-          ],
-        } satisfies SessionMessage,
-      ]),
+          time: {
+            created: 1,
+            updated: 1,
+          },
+          location: {
+            directory: "/tmp",
+          },
+          model: {
+            providerID: "openai",
+            id: "gpt-5",
+          },
+        },
+      }),
     )
-    spyOn(sdk.session, "get").mockRejectedValue(new Error("not needed"))
-    spyOn(sdk.app, "agents").mockImplementation(() => ok([]))
-    spyOn(sdk.experimental.resource, "list").mockImplementation(() => ok({}))
-    spyOn(sdk.command, "list").mockImplementation(() => ok([]))
+    spyOn(sdk.v2.agent, "list").mockImplementation(() => ok({ location: { directory: "/tmp" }, data: [] }) as never)
+    spyOn(sdk.v2.reference, "list").mockImplementation(() => ok({ location: { directory: "/tmp" }, data: [] }) as never)
+    spyOn(sdk.v2.command, "list").mockImplementation(() => ok({ location: { directory: "/tmp" }, data: [] }) as never)
+    spyOn(sdk.v2.skill, "list").mockImplementation(() => ok({ location: { directory: "/tmp" }, data: [] }) as never)
 
     const task = runInteractiveMode(
       {
@@ -215,6 +272,7 @@ describe("run interactive runtime", () => {
             }, 0)
             return {
               runPromptTurn: async () => {},
+              interruptActiveTurn: async () => {},
               selectSubagent: () => {},
               replayOnResize: async () => false,
               close: async () => {},
@@ -234,5 +292,8 @@ describe("run interactive runtime", () => {
     await task
 
     expect(transportProviders).toEqual([[provider]])
+    expect(legacyProviders).not.toHaveBeenCalled()
+    expect(legacyAgents).not.toHaveBeenCalled()
+    expect(legacyCommands).not.toHaveBeenCalled()
   })
 })

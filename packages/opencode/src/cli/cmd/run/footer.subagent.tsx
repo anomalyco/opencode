@@ -53,6 +53,9 @@ export function RunFooterSubagentBody(props: {
   diffStyle?: RunDiffStyle
   onCycle: (dir: -1 | 1) => void
   onClose: () => void
+  // Formatted interrupt shortcut from the registered keymap binding; the
+  // command itself is dispatched through the keymap in footer.view.
+  interrupt?: () => string | undefined
 }) {
   const theme = createMemo(() => props.theme())
   const footer = createMemo(() => theme().footer)
@@ -88,6 +91,11 @@ export function RunFooterSubagentBody(props: {
     </box>
   ))
   let scroll: ScrollBoxRenderable | undefined
+
+  const interruptHint = createMemo(() => {
+    if (tab()?.status !== "running") return undefined
+    return props.interrupt?.()
+  })
 
   useKeyboard((event) => {
     if (!props.active()) {
@@ -139,6 +147,13 @@ export function RunFooterSubagentBody(props: {
                   <span style={{ fg: footer().muted }}>{"  " + subtitle()}</span>
                 </Show>
               </text>
+              <Show when={interruptHint()}>
+                {(hint) => (
+                  <text fg={footer().muted} wrapMode="none" truncate flexShrink={0}>
+                    {hint()} interrupt
+                  </text>
+                )}
+              </Show>
               <Show when={props.total() > 1 && props.index() > 0}>
                 <text fg={footer().muted} wrapMode="none" truncate flexShrink={0}>
                   {props.index()} of {props.total()}

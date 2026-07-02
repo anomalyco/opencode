@@ -33,7 +33,8 @@ export function generate(model: ModelV2Info): ModelV2Info["variants"] {
   if (!["glm-5.2", "glm-5-2", "glm-5p2"].some((name) => ids.includes(name))) return []
   return ["high", "max"].map((id) => ({
     id,
+    settings: { reasoningEffort: id },
     headers: {},
-    body: { reasoning_effort: id },
+    body: {},
   }))
 }

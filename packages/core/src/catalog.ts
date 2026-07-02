@@ -85,6 +85,7 @@ const layer = Layer.effect(
               ? { ...model.api, settings: { ...provider.api.settings, ...model.api.settings } }
               : model.api
       const request = {
+        settings: { ...provider.request.settings, ...model.request.settings },
         headers: { ...provider.request.headers, ...model.request.headers },
         body: { ...provider.request.body, ...model.request.body },
         variant: model.request.variant,

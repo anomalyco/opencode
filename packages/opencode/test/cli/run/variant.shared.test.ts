@@ -1,9 +1,8 @@
 import path from "path"
-import { NodeFileSystem } from "@effect/platform-node"
-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { describe, expect, test } from "bun:test"
-import { Effect, FileSystem, Layer } from "effect"
+import { Effect, Layer } from "effect"
 import { Global } from "@opencode-ai/core/global"
 import {
   createVariantRuntime,
@@ -99,7 +98,7 @@ function userMessage(
   }
 }
 
-const it = testEffect(Layer.mergeAll(LayerNode.compile(FSUtil.node), NodeFileSystem.layer))
+const it = testEffect(AppNodeBuilder.build(FSUtil.node))
 
 function remap(root: string, file: string) {
   if (file === Global.Path.state) {
@@ -124,7 +123,7 @@ function remappedFs(root: string) {
         writeJson: (file, data, mode) => fs.writeJson(remap(root, file), data, mode),
       })
     }),
-  ).pipe(Layer.provide(LayerNode.compile(FSUtil.node)))
+  ).pipe(Layer.provide(AppNodeBuilder.build(FSUtil.node)))
 }
 
 describe("run variant shared", () => {
@@ -160,9 +159,8 @@ describe("run variant shared", () => {
 
   it.live("reads and writes saved variants through a runtime-backed app fs layer", () =>
     Effect.gen(function* () {
-      const filesys = yield* FileSystem.FileSystem
       const fs = yield* FSUtil.Service
-      const root = yield* filesys.makeTempDirectoryScoped()
+      const root = yield* fs.makeTempDirectoryScoped()
       const file = path.join(root, "model.json")
 
       yield* fs.writeJson(file, {
@@ -172,7 +170,7 @@ describe("run variant shared", () => {
         },
       })
 
-      const svc = createVariantRuntime(remappedFs(root))
+      const svc = createVariantRuntime([[FSUtil.node, remappedFs(root)]])
 
       yield* Effect.promise(() => svc.saveVariant(model, "high"))
       expect(yield* Effect.promise(() => svc.resolveSavedVariant(model))).toBe("high")
@@ -197,14 +195,13 @@ describe("run variant shared", () => {
 
   it.live("repairs malformed saved variant state on the next write", () =>
     Effect.gen(function* () {
-      const filesys = yield* FileSystem.FileSystem
       const fs = yield* FSUtil.Service
-      const root = yield* filesys.makeTempDirectoryScoped()
+      const root = yield* fs.makeTempDirectoryScoped()
       const file = path.join(root, "model.json")
 
-      yield* filesys.writeFileString(file, "{")
+      yield* fs.writeFileString(file, "{")
 
-      const svc = createVariantRuntime(remappedFs(root))
+      const svc = createVariantRuntime([[FSUtil.node, remappedFs(root)]])
 
       yield* Effect.promise(() => svc.saveVariant(model, "high"))
       expect(yield* Effect.promise(() => svc.resolveSavedVariant(model))).toBe("high")

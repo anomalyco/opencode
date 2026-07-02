@@ -31,7 +31,7 @@ describe("OpenRouterPlugin", () => {
       yield* catalog.transform((catalog) => {
         catalog.provider.update(ProviderV2.ID.openrouter, (provider) => {
           provider.api = { type: "aisdk", package: "@openrouter/ai-sdk-provider" }
-          provider.request = { headers: { Existing: "value" }, body: {} }
+          provider.request = { settings: {}, headers: { Existing: "value" }, body: {} }
         })
         catalog.provider.update(ProviderV2.ID.make("nvidia"), () => {})
       })

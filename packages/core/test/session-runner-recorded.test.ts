@@ -31,7 +31,8 @@ import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { Location } from "@opencode-ai/core/location"
-import { SystemContextRegistry } from "@opencode-ai/core/system-context/registry"
+import { SystemContextBuiltIns } from "@opencode-ai/core/system-context/builtins"
+import { InstructionContext } from "@opencode-ai/core/instruction-context"
 import { SystemContext } from "@opencode-ai/core/system-context"
 import { SkillGuidance } from "@opencode-ai/core/skill/guidance"
 import { ReferenceGuidance } from "@opencode-ai/core/reference/guidance"
@@ -72,7 +73,8 @@ const model = OpenAIChat.route
   })
   .model({ id: "gpt-4o-mini" })
 const models = SessionRunnerModel.layerWith(() => Effect.succeed(model))
-const systemContext = AppNodeBuilder.build(SystemContextRegistry.node)
+const systemContext = Layer.mock(SystemContextBuiltIns.Service, { load: () => Effect.succeed(SystemContext.empty) })
+const instructionContext = Layer.mock(InstructionContext.Service, { load: () => Effect.succeed(SystemContext.empty) })
 const skillGuidance = Layer.mock(SkillGuidance.Service, { load: () => Effect.succeed(SystemContext.empty) })
 const referenceGuidance = Layer.mock(ReferenceGuidance.Service, { load: () => Effect.succeed(SystemContext.empty) })
 const mcpGuidance = Layer.mock(McpGuidance.Service, { load: () => Effect.succeed(SystemContext.empty) })
@@ -81,7 +83,8 @@ const runnerLayer = AppNodeBuilder.build(SessionRunnerLLM.node, [
   [Snapshot.node, Snapshot.noopLayer],
   [LayerNodePlatform.llmClient, client],
   [SessionRunnerModel.node, models],
-  [SystemContextRegistry.node, systemContext],
+  [SystemContextBuiltIns.node, systemContext],
+  [InstructionContext.node, instructionContext],
   [Location.node, Location.boundNode({ directory: AbsolutePath.make("/project") })],
   [SkillGuidance.node, skillGuidance],
   [ReferenceGuidance.node, referenceGuidance],
@@ -116,7 +119,8 @@ const it = testEffect(
       AgentV2.node,
       ToolRegistry.node,
       SessionRunnerModel.node,
-      SystemContextRegistry.node,
+      SystemContextBuiltIns.node,
+      InstructionContext.node,
       SkillGuidance.node,
       ReferenceGuidance.node,
       Config.node,
@@ -129,7 +133,8 @@ const it = testEffect(
       [PermissionV2.node, permission],
       [ToolOutputStore.node, ToolOutputStore.nodeWithoutConfig],
       [SessionRunnerModel.node, models],
-      [SystemContextRegistry.node, systemContext],
+      [SystemContextBuiltIns.node, systemContext],
+      [InstructionContext.node, instructionContext],
       [Location.node, Location.boundNode({ directory: AbsolutePath.make("/project") })],
       [SkillGuidance.node, skillGuidance],
       [ReferenceGuidance.node, referenceGuidance],
