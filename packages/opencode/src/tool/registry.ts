@@ -32,6 +32,7 @@ import { ApplyPatchTool } from "./apply_patch"
 import { Glob } from "@opencode-ai/core/util/glob"
 import path from "path"
 import { pathToFileURL } from "url"
+import { ToolLoadError } from "@/server/routes/instance/httpapi/errors"
 import { Effect, Layer, Context } from "effect"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
@@ -177,7 +178,16 @@ const layer = Layer.effect(
           const namespace = path.basename(match, path.extname(match))
           // `match` is an absolute filesystem path from `Glob.scanSync(..., { absolute: true })`.
           // Import it as `file://` so Node on Windows accepts the dynamic import.
-          const mod = yield* Effect.promise(() => import(pathToFileURL(match).href))
+          const mod = yield* Effect.tryPromise({
+            try: () => import(pathToFileURL(match).href),
+            catch: (raw) =>
+              new ToolLoadError({
+                toolPath: match,
+                message: `Failed to load tool '${namespace}': ${getErrorMessage(raw)}`,
+                hint: inferHint(raw),
+                cause: truncateCause(String((raw as Error)?.stack ?? raw)),
+              }),
+          })
           for (const [id, def] of Object.entries(mod)) {
             if (!isPluginTool(def)) continue
             custom.push(fromPlugin(id === "default" ? namespace : `${namespace}_${id}`, def))
@@ -388,6 +398,30 @@ function normalizeZodJsonSchema(value: unknown): unknown {
 
 function isJsonSchemaObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+function getErrorMessage(raw: unknown): string {
+  if (raw instanceof Error) return raw.message
+  if (typeof raw === "object" && raw !== null && "message" in raw) return String((raw as Record<string, unknown>).message)
+  return String(raw)
+}
+
+function inferHint(error: unknown): string | undefined {
+  const msg = getErrorMessage(error)
+  if (msg.includes("Cannot find module")) {
+    const match = msg.match(/Cannot find module ['"]([^'"]+)['"]/)
+    const dep = match?.[1]
+    return dep
+      ? `Missing dependency '${dep}'. Run 'npm install' (or 'bun install') in your config directory.`
+      : "A required npm dependency is missing. Run 'npm install' in your config directory."
+  }
+  if (msg.includes("ERR_MODULE_NOT_FOUND")) return "Module not found. Check your imports and run 'npm install'."
+  if (msg.includes("SyntaxError")) return "Fix the syntax error in your tool file, then restart opencode."
+  return undefined
+}
+
+function truncateCause(stack: string): string {
+  return stack.split("\n")[0].slice(0, 512)
 }
 
 export const node = LayerNode.make({

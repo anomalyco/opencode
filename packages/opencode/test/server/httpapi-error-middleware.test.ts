@@ -5,6 +5,7 @@ import { ConfigErrorV1 } from "@opencode-ai/core/v1/config/error"
 import { Effect, Layer } from "effect"
 import { HttpClient, HttpClientRequest, HttpRouter } from "effect/unstable/http"
 import { errorLayer } from "../../src/server/routes/instance/httpapi/middleware/error"
+import { ToolLoadError } from "../../src/server/routes/instance/httpapi/errors"
 import { NotFoundError } from "../../src/storage/storage"
 import { testEffect } from "../lib/effect"
 
@@ -96,6 +97,64 @@ describe("HttpApi error middleware", () => {
 
       expect(response.status).toBe(500)
       expectUnknownErrorBody(body)
+    }),
+  )
+
+  it.live("returns ToolLoadError defect as structured 500", () =>
+    Effect.gen(function* () {
+      const toolError = new ToolLoadError({
+        toolPath: "/home/user/.config/opencode/tools/slack_lint.ts",
+        message: "Failed to load tool 'slack_lint': Cannot find module '@opencode-ai/plugin'",
+        hint: "Missing dependency '@opencode-ai/plugin'. Run 'npm install' in your config directory.",
+        cause: "ResolveMessage: Cannot find module '@opencode-ai/plugin'",
+      })
+
+      yield* HttpRouter.add("GET", "/tool-error", Effect.die(toolError)).pipe(
+        Layer.provide(errorLayer),
+        HttpRouter.serve,
+        Layer.build,
+      )
+
+      const response = yield* HttpClientRequest.get("/tool-error").pipe(HttpClient.execute)
+      const body = yield* response.json
+
+      expect(response.status).toBe(500)
+      expect(body).toMatchObject({
+        name: "ToolLoadError",
+        data: {
+          toolPath: "/home/user/.config/opencode/tools/slack_lint.ts",
+          message: "Failed to load tool 'slack_lint': Cannot find module '@opencode-ai/plugin'",
+          hint: "Missing dependency '@opencode-ai/plugin'. Run 'npm install' in your config directory.",
+          cause: "ResolveMessage: Cannot find module '@opencode-ai/plugin'",
+        },
+      })
+    }),
+  )
+
+  it.live("returns ToolLoadError without optional fields", () =>
+    Effect.gen(function* () {
+      const toolError = new ToolLoadError({
+        toolPath: "/home/user/.config/opencode/tools/bad_syntax.ts",
+        message: "Failed to load tool 'bad_syntax': SyntaxError: Unexpected token",
+      })
+
+      yield* HttpRouter.add("GET", "/tool-error-no-hint", Effect.die(toolError)).pipe(
+        Layer.provide(errorLayer),
+        HttpRouter.serve,
+        Layer.build,
+      )
+
+      const response = yield* HttpClientRequest.get("/tool-error-no-hint").pipe(HttpClient.execute)
+      const body = yield* response.json
+
+      expect(response.status).toBe(500)
+      expect(body).toMatchObject({
+        name: "ToolLoadError",
+        data: {
+          toolPath: "/home/user/.config/opencode/tools/bad_syntax.ts",
+          message: "Failed to load tool 'bad_syntax': SyntaxError: Unexpected token",
+        },
+      })
     }),
   )
 })
