@@ -162,7 +162,14 @@ const echoNode = makeLocationNode({ name: "test/session-runner-tools", layer: ec
 let modelResolveHook = Effect.void
 let currentModel = model
 const models = SessionRunnerModel.layerWith((session) =>
-  modelResolveHook.pipe(Effect.as(session.model?.id === "replacement" ? replacementModel : currentModel)),
+  modelResolveHook.pipe(
+    Effect.as(
+      SessionRunnerModel.resolved(
+        session.model?.id === "replacement" ? replacementModel : currentModel,
+        session.model?.variant,
+      ),
+    ),
+  ),
 )
 const systemContextKey = SystemContext.Key.make("test/context")
 let systemBaseline = "Initial context"

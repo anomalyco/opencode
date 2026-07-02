@@ -38,7 +38,9 @@ const client = Layer.mock(LLMClient.Service)({
   generate: () => Effect.die("unused"),
 })
 const config = Layer.mock(Config.Service)({ entries: () => Effect.succeed([]) })
-const models = Layer.mock(SessionRunnerModel.Service)({ resolve: () => Effect.succeed(model) })
+const models = Layer.mock(SessionRunnerModel.Service)({
+  resolve: () => Effect.succeed(SessionRunnerModel.resolved(model)),
+})
 const it = testEffect(
   AppNodeBuilder.build(
     LayerNode.group([Database.node, EventV2.node, SessionProjector.node, SessionStore.node, SessionCompaction.node]),

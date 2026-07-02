@@ -14,8 +14,6 @@ import { Config } from "../../config"
 import { Database } from "../../database/database"
 import { EventV2 } from "../../event"
 import { Location } from "../../location"
-import { ModelV2 } from "../../model"
-import { ProviderV2 } from "../../provider"
 import { QuestionV2 } from "../../question"
 import { SystemContext } from "../../system-context/index"
 import { SystemContextBuiltIns } from "../../system-context/builtins"
@@ -217,7 +215,8 @@ const layer = Layer.effect(
         }
         if (promoted > 0) currentStep = 1
       }
-      const model = yield* models.resolve(session)
+      const resolved = yield* models.resolve(session)
+      const model = resolved.model
       const entries = yield* SessionHistory.entriesForRunner(db, session.id, checkpoint.baselineSeq)
       const context = entries.map((entry) => entry.message)
       const isLastStep = agent.info?.steps !== undefined && currentStep >= agent.info.steps
@@ -244,11 +243,9 @@ const layer = Layer.effect(
       const publisher = createLLMEventPublisher(events, {
         sessionID: session.id,
         agent: agent.id,
-        model: {
-          id: ModelV2.ID.make(model.id),
-          providerID: ProviderV2.ID.make(model.provider),
-          ...(session.model?.variant === undefined ? {} : { variant: session.model.variant }),
-        },
+        // The selected catalog identity, not model.id: route-level ids are provider API
+        // model ids (for example gpt-5.5-fast resolves to api id gpt-5.5).
+        model: resolved.ref,
         snapshot: startSnapshot,
       })
       const publication = Semaphore.makeUnsafe(1)
