@@ -12,9 +12,14 @@ export function createWindowRegistry<W>(persistence: {
   const persisted = () => {
     const value = persistence.read()
     if (!Array.isArray(value)) return []
-    return value.filter((id): id is string => typeof id === "string" && id.length > 0)
+  
+    return [
+      ...new Set(
+        value.filter((id): id is string => typeof id === "string" && id.length > 0),
+      ),
+    ]
   }
-
+  
   return {
     persisted,
     setQuitting(value = true) {
