@@ -1,7 +1,7 @@
 import { EOL } from "os"
 import { Effect } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
-import { LocationServiceMap, locationServiceMapLayer } from "@opencode-ai/core/location-services"
+import { LocationServiceMap, buildLocationServiceMap } from "@opencode-ai/core/location-services"
 import { Location } from "@opencode-ai/core/location"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { effectCmd } from "../../effect-cmd"
@@ -37,6 +37,6 @@ export const V2Command = effectCmd({
           }),
         ),
       ),
-      Effect.provide(locationServiceMapLayer),
+      Effect.provide(buildLocationServiceMap()),
     ),
 })
