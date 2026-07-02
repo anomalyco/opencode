@@ -72,14 +72,31 @@ export type Error =
   | UnsupportedApiError
   | Integration.AuthorizationError
 
+export interface Resolved {
+  /** Route-level model for provider requests; its id is the provider API model id, which may differ from the catalog id. */
+  readonly model: Model
+  /** Selected catalog identity. Durable records and displays must use this, never the API model id. */
+  readonly ref: ModelV2.Ref
+}
+
 export interface Interface {
-  readonly resolve: (session: SessionSchema.Info) => Effect.Effect<Model, Error>
+  readonly resolve: (session: SessionSchema.Info) => Effect.Effect<Resolved, Error>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/SessionRunnerModel") {}
 
 /** Test or embedding seam for supplying a model resolver directly. */
 export const layerWith = (resolve: Interface["resolve"]) => Layer.succeed(Service, Service.of({ resolve }))
+
+/** Builds a Resolved whose catalog identity mirrors the route model. Test or embedding seam. */
+export const resolved = (model: Model, variant?: ModelV2.VariantID): Resolved => ({
+  model,
+  ref: ModelV2.Ref.make({
+    id: ModelV2.ID.make(model.id),
+    providerID: ProviderV2.ID.make(model.provider),
+    ...(variant === undefined ? {} : { variant }),
+  }),
+})
 
 const apiKey = (model: ModelV2.Info, credential?: Credential.Value) => {
   if (credential?.type === "key") return Auth.value(credential.key)
@@ -233,11 +250,19 @@ const layer = Layer.effect(
         const connection = yield* integrations.connection.active(
           provider?.integrationID ?? Integration.ID.make(selected.providerID),
         )
-        return yield* resolve(
+        const model = yield* resolve(
           session,
           selected,
           connection ? yield* integrations.connection.resolve(connection) : undefined,
         )
+        return {
+          model,
+          ref: ModelV2.Ref.make({
+            id: selected.id,
+            providerID: selected.providerID,
+            ...(session.model?.variant === undefined ? {} : { variant: session.model.variant }),
+          }),
+        }
       }),
     })
   }),
