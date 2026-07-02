@@ -69,10 +69,13 @@ function nativeItem(
 
   // If this entry has a role AND the user wants to disable its built-in accelerator,
   // convert it to a manual action item instead of using the native role.
+  // Only convert if the entry has a real handler — otherwise the item becomes a no-op.
   if (entry.role) {
-    const roleAccel = platform === "windows" ? ROLE_ACCELERATORS[entry.role] : null
-    if (roleAccel && disabledAccelerators.has(roleAccel)) {
-      return buildManualItem(entry, deps, platform, disabledAccelerators)
+    if (platform === "windows") {
+      const roleAccel = ROLE_ACCELERATORS[entry.role]
+      if (roleAccel && disabledAccelerators.has(roleAccel) && (entry.action || entry.command || entry.href)) {
+        return buildManualItem(entry, deps, platform, disabledAccelerators)
+      }
     }
     return { role: nativeRole(entry.role) }
   }

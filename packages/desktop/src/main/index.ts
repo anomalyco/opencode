@@ -377,7 +377,9 @@ const main = Effect.gen(function* () {
   if (windows.length) {
     const store = getStore()
     const disabled = store.get(DISABLE_NATIVE_ACCELERATORS_KEY)
-    const disabledAccelerators: string[] = Array.isArray(disabled) ? disabled : []
+    const disabledAccelerators: string[] = Array.isArray(disabled)
+      ? disabled.filter((v): v is string => typeof v === "string")
+      : []
 
     createMenu(
       {
