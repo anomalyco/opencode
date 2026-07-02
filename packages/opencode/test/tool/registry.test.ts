@@ -6,6 +6,7 @@ import { Effect, Layer, Result, Schema } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { ToolRegistry } from "@/tool/registry"
 import { Tool } from "@/tool/tool"
+import { ToolLoadError } from "@/server/routes/instance/httpapi/errors"
 import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { TestConfig } from "../fixture/config"
@@ -488,6 +489,76 @@ describe("tool.registry", () => {
       const registry = yield* ToolRegistry.Service
       const ids = yield* registry.ids()
       expect(ids).toContain("cowsay")
+    }),
+  )
+
+  it.instance("surfaces a readable error when a custom tool imports a missing module", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const tools = path.join(test.directory, ".opencode", "tools")
+      yield* Effect.promise(() => fs.mkdir(tools, { recursive: true }))
+      yield* Effect.promise(() =>
+        Bun.write(
+          path.join(tools, "missing_dep.ts"),
+          [
+            "import { something } from 'definitely-missing-package'",
+            "export default {",
+            "  description: 'tool with missing dep',",
+            "  args: {},",
+            "  execute: async () => 'ok',",
+            "}",
+            "",
+          ].join("\n"),
+        ),
+      )
+
+      const registry = yield* ToolRegistry.Service
+      const exit = yield* Effect.exit(registry.ids())
+
+      expect(exit._tag).toBe("Failure")
+      const toolError = (exit as unknown as { cause: { error: unknown } }).cause?.error
+      expect(ToolLoadError.isInstance(toolError)).toBe(true)
+      if (ToolLoadError.isInstance(toolError)) {
+        expect(toolError.message).toContain("Failed to load tool 'missing_dep'")
+        expect(toolError.hint).toBeDefined()
+        expect(toolError.hint).toContain("npm install")
+        expect(toolError.toolPath).toContain("missing_dep.ts")
+      }
+    }),
+  )
+
+  it.instance("surfaces a hint for SyntaxError when a custom tool has invalid JS", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const tools = path.join(test.directory, ".opencode", "tools")
+      yield* Effect.promise(() => fs.mkdir(tools, { recursive: true }))
+      // Write a tool with an intentional SyntaxError by using an invalid import path
+      // that fails module resolution (covers the "Cannot find module" hint path)
+      yield* Effect.promise(() =>
+        Bun.write(
+          path.join(tools, "bad_import.ts"),
+          [
+            "import { tool } from '@this-package-does-not-exist-12345'",
+            "export default tool({",
+            "  description: 'bad import tool',",
+            "  args: {},",
+            "  execute: async () => 'ok',",
+            "})",
+            "",
+          ].join("\n"),
+        ),
+      )
+
+      const registry = yield* ToolRegistry.Service
+      const exit = yield* Effect.exit(registry.ids())
+
+      expect(exit._tag).toBe("Failure")
+      const toolError = (exit as unknown as { cause: { error: unknown } }).cause?.error
+      expect(ToolLoadError.isInstance(toolError)).toBe(true)
+      if (ToolLoadError.isInstance(toolError)) {
+        expect(toolError.message).toContain("Failed to load tool 'bad_import'")
+        expect(toolError.hint).toBeDefined()
+      }
     }),
   )
 })

@@ -175,6 +175,13 @@ export class ProjectNotFoundError extends Schema.TaggedErrorClass<ProjectNotFoun
   { httpApiStatus: 404 },
 ) {}
 
+export class ToolLoadError extends Schema.TaggedErrorClass<ToolLoadError>()("ToolLoadError", {
+  toolPath: Schema.String,
+  message: Schema.String,
+  hint: Schema.optional(Schema.String),
+  cause: Schema.optional(Schema.String),
+}, { httpApiStatus: 500 }) {}
+
 export class ApiNotFoundError extends Schema.ErrorClass<ApiNotFoundError>("NotFoundError")(
   {
     name: Schema.Literal("NotFoundError"),

@@ -2,6 +2,7 @@ import { NamedError } from "@opencode-ai/core/util/error"
 import { ConfigErrorV1 } from "@opencode-ai/core/v1/config/error"
 import { Cause, Effect } from "effect"
 import { HttpRouter, HttpServerError, HttpServerRespondable, HttpServerResponse } from "effect/unstable/http"
+import { ToolLoadError } from "../errors"
 
 // Keep typed HttpApi failures on their declared error path; this boundary only replaces defect-only empty 500s.
 export const errorLayer = HttpRouter.middleware<{ handles: unknown }>()((effect) =>
@@ -23,6 +24,12 @@ export const errorLayer = HttpRouter.middleware<{ handles: unknown }>()((effect)
         ConfigErrorV1.DirectoryTypoError.isInstance(error)
       ) {
         return Effect.succeed(HttpServerResponse.jsonUnsafe(error.toObject(), { status: 400 }))
+      }
+
+      if (ToolLoadError.isInstance(error)) {
+        return Effect.succeed(
+          HttpServerResponse.jsonUnsafe({ name: "ToolLoadError", data: { ...error } }, { status: 500 }),
+        )
       }
 
       const ref = `err_${crypto.randomUUID().slice(0, 8)}`
