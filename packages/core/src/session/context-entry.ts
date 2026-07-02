@@ -33,22 +33,20 @@ const renderValue = (value: Schema.Json) => (typeof value === "string" ? value :
 const renderBlock = (key: Key, value: Schema.Json) =>
   [`<context key="${key}">`, renderValue(value), "</context>"].join("\n")
 
+// Rendering stays mechanism-neutral: the model sees session context, not how
+// it was attached. Only chronological updates and removals carry narration.
 const source = (entry: Info) =>
   SystemContext.make({
     key: SystemContext.Key.make(`api/${entry.key}`),
     codec: Schema.toCodecJson(Schema.Json),
     load: Effect.succeed(entry.value),
-    baseline: (value) =>
-      [
-        `An API client attached the following context to this session under "${entry.key}":`,
-        renderBlock(entry.key, value),
-      ].join("\n"),
+    baseline: (value) => renderBlock(entry.key, value),
     update: (_previous, value) =>
       [
-        `The attached context "${entry.key}" changed. This value supersedes the previous one:`,
+        `The context under "${entry.key}" changed and supersedes the previous value:`,
         renderBlock(entry.key, value),
       ].join("\n"),
-    removed: () => `The attached context "${entry.key}" was removed. Disregard it.`,
+    removed: () => `The context under "${entry.key}" no longer applies. Disregard it.`,
   })
 
 const layer = Layer.effect(
