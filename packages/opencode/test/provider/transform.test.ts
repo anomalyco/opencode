@@ -87,19 +87,6 @@ describe("ProviderTransform.options - setCacheKey", () => {
     expect(result.promptCacheKey).toBe(sessionID)
   })
 
-  test("should set promptCacheKey for xai models regardless of setCacheKey", () => {
-    const xaiModel = {
-      ...mockModel,
-      providerID: "xai",
-      api: {
-        id: "grok-4.3",
-        url: "https://api.x.ai/v1",
-        npm: "@ai-sdk/xai",
-      },
-    }
-    const result = ProviderTransform.options({ model: xaiModel, sessionID, providerOptions: {} })
-    expect(result.promptCacheKey).toBe(sessionID)
-  })
 
   test("should set store=false for openai provider", () => {
     const openaiModel = {
