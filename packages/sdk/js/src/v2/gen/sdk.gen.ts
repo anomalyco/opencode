@@ -301,6 +301,8 @@ import type {
   V2LocationGetResponses,
   V2McpListErrors,
   V2McpListResponses,
+  V2ModelDefaultErrors,
+  V2ModelDefaultResponses,
   V2ModelListErrors,
   V2ModelListResponses,
   V2PermissionRequestListErrors,
@@ -6116,6 +6118,28 @@ export class Model extends HeyApiClient {
     const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "location" }] }])
     return (options?.client ?? this.client).get<V2ModelListResponses, V2ModelListErrors, ThrowOnError>({
       url: "/api/model",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get default model
+   *
+   * Retrieve the model used when a session has no explicit model selection.
+   */
+  public default<ThrowOnError extends boolean = false>(
+    parameters?: {
+      location?: {
+        directory?: string
+        workspace?: string
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "location" }] }])
+    return (options?.client ?? this.client).get<V2ModelDefaultResponses, V2ModelDefaultErrors, ThrowOnError>({
+      url: "/api/model/default",
       ...options,
       ...params,
     })

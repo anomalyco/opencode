@@ -152,14 +152,6 @@ export function createSession(messages: SessionMessages): RunSession {
   }
 }
 
-export async function resolveSession(sdk: RunInput["sdk"], sessionID: string, limit = LIMIT): Promise<RunSession> {
-  const response = await sdk.session.messages({
-    sessionID,
-    limit,
-  })
-  return createSession(response.data ?? [])
-}
-
 export async function resolveCurrentSession(
   sdk: RunInput["sdk"],
   sessionID: string,

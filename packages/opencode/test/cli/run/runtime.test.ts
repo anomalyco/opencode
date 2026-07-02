@@ -233,7 +233,7 @@ describe("run interactive runtime", () => {
       }),
     )
     spyOn(sdk.v2.agent, "list").mockImplementation(() => ok({ location: { directory: "/tmp" }, data: [] }) as never)
-    spyOn(sdk.experimental.resource, "list").mockImplementation(() => ok({}))
+    spyOn(sdk.v2.reference, "list").mockImplementation(() => ok({ location: { directory: "/tmp" }, data: [] }) as never)
     spyOn(sdk.v2.command, "list").mockImplementation(() => ok({ location: { directory: "/tmp" }, data: [] }) as never)
     spyOn(sdk.v2.skill, "list").mockImplementation(() => ok({ location: { directory: "/tmp" }, data: [] }) as never)
 

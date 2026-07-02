@@ -89,6 +89,7 @@ function sdk(input: {
   streams: ReturnType<typeof feed>[]
   active?: () => Record<string, { type: "running" }>
   messages?: Record<string, SessionMessages>
+  sessions?: Array<{ id: string; parentID?: string; title?: string; agent?: string; time: { updated: number } }>
 }) {
   const client = new OpencodeClient()
   let subscription = 0
@@ -115,18 +116,21 @@ function sdk(input: {
   spyOn(client.v2.session, "active").mockImplementation(() => ok({ data: input.active?.() ?? {} }))
   spyOn(client.v2.session, "switchAgent").mockImplementation(() => ok(undefined))
   spyOn(client.v2.session, "switchModel").mockImplementation(() => ok(undefined))
-  spyOn(client.config, "get").mockImplementation(() => ok({}))
-  spyOn(client.v2.model, "list").mockImplementation(() =>
-    ok({
-      location: {
-        directory: "/tmp",
-        project: {
-          id: "proj_1",
-          directory: "/tmp",
-        },
-      },
-      data: [],
-    }),
+  // The generated methods have conditional return types for throwOnError; the
+  // minimal shapes below are enough for family discovery and model fallback.
+  spyOn(client.v2.session, "list").mockImplementation(
+    () =>
+      ok({
+        location: { directory: "/tmp", project: { id: "proj_1", directory: "/tmp" } },
+        data: input.sessions ?? [],
+      }) as never,
+  )
+  spyOn(client.v2.model, "default").mockImplementation(
+    () =>
+      ok({
+        location: { directory: "/tmp", project: { id: "proj_1", directory: "/tmp" } },
+        data: undefined,
+      }) as never,
   )
   return client
 }
@@ -853,7 +857,7 @@ describe("V2 mini transport", () => {
     await transport.close()
   })
 
-  test("falls back to the configured model when selecting a variant on a fresh session", async () => {
+  test("falls back to the default model when selecting a variant on a fresh session", async () => {
     const events = feed()
     events.push(connected())
     const client = sdk({ streams: [events] })
@@ -868,7 +872,13 @@ describe("V2 mini transport", () => {
     // The generated method has conditional return types for throwOnError; the test only needs the nested model field.
     // @ts-expect-error minimal session shape is enough for this lookup
     spyOn(client.v2.session, "get").mockImplementation(() => ok({ data: { model: undefined } }))
-    spyOn(client.config, "get").mockImplementation(() => ok({ model: "openai/gpt-5" }))
+    spyOn(client.v2.model, "default").mockImplementation(
+      () =>
+        ok({
+          location: { directory: "/tmp", project: { id: "proj_1", directory: "/tmp" } },
+          data: { id: "gpt-5", providerID: "openai" },
+        }) as never,
+    )
     const switched = spyOn(client.v2.session, "switchModel").mockImplementation(() => ok(undefined))
     let admitted = false
     // The generated method has conditional return types for throwOnError; this mock represents the successful branch.
@@ -1204,6 +1214,37 @@ describe("V2 mini transport", () => {
     await Bun.sleep(0)
     await Bun.sleep(0)
     expect(states().at(-1)?.tabs).toMatchObject([{ sessionID: "ses_child", status: "cancelled" }])
+    await transport.close()
+  })
+
+  test("adopts historical children from the session family list", async () => {
+    const events = feed()
+    events.push(connected())
+    const client = sdk({
+      streams: [events],
+      sessions: [
+        { id: "ses_child_old", parentID: "ses_1", title: "Earlier subagent", agent: "explore", time: { updated: 9 } },
+        { id: "ses_unrelated", title: "Different session", time: { updated: 5 } },
+        { id: "ses_sibling", parentID: "ses_2", title: "Someone else's child", time: { updated: 4 } },
+      ],
+    })
+    const ui = footer()
+    const transport = await createSessionTransport({
+      sdk: client,
+      sessionID: "ses_1",
+      thinking: false,
+      limits: () => ({}),
+      footer: ui.api,
+    })
+    const states = ui.events.flatMap((event) => (event.type === "stream.subagent" ? [event.state] : []))
+    expect(states.at(-1)?.tabs).toMatchObject([
+      {
+        sessionID: "ses_child_old",
+        label: "Explore",
+        title: "Earlier subagent",
+        status: "completed",
+      },
+    ])
     await transport.close()
   })
 

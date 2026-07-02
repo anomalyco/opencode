@@ -15,7 +15,7 @@
 import { createOpencodeClient } from "@opencode-ai/sdk/v2"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { MessageID } from "@/session/schema"
-import { loadRunAgents, loadRunCommands } from "./catalog.shared"
+import { loadRunAgents, loadRunCommands, loadRunReferences } from "./catalog.shared"
 import { createRunDemo } from "./demo"
 import { resolveModelInfo, resolveRunTuiConfig, resolveSessionInfo } from "./runtime.boot"
 import { createRuntimeLifecycle } from "./runtime.lifecycle"
@@ -231,7 +231,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
         .then((x) => x.data ?? [])
         .catch(() => []),
     agents: [],
-    resources: [],
+    references: [],
     sessionID: state.sessionID,
     sessionTitle: state.sessionTitle,
     getSessionID: () => state.sessionID,
@@ -383,12 +383,9 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
       return
     }
 
-    const [agents, resources, commands] = await Promise.all([
+    const [agents, references, commands] = await Promise.all([
       loadRunAgents(ctx.sdk, ctx.directory).catch(() => []),
-      ctx.sdk.experimental.resource
-        .list({ directory: ctx.directory })
-        .then((x) => Object.values(x.data ?? {}))
-        .catch(() => []),
+      loadRunReferences(ctx.sdk, ctx.directory).catch(() => []),
       loadRunCommands(ctx.sdk, ctx.directory).catch(() => []),
     ])
     if (footer.isClosed) {
@@ -398,7 +395,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
     footer.event({
       type: "catalog",
       agents,
-      resources,
+      references,
       commands,
     })
   }

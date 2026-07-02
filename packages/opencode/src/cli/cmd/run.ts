@@ -646,13 +646,16 @@ export const RunCommand = effectCmd({
 
       async function transcriptKind(sdk: OpencodeClient, sessionID: string) {
         const current = await sdk.v2.session.messages({ sessionID, limit: 1 }).then((result) => (result.data?.data.length ?? 0) > 0)
+        // Ordinary prompt flows assume a transcript with current messages is
+        // current-owned; only legacy-only modes (--command, directory
+        // attachments) still probe legacy history for mixed transcripts.
+        if (current && (interactive || currentPrompt)) return "current" as const
+
+        const legacy = await sdk.session.messages({ sessionID, limit: 1 }).then((result) => (result.data?.length ?? 0) > 0)
         if (current) {
-          const legacy = await sdk.session.messages({ sessionID, limit: 1 }).then((result) => (result.data?.length ?? 0) > 0)
           if (legacy) throw new Error("Session contains mixed legacy and current transcripts")
           return "current" as const
         }
-
-        const legacy = await sdk.session.messages({ sessionID, limit: 1 }).then((result) => (result.data?.length ?? 0) > 0)
         if (legacy) return "legacy" as const
         return "empty" as const
       }

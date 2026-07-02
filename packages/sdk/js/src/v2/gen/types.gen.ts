@@ -12918,6 +12918,47 @@ export type V2ModelListResponses = {
 
 export type V2ModelListResponse = V2ModelListResponses[keyof V2ModelListResponses]
 
+export type V2ModelDefaultData = {
+  body?: never
+  path?: never
+  query?: {
+    location?: {
+      directory?: string
+      workspace?: string
+    }
+  }
+  url: "/api/model/default"
+}
+
+export type V2ModelDefaultErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * ServiceUnavailableError
+   */
+  503: ServiceUnavailableError
+}
+
+export type V2ModelDefaultError = V2ModelDefaultErrors[keyof V2ModelDefaultErrors]
+
+export type V2ModelDefaultResponses = {
+  /**
+   * Success
+   */
+  200: {
+    location: LocationInfo
+    data: ModelV2Info
+  }
+}
+
+export type V2ModelDefaultResponse = V2ModelDefaultResponses[keyof V2ModelDefaultResponses]
+
 export type V2GenerateTextData = {
   body: {
     prompt: string

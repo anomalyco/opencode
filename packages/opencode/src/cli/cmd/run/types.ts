@@ -109,9 +109,9 @@ export type RunAgent = {
   hidden: boolean
 }
 
-type RunResourceMap = NonNullable<Awaited<ReturnType<OpencodeClient["experimental"]["resource"]["list"]>>["data"]>
-
-export type RunResource = RunResourceMap[string]
+export type RunReference = NonNullable<
+  Awaited<ReturnType<OpencodeClient["v2"]["reference"]["list"]>>["data"]
+>["data"][number]
 
 export type RunInput = {
   sdk: OpencodeClient
@@ -283,7 +283,7 @@ export type FooterEvent =
   | {
       type: "catalog"
       agents: RunAgent[]
-      resources: RunResource[]
+      references: RunReference[]
       commands?: RunCommand[]
     }
   | {

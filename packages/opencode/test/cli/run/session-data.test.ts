@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { Event } from "@opencode-ai/sdk/v2"
-import { createSessionData, flushInterrupted, reduceSessionData } from "@/cli/cmd/run/session-data"
+import { createSessionData, reduceSessionData } from "@/cli/cmd/run/session-data"
 import type { StreamCommit } from "@/cli/cmd/run/types"
 
 function reduce(data: ReturnType<typeof createSessionData>, event: unknown, thinking = true) {
@@ -545,28 +545,6 @@ describe("run session data", () => {
         toolError: "No such file or directory: '/tmp/demo/run'",
       }),
     ])
-  })
-
-  test("flushInterrupted emits one interrupted final per live part", () => {
-    const data = reduce(
-      createSessionData(),
-      text({
-        id: "txt-1",
-        messageID: "msg-1",
-        text: "unfinished",
-      }),
-    ).data
-
-    const first: StreamCommit[] = []
-    flushInterrupted(data, first)
-    expect(first).toEqual([
-      expect.objectContaining({ kind: "assistant", text: "unfinished", phase: "progress" }),
-      expect.objectContaining({ kind: "assistant", phase: "final", interrupted: true }),
-    ])
-
-    const next: StreamCommit[] = []
-    flushInterrupted(data, next)
-    expect(next).toEqual([])
   })
 
   test("surfaces session errors as error commits", () => {

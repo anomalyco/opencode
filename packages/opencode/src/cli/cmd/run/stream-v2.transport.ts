@@ -192,14 +192,9 @@ async function resolveSelectedModel(input: StreamInput, next: Pick<SessionTurnIn
     .then((response) => response.data.data.model)
   if (session) return { ...session, variant: next.variant }
 
-  const config = await input.sdk.config.get(undefined, { throwOnError: true, signal: next.signal })
-  if (config.data?.model) {
-    const [providerID, ...modelID] = config.data.model.split("/")
-    return { providerID, id: modelID.join("/"), variant: next.variant }
-  }
-
-  const listed = await input.sdk.v2.model.list(undefined, { throwOnError: true, signal: next.signal })
-  const fallback = listed.data.data[0]
+  const fallback = await input.sdk.v2.model
+    .default(undefined, { throwOnError: true, signal: next.signal })
+    .then((response) => response.data.data)
   if (!fallback) return
   return { providerID: fallback.providerID, id: fallback.id, variant: next.variant }
 }

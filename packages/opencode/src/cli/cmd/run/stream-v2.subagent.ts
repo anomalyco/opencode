@@ -1,9 +1,10 @@
 // Current-native subagent (child Session) tracking for the mini transport.
 //
-// Discovers child Sessions of the active parent from three current sources:
+// Discovers child Sessions of the active parent from four current sources:
 //   1. projected subagent tool output (`structured.sessionID`) during hydration
-//   2. the process-local active-session map during hydration
-//   3. live events from unknown sessions whose `parentID` matches the parent
+//   2. the current session list filtered by `parentID` during hydration
+//   3. the process-local active-session map during hydration
+//   4. live events from unknown sessions whose `parentID` matches the parent
 //
 // Tracks one footer tab per child and a detail transcript for the selected
 // child, reduced from the same current live event stream the parent uses.
@@ -27,6 +28,7 @@ import type { FooterSubagentDetail, FooterSubagentState, FooterSubagentTab, Stre
 const CHILD_MESSAGE_LIMIT = 80
 const CHILD_FRAME_LIMIT = 80
 const DISCOVERY_BUFFER_LIMIT = 64
+const FAMILY_LIST_LIMIT = 100
 const FALLBACK_LABEL = "Subagent"
 
 export function outputText(content: ReadonlyArray<{ type: string; text?: string }>) {
@@ -651,6 +653,18 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
         for (const item of message.content) {
           if (item.type === "tool") mainTool(item, next.active)
         }
+      }
+      // Family index: adopt children directly from the current session list so
+      // historical subagents beyond the projected message window still get tabs.
+      const family = await input.sdk.v2.session
+        .list({ limit: FAMILY_LIST_LIMIT, order: "desc" }, { throwOnError: true })
+        .then((response) => response.data.data.filter((session) => session.parentID === input.sessionID))
+        .catch(() => [])
+      for (const session of family) {
+        const child = ensureChild(session.id)
+        if (session.agent && child.label === FALLBACK_LABEL) child.label = Locale.titlecase(session.agent)
+        if (!child.title) child.title = session.title
+        touch(child, session.time.updated)
       }
       for (const sessionID of Object.keys(next.active)) discover(sessionID)
       for (const child of children.values()) {

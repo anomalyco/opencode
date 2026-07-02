@@ -27,7 +27,7 @@ import type {
   RunAgent,
   RunInput,
   RunPrompt,
-  RunResource,
+  RunReference,
   RunTuiConfig,
 } from "./types"
 import { formatModelLabel } from "./variant.shared"
@@ -55,7 +55,7 @@ export type LifecycleInput = {
   directory: string
   findFiles: (query: string) => Promise<string[]>
   agents: RunAgent[]
-  resources: RunResource[]
+  references: RunReference[]
   sessionID: string
   sessionTitle?: string
   getSessionID?: () => string | undefined
@@ -234,7 +234,7 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
       directory: input.directory,
       findFiles: input.findFiles,
       agents: input.agents,
-      resources: input.resources,
+      references: input.references,
       sessionID: input.getSessionID ?? (() => input.sessionID),
       ...labels,
       model: input.model,

@@ -1,5 +1,5 @@
 import type { OpencodeClient } from "@opencode-ai/sdk/v2"
-import type { RunAgent, RunCommand, RunProvider } from "./types"
+import type { RunAgent, RunCommand, RunProvider, RunReference } from "./types"
 
 type CurrentAgent = NonNullable<Awaited<ReturnType<OpencodeClient["v2"]["agent"]["list"]>>["data"]>["data"][number]
 type CurrentCommand = NonNullable<Awaited<ReturnType<OpencodeClient["v2"]["command"]["list"]>>["data"]>["data"][number]
@@ -98,6 +98,11 @@ export async function loadRunCommands(sdk: OpencodeClient, directory: string): P
     ...(commands.data?.data ?? []).map(runCommand),
     ...(skills.data?.data ?? []).filter((skill) => skill.slash !== false).map(runSkill),
   ]
+}
+
+export async function loadRunReferences(sdk: OpencodeClient, directory: string): Promise<RunReference[]> {
+  const result = await sdk.v2.reference.list(location(directory), { throwOnError: true })
+  return (result.data?.data ?? []).filter((reference) => !reference.hidden)
 }
 
 export async function loadRunProviders(sdk: OpencodeClient, directory: string): Promise<RunProvider[]> {

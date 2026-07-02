@@ -5,9 +5,9 @@
 //   - FooterOutput:   status bar patches and view transitions (permission, question)
 //
 // The reducer mutates SessionData in place for performance but has no
-// external side effects -- no IO, no footer calls. The caller
-// (stream.transport.ts) feeds events in and forwards output to the footer
-// through stream.ts.
+// external side effects -- no IO, no footer calls. The demo runtime
+// (demo.ts) feeds events in and forwards output to the footer through
+// stream.ts; the current transport reuses the blocker helpers below.
 //
 // Key design decisions:
 //
@@ -24,7 +24,7 @@
 //   `data.questions`. The footer shows whichever is first. When a reply
 //   event arrives, the queue entry is removed and the footer falls back
 //   to the next pending request or to the prompt view.
-import type { Event, Part, PermissionRequest, QuestionRequest, ToolPart } from "@opencode-ai/sdk/v2"
+import type { Event, PermissionRequest, QuestionRequest, ToolPart } from "@opencode-ai/sdk/v2"
 import * as Locale from "@/util/locale"
 import { toolView } from "./tool"
 import type { FooterOutput, FooterPatch, FooterView, StreamCommit } from "./types"
@@ -278,33 +278,6 @@ function remove(list: Array<{ id: string }>, id: string): boolean {
 
   list.splice(idx, 1)
   return true
-}
-
-export function bootstrapSessionData(input: {
-  data: SessionData
-  messages: Array<{
-    parts: Part[]
-  }>
-  permissions: PermissionRequest[]
-  questions: QuestionRequest[]
-}) {
-  for (const message of input.messages) {
-    for (const part of message.parts) {
-      if (part.type !== "tool") {
-        continue
-      }
-
-      input.data.call.set(key(part.messageID, part.callID), part.state.input)
-    }
-  }
-
-  for (const request of input.permissions.slice().sort((a, b) => a.id.localeCompare(b.id))) {
-    upsert(input.data.permissions, enrichPermission(input.data, request))
-  }
-
-  for (const request of input.questions.slice().sort((a, b) => a.id.localeCompare(b.id))) {
-    upsert(input.data.questions, request)
-  }
 }
 
 function key(msg: string, call: string): string {
@@ -738,26 +711,6 @@ function failTool(part: ToolPart, text: string): SessionCommit {
     toolState: "error",
     toolError: text,
   })
-}
-
-// Emits "interrupted" final entries for all in-flight parts. Called when a turn is aborted.
-export function flushInterrupted(data: SessionData, commits: SessionCommit[]) {
-  for (const partID of data.part.keys()) {
-    if (data.ids.has(partID)) {
-      continue
-    }
-
-    const msg = data.msg.get(partID)
-    if (msg && data.role.get(msg) === "user" && !data.includeUserText) {
-      data.ids.add(partID)
-      drop(data, partID)
-      continue
-    }
-
-    flushPart(data, commits, partID, true)
-    data.ids.add(partID)
-    drop(data, partID)
-  }
 }
 
 // The main reducer. Takes one SDK event and returns scrollback commits and

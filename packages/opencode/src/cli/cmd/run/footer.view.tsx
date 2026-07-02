@@ -50,7 +50,7 @@ import type {
   RunInput,
   RunPrompt,
   RunProvider,
-  RunResource,
+  RunReference,
   RunTuiConfig,
 } from "./types"
 import type { RunTheme } from "./theme"
@@ -74,7 +74,7 @@ type RunFooterViewProps = {
   directory: string
   findFiles: (query: string) => Promise<string[]>
   agents: () => RunAgent[]
-  resources: () => RunResource[]
+  references: () => RunReference[]
   commands: () => RunCommand[] | undefined
   providers: () => RunProvider[] | undefined
   currentModel: () => RunInput["model"]
@@ -368,7 +368,7 @@ export function RunFooterView(props: RunFooterViewProps) {
     directory: props.directory,
     findFiles: props.findFiles,
     agents: props.agents,
-    resources: props.resources,
+    references: props.references,
     commands: props.commands,
     tuiConfig: props.tuiConfig,
     state: props.state,

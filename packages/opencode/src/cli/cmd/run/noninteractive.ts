@@ -364,13 +364,8 @@ export async function runNonInteractivePrompt(input: Input) {
             .then((result) => result.data.data.model)
             .then(async (model) => {
               if (model) return { ...model, variant: input.variant }
-              const config = await input.client.config.get(undefined, { throwOnError: true })
-              if (config.data?.model) {
-                const [providerID, ...modelID] = config.data.model.split("/")
-                return { providerID, id: modelID.join("/"), variant: input.variant }
-              }
-              const result = await input.client.v2.model.list(undefined, { throwOnError: true })
-              const fallback = result.data.data[0]
+              const result = await input.client.v2.model.default(undefined, { throwOnError: true })
+              const fallback = result.data.data
               return fallback ? { providerID: fallback.providerID, id: fallback.id, variant: input.variant } : undefined
             })
         : undefined
