@@ -1,6 +1,5 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import path from "node:path"
 import { CommandV2 } from "@opencode-ai/core/command"
 import { Config } from "@opencode-ai/core/config"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -9,7 +8,6 @@ import { MCP } from "@opencode-ai/core/mcp/index"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { emptyConfigLayer, emptyMcpLayer, testLocationLayer } from "./fixture/mcp"
-import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(
@@ -79,27 +77,4 @@ describe("CommandV2", () => {
     }),
   )
 
-  it.live("attaches files mentioned in command templates", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-    ).pipe(
-      Effect.flatMap((tmp) =>
-        Effect.gen(function* () {
-          yield* Effect.promise(() => Bun.write(path.join(tmp.path, "notes.txt"), "hello"))
-          const command = yield* CommandV2.Service
-          yield* command.transform((editor) => {
-            editor.update("review", (command) => {
-              command.template = `Review @${path.join(tmp.path, "notes.txt")}`
-            })
-          })
-
-          expect(yield* command.evaluate({ name: "review" })).toMatchObject({
-            text: `Review @${path.join(tmp.path, "notes.txt")}`,
-            files: [{ name: path.join(tmp.path, "notes.txt") }],
-          })
-        }),
-      ),
-    ),
-  )
 })

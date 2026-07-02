@@ -491,7 +491,7 @@ const layer = Layer.effect(
         return yield* result.prompt({
           id: input.id,
           sessionID: input.sessionID,
-          prompt: { text: evaluated.text, files: mergeFiles(evaluated.files, input.files), agents: input.agents },
+          prompt: { text: evaluated.text, files: input.files, agents: input.agents },
           delivery: input.delivery,
           resume: input.resume,
         })
@@ -649,16 +649,6 @@ const resolvePrompt = (input: PromptInput.Prompt) =>
       }
     }),
   })
-
-function mergeFiles(
-  templateFiles: PromptInput.Prompt["files"],
-  inputFiles: PromptInput.Prompt["files"],
-): PromptInput.Prompt["files"] {
-  if (!templateFiles?.length) return inputFiles
-  if (!inputFiles?.length) return templateFiles
-  const uris = new Set(inputFiles.map((file) => file.uri))
-  return [...templateFiles.filter((file) => !uris.has(file.uri)), ...inputFiles]
-}
 
 export const node = makeGlobalNode({
   service: Service,

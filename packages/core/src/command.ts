@@ -3,7 +3,6 @@ export * as CommandV2 from "./command"
 import { makeLocationNode } from "./effect/app-node"
 import { Context, Effect, Layer, Schema, Types } from "effect"
 import { Command } from "@opencode-ai/schema/command"
-import { PromptInput } from "@opencode-ai/schema/prompt-input"
 import { State } from "./state"
 import { MCP } from "./mcp/index"
 import { EventV2 } from "./event"
@@ -12,9 +11,6 @@ import { ChildProcess } from "effect/unstable/process"
 import { Config } from "./config"
 import { Location } from "./location"
 import { ShellSelect } from "./shell/select"
-import os from "node:os"
-import path from "node:path"
-import { pathToFileURL } from "node:url"
 
 export const Info = Command.Info
 export type Info = Command.Info
@@ -22,7 +18,6 @@ export const Event = Command.Event
 
 export type Evaluation = {
   readonly text: string
-  readonly files?: PromptInput.FileAttachment[]
 }
 
 export type Data = {
@@ -165,11 +160,7 @@ function evaluateTemplate(
 ) {
   return Effect.gen(function* () {
     const expanded = evaluateArguments(template, input)
-    const evaluated = yield* Effect.all({
-      text: evaluateShell(command, expanded, services),
-      files: resolveFiles(expanded, services.location.directory),
-    })
-    return { text: evaluated.text, ...(evaluated.files.length === 0 ? {} : { files: evaluated.files }) }
+    return { text: yield* evaluateShell(command, expanded, services) }
   })
 }
 
@@ -223,23 +214,6 @@ const evaluateShell = Effect.fnUntraced(function* (
   return text.replace(shellRegex, () => iterator.next().value ?? "")
 })
 
-const resolveFiles = Effect.fnUntraced(function* (text: string, directory: string) {
-  const names = Array.from(new Set(Array.from(text.matchAll(fileRegex)).flatMap((match) => (match[1] ? [match[1]] : []))))
-  return yield* Effect.forEach(
-    names,
-    (name) =>
-      Effect.gen(function* () {
-        const filepath = name.startsWith("~/") ? path.join(os.homedir(), name.slice(2)) : path.resolve(directory, name)
-        if (!(yield* Effect.promise(() => Bun.file(filepath).exists()))) return
-        return PromptInput.FileAttachment.make({
-          uri: pathToFileURL(filepath).href,
-          name,
-        })
-      }),
-    { concurrency: 16 },
-  ).pipe(Effect.map((files) => files.filter((file): file is PromptInput.FileAttachment => file !== undefined)))
-})
-
 function parseArguments(input: string) {
   return (input.match(argsRegex) ?? []).map((arg) => arg.replace(quoteTrimRegex, ""))
 }
@@ -264,7 +238,6 @@ const argsRegex = /(?:\[Image\s+\d+\]|"[^"]*"|'[^']*'|[^\s"']+)/gi
 const placeholderRegex = /\$(\d+)/g
 const quoteTrimRegex = /^["']|["']$/g
 const shellRegex = /!`([^`]+)`/g
-const fileRegex = /(?<![\w`])@(\.?[^\s`,.]*(?:\.[^\s`,.]+)*)/g
 
 export const node = makeLocationNode({
   service: Service,
