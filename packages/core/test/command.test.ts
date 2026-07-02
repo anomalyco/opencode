@@ -67,17 +67,13 @@ describe("CommandV2", () => {
   it.effect("evaluates command template shell blocks", () =>
     Effect.gen(function* () {
       const command = yield* CommandV2.Service
-      const outputCommand =
-        process.platform === "win32"
-          ? `& '${process.execPath.replaceAll("'", "''")}' -e "process.stdout.write('command-output')"`
-          : `${JSON.stringify(process.execPath)} -e "process.stdout.write('command-output')"`
       yield* command.transform((editor) => {
         editor.update("review", (command) => {
-          command.template = `Output: !\`${outputCommand}\``
+          command.template = "Output: !`echo command-output`"
         })
       })
 
-      expect(yield* command.evaluate({ name: "review" })).toEqual({ text: "Output: command-output" })
+      expect((yield* command.evaluate({ name: "review" })).text.replace(/\r?\n$/, "")).toEqual("Output: command-output")
     }),
   )
 
