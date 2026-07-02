@@ -29,7 +29,6 @@ function invalidAnswer(error: Form.InvalidAnswerError) {
 
 export const FormHandler = HttpApiBuilder.group(Api, "server.form", (handlers) =>
   Effect.gen(function* () {
-    const form = yield* Form.Service
     const withOwnedForm = Effect.fnUntraced(function* <A, E>(
       sessionID: string,
       formID: Form.ID,
@@ -44,18 +43,21 @@ export const FormHandler = HttpApiBuilder.group(Api, "server.form", (handlers) =
       .handle(
         "form.request.list",
         Effect.fn(function* () {
+          const form = yield* Form.Service
           return yield* response(form.list())
         }),
       )
       .handle(
         "session.form.list",
         Effect.fn(function* (ctx) {
+          const form = yield* Form.Service
           return yield* response(form.list({ sessionID: ctx.params.sessionID }))
         }),
       )
       .handle(
         "session.form.create",
         Effect.fn(function* (ctx) {
+          const form = yield* Form.Service
           if (ctx.payload.mode === "form") {
             if (!ctx.payload.fields) {
               return yield* new InvalidRequestError({ message: "Form fields are required", field: "fields" })
