@@ -528,7 +528,6 @@ export const layer = Layer.effect(
           .toSorted((a, b) => a.server.localeCompare(b.server))
       }),
       prompts: Effect.fn("MCP.prompts")(function* () {
-        yield* whenAllReady
         return Array.from(runtime.values())
           .flatMap((entry) => entry.prompts ?? [])
           .toSorted((a, b) => a.server.localeCompare(b.server) || a.name.localeCompare(b.name))

@@ -618,7 +618,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         // so the mcp list refreshes here rather than off integration.updated.
         case "mcp.status.changed":
           if (bootstrapping) break
-          void result.location.mcp.refresh(event.location)
+          void Promise.all([result.location.mcp.refresh(event.location), result.location.command.refresh(event.location)])
           break
       }
     }
