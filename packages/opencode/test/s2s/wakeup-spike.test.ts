@@ -50,6 +50,7 @@ import { Question } from "@/question"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Session } from "@/session/session"
+import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionCompaction } from "@/session/compaction"
 import { SessionProcessor } from "@/session/processor"
 import { SessionPrompt } from "@/session/prompt"
@@ -170,6 +171,7 @@ function makeRunLoopLayer() {
   const flags = RuntimeFlags.layer({ experimentalEventSystem: true, experimentalAgentMessaging: true })
   const root = LayerNode.group([
     Session.node,
+    SessionProjector.node,
     Snapshot.node,
     LLM.node,
     Env.node,

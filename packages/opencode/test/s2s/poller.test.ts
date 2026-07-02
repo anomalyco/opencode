@@ -47,6 +47,7 @@ import { SessionTable } from "@opencode-ai/core/session/sql"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { Env } from "../../src/env"
 import { EventV2Bridge } from "@/event-v2-bridge"
+import { EventV2 } from "@opencode-ai/core/event"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Format } from "../../src/format"
 import { Git } from "@/git"
@@ -68,6 +69,7 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { S2SPoller } from "../../src/s2s/poller"
 import { S2SStore } from "../../src/s2s/store"
 import { Session } from "@/session/session"
+import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionCompaction } from "@/session/compaction"
 import { SessionID } from "../../src/session/schema"
 import { SessionProcessor } from "@/session/processor"
@@ -84,7 +86,7 @@ import { Todo } from "@/session/todo"
 import { ToolRegistry } from "@/tool/registry"
 import { Truncate } from "@/tool/truncate"
 import { TestInstance, disposeAllInstances } from "../fixture/fixture"
-import { testEffectShared } from "../lib/effect"
+import { testEffect, testEffectShared } from "../lib/effect"
 import { TestLLMServer } from "../lib/llm-server"
 
 afterEach(async () => {
@@ -198,6 +200,7 @@ function makeRunLoopLayer() {
   })
   const root = LayerNode.group([
     Session.node,
+    SessionProjector.node,
     Snapshot.node,
     LLM.node,
     Env.node,
@@ -240,6 +243,10 @@ function makeRunLoopLayer() {
     [RuntimeFlags.node, flags],
     [SessionStatus.node, statusNode],
     [SessionRunState.node, runStateNode],
+    // Same :memory: layer instance the poller-side S2SStore receives via
+    // Layer.provide(database) below — one handle for both worlds, matching
+    // the old-base sharing semantics under testEffectShared's memoMap.
+    [Database.node, database],
   ]
   return LayerNode.compile(root, replacements)
 }
@@ -264,7 +271,7 @@ const pollerLayer = Layer.provideMerge(
 )
 
 const spikeLayer = Layer.mergeAll(TestLLMServer.layer, pollerLayer).pipe(Layer.provide(database))
-const it = testEffectShared(spikeLayer as unknown as Layer.Layer<any, any, never>)
+const it = testEffect(spikeLayer as unknown as Layer.Layer<any, any, never>)
 
 const writeConfig = Effect.fn("PollerTest.writeConfig")(function* (
   dir: string,
@@ -374,7 +381,7 @@ describe("S2SPoller: reaper cutoff advances per tick (FIX 1 regression guard)", 
         sessionStub,
         sessionStatusStub,
         sessionPromptStub,
-        EventV2Bridge.defaultLayer,
+        EventV2Bridge.defaultLayer.pipe(Layer.provideMerge(EventV2.layerWith())),
         RuntimeFlags.layer({
           experimentalEventSystem: true,
           experimentalAgentMessaging: true,
@@ -385,7 +392,7 @@ describe("S2SPoller: reaper cutoff advances per tick (FIX 1 regression guard)", 
     ).pipe(Layer.provideMerge(reaperDatabase))
   }
 
-  const reaperLoopIt = testEffectShared(makeReaperLoopLayer() as unknown as Layer.Layer<any, any, never>)
+  const reaperLoopIt = testEffect(makeReaperLoopLayer() as unknown as Layer.Layer<any, any, never>)
 
   reaperLoopIt.live(
     "background reap loop advances its cutoff each tick (frozen form leaves row claimed)",
