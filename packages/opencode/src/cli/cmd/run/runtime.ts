@@ -119,6 +119,7 @@ function createSessionResolver(fn?: CreateSession) {
 type RuntimeState = {
   shown: boolean
   aborting: boolean
+  abortActiveTurn?: () => void
   model: RunInput["model"]
   providers: RunProvider[]
   variants: string[]
@@ -343,6 +344,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
       }
 
       state.aborting = true
+      state.abortActiveTurn?.()
       void ctx.sdk.session
         .abort({
           sessionID: state.sessionID,
@@ -546,6 +548,9 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
       footer,
       initialInput: input.initialInput,
       trace: log,
+      bindInterrupt: (abortActive) => {
+        state.abortActiveTurn = abortActive
+      },
       onSend: (prompt) => {
         state.shown = true
         state.history.push(prompt)

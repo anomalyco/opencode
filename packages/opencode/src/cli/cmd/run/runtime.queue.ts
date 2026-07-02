@@ -29,6 +29,7 @@ export type QueueInput = {
   trace?: Trace
   onSend?: (prompt: RunPrompt) => void
   onNewSession?: () => void | Promise<void>
+  bindInterrupt?: (abortActive: () => void) => void
   run: (prompt: RunPrompt, signal: AbortSignal) => Promise<void>
 }
 
@@ -313,6 +314,10 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
     )
     drain()
   }
+
+  input.bindInterrupt?.(() => {
+    state.ctrl?.abort()
+  })
 
   const offPrompt = input.footer.onPrompt((prompt) => {
     submit(prompt)

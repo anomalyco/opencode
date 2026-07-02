@@ -427,6 +427,44 @@ describe("run runtime queue", () => {
     expect(seen).toEqual(["one", "two"])
   })
 
+  test("runs queued prompts after interrupt aborts the active turn", async () => {
+    const ui = footer()
+    const seen: string[] = []
+    let abortActive: (() => void) | undefined
+
+    const task = runPromptQueue({
+      footer: ui.api,
+      bindInterrupt: (abort) => {
+        abortActive = abort
+      },
+      run: async (input, signal) => {
+        seen.push(input.text)
+        if (input.text !== "one") {
+          ui.api.close()
+          return
+        }
+
+        await new Promise<void>((resolve) => {
+          if (signal.aborted) {
+            resolve()
+            return
+          }
+
+          signal.addEventListener("abort", () => resolve(), { once: true })
+        })
+      },
+    })
+
+    ui.submit("one")
+    await Promise.resolve()
+    ui.submit("two")
+    await Promise.resolve()
+    abortActive?.()
+    await task
+
+    expect(seen).toEqual(["one", "two"])
+  })
+
   test("close aborts the active run and drops pending queued work", async () => {
     const ui = footer()
     const seen: string[] = []
