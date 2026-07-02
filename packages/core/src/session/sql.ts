@@ -171,6 +171,6 @@ export const SessionContextEpochTable = sqliteTable("session_context_epoch", {
     .primaryKey()
     .references(() => SessionTable.id, { onDelete: "cascade" }),
   baseline: text().notNull(),
-  snapshot: text({ mode: "json" }).notNull().$type<SystemContext.Snapshot>(),
+  snapshot: text({ mode: "json" }).notNull().$type<SystemContext.Applied>(),
   baseline_seq: integer().notNull(),
 })

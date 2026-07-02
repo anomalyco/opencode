@@ -16,10 +16,10 @@ describe("ReferenceGuidance", () => {
       const guidance = yield* ReferenceGuidance.Service
       const generation = yield* SystemContext.initialize(yield* guidance.load())
 
-      expect(generation.baseline).toContain("<available_references>")
-      expect(generation.baseline).toContain("<name>docs</name>")
-      expect(generation.baseline).toContain("<path>/docs</path>")
-      expect(generation.baseline).toContain("<description>Use for product documentation</description>")
+      expect(generation.text).toContain("<available_references>")
+      expect(generation.text).toContain("<name>docs</name>")
+      expect(generation.text).toContain("<path>/docs</path>")
+      expect(generation.text).toContain("<description>Use for product documentation</description>")
     }).pipe(
       Effect.provide(
         guidanceLayer(
@@ -47,7 +47,7 @@ describe("ReferenceGuidance", () => {
     Effect.gen(function* () {
       const guidance = yield* ReferenceGuidance.Service
       const generation = yield* SystemContext.initialize(yield* guidance.load())
-      expect(generation.baseline).toBe("")
+      expect(generation.text).toBe("")
     }).pipe(Effect.provide(guidanceLayer(Layer.mock(Reference.Service, { list: () => Effect.succeed([]) })))),
   )
 
@@ -55,7 +55,7 @@ describe("ReferenceGuidance", () => {
     Effect.gen(function* () {
       const guidance = yield* ReferenceGuidance.Service
       const generation = yield* SystemContext.initialize(yield* guidance.load())
-      expect(generation.baseline).toBe("")
+      expect(generation.text).toBe("")
     }).pipe(
       Effect.provide(
         guidanceLayer(

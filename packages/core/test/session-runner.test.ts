@@ -1361,7 +1361,7 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
-  it.effect("preserves effective System updates while compaction rebaseline is blocked", () =>
+  it.effect("rebaselines after compaction from the last-applied belief while unobservable", () =>
     Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
@@ -1393,8 +1393,9 @@ describe("SessionRunnerLLM", () => {
       yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Third" }), resume: false })
       yield* session.resume(sessionID)
 
-      expect(requests.at(-1)?.system.map((part) => part.text)).toEqual([defaultSystem, "Initial context"])
-      expect(systemTexts(requests.at(-1)!)).toContain("Changed context")
+      // The rebaseline proceeds while the source is unobservable, restating the model's belief.
+      expect(requests.at(-1)?.system.map((part) => part.text)).toEqual([defaultSystem, "Changed context"])
+      expect(systemTexts(requests.at(-1)!)).not.toContain("Changed context")
     }),
   )
 

@@ -25,7 +25,7 @@ describe("SystemContextRegistry", () => {
     Effect.gen(function* () {
       const registry = yield* SystemContextRegistry.Service
 
-      expect(yield* SystemContext.initialize(yield* registry.load())).toEqual({ baseline: "", snapshot: {} })
+      expect(yield* SystemContext.initialize(yield* registry.load())).toEqual({ text: "", applied: {} })
     }),
   )
 
@@ -35,7 +35,7 @@ describe("SystemContextRegistry", () => {
       yield* registry.register(entry("test/second", "second"))
       yield* registry.register(entry("test/first", "first"))
 
-      expect((yield* SystemContext.initialize(yield* registry.load())).baseline).toBe("first\n\nsecond")
+      expect((yield* SystemContext.initialize(yield* registry.load())).text).toBe("first\n\nsecond")
     }),
   )
 
@@ -105,10 +105,10 @@ describe("SystemContextRegistry", () => {
       const scope = yield* Scope.make()
       yield* registry.register(entry("test/scoped", "scoped")).pipe(Scope.provide(scope))
 
-      expect((yield* SystemContext.initialize(yield* registry.load())).baseline).toBe("scoped")
+      expect((yield* SystemContext.initialize(yield* registry.load())).text).toBe("scoped")
 
       yield* Scope.close(scope, Exit.void)
-      expect(yield* SystemContext.initialize(yield* registry.load())).toEqual({ baseline: "", snapshot: {} })
+      expect(yield* SystemContext.initialize(yield* registry.load())).toEqual({ text: "", applied: {} })
     }),
   )
 })

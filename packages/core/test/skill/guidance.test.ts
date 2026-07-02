@@ -53,7 +53,7 @@ describe("SkillGuidance", () => {
         .load({ id: agent.id, info: agent })
         .pipe(Effect.flatMap(SystemContext.initialize))
 
-      expect(initialized.baseline).toBe(
+      expect(initialized.text).toBe(
         [
           "Skills provide specialized instructions and workflows for specific tasks.",
           "Use the skill tool to load a skill when a task matches its description.",
@@ -65,13 +65,13 @@ describe("SkillGuidance", () => {
           "</available_skills>",
         ].join("\n"),
       )
-      expect(initialized.baseline).not.toContain("manual")
+      expect(initialized.text).not.toContain("manual")
 
       skills = []
       expect(
         yield* guidance
           .load({ id: agent.id, info: agent })
-          .pipe(Effect.flatMap((context) => SystemContext.reconcile(context, initialized.snapshot))),
+          .pipe(Effect.flatMap((context) => SystemContext.reconcile(context, initialized.applied))),
       ).toMatchObject({
         _tag: "Updated",
         text: expect.stringContaining("No skills are currently available."),
@@ -89,8 +89,8 @@ describe("SkillGuidance", () => {
       expect(
         yield* guidance.load({ id: agent.id, info: agent }).pipe(Effect.flatMap(SystemContext.initialize)),
       ).toEqual({
-        baseline: "",
-        snapshot: {},
+        text: "",
+        applied: {},
       })
     }).pipe(Effect.provide(layer(() => [effect])))
   })
@@ -108,8 +108,8 @@ describe("SkillGuidance", () => {
       expect(
         yield* guidance.load({ id: agent.id, info: agent }).pipe(Effect.flatMap(SystemContext.initialize)),
       ).toEqual({
-        baseline: "",
-        snapshot: {},
+        text: "",
+        applied: {},
       })
     }).pipe(Effect.provide(layer(() => [effect])))
   })
@@ -125,7 +125,7 @@ describe("SkillGuidance", () => {
     return Effect.gen(function* () {
       const guidance = yield* SkillGuidance.Service
       expect(
-        (yield* guidance.load({ id: agent.id, info: agent }).pipe(Effect.flatMap(SystemContext.initialize))).baseline,
+        (yield* guidance.load({ id: agent.id, info: agent }).pipe(Effect.flatMap(SystemContext.initialize))).text,
       ).toContain("<name>effect</name>")
     }).pipe(Effect.provide(layer(() => [effect])))
   })
@@ -144,8 +144,8 @@ describe("SkillGuidance", () => {
       expect(
         yield* guidance.load({ id: agent.id, info: agent }).pipe(Effect.flatMap(SystemContext.initialize)),
       ).toEqual({
-        baseline: "",
-        snapshot: {},
+        text: "",
+        applied: {},
       })
     }).pipe(Effect.provide(layer(() => [effect])))
   })

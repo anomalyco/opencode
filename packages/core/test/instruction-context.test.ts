@@ -71,23 +71,23 @@ describe("InstructionContext", () => {
           )
 
           const initialized = yield* SystemContext.initialize(yield* load)
-          expect(initialized.baseline).toBe(
+          expect(initialized.text).toBe(
             [
               `Instructions from: ${globalFile}\nglobal`,
               `Instructions from: ${packageFile}\npackage`,
               `Instructions from: ${projectFile}\nproject`,
             ].join("\n\n"),
           )
-          expect(initialized.baseline).not.toContain("outside")
+          expect(initialized.text).not.toContain("outside")
 
           yield* Effect.promise(() => fs.writeFile(packageFile, "changed"))
-          expect(yield* SystemContext.reconcile(yield* load, initialized.snapshot)).toMatchObject({
+          expect(yield* SystemContext.reconcile(yield* load, initialized.applied)).toMatchObject({
             _tag: "Updated",
             text: expect.stringContaining(`Instructions from: ${packageFile}\nchanged`),
           })
 
           yield* Effect.promise(() => fs.rm(packageFile))
-          const partial = yield* SystemContext.reconcile(yield* load, initialized.snapshot)
+          const partial = yield* SystemContext.reconcile(yield* load, initialized.applied)
           expect(partial).toEqual({
             _tag: "Updated",
             text: [
@@ -95,14 +95,14 @@ describe("InstructionContext", () => {
               `Instructions from: ${globalFile}\nglobal`,
               `Instructions from: ${projectFile}\nproject`,
             ].join("\n\n"),
-            snapshot: expect.any(Object),
+            applied: expect.any(Object),
           })
 
           yield* Effect.promise(() => Promise.all([fs.rm(globalFile), fs.rm(projectFile)]))
-          expect(yield* SystemContext.reconcile(yield* load, initialized.snapshot)).toEqual({
+          expect(yield* SystemContext.reconcile(yield* load, initialized.applied)).toEqual({
             _tag: "Updated",
             text: "Previously loaded instructions no longer apply.",
-            snapshot: {},
+            applied: {},
           })
         }),
       ),
@@ -131,7 +131,7 @@ describe("InstructionContext", () => {
             ),
           )
 
-          expect((yield* SystemContext.initialize(context)).baseline).toBe(`Instructions from: ${file}\n`)
+          expect((yield* SystemContext.initialize(context)).text).toBe(`Instructions from: ${file}\n`)
         }),
       ),
     ),

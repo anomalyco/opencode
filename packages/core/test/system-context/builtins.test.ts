@@ -61,7 +61,7 @@ describe("SystemContextBuiltIns", () => {
       const context = yield* SystemContextRegistry.Service
       const initialized = yield* SystemContext.initialize(yield* context.load())
 
-      expect(initialized.baseline).toBe(
+      expect(initialized.text).toBe(
         [
           "Here is some useful information about the environment you are running in:",
           "<env>",
@@ -84,7 +84,7 @@ describe("SystemContextBuiltIns", () => {
       const initialized = yield* SystemContext.initialize(yield* context.load())
 
       yield* TestClock.setTime(timestamp + 24 * 60 * 60 * 1000)
-      const refreshed = yield* SystemContext.reconcile(yield* context.load(), initialized.snapshot)
+      const refreshed = yield* SystemContext.reconcile(yield* context.load(), initialized.applied)
 
       expect(refreshed).toMatchObject({
         _tag: "Updated",
@@ -100,7 +100,7 @@ describe("SystemContextBuiltIns", () => {
       const initialized = yield* SystemContext.initialize(yield* context.load())
 
       yield* TestClock.setTime(timestamp + 60 * 60 * 1000)
-      expect(yield* SystemContext.reconcile(yield* context.load(), initialized.snapshot)).toEqual({ _tag: "Unchanged" })
+      expect(yield* SystemContext.reconcile(yield* context.load(), initialized.applied)).toEqual({ _tag: "Unchanged" })
     }),
   )
 
@@ -109,7 +109,7 @@ describe("SystemContextBuiltIns", () => {
       yield* TestClock.setTime(timestamp)
       const context = yield* SystemContextRegistry.Service
 
-      expect((yield* SystemContext.initialize(yield* context.load())).baseline).toBe(
+      expect((yield* SystemContext.initialize(yield* context.load())).text).toBe(
         [
           "Here is some useful information about the environment you are running in:",
           "<env>",
