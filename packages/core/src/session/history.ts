@@ -82,14 +82,6 @@ export const load = Effect.fn("SessionHistory.load")(function* (db: DatabaseServ
   return yield* Effect.forEach(yield* messageRows(db, sessionID, compaction, epoch?.baselineSeq), decodeMessageRow)
 })
 
-export const loadForRunner = Effect.fn("SessionHistory.loadForRunner")(function* (
-  db: DatabaseService,
-  sessionID: SessionSchema.ID,
-  baselineSeq: number,
-) {
-  return (yield* entriesForRunner(db, sessionID, baselineSeq)).map((entry) => entry.message)
-})
-
 export const entriesForRunner = Effect.fn("SessionHistory.entriesForRunner")(function* (
   db: DatabaseService,
   sessionID: SessionSchema.ID,

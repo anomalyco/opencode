@@ -741,6 +741,35 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("copies the context checkpoint to a fork", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const { db } = yield* Database.Service
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "First" }), resume: false })
+      response = []
+      yield* session.resume(sessionID)
+
+      const forked = yield* session.fork({ sessionID })
+
+      const parent = yield* db
+        .select()
+        .from(SessionContextCheckpointTable)
+        .where(eq(SessionContextCheckpointTable.session_id, sessionID))
+        .get()
+        .pipe(Effect.orDie)
+      expect(parent).toBeDefined()
+      expect(
+        yield* db
+          .select()
+          .from(SessionContextCheckpointTable)
+          .where(eq(SessionContextCheckpointTable.session_id, forked.id))
+          .get()
+          .pipe(Effect.orDie),
+      ).toEqual({ ...parent!, session_id: forked.id })
+    }),
+  )
+
   it.effect("heals an undecodable stored applied record by re-announcing context", () =>
     Effect.gen(function* () {
       yield* setup

@@ -13,7 +13,14 @@ import { SessionMessageUpdater } from "./message-updater"
 import { SessionInput } from "./input"
 import { WorkspaceV2 } from "../workspace"
 import { SessionContextCheckpoint } from "./context-checkpoint"
-import { MessageTable, PartTable, SessionInputTable, SessionMessageTable, SessionTable } from "./sql"
+import {
+  MessageTable,
+  PartTable,
+  SessionContextCheckpointTable,
+  SessionInputTable,
+  SessionMessageTable,
+  SessionTable,
+} from "./sql"
 import type { DeepMutable } from "../schema"
 import { Slug } from "../util/slug"
 
@@ -209,6 +216,23 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
     .get()
     .pipe(Effect.orDie)
   if (!stored) return yield* Effect.die(new SessionAlreadyProjected())
+
+  // The fork inherits the parent's transcript, so it inherits the context
+  // checkpoint that transcript was built against: copied message seqs keep
+  // folding at the same baseline horizon.
+  const checkpoint = yield* db
+    .select()
+    .from(SessionContextCheckpointTable)
+    .where(eq(SessionContextCheckpointTable.session_id, event.data.parentID))
+    .get()
+    .pipe(Effect.orDie)
+  if (checkpoint) {
+    yield* db
+      .insert(SessionContextCheckpointTable)
+      .values({ ...checkpoint, session_id: event.data.sessionID })
+      .run()
+      .pipe(Effect.orDie)
+  }
 
   const usage = emptyUsage()
   let cursor = -1
