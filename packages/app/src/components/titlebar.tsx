@@ -456,7 +456,6 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                 <TitlebarTabStrip
                   tabs={tabsStore}
                   currentTab={currentTab}
-                  activeServerKey={server.key}
                   forceTruncate={tabsAreOverflowing()}
                   onOverflowChange={setTabsAreOverflowing}
                   onNavigate={(tab, el) => {

@@ -17,6 +17,8 @@ export interface MockServerConfig {
   todos?: (sessionID: string) => unknown[]
   permissions?: unknown[] | (() => unknown[])
   questions?: unknown[] | (() => unknown[])
+  fileList?: (path: string) => unknown | Promise<unknown>
+  fileContent?: (path: string) => unknown | Promise<unknown>
   sessionStatus?: unknown
 }
 
@@ -56,6 +58,10 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
       return json(route, typeof config.questions === "function" ? config.questions() : (config.questions ?? []))
     if (path === "/session/status") return json(route, config.sessionStatus ?? {})
     if (path === "/vcs/diff" && config.vcsDiff) return json(route, config.vcsDiff)
+    if (path === "/file" && config.fileList)
+      return json(route, await config.fileList(url.searchParams.get("path") ?? ""))
+    if (path === "/file/content" && config.fileContent)
+      return json(route, await config.fileContent(url.searchParams.get("path") ?? ""))
     if (emptyObject.has(path)) return json(route, {})
     if (emptyList.has(path)) return json(route, [])
     if (path in staticRoutes) return json(route, staticRoutes[path])

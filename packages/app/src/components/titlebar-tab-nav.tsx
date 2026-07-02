@@ -28,7 +28,6 @@ export function TabNavItem(props: {
   onClose: () => void
   onNavigate: () => void
   active?: boolean
-  activeServer: boolean
   forceTruncate?: boolean
   suppressNavigation?: () => boolean
   dragging?: boolean
@@ -245,7 +244,7 @@ export function TabNavItem(props: {
                   project={project()}
                   directory={session().directory}
                   sessionId={session().id}
-                  activeServer={props.activeServer}
+                  server={props.server}
                 />
               </span>
             )}

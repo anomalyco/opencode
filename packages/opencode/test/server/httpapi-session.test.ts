@@ -905,6 +905,54 @@ describe("session HttpApi", () => {
   )
 
   it.instance(
+    "lists Windows sessions for equivalent directory spellings",
+    () =>
+      Effect.gen(function* () {
+        if (process.platform !== "win32") return
+        const test = yield* TestInstance
+        const headers = { "x-opencode-directory": test.directory, "content-type": "application/json" }
+        const created = yield* requestJson<Session.Info>(SessionPaths.create, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ title: "windows spelling" }),
+        })
+
+        const forwardSlashes = test.directory.replaceAll("\\", "/")
+        const lowercaseDrive = test.directory.replace(/^[A-Z]:/, (drive) => drive.toLowerCase())
+        const trailingSeparator = `${test.directory}\\`
+        for (const spelling of [forwardSlashes, lowercaseDrive, trailingSeparator]) {
+          const query = new URLSearchParams({ directory: spelling, roots: "true" })
+          const listed = yield* requestJson<Session.Info[]>(`${SessionPaths.list}?${query}`, { headers })
+          expect({ spelling, ids: listed.map((item) => item.id) }).toEqual({ spelling, ids: [created.id] })
+        }
+      }),
+    { git: true, config: { formatter: false, lsp: false, share: "disabled" } },
+    { timeout: 15000 },
+  )
+
+  it.instance(
+    "lists Windows sessions created through the global worktree sentinel",
+    () =>
+      Effect.gen(function* () {
+        if (process.platform !== "win32") return
+        const globalWorktreeSentinel = "/"
+        const headers = { "x-opencode-directory": globalWorktreeSentinel, "content-type": "application/json" }
+        const driveRootSession = yield* requestJson<Session.Info>(SessionPaths.create, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ title: "created at drive root" }),
+        })
+        expect(driveRootSession.directory).toMatch(/^[A-Za-z]:\\$/)
+
+        const query = new URLSearchParams({ directory: globalWorktreeSentinel, roots: "true" })
+        const listed = yield* requestJson<Session.Info[]>(`${SessionPaths.list}?${query}`, { headers })
+        expect(listed.map((item) => item.id)).toContain(driveRootSession.id)
+      }),
+    { git: true, config: { formatter: false, lsp: false, share: "disabled" } },
+    { timeout: 15000 },
+  )
+
+  it.instance(
     "serves paginated message link headers",
     () =>
       Effect.gen(function* () {

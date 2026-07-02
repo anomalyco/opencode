@@ -1,5 +1,6 @@
 import type { FileContent } from "@opencode-ai/sdk/v2"
-import { createEffect, createMemo, createResource, Match, on, Show, Switch, type JSX } from "solid-js"
+import { createEffect, createMemo, Match, on, onCleanup, Show, Switch, untrack, type JSX } from "solid-js"
+import { createStore } from "solid-js/store"
 import { useI18n } from "@opencode-ai/ui/context/i18n"
 import {
   dataUrlFromMediaValue,
@@ -30,6 +31,13 @@ function mediaValue(cfg: FileMediaOptions, mode: "image" | "audio") {
 
 export function FileMedia(props: { media?: FileMediaOptions; fallback: () => JSX.Element }) {
   const i18n = useI18n()
+  const [remote, setRemote] = createStore<{
+    key?: string
+    loading?: boolean
+    error?: boolean
+    src?: string
+    mime?: string
+  }>({})
   const cfg = () => props.media
   const kind = createMemo(() => {
     const media = cfg()
@@ -81,50 +89,66 @@ export function FileMedia(props: { media?: FileMediaOptions; fallback: () => JSX
     }
   })
 
-  const [loaded] = createResource(request, async (input) => {
-    return input.readFile(input.path).then(
+  createEffect(() => {
+    const input = request()
+    if (!input) {
+      setRemote({ key: undefined, loading: false, error: false, src: undefined, mime: undefined })
+      return
+    }
+
+    let active = true
+    // Keep the previous media visible while re-reading the same file (e.g. a vcs
+    // diff refresh); only a key change resets to the loading placeholder.
+    if (untrack(() => remote.key) === input.key) setRemote({ loading: true, error: false })
+    else setRemote({ key: input.key, loading: true, error: false, src: undefined, mime: undefined })
+    void input.readFile(input.path).then(
       (result) => {
+        if (!active) return
         const src = dataUrlFromMediaValue(result as any, input.kind)
         if (!src) {
           input.onError?.({ kind: input.kind })
-          return { key: input.key, error: true as const }
+          setRemote({ key: input.key, loading: false, error: true, src: undefined, mime: undefined })
+          return
         }
 
-        return {
+        setRemote({
           key: input.key,
+          loading: false,
+          error: false,
           src,
           mime: input.kind === "audio" ? normalizeMimeType(result?.mimeType) : undefined,
-        }
+        })
       },
       () => {
+        if (!active) return
         input.onError?.({ kind: input.kind })
-        return { key: input.key, error: true as const }
+        setRemote({ key: input.key, loading: false, error: true, src: undefined, mime: undefined })
       },
     )
-  })
 
-  const remote = createMemo(() => {
-    const input = request()
-    const value = loaded()
-    if (!input || !value || value.key !== input.key) return
-    return value
+    onCleanup(() => {
+      active = false
+    })
   })
 
   const src = createMemo(() => {
-    const value = remote()
-    return direct() ?? (value && "src" in value ? value.src : undefined)
+    const input = request()
+    if (!input || remote.key !== input.key || remote.error) return direct()
+    return direct() ?? remote.src
   })
   const status = createMemo(() => {
     if (direct()) return "ready" as const
-    if (!request()) return "idle" as const
-    if (loaded.loading) return "loading" as const
-    if (remote()?.error) return "error" as const
+    const input = request()
+    if (!input) return "idle" as const
+    if (remote.key !== input.key || remote.loading) return "loading" as const
+    if (remote.error) return "error" as const
     if (src()) return "ready" as const
     return "idle" as const
   })
   const audioMime = createMemo(() => {
-    const value = remote()
-    return value && "mime" in value ? value.mime : undefined
+    const input = request()
+    if (!input || remote.key !== input.key) return
+    return remote.mime
   })
 
   const svgSource = createMemo(() => {
