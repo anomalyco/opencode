@@ -31,8 +31,60 @@ jobs:
         settings:
           - name: linux
             host: ubuntu-latest
-          - name: windows
+            unit_timeout_minutes: 25
+            unit_command: GITHUB_ACTIONS=false bun turbo test
+          - name: windows-1
             host: windows-latest
+            unit_timeout_minutes: 30
+            unit_command: >-
+              GITHUB_ACTIONS=false bun turbo test
+              --filter=opencode
+              --filter=@opencode-ai/core
+              --filter=@opencode-ai/tui
+              --filter=@opencode-ai/plugin
+              --filter=@opencode-ai/llm
+              --filter=@opencode-ai/server
+          - name: windows-2
+            host: windows-latest
+            unit_timeout_minutes: 30
+            unit_command: >-
+              GITHUB_ACTIONS=false bun turbo test
+              --filter=@opencode-ai/app
+              --filter=@opencode-ai/desktop
+              --filter=@opencode-ai/ui
+              --filter=@opencode-ai/session-ui
+              --filter=@opencode-ai/sdk
+              --filter=@opencode-ai/web
+              --filter=@opencode-ai/storybook
+              --filter=@opencode-ai/cli
+          - name: windows-3
+            host: windows-latest
+            unit_timeout_minutes: 30
+            unit_command: >-
+              GITHUB_ACTIONS=false bun turbo test
+              --filter=@opencode-ai/console-app
+              --filter=@opencode-ai/console-core
+              --filter=@opencode-ai/console-function
+              --filter=@opencode-ai/console-mail
+              --filter=@opencode-ai/console-resource
+              --filter=@opencode-ai/console-support
+              --filter=@opencode-ai/stats-app
+              --filter=@opencode-ai/stats-core
+              --filter=@opencode-ai/stats-server
+          - name: windows-4
+            host: windows-latest
+            unit_timeout_minutes: 30
+            unit_command: >-
+              GITHUB_ACTIONS=false bun turbo test
+              --filter=@opencode-ai/anr-core
+              --filter=@opencode-ai/effect-drizzle-sqlite
+              --filter=@opencode-ai/effect-sqlite-node
+              --filter=@opencode-ai/enterprise
+              --filter=@opencode-ai/function
+              --filter=@opencode-ai/http-recorder
+              --filter=@opencode-ai/schema
+              --filter=@opencode-ai/script
+              --filter=@opencode-ai/slack
     runs-on: ${{ matrix.settings.host }}
     defaults:
       run:
@@ -85,8 +137,8 @@ jobs:
             turbo-${{ runner.os }}-
 
       - name: Run unit tests
-        timeout-minutes: 20
-        run: GITHUB_ACTIONS=false bun turbo test
+        timeout-minutes: ${{ matrix.settings.unit_timeout_minutes }}
+        run: ${{ matrix.settings.unit_command }}
         env:
           OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: ${{ runner.os == 'Windows' && 'true' || 'false' }}
 

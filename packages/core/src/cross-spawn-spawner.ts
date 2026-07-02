@@ -96,6 +96,11 @@ const toPlatformError = (
 
 type ExitSignal = Deferred.Deferred<readonly [code: number | null, signal: NodeJS.Signals | null]>
 
+const timeoutKillGrace =
+  globalThis.process.env.GITHUB_ACTIONS === "true" || globalThis.process.env.CI === "true"
+    ? "15 seconds"
+    : "5 seconds"
+
 export const make = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem
   const path = yield* Path.Path
@@ -357,7 +362,7 @@ export const make = Effect.gen(function* () {
       if (Predicate.isUndefined(opts?.forceKillAfter)) return f(command, proc, signal)
       return Effect.timeoutOrElse(f(command, proc, signal), {
         duration: opts.forceKillAfter,
-        orElse: () => f(command, proc, "SIGKILL"),
+        orElse: () => Effect.sleep(timeoutKillGrace).pipe(Effect.andThen(f(command, proc, "SIGKILL"))),
       })
     }
 
@@ -414,7 +419,10 @@ export const make = Effect.gen(function* () {
               const escalated = command.options.forceKillAfter
                 ? Effect.timeoutOrElse(attempt, {
                     duration: command.options.forceKillAfter,
-                    orElse: () => send("SIGKILL").pipe(Effect.andThen(Deferred.await(signal)), Effect.asVoid),
+                    orElse: () =>
+                      Effect.sleep(timeoutKillGrace).pipe(
+                        Effect.andThen(send("SIGKILL").pipe(Effect.andThen(Deferred.await(signal)), Effect.asVoid)),
+                      ),
                   })
                 : attempt
               return yield* Effect.ignore(escalated)
@@ -451,7 +459,10 @@ export const make = Effect.gen(function* () {
               if (!opts?.forceKillAfter) return attempt
               return Effect.timeoutOrElse(attempt, {
                 duration: opts.forceKillAfter,
-                orElse: () => send("SIGKILL").pipe(Effect.andThen(Deferred.await(signal)), Effect.asVoid),
+                orElse: () =>
+                  Effect.sleep(timeoutKillGrace).pipe(
+                    Effect.andThen(send("SIGKILL").pipe(Effect.andThen(Deferred.await(signal)), Effect.asVoid)),
+                  ),
               })
             },
             unref: Effect.sync(() => {

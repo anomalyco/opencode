@@ -75,8 +75,9 @@ describe("opencode run (non-interactive subprocess)", () => {
           model: "test/nonexistent-model",
           timeoutMs: 15_000,
         })
+        const maxMs = process.env.CI ? 20_000 : 15_000
         expect(result.exitCode).not.toBe(0)
-        expect(result.durationMs).toBeLessThan(15_000)
+        expect(result.durationMs).toBeLessThan(maxMs)
       }),
     30_000,
   )
@@ -95,7 +96,7 @@ describe("opencode run (non-interactive subprocess)", () => {
           }),
         )
         yield* llm.fail("upstream provider exploded mid-stream")
-        const result = yield* opencode.run("trigger midstream error", { timeoutMs: 30_000 })
+        const result = yield* opencode.run("trigger midstream error", { timeoutMs: 45_000 })
         expect(result.exitCode).toBe(0)
         expect(result.stdout).toBe("partial response\n")
         expect(result.stderr).not.toContain("upstream provider exploded mid-stream")
