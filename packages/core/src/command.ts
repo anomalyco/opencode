@@ -218,7 +218,7 @@ const evaluateShell = Effect.fnUntraced(function* (
           ),
         )
     },
-    { concurrency: "unbounded" },
+    { concurrency: 2 },
   )
   let index = 0
   return text.replace(shellRegex, () => outputs[index++] ?? "")
@@ -238,7 +238,7 @@ const resolveFiles = Effect.fnUntraced(function* (text: string, directory: strin
           name,
         })
       }),
-    { concurrency: "unbounded" },
+    { concurrency: 16 },
   ).pipe(Effect.map((files) => files.filter((file): file is PromptInput.FileAttachment => file !== undefined)))
 })
 
