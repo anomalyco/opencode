@@ -104,6 +104,18 @@ import type {
   LocalScanErrors,
   LocalScanResponses,
   LocationRef,
+  LoopCancelErrors,
+  LoopCancelResponses,
+  LoopCreateErrors,
+  LoopCreateResponses,
+  LoopGetErrors,
+  LoopGetResponses,
+  LoopListErrors,
+  LoopListResponses,
+  LoopPauseErrors,
+  LoopPauseResponses,
+  LoopResumeErrors,
+  LoopResumeResponses,
   LspStatusErrors,
   LspStatusResponses,
   McpAddErrors,
@@ -2431,6 +2443,209 @@ export class Local extends HeyApiClient {
   private _model?: Model
   get model(): Model {
     return (this._model ??= new Model({ client: this.client }))
+  }
+}
+
+export class Loop extends HeyApiClient {
+  /**
+   * List loops
+   *
+   * List loops known to the server, most recently created first.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<LoopListResponses, LoopListErrors, ThrowOnError>({
+      url: "/loop",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Create loop
+   *
+   * Start a loop that repeats a prompt until it signals completion, hits the max iteration count, or stalls with no progress.
+   */
+  public create<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      prompt?: string
+      maxIterations?: number
+      interval?: number
+      noProgressLimit?: number
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "prompt" },
+            { in: "body", key: "maxIterations" },
+            { in: "body", key: "interval" },
+            { in: "body", key: "noProgressLimit" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<LoopCreateResponses, LoopCreateErrors, ThrowOnError>({
+      url: "/loop",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Get loop
+   *
+   * Retrieve the current state of a loop, including its iteration history.
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters: {
+      loopID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "loopID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<LoopGetResponses, LoopGetErrors, ThrowOnError>({
+      url: "/loop/{loopID}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Pause loop
+   *
+   * Pause a running loop before its next iteration.
+   */
+  public pause<ThrowOnError extends boolean = false>(
+    parameters: {
+      loopID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "loopID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<LoopPauseResponses, LoopPauseErrors, ThrowOnError>({
+      url: "/loop/{loopID}/pause",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Resume loop
+   *
+   * Resume a paused loop.
+   */
+  public resume<ThrowOnError extends boolean = false>(
+    parameters: {
+      loopID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "loopID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<LoopResumeResponses, LoopResumeErrors, ThrowOnError>({
+      url: "/loop/{loopID}/resume",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Cancel loop
+   *
+   * Cancel a running or paused loop.
+   */
+  public cancel<ThrowOnError extends boolean = false>(
+    parameters: {
+      loopID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "loopID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<LoopCancelResponses, LoopCancelErrors, ThrowOnError>({
+      url: "/loop/{loopID}/cancel",
+      ...options,
+      ...params,
+    })
   }
 }
 
@@ -7024,6 +7239,11 @@ export class OpencodeClient extends HeyApiClient {
   private _local?: Local
   get local(): Local {
     return (this._local ??= new Local({ client: this.client }))
+  }
+
+  private _loop?: Loop
+  get loop(): Loop {
+    return (this._loop ??= new Loop({ client: this.client }))
   }
 
   private _mcp?: Mcp

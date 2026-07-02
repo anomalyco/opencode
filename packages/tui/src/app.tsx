@@ -8,6 +8,7 @@ import { ClipboardProvider, useClipboard } from "./context/clipboard"
 import { ExitProvider, useExit } from "./context/exit"
 import { EpilogueProvider } from "./context/epilogue"
 import * as Selection from "./util/selection"
+import { Locale } from "./util/locale"
 import { createCliRenderer, MouseButton, type CliRenderer } from "@opentui/core"
 import { RouteProvider, useRoute } from "./context/route"
 import {
@@ -44,6 +45,7 @@ import { DialogThemeList } from "./component/dialog-theme-list"
 import { DialogHelp } from "./ui/dialog-help"
 import { DialogAgent } from "./component/dialog-agent"
 import { DialogSessionList } from "./component/dialog-session-list"
+import { DialogLoopList } from "./component/dialog-loop-list"
 import { DialogWorkspaceList } from "./component/dialog-workspace-list"
 import { DialogConsoleOrg } from "./component/dialog-console-org"
 import { ThemeProvider, useTheme } from "./context/theme"
@@ -359,6 +361,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
   const kv = useKV()
   const keymap = useOpencodeKeymap()
   const event = useEvent()
+  const notifiedLoops = new Set<string>()
   const sdk = useSDK()
   const toast = useToast()
   const themeState = useTheme()
@@ -601,6 +604,27 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         slashName: "workspaces",
         run: () => {
           dialog.replace(() => <DialogWorkspaceList />)
+        },
+      },
+      {
+        // Palette trigger (and bare `/loop` with no prompt text, handled in
+        // prompt/index.tsx) both just open the management dialog — starting
+        // a loop with a prompt needs argument text the palette can't supply.
+        name: "loop.start",
+        title: "Start loop",
+        category: "Loop",
+        slashName: "loop",
+        run: () => {
+          dialog.replace(() => <DialogLoopList />)
+        },
+      },
+      {
+        name: "loop.list",
+        title: "Manage loops",
+        category: "Loop",
+        slashName: "loops",
+        run: () => {
+          dialog.replace(() => <DialogLoopList />)
         },
       },
       ...Array.from({ length: 9 }, (_, i) => ({
@@ -992,6 +1016,22 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       variant: "error",
       message,
       duration: 5000,
+    })
+  })
+
+  // loop.updated fires on every iteration, not just terminal transitions —
+  // notifiedLoops keeps the toast to a single fire per loop.
+  event.on("loop.updated", (evt, { workspace }) => {
+    if (workspace !== project.workspace.current()) return
+    const info = evt.properties.loop
+    if (info.status !== "completed" && info.status !== "stalled" && info.status !== "max_reached") return
+    if (notifiedLoops.has(info.id)) return
+    notifiedLoops.add(info.id)
+    toast.show({
+      variant: info.status === "stalled" ? "warning" : info.status === "completed" ? "success" : "info",
+      title: `Loop ${info.status.replace("_", " ")}`,
+      message: `"${Locale.truncate(info.prompt, 50)}" (${info.iteration} iteration${info.iteration === 1 ? "" : "s"})`,
+      duration: 6000,
     })
   })
 

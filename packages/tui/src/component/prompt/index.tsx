@@ -44,6 +44,8 @@ import { DialogStash } from "../dialog-stash"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
 import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import type { AssistantMessage, FilePart, UserMessage } from "@opencode-ai/sdk/v2"
+import { parseLoopArgs } from "@opencode-ai/sdk/v2"
+import { DialogLoopList } from "../dialog-loop-list"
 import { Locale } from "../../util/locale"
 import { errorMessage } from "../../util/error"
 import { formatDuration } from "../../util/format"
@@ -1073,6 +1075,41 @@ export function Prompt(props: PromptProps) {
         command: inputText,
       })
       setStore("mode", "normal")
+    } else if (inputText === "/loop" || inputText.startsWith("/loop ") || inputText.startsWith("/loop\n")) {
+      // /loop is an imperative TUI command (start a background loop), not a
+      // server prompt-template command, so it doesn't go through
+      // session.command — it parses its own argument string and either
+      // starts a loop directly or opens the management dialog.
+      const firstLineEnd = inputText.indexOf("\n")
+      const firstLine = firstLineEnd === -1 ? inputText : inputText.slice(0, firstLineEnd)
+      const rest = firstLine.slice("/loop".length).trim()
+      try {
+        const parsed = parseLoopArgs(rest)
+        if (!parsed.prompt) {
+          dialog.replace(() => <DialogLoopList />)
+        } else {
+          move.startSubmit()
+          sdk.client.loop
+            .create({
+              prompt: parsed.prompt,
+              interval: parsed.interval,
+              maxIterations: parsed.max,
+              noProgressLimit: parsed.noProgressLimit,
+            })
+            .then((result) => {
+              if (result.error || !result.data) {
+                toast.show({ title: "Failed to start loop", message: errorMessage(result.error), variant: "error" })
+                return
+              }
+              toast.show({ variant: "success", message: `Loop ${result.data.id} started (max ${result.data.maxIterations} iterations)` })
+            })
+            .catch((error) => {
+              toast.show({ title: "Failed to start loop", message: errorMessage(error), variant: "error" })
+            })
+        }
+      } catch (error) {
+        toast.show({ title: "Invalid /loop arguments", message: errorMessage(error), variant: "error" })
+      }
     } else if (
       inputText.startsWith("/") &&
       sync.data.command.some((x) => x.name === inputText.split("\n")[0].split(" ")[0].slice(1))

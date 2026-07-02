@@ -87,6 +87,7 @@ export type Event =
   | EventWorkspaceReady
   | EventWorkspaceFailed
   | EventWorkspaceStatus
+  | EventLoopUpdated
   | EventWorktreeReady
   | EventWorktreeFailed
   | EventServerConnected
@@ -724,6 +725,30 @@ export type QuestionTool = {
 }
 
 export type QuestionAnswer = Array<string>
+
+export type Loop = {
+  id: string
+  directory: string
+  parentSessionID: string
+  prompt: string
+  status: "running" | "paused" | "completed" | "stalled" | "cancelled" | "max_reached" | "error"
+  maxIterations: number
+  interval?: number
+  noProgressLimit: number
+  iteration: number
+  iterations: Array<{
+    iteration: number
+    sessionID: string
+    toolCalls: number
+    outputLength: number
+    complete: boolean
+    startedAt: number
+    finishedAt: number
+  }>
+  startedAt: number
+  lastRunAt?: number
+  finishedAt?: number
+}
 
 export type GlobalEvent = {
   directory: string
@@ -1597,6 +1622,13 @@ export type GlobalEvent = {
       }
     | {
         id: string
+        type: "loop.updated"
+        properties: {
+          loop: Loop
+        }
+      }
+    | {
+        id: string
         type: "worktree.ready"
         properties: {
           name: string
@@ -2115,6 +2147,7 @@ export type Model = {
     context: number
     input?: number
     output: number
+    contextMax?: number
   }
   status: "alpha" | "beta" | "deprecated" | "active"
   options: {
@@ -2436,6 +2469,13 @@ export type LocalOffloadRecommendation = {
   ctx_size?: number
 }
 
+export type NotFoundError = {
+  name: "NotFoundError"
+  data: {
+    message: string
+  }
+}
+
 export type McpStatusConnected = {
   status: "connected"
 }
@@ -2611,13 +2651,6 @@ export type ProviderAuthError1 = {
     field?: string
     message?: string
     kind?: string
-  }
-}
-
-export type NotFoundError = {
-  name: "NotFoundError"
-  data: {
-    message: string
   }
 }
 
@@ -5155,6 +5188,14 @@ export type EventWorkspaceStatus = {
   }
 }
 
+export type EventLoopUpdated = {
+  id: string
+  type: "loop.updated"
+  properties: {
+    loop: Loop
+  }
+}
+
 export type EventWorktreeReady = {
   id: string
   type: "worktree.ready"
@@ -6680,6 +6721,203 @@ export type LocalModelOffloadRecommendationResponses = {
 
 export type LocalModelOffloadRecommendationResponse =
   LocalModelOffloadRecommendationResponses[keyof LocalModelOffloadRecommendationResponses]
+
+export type LoopListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/loop"
+}
+
+export type LoopListErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type LoopListError = LoopListErrors[keyof LoopListErrors]
+
+export type LoopListResponses = {
+  /**
+   * List of loops
+   */
+  200: Array<Loop>
+}
+
+export type LoopListResponse = LoopListResponses[keyof LoopListResponses]
+
+export type LoopCreateData = {
+  body?: {
+    prompt: string
+    maxIterations?: number
+    interval?: number
+    noProgressLimit?: number
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/loop"
+}
+
+export type LoopCreateErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+}
+
+export type LoopCreateError = LoopCreateErrors[keyof LoopCreateErrors]
+
+export type LoopCreateResponses = {
+  /**
+   * Successfully created loop
+   */
+  200: Loop
+}
+
+export type LoopCreateResponse = LoopCreateResponses[keyof LoopCreateResponses]
+
+export type LoopGetData = {
+  body?: never
+  path: {
+    loopID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/loop/{loopID}"
+}
+
+export type LoopGetErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+}
+
+export type LoopGetError = LoopGetErrors[keyof LoopGetErrors]
+
+export type LoopGetResponses = {
+  /**
+   * Get loop
+   */
+  200: Loop
+}
+
+export type LoopGetResponse = LoopGetResponses[keyof LoopGetResponses]
+
+export type LoopPauseData = {
+  body?: never
+  path: {
+    loopID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/loop/{loopID}/pause"
+}
+
+export type LoopPauseErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+}
+
+export type LoopPauseError = LoopPauseErrors[keyof LoopPauseErrors]
+
+export type LoopPauseResponses = {
+  /**
+   * Loop paused
+   */
+  200: boolean
+}
+
+export type LoopPauseResponse = LoopPauseResponses[keyof LoopPauseResponses]
+
+export type LoopResumeData = {
+  body?: never
+  path: {
+    loopID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/loop/{loopID}/resume"
+}
+
+export type LoopResumeErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+}
+
+export type LoopResumeError = LoopResumeErrors[keyof LoopResumeErrors]
+
+export type LoopResumeResponses = {
+  /**
+   * Loop resumed
+   */
+  200: boolean
+}
+
+export type LoopResumeResponse = LoopResumeResponses[keyof LoopResumeResponses]
+
+export type LoopCancelData = {
+  body?: never
+  path: {
+    loopID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/loop/{loopID}/cancel"
+}
+
+export type LoopCancelErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+}
+
+export type LoopCancelError = LoopCancelErrors[keyof LoopCancelErrors]
+
+export type LoopCancelResponses = {
+  /**
+   * Loop cancelled
+   */
+  200: boolean
+}
+
+export type LoopCancelResponse = LoopCancelResponses[keyof LoopCancelResponses]
 
 export type McpStatusData = {
   body?: never

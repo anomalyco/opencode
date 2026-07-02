@@ -16,6 +16,7 @@ import { EventV2Bridge } from "@/event-v2-bridge"
 import { Format } from "@/format"
 import { Git } from "@/git"
 import { Installation } from "@/installation"
+import { Loop } from "@/loop/loop"
 import { LSP } from "@/lsp/lsp"
 import { MCP } from "@/mcp"
 import { McpAuth } from "@/mcp/auth"
@@ -85,6 +86,7 @@ import { fileHandlers } from "./handlers/file"
 import { globalHandlers } from "./handlers/global"
 import { instanceHandlers } from "./handlers/instance"
 import { localHandlers } from "./handlers/local"
+import { loopHandlers } from "./handlers/loop"
 import { mcpHandlers } from "./handlers/mcp"
 import { permissionHandlers } from "./handlers/permission"
 import { projectHandlers } from "./handlers/project"
@@ -150,6 +152,7 @@ const instanceApiRoutes = HttpApiBuilder.layer(InstanceHttpApi).pipe(
     fileHandlers,
     instanceHandlers,
     localHandlers,
+    loopHandlers,
     mcpHandlers,
     projectHandlers,
     projectCopyHandlers,
@@ -242,6 +245,7 @@ const app = LayerNode.group([
   MCP.node,
   McpAuth.node,
   Command.node,
+  Loop.node,
   Truncate.node,
   ToolRegistry.node,
   Format.node,

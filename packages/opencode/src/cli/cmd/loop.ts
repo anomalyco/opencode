@@ -8,91 +8,55 @@
 //   opencode loop cancel <id>
 //   opencode loop pause  <id>
 //   opencode loop resume <id>
-
-import { Effect, Duration } from "effect"
+//
+// The engine itself now lives server-side in @/loop/loop (see design notes
+// there) so loops survive this CLI process exiting and are visible from the
+// TUI's /loops dialog. This file is a thin client: it starts a loop and
+// polls the server for status until the loop reaches a terminal state.
+import { Effect } from "effect"
 import { effectCmd, fail } from "../effect-cmd"
 import { UI } from "../ui"
-import { createOpencodeClient } from "@opencode-ai/sdk/v2"
+import { createOpencodeClient, LoopArgDefaults, type Loop } from "@opencode-ai/sdk/v2"
 
-const COMPLETE_SIGNAL = "<promise>COMPLETE</promise>"
+const POLL_INTERVAL_MS = 1000
 
-// In-process registry of active loops (survives only for this process lifetime).
-interface LoopState {
-  id: string
-  prompt: string
-  iteration: number
-  maxIterations: number
-  interval: number | null
-  paused: boolean
-  cancelled: boolean
-  startedAt: Date
-  lastRunAt: Date | null
-}
-
-const loops = new Map<string, LoopState>()
-
-function newID() {
-  return `loop_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`
-}
-
-async function runIteration(sdk: ReturnType<typeof createOpencodeClient>, prompt: string): Promise<{ output: string; complete: boolean }> {
-  const session = await sdk.session.create({ title: "loop" })
-  if (session.error || !session.data) return { output: "", complete: false }
-
-  const sessionID = session.data.id
-  const events = await sdk.event.subscribe()
-
-  await sdk.session.prompt({ sessionID, parts: [{ type: "text", text: prompt }] } as any)
-
-  let output = ""
-  for await (const event of events.stream as AsyncGenerator<any, unknown, unknown>) {
-    if (event.type === "message.part.updated") {
-      const part = event.properties?.part
-      if (part?.sessionID !== sessionID) continue
-      if (part?.type === "text" && part.time?.end) output += part.text
-    }
-    if (
-      event.type === "session.status" &&
-      event.properties?.sessionID === sessionID &&
-      event.properties?.status?.type === "idle"
-    ) break
+function statusColor(status: Loop["status"]) {
+  switch (status) {
+    case "completed":
+      return UI.Style.TEXT_SUCCESS_BOLD
+    case "stalled":
+    case "error":
+      return UI.Style.TEXT_DANGER_BOLD
+    case "cancelled":
+      return UI.Style.TEXT_DIM
+    default:
+      return UI.Style.TEXT_NORMAL
   }
-
-  return { output, complete: output.includes(COMPLETE_SIGNAL) }
 }
 
-async function runLoop(sdk: ReturnType<typeof createOpencodeClient>, state: LoopState): Promise<void> {
-  for (let i = 1; i <= state.maxIterations; i++) {
-    if (state.cancelled) {
-      UI.println(`loop ${state.id} cancelled at iteration ${i}`)
-      break
-    }
-    while (state.paused) {
-      await new Promise((r) => setTimeout(r, 500))
-      if (state.cancelled) break
-    }
-    if (state.cancelled) break
+const TERMINAL_STATUSES = new Set<Loop["status"]>(["completed", "stalled", "cancelled", "max_reached", "error"])
 
-    state.iteration = i
-    state.lastRunAt = new Date()
-    UI.println(`${UI.Style.TEXT_DIM}[${state.id}] iteration ${i}/${state.maxIterations}${UI.Style.TEXT_NORMAL}`)
-
-    const { output, complete } = await runIteration(sdk, state.prompt)
-
-    if (output.trim()) {
-      UI.println(output.trim())
-      UI.empty()
+async function follow(sdk: ReturnType<typeof createOpencodeClient>, id: string) {
+  let iteration = 0
+  while (true) {
+    const result = await sdk.loop.get({ loopID: id })
+    const info = result.data
+    if (!info) {
+      UI.println(`loop ${id} not found`)
+      return
     }
-
-    if (complete) {
-      UI.println(`${UI.Style.TEXT_SUCCESS_BOLD}[${state.id}] complete signal received — stopping${UI.Style.TEXT_NORMAL}`)
-      break
+    if (info.iteration !== iteration) {
+      iteration = info.iteration
+      const last = info.iterations.at(-1)
+      UI.println(
+        `${UI.Style.TEXT_DIM}[${id}] iteration ${iteration}/${info.maxIterations} — ${last?.toolCalls ?? 0} tool call(s)${UI.Style.TEXT_NORMAL}`,
+      )
     }
-
-    if (i < state.maxIterations) {
-      const delaySec = state.interval ?? 2
-      await new Promise((r) => setTimeout(r, delaySec * 1000))
+    if (TERMINAL_STATUSES.has(info.status)) {
+      UI.println(`${statusColor(info.status)}[${id}] ${info.status}${UI.Style.TEXT_NORMAL}`)
+      return
     }
+    await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
   }
 }
 
@@ -108,13 +72,18 @@ export const LoopCommand = effectCmd({
       .option("max", {
         type: "number",
         alias: "n",
-        describe: "max iterations (default: 10)",
-        default: 10,
+        describe: `max iterations (default: ${LoopArgDefaults.maxIterations})`,
+        default: LoopArgDefaults.maxIterations,
       })
       .option("interval", {
         type: "number",
         alias: "i",
         describe: "seconds between iterations (omit for back-to-back ralph style)",
+      })
+      .option("no-progress-limit", {
+        type: "number",
+        describe: `consecutive no-progress iterations before stopping (default: ${LoopArgDefaults.noProgressLimit}, 0 disables)`,
+        default: LoopArgDefaults.noProgressLimit,
       })
       .option("server", {
         type: "string",
@@ -125,28 +94,21 @@ export const LoopCommand = effectCmd({
     const prompt = args.prompt
     if (!prompt) yield* fail("prompt is required")
 
-    const id = newID()
-    const state: LoopState = {
-      id,
-      prompt,
-      iteration: 0,
-      maxIterations: args.max,
-      interval: args.interval ?? null,
-      paused: false,
-      cancelled: false,
-      startedAt: new Date(),
-      lastRunAt: null,
-    }
-    loops.set(id, state)
-
-    UI.println(`${UI.Style.TEXT_SUCCESS_BOLD}loop ${id}${UI.Style.TEXT_NORMAL} started (max ${state.maxIterations} iterations)`)
-
     const sdk = createOpencodeClient({ baseUrl: args.server })
+    const created = yield* Effect.promise(() =>
+      sdk.loop.create({
+        prompt,
+        maxIterations: args.max,
+        interval: args.interval,
+        noProgressLimit: args["no-progress-limit"],
+      }),
+    )
+    if (created.error || !created.data) yield* fail("failed to create loop")
+    const info = created.data!
 
-    yield* Effect.promise(() => runLoop(sdk, state))
+    UI.println(`${UI.Style.TEXT_SUCCESS_BOLD}loop ${info.id}${UI.Style.TEXT_NORMAL} started (max ${info.maxIterations} iterations)`)
 
-    loops.delete(id)
-    UI.println(`${UI.Style.TEXT_DIM}loop ${id} finished${UI.Style.TEXT_NORMAL}`)
+    yield* Effect.promise(() => follow(sdk, info.id))
   }),
 })
 
@@ -154,61 +116,76 @@ export const LoopCommand = effectCmd({
 
 export const LoopListCommand = effectCmd({
   command: "loop list",
-  describe: "list running loops",
+  describe: "list loops known to the server",
   instance: false,
-  handler: Effect.fn("Cli.loopList")(function* () {
-    if (loops.size === 0) {
+  builder: (yargs) =>
+    yargs.option("server", {
+      type: "string",
+      describe: "opencode server URL (default: http://localhost:2525)",
+      default: "http://localhost:2525",
+    }),
+  handler: Effect.fn("Cli.loopList")(function* (args) {
+    const sdk = createOpencodeClient({ baseUrl: args.server })
+    const result = yield* Effect.promise(() => sdk.loop.list())
+    const loops = result.data ?? []
+    if (loops.length === 0) {
       UI.println("no active loops")
       return
     }
-    for (const s of loops.values()) {
-      const status = s.paused ? "paused" : s.cancelled ? "cancelled" : "running"
-      UI.println(`${UI.Style.TEXT_SUCCESS_BOLD}${s.id}${UI.Style.TEXT_NORMAL}  ${status}  iter ${s.iteration}/${s.maxIterations}  "${s.prompt.slice(0, 60)}"`)
+    for (const info of loops) {
+      UI.println(
+        `${UI.Style.TEXT_SUCCESS_BOLD}${info.id}${UI.Style.TEXT_NORMAL}  ${info.status}  iter ${info.iteration}/${info.maxIterations}  "${info.prompt.slice(0, 60)}"`,
+      )
     }
   }),
 })
 
-// ── loop cancel ──────────────────────────────────────────────────────────────
+// ── loop cancel / pause / resume ────────────────────────────────────────────
+
+const serverOption = (yargs: import("yargs").Argv) =>
+  yargs
+    .positional("id", { type: "string" as const, describe: "loop ID", demandOption: true })
+    .option("server", {
+      type: "string" as const,
+      describe: "opencode server URL (default: http://localhost:2525)",
+      default: "http://localhost:2525",
+    })
 
 export const LoopCancelCommand = effectCmd({
   command: "loop cancel <id>",
   describe: "cancel a running loop",
   instance: false,
-  builder: (yargs) => yargs.positional("id", { type: "string", describe: "loop ID", demandOption: true }),
+  builder: serverOption,
   handler: Effect.fn("Cli.loopCancel")(function* (args) {
-    const state = loops.get(args.id ?? "")
-    if (!state) yield* fail(`loop ${args.id} not found`)
-    state!.cancelled = true
+    const sdk = createOpencodeClient({ baseUrl: args.server })
+    const result = yield* Effect.promise(() => sdk.loop.cancel({ loopID: args.id! }))
+    if (result.error || !result.data) yield* fail(`loop ${args.id} not found`)
     UI.println(`loop ${args.id} cancelled`)
   }),
 })
-
-// ── loop pause ───────────────────────────────────────────────────────────────
 
 export const LoopPauseCommand = effectCmd({
   command: "loop pause <id>",
   describe: "pause a running loop",
   instance: false,
-  builder: (yargs) => yargs.positional("id", { type: "string", describe: "loop ID", demandOption: true }),
+  builder: serverOption,
   handler: Effect.fn("Cli.loopPause")(function* (args) {
-    const state = loops.get(args.id ?? "")
-    if (!state) yield* fail(`loop ${args.id} not found`)
-    state!.paused = true
+    const sdk = createOpencodeClient({ baseUrl: args.server })
+    const result = yield* Effect.promise(() => sdk.loop.pause({ loopID: args.id! }))
+    if (result.error || !result.data) yield* fail(`loop ${args.id} not found`)
     UI.println(`loop ${args.id} paused`)
   }),
 })
-
-// ── loop resume ──────────────────────────────────────────────────────────────
 
 export const LoopResumeCommand = effectCmd({
   command: "loop resume <id>",
   describe: "resume a paused loop",
   instance: false,
-  builder: (yargs) => yargs.positional("id", { type: "string", describe: "loop ID", demandOption: true }),
+  builder: serverOption,
   handler: Effect.fn("Cli.loopResume")(function* (args) {
-    const state = loops.get(args.id ?? "")
-    if (!state) yield* fail(`loop ${args.id} not found`)
-    state!.paused = false
+    const sdk = createOpencodeClient({ baseUrl: args.server })
+    const result = yield* Effect.promise(() => sdk.loop.resume({ loopID: args.id! }))
+    if (result.error || !result.data) yield* fail(`loop ${args.id} not found`)
     UI.println(`loop ${args.id} resumed`)
   }),
 })
