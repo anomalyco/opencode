@@ -66,6 +66,13 @@ export const Model = Schema.Struct({
       Schema.StructWithRest(
         Schema.Struct({
           disabled: Schema.optional(Schema.Boolean).annotate({ description: "Disable this variant for the model" }),
+          limit: Schema.optional(
+            Schema.Struct({
+              context: Schema.optional(Schema.Finite),
+              input: Schema.optional(Schema.Finite),
+              output: Schema.optional(Schema.Finite),
+            }),
+          ).annotate({ description: "Override the model's token limits when this variant is active" }),
         }),
         [Schema.Record(Schema.String, Schema.Any)],
       ),

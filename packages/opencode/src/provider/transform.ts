@@ -1326,6 +1326,12 @@ export function maxOutputTokens(model: Provider.Model, outputTokenMax = OUTPUT_T
   return Math.min(model.limit.output, outputTokenMax) || outputTokenMax
 }
 
+export function withVariantLimit(model: Provider.Model, variantID?: string): Provider.Model {
+  const limit = variantID === undefined ? undefined : model.variants?.[variantID]?.["limit"]
+  if (!isPlainObject(limit)) return model
+  return { ...model, limit: { ...model.limit, ...(limit as Partial<Provider.Model["limit"]>) } }
+}
+
 type JsonRecord = Record<string, unknown>
 
 function isPlainObject(value: unknown): value is JsonRecord {

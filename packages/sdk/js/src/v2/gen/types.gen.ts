@@ -1811,7 +1811,20 @@ export type ProviderConfig = {
       variants?: {
         [key: string]: {
           disabled?: boolean
-          [key: string]: unknown | boolean | undefined
+          limit?: {
+            context?: number
+            input?: number
+            output?: number
+          }
+          [key: string]:
+            | unknown
+            | boolean
+            | {
+                context?: number
+                input?: number
+                output?: number
+              }
+            | undefined
         }
       }
     }

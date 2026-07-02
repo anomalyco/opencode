@@ -832,6 +832,80 @@ describe("session.llm.stream", () => {
     },
   )
 
+  it.instance(
+    "applies variant limit overrides to max output tokens",
+    () =>
+      Effect.gen(function* () {
+        const fixture = loadFixture(vivgridFixture.providerID, vivgridFixture.modelID)
+        const request = waitRequest(
+          "/chat/completions",
+          new Response(createChatStream("Hello"), {
+            status: 200,
+            headers: { "Content-Type": "text/event-stream" },
+          }),
+        )
+
+        const resolved = yield* Provider.use.getModel(
+          ProviderV2.ID.make(vivgridFixture.providerID),
+          ModelV2.ID.make(fixture.model.id),
+        )
+        const sessionID = SessionID.make("session-test-variant-limit")
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        } satisfies Agent.Info
+
+        const user = {
+          id: MessageID.make("msg_user-variant-limit"),
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: agent.name,
+          model: {
+            providerID: ProviderV2.ID.make(vivgridFixture.providerID),
+            modelID: resolved.id,
+            variant: "throttled",
+          },
+        } satisfies SessionV1.User
+
+        yield* drain({
+          user,
+          sessionID,
+          model: resolved,
+          agent,
+          system: ["You are a helpful assistant."],
+          messages: [{ role: "user", content: "Hello" }],
+          tools: {},
+        })
+
+        const capture = yield* Effect.promise(() => request)
+        const body = capture.body
+
+        const maxTokens = (body.max_tokens as number | undefined) ?? (body.max_output_tokens as number | undefined)
+        expect(maxTokens).toBe(4096)
+        expect(body.limit).toBeUndefined()
+      }),
+    {
+      config: () => ({
+        enabled_providers: [vivgridFixture.providerID],
+        provider: {
+          [vivgridFixture.providerID]: {
+            options: { apiKey: "test-key", baseURL: `${state.server!.url.origin}/v1` },
+            models: {
+              [vivgridFixture.modelID]: {
+                variants: {
+                  throttled: { limit: { output: 4096 } },
+                },
+              },
+            },
+          },
+        },
+      }),
+    },
+  )
+
   const alibabaQwenFixture = { providerID: "alibaba", modelID: "qwen-plus" }
   it.instance(
     "service stream cancellation cancels provider response body promptly",

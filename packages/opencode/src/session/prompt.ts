@@ -9,6 +9,7 @@ import { SessionRevert } from "./revert"
 import { Session } from "./session"
 import { Agent } from "../agent/agent"
 import { Provider } from "@/provider/provider"
+import { ProviderTransform } from "@/provider/transform"
 
 import { type Tool as AITool, tool, jsonSchema } from "ai"
 import type { JSONSchema7 } from "@ai-sdk/provider"
@@ -1138,7 +1139,10 @@ const layer = Layer.effect(
               history: msgs,
             }).pipe(Effect.ignore, Effect.forkIn(scope))
 
-          const model = yield* getModel(lastUser.model.providerID, lastUser.model.modelID, sessionID)
+          const model = ProviderTransform.withVariantLimit(
+            yield* getModel(lastUser.model.providerID, lastUser.model.modelID, sessionID),
+            lastUser.model.variant,
+          )
           const task = tasks.pop()
 
           if (task?.type === "subtask") {

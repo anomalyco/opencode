@@ -20944,6 +20944,21 @@
                     "properties": {
                       "disabled": {
                         "type": "boolean"
+                      },
+                      "limit": {
+                        "type": "object",
+                        "properties": {
+                          "context": {
+                            "type": "number"
+                          },
+                          "input": {
+                            "type": "number"
+                          },
+                          "output": {
+                            "type": "number"
+                          }
+                        },
+                        "additionalProperties": false
                       }
                     },
                     "additionalProperties": {}
