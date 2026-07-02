@@ -1,16 +1,18 @@
 import { describe, expect } from "bun:test"
-import { Effect, Fiber, Layer, Stream } from "effect"
+import { Effect, Fiber, Layer, Schema, Stream } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventV2 } from "@opencode-ai/core/event"
 import { Location } from "@opencode-ai/core/location"
 import { ProjectV2 } from "@opencode-ai/core/project"
+import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionStore } from "@opencode-ai/core/session/store"
+import { SessionTable } from "@opencode-ai/core/session/sql"
 import { testEffect } from "./lib/effect"
 
 const projects = Layer.succeed(
@@ -71,6 +73,59 @@ describe("SessionV2.log", () => {
       const session = yield* SessionV2.Service
       const error = yield* Effect.flip(Stream.runCollect(session.log({ sessionID: SessionV2.ID.create() })))
       expect(error._tag).toBe("Session.NotFoundError")
+    }),
+  )
+
+  it.effect("reads across undecodable gaps in aggregate order and marks the true log position", () =>
+    Effect.gen(function* () {
+      const GapEvent = EventV2.define({
+        type: "test.session.log.gap",
+        durable: { aggregate: "sessionID", version: 1 },
+        schema: { sessionID: SessionV2.ID, value: Schema.String },
+      })
+      const session = yield* SessionV2.Service
+      const events = yield* EventV2.Service
+      const created = yield* session.create({ location })
+      yield* session.switchAgent({ sessionID: created.id, agent: "one" })
+      // Not in the durable manifest, so reads must skip it without failing.
+      yield* events.publish(GapEvent, { sessionID: created.id, value: "filtered" })
+      yield* session.switchAgent({ sessionID: created.id, agent: "two" })
+      yield* session.switchAgent({ sessionID: created.id, agent: "three" })
+
+      const items = Array.from(yield* Stream.runCollect(session.log({ sessionID: created.id, after: 1 })))
+
+      expect(
+        items.map((item): number | string | undefined => (EventV2.isCaughtUp(item) ? item.type : item.durable?.seq)),
+      ).toEqual([3, 4, "log.caught_up"])
+      expect(items.at(-1)).toEqual({ type: "log.caught_up", aggregateID: created.id, seq: EventV2.Seq.make(4) })
+    }),
+  )
+
+  it.effect("completes with a bare caught-up marker for a migrated Session with no event sequence", () =>
+    Effect.gen(function* () {
+      const db = (yield* Database.Service).db
+      const session = yield* SessionV2.Service
+      const sessionID = SessionV2.ID.make("ses_empty_log")
+      yield* db
+        .insert(ProjectTable)
+        .values({ id: ProjectV2.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
+        .onConflictDoNothing()
+        .run()
+      yield* db
+        .insert(SessionTable)
+        .values({
+          id: sessionID,
+          project_id: ProjectV2.ID.global,
+          slug: "empty-log",
+          directory: "/project",
+          title: "Empty log",
+          version: "test",
+        })
+        .run()
+
+      const items = Array.from(yield* Stream.runCollect(session.log({ sessionID })))
+
+      expect(items).toEqual([{ type: "log.caught_up", aggregateID: sessionID }])
     }),
   )
 })

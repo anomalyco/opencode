@@ -47,10 +47,6 @@ import type {
   SessionPutContextEntryOutput,
   SessionRemoveContextEntryInput,
   SessionRemoveContextEntryOutput,
-  SessionHistoryInput,
-  SessionHistoryOutput,
-  SessionEventsInput,
-  SessionEventsOutput,
   SessionLogInput,
   SessionLogOutput,
   SessionInterruptInput,
@@ -608,30 +604,6 @@ export function make(options: ClientOptions) {
             successStatus: 204,
             declaredStatuses: [404, 400, 401],
             empty: true,
-          },
-          requestOptions,
-        ),
-      history: (input: SessionHistoryInput, requestOptions?: RequestOptions) =>
-        request<SessionHistoryOutput>(
-          {
-            method: "GET",
-            path: `/api/session/${encodeURIComponent(input.sessionID)}/history`,
-            query: { limit: input["limit"], after: input["after"] },
-            successStatus: 200,
-            declaredStatuses: [404, 400, 401],
-            empty: false,
-          },
-          requestOptions,
-        ),
-      events: (input: SessionEventsInput, requestOptions?: RequestOptions): AsyncIterable<SessionEventsOutput> =>
-        sse<SessionEventsOutput>(
-          {
-            method: "GET",
-            path: `/api/session/${encodeURIComponent(input.sessionID)}/event`,
-            query: { after: input["after"] },
-            successStatus: 200,
-            declaredStatuses: [404, 400, 401],
-            empty: false,
           },
           requestOptions,
         ),

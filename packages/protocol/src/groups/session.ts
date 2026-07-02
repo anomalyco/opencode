@@ -104,13 +104,6 @@ const BooleanFromString = Schema.Literals(["true", "false"]).pipe(
   }),
 )
 
-const SessionHistoryLimit = PositiveInt.check(Schema.isLessThanOrEqualTo(100))
-
-export const SessionHistoryQuery = Schema.Struct({
-  limit: Schema.NumberFromString.pipe(Schema.decodeTo(SessionHistoryLimit), Schema.optional),
-  after: Schema.NumberFromString.pipe(Schema.decodeTo(Event.Seq), Schema.optional),
-})
-
 const SessionsQueryCursor = SessionsCursor.annotate({
   description: "Opaque pagination cursor returned as cursor.previous or cursor.next in the previous response.",
 })
@@ -468,44 +461,6 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
             identifier: "v2.session.context.entry.remove",
             summary: "Remove context entry",
             description: "Remove one context entry; the removal is announced to the model at the next turn boundary.",
-          }),
-        ),
-    )
-    .add(
-      HttpApiEndpoint.get("session.history", "/api/session/:sessionID/history", {
-        params: { sessionID: Session.ID },
-        query: SessionHistoryQuery,
-        success: Schema.Struct({
-          data: Schema.Array(SessionEvent.Durable),
-          hasMore: Schema.Boolean,
-        }).annotate({ identifier: "SessionHistory" }),
-        error: SessionNotFoundError,
-      })
-        .middleware(sessionLocationMiddleware)
-        .annotateMerge(
-          OpenApi.annotations({
-            identifier: "v2.session.history",
-            summary: "Get session history",
-            description:
-              "Read one finite page of public durable Session events after an exclusive aggregate sequence. Newly committed events may appear on later pages.",
-          }),
-        ),
-    )
-    .add(
-      HttpApiEndpoint.get("session.events", "/api/session/:sessionID/event", {
-        params: { sessionID: Session.ID },
-        query: {
-          after: Schema.NumberFromString.pipe(Schema.decodeTo(Event.Seq), Schema.optional),
-        },
-        success: HttpApiSchema.StreamSse({ data: SessionEvent.Durable }),
-        error: SessionNotFoundError,
-      })
-        .middleware(sessionLocationMiddleware)
-        .annotateMerge(
-          OpenApi.annotations({
-            identifier: "v2.session.events",
-            summary: "Subscribe to session events",
-            description: "Replay durable events after an aggregate sequence, then continue with new durable events.",
           }),
         ),
     )

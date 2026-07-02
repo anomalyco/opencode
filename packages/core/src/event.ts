@@ -87,53 +87,6 @@ const decodeSerializedEvent = (event: SerializedEvent): Payload => {
   }
 }
 
-export const readAggregate = Effect.fn("EventV2.readAggregate")(function* <A>(
-  db: Database.Interface["db"],
-  input: {
-    readonly aggregateID: string
-    readonly after?: number
-    readonly limit: number
-    readonly manifest: {
-      readonly definitions: ReadonlyMap<string, Definition>
-      readonly schema: Schema.Decoder<A, never>
-    }
-  },
-) {
-  const after = input.after ?? -1
-  const rows = yield* db
-    .select()
-    .from(EventTable)
-    .where(
-      and(
-        eq(EventTable.aggregate_id, input.aggregateID),
-        gt(EventTable.seq, after),
-        inArray(EventTable.type, Array.from(input.manifest.definitions.keys())),
-      ),
-    )
-    .orderBy(asc(EventTable.seq))
-    .limit(input.limit + 1)
-    .all()
-    .pipe(Effect.orDie)
-  const page = rows.slice(0, input.limit)
-  const decode = Schema.decodeUnknownSync(input.manifest.schema)
-  const events = page.map((event) =>
-    decode({
-      id: event.id,
-      type: input.manifest.definitions.get(event.type)?.type ?? event.type,
-      durable: {
-        aggregateID: event.aggregate_id,
-        seq: event.seq,
-        version: input.manifest.definitions.get(event.type)?.durable?.version,
-      },
-      data: event.data,
-    }),
-  )
-  return {
-    events,
-    hasMore: rows.length > input.limit,
-  }
-})
-
 export class SubscriberOverflowError extends Schema.TaggedErrorClass<SubscriberOverflowError>()(
   "EventV2.SubscriberOverflow",
   { capacity: Schema.Int },
@@ -182,7 +135,6 @@ export interface Interface {
   readonly changes: () => Stream.Stream<EventLog.Change>
   /** Latest committed seq per aggregate. Aggregates without events are absent. */
   readonly sequences: (aggregateIDs: ReadonlyArray<string>) => Effect.Effect<ReadonlyMap<string, Seq>>
-  readonly durable: (input: { readonly aggregateID: string; readonly after?: number }) => Stream.Stream<Payload>
   /** @deprecated Use `all()` and consume the returned stream. */
   readonly listen: (listener: Subscriber) => Effect.Effect<Unsubscribe>
   readonly project: <D extends Definition>(definition: D, projector: Subscriber<D>) => Effect.Effect<void>
@@ -627,17 +579,24 @@ export const layerWith = (options?: LayerOptions) =>
               .all(),
           ),
           Effect.orDie,
-          Effect.map((rows) =>
-            rows.map((event) =>
-              decodeSerializedEvent({
-                id: event.id,
-                aggregateID: event.aggregate_id,
-                seq: event.seq,
-                type: event.type,
-                data: event.data,
-              }),
-            ),
-          ),
+          // Skip types missing from the durable manifest instead of failing the
+          // read: the aggregate may hold events this process cannot decode. The
+          // raw tail seq keeps cursors advancing across the resulting gaps.
+          Effect.map((rows) => ({
+            seq: rows.at(-1)?.seq,
+            events: rows.flatMap((event) => {
+              if (!Durable.get(event.type)?.durable) return []
+              return [
+                decodeSerializedEvent({
+                  id: event.id,
+                  aggregateID: event.aggregate_id,
+                  seq: event.seq,
+                  type: event.type,
+                  data: event.data,
+                }),
+              ]
+            }),
+          })),
         )
 
       const subscribeDurable = (aggregateID: string) =>
@@ -669,11 +628,12 @@ export const layerWith = (options?: LayerOptions) =>
           Effect.gen(function* () {
             let sequence = input.after ?? -1
             const read = Effect.suspend(() => readAfter(input.aggregateID, sequence)).pipe(
-              Effect.tap((events) =>
+              Effect.tap((page) =>
                 Effect.sync(() => {
-                  sequence = events.at(-1)?.durable?.seq ?? sequence
+                  sequence = page.seq ?? sequence
                 }),
               ),
+              Effect.map((page) => page.events),
             )
             // Subscribing before the historical read means events committed during
             // replay either appear in the read or arrive through a post-marker wake.
@@ -693,9 +653,6 @@ export const layerWith = (options?: LayerOptions) =>
             return Stream.concat(replay, live)
           }),
         )
-
-      const durable = (input: { readonly aggregateID: string; readonly after?: number }): Stream.Stream<Payload> =>
-        log({ ...input, follow: true }).pipe(Stream.filter((item): item is Payload => !isCaughtUp(item)))
 
       const changes = (): Stream.Stream<EventLog.Change> =>
         Stream.unwrap(
@@ -774,7 +731,6 @@ export const layerWith = (options?: LayerOptions) =>
         log,
         changes,
         sequences,
-        durable,
         listen,
         project,
         replay,

@@ -245,7 +245,11 @@ describe("SessionV2.prompt", () => {
       const session = yield* SessionV2.Service
       const events = yield* EventV2.Service
       const { db } = yield* Database.Service
-      const fiber = yield* session.events({ sessionID }).pipe(Stream.take(4), Stream.runCollect, Effect.forkScoped)
+      const publicEvents = (input: { sessionID: SessionV2.ID; after?: number }) =>
+        session
+          .log({ ...input, follow: true })
+          .pipe(Stream.filter((item): item is SessionEvent.DurableEvent => !EventV2.isCaughtUp(item)))
+      const fiber = yield* publicEvents({ sessionID }).pipe(Stream.take(4), Stream.runCollect, Effect.forkScoped)
       yield* Effect.yieldNow
 
       yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "First" }), resume: false })
@@ -261,9 +265,7 @@ describe("SessionV2.prompt", () => {
       ])
       expect(
         Array.from(
-          yield* session
-            .events({ sessionID, after: streamed[0]!.durable?.seq })
-            .pipe(Stream.take(1), Stream.runCollect),
+          yield* publicEvents({ sessionID, after: streamed[0]!.durable?.seq }).pipe(Stream.take(1), Stream.runCollect),
         ).map((event): [number | undefined, string] => [event.durable?.seq, event.type]),
       ).toEqual([[1, "session.next.prompt.admitted"]])
     }),

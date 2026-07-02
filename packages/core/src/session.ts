@@ -37,7 +37,6 @@ import { SessionCompaction } from "./session/compaction"
 import { SessionRevert } from "./session/revert"
 import { Revert } from "@opencode-ai/schema/revert"
 import { FSUtil } from "./fs-util"
-import { SessionDurable } from "@opencode-ai/schema/durable-event-manifest"
 import type { EventLog } from "@opencode-ai/schema/event-log"
 import { SkillV2 } from "./skill"
 import { Job } from "./job"
@@ -161,10 +160,6 @@ export interface Interface {
   readonly context: (
     sessionID: SessionSchema.ID,
   ) => Effect.Effect<SessionMessage.Message[], NotFoundError | MessageDecodeError>
-  readonly events: (input: {
-    sessionID: SessionSchema.ID
-    after?: number
-  }) => Stream.Stream<SessionEvent.DurableEvent, NotFoundError>
   /**
    * Durable, ordered, gap-free session log read. Replays public durable
    * session events after the exclusive `after` cursor, emits a `CaughtUp`
@@ -179,11 +174,6 @@ export interface Interface {
   }) => Stream.Stream<SessionEvent.DurableEvent | EventLog.CaughtUp, NotFoundError>
   /** Latest durable log seq per session. Sessions without events are absent. */
   readonly watermarks: (sessionIDs: ReadonlyArray<SessionSchema.ID>) => Effect.Effect<ReadonlyMap<string, EventV2.Seq>>
-  readonly history: (input: {
-    sessionID: SessionSchema.ID
-    after?: number
-    limit: number
-  }) => Effect.Effect<{ events: ReadonlyArray<SessionEvent.DurableEvent>; hasMore: boolean }, NotFoundError>
   readonly switchAgent: (input: { sessionID: SessionSchema.ID; agent: string }) => Effect.Effect<void, NotFoundError>
   readonly switchModel: (input: {
     sessionID: SessionSchema.ID
@@ -453,12 +443,6 @@ const layer = Layer.effect(
         yield* result.get(sessionID)
         return yield* store.context(sessionID)
       }),
-      events: (input) =>
-        Stream.unwrap(
-          result
-            .get(input.sessionID)
-            .pipe(Effect.as(events.durable({ aggregateID: input.sessionID, after: input.after }))),
-        ).pipe(Stream.filter((event): event is SessionEvent.DurableEvent => isDurableSessionEvent(event))),
       log: (input) =>
         Stream.unwrap(
           result
@@ -472,14 +456,6 @@ const layer = Layer.effect(
         ),
       watermarks: Effect.fn("V2Session.watermarks")(function* (sessionIDs) {
         return yield* events.sequences(sessionIDs)
-      }),
-      history: Effect.fn("V2Session.history")(function* (input) {
-        yield* result.get(input.sessionID)
-        return yield* EventV2.readAggregate(db, {
-          ...input,
-          aggregateID: input.sessionID,
-          manifest: SessionDurable,
-        })
       }),
       prompt: Effect.fn("V2Session.prompt")((input) =>
         Effect.uninterruptible(

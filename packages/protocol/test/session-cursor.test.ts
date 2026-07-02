@@ -1,8 +1,7 @@
 import { describe, expect, test } from "bun:test"
-import { Effect, Schema } from "effect"
-import { SessionHistoryQuery, SessionsCursor } from "../src/groups/session.js"
+import { Effect } from "effect"
+import { SessionsCursor } from "../src/groups/session.js"
 import { Session } from "@opencode-ai/schema/session"
-import { Event } from "@opencode-ai/schema/event"
 
 describe("SessionsCursor", () => {
   test("round trips without Node globals", async () => {
@@ -15,13 +14,5 @@ describe("SessionsCursor", () => {
     const cursor = SessionsCursor.make(input)
 
     expect(await Effect.runPromise(SessionsCursor.parse(cursor))).toEqual(input)
-  })
-})
-
-describe("SessionHistoryQuery", () => {
-  test("decodes numeric paging inputs", async () => {
-    const query = await Effect.runPromise(Schema.decodeUnknownEffect(SessionHistoryQuery)({ after: "3", limit: "10" }))
-
-    expect(query).toEqual({ after: Event.Seq.make(3), limit: 10 })
   })
 })

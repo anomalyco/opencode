@@ -78,6 +78,12 @@ const durableData = (sessionID: Session.ID, text: string) => ({
   messageID: SessionV1.MessageID.ascending(`msg_${text}`),
 })
 
+/** Followed log read without markers: the old `durable` stream shape. */
+const tail = (events: EventV2.Interface, input: { aggregateID: string; after?: number }) =>
+  events
+    .log({ ...input, follow: true })
+    .pipe(Stream.filter((item): item is EventV2.Payload => !EventV2.isCaughtUp(item)))
+
 const it = testEffect(
   AppNodeBuilder.build(LayerNode.group([Database.node, EventV2.node, Location.node]), [[Location.node, locationLayer]]),
 )
@@ -425,9 +431,11 @@ describe("EventV2", () => {
       const aggregateID = Session.ID.create()
       yield* events.publish(DurableMessage, durableData(aggregateID, "zero"))
       yield* events.publish(DurableMessage, durableData(aggregateID, "one"))
-      const fiber = yield* events
-        .durable({ aggregateID, after: 0 })
-        .pipe(Stream.take(2), Stream.runCollect, Effect.forkScoped)
+      const fiber = yield* tail(events, { aggregateID, after: 0 }).pipe(
+        Stream.take(2),
+        Stream.runCollect,
+        Effect.forkScoped,
+      )
       yield* Effect.yieldNow
 
       yield* events.publish(DurableMessage, durableData(aggregateID, "two"))
@@ -444,7 +452,7 @@ describe("EventV2", () => {
       const events = yield* EventV2.Service
       const aggregateID = Session.ID.create()
       yield* events.publish(DurableMessage, durableData(aggregateID, "zero"))
-      const fiber = yield* events.durable({ aggregateID }).pipe(Stream.take(2), Stream.runCollect, Effect.forkScoped)
+      const fiber = yield* tail(events, { aggregateID }).pipe(Stream.take(2), Stream.runCollect, Effect.forkScoped)
 
       yield* events.publish(DurableMessage, durableData(aggregateID, "one"))
 
@@ -470,7 +478,7 @@ describe("EventV2", () => {
       yield* Effect.gen(function* () {
         const events = yield* EventV2.Service
         const aggregateID = Session.ID.create()
-        const fiber = yield* events.durable({ aggregateID }).pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
+        const fiber = yield* tail(events, { aggregateID }).pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
         yield* Deferred.await(readStarted)
 
         pause = false
@@ -489,9 +497,7 @@ describe("EventV2", () => {
       const events = yield* EventV2.Service
       const aggregateID = Session.ID.create()
       const count = 64
-      const fiber = yield* events
-        .durable({ aggregateID })
-        .pipe(Stream.take(count), Stream.runCollect, Effect.forkScoped)
+      const fiber = yield* tail(events, { aggregateID }).pipe(Stream.take(count), Stream.runCollect, Effect.forkScoped)
       yield* Effect.yieldNow
 
       for (let index = 0; index < count; index++) {
@@ -508,7 +514,7 @@ describe("EventV2", () => {
     Effect.gen(function* () {
       const events = yield* EventV2.Service
       const aggregateID = Session.ID.create()
-      const fiber = yield* events.durable({ aggregateID }).pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
+      const fiber = yield* tail(events, { aggregateID }).pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
       yield* Effect.yieldNow
 
       yield* events.publish(Message, { text: "live only" })

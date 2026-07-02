@@ -31,7 +31,6 @@ const capture = () => {
     log: () => Stream.empty,
     changes: () => Stream.empty,
     sequences: () => Effect.succeed(new Map()),
-    durable: () => Stream.empty,
     listen: () => Effect.succeed(Effect.void),
     project: () => Effect.void,
     replay: () => Effect.void,

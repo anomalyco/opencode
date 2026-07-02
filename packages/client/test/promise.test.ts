@@ -174,7 +174,6 @@ test("event.subscribe terminates on malformed Promise SSE data", async () => {
 
 test("session methods use the public HTTP contract", async () => {
   const requests: Array<{ url: string; init?: RequestInit }> = []
-  let historyPage = 0
   const client = OpenCode.make({
     baseUrl: "http://localhost:3000",
     fetch: async (input, init) => {
@@ -185,11 +184,10 @@ test("session methods use the public HTTP contract", async () => {
           headers: { "content-type": "text/event-stream" },
         })
       }
-      if (url.includes("/history")) {
-        historyPage++
-        return Response.json(
-          historyPage === 1 ? { data: [modelSwitchedEvent], hasMore: true } : { data: [], hasMore: false },
-        )
+      if (url.includes("/log")) {
+        return new Response(`data: ${JSON.stringify(modelSwitchedEvent)}\n\ndata: ${JSON.stringify(caughtUp)}\n\n`, {
+          headers: { "content-type": "text/event-stream" },
+        })
       }
       if (url.includes("/prompt")) return Response.json(admission)
       if (url.includes("/context")) return Response.json({ data: [] })
@@ -218,13 +216,8 @@ test("session methods use the public HTTP contract", async () => {
   await client.session.compact({ sessionID: "ses_test" })
   await client.session.wait({ sessionID: "ses_test" })
   const context = await client.session.context({ sessionID: "ses_test" })
-  const history = await client.session.history({ sessionID: "ses_test", after: 0, limit: 1 })
-  const historyAfter = history.data.at(-1)?.durable?.seq
-  const historyNext = history.hasMore
-    ? await client.session.history({ sessionID: "ses_test", after: historyAfter, limit: 2 })
-    : undefined
-  const events = []
-  for await (const event of client.session.events({ sessionID: "ses_test", after: 0 })) events.push(event)
+  const log = []
+  for await (const item of client.session.log({ sessionID: "ses_test", after: 0 })) log.push(item)
   await client.session.interrupt({ sessionID: "ses_test" })
   const message = await client.session.message({ sessionID: "ses_test", messageID: "msg_model" })
 
@@ -233,9 +226,7 @@ test("session methods use the public HTTP contract", async () => {
   expect(created.id).toBe("ses_test")
   expect(admitted.id).toBe("msg_test")
   expect(context).toEqual([])
-  expect(history).toEqual({ data: [modelSwitchedEvent], hasMore: true })
-  expect(historyNext).toEqual({ data: [], hasMore: false })
-  expect(events).toEqual([modelSwitchedEvent])
+  expect(log).toEqual([modelSwitchedEvent, caughtUp])
   expect(message).toEqual(modelSwitchedMessage)
   expect(requests.map((request) => [request.init?.method, request.url])).toEqual([
     ["GET", "http://localhost:3000/api/session?limit=10&order=desc"],
@@ -247,9 +238,7 @@ test("session methods use the public HTTP contract", async () => {
     ["POST", "http://localhost:3000/api/session/ses_test/compact"],
     ["POST", "http://localhost:3000/api/session/ses_test/wait"],
     ["GET", "http://localhost:3000/api/session/ses_test/context"],
-    ["GET", "http://localhost:3000/api/session/ses_test/history?limit=1&after=0"],
-    ["GET", "http://localhost:3000/api/session/ses_test/history?limit=2&after=1"],
-    ["GET", "http://localhost:3000/api/session/ses_test/event?after=0"],
+    ["GET", "http://localhost:3000/api/session/ses_test/log?after=0"],
     ["POST", "http://localhost:3000/api/session/ses_test/interrupt"],
     ["GET", "http://localhost:3000/api/session/ses_test/message/msg_model"],
   ])
@@ -276,7 +265,7 @@ test("middleware errors remain declared client errors", async () => {
   }
 })
 
-test("session.history decodes SessionNotFoundError", async () => {
+test("session.log decodes SessionNotFoundError", async () => {
   const client = OpenCode.make({
     baseUrl: "http://localhost:3000",
     fetch: async () =>
@@ -287,7 +276,7 @@ test("session.history decodes SessionNotFoundError", async () => {
   })
 
   try {
-    await client.session.history({ sessionID: "ses_missing" })
+    await client.session.log({ sessionID: "ses_missing" })[Symbol.asyncIterator]().next()
     throw new Error("Expected request to fail")
   } catch (error) {
     expect(isSessionNotFoundError(error)).toBe(true)
@@ -331,6 +320,8 @@ const modelSwitchedMessage = {
   time: { created: 1_717_171_717_000 },
   model: { id: "claude", providerID: "anthropic" },
 }
+
+const caughtUp = { type: "log.caught_up", aggregateID: "ses_test", seq: 1 }
 
 const modelSwitchedEvent = {
   id: "evt_model",
