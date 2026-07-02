@@ -159,6 +159,7 @@ export const Definitions = {
   workspace_set: keybind("none", "Set workspace"),
 
   input_clear: keybind("ctrl+c", "Clear input field"),
+  input_clear_double: keybind("escape", "Clear input when pressed twice quickly"),
   input_paste: keybind({ key: "ctrl+v", preventDefault: false }, "Paste from clipboard"),
   input_submit: keybind("return", "Submit input"),
   input_newline: keybind("shift+return,ctrl+return,alt+return,ctrl+j", "Insert newline in input"),
@@ -362,6 +363,7 @@ export const CommandMap = {
   prompt_stash_list: "prompt.stash.list",
   workspace_set: "workspace.set",
   input_clear: "prompt.clear",
+  input_clear_double: "prompt.clear.double",
   input_paste: "prompt.paste",
   input_submit: "input.submit",
   input_newline: "input.newline",

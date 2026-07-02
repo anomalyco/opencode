@@ -63,6 +63,48 @@ test("legacy page key aliases compile as page keys", async () => {
   }
 })
 
+test("input_clear_double compiles to escape and can be disabled", async () => {
+  const sequences: Record<string, string[][]> = {}
+
+  function Harness() {
+    const renderer = useRenderer()
+    const keymap = createDefaultOpenTuiKeymap(renderer)
+    const config = createResolvedKeymapConfig()
+    const disabled = createResolvedKeymapConfig({ input_clear_double: "none" })
+    const offKeymap = registerOpencodeKeymap(keymap, renderer, config)
+    const offLayer = keymap.registerLayer({
+      bindings: config.keybinds.gather("prompt", ["prompt.clear.double"]),
+    })
+    const bindings = keymap.getCommandBindings({
+      visibility: "registered",
+      commands: ["prompt.clear.double"],
+    })
+    sequences.default =
+      bindings.get("prompt.clear.double")?.map((binding) => binding.sequence.map((part) => part.stroke.name)) ?? []
+    sequences.disabled = disabled.keybinds.gather("prompt", ["prompt.clear.double"]).map(() => [])
+    onCleanup(() => {
+      offLayer()
+      offKeymap()
+    })
+
+    return (
+      <OpencodeKeymapProvider keymap={keymap}>
+        <box />
+      </OpencodeKeymapProvider>
+    )
+  }
+
+  const app = await testRender(() => <Harness />)
+  try {
+    expect(sequences).toEqual({
+      default: [["escape"]],
+      disabled: [],
+    })
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
 test("mode-less bindings stay active when opencode mode changes", async () => {
   const counts: Record<string, Record<string, number>> = {}
 

@@ -99,6 +99,7 @@ const money = new Intl.NumberFormat("en-US", {
 })
 
 const DRAFT_RETENTION_MIN_CHARS = 20
+const ESC_CLEAR_WINDOW_MS = 500
 
 function randomIndex(count: number) {
   if (count <= 0) return 0
@@ -140,6 +141,7 @@ let stashed: { prompt: PromptInfo; cursor: number } | undefined
 export function Prompt(props: PromptProps) {
   let input: TextareaRenderable
   let anchor: BoxRenderable
+  let escClearTimer: ReturnType<typeof setTimeout> | undefined
   const [inputTarget, setInputTarget] = createSignal<TextareaRenderable | undefined>()
 
   const leader = useLeaderActive()
@@ -281,6 +283,7 @@ export function Prompt(props: PromptProps) {
     mode: "normal" | "shell"
     extmarkToPartIndex: Map<number, number>
     interrupt: number
+    escClear: number
     placeholder: number
   }>({
     placeholder: randomIndex(list().length),
@@ -291,6 +294,7 @@ export function Prompt(props: PromptProps) {
     mode: "normal",
     extmarkToPartIndex: new Map(),
     interrupt: 0,
+    escClear: 0,
   })
 
   createEffect(
@@ -337,6 +341,25 @@ export function Prompt(props: PromptProps) {
         run: () => {
           clearPrompt()
           dialog.clear()
+        },
+      },
+      {
+        title: "Clear prompt on double press",
+        name: "prompt.clear.double",
+        category: "Prompt",
+        hidden: true,
+        run: () => {
+          if (!input.focused) return
+          if (auto()?.visible) return
+          if (escClearTimer) clearTimeout(escClearTimer)
+          if (store.escClear > 0) {
+            clearPrompt()
+            return
+          }
+          setStore("escClear", 1)
+          escClearTimer = setTimeout(() => {
+            setStore("escClear", 0)
+          }, ESC_CLEAR_WINDOW_MS)
         },
       },
       {
@@ -623,6 +646,7 @@ export function Prompt(props: PromptProps) {
     if (store.prompt.input) {
       stashed = { prompt: unwrap(store.prompt), cursor: input.cursorOffset }
     }
+    if (escClearTimer) clearTimeout(escClearTimer)
     setInputTarget(undefined)
     props.ref?.(undefined)
   })
@@ -805,6 +829,20 @@ export function Prompt(props: PromptProps) {
       target: inputTarget,
       enabled: inputTarget() !== undefined && !props.disabled && store.prompt.input !== "",
       bindings: tuiConfig.keybinds.get("prompt.clear"),
+    }
+  })
+
+  useBindings(() => {
+    return {
+      target: inputTarget,
+      enabled:
+        inputTarget() !== undefined &&
+        !props.disabled &&
+        store.mode === "normal" &&
+        status().type === "idle" &&
+        store.prompt.input !== "" &&
+        !auto()?.visible,
+      bindings: tuiConfig.keybinds.get("prompt.clear.double"),
     }
   })
 
@@ -1278,6 +1316,7 @@ export function Prompt(props: PromptProps) {
       parts: [],
     })
     setStore("extmarkToPartIndex", new Map())
+    setStore("escClear", 0)
   }
 
   const highlight = createMemo(() => {
@@ -1582,6 +1621,13 @@ export function Prompt(props: PromptProps) {
                   <span style={{ fg: store.interrupt > 0 ? theme.primary : theme.textMuted }}>
                     {store.interrupt > 0 ? "again to interrupt" : "interrupt"}
                   </span>
+                </text>
+              </box>
+            </Match>
+            <Match when={store.escClear > 0}>
+              <box paddingLeft={3}>
+                <text fg={theme.primary}>
+                  esc <span style={{ fg: theme.primary }}>again to clear</span>
                 </text>
               </box>
             </Match>
