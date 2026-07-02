@@ -38,6 +38,7 @@ import { SessionRevert } from "./session/revert"
 import { Revert } from "@opencode-ai/schema/revert"
 import { FSUtil } from "./fs-util"
 import { SessionDurable } from "@opencode-ai/schema/durable-event-manifest"
+import type { EventLog } from "@opencode-ai/schema/event-log"
 import { SkillV2 } from "./skill"
 import { Job } from "./job"
 import { CommandV2 } from "./command"
@@ -136,7 +137,11 @@ export type Error =
   | MessageNotFoundError
 
 export interface Interface {
-  readonly list: (input?: ListInput) => Effect.Effect<SessionSchema.Info[]>
+  readonly list: (input?: ListInput) => Effect.Effect<{
+    readonly data: SessionSchema.Info[]
+    /** Per-session durable log watermark, read in the same transaction as the snapshot. Sessions without events are absent. */
+    readonly watermarks: ReadonlyMap<string, number>
+  }>
   readonly create: (input: CreateInput) => Effect.Effect<SessionSchema.Info, NotFoundError>
   readonly fork: (input: ForkInput) => Effect.Effect<SessionSchema.Info, NotFoundError | MessageNotFoundError>
   readonly get: (sessionID: SessionSchema.ID) => Effect.Effect<SessionSchema.Info, NotFoundError>
@@ -160,6 +165,20 @@ export interface Interface {
     sessionID: SessionSchema.ID
     after?: number
   }) => Stream.Stream<SessionEvent.DurableEvent, NotFoundError>
+  /**
+   * Durable, ordered, gap-free session log read. Replays public durable
+   * session events after the exclusive `after` cursor, emits a `CaughtUp`
+   * marker at the replay boundary, then continues live when `follow` is set.
+   * The marker's seq may exceed the last emitted event because non-public
+   * durable events share the aggregate's sequence space.
+   */
+  readonly log: (input: {
+    sessionID: SessionSchema.ID
+    after?: number
+    follow?: boolean
+  }) => Stream.Stream<SessionEvent.DurableEvent | EventLog.CaughtUp, NotFoundError>
+  /** Latest durable log seq per session. Sessions without events are absent. */
+  readonly watermarks: (sessionIDs: ReadonlyArray<SessionSchema.ID>) => Effect.Effect<ReadonlyMap<string, number>>
   readonly history: (input: {
     sessionID: SessionSchema.ID
     after?: number
@@ -373,10 +392,21 @@ const layer = Layer.effect(
             order === "asc" ? asc(sortColumn) : desc(sortColumn),
             order === "asc" ? asc(SessionTable.id) : desc(SessionTable.id),
           )
-        const rows = yield* (input.limit === undefined ? query.all() : query.limit(input.limit).all()).pipe(
-          Effect.orDie,
-        )
-        return (direction === "previous" ? rows.toReversed() : rows).map((row) => fromRow(row))
+        // Watermarks must pair with the snapshot exactly, so both reads share a transaction:
+        // a higher watermark would let an attached tail skip events missing from the snapshot.
+        const snapshot = yield* db
+          .transaction(() =>
+            Effect.gen(function* () {
+              const rows = yield* (input.limit === undefined ? query.all() : query.limit(input.limit).all()).pipe(
+                Effect.orDie,
+              )
+              const watermarks = yield* events.sequences(rows.map((row) => row.id))
+              return { rows, watermarks }
+            }),
+          )
+          .pipe(Effect.orDie)
+        const rows = direction === "previous" ? snapshot.rows.toReversed() : snapshot.rows
+        return { data: rows.map((row) => fromRow(row)), watermarks: snapshot.watermarks }
       }),
       messages: Effect.fn("V2Session.messages")(function* (input) {
         yield* result.get(input.sessionID)
@@ -426,6 +456,20 @@ const layer = Layer.effect(
             .get(input.sessionID)
             .pipe(Effect.as(events.durable({ aggregateID: input.sessionID, after: input.after }))),
         ).pipe(Stream.filter((event): event is SessionEvent.DurableEvent => isDurableSessionEvent(event))),
+      log: (input) =>
+        Stream.unwrap(
+          result
+            .get(input.sessionID)
+            .pipe(Effect.as(events.log({ aggregateID: input.sessionID, after: input.after, follow: input.follow }))),
+        ).pipe(
+          Stream.filter(
+            (item): item is SessionEvent.DurableEvent | EventLog.CaughtUp =>
+              EventV2.isCaughtUp(item) || isDurableSessionEvent(item),
+          ),
+        ),
+      watermarks: Effect.fn("V2Session.watermarks")(function* (sessionIDs) {
+        return yield* events.sequences(sessionIDs)
+      }),
       history: Effect.fn("V2Session.history")(function* (input) {
         yield* result.get(input.sessionID)
         return yield* EventV2.readAggregate(db, {

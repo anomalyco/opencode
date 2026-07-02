@@ -1121,4 +1121,125 @@ describe("EventV2", () => {
       expect(received[0]?.data).toEqual(durableData(aggregateID, "replayed"))
     }),
   )
+
+  it.effect("log without follow replays events and completes with a caught-up marker", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const aggregateID = Session.ID.create()
+      yield* events.publish(DurableMessage, durableData(aggregateID, "zero"))
+      yield* events.publish(DurableMessage, durableData(aggregateID, "one"))
+
+      const items = Array.from(yield* Stream.runCollect(events.log({ aggregateID })))
+
+      expect(items.map((item) => (EventV2.isCaughtUp(item) ? item.type : item.durable?.seq))).toEqual([
+        0,
+        1,
+        "log.caught_up",
+      ])
+      expect(items.at(-1)).toEqual({ type: "log.caught_up", aggregateID, seq: 1 })
+    }),
+  )
+
+  it.effect("log caught-up marker omits seq for an empty log and keeps the cursor otherwise", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const aggregateID = Session.ID.create()
+
+      const empty = Array.from(yield* Stream.runCollect(events.log({ aggregateID })))
+      yield* events.publish(DurableMessage, durableData(aggregateID, "zero"))
+      const drained = Array.from(yield* Stream.runCollect(events.log({ aggregateID, after: 0 })))
+
+      expect(empty).toEqual([{ type: "log.caught_up", aggregateID }])
+      expect(empty[0]).not.toHaveProperty("seq")
+      expect(drained).toEqual([{ type: "log.caught_up", aggregateID, seq: 0 }])
+    }),
+  )
+
+  it.effect("log with follow emits the caught-up marker at the replay-to-live boundary", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const aggregateID = Session.ID.create()
+      yield* events.publish(DurableMessage, durableData(aggregateID, "zero"))
+      const fiber = yield* events
+        .log({ aggregateID, follow: true })
+        .pipe(Stream.take(3), Stream.runCollect, Effect.forkScoped)
+      yield* Effect.yieldNow
+
+      yield* events.publish(DurableMessage, durableData(aggregateID, "one"))
+
+      const items = Array.from(yield* Fiber.join(fiber))
+      expect(items.map((item) => (EventV2.isCaughtUp(item) ? item : item.durable?.seq))).toEqual([
+        0,
+        { type: "log.caught_up", aggregateID, seq: 0 },
+        1,
+      ])
+    }),
+  )
+
+  it.effect("changes emits sweep-required on subscribe then coalesced hints per aggregate", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const first = Session.ID.create()
+      const second = Session.ID.create()
+      const pull = yield* Stream.toPull(events.changes())
+
+      expect(Array.from(yield* pull)).toEqual([{ type: "log.sweep_required" }])
+
+      yield* events.publish(DurableMessage, durableData(first, "zero"))
+      yield* events.publish(DurableMessage, durableData(first, "one"))
+      yield* events.publish(DurableMessage, durableData(first, "two"))
+      yield* events.publish(DurableMessage, durableData(second, "zero"))
+
+      expect(Array.from(yield* pull)).toEqual([
+        { type: "log.hint", aggregateID: first, seq: 2 },
+        { type: "log.hint", aggregateID: second, seq: 0 },
+      ])
+    }),
+  )
+
+  it.effect("changes abandons the hint buffer for a sweep when key retention is exceeded", () =>
+    Effect.gen(function* () {
+      const eventLayer = EventV2.layerWith({ changesKeyCapacity: 2 }).pipe(
+        Layer.provide(LayerNode.compile(Database.node)),
+      )
+
+      yield* Effect.gen(function* () {
+        const events = yield* EventV2.Service
+        const pull = yield* Stream.toPull(events.changes())
+        expect(Array.from(yield* pull)).toEqual([{ type: "log.sweep_required" }])
+
+        yield* events.publish(DurableMessage, durableData(Session.ID.create(), "a"))
+        yield* events.publish(DurableMessage, durableData(Session.ID.create(), "b"))
+        yield* events.publish(DurableMessage, durableData(Session.ID.create(), "c"))
+
+        expect(Array.from(yield* pull)).toEqual([{ type: "log.sweep_required" }])
+
+        const late = Session.ID.create()
+        yield* events.publish(DurableMessage, durableData(late, "d"))
+
+        expect(Array.from(yield* pull)).toEqual([{ type: "log.hint", aggregateID: late, seq: 0 }])
+      }).pipe(Effect.provide(Layer.merge(LayerNode.compile(Database.node), eventLayer)))
+    }),
+  )
+
+  it.effect("sequences returns the latest committed seq per aggregate and omits unknown aggregates", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const first = Session.ID.create()
+      const second = Session.ID.create()
+      yield* events.publish(DurableMessage, durableData(first, "zero"))
+      yield* events.publish(DurableMessage, durableData(first, "one"))
+      yield* events.publish(DurableMessage, durableData(second, "zero"))
+
+      const sequences = yield* events.sequences([first, second, Session.ID.create()])
+
+      expect(sequences).toEqual(
+        new Map([
+          [first, 1],
+          [second, 0],
+        ]),
+      )
+      expect(yield* events.sequences([])).toEqual(new Map())
+    }),
+  )
 })

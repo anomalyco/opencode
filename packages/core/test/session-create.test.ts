@@ -66,7 +66,7 @@ describe("SessionV2.create", () => {
       const second = yield* session.create({ location })
 
       expect(second.id).not.toBe(first.id)
-      expect(yield* session.list()).toHaveLength(2)
+      expect((yield* session.list()).data).toHaveLength(2)
     }),
   )
 
@@ -79,7 +79,7 @@ describe("SessionV2.create", () => {
       const retried = yield* session.create(input)
 
       expect(retried).toEqual(first)
-      expect(yield* session.list()).toEqual([first])
+      expect((yield* session.list()).data).toEqual([first])
     }),
   )
 
@@ -227,7 +227,7 @@ describe("SessionV2.create", () => {
       for (const input of changed) {
         expect(yield* session.create(input)).toEqual(created)
       }
-      expect(yield* session.list()).toHaveLength(1)
+      expect((yield* session.list()).data).toHaveLength(1)
     }),
   )
 
@@ -239,7 +239,7 @@ describe("SessionV2.create", () => {
       const created = yield* Effect.all([session.create(input), session.create(input)], { concurrency: "unbounded" })
 
       expect(created[1]).toEqual(created[0])
-      expect(yield* session.list()).toEqual([created[0]])
+      expect((yield* session.list()).data).toEqual([created[0]])
     }),
   )
 
