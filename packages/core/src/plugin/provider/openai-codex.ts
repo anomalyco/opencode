@@ -1,5 +1,14 @@
 export * as OpenAICodex from "./openai-codex"
 
+// TEMPORARY SEAM (#34765): plugins have no hook into LLM route construction, so
+// codex routing lives in SessionRunnerModel.fromCatalogModel and catalog filtering
+// in OpenAIPlugin, sharing this module. Once the native provider packages land
+// (#33689/#33925/#34462) this should collapse into the native OpenAI provider.
+// The eligibility rules mirror V1's CodexAuthPlugin allowlist; models.dev has no
+// plan-eligibility data for OpenAI today, but models other vendors' subscriptions
+// as dedicated providers (e.g. zai-coding-plan) - a future openai-chatgpt-plan
+// provider entry could replace the hardcoded rules with catalog data.
+
 /** ChatGPT-plan requests must target the codex backend instead of the public API. */
 export const baseURL = "https://chatgpt.com/backend-api/codex"
 
