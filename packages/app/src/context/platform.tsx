@@ -19,6 +19,18 @@ type SaveFilePickerOptions = { title?: string; defaultPath?: string }
 type PlatformName = "web" | "desktop"
 type DesktopOS = "macos" | "windows" | "linux"
 
+export type OpencodeQuota = {
+  id: string
+  providerName: string
+  used: number
+  limit: number | null
+  unit: string
+  window?: string
+  reset?: string
+  predictedReset?: string
+  info?: string
+}
+
 export type FatalRendererErrorLog = {
   error: string
   url: string
@@ -114,6 +126,9 @@ type PlatformBase = {
 
   /** Record a fatal renderer error in platform logs (desktop only) */
   recordFatalRendererError?(error: FatalRendererErrorLog): Promise<void>
+
+  /** Read structured quota data from the local opencode-quotas plugin (desktop only) */
+  getOpencodeQuotas?(context?: { providerID?: string; modelID?: string }): Promise<OpencodeQuota[]>
 }
 
 export type Platform = PlatformBase &

@@ -40,6 +40,18 @@ export type FatalRendererError = {
   os?: string
 }
 
+export type OpencodeQuota = {
+  id: string
+  providerName: string
+  used: number
+  limit: number | null
+  unit: string
+  window?: string
+  reset?: string
+  predictedReset?: string
+  info?: string
+}
+
 export type ElectronAPI = {
   killSidecar: () => Promise<void>
   installCli: () => Promise<string>
@@ -100,4 +112,5 @@ export type ElectronAPI = {
   setBackgroundColor: (color: string) => Promise<void>
   exportDebugLogs: () => Promise<string>
   recordFatalRendererError: (error: FatalRendererError) => Promise<void>
+  getOpencodeQuotas: (context?: { providerID?: string; modelID?: string }) => Promise<OpencodeQuota[]>
 }

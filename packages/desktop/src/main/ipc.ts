@@ -1,11 +1,12 @@
 import { execFile } from "node:child_process"
 import { stat } from "node:fs/promises"
-import { basename } from "node:path"
+import { homedir } from "node:os"
+import { basename, join } from "node:path"
 import { app, BrowserWindow, Notification, clipboard, dialog, ipcMain, shell } from "electron"
 import type { IpcMainEvent, IpcMainInvokeEvent } from "electron"
 import type { DesktopMenuAction } from "@opencode-ai/app/desktop-menu"
 
-import type { FatalRendererError, ServerReadyData, TitlebarTheme } from "../preload/types"
+import type { FatalRendererError, OpencodeQuota, ServerReadyData, TitlebarTheme } from "../preload/types"
 import { runDesktopMenuAction } from "./desktop-menu-actions"
 import { assertAttachmentBudget, createPickedFileAuthorizations } from "./attachment-picker"
 import { getStore, removeStoreFileIfEmpty } from "./store"
@@ -19,6 +20,32 @@ const pickerFilters = (ext?: string[]) => {
 }
 
 const pickedFiles = createPickedFileAuthorizations()
+
+function getOpencodeQuotas(context?: { providerID?: string; modelID?: string }) {
+  const cli =
+    process.env.OPENCODE_QUOTAS_CLI ??
+    join(homedir(), ".config", "opencode", "plugins", "opencode-quotas", "dist", "cli.js")
+  const args = [cli, "--json"]
+  if (context?.providerID) args.push("--provider", context.providerID)
+  if (context?.modelID) args.push("--model", context.modelID)
+
+  return new Promise<OpencodeQuota[]>((resolve) => {
+    execFile("node", args, { cwd: homedir(), timeout: 20_000 }, (error, stdout) => {
+      if (error) return resolve([])
+
+      try {
+        const start = stdout.indexOf("[")
+        const end = stdout.lastIndexOf("]")
+        if (start === -1 || end === -1 || end < start) return resolve([])
+        const parsed = JSON.parse(stdout.slice(start, end + 1))
+        if (!Array.isArray(parsed)) return resolve([])
+        resolve(parsed as OpencodeQuota[])
+      } catch {
+        resolve([])
+      }
+    })
+  })
+}
 
 type Deps = {
   killSidecar: () => Promise<void> | void
@@ -75,6 +102,10 @@ export function registerIpcHandlers(deps: Deps) {
   ipcMain.handle("export-debug-logs", () => deps.exportDebugLogs())
   ipcMain.handle("record-fatal-renderer-error", (_event: IpcMainInvokeEvent, error: FatalRendererError) =>
     deps.recordFatalRendererError(error),
+  )
+  ipcMain.handle(
+    "get-opencode-quotas",
+    (_event: IpcMainInvokeEvent, context?: { providerID?: string; modelID?: string }) => getOpencodeQuotas(context),
   )
   ipcMain.handle("store-get", (_event: IpcMainInvokeEvent, name: string, key: string) => {
     try {

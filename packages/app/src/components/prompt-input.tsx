@@ -6,9 +6,11 @@ import {
   Component,
   Show,
   onCleanup,
+  onMount,
   createMemo,
   createSignal,
   createResource,
+  For,
   Switch,
   Match,
   type JSX,
@@ -47,7 +49,7 @@ import { useCommand } from "@/context/command"
 import { Persist, persisted } from "@/utils/persist"
 import { usePermission } from "@/context/permission"
 import { useLanguage } from "@/context/language"
-import { usePlatform } from "@/context/platform"
+import { usePlatform, type OpencodeQuota } from "@/context/platform"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { createTextFragment, getCursorPosition, setCursorPosition, setRangeEdge } from "./prompt-input/editor-dom"
 import { createPromptAttachments } from "./prompt-input/attachments"
@@ -213,6 +215,25 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const language = useLanguage()
   const platform = usePlatform()
   const tabs = () => props.controls.session.tabs
+  const [quotaTick, setQuotaTick] = createSignal(0)
+  const quotaContext = createMemo(() => {
+    const model = props.controls.model.selection.current()
+    return {
+      tick: quotaTick(),
+      providerID: model?.provider?.id,
+      modelID: model?.id,
+    }
+  })
+  const [quotas] = createResource(quotaContext, async (context) => {
+    if (!platform.getOpencodeQuotas) return []
+    return platform.getOpencodeQuotas({ providerID: context.providerID, modelID: context.modelID }).catch(() => [])
+  })
+
+  onMount(() => {
+    if (!platform.getOpencodeQuotas) return
+    const interval = window.setInterval(() => setQuotaTick((value) => value + 1), 60_000)
+    onCleanup(() => window.clearInterval(interval))
+  })
   let editorRef!: HTMLDivElement
   let fileInputRef: HTMLInputElement | undefined
   let scrollRef!: HTMLDivElement
@@ -1708,6 +1729,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       </TooltipV2>
                     </div>
                   </Show>
+                  <QuotaRings quotas={quotas() ?? []} />
                 </div>
                 <TooltipV2 placement="top" inactive={!working() && blank()} value={tip()}>
                   <IconButton
@@ -2053,6 +2075,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                             </TooltipKeybind>
                           </div>
                         </Show>
+                        <QuotaRings quotas={quotas() ?? []} />
                       </Show>
                     </Show>
                   </div>
@@ -2236,4 +2259,87 @@ function ModelControlContent(props: { state: ComposerModelControlState; v2?: boo
       </span>
     </>
   )
+}
+
+function QuotaRings(props: { quotas: OpencodeQuota[] }) {
+  const visible = createMemo(() => props.quotas.filter((quota) => quota.limit !== null && quota.limit > 0))
+
+  return (
+    <Show when={visible().length > 0}>
+      <div data-component="prompt-quota-rings" class="flex items-center gap-1 pl-1">
+        <For each={visible()}>{(quota) => <QuotaRing quota={quota} />}</For>
+      </div>
+    </Show>
+  )
+}
+
+function QuotaRing(props: { quota: OpencodeQuota }) {
+  const percent = createMemo(() => {
+    const limit = props.quota.limit ?? 0
+    if (limit <= 0) return 0
+    return Math.max(0, Math.min(100, (props.quota.used / limit) * 100))
+  })
+  const color = createMemo(() => {
+    const value = percent()
+    if (value >= 80) return "var(--v2-icon-icon-danger, #ef4444)"
+    if (value >= 50) return "var(--v2-icon-icon-warning, #f59e0b)"
+    return "var(--v2-icon-icon-success, #22c55e)"
+  })
+  const label = createMemo(() => shortQuotaLabel(props.quota))
+  const circumference = 2 * Math.PI * 8
+  const reset = createMemo(() => props.quota.reset?.replace(/^resets (in|at) /, "") ?? "-")
+  const tooltip = createMemo(() => {
+    const windowInfo = props.quota.window ? ` · ${props.quota.window}` : ""
+    const predicted = props.quota.predictedReset
+      ? ` · ETTL ${props.quota.predictedReset.replace(" (predicted)", "")}`
+      : ""
+    return `${props.quota.providerName}${windowInfo} · ${Math.round(percent())}% used · reset ${reset()}${predicted}`
+  })
+
+  return (
+    <TooltipV2 placement="top" gutter={4} value={tooltip()}>
+      <div class="relative flex size-6 shrink-0 items-center justify-center text-[8px] font-[560] text-v2-text-text-faint">
+        <svg class="absolute inset-0 size-6 -rotate-90" viewBox="0 0 20 20" aria-hidden="true">
+          <circle
+            cx="10"
+            cy="10"
+            r="8"
+            fill="none"
+            stroke="var(--v2-border-border-muted, currentColor)"
+            stroke-width="2"
+            opacity="0.45"
+          />
+          <circle
+            cx="10"
+            cy="10"
+            r="8"
+            fill="none"
+            stroke={color()}
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-dasharray={`${circumference}`}
+            stroke-dashoffset={`${circumference - (circumference * percent()) / 100}`}
+          />
+        </svg>
+        <span class="relative max-w-[18px] truncate uppercase">{label()}</span>
+      </div>
+    </TooltipV2>
+  )
+}
+
+function shortQuotaLabel(quota: OpencodeQuota) {
+  const text = quota.providerName.toLowerCase()
+  if (text.includes("codex")) return quota.window?.includes("168h") ? "7d" : "5h"
+  if (text.includes("antigravity")) {
+    if (text.includes("flash")) return "af"
+    if (text.includes("pro")) return "ap"
+    if (text.includes("premium")) return "am"
+    return "ag"
+  }
+  if (text.includes("copilot")) return "gh"
+  return quota.providerName
+    .split(/\s+/)
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
 }
