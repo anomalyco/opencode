@@ -56,7 +56,7 @@ import { reply, TestLLMServer } from "../lib/llm-server"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
-import { LocationServiceMap, locationServiceMapLayer } from "@opencode-ai/core/location-services"
+import { LocationServiceMap, buildLocationServiceMap } from "@opencode-ai/core/location-services"
 
 const summary = Layer.succeed(
   SessionSummary.Service,
@@ -691,7 +691,7 @@ noLLMServer.instance.skip(
         Effect.provide(
           LayerNode.compile(SessionV2.node, [
             [SessionExecution.node, SessionExecution.noopLayer],
-            [LocationServiceMap.node, locationServiceMapLayer],
+            [LocationServiceMap.node, buildLocationServiceMap()],
           ]),
         ),
       )
