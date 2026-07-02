@@ -400,5 +400,6 @@ export const node = LayerNode.make({
     RuntimeFlags.node,
   ],
 })
+export const defaultLayer = live
 
 export * as LLM from "./llm"

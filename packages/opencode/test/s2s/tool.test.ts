@@ -50,7 +50,7 @@ import { Session } from "@/session/session"
 import { Truncate } from "@/tool/truncate"
 import { S2STool } from "../../src/tool/s2s"
 import { MessageID, SessionID } from "../../src/session/schema"
-import { testEffect } from "../lib/effect"
+import { testEffectShared } from "../lib/effect"
 
 const database = Database.layerFromPath(":memory:")
 
@@ -68,7 +68,7 @@ const baseLayer = Layer.mergeAll(
   S2SStore.defaultLayer,
 ).pipe(Layer.provide(database))
 
-const it = testEffect(baseLayer)
+const it = testEffectShared(baseLayer as unknown as Layer.Layer<any, any, never>)
 
 // Create a session and register BOTH the custom slug AND the
 // auto-generated slug in Messaging so the S2STool's resolveSlug

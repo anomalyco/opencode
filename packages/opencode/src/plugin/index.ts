@@ -120,7 +120,7 @@ async function applyPlugin(load: PluginLoader.Loaded, input: PluginInput, hooks:
   }
 }
 
-const layer = Layer.effect(
+export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const events = yield* EventV2Bridge.Service
@@ -310,5 +310,6 @@ export const node = LayerNode.make({
   layer: layer,
   deps: [EventV2Bridge.node, Config.node, RuntimeFlags.node],
 })
+export const defaultLayer = layer
 
 export * as Plugin from "."

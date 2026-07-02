@@ -11,20 +11,22 @@
 //   - composes Messaging.layer over EventV2Bridge.defaultLayer
 
 import { afterEach, describe, expect } from "bun:test"
-import { Effect, Layer } from "effect"
+import { Effect } from "effect"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Messaging } from "../../src/messaging"
 import { SessionID } from "../../src/session/schema"
-import { testEffect } from "../lib/effect"
+import { testEffectShared } from "../lib/effect"
 import { BackgroundJob } from "../../src/background/job"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { EventV2Bridge } from "../../src/event-v2-bridge"
 import { disposeAllInstances } from "../fixture/fixture"
 
-const it = testEffect(
-  Layer.mergeAll(
-    Messaging.layer.pipe(Layer.provideMerge(EventV2Bridge.defaultLayer)),
-    BackgroundJob.defaultLayer,
-    CrossSpawnSpawner.defaultLayer,
+const it = testEffectShared(
+  LayerNode.compile(
+    LayerNode.group([
+      Messaging.node,
+      BackgroundJob.node,
+      CrossSpawnSpawner.node,
+    ]),
   ),
 )
 

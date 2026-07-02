@@ -336,12 +336,11 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer
-
 // The store has no upstream dependencies beyond `Database.Service`, which
 // AppLayer already provides. `node` is exported so the S2S wiring step
 // (later task) can splice it into the graph without re-deriving the
 // dependency list.
-export const node = LayerNode.make(layer, [Database.node])
+export const node = LayerNode.make({ service: Service, layer, deps: [Database.node] })
+export const defaultLayer = layer
 
 export * as S2SStore from "./store"

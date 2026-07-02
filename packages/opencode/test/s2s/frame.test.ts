@@ -21,6 +21,7 @@
 
 import { afterEach, describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { NodeFileSystem } from "@effect/platform-node"
 import { FetchHttpClient } from "effect/unstable/http"
 import { Agent } from "../../src/agent/agent"
@@ -67,7 +68,7 @@ import { Todo } from "@/session/todo"
 import { ToolRegistry } from "@/tool/registry"
 import { Truncate } from "@/tool/truncate"
 import { TestInstance, disposeAllInstances } from "../fixture/fixture"
-import { testEffect } from "../lib/effect"
+import { testEffectShared } from "../lib/effect"
 import { TestLLMServer } from "../lib/llm-server"
 
 afterEach(async () => {
@@ -132,9 +133,8 @@ const lspStub = Layer.succeed(
   }),
 )
 
-const runLoopStatus = SessionStatus.layer.pipe(Layer.provideMerge(EventV2Bridge.defaultLayer))
-const runLoopRunState = SessionRunState.layer.pipe(Layer.provide(runLoopStatus))
-const runLoopInfra = Layer.mergeAll(NodeFileSystem.layer, CrossSpawnSpawner.defaultLayer)
+const statusNode = LayerNode.make({ service: SessionStatus.Service, layer: SessionStatus.layer, deps: [EventV2Bridge.node] })
+const runStateNode = LayerNode.make({ service: SessionRunState.Service, layer: SessionRunState.layer, deps: [BackgroundJob.node, statusNode] })
 
 const providerCfgFor = (url: string): Partial<ConfigV1.Info> => ({
   provider: {
@@ -163,77 +163,57 @@ const providerCfgFor = (url: string): Partial<ConfigV1.Info> => ({
 })
 
 function makeRunLoopLayer() {
-  const deps = Layer.mergeAll(
-    Session.defaultLayer,
-    Snapshot.defaultLayer,
-    LLM.defaultLayer,
-    Env.defaultLayer,
-    Agent.defaultLayer,
-    Command.defaultLayer,
-    Permission.defaultLayer,
-    Plugin.defaultLayer,
-    Config.defaultLayer,
-    Provider.defaultLayer,
-    lspStub,
-    mcpStub,
-    FSUtil.defaultLayer,
-    BackgroundJob.defaultLayer,
-    runLoopStatus,
-    Database.defaultLayer,
-    EventV2Bridge.defaultLayer,
-    Interrupt.defaultLayer,
-  ).pipe(Layer.provideMerge(runLoopInfra))
-  const messaging = Messaging.layer.pipe(Layer.provideMerge(deps))
-  const todo = Todo.layer.pipe(Layer.provideMerge(deps))
-  const question = Question.layer.pipe(Layer.provideMerge(deps))
-  const registry = ToolRegistry.layer
-    .pipe(
-      Layer.provide(Skill.defaultLayer),
-      Layer.provide(FetchHttpClient.layer),
-      Layer.provide(CrossSpawnSpawner.defaultLayer),
-      Layer.provide(Git.defaultLayer),
-      Layer.provide(Ripgrep.defaultLayer),
-      Layer.provide(Format.defaultLayer),
-      Layer.provide(S2SStore.defaultLayer),
-      Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true, experimentalAgentMessaging: true })),
-      Layer.provideMerge(todo),
-      Layer.provideMerge(question),
-      Layer.provideMerge(messaging),
-      Layer.provideMerge(deps),
-    )
-  const trunc = Truncate.layer.pipe(Layer.provideMerge(deps))
-  const proc = SessionProcessor.layer.pipe(
-    Layer.provide(summaryStub),
-    Layer.provide(Image.defaultLayer),
-    Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
-    Layer.provideMerge(deps),
-  )
-  const compact = SessionCompaction.layer
-    .pipe(
-      Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
-      Layer.provideMerge(proc),
-      Layer.provideMerge(deps),
-    )
-  return SessionPrompt.layer.pipe(
-    Layer.provide(SessionRevert.defaultLayer),
-    Layer.provide(Image.defaultLayer),
-    Layer.provide(summaryStub),
-    Layer.provideMerge(runLoopRunState),
-    Layer.provideMerge(compact),
-    Layer.provideMerge(proc),
-    Layer.provideMerge(registry),
-    Layer.provideMerge(trunc),
-    Layer.provideMerge(messaging),
-    Layer.provide(Instruction.defaultLayer),
-    Layer.provide(SystemPrompt.defaultLayer),
-    Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true, experimentalAgentMessaging: true })),
-    Layer.provideMerge(deps),
-    Layer.provide(summaryStub),
-  )
+  const flags = RuntimeFlags.layer({ experimentalEventSystem: true, experimentalAgentMessaging: true })
+  const root = LayerNode.group([
+    Session.node,
+    Snapshot.node,
+    LLM.node,
+    Env.node,
+    Agent.node,
+    Command.node,
+    Permission.node,
+    Plugin.node,
+    Config.node,
+    Provider.node,
+    FSUtil.node,
+    BackgroundJob.node,
+    Database.node,
+    EventV2Bridge.node,
+    Interrupt.node,
+    S2SStore.node,
+    Messaging.node,
+    Todo.node,
+    Question.node,
+    ToolRegistry.node,
+    Skill.node,
+    CrossSpawnSpawner.node,
+    Git.node,
+    Ripgrep.node,
+    Format.node,
+    Truncate.node,
+    SessionProcessor.node,
+    Image.node,
+    SessionCompaction.node,
+    SessionRevert.node,
+    Instruction.node,
+    SystemPrompt.node,
+    SessionPrompt.node,
+    statusNode,
+    runStateNode,
+  ])
+  const replacements: LayerNode.Replacements = [
+    [SessionSummary.node, summaryStub],
+    [LSP.node, lspStub],
+    [MCP.node, mcpStub],
+    [RuntimeFlags.node, flags],
+    [SessionStatus.node, statusNode],
+    [SessionRunState.node, runStateNode],
+  ]
+  return LayerNode.compile(root, replacements)
 }
 
 const spikeLayer = Layer.mergeAll(TestLLMServer.layer, makeRunLoopLayer())
-const it = testEffect(spikeLayer)
+const it = testEffectShared(spikeLayer as unknown as Layer.Layer<any, any, never>)
 
 const useServerConfig = Effect.fn("FrameTest.useServerConfig")(function* (
   config: (url: string) => Partial<ConfigV1.Info>,

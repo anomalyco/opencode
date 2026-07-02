@@ -78,7 +78,7 @@ type StreamEvent = LLMEvent
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionProcessor") {}
 
-const layer = Layer.effect(
+export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const session = yield* Session.Service
@@ -714,5 +714,6 @@ export const node = LayerNode.make({
     Database.node,
   ],
 })
+export const defaultLayer = layer
 
 export * as SessionProcessor from "./processor"

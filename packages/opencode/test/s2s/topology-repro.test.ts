@@ -27,8 +27,8 @@ class Inner extends Context.Service<Inner, InnerShape>()("repro/Inner") {}
 
 const StoreLayer = Layer.succeed(Store, Store.of({ tag: "store" }))
 const DatabaseLayer = Layer.succeed(Database, Database.of({ tag: "db" }))
-const StoreNode = LayerNode.make(StoreLayer, [])
-const DatabaseNode = LayerNode.make(DatabaseLayer, [])
+const StoreNode = LayerNode.make({ service: Store, layer: StoreLayer, deps: [] })
+const DatabaseNode = LayerNode.make({ service: Database, layer: DatabaseLayer, deps: [] })
 
 // Inner captures Store + Database at BUILD time (like SessionPrompt capturing
 // messaging/database). capturedProbe provides the captured Store into a forked
@@ -59,7 +59,7 @@ const InnerLayer = Layer.effect(
 // InnerNode declares BOTH Database and Store as deps -> Layer.provide supplies
 // them to Inner.layer's BUILD context (so the build-time `yield* Store` works),
 // but does NOT re-expose Store to the group ambient.
-const InnerNode = LayerNode.make(InnerLayer, [DatabaseNode, StoreNode])
+const InnerNode = LayerNode.make({ service: Inner, layer: InnerLayer, deps: [DatabaseNode, StoreNode] })
 
 const run = (
   groupLayer: Layer.Layer<Inner, never, never>,
@@ -73,7 +73,7 @@ const run = (
 describe("s2s HTTP-group topology repro", () => {
   // EXACT production group: Store is NOT a direct child (only Database + Inner).
   const appGroup = LayerNode.group([DatabaseNode, InnerNode])
-  const built = () => LayerNode.buildLayer(appGroup) as Layer.Layer<Inner, never, never>
+  const built = () => LayerNode.compile(appGroup) as Layer.Layer<Inner, never, never>
 
   it("BUG: ambientProbe in bug-shape group cannot see Store (reproduces production)", async () => {
     const result = await run(built(), (i) => i.ambientProbe())

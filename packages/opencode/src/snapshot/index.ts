@@ -46,7 +46,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Snapshot") {}
 
-const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | Config.Service> = Layer.effect(
+export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | Config.Service> = Layer.effect(
   Service,
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
@@ -803,5 +803,6 @@ export const node = LayerNode.make({
   layer: layer,
   deps: [FSUtil.node, AppProcess.node, Config.node],
 })
+export const defaultLayer = layer
 
 export * as Snapshot from "."

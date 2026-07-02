@@ -264,22 +264,25 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer
-
 // The poller depends on the services the AppLayer already provides
 // (RuntimeFlags, S2SStore, Messaging, Session, SessionStatus, SessionPrompt,
 // EventV2Bridge). `Scope` is a built-in primitive so it is consumed by the
 // layer effect itself and not listed here. The `node` form is exported so
 // the AppLayer wiring step can splice it into the graph without re-deriving
 // the dep list.
-export const node = LayerNode.make(layer, [
-  RuntimeFlags.node,
-  S2SStore.node,
-  Messaging.node,
-  Session.node,
-  SessionStatus.node,
-  SessionPrompt.node,
-  EventV2Bridge.node,
-])
+export const node = LayerNode.make({
+  service: Service,
+  layer,
+  deps: [
+    RuntimeFlags.node,
+    S2SStore.node,
+    Messaging.node,
+    Session.node,
+    SessionStatus.node,
+    SessionPrompt.node,
+    EventV2Bridge.node,
+  ],
+})
+export const defaultLayer = layer
 
 export * as S2SPoller from "./poller"

@@ -18,7 +18,7 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Database } from "@opencode-ai/core/database/database"
 import { Interrupt } from "../session/interrupt"
 import { EventV2Bridge } from "@/event-v2-bridge"
-import { EventV2 } from "@opencode-ai/core/event"
+import { TaskEvent } from "@opencode-ai/schema/task-event"
 
 export interface TaskPromptOps {
   cancel(sessionID: SessionID): Effect.Effect<void>
@@ -26,14 +26,8 @@ export interface TaskPromptOps {
   prompt(input: SessionPrompt.PromptInput): Effect.Effect<SessionV1.WithParts>
 }
 
-export const TaskCompleted = Schema.Struct({
-  sessionID: SessionID,
-  parentSessionID: SessionID,
-  status: Schema.Literals(["ok", "error", "aborted"]),
-}).annotate({ identifier: "TaskCompleted" })
-
 export const Event = {
-  Completed: EventV2.define({ type: "task.completed", schema: TaskCompleted.fields }),
+  Completed: TaskEvent.Completed,
 }
 
 const id = "task"

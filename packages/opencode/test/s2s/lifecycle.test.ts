@@ -141,7 +141,7 @@ const seam3Layer = Layer.mergeAll(
   S2SStore.defaultLayer,
 ).pipe(Layer.provide(database))
 
-const itSeam3 = testEffect(seam3Layer)
+const itSeam3 = testEffectShared(seam3Layer as unknown as Layer.Layer<any, any, never>)
 
 const ctxFor = (sessionID: SessionID) => ({
   sessionID,

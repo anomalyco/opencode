@@ -53,14 +53,13 @@ const layer = (flags: Partial<RuntimeFlags.Info> = {}) =>
       Interrupt.node,
       Database.node,
       Messaging.node,
-      Interrupt.node,
       RuntimeFlags.node,
       Ripgrep.node,
     ]),
     [[RuntimeFlags.node, RuntimeFlags.layer(flags)]],
   )
 
-const withRipgrep = (flags: Partial<RuntimeFlags.Info> = {}) => layer(flags).pipe(Layer.provide(Ripgrep.defaultLayer))
+const withRipgrep = (flags: Partial<RuntimeFlags.Info> = {}) => layer(flags)
 
 const it = testEffect(withRipgrep())
 const background = testEffect(withRipgrep({ experimentalBackgroundSubagents: true }))

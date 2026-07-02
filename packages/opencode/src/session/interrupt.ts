@@ -125,6 +125,7 @@ export const layer = Layer.effect(
 )
 
 export const node = LayerNode.make({ service: Service, layer, deps: [EventV2Bridge.node] })
+export const defaultLayer = layer
 
 // --- visible-marker renderer (untrusted reason is XML-escaped) ----------------
 

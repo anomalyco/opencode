@@ -89,7 +89,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ToolRegistry") {}
 
-const layer = Layer.effect(
+export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const config = yield* Config.Service
@@ -470,5 +470,6 @@ export const node = LayerNode.make({
     Ripgrep.node,
   ],
 })
+export const defaultLayer = layer
 
 export * as ToolRegistry from "./registry"

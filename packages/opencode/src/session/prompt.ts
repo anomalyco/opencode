@@ -117,7 +117,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionPrompt") {}
 
-const layer = Layer.effect(
+export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const status = yield* SessionStatus.Service
@@ -1874,5 +1874,6 @@ export const node = LayerNode.make({
     Messaging.node,
   ],
 })
+export const defaultLayer = layer
 
 export * as SessionPrompt from "./prompt"
