@@ -1160,6 +1160,21 @@ export function options(input: {
     }
   }
 
+  // Adaptive-only Anthropic models (Fable 5, Opus 4.7+, Sonnet 5) default their
+  // thinking display to "omitted", which streams empty signature-only thinking
+  // blocks. When the model routes its answer into thinking and then calls a tool
+  // (e.g. `question`), no visible text is produced and the turn renders blank.
+  // The reasoning-effort variants in variants() already request
+  // display:"summarized", but variant options only apply when the user selects a
+  // variant. Default it here so the summary is visible even with no variant.
+  if (
+    (input.model.api.npm === "@ai-sdk/anthropic" || input.model.api.npm === "@ai-sdk/google-vertex/anthropic") &&
+    anthropicOmitsThinking(input.model.api.id) &&
+    result["thinking"] === undefined
+  ) {
+    result["thinking"] = { type: "adaptive", display: "summarized" }
+  }
+
   // Enable thinking for reasoning models on alibaba-cn (DashScope).
   // DashScope's OpenAI-compatible API requires `enable_thinking: true` in the request body
   // to return reasoning_content. Without it, models like kimi-k2.5, qwen-plus, qwen3, qwq,

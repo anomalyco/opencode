@@ -209,6 +209,56 @@ describe("ProviderTransform.options - minimax m3 thinking", () => {
   })
 })
 
+describe("ProviderTransform.options - adaptive-only anthropic summarized thinking", () => {
+  // Regression: adaptive-only Anthropic models (Fable 5, Opus 4.7+, Sonnet 5)
+  // default their thinking display to "omitted", which streams empty
+  // signature-only thinking blocks. With no variant selected, the summarized
+  // display from variants() never applies, so the model's answer can vanish into
+  // omitted thinking (e.g. it "thinks" then calls the question tool, rendering a
+  // blank turn). options() must default these to display:"summarized".
+  const createModel = (apiId: string, npm: string) =>
+    ({
+      id: apiId,
+      providerID: npm === "@ai-sdk/google-vertex/anthropic" ? "google-vertex-anthropic" : "anthropic",
+      api: {
+        id: apiId,
+        url: "https://api.anthropic.com",
+        npm,
+      },
+      capabilities: { reasoning: true },
+      limit: { output: 64_000 },
+    }) as any
+
+  for (const apiId of ["claude-fable-5", "claude-opus-4-7", "claude-opus-4-8", "claude-sonnet-5"]) {
+    test(`${apiId} defaults to adaptive summarized thinking (anthropic SDK)`, () => {
+      expect(
+        ProviderTransform.options({
+          model: createModel(apiId, "@ai-sdk/anthropic"),
+          sessionID: "test-session-123",
+        }).thinking,
+      ).toEqual({ type: "adaptive", display: "summarized" })
+    })
+  }
+
+  test("applies on the vertex anthropic path too", () => {
+    expect(
+      ProviderTransform.options({
+        model: createModel("claude-fable-5", "@ai-sdk/google-vertex/anthropic"),
+        sessionID: "test-session-123",
+      }).thinking,
+    ).toEqual({ type: "adaptive", display: "summarized" })
+  })
+
+  test("does not apply to non-adaptive-only anthropic models (opus 4.5)", () => {
+    expect(
+      ProviderTransform.options({
+        model: createModel("claude-opus-4-5", "@ai-sdk/anthropic"),
+        sessionID: "test-session-123",
+      }).thinking,
+    ).toBeUndefined()
+  })
+})
+
 describe("ProviderTransform.options - google thinkingConfig gating", () => {
   const sessionID = "test-session-123"
 
