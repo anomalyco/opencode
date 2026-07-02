@@ -129,6 +129,6 @@ describe("BackgroundJob", () => {
       expect(received).toEqual(payload)
 
       yield* jobs.cancel("ses_child_msg")
-    }).pipe(Effect.provide(BackgroundJob.layer)),
+    }).pipe(Effect.provide(jobsLayer)),
   )
 })

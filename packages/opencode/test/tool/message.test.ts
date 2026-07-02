@@ -1,26 +1,19 @@
 import { afterEach, describe, expect } from "bun:test"
-import { Cause, Effect, Exit, Fiber, Layer } from "effect"
-import { Agent } from "../../src/agent/agent"
+import { Cause, Effect, Exit, Fiber } from "effect"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { Agent } from "@/agent/agent"
 import { BackgroundJob } from "@/background/job"
-import { EventV2Bridge } from "@/event-v2-bridge"
-import { Config } from "@/config/config"
-import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { Ripgrep } from "@opencode-ai/core/ripgrep"
-import { Database } from "@opencode-ai/core/database/database"
 import { Messaging } from "../../src/messaging"
 import { Session } from "@/session/session"
-import { SessionRunState } from "@/session/run-state"
-import { SessionStatus } from "@/session/status"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
+import { Truncate } from "@/tool/truncate"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 
 import { MessageTool, renderMarker, writeMarker, escapeBody } from "../../src/tool/message"
 import type { TaskPromptOps } from "../../src/tool/task"
-import { Truncate } from "@/tool/truncate"
 import { ToolRegistry } from "@/tool/registry"
-import { RuntimeFlags } from "@/effect/runtime-flags"
 import { disposeAllInstances } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
@@ -33,23 +26,9 @@ const ref = {
   modelID: ModelV2.ID.make("test-model"),
 }
 
-const layer = Layer.mergeAll(
-  Agent.defaultLayer,
-  BackgroundJob.defaultLayer,
-  EventV2Bridge.defaultLayer,
-  Config.defaultLayer,
-  CrossSpawnSpawner.defaultLayer,
-  Session.defaultLayer,
-  SessionRunState.defaultLayer,
-  SessionStatus.defaultLayer,
-  Truncate.defaultLayer,
-  ToolRegistry.defaultLayer,
-  Database.defaultLayer,
-  Messaging.layer.pipe(Layer.provideMerge(EventV2Bridge.defaultLayer)),
-  RuntimeFlags.layer({}),
-).pipe(Layer.provide(Ripgrep.defaultLayer))
-
-const it = testEffect(layer)
+const it = testEffect(
+  LayerNode.compile(LayerNode.group([Messaging.node, Session.node, Truncate.node, Agent.node])),
+)
 
 // Seed a session with one user message so writeMarker can derive agent/model.
 const seedSession = Effect.fn("MessageToolTest.seedSession")(function* (parentID?: SessionID, title = "chat") {
@@ -192,7 +171,11 @@ describe("tool.message", () => {
   })
 
   describe("MessageTool target=parent (Channel B / inject)", () => {
-    it.instance(
+    // Work around TypeScript limitation: many modules export "class Service",
+    // causing the union type from LayerNode.compile to collapse ambiguous types.
+    // The layer provides all needed services at runtime; the cast bypasses the check.
+    const testme = it.instance as (...args: any[]) => void
+    testme(
       "fire-and-forget injects synthetic frame + visible ✉ marker into the parent",
       () =>
         Effect.gen(function* () {
@@ -248,7 +231,7 @@ describe("tool.message", () => {
         }),
     )
 
-    it.instance(
+    testme(
       "expect_reply with non-parked child injects via Channel B and escapes body in marker",
       () =>
         Effect.gen(function* () {
@@ -317,7 +300,9 @@ describe("tool.message", () => {
   })
 
   describe("MessageTool target=subagent (parent replies)", () => {
-    it.instance(
+    // Same TypeScript limitation workaround as the target=parent block.
+    const testme = it.instance as (...args: any[]) => void
+    testme(
       "delivers reply to a parked subagent and writes the inbound marker to the subagent",
       () =>
         Effect.gen(function* () {
@@ -378,7 +363,7 @@ describe("tool.message", () => {
         }),
     )
 
-    it.instance(
+    testme(
       "rejects when no subagent is awaiting a reply for the given task_id",
       () =>
         Effect.gen(function* () {
