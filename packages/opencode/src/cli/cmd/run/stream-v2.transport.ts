@@ -1,15 +1,16 @@
 import type {
   OpencodeClient,
+  FormFormInfo,
   PermissionRequest,
   PermissionV2Request,
   QuestionRequest,
-  QuestionV2Request,
   SessionMessage,
   SessionMessageAssistant,
   SessionMessageAssistantTool,
   V2Event,
 } from "@opencode-ai/sdk/v2"
 import { blockerStatus, pickBlockerView } from "./session-data"
+import { formQuestionRequest } from "./question.shared"
 import { writeSessionOutput } from "./stream"
 import { createSubagentTracker, legacyTool, toolCommit } from "./stream-v2.subagent"
 import type {
@@ -133,13 +134,8 @@ function permission(request: PermissionV2Request): PermissionRequest {
   }
 }
 
-function question(request: QuestionV2Request): QuestionRequest {
-  return {
-    id: request.id,
-    sessionID: request.sessionID,
-    questions: request.questions,
-    tool: request.tool,
-  }
+function question(form: FormFormInfo): QuestionRequest | undefined {
+  return formQuestionRequest(form)
 }
 
 function sessionID(event: RunV2Event) {
@@ -369,13 +365,13 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
         { throwOnError: true },
       ),
       input.sdk.v2.session.permission.list({ sessionID: input.sessionID }, { throwOnError: true }),
-      input.sdk.v2.session.question.list({ sessionID: input.sessionID }, { throwOnError: true }),
+      input.sdk.v2.session.form.list({ sessionID: input.sessionID }, { throwOnError: true }),
       input.sdk.v2.session.active({ throwOnError: true }),
     ])
     const projected = messages.data.data.toReversed()
     for (const message of projected) renderMessage(message, next.render, next.reuseVisibleWait)
     state.permissions = permissions.data.data.map(permission)
-    state.questions = questions.data.data.map(question)
+    state.questions = questions.data.data.flatMap((form) => (form.mode === "form" ? question(form) ?? [] : []))
     syncBlockers()
     await subagents.hydrate({ messages: projected, active: active.data.data })
     const running = input.sessionID in active.data.data
@@ -544,13 +540,14 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       syncBlockers()
       return
     }
-    if (event.type === "question.v2.asked") {
-      if (!state.questions.some((item) => item.id === event.data.id)) state.questions.push(question(event.data))
+    if (event.type === "form.created") {
+      const next = event.data.form.mode === "form" ? question(event.data.form) : undefined
+      if (next && !state.questions.some((item) => item.id === next.id)) state.questions.push(next)
       syncBlockers()
       return
     }
-    if (event.type === "question.v2.replied" || event.type === "question.v2.rejected") {
-      state.questions = state.questions.filter((item) => item.id !== event.data.requestID)
+    if (event.type === "form.replied" || event.type === "form.cancelled") {
+      state.questions = state.questions.filter((item) => item.id !== event.data.id)
       syncBlockers()
       return
     }

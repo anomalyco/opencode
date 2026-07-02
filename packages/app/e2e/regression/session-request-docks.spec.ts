@@ -10,17 +10,21 @@ const title = "Request dock regression"
 
 test("shows a pending question dock", async ({ page }) => {
   await mockServer(page, {
-    questions: [
+    forms: [
       {
-        id: "question-request",
+        id: "frm_question_request",
         sessionID,
-        questions: [
+        mode: "form",
+        metadata: { kind: "question" },
+        fields: [
           {
-            header: "Implementation",
-            question: "Which implementation should be used?",
+            key: "question_0",
+            type: "string",
+            title: "Which implementation should be used?",
+            description: "Implementation",
             options: [
-              { label: "Minimal", description: "Use the smallest correct change" },
-              { label: "Extended", description: "Include additional behavior" },
+              { value: "Minimal", label: "Minimal", description: "Use the smallest correct change" },
+              { value: "Extended", label: "Extended", description: "Include additional behavior" },
             ],
           },
         ],
@@ -41,7 +45,8 @@ test("shows a pending question dock", async ({ page }) => {
   const rejectRequests: string[] = []
   page.on("request", (request) => {
     if (request.method() !== "POST") return
-    if (new URL(request.url()).pathname === "/question/question-request/reject") rejectRequests.push(request.url())
+    if (new URL(request.url()).pathname === `/api/session/${sessionID}/form/frm_question_request/cancel`)
+      rejectRequests.push(request.url())
   })
 
   await question.locator('[data-component="icon-button"][data-icon="chevron-down"]').click()
@@ -63,10 +68,12 @@ test("shows a pending question dock", async ({ page }) => {
 
   await question.getByRole("radio", { name: /Minimal/ }).click()
   const reply = page.waitForRequest(
-    (request) => request.method() === "POST" && new URL(request.url()).pathname === "/question/question-request/reply",
+    (request) =>
+      request.method() === "POST" &&
+      new URL(request.url()).pathname === `/api/session/${sessionID}/form/frm_question_request/reply`,
   )
   await question.getByRole("button", { name: "Submit" }).click()
-  expect((await reply).postDataJSON()).toEqual({ answers: [["Minimal"]] })
+  expect((await reply).postDataJSON()).toEqual({ answer: { question_0: "Minimal" } })
 })
 
 test("shows a pending permission dock", async ({ page }) => {
@@ -105,6 +112,7 @@ async function mockServer(
   requests: {
     permissions?: unknown[] | (() => unknown[])
     questions?: unknown[] | (() => unknown[])
+    forms?: unknown[] | (() => unknown[])
   },
 ) {
   await mockOpenCodeServer(page, {
@@ -148,6 +156,7 @@ async function mockServer(
     pageMessages: () => ({ items: [] }),
     permissions: requests.permissions,
     questions: requests.questions,
+    forms: requests.forms,
   })
   await page.addInitScript(() => {
     localStorage.setItem("settings.v3", JSON.stringify({ general: { newLayoutDesigns: true } }))

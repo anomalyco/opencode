@@ -17,6 +17,7 @@ export interface MockServerConfig {
   todos?: (sessionID: string) => unknown[]
   permissions?: unknown[] | (() => unknown[])
   questions?: unknown[] | (() => unknown[])
+  forms?: unknown[] | (() => unknown[])
 }
 
 export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
@@ -53,6 +54,17 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
       return json(route, typeof config.permissions === "function" ? config.permissions() : (config.permissions ?? []))
     if (path === "/question")
       return json(route, typeof config.questions === "function" ? config.questions() : (config.questions ?? []))
+    if (path === "/api/form/request")
+      return json(route, {
+        location: { directory: config.directory, project: config.project },
+        data: typeof config.forms === "function" ? config.forms() : (config.forms ?? []),
+      })
+    if (/^\/api\/session\/[^/]+\/form$/.test(path))
+      return json(route, {
+        location: { directory: config.directory, project: config.project },
+        data: typeof config.forms === "function" ? config.forms() : (config.forms ?? []),
+      })
+    if (/^\/api\/session\/[^/]+\/form\/[^/]+\/(reply|cancel)$/.test(path)) return json(route, undefined, undefined, 204)
     if (path === "/vcs/diff" && config.vcsDiff) return json(route, config.vcsDiff)
     if (emptyObject.has(path)) return json(route, {})
     if (emptyList.has(path)) return json(route, [])
