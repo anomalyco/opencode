@@ -24,7 +24,7 @@ import { ReferenceGuidance } from "../../reference/guidance"
 import { McpGuidance } from "../../mcp/guidance"
 import { ToolRegistry } from "../../tool/registry"
 import { ToolOutputStore } from "../../tool-output-store"
-import { SessionContextEpoch } from "../context-epoch"
+import { SessionContextCheckpoint } from "../context-checkpoint"
 import { SessionCompaction } from "../compaction"
 import { SessionEvent } from "../event"
 import { SessionHistory } from "../history"
@@ -184,7 +184,9 @@ const layer = Layer.effect(
       if (session.location.directory !== location.directory || session.location.workspaceID !== location.workspaceID)
         return yield* Effect.interrupt
       const agent = yield* agents.select(session.agent)
-      const initialized = yield* SessionContextEpoch.initialize(db, loadSystemContext(agent), session.id)
+      // Establish what the model knows before admitting what the user said, so
+      // a blocked first turn leaves pending inputs untouched.
+      const checkpoint = yield* SessionContextCheckpoint.prepare(db, events, loadSystemContext(agent), session.id)
       const toolFibers = yield* FiberSet.make<void, ToolOutputStore.Error>()
       let needsContinuation = false
       let currentStep = step
@@ -198,10 +200,8 @@ const layer = Layer.effect(
         }
         if (promoted > 0) currentStep = 1
       }
-      const system =
-        initialized ?? (yield* SessionContextEpoch.prepare(db, events, loadSystemContext(agent), session.id))
       const model = yield* models.resolve(session)
-      const entries = yield* SessionHistory.entriesForRunner(db, session.id, system.baselineSeq)
+      const entries = yield* SessionHistory.entriesForRunner(db, session.id, checkpoint.baselineSeq)
       const context = entries.map((entry) => entry.message)
       const isLastStep = agent.info?.steps !== undefined && currentStep >= agent.info.steps
       const toolMaterialization = isLastStep
@@ -211,7 +211,10 @@ const layer = Layer.effect(
       const request = LLM.request({
         model,
         providerOptions: { openai: { promptCacheKey } },
-        system: [agent.info?.system ? agent.info.system : SessionRunnerSystemPrompt.provider(model), system.baseline]
+        system: [
+          agent.info?.system ? agent.info.system : SessionRunnerSystemPrompt.provider(model),
+          checkpoint.baseline,
+        ]
           .filter((part): part is string => part !== undefined && part.length > 0)
           .map(SystemPart.make),
         messages: [...toLLMMessages(context, model), ...(isLastStep ? [Message.assistant(MAX_STEPS_PROMPT)] : [])],

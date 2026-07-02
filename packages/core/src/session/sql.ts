@@ -165,7 +165,7 @@ export const SessionInputTable = sqliteTable(
   ],
 )
 
-export const SessionContextEpochTable = sqliteTable("session_context_epoch", {
+export const SessionContextCheckpointTable = sqliteTable("session_context_epoch", {
   session_id: text()
     .$type<SessionSchema.ID>()
     .primaryKey()

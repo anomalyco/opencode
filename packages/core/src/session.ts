@@ -108,7 +108,7 @@ export class OperationUnavailableError extends Schema.TaggedErrorClass<Operation
   },
 ) {}
 
-export { ContextSnapshotDecodeError, MessageDecodeError } from "./session/error"
+export { MessageDecodeError } from "./session/error"
 
 export class PromptConflictError extends Schema.TaggedErrorClass<PromptConflictError>()("Session.PromptConflictError", {
   sessionID: SessionSchema.ID,
@@ -466,7 +466,9 @@ const layer = Layer.effect(
           text: skill.content,
         })
         if (input.resume !== false)
-          yield* execution.resume(input.sessionID).pipe(Effect.ignore, Effect.forkIn(scope, { startImmediately: true }), Effect.asVoid)
+          yield* execution
+            .resume(input.sessionID)
+            .pipe(Effect.ignore, Effect.forkIn(scope, { startImmediately: true }), Effect.asVoid)
       }),
       switchAgent: Effect.fn("V2Session.switchAgent")(function* (input) {
         yield* result.get(input.sessionID)
@@ -550,7 +552,9 @@ const layer = Layer.effect(
           description: input.description,
           metadata: input.metadata,
         })
-        yield* execution.resume(input.sessionID).pipe(Effect.ignore, Effect.forkIn(scope, { startImmediately: true }), Effect.asVoid)
+        yield* execution
+          .resume(input.sessionID)
+          .pipe(Effect.ignore, Effect.forkIn(scope, { startImmediately: true }), Effect.asVoid)
       }),
       interrupt: Effect.fn("V2Session.interrupt")((sessionID) =>
         Effect.uninterruptible(execution.interrupt(sessionID)),
