@@ -5,6 +5,12 @@ export type SessionSwitchSample = {
   hasVisibleRows: boolean
   last: boolean
   bottomErrorPx?: number
+  review?: {
+    fileHost: boolean
+    fileHostReplaced: boolean
+    header: string
+    replacedLevels: string[]
+  }
 }
 
 export function classifySessionSwitch(samples: SessionSwitchSample[]) {
@@ -23,6 +29,10 @@ export function classifySessionSwitch(samples: SessionSwitchSample[]) {
       (sample) => sample.hasVisibleRows && sample.destination.length === 0 && sample.source.length === 0,
     ).length,
     sourceSamples: samples.filter((sample) => sample.source.length > 0).length,
+    reviewFileHostMissingSamples: samples.filter((sample) => sample.review && !sample.review.fileHost).length,
+    reviewFileHostReplacedSamples: samples.filter((sample) => sample.review?.fileHostReplaced).length,
+    reviewHeaders: [...new Set(samples.flatMap((sample) => (sample.review ? [sample.review.header] : [])))],
+    reviewReplacedLevels: [...new Set(samples.flatMap((sample) => sample.review?.replacedLevels ?? []))],
   }
 }
 

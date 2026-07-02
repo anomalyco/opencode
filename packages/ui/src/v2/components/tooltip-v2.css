@@ -2,7 +2,12 @@
   display: flex;
 }
 
+[data-popper-positioner]:has([data-component="tooltip-v2"]) {
+  z-index: 1000;
+}
+
 [data-component="tooltip-v2"] {
+  z-index: 1000;
   box-sizing: border-box;
   display: inline-flex;
   flex-direction: row;
@@ -53,5 +58,12 @@
   to {
     opacity: 0;
     transform: scale(0.96);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-component="tooltip-v2"],
+  [data-component="tooltip-v2"][data-closed] {
+    animation: none;
   }
 }

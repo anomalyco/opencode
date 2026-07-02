@@ -51,7 +51,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
     const fallback = server.key
     const [store, setStore, _, ready] = persisted(
       {
-        ...Persist.global("tabs"),
+        ...Persist.window("tabs"),
         migrate: (value: unknown) => {
           if (!Array.isArray(value)) return value
           return value.map((tab) => {
@@ -62,7 +62,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       },
       createStore<Tab[]>([]),
     )
-    const [recent, setRecent, , recentReady] = persisted(Persist.global("tabs.recent"), createStore<RecentTab>({}))
+    const [recent, setRecent, , recentReady] = persisted(Persist.window("tabs.recent"), createStore<RecentTab>({}))
 
     const params = useParams()
     const navigate = useNavigate()
