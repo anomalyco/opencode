@@ -1125,7 +1125,7 @@ export function Prompt(props: PromptProps) {
       const restOfInput = firstLineEnd === -1 ? "" : inputText.slice(firstLineEnd + 1)
       const args = firstLineArgs.join(" ") + (restOfInput ? "\n" + restOfInput : "")
 
-      const error = await sdk.api.session
+      void sdk.api.session
         .command({
           sessionID,
           command: command.slice(1),
@@ -1162,14 +1162,9 @@ export function Prompt(props: PromptProps) {
               : [],
           ),
         })
-        .then(
-          () => undefined,
-          (error) => error,
-        )
-      if (error) {
-        toast.show({ title: "Failed to run command", message: errorMessage(error), variant: "error" })
-        return false
-      }
+        .catch((error) => {
+          toast.show({ title: "Failed to run command", message: errorMessage(error), variant: "error" })
+        })
     } else if (
       inputText.startsWith("/") &&
       (data.location.skill.list(currentLocation()) ?? []).some(
