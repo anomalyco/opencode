@@ -124,6 +124,7 @@ const appBindingCommands = [
   "workspace.list",
   "app.debug",
   "app.console",
+  "tui.toggle_cost",
   "app.heap_snapshot",
   "terminal.suspend",
   "terminal.title.toggle",
@@ -834,6 +835,21 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         run: () => {
           renderer.console.toggle()
           dialog.clear()
+        },
+      },
+      {
+        title: "Toggle cost display",
+        name: "tui.toggle_cost",
+        category: "System",
+        slashName: "cost",
+        run: () => {
+          const current = kv.get("show_cost", tuiConfig.show_cost)
+          kv.set("show_cost", !current)
+          toast.show({
+            variant: "info",
+            message: current ? "Cost display hidden" : "Cost display shown",
+            duration: 2000,
+          })
         },
       },
       {

@@ -270,9 +270,10 @@ export function Prompt(props: PromptProps) {
     const model = sync.data.provider.find((item) => item.id === last.providerID)?.models[last.modelID]
     const pct = model?.limit.context ? `${Math.round((tokens / model.limit.context) * 100)}%` : undefined
     const cost = session?.cost ?? 0
+    const showCost = kv.get("show_cost", tuiConfig.show_cost)
     return {
       context: pct ? `${Locale.number(tokens)} (${pct})` : Locale.number(tokens),
-      cost: cost > 0 ? money.format(cost) : undefined,
+      cost: showCost && cost > 0 ? money.format(cost) : undefined,
     }
   })
 
@@ -571,6 +572,7 @@ export function Prompt(props: PromptProps) {
       "session.interrupt",
       "workspace.set",
       "session.move",
+      "tui.toggle_cost",
     ]),
   }))
 

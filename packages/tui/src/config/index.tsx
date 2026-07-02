@@ -63,6 +63,7 @@ export const Info = Schema.Struct({
   scroll_acceleration: Schema.optional(ScrollAcceleration),
   diff_style: Schema.optional(DiffStyle),
   mouse: Schema.optional(Schema.Boolean).annotate({ description: "Enable or disable mouse capture (default: true)" }),
+  show_cost: Schema.optional(Schema.Boolean).annotate({ description: "Show cost display in the TUI (default: true)" }),
 })
 export type Info = Schema.Schema.Type<typeof Info>
 
@@ -78,6 +79,7 @@ export type Resolved = Omit<Info, "attention" | "keybinds" | "leader_timeout" | 
   keybinds: TuiKeybind.BindingLookupView
   leader_timeout: number
   mouse: boolean
+  show_cost: boolean
 }
 
 export const ResolveOptions = Schema.Struct({
@@ -113,6 +115,7 @@ export function resolve(input: Info, options: ResolveOptions): Resolved {
     }),
     leader_timeout: input.leader_timeout ?? LeaderTimeoutDefault,
     mouse: input.mouse ?? true,
+    show_cost: input.show_cost ?? true,
   }
 }
 

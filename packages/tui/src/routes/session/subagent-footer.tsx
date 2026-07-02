@@ -2,6 +2,8 @@ import { createMemo, createSignal, Show } from "solid-js"
 import { useRouteData } from "../../context/route"
 import { useSync } from "../../context/sync"
 import { useTheme } from "../../context/theme"
+import { useTuiConfig } from "../../config"
+import { useKV } from "../../context/kv"
 import { SplitBorder } from "../../ui/border"
 import type { AssistantMessage } from "@opencode-ai/sdk/v2"
 import { Locale } from "../../util/locale"
@@ -9,6 +11,8 @@ import { useTerminalDimensions } from "@opentui/solid"
 import { useCommandShortcut, useOpencodeKeymap } from "../../keymap"
 
 export function SubagentFooter() {
+  const kv = useKV()
+  const tuiConfig = useTuiConfig()
   const route = useRouteData("session")
   const sync = useSync()
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
@@ -42,6 +46,7 @@ export function SubagentFooter() {
     const model = sync.data.provider.find((item) => item.id === last.providerID)?.models[last.modelID]
     const pct = model?.limit.context ? `${Math.round((tokens / model.limit.context) * 100)}%` : undefined
     const cost = session()?.cost ?? 0
+    const showCost = kv.get("show_cost", tuiConfig.show_cost)
 
     const money = new Intl.NumberFormat("en-US", {
       style: "currency",
@@ -50,7 +55,7 @@ export function SubagentFooter() {
 
     return {
       context: pct ? `${Locale.number(tokens)} (${pct})` : Locale.number(tokens),
-      cost: cost > 0 ? money.format(cost) : undefined,
+      cost: showCost && cost > 0 ? money.format(cost) : undefined,
     }
   })
 
