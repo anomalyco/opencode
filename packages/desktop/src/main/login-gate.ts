@@ -5,6 +5,7 @@ import { createServer } from "node:http"
 import { homedir } from "node:os"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
+import { writeFileSync, unlinkSync } from "node:fs"
 import { getLogger } from "./logging"
 
 // Root path for resolving preload scripts at runtime.
@@ -672,15 +673,26 @@ function showLoginDialog(serverUrl: string, serverPassword: string): Promise<voi
       }
     }
 
+    // Write HTML to a temp file and load it via file:// — loading inline HTML
+    // via data:text/html with a preload script is unreliable in Electron 42
+    // packaged builds on Windows (the preload may not execute).
+    // Using win.loadFile() gives the page a proper file:// origin and avoids
+    // the preload-not-running edge case entirely.
+    const fs = { writeFileSync, unlinkSync }
+    const tmpFile = join(app.getPath("temp"), `opencode-login-${Date.now()}.html`)
+    fs.writeFileSync(tmpFile, HTML_LOGIN)
+
     win.on("closed", () => {
       cleanup()
       if (!resolved) {
         reject(oauthError ?? new Error("Login cancelled"))
       }
+      // Clean up temp file
+      try { fs.unlinkSync(tmpFile) } catch { /* ignore */ }
     })
 
-    // Load HTML
-    win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(HTML_LOGIN)}`)
+    // Load HTML from temp file
+    win.loadFile(tmpFile)
 
     win.once("ready-to-show", () => {
       win.show()
