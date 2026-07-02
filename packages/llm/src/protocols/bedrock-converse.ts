@@ -592,7 +592,7 @@ const step = (state: ParserState, event: BedrockEvent) =>
         event.modelStreamErrorException?.message ??
         event.serviceUnavailableException?.message ??
         "Bedrock Converse stream error"
-      return [state, [LLMEvent.providerError({ message, retryable: true })]] as const
+      return [state, [LLMEvent.providerError({ message })]] as const
     }
 
     if (event.validationException || event.throttlingException) {
@@ -604,7 +604,6 @@ const step = (state: ParserState, event: BedrockEvent) =>
           LLMEvent.providerError({
             message,
             classification: event.validationException && isContextOverflow(message) ? "context-overflow" : undefined,
-            retryable: event.throttlingException !== undefined,
           }),
         ],
       ] as const
