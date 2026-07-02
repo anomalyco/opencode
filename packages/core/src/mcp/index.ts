@@ -337,7 +337,7 @@ export const layer = Layer.effect(
         Effect.map((defs) => {
           entry.prompts = defs.map((def) => toPrompt(name, def))
         }),
-        Effect.catchAll(() => Effect.sync(() => (entry.prompts = []))),
+        Effect.catch(() => Effect.sync(() => (entry.prompts = []))),
       )
 
     const watch = (name: ServerName, entry: ServerEntry, connection: MCPClient.Connection) => {
@@ -396,7 +396,7 @@ export const layer = Layer.effect(
             connection.tools().pipe(
               Effect.flatMap((tools) =>
                 connection.prompts().pipe(
-                  Effect.catchAll(() => Effect.succeed([] as MCPClient.PromptDefinition[])),
+                  Effect.catch(() => Effect.succeed([] as MCPClient.PromptDefinition[])),
                   Effect.map((prompts) => ({ connection, prompts, tools })),
                 ),
               ),
@@ -539,7 +539,7 @@ export const layer = Layer.effect(
         if (!target.entry.client) return undefined
         const result = yield* target.entry.client
           .prompt({ name: input.name, args: input.args })
-          .pipe(Effect.catchAll(() => Effect.succeed(undefined)))
+          .pipe(Effect.catch(() => Effect.succeed(undefined)))
         if (!result) return undefined
         return new PromptResult({
           server: target.name,
