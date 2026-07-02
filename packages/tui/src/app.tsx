@@ -493,6 +493,13 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
     })
   })
 
+  let resumed = false
+  createEffect(() => {
+    if (resumed || sync.status === "loading" || !args.resume) return
+    resumed = true
+    dialog.replace(() => <DialogSessionList />)
+  })
+
   let continued = false
   createEffect(() => {
     // When using -c, session list is loaded in blocking phase, so we can navigate at "partial"

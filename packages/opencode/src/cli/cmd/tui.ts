@@ -84,8 +84,12 @@ export const TuiThreadCommand = cmd({
         describe: "model to use in the format of provider/model",
       })
       .option("continue", {
-        alias: ["c", "resume"],
+        alias: ["c"],
         describe: "continue the last session",
+        type: "boolean",
+      })
+      .option("resume", {
+        describe: "open the session list",
         type: "boolean",
       })
       .option("session", {
@@ -95,7 +99,7 @@ export const TuiThreadCommand = cmd({
       })
       .option("fork", {
         type: "boolean",
-        describe: "fork the session when continuing (use with --continue, --resume, or --session)",
+        describe: "fork the session when continuing (use with --continue or --session)",
       })
       .option("prompt", {
         type: "string",
@@ -150,6 +154,12 @@ export const TuiThreadCommand = cmd({
     const noReplay = args.replay === false || args.noReplay === true
 
     if (args.mini) {
+      if (args.resume) {
+        UI.error("--resume cannot be used with --mini")
+        process.exitCode = 1
+        return
+      }
+
       const network = ["--port", "--hostname", "--mdns", "--no-mdns", "--mdns-domain", "--cors"].find((option) =>
         process.argv.some((arg) => arg === option || arg.startsWith(option + "=")),
       )
@@ -190,7 +200,13 @@ export const TuiThreadCommand = cmd({
     try {
       const { TuiConfig } = await import("@/config/tui")
       if (args.fork && !args.continue && !args.session) {
-        UI.error("--fork requires --continue, --resume, or --session")
+        UI.error("--fork requires --continue or --session")
+        process.exitCode = 1
+        return
+      }
+
+      if (args.resume && (args.continue || args.session || args.fork)) {
+        UI.error("--resume cannot be used with --continue, --session, or --fork")
         process.exitCode = 1
         return
       }
@@ -282,6 +298,7 @@ export const TuiThreadCommand = cmd({
             events: transport.events,
             args: {
               continue: args.continue,
+              resume: args.resume,
               sessionID: args.session,
               agent: args.agent,
               model: args.model,

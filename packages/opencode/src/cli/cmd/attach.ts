@@ -19,7 +19,7 @@ export const AttachCommand = cmd({
         description: "directory to run in",
       })
       .option("continue", {
-        alias: ["c", "resume"],
+        alias: ["c"],
         describe: "continue the last session",
         type: "boolean",
       })
@@ -30,7 +30,7 @@ export const AttachCommand = cmd({
       })
       .option("fork", {
         type: "boolean",
-        describe: "fork the session when continuing (use with --continue, --resume, or --session)",
+        describe: "fork the session when continuing (use with --continue or --session)",
       })
       .option("password", {
         alias: ["p"],
@@ -106,7 +106,7 @@ export const AttachCommand = cmd({
 
     const { TuiConfig } = await import("@/config/tui")
     if (args.fork && !args.continue && !args.session) {
-      UI.error("--fork requires --continue, --resume, or --session")
+      UI.error("--fork requires --continue or --session")
       process.exitCode = 1
       return
     }

@@ -145,7 +145,7 @@ export const RunCommand = effectCmd({
         type: "string",
       })
       .option("continue", {
-        alias: ["c", "resume"],
+        alias: ["c"],
         describe: "continue the last session",
         type: "boolean",
       })
@@ -155,7 +155,7 @@ export const RunCommand = effectCmd({
         type: "string",
       })
       .option("fork", {
-        describe: "fork the session before continuing (requires --continue, --resume, or --session)",
+        describe: "fork the session before continuing (requires --continue or --session)",
         type: "boolean",
       })
       .option("share", {
@@ -423,7 +423,7 @@ export const RunCommand = effectCmd({
       }
 
       if (args.fork && !args.continue && !args.session) {
-        UI.error("--fork requires --continue, --resume, or --session")
+        UI.error("--fork requires --continue or --session")
         process.exit(1)
       }
 
