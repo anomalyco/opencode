@@ -17,7 +17,6 @@ import { Flag } from "@opencode-ai/core/flag/flag"
 import { MessageID } from "@/session/schema"
 import { loadRunAgents, loadRunCommands, loadRunReferences } from "./catalog.shared"
 import { createRunDemo } from "./demo"
-import { questionFormAnswer } from "./question.shared"
 import { resolveModelInfo, resolveRunTuiConfig, resolveSessionInfo } from "./runtime.boot"
 import { createRuntimeLifecycle } from "./runtime.lifecycle"
 import { trace } from "./trace"
@@ -256,10 +255,9 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
         return
       }
 
-      await ctx.sdk.v2.session.form.reply({
-        sessionID: state.sessionID,
-        formID: next.requestID,
-        formReply: { answer: questionFormAnswer(next.answers) },
+      await ctx.sdk.question.reply({
+        requestID: next.requestID,
+        answers: next.answers ?? [],
       })
     },
     onQuestionReject: async (next) => {
@@ -267,7 +265,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
         return
       }
 
-      await ctx.sdk.v2.session.form.cancel({ sessionID: state.sessionID, formID: next.requestID })
+      await ctx.sdk.question.reject(next)
     },
     onCycleVariant: () => {
       if (!state.model || state.variants.length === 0) {

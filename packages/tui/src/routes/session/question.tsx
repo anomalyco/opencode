@@ -173,10 +173,10 @@ export function QuestionPrompt(props: { request: QuestionForm; directory?: strin
     bindings: [
       {
         key: "escape",
-        desc: "Reject question",
+        desc: "Cancel answer edit",
         group: "Question",
         cmd: () => {
-          reject()
+          setStore("editing", false)
         },
       },
       ...tuiConfig.keybinds.get("prompt.clear"),

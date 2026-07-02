@@ -1,6 +1,5 @@
 import type {
   OpencodeClient,
-  FormFormInfo,
   PermissionRequest,
   PermissionV2Request,
   QuestionRequest,
@@ -10,7 +9,6 @@ import type {
   V2Event,
 } from "@opencode-ai/sdk/v2"
 import { blockerStatus, pickBlockerView } from "./session-data"
-import { formQuestionRequest } from "./question.shared"
 import { writeSessionOutput } from "./stream"
 import { createSubagentTracker, legacyTool, toolCommit } from "./stream-v2.subagent"
 import type {
@@ -132,10 +130,6 @@ function permission(request: PermissionV2Request): PermissionRequest {
     always: request.save ?? [],
     tool: request.source?.type === "tool" ? request.source : undefined,
   }
-}
-
-function question(form: FormFormInfo): QuestionRequest | undefined {
-  return formQuestionRequest(form)
 }
 
 function sessionID(event: RunV2Event) {
@@ -365,13 +359,13 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
         { throwOnError: true },
       ),
       input.sdk.v2.session.permission.list({ sessionID: input.sessionID }, { throwOnError: true }),
-      input.sdk.v2.session.form.list({ sessionID: input.sessionID }, { throwOnError: true }),
+      input.sdk.question.list({ directory: input.directory }, { throwOnError: true }),
       input.sdk.v2.session.active({ throwOnError: true }),
     ])
     const projected = messages.data.data.toReversed()
     for (const message of projected) renderMessage(message, next.render, next.reuseVisibleWait)
     state.permissions = permissions.data.data.map(permission)
-    state.questions = questions.data.data.flatMap((form) => (form.mode === "form" ? question(form) ?? [] : []))
+    state.questions = questions.data.filter((item) => item.sessionID === input.sessionID)
     syncBlockers()
     await subagents.hydrate({ messages: projected, active: active.data.data })
     const running = input.sessionID in active.data.data
@@ -540,14 +534,13 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       syncBlockers()
       return
     }
-    if (event.type === "form.created") {
-      const next = event.data.form.mode === "form" ? question(event.data.form) : undefined
-      if (next && !state.questions.some((item) => item.id === next.id)) state.questions.push(next)
+    if (event.type === "question.asked") {
+      if (!state.questions.some((item) => item.id === event.data.id)) state.questions.push(event.data)
       syncBlockers()
       return
     }
-    if (event.type === "form.replied" || event.type === "form.cancelled") {
-      state.questions = state.questions.filter((item) => item.id !== event.data.id)
+    if (event.type === "question.replied" || event.type === "question.rejected") {
+      state.questions = state.questions.filter((item) => item.id !== event.data.requestID)
       syncBlockers()
       return
     }

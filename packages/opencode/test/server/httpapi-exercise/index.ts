@@ -850,14 +850,6 @@ const scenarios: Scenario[] = [
     }))
     .json(404, object, "status"),
   http.protected
-    .get("/api/session/{sessionID}/form", "v2.session.form.list")
-    .seeded((ctx) => ctx.session({ title: "Form list owner" }))
-    .at((ctx) => ({
-      path: route("/api/session/{sessionID}/form", { sessionID: ctx.state.id }),
-      headers: ctx.headers(),
-    }))
-    .json(200, data(array)),
-  http.protected
     .post("/api/session/{sessionID}/permission/{requestID}/reply", "v2.session.permission.reply")
     .seeded((ctx) => ctx.session({ title: "Permission owner" }))
     .at((ctx) => ({
@@ -867,29 +859,6 @@ const scenarios: Scenario[] = [
       }),
       headers: ctx.headers(),
       body: { reply: "once" },
-    }))
-    .json(404, object, "status"),
-  http.protected
-    .post("/api/session/{sessionID}/form/{formID}/reply", "v2.session.form.reply")
-    .seeded((ctx) => ctx.session({ title: "Form reply owner" }))
-    .at((ctx) => ({
-      path: route("/api/session/{sessionID}/form/{formID}/reply", {
-        sessionID: ctx.state.id,
-        formID: "frm_httpapi_missing",
-      }),
-      headers: ctx.headers(),
-      body: { answer: {} },
-    }))
-    .json(404, object, "status"),
-  http.protected
-    .post("/api/session/{sessionID}/form/{formID}/cancel", "v2.session.form.cancel")
-    .seeded((ctx) => ctx.session({ title: "Form cancel owner" }))
-    .at((ctx) => ({
-      path: route("/api/session/{sessionID}/form/{formID}/cancel", {
-        sessionID: ctx.state.id,
-        formID: "frm_httpapi_missing",
-      }),
-      headers: ctx.headers(),
     }))
     .json(404, object, "status"),
   http.protected.get("/api/permission/saved", "v2.permission.saved.list").json(200, (body) => {

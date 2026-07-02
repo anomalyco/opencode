@@ -13,7 +13,7 @@
 //
 // Custom answers: if a question has custom=true, an extra "Type your own
 // answer" option appears. Selecting it enters editing mode with a text field.
-import type { FormFormInfo, QuestionInfo, QuestionRequest } from "@opencode-ai/sdk/v2"
+import type { QuestionInfo, QuestionRequest } from "@opencode-ai/sdk/v2"
 import type { QuestionReject, QuestionReply } from "./types"
 
 export type QuestionBodyState = {
@@ -41,48 +41,6 @@ export function createQuestionBodyState(requestID: string): QuestionBodyState {
     editing: false,
     submitting: false,
   }
-}
-
-export function formQuestionRequest(form: FormFormInfo): QuestionRequest | undefined {
-  if (form.metadata?.kind !== "question") return
-  const questions = form.fields.flatMap((field): QuestionInfo[] => {
-    if (field.type !== "string" && field.type !== "multiselect") return []
-    return [
-      {
-        question: field.title ?? field.key,
-        header: field.description ?? field.title ?? field.key,
-        options: (field.options ?? []).map((option) => ({
-          label: option.label,
-          description: option.description ?? "",
-        })),
-        multiple: field.type === "multiselect",
-        custom: field.custom,
-      },
-    ]
-  })
-  return {
-    id: form.id,
-    sessionID: form.sessionID,
-    questions,
-    tool: formTool(form.metadata?.tool),
-  }
-}
-
-export function questionFormAnswer(answers: string[][] = []) {
-  return Object.fromEntries(
-    answers.flatMap((answer, index): Array<[string, string | string[]]> => {
-      if (answer.length === 0) return []
-      if (answer.length > 1) return [[`question_${index}`, answer]]
-      return [[`question_${index}`, answer[0] ?? ""]]
-    }),
-  )
-}
-
-function formTool(value: unknown) {
-  if (typeof value !== "object" || value === null) return
-  const tool = value as { messageID?: unknown; callID?: unknown }
-  if (typeof tool.messageID !== "string" || typeof tool.callID !== "string") return
-  return { messageID: tool.messageID, callID: tool.callID }
 }
 
 export function questionSync(state: QuestionBodyState, requestID: string): QuestionBodyState {

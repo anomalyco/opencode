@@ -10,7 +10,6 @@ import type {
 import { EOL } from "node:os"
 import { MessageID } from "@/session/schema"
 import { UI } from "../../ui"
-import { formQuestionRequest } from "./question.shared"
 
 type Model = {
   providerID: string
@@ -68,7 +67,6 @@ export async function runNonInteractivePrompt(input: Input) {
   let submitted = false
   let promoted = false
   let emittedError = false
-  let questionRejected = false
   let permissionRejected = false
   let interrupted = false
   let admission: AbortController | undefined
@@ -113,11 +111,6 @@ export async function runNonInteractivePrompt(input: Input) {
     }
   }
 
-  const rejectQuestion = async (request: { id: string }) => {
-    questionRejected = true
-    await input.client.v2.session.form.cancel({ sessionID: input.sessionID, formID: request.id }).catch(() => {})
-  }
-
   const consume = async () => {
     while (!controller.signal.aborted) {
       const next = await stream.next()
@@ -126,11 +119,6 @@ export async function runNonInteractivePrompt(input: Input) {
 
       if (event.type === "permission.v2.asked" && submitted && event.data.sessionID === input.sessionID) {
         await replyPermission(event.data)
-        continue
-      }
-      if (event.type === "form.created" && submitted && event.data.form.sessionID === input.sessionID) {
-        const question = event.data.form.mode === "form" ? formQuestionRequest(event.data.form) : undefined
-        if (question) await rejectQuestion(question)
         continue
       }
       if (!("sessionID" in event.data) || event.data.sessionID !== input.sessionID) continue
@@ -146,7 +134,7 @@ export async function runNonInteractivePrompt(input: Input) {
       if (
         event.type === "session.next.execution.settled" &&
         event.data.outcome === "interrupted" &&
-        (interrupted || permissionRejected || questionRejected)
+        (interrupted || permissionRejected)
       ) {
         return
       }
@@ -322,14 +310,14 @@ export async function runNonInteractivePrompt(input: Input) {
         continue
       }
       if (event.type === "session.next.step.failed") {
-        if (interrupted || permissionRejected || questionRejected) continue
+        if (interrupted || permissionRejected) continue
         emittedError = true
         process.exitCode = 1
         if (!emit("error", time, { error: event.data.error })) UI.error(event.data.error.message)
         continue
       }
       if (event.type === "session.next.execution.settled") {
-        if (event.data.outcome === "failure" && !emittedError && !questionRejected) {
+        if (event.data.outcome === "failure" && !emittedError) {
           emittedError = true
           process.exitCode = 1
           const error = event.data.error ?? { type: "unknown", message: "Session execution failed" }
@@ -408,18 +396,8 @@ export async function runNonInteractivePrompt(input: Input) {
     if (!response.data.data) throw new Error("Prompt was not admitted")
     if (interrupted) await input.client.v2.session.interrupt({ sessionID: input.sessionID }).catch(() => {})
 
-    const [permissions, questions] = await Promise.all([
-      input.client.v2.session.permission.list({ sessionID: input.sessionID }).catch(() => undefined),
-      input.client.v2.session.form.list({ sessionID: input.sessionID }).catch(() => undefined),
-    ])
-    await Promise.all([
-      ...(permissions?.data?.data ?? []).map(replyPermission),
-      ...(questions?.data?.data ?? []).flatMap((form) => {
-        if (form.mode !== "form") return []
-        const question = formQuestionRequest(form)
-        return question ? [rejectQuestion(question)] : []
-      }),
-    ])
+    const permissions = await input.client.v2.session.permission.list({ sessionID: input.sessionID }).catch(() => undefined)
+    await Promise.all((permissions?.data?.data ?? []).map(replyPermission))
     await completed
   } finally {
     process.off("SIGINT", interrupt)

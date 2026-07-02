@@ -137,11 +137,7 @@ describe("PublicApi OpenAPI v2 errors", () => {
   test("preserves required request bodies for v2 mutations", () => {
     const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
 
-    for (const path of [
-      "/api/session/{sessionID}/prompt",
-      "/api/session/{sessionID}/permission/{requestID}/reply",
-      "/api/session/{sessionID}/question/{requestID}/reply",
-    ]) {
+    for (const path of ["/api/session/{sessionID}/prompt", "/api/session/{sessionID}/permission/{requestID}/reply"]) {
       expect(spec.paths[path]?.post?.requestBody?.required, path).toBe(true)
     }
   })
@@ -291,15 +287,6 @@ describe("PublicApi OpenAPI v2 errors", () => {
       expect(componentName(responseRef(spec.paths[route[1]]?.[route[0]]?.responses?.["404"]) ?? "")).toBe(
         "QuestionNotFoundError",
       )
-    }
-    for (const route of [
-      ["post", "/api/session/{sessionID}/question/{requestID}/reply"],
-      ["post", "/api/session/{sessionID}/question/{requestID}/reject"],
-    ] as const) {
-      expect(componentNames(spec.paths[route[1]]?.[route[0]]?.responses?.["404"])).toEqual([
-        "QuestionNotFoundError",
-        "SessionNotFoundError",
-      ])
     }
   })
 
