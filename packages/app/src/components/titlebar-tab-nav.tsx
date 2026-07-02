@@ -5,12 +5,13 @@ import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { useGlobal } from "@/context/global"
 import { useLanguage } from "@/context/language"
-import { ServerConnection } from "@/context/server"
-import { projectForSession } from "@/pages/layout/helpers"
+import { ServerConnection, serverName } from "@/context/server"
+import { displayName, projectForSession } from "@/pages/layout/helpers"
 import { SessionTabAvatar } from "@/pages/layout/session-tab-avatar"
 import { showToast } from "@/utils/toast"
 import type { Session } from "@opencode-ai/sdk/v2"
 import { canOpenTabRename, forwardTabRef } from "./titlebar-tab-gesture"
+import { TabPreviewPopover } from "./titlebar-tab-popover"
 import "./titlebar-tab-nav.css"
 
 // MouseEvent.button uses 1 for the middle/wheel button.
@@ -58,6 +59,32 @@ export function TabNavItem(props: {
     return projectForSession(session, serverCtx()?.projects.list() ?? [])
   })
   const title = createMemo(() => props.session()?.title ?? props.fallbackTitle)
+
+  const projectName = createMemo(() => {
+    const session = props.session()
+    if (!session) return
+    return displayName(project() ?? { worktree: session.directory })
+  })
+  const previewPath = createMemo(() => {
+    const session = props.session()
+    if (!session) return
+    const home = serverCtx()?.sync.data.path.home
+    return home ? session.directory.replace(home, "~") : session.directory
+  })
+  const branch = createMemo(() => {
+    const session = props.session()
+    if (!session) return
+    return serverCtx()?.sync.child(session.directory, { bootstrap: false })[0].vcs?.branch
+  })
+  // Only label the server when multiple servers are connected.
+  const serverLabel = createMemo(() => {
+    if (global.servers.list().length <= 1) return
+    const conn = global.servers.list().find((item) => ServerConnection.key(item) === props.server)
+    return conn ? serverName(conn) : undefined
+  })
+
+  const [popoverOpen, setPopoverOpen] = createSignal(false)
+  const previewBlocked = () => !!props.dragging || editing() || !!props.pressed || !props.session()
 
   const measureTitleOverflow = () => {
     if (!titleEl || editing()) {
@@ -173,7 +200,7 @@ export function TabNavItem(props: {
     onCleanup(cleanup)
   })
 
-  return (
+  const tab = (
     <div
       ref={(el) => {
         tabRoot = el
@@ -281,6 +308,24 @@ export function TabNavItem(props: {
         />
       </div>
     </div>
+  )
+
+  return (
+    <TabPreviewPopover
+      trigger={tab}
+      open={popoverOpen() && !previewBlocked()}
+      onOpenChange={(value) => {
+        if (value && previewBlocked()) return
+        setPopoverOpen(value)
+      }}
+      data={{
+        projectName: projectName(),
+        title: props.session()?.title,
+        path: previewPath(),
+        branch: branch(),
+        serverName: serverLabel(),
+      }}
+    />
   )
 }
 
