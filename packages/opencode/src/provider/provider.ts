@@ -26,6 +26,7 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import { isRecord } from "@/util/record"
 import { optional } from "@opencode-ai/core/schema"
 import { ProviderTransform } from "./transform"
+import { XaiCache } from "./xai-cache"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ModelStatus } from "./model-status"
@@ -1704,7 +1705,11 @@ const layer = Layer.effect(
         const existing = s.sdk.get(key)
         if (existing) return existing
 
-        const customFetch = options["fetch"]
+        // Composes with any auth fetch already in options (e.g. the xAI OAuth
+        // plugin loader): the body is rewritten first, then the wrapped fetch
+        // still applies its own header handling.
+        const customFetch =
+          model.api.npm === "@ai-sdk/xai" ? XaiCache.withPromptCacheKey(options["fetch"]) : options["fetch"]
         const chunkTimeout = options["chunkTimeout"]
         const headerTimeout = options["headerTimeout"]
         delete options["chunkTimeout"]
