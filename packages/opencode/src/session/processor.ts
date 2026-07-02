@@ -319,6 +319,16 @@ const layer = Layer.effect(
 
           case "tool-input-delta":
             yield* ensureToolCall(value)
+            yield* updateToolCall(value.id, (match) => {
+              if (match.state.status !== "pending" && match.state.status !== "running") return match
+              return {
+                ...match,
+                state: {
+                  ...match.state,
+                  raw: (match.state.raw ?? "") + value.text,
+                },
+              }
+            })
             return
 
           case "tool-input-end": {
@@ -332,21 +342,30 @@ const layer = Layer.effect(
             }
             yield* ensureToolCall(value)
             const input = isRecord(value.input) ? value.input : { value: value.input }
-            yield* updateToolCall(value.id, (match) => ({
-              ...match,
-              tool: value.name,
-              state:
-                match.state.status === "running"
-                  ? { ...match.state, input }
-                  : {
-                      status: "running",
-                      input,
-                      time: { start: Date.now() },
-                    },
-              metadata: match.metadata?.providerExecuted
-                ? { ...value.providerMetadata, providerExecuted: true }
-                : value.providerMetadata,
-            }))
+            yield* updateToolCall(value.id, (match) => {
+              if (match.state.status !== "pending" && match.state.status !== "running") return match
+              const start = match.state.status === "running" ? match.state.time.start : Date.now()
+              const raw = match.state.raw
+              return {
+                ...match,
+                tool: value.name,
+                state: {
+                  status: "running",
+                  input,
+                  raw,
+                  time: { start },
+                  ...(match.state.status === "running" && match.state.title !== undefined
+                    ? { title: match.state.title }
+                    : {}),
+                  ...(match.state.status === "running" && match.state.metadata !== undefined
+                    ? { metadata: match.state.metadata }
+                    : {}),
+                },
+                metadata: match.metadata?.providerExecuted
+                  ? { ...value.providerMetadata, providerExecuted: true }
+                  : value.providerMetadata,
+              }
+            })
 
             const parts = yield* MessageV2.parts(ctx.assistantMessage.id).pipe(
               Effect.provideService(Database.Service, database),
@@ -581,8 +600,8 @@ const layer = Layer.effect(
           yield* session.updatePart({
             ...part,
             state: {
-              ...part.state,
               status: "error",
+              input: part.state.input,
               error: "Tool execution aborted",
               metadata: { ...metadata, interrupted: true },
               time: { start: "time" in part.state ? part.state.time.start : end, end },

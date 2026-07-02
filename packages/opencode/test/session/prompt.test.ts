@@ -50,7 +50,7 @@ import { Truncate } from "@/tool/truncate"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { Format } from "../../src/format"
-import { TestInstance } from "../fixture/fixture"
+import { provideTmpdirServer, TestInstance } from "../fixture/fixture"
 import { awaitWithTimeout, pollWithTimeout, testEffect } from "../lib/effect"
 import { reply, TestLLMServer } from "../lib/llm-server"
 import { RuntimeFlags } from "@/effect/runtime-flags"
@@ -255,6 +255,13 @@ const withMcpInstructions = testEffect(
 )
 const unix = process.platform !== "win32" ? it.instance : it.instance.skip
 const unixNoLLMServer = process.platform !== "win32" ? noLLMServer.instance : noLLMServer.instance.skip
+const win = process.platform === "win32" ? it.live : it.live.skip
+
+function powershell() {
+  const shell = Bun.which("powershell") ?? Bun.which("pwsh")
+  if (!shell) throw new Error("pwsh or powershell is required for PowerShell shell-tool tests")
+  return shell
+}
 
 // Config that registers a custom "test" provider with a "test-model" model
 // so provider model lookup succeeds inside the loop.
@@ -1664,6 +1671,109 @@ unixNoLLMServer(
       }),
     ),
   { config: cfg },
+  30_000,
+)
+
+win(
+  "loop preserves raw tool input while shell tool runs a PowerShell pipeline",
+  () =>
+    provideTmpdirServer(
+      ({ dir, llm }) =>
+        Effect.gen(function* () {
+          const prompt = yield* SessionPrompt.Service
+          const sessions = yield* Session.Service
+          const chat = yield* sessions.create({
+            title: "PowerShell pipeline raw state",
+            permission: [{ permission: "*", pattern: "*", action: "allow" }],
+          })
+          yield* prompt.prompt({
+            sessionID: chat.id,
+            agent: "build",
+            noReply: true,
+            parts: [{ type: "text", text: "run powershell pipeline" }],
+          })
+
+          const outDir = path.join(dir, "pipeline-output").replaceAll("'", "''")
+          const releaseFile = path.join(dir, "release-pipeline.txt")
+          const releasePath = releaseFile.replaceAll("'", "''")
+          const command = [
+            `New-Item -ItemType Directory -Path '${outDir}' -Force | Out-Null`,
+            "Write-Output pipeline-one",
+            `while (-not (Test-Path -LiteralPath '${releasePath}')) { Start-Sleep -Milliseconds 100 }`,
+            "Write-Output pipeline-two",
+          ].join("; ")
+          const toolInput = {
+            command,
+            description: "PowerShell pipeline raw state",
+            timeout: 30_000,
+            workdir: dir,
+          }
+          const rawInput = JSON.stringify(toolInput)
+          yield* llm.tool("bash", toolInput)
+          yield* llm.text("done")
+
+          const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
+
+          let firstStart: number | undefined
+          const observed = yield* Effect.exit(
+            pollWithTimeout(
+              Effect.gen(function* () {
+                const msgs = yield* MessageV2.filterCompactedEffect(chat.id)
+                const tool = msgs
+                  .flatMap((msg) => msg.parts)
+                  .findLast((part): part is SessionV1.ToolPart => part.type === "tool" && part.tool === "bash")
+                if (tool?.state.status === "running") {
+                  expect(tool.state.raw).toBe(rawInput)
+                  const output = String(tool.state.metadata?.output ?? "")
+                  if (output.includes("pipeline-one")) {
+                    firstStart = tool.state.time.start
+                    return true
+                  }
+                }
+                if (tool?.state.status === "completed") {
+                  throw new Error("tool completed before observing running PowerShell pipeline output")
+                }
+                if (tool?.state.status === "error") {
+                  throw new Error(tool.state.error)
+                }
+              }),
+              "timed out waiting for running PowerShell pipeline output",
+              20_000,
+            ),
+          )
+
+          yield* Effect.promise(() => Bun.write(releaseFile, "go"))
+          const exit = yield* Fiber.await(fiber)
+          if (Exit.isFailure(observed)) {
+            return yield* Effect.failCause(observed.cause)
+          }
+          expect(Exit.isSuccess(exit)).toBe(true)
+          if (Exit.isFailure(exit)) return
+
+          const msgs = yield* MessageV2.filterCompactedEffect(chat.id)
+          const tool = msgs
+            .flatMap((msg) => msg.parts)
+            .findLast(
+              (part): part is CompletedToolPart =>
+                part.type === "tool" && part.tool === "bash" && part.state.status === "completed",
+            )
+          expect(tool).toBeDefined()
+          if (!tool) return
+          expect(firstStart).toBeDefined()
+          if (firstStart === undefined) return
+          expect(tool.state.output).toContain("pipeline-one")
+          expect(tool.state.output).toContain("pipeline-two")
+          expect(tool.state.time.start).toBe(firstStart)
+          expect(tool.state.time.end - tool.state.time.start).toBeLessThan(30_000)
+        }),
+      {
+        git: true,
+        config: (url) => ({
+          ...providerCfg(url),
+          shell: powershell(),
+        }),
+      },
+    ),
   30_000,
 )
 

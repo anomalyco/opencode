@@ -209,6 +209,7 @@ function compactToolState(part: ToolPart): ToolPart["state"] {
       status: "running",
       input: part.state.input,
       time: part.state.time,
+      ...(part.state.raw !== undefined ? { raw: part.state.raw } : {}),
       ...(part.state.metadata ? { metadata: part.state.metadata } : {}),
       ...(part.state.title ? { title: part.state.title } : {}),
     }

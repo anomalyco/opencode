@@ -417,6 +417,87 @@ describe("run subagent data", () => {
     expect(snapshot.questions).toEqual([])
   })
 
+  test("compacts child tool raw according to tool state", () => {
+    const data = createSubagentData()
+
+    bootstrapSubagentData({
+      data,
+      messages: [taskMessage("child-1", "running")],
+      children: [{ id: "child-1" }],
+      permissions: [],
+      questions: [],
+    })
+
+    const runningRaw = '{"command":"git status --short"}'
+    reduce(data, {
+      type: "message.part.updated",
+      properties: {
+        part: {
+          id: "tool-running",
+          messageID: "msg-assistant-1",
+          sessionID: "child-1",
+          type: "tool",
+          callID: "call-running",
+          tool: "bash",
+          state: {
+            status: "running",
+            input: {
+              command: "git status --short",
+            },
+            raw: runningRaw,
+            time: { start: 1 },
+          },
+        },
+      },
+    })
+
+    const running = snapshotSubagentData(data).details["child-1"]?.commits.find(
+      (commit) => commit.partID === "tool-running",
+    )
+    expect(running?.part?.state.status).toBe("running")
+    if (running?.part?.state.status === "running") {
+      expect(running.part.state.raw).toBe(runningRaw)
+    }
+
+    const errorData = createSubagentData()
+    bootstrapSubagentData({
+      data: errorData,
+      messages: [taskMessage("child-2", "running")],
+      children: [{ id: "child-2" }],
+      permissions: [],
+      questions: [],
+    })
+
+    reduce(errorData, {
+      type: "message.part.updated",
+      properties: {
+        part: {
+          id: "tool-error",
+          messageID: "msg-assistant-2",
+          sessionID: "child-2",
+          type: "tool",
+          callID: "call-error",
+          tool: "bash",
+          state: {
+            status: "error",
+            input: {},
+            error: "Tool execution aborted",
+            raw: '{"command":"Write-Output compact-secret"}',
+            time: { start: 1, end: 2 },
+          },
+        },
+      },
+    })
+
+    const errorCommits = snapshotSubagentData(errorData).details["child-2"]?.commits ?? []
+    const error = errorCommits.find((commit) => commit.partID === "tool-error" && commit.toolState === "error")
+    expect(error?.part?.state.status).toBe("error")
+    if (error?.part?.state.status === "error") {
+      expect("raw" in error.part.state).toBe(false)
+    }
+    expect(JSON.stringify(errorCommits)).not.toContain("compact-secret")
+  })
+
   test("replays bootstrapped child session messages into inspector commits", () => {
     const data = createSubagentData()
 

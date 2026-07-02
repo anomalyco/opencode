@@ -266,6 +266,7 @@ export type ToolStatePending = Types.DeepMutable<Schema.Schema.Type<typeof ToolS
 export const ToolStateRunning = Schema.Struct({
   status: Schema.Literal("running"),
   input: Schema.Record(Schema.String, Schema.Any),
+  raw: Schema.optional(Schema.String),
   title: Schema.optional(Schema.String),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Any)),
   time: Schema.Struct({

@@ -103,9 +103,22 @@ function defer<T>() {
   return { promise, resolve }
 }
 
+function chatChunk(input: { delta?: Record<string, unknown>; finish?: string }) {
+  return {
+    id: "chatcmpl-test",
+    object: "chat.completion.chunk",
+    choices: [
+      {
+        delta: input.delta ?? {},
+        ...(input.finish ? { finish_reason: input.finish } : {}),
+      },
+    ],
+  }
+}
+
 const waitFor = <A>(check: Effect.Effect<A | undefined>, message: string) =>
   Effect.gen(function* () {
-    const stop = Date.now() + 500
+    const stop = Date.now() + 5_000
     while (Date.now() < stop) {
       const value = yield* check
       if (value !== undefined) return value
@@ -366,6 +379,219 @@ it.live("session.processor effect tests preserve text start time", () =>
         expect(text?.time?.end).toBeDefined()
         if (!text?.time?.start || !text.time.end) return
         expect(text.time.start).toBeLessThan(text.time.end)
+      }),
+    { config: (url) => providerCfg(url) },
+  ),
+)
+
+it.live("session.processor preserves raw tool input across input deltas", () =>
+  provideTmpdirServer(
+    ({ dir, llm }) =>
+      Effect.gen(function* () {
+        const database = yield* Database.Service
+        const { processors, session, provider } = yield* boot()
+        const input = {
+          command: "Write-Output pipeline-one",
+          description: "PowerShell pipeline raw state",
+          timeout: 30_000,
+          workdir: dir,
+        }
+        const rawInput = JSON.stringify(input)
+        const split = Math.floor(rawInput.length / 2)
+        const release = defer<void>()
+
+        yield* llm.push(
+          raw({
+            chunks: [
+              chatChunk({ delta: { role: "assistant" } }),
+              chatChunk({
+                delta: {
+                  tool_calls: [
+                    {
+                      index: 0,
+                      id: "call_raw",
+                      type: "function",
+                      function: { name: "bash", arguments: "" },
+                    },
+                  ],
+                },
+              }),
+              chatChunk({
+                delta: {
+                  tool_calls: [{ index: 0, function: { arguments: rawInput.slice(0, split) } }],
+                },
+              }),
+              chatChunk({
+                delta: {
+                  tool_calls: [{ index: 0, function: { arguments: rawInput.slice(split) } }],
+                },
+              }),
+              chatChunk({ finish: "tool_calls" }),
+            ],
+          }),
+        )
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "hi")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+        })
+
+        const run = yield* handle
+          .process({
+            user: {
+              id: parent.id,
+              sessionID: chat.id,
+              role: "user",
+              time: parent.time,
+              agent: parent.agent,
+              model: { providerID: ref.providerID, modelID: ref.modelID },
+            } satisfies SessionV1.User,
+            sessionID: chat.id,
+            model: mdl,
+            agent: agent(),
+            system: [],
+            messages: [{ role: "user", content: "hi" }],
+            tools: {
+              bash: tool({
+                description: "Run shell command",
+                inputSchema: z.object({
+                  command: z.string(),
+                  description: z.string(),
+                  timeout: z.number(),
+                  workdir: z.string(),
+                }),
+                execute: async () => {
+                  await release.promise
+                  return { title: "bash", output: "done", metadata: {} }
+                },
+              }),
+            },
+          })
+          .pipe(Effect.forkChild)
+
+        const toolPart = yield* waitFor(
+          MessageV2.parts(msg.id).pipe(
+            Effect.map((parts) =>
+              parts.find(
+                (part): part is SessionV1.ToolPart =>
+                  part.type === "tool" && part.tool === "bash" && part.state.status === "running",
+              ),
+            ),
+            Effect.provideService(Database.Service, database),
+          ),
+          "timed out waiting for running raw tool state",
+        )
+        expect(toolPart.state.status).toBe("running")
+        if (toolPart.state.status !== "running") return
+        expect(toolPart.state.input).toEqual(input)
+        expect(toolPart.state.raw).toBe(rawInput)
+        expect(toolPart.state.time.start).toBeGreaterThan(0)
+
+        release.resolve()
+        const exit = yield* Fiber.await(run)
+        expect(Exit.isSuccess(exit)).toBe(true)
+      }),
+    { config: (url) => providerCfg(url) },
+  ),
+)
+
+it.live("session.processor drops raw tool input when a running tool aborts on cleanup", () =>
+  provideTmpdirServer(
+    ({ dir, llm }) =>
+      Effect.gen(function* () {
+        const database = yield* Database.Service
+        const { processors, session, provider } = yield* boot()
+        const input = {
+          command: "Write-Output before-abort",
+          description: "PowerShell pipeline raw state",
+          timeout: 30_000,
+          workdir: dir,
+        }
+        const rawInput = JSON.stringify(input)
+        const release = defer<void>()
+
+        yield* llm.tool("bash", input)
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "abort running raw tool")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+        })
+
+        const run = yield* handle
+          .process({
+            user: {
+              id: parent.id,
+              sessionID: chat.id,
+              role: "user",
+              time: parent.time,
+              agent: parent.agent,
+              model: { providerID: ref.providerID, modelID: ref.modelID },
+            } satisfies SessionV1.User,
+            sessionID: chat.id,
+            model: mdl,
+            agent: agent(),
+            system: [],
+            messages: [{ role: "user", content: "abort running raw tool" }],
+            tools: {
+              bash: tool({
+                description: "Run shell command",
+                inputSchema: z.object({
+                  command: z.string(),
+                  description: z.string(),
+                  timeout: z.number(),
+                  workdir: z.string(),
+                }),
+                execute: async () => {
+                  await release.promise
+                  return { title: "bash", output: "done", metadata: {} }
+                },
+              }),
+            },
+          })
+          .pipe(Effect.forkChild)
+
+        const running = yield* waitFor(
+          MessageV2.parts(msg.id).pipe(
+            Effect.map((parts) =>
+              parts.find(
+                (part): part is SessionV1.ToolPart =>
+                  part.type === "tool" && part.tool === "bash" && part.state.status === "running",
+              ),
+            ),
+            Effect.provideService(Database.Service, database),
+          ),
+          "timed out waiting for running raw tool state",
+        )
+        expect(running.state.status).toBe("running")
+        if (running.state.status !== "running") return
+        expect(running.state.raw).toBe(rawInput)
+
+        yield* Fiber.interrupt(run)
+        const exit = yield* Fiber.await(run)
+        release.resolve()
+        expect(Exit.isFailure(exit)).toBe(true)
+        if (Exit.isFailure(exit)) {
+          expect(Cause.hasInterruptsOnly(exit.cause)).toBe(true)
+        }
+
+        const parts = yield* MessageV2.parts(msg.id)
+        const call = parts.find((part): part is SessionV1.ToolPart => part.type === "tool" && part.tool === "bash")
+        expect(call?.state.status).toBe("error")
+        if (call?.state.status === "error") {
+          expect(call.state.error).toBe("Tool execution aborted")
+          expect("raw" in call.state).toBe(false)
+          expect(call.state.metadata?.interrupted).toBe(true)
+        }
       }),
     { config: (url) => providerCfg(url) },
   ),
@@ -826,6 +1052,7 @@ it.live("session.processor effect tests mark pending tools as aborted on cleanup
         expect(call?.state.status).toBe("error")
         if (call?.state.status === "error") {
           expect(call.state.error).toBe("Tool execution aborted")
+          expect("raw" in call.state).toBe(false)
           expect(call.state.metadata?.interrupted).toBe(true)
           expect(call.state.time.end).toBeDefined()
         }

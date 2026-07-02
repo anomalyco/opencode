@@ -16722,6 +16722,9 @@
           "input": {
             "type": "object"
           },
+          "raw": {
+            "type": "string"
+          },
           "title": {
             "type": "string"
           },

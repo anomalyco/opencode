@@ -104,6 +104,7 @@ function part(part: SessionV1.Part): SessionV1.Part {
               ? {
                   ...part.state,
                   input: data("tool-input", part.id, part.state.input) ?? part.state.input,
+                  raw: part.state.raw === undefined ? undefined : redact("tool-raw", part.id, part.state.raw),
                   title: part.state.title === undefined ? undefined : redact("tool-title", part.id, part.state.title),
                   metadata: data("tool-state-metadata", part.id, part.state.metadata),
                 }
@@ -117,9 +118,11 @@ function part(part: SessionV1.Part): SessionV1.Part {
                     attachments: part.state.attachments?.map(filepart),
                   }
                 : {
-                    ...part.state,
+                    status: "error",
                     input: data("tool-input", part.id, part.state.input) ?? part.state.input,
+                    error: part.state.error,
                     metadata: data("tool-state-metadata", part.id, part.state.metadata),
+                    time: part.state.time,
                   },
       }
     case "patch":
@@ -160,7 +163,7 @@ function part(part: SessionV1.Part): SessionV1.Part {
 
 const partFn = part
 
-function sanitize(data: { info: Session.Info; messages: SessionV1.WithParts[] }) {
+export function sanitize(data: { info: Session.Info; messages: SessionV1.WithParts[] }) {
   return {
     info: {
       ...data.info,

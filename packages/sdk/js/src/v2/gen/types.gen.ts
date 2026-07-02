@@ -487,6 +487,7 @@ export type ToolStateRunning = {
   input: {
     [key: string]: unknown
   }
+  raw?: string
   title?: string
   metadata?: {
     [key: string]: unknown

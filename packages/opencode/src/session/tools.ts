@@ -63,15 +63,19 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
     messages: input.messages,
     metadata: (val) =>
       input.processor.updateToolCall(options.toolCallId, (match) => {
-        if (!["running", "pending"].includes(match.state.status)) return match
+        if (match.state.status !== "pending" && match.state.status !== "running") return match
+        const start = match.state.status === "running" ? match.state.time.start : Date.now()
+        const title = val.title ?? (match.state.status === "running" ? match.state.title : undefined)
+        const metadata = val.metadata ?? (match.state.status === "running" ? match.state.metadata : undefined)
         return {
           ...match,
           state: {
-            title: val.title,
-            metadata: val.metadata,
             status: "running",
             input: args,
-            time: { start: Date.now() },
+            raw: match.state.raw,
+            time: { start },
+            ...(title !== undefined ? { title } : {}),
+            ...(metadata !== undefined ? { metadata } : {}),
           },
         }
       }),
