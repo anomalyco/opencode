@@ -151,7 +151,7 @@ describe("EventV2", () => {
     Effect.gen(function* () {
       const events = yield* EventV2.Service
       const typed = yield* events.subscribe(Message).pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
-      const wildcard = yield* events.all().pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
+      const wildcard = yield* events.live().pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
       yield* Effect.yieldNow
       const event = yield* events.publish(Message, { text: "hello" })
 
@@ -232,7 +232,7 @@ describe("EventV2", () => {
     Effect.gen(function* () {
       const events = yield* EventV2.Service
       const received = new Array<string>()
-      const fiber = yield* events.all().pipe(
+      const fiber = yield* events.live().pipe(
         Stream.take(1),
         Stream.runForEach(() => Effect.sync(() => received.push("stream"))),
         Effect.forkScoped,
@@ -331,8 +331,8 @@ describe("EventV2", () => {
       const events = yield* EventV2.Service
       const consuming = yield* Deferred.make<void>()
       const release = yield* Deferred.make<void>()
-      const slowStream = yield* EventV2.allBounded(events, 1)
-      const fastStream = yield* EventV2.allBounded(events, 8)
+      const slowStream = yield* EventV2.liveBounded(events, 1)
+      const fastStream = yield* EventV2.liveBounded(events, 8)
       const slow = yield* slowStream.pipe(
         Stream.runForEach(() => Deferred.succeed(consuming, undefined).pipe(Effect.andThen(Deferred.await(release)))),
         Effect.forkScoped,

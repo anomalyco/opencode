@@ -27,7 +27,7 @@ const capture = () => {
         return event
       }),
     subscribe: () => Stream.empty,
-    all: () => Stream.empty,
+    live: () => Stream.empty,
     log: () => Stream.empty,
     changes: () => Stream.empty,
     sequences: () => Effect.succeed(new Map()),

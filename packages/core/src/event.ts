@@ -115,7 +115,12 @@ export interface Interface {
     options?: PublishOptions,
   ) => Effect.Effect<Payload<D>>
   readonly subscribe: <D extends Definition>(definition: D) => Stream.Stream<Payload<D>>
-  readonly all: () => Stream.Stream<Payload>
+  /**
+   * Volatile live channel: every event published from now on, nothing before,
+   * nothing across a disconnect. The only channel that carries non-durable
+   * events; consumers that need reliability combine `changes` with `log`.
+   */
+  readonly live: () => Stream.Stream<Payload>
   /**
    * Durable, ordered, gap-free per-aggregate log read. `follow: false`
    * completes at the end of the log; `follow: true` replays then transitions
@@ -152,7 +157,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Event") {}
 
-export const allBounded = (events: Interface, capacity: number) =>
+export const liveBounded = (events: Interface, capacity: number) =>
   Effect.gen(function* () {
     const queue = yield* Queue.dropping<Payload, SubscriberOverflowError>(capacity)
     const unsubscribe = yield* events.listen((event) =>
@@ -180,7 +185,7 @@ export const layerWith = (options?: LayerOptions) =>
     Service,
     Effect.gen(function* () {
       const pubsub = {
-        all: yield* PubSub.unbounded<Payload>(),
+        live: yield* PubSub.unbounded<Payload>(),
         durable: new Map<string, Set<PubSub.PubSub<void>>>(),
         typed: new Map<string, PubSub.PubSub<Payload>>(),
       }
@@ -206,7 +211,7 @@ export const layerWith = (options?: LayerOptions) =>
 
       yield* Effect.addFinalizer(() =>
         Effect.gen(function* () {
-          yield* PubSub.shutdown(pubsub.all)
+          yield* PubSub.shutdown(pubsub.live)
           yield* Effect.forEach(
             pubsub.durable.values(),
             (pubsubs) => Effect.forEach(pubsubs, PubSub.shutdown, { discard: true }),
@@ -446,7 +451,7 @@ export const layerWith = (options?: LayerOptions) =>
           )
           const typed = pubsub.typed.get(event.type)
           if (typed) yield* PubSub.publish(typed, event)
-          yield* PubSub.publish(pubsub.all, event)
+          yield* PubSub.publish(pubsub.live, event)
         })
       }
 
@@ -566,7 +571,7 @@ export const layerWith = (options?: LayerOptions) =>
           Stream.map((event) => event as Payload<D>),
         )
 
-      const streamAll = (): Stream.Stream<Payload> => Stream.fromPubSub(pubsub.all)
+      const streamLive = (): Stream.Stream<Payload> => Stream.fromPubSub(pubsub.live)
 
       const readAfter = (aggregateID: string, after: number) =>
         (options?.beforeAggregateRead?.(aggregateID) ?? Effect.void).pipe(
@@ -727,7 +732,7 @@ export const layerWith = (options?: LayerOptions) =>
       return Service.of({
         publish,
         subscribe,
-        all: streamAll,
+        live: streamLive,
         log,
         changes,
         sequences,
