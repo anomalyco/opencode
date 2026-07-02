@@ -9,6 +9,7 @@ import { Context, Effect, Encoding, Result, Schema, Struct } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
 import {
   ConflictError,
+  CommandEvaluationError,
   CommandNotFoundError,
   InvalidCursorError,
   InvalidRequestError,
@@ -273,7 +274,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
           resume: Schema.Boolean.pipe(Schema.optional),
         }),
         success: Schema.Struct({ data: SessionInput.Admitted }),
-        error: [ConflictError, SessionNotFoundError, CommandNotFoundError],
+        error: [ConflictError, SessionNotFoundError, CommandNotFoundError, CommandEvaluationError],
       })
         .middleware(sessionLocationMiddleware)
         .annotateMerge(

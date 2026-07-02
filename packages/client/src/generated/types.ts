@@ -58,6 +58,14 @@ export type CommandNotFoundError = {
 export const isCommandNotFoundError = (value: unknown): value is CommandNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "CommandNotFoundError"
 
+export type CommandEvaluationError = {
+  readonly _tag: "CommandEvaluationError"
+  readonly command: string
+  readonly message: string
+}
+export const isCommandEvaluationError = (value: unknown): value is CommandEvaluationError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "CommandEvaluationError"
+
 export type SkillNotFoundError = {
   readonly _tag: "SkillNotFoundError"
   readonly skill: string

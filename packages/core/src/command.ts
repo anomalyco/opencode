@@ -1,7 +1,7 @@
 export * as CommandV2 from "./command"
 
 import { makeLocationNode } from "./effect/app-node"
-import { Context, Effect, Layer, Types } from "effect"
+import { Context, Effect, Layer, Schema, Types } from "effect"
 import { Command } from "@opencode-ai/schema/command"
 import { State } from "./state"
 import { MCP } from "./mcp/index"
@@ -13,12 +13,14 @@ export type Data = {
   commands: Map<string, Types.DeepMutable<Info>>
 }
 
-export type Expanded = {
-  readonly info: Info
-  readonly prompt: {
-    readonly text: string
-  }
-}
+export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("Command.NotFoundError", {
+  command: Schema.String,
+}) {}
+
+export class EvaluationError extends Schema.TaggedErrorClass<EvaluationError>()("Command.EvaluationError", {
+  command: Schema.String,
+  message: Schema.String,
+}) {}
 
 export type Draft = {
   list: () => readonly Info[]
@@ -30,7 +32,10 @@ export type Draft = {
 export interface Interface extends State.Transformable<Draft> {
   readonly get: (name: string) => Effect.Effect<Info | undefined>
   readonly list: () => Effect.Effect<Info[]>
-  readonly expand: (input: { readonly name: string; readonly arguments?: string }) => Effect.Effect<Expanded | undefined>
+  readonly evaluate: (input: {
+    readonly name: string
+    readonly arguments?: string
+  }) => Effect.Effect<string, NotFoundError | EvaluationError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Command") {}
@@ -82,34 +87,47 @@ const layer = Layer.effect(
           ...(yield* mcpCommands()).filter((command) => !names.has(command.name)),
         ].toSorted((a, b) => a.name.localeCompare(b.name))
       }),
-      expand: Effect.fn("CommandV2.expand")(function* (input) {
+      evaluate: Effect.fn("CommandV2.evaluate")(function* (input) {
         const command = staticCommand(input.name)
-        if (command)
-          return {
-            info: command,
-            prompt: { text: expandTemplate(command.template, input.arguments ?? "") },
-          }
+        if (command) return evaluateTemplate(command.template, input.arguments ?? "")
 
         const prompt = (yield* mcp.prompts()).find((prompt) => mcpCommandName(prompt.server, prompt.name) === input.name)
-        if (!prompt) return undefined
-        const result = yield* mcp.prompt({
-          server: prompt.server,
-          name: prompt.name,
-          args: Object.fromEntries(
-            (prompt.arguments ?? []).map((argument, index) => [argument.name, parseArguments(input.arguments ?? "")[index] ?? ""]),
-          ),
-        })
-        if (!result) return undefined
-        return {
-          info: Info.make({ name: input.name, template: "", description: prompt.description }),
-          prompt: { text: result.messages.map((message) => promptMessageText(message.content)).join("\n").trim() },
-        }
+        if (!prompt) return yield* new NotFoundError({ command: input.name })
+        const result = yield* mcp
+          .prompt({
+            server: prompt.server,
+            name: prompt.name,
+            args: Object.fromEntries(
+              (prompt.arguments ?? []).map((argument, index) => [
+                argument.name,
+                parseArguments(input.arguments ?? "")[index] ?? "",
+              ]),
+            ),
+          })
+          .pipe(
+            Effect.catchTag(
+              "MCP.NotFoundError",
+              () =>
+                Effect.fail(
+                  new EvaluationError({
+                    command: input.name,
+                    message: `MCP server could not be found while evaluating prompt: ${prompt.server}`,
+                  }),
+                ),
+            ),
+          )
+        if (!result)
+          return yield* new EvaluationError({
+            command: input.name,
+            message: `MCP prompt could not be evaluated: ${prompt.server}:${prompt.name}`,
+          })
+        return result.messages.map((message) => promptMessageText(message.content)).join("\n").trim()
       }),
     })
   }),
 )
 
-function expandTemplate(template: string, input: string) {
+function evaluateTemplate(template: string, input: string) {
   const args = parseArguments(input)
   const placeholders = template.match(placeholderRegex) ?? []
   const last = Math.max(0, ...placeholders.map((item) => Number(item.slice(1))))

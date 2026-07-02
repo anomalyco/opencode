@@ -470,7 +470,7 @@ export function make(options: ClientOptions) {
               resume: input["resume"],
             },
             successStatus: 200,
-            declaredStatuses: [409, 404, 400, 401],
+            declaredStatuses: [409, 404, 500, 400, 401],
             empty: false,
           },
           requestOptions,

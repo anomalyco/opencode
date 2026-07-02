@@ -5,6 +5,7 @@ import { Api } from "../api"
 import { SessionsCursor } from "@opencode-ai/protocol/groups/session"
 import {
   ConflictError,
+  CommandEvaluationError,
   CommandNotFoundError,
   InvalidCursorError,
   MessageNotFoundError,
@@ -242,11 +243,19 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                     }),
                   ),
                 ),
-                Effect.catchTag("Session.CommandNotFoundError", (error) =>
+                Effect.catchTag("Command.NotFoundError", (error) =>
                   Effect.fail(
                     new CommandNotFoundError({
                       command: error.command,
                       message: `Command not found: ${error.command}`,
+                    }),
+                  ),
+                ),
+                Effect.catchTag("Command.EvaluationError", (error) =>
+                  Effect.fail(
+                    new CommandEvaluationError({
+                      command: error.command,
+                      message: error.message,
                     }),
                   ),
                 ),
