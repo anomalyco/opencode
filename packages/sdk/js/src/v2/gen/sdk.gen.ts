@@ -399,6 +399,8 @@ import type {
   V2SessionSwitchAgentResponses,
   V2SessionSwitchModelErrors,
   V2SessionSwitchModelResponses,
+  V2SessionSyntheticErrors,
+  V2SessionSyntheticResponses,
   V2SessionWaitErrors,
   V2SessionWaitResponses,
   V2ShellCreateErrors,
@@ -5806,6 +5808,47 @@ export class Session3 extends HeyApiClient {
     )
     return (options?.client ?? this.client).post<V2SessionSkillResponses, V2SessionSkillErrors, ThrowOnError>({
       url: "/api/session/{sessionID}/skill",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Add synthetic message
+   *
+   * Append a synthetic message to a session and resume execution.
+   */
+  public synthetic<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      text?: string
+      description?: string
+      metadata?: {
+        [key: string]: unknown
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "body", key: "text" },
+            { in: "body", key: "description" },
+            { in: "body", key: "metadata" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<V2SessionSyntheticResponses, V2SessionSyntheticErrors, ThrowOnError>({
+      url: "/api/session/{sessionID}/synthetic",
       ...options,
       ...params,
       headers: {

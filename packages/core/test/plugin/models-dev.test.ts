@@ -168,7 +168,7 @@ describe("ModelsDevPlugin", () => {
     ),
   )
 
-  it.effect("converts reasoning options into provider option variants", () =>
+  it.effect("converts reasoning options into settings variants", () =>
     Effect.acquireUseRelease(
       Effect.sync(() => {
         const previous = {
@@ -197,27 +197,23 @@ describe("ModelsDevPlugin", () => {
           ])
           expect(model?.variants).toContainEqual({
             id: ModelV2.VariantID.make("low"),
+            settings: {
+              reasoningEffort: "low",
+              reasoningSummary: "auto",
+              include: ["reasoning.encrypted_content"],
+            },
             headers: {},
             body: {},
-            providerOptions: {
-              openai: {
-                reasoningEffort: "low",
-                reasoningSummary: "auto",
-                include: ["reasoning.encrypted_content"],
-              },
-            },
           })
           expect(model?.variants).toContainEqual({
             id: ModelV2.VariantID.make("high"),
+            settings: {
+              reasoningEffort: "high",
+              reasoningSummary: "auto",
+              include: ["reasoning.encrypted_content"],
+            },
             headers: {},
             body: {},
-            providerOptions: {
-              openai: {
-                reasoningEffort: "high",
-                reasoningSummary: "auto",
-                include: ["reasoning.encrypted_content"],
-              },
-            },
           })
 
           const mode = yield* catalog.model.get(ProviderV2.ID.openai, ModelV2.ID.make("gpt-reasoning-high"))
@@ -237,19 +233,15 @@ describe("ModelsDevPlugin", () => {
           const budgetModel = yield* catalog.model.get(ProviderV2.ID.anthropic, ModelV2.ID.make("claude-budget"))
           expect(budgetModel?.variants).toContainEqual({
             id: ModelV2.VariantID.make("high"),
+            settings: { thinking: { type: "enabled", budgetTokens: 16000 } },
             headers: {},
             body: {},
-            providerOptions: {
-              anthropic: { thinking: { type: "enabled", budgetTokens: 16000 } },
-            },
           })
           expect(budgetModel?.variants).toContainEqual({
             id: ModelV2.VariantID.make("max"),
+            settings: { thinking: { type: "enabled", budgetTokens: 64000 } },
             headers: {},
             body: {},
-            providerOptions: {
-              anthropic: { thinking: { type: "enabled", budgetTokens: 64000 } },
-            },
           })
         }).pipe(Effect.provide(AppNodeBuilder.build(ModelsDev.node))),
       (previous) =>

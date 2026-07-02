@@ -43,16 +43,14 @@ export const Api = Schema.Union([AISDK, Native])
   .annotate({ identifier: "Provider.Api" })
 export type Api = typeof Api.Type
 
-export const ProviderOptions = Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Unknown)).annotate({
-  identifier: "Provider.Options",
-})
-export type ProviderOptions = typeof ProviderOptions.Type
+export const Settings = Schema.Record(Schema.String, Schema.Unknown).annotate({ identifier: "Provider.Settings" })
+export type Settings = typeof Settings.Type
 
 export interface Request extends Schema.Schema.Type<typeof Request> {}
 export const Request = Schema.Struct({
+  settings: Settings,
   headers: Schema.Record(Schema.String, Schema.String),
   body: Schema.Record(Schema.String, Schema.Json),
-  providerOptions: ProviderOptions.pipe(optional),
 }).annotate({ identifier: "Provider.Request" })
 
 export interface Info extends Schema.Schema.Type<typeof Info> {}
@@ -72,7 +70,7 @@ export const Info = Schema.Struct({
           id,
           name: id,
           api: { type: "native", settings: {} },
-          request: { headers: {}, body: {} },
+          request: { settings: {}, headers: {}, body: {} },
         }),
     })),
   )

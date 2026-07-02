@@ -288,7 +288,7 @@ function providerInfo(value: ProviderV2.MutableInfo) {
   return {
     ...value,
     api: { ...value.api, settings: value.api.settings && { ...value.api.settings } },
-    request: { headers: { ...value.request.headers }, body: { ...value.request.body } },
+    request: { settings: { ...value.request.settings }, headers: { ...value.request.headers }, body: { ...value.request.body } },
   }
 }
 
@@ -303,11 +303,13 @@ function modelInfo(value: ModelV2.Info | ModelV2.MutableInfo) {
     },
     request: {
       ...value.request,
+      settings: { ...value.request.settings },
       headers: { ...value.request.headers },
       body: { ...value.request.body },
     },
     variants: value.variants.map((variant) => ({
       ...variant,
+      settings: { ...variant.settings },
       headers: { ...variant.headers },
       body: { ...variant.body },
     })),

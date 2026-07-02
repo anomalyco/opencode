@@ -19,24 +19,13 @@ export type MutableApi<T extends Api = Api> = T extends Api
 export const Request = Provider.Request
 export type Request = Provider.Request
 
-export const ProviderOptions = Provider.ProviderOptions
-export type ProviderOptions = Provider.ProviderOptions
-
-export const mergeProviderOptions = (...items: ReadonlyArray<ProviderOptions | undefined>): ProviderOptions | undefined => {
-  const result: Record<string, ProviderOptions[string]> = {}
-  for (const item of items) {
-    if (!item) continue
-    for (const [provider, options] of Object.entries(item)) {
-      result[provider] = { ...result[provider], ...options }
-    }
-  }
-  return Object.keys(result).length === 0 ? undefined : result
-}
+export const Settings = Provider.Settings
+export type Settings = Provider.Settings
 
 export const Info = Provider.Info
 export type Info = Provider.Info
 
-export type MutableRequest = Omit<Types.DeepMutable<Request>, "providerOptions"> & { providerOptions?: ProviderOptions }
+export type MutableRequest = Types.DeepMutable<Request>
 
 export type MutableInfo = Omit<Types.DeepMutable<Info>, "api" | "request"> & {
   api: MutableApi

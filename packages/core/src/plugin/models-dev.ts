@@ -81,8 +81,8 @@ function reasoningVariants(provider: ModelsDev.Provider, model: ModelsDev.Model)
       const raw: unknown = value
       const id = raw === null ? "none" : typeof raw === "string" ? raw : undefined
       if (id === undefined) return []
-      const providerOptions = providerOptionsForEffort(npm, id)
-      return providerOptions ? [{ id, headers: {}, body: {}, providerOptions }] : []
+      const settings = settingsForEffort(npm, id)
+      return settings ? [{ id, settings, headers: {}, body: {} }] : []
     })
   }
 
@@ -95,25 +95,23 @@ function reasoningVariants(provider: ModelsDev.Provider, model: ModelsDev.Model)
   return []
 }
 
-function providerOptionsForEffort(npm: string | undefined, effort: string): ProviderV2.ProviderOptions | undefined {
-  if (npm === "@openrouter/ai-sdk-provider") return { openrouter: { reasoning: { effort } } }
+function settingsForEffort(npm: string | undefined, effort: string): ProviderV2.Settings | undefined {
+  if (npm === "@openrouter/ai-sdk-provider") return { reasoning: { effort } }
   if (npm === "@ai-sdk/anthropic" || npm === "@ai-sdk/google-vertex/anthropic") {
-    return { anthropic: { thinking: { type: "adaptive" }, effort } }
+    return { thinking: { type: "adaptive" }, effort }
   }
   if (npm === "@ai-sdk/google" || npm === "@ai-sdk/google-vertex") {
-    return { gemini: { thinkingConfig: { includeThoughts: true, thinkingLevel: effort } } }
+    return { thinkingConfig: { includeThoughts: true, thinkingLevel: effort } }
   }
-  if (npm === "@ai-sdk/azure") return { openai: { reasoningEffort: effort }, azure: { reasoningEffort: effort } }
+  if (npm === "@ai-sdk/azure") return { reasoningEffort: effort }
   if (npm === "@ai-sdk/openai") {
     return {
-      openai: {
-        reasoningEffort: effort,
-        reasoningSummary: "auto",
-        include: OPENAI_INCLUDE_ENCRYPTED_REASONING,
-      },
+      reasoningEffort: effort,
+      reasoningSummary: "auto",
+      include: OPENAI_INCLUDE_ENCRYPTED_REASONING,
     }
   }
-  if (npm === "@ai-sdk/openai-compatible") return { openai: { reasoningEffort: effort } }
+  if (npm === "@ai-sdk/openai-compatible") return { reasoningEffort: effort }
 }
 
 function budgetVariants(
@@ -126,18 +124,18 @@ function budgetVariants(
     { id: "high", budget: high },
     ...(max === undefined || max === high ? [] : [{ id: "max", budget: max }]),
   ].flatMap((item) => {
-    const providerOptions = providerOptionsForBudget(npm, item.budget)
-    return providerOptions ? [{ id: item.id, headers: {}, body: {}, providerOptions }] : []
+    const settings = settingsForBudget(npm, item.budget)
+    return settings ? [{ id: item.id, settings, headers: {}, body: {} }] : []
   })
 }
 
-function providerOptionsForBudget(npm: string | undefined, budget: number): ProviderV2.ProviderOptions | undefined {
-  if (npm === "@openrouter/ai-sdk-provider") return { openrouter: { reasoning: { max_tokens: budget } } }
+function settingsForBudget(npm: string | undefined, budget: number): ProviderV2.Settings | undefined {
+  if (npm === "@openrouter/ai-sdk-provider") return { reasoning: { max_tokens: budget } }
   if (npm === "@ai-sdk/anthropic" || npm === "@ai-sdk/google-vertex/anthropic") {
-    return { anthropic: { thinking: { type: "enabled", budgetTokens: budget } } }
+    return { thinking: { type: "enabled", budgetTokens: budget } }
   }
   if (npm === "@ai-sdk/google" || npm === "@ai-sdk/google-vertex") {
-    return { gemini: { thinkingConfig: { includeThoughts: true, thinkingBudget: budget } } }
+    return { thinkingConfig: { includeThoughts: true, thinkingBudget: budget } }
   }
 }
 

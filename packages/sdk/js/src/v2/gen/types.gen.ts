@@ -942,6 +942,9 @@ export type GlobalEvent = {
           messageID: string
           text: string
           description?: string
+          metadata?: {
+            [key: string]: unknown
+          }
         }
       }
     | {
@@ -3618,6 +3621,9 @@ export type SyncEventSessionNextSynthetic = {
       messageID: string
       text: string
       description?: string
+      metadata?: {
+        [key: string]: unknown
+      }
     }
   }
 }
@@ -4091,20 +4097,18 @@ export type LocationInfo = {
   }
 }
 
-export type ProviderOptions = {
-  [key: string]: {
-    [key: string]: unknown
-  }
+export type ProviderSettings = {
+  [key: string]: unknown
 }
 
 export type ProviderRequest = {
+  settings: ProviderSettings
   headers: {
     [key: string]: string
   }
   body: {
     [key: string]: unknown
   }
-  providerOptions?: ProviderOptions
 }
 
 export type AgentColor = string | "primary" | "secondary" | "accent" | "success" | "warning" | "error" | "info"
@@ -4590,6 +4594,9 @@ export type SessionNextSynthetic = {
     messageID: string
     text: string
     description?: string
+    metadata?: {
+      [key: string]: unknown
+    }
   }
 }
 
@@ -5127,24 +5134,24 @@ export type ModelV2Info = {
   api: ModelApi
   capabilities: ModelCapabilities
   request: {
+    settings: ProviderSettings
     headers: {
       [key: string]: string
     }
     body: {
       [key: string]: unknown
     }
-    providerOptions?: ProviderOptions
     variant?: string
   }
   variants: Array<{
     id: string
+    settings: ProviderSettings
     headers: {
       [key: string]: string
     }
     body: {
       [key: string]: unknown
     }
-    providerOptions?: ProviderOptions
   }>
   time: {
     released: number
@@ -6815,6 +6822,9 @@ export type EventSessionNextSynthetic = {
     messageID: string
     text: string
     description?: string
+    metadata?: {
+      [key: string]: unknown
+    }
   }
 }
 
@@ -12292,6 +12302,47 @@ export type V2SessionSkillResponses = {
 }
 
 export type V2SessionSkillResponse = V2SessionSkillResponses[keyof V2SessionSkillResponses]
+
+export type V2SessionSyntheticData = {
+  body: {
+    text: string
+    description?: string
+    metadata?: {
+      [key: string]: unknown
+    }
+  }
+  path: {
+    sessionID: string
+  }
+  query?: never
+  url: "/api/session/{sessionID}/synthetic"
+}
+
+export type V2SessionSyntheticErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * SessionNotFoundError
+   */
+  404: SessionNotFoundError
+}
+
+export type V2SessionSyntheticError = V2SessionSyntheticErrors[keyof V2SessionSyntheticErrors]
+
+export type V2SessionSyntheticResponses = {
+  /**
+   * <No Content>
+   */
+  204: void
+}
+
+export type V2SessionSyntheticResponse = V2SessionSyntheticResponses[keyof V2SessionSyntheticResponses]
 
 export type V2SessionCompactData = {
   body?: never

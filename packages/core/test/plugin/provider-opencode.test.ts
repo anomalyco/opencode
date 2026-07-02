@@ -142,6 +142,7 @@ describe("OpencodePlugin", () => {
               model.variants = [
                 {
                   id: ModelV2.VariantID.make("custom"),
+                  settings: {},
                   headers: { "x-custom": "true" },
                   body: { custom: true },
                 },
@@ -177,7 +178,7 @@ describe("OpencodePlugin", () => {
               url: `${server.url.origin}/v1`,
             },
           })
-          expect(provider.request).toEqual({ headers: { "x-org-id": "org" }, body: { custom: "value" } })
+          expect(provider.request).toEqual({ settings: {}, headers: { "x-org-id": "org" }, body: { custom: "value" } })
           expect(yield* (yield* Integration.Service).get(Integration.ID.make("remote"))).toBeUndefined()
 
           const model = required(yield* catalog.model.get(ProviderV2.ID.make("remote"), ModelV2.ID.make("model")))
@@ -192,11 +193,13 @@ describe("OpencodePlugin", () => {
           expect(model.variants).toEqual([
             {
               id: ModelV2.VariantID.make("custom"),
+              settings: {},
               headers: { "x-custom": "true" },
               body: { custom: true },
             },
             {
               id: ModelV2.VariantID.make("high"),
+              settings: {},
               headers: {},
               body: { temperature: 0.2 },
             },
@@ -359,6 +362,7 @@ describe("OpencodePlugin", () => {
             ...ProviderV2.Info.empty(ProviderV2.ID.opencode),
             api: { type: "aisdk", package: "test-provider" },
             request: {
+              settings: {},
               headers: {},
               body: { apiKey: "configured" },
             },
