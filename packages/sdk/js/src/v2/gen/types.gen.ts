@@ -77,6 +77,9 @@ export type Event =
   | EventTuiSessionSelect2
   | EventMcpToolsChanged
   | EventMcpBrowserOpenFailed
+  | EventMessagingSent
+  | EventMessagingReplied
+  | EventMessagingRejected
   | EventCommandExecuted
   | EventProjectUpdated
   | EventSessionStatus
@@ -85,9 +88,6 @@ export type Event =
   | EventQuestionReplied
   | EventQuestionRejected
   | EventSessionCompacted
-  | EventMessagingSent
-  | EventMessagingReplied
-  | EventMessagingRejected
   | EventVcsBranchUpdated
   | EventWorkspaceReady
   | EventWorkspaceFailed
@@ -1471,6 +1471,32 @@ export type GlobalEvent = {
       }
     | {
         id: string
+        type: "messaging.sent"
+        properties: {
+          childSessionID: string
+          parentSessionID: string
+          body: string
+          expectReply: boolean
+        }
+      }
+    | {
+        id: string
+        type: "messaging.replied"
+        properties: {
+          childSessionID: string
+          parentSessionID: string
+          body: string
+        }
+      }
+    | {
+        id: string
+        type: "messaging.rejected"
+        properties: {
+          childSessionID: string
+        }
+      }
+    | {
+        id: string
         type: "command.executed"
         properties: {
           name: string
@@ -1543,32 +1569,6 @@ export type GlobalEvent = {
         type: "session.compacted"
         properties: {
           sessionID: string
-        }
-      }
-    | {
-        id: string
-        type: "messaging.sent"
-        properties: {
-          childSessionID: string
-          parentSessionID: string
-          body: string
-          expectReply: boolean
-        }
-      }
-    | {
-        id: string
-        type: "messaging.replied"
-        properties: {
-          childSessionID: string
-          parentSessionID: string
-          body: string
-        }
-      }
-    | {
-        id: string
-        type: "messaging.rejected"
-        properties: {
-          childSessionID: string
         }
       }
     | {
@@ -2950,6 +2950,9 @@ export type V2Event =
   | TuiSessionSelect
   | McpToolsChanged
   | McpBrowserOpenFailed
+  | MessagingSent
+  | MessagingReplied
+  | MessagingRejected
   | CommandExecuted
   | ProjectUpdated
   | SessionStatus2
@@ -5891,6 +5894,62 @@ export type McpBrowserOpenFailed = {
   }
 }
 
+export type MessagingSent = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "messaging.sent"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    childSessionID: string
+    parentSessionID: string
+    body: string
+    expectReply: boolean
+  }
+}
+
+export type MessagingReplied = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "messaging.replied"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    childSessionID: string
+    parentSessionID: string
+    body: string
+  }
+}
+
+export type MessagingRejected = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "messaging.rejected"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    childSessionID: string
+  }
+}
+
 export type CommandExecuted = {
   id: string
   metadata?: {
@@ -6927,6 +6986,35 @@ export type EventMcpBrowserOpenFailed = {
   }
 }
 
+export type EventMessagingSent = {
+  id: string
+  type: "messaging.sent"
+  properties: {
+    childSessionID: string
+    parentSessionID: string
+    body: string
+    expectReply: boolean
+  }
+}
+
+export type EventMessagingReplied = {
+  id: string
+  type: "messaging.replied"
+  properties: {
+    childSessionID: string
+    parentSessionID: string
+    body: string
+  }
+}
+
+export type EventMessagingRejected = {
+  id: string
+  type: "messaging.rejected"
+  properties: {
+    childSessionID: string
+  }
+}
+
 export type EventCommandExecuted = {
   id: string
   type: "command.executed"
@@ -7008,35 +7096,6 @@ export type EventSessionCompacted = {
   type: "session.compacted"
   properties: {
     sessionID: string
-  }
-}
-
-export type EventMessagingSent = {
-  id: string
-  type: "messaging.sent"
-  properties: {
-    childSessionID: string
-    parentSessionID: string
-    body: string
-    expectReply: boolean
-  }
-}
-
-export type EventMessagingReplied = {
-  id: string
-  type: "messaging.replied"
-  properties: {
-    childSessionID: string
-    parentSessionID: string
-    body: string
-  }
-}
-
-export type EventMessagingRejected = {
-  id: string
-  type: "messaging.rejected"
-  properties: {
-    childSessionID: string
   }
 }
 
