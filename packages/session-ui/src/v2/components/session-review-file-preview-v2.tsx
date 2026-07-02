@@ -97,6 +97,8 @@ function ReviewCommentMenuV2(props: {
 export function SessionReviewFilePreviewV2(props: SessionReviewFilePreviewV2Props) {
   const i18n = useI18n()
   const fileComponent = useFileComponent()
+  let scrollRef: HTMLDivElement | undefined
+  let focusToken = 0
 
   const [store, setStore] = createStore({
     selection: null as SelectedLineRange | null,
@@ -168,6 +170,24 @@ export function SessionReviewFilePreviewV2(props: SessionReviewFilePreviewV2Prop
 
       const comment = (props.comments ?? []).find((item) => item.file === focus.file && item.id === focus.id)
       if (comment) setStore("selection", cloneSelectedLineRange(comment.selection))
+
+      // The diff renders asynchronously, so poll for the comment anchor before
+      // scrolling; clear the focus once handled so revisiting the file does not
+      // re-open a stale comment (mirrors the v1 review behavior).
+      focusToken++
+      const token = focusToken
+      const scrollTo = (attempt: number) => {
+        if (token !== focusToken) return
+        const anchor = scrollRef?.querySelector(`[data-comment-id="${focus.id}"]`)
+        if (anchor instanceof HTMLElement) {
+          anchor.scrollIntoView({ block: "center" })
+          return
+        }
+        if (attempt >= 120) return
+        requestAnimationFrame(() => scrollTo(attempt + 1))
+      }
+      requestAnimationFrame(() => scrollTo(0))
+      requestAnimationFrame(() => props.onFocusedCommentChange?.(null))
     })
   })
 
@@ -223,7 +243,12 @@ export function SessionReviewFilePreviewV2(props: SessionReviewFilePreviewV2Prop
         </div>
         <DiffChanges changes={view()} />
       </div>
-      <div data-slot="session-review-v2-diff-scroll">
+      <div
+        ref={(el) => {
+          scrollRef = el
+        }}
+        data-slot="session-review-v2-diff-scroll"
+      >
         <Show
           when={diffCanRender() || mediaKind()}
           fallback={

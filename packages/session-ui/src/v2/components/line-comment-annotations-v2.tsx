@@ -27,6 +27,7 @@ type LineCommentControllerV2Props<T extends LineCommentShape> = {
 }
 
 type CommentProps = {
+  id?: string
   comment: JSX.Element
   selection: JSX.Element
   actions?: JSX.Element
@@ -52,6 +53,7 @@ function lineCommentElementV2(view: Accessor<CommentProps>) {
       fallback={
         <div
           data-prevent-autofocus=""
+          data-comment-id={view().id}
           onMouseDown={(event) => event.stopPropagation()}
           onClick={view().onClick}
           onMouseEnter={view().onMouseEnter}
@@ -60,7 +62,7 @@ function lineCommentElementV2(view: Accessor<CommentProps>) {
         </div>
       }
     >
-      <div data-prevent-autofocus="" onMouseDown={(event) => event.stopPropagation()}>
+      <div data-prevent-autofocus="" data-comment-id={view().id} onMouseDown={(event) => event.stopPropagation()}>
         <LineCommentEditorV2
           value={view().editor!.value}
           selection={view().editor!.selection}
@@ -84,6 +86,8 @@ function lineCommentDraftElementV2(view: Accessor<DraftProps>) {
         onInput={view().onInput}
         onCancel={view().onCancel}
         onSubmit={view().onSubmit}
+        cancelLabel={view().cancelLabel}
+        submitLabel={view().submitLabel}
       />
     </div>
   )
@@ -114,6 +118,7 @@ export function createLineCommentControllerV2<T extends LineCommentShape>(props:
       }
 
       return {
+        id: comment.id,
         comment: comment.comment,
         selection: formatSelectedLineLabel(comment.selection, i18n.t),
         get actions() {
@@ -136,6 +141,7 @@ export function createLineCommentControllerV2<T extends LineCommentShape>(props:
                   })
                   note.cancelDraft()
                 },
+                cancelLabel: i18n.t("ui.lineComment.cancel"),
                 submitLabel: props.editSubmitLabel,
               }
             : undefined
@@ -158,6 +164,8 @@ export function createLineCommentControllerV2<T extends LineCommentShape>(props:
         props.onSubmit({ comment, selection: cloneSelectedLineRange(range) })
         note.cancelDraft()
       },
+      cancelLabel: i18n.t("ui.lineComment.cancel"),
+      submitLabel: i18n.t("ui.lineComment.submit"),
     }),
   })
 

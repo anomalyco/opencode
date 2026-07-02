@@ -1146,19 +1146,13 @@ export default function Page() {
     )
   }
 
-  const reviewEmptyV2 = (input: { loadingClass: string }) => {
-    if (store.changes === "git" || store.changes === "branch") {
-      if (!reviewReady()) return <div class={input.loadingClass}>{language.t("session.review.loadingChanges")}</div>
-      return <SessionReviewEmptyChangesV2 />
+  const reviewEmptyV2 = () => {
+    if ((store.changes === "git" || store.changes === "branch") && !reviewReady()) {
+      return <div class="px-6 py-4 text-text-weak">{language.t("session.review.loadingChanges")}</div>
     }
-
-    if (store.changes === "turn") {
-      if (nogit()) {
-        return <SessionReviewEmptyNoGitV2 pending={gitMutation.isPending} onInitGit={initGit} />
-      }
-      return <SessionReviewEmptyChangesV2 />
+    if (store.changes === "turn" && nogit()) {
+      return <SessionReviewEmptyNoGitV2 pending={gitMutation.isPending} onInitGit={initGit} />
     }
-
     return <SessionReviewEmptyChangesV2 />
   }
 
@@ -1205,9 +1199,7 @@ export default function Page() {
       return changesTitleV2()
     },
     get empty() {
-      return reviewEmptyV2({
-        loadingClass: "px-6 py-4 text-text-weak",
-      })
+      return reviewEmptyV2()
     },
     diffs: reviewDiffs,
     diffsReady: reviewReady,
@@ -1232,7 +1224,15 @@ export default function Page() {
     get focusedComment() {
       return comments.focus()
     },
-    onFocusedCommentChange: comments.setFocus,
+    onFocusedCommentChange: (focus: { file: string; id: string } | null) => {
+      // The preview clears the focus once it has opened the comment; persist the
+      // focused file as the active selection so the preview stays on it.
+      if (!focus) {
+        const current = comments.focus()
+        if (current) focusReviewDiff(current.file)
+      }
+      comments.setFocus(focus)
+    },
   })
 
   const reviewPanelV2 = () => (

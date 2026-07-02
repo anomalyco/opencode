@@ -1,5 +1,4 @@
 import { useFile } from "@/context/file"
-import { encodeFilePath } from "@/context/file/path"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import "@opencode-ai/ui/v2/file-tree-v2.css"
@@ -18,36 +17,24 @@ import {
 } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import type { FileNode } from "@opencode-ai/sdk/v2"
-import { dirsToExpand, shouldListRoot } from "@/components/file-tree"
+import { Icon } from "@opencode-ai/ui/v2/icon"
+import {
+  dirsToExpand,
+  pathToFileUrl,
+  shouldListRoot,
+  visibleKind,
+  withFileDragImage,
+  type Filter,
+  type Kind,
+} from "@/components/file-tree"
+
+export type { Kind } from "@/components/file-tree"
 
 const MAX_DEPTH = 128
 
-function pathToFileUrl(filepath: string): string {
-  return `file://${encodeFilePath(filepath)}`
-}
-
-export type Kind = "add" | "del" | "mix"
-
-type Filter = {
-  files: Set<string>
-  dirs: Set<string>
-}
-
-function visibleNodesForPath(
-  path: string,
-  children: (dir: string) => FileNode[],
-  current: Filter | undefined,
-  query?: string,
-) {
+function visibleNodesForPath(path: string, children: (dir: string) => FileNode[], current: Filter | undefined) {
   const nodes = children(path)
-  if (!current) {
-    const value = query?.trim().toLowerCase()
-    if (!value) return nodes
-    return nodes.filter((node) => {
-      if (node.type === "directory") return true
-      return node.name.toLowerCase().includes(value)
-    })
-  }
+  if (!current) return nodes
 
   const parent = (item: string) => {
     const idx = item.lastIndexOf("/")
@@ -100,13 +87,7 @@ function visibleNodesForPath(
     return a.name.localeCompare(b.name)
   })
 
-  const value = query?.trim().toLowerCase()
-  if (!value) return out
-
-  return out.filter((node) => {
-    if (node.type === "directory") return true
-    return node.name.toLowerCase().includes(value)
-  })
+  return out
 }
 
 const INDENT_STEP = 16
@@ -121,48 +102,16 @@ function guideLineLeft(level: number) {
   return rowPaddingLeft(level, "directory") + 8
 }
 
-type ChangeState = "modified" | "added" | "deleted" | "renamed" | "untracked"
-
-export const kindLabel = (kind: Kind, showModifiedLabel: boolean) => {
+export const kindLabel = (kind: Kind) => {
   if (kind === "add") return "A"
   if (kind === "del") return "D"
-  if (showModifiedLabel) return "M"
   return ""
 }
 
-export const kindChange = (kind: Kind): ChangeState => {
+export const kindChange = (kind: Kind) => {
   if (kind === "add") return "added"
   if (kind === "del") return "deleted"
   return "modified"
-}
-
-const visibleKind = (node: FileNode, kinds?: ReadonlyMap<string, Kind>, marks?: Set<string>) => {
-  const kind = kinds?.get(node.path)
-  if (!kind) return
-  if (!marks?.has(node.path)) return
-  return kind
-}
-
-const buildDragImage = (target: HTMLElement) => {
-  const icon = target.querySelector('[data-component="file-icon"]') ?? target.querySelector("svg")
-  const text = target.querySelector("span")
-  if (!icon || !text) return
-
-  const image = document.createElement("div")
-  image.className =
-    "flex items-center gap-x-2 px-2 py-1 bg-surface-raised-base rounded-md border border-border-base text-12-regular text-text-strong"
-  image.style.position = "absolute"
-  image.style.top = "-1000px"
-  image.innerHTML = (icon as SVGElement).outerHTML + (text as HTMLSpanElement).outerHTML
-  return image
-}
-
-const withFileDragImage = (event: DragEvent) => {
-  const image = buildDragImage(event.currentTarget as HTMLElement)
-  if (!image) return
-  document.body.appendChild(image)
-  event.dataTransfer?.setDragImage(image, 0, 12)
-  setTimeout(() => document.body.removeChild(image), 0)
 }
 
 const FileTreeNodeV2 = (
@@ -176,7 +125,6 @@ const FileTreeNodeV2 = (
       draggable: boolean
       kinds?: ReadonlyMap<string, Kind>
       marks?: Set<string>
-      showModifiedLabel?: boolean
       showFolderChangeIndicator?: boolean
       as?: "div" | "button"
     },
@@ -189,7 +137,6 @@ const FileTreeNodeV2 = (
     "draggable",
     "kinds",
     "marks",
-    "showModifiedLabel",
     "showFolderChangeIndicator",
     "as",
     "children",
@@ -228,7 +175,7 @@ const FileTreeNodeV2 = (
         if (local.node.type === "file") {
           return (
             <span data-slot="file-tree-v2-change" data-change={kindChange(value)}>
-              {kindLabel(value, local.showModifiedLabel ?? false)}
+              {kindLabel(value)}
             </span>
           )
         }
@@ -239,6 +186,9 @@ const FileTreeNodeV2 = (
   )
 }
 
+// V2-styled fork of FileTree for the review sidebar. Unlike the v1 tree it never
+// lists unloaded subdirectories, so callers must pass `allowed` (nodes are
+// synthesized from that list) for nested content to appear.
 export default function FileTreeV2(props: {
   path: string
   class?: string
@@ -248,12 +198,9 @@ export default function FileTreeV2(props: {
   allowed?: readonly string[]
   modified?: readonly string[]
   kinds?: ReadonlyMap<string, Kind>
-  query?: string
-  showModifiedLabel?: boolean
   showFolderChangeIndicator?: boolean
   draggable?: boolean
   onFileClick?: (file: FileNode) => void
-  onFileDoubleClick?: (file: FileNode) => void
 
   _filter?: Filter
   _marks?: Set<string>
@@ -377,19 +324,23 @@ export default function FileTreeV2(props: {
     ),
   )
 
-  const nodes = createMemo(() => visibleNodesForPath(props.path, file.tree.children, filter(), props.query))
+  const nodes = createMemo(() => visibleNodesForPath(props.path, file.tree.children, filter()))
 
   return (
     <div
       data-component="file-tree-v2"
-      data-show-modified-label={props.showModifiedLabel ? "" : undefined}
-      class={props.class}
+      classList={{
+        // Scope for the group-hover guide lines below; hosts may add an outer
+        // group with the same name to widen the hover area.
+        "group/file-tree-v2": true,
+        [props.class ?? ""]: !!props.class,
+      }}
     >
       <For each={nodes()}>
         {(node) => {
           const expanded = () => file.tree.state(node.path)?.expanded ?? false
           const deep = () => deeps().get(node.path) ?? -1
-          const hasChildren = () => visibleNodesForPath(node.path, file.tree.children, filter(), props.query).length > 0
+          const hasChildren = () => visibleNodesForPath(node.path, file.tree.children, filter()).length > 0
           return (
             <Switch>
               <Match when={node.type === "directory"}>
@@ -410,7 +361,6 @@ export default function FileTreeV2(props: {
                       draggable={draggable()}
                       kinds={kinds()}
                       marks={marks()}
-                      showModifiedLabel={props.showModifiedLabel}
                       showFolderChangeIndicator={props.showFolderChangeIndicator}
                     >
                       <div
@@ -418,16 +368,7 @@ export default function FileTreeV2(props: {
                         data-expanded={expanded() ? "" : undefined}
                         class="size-4 flex items-center justify-center"
                       >
-                        <svg
-                          width="16"
-                          height="16"
-                          viewBox="0 0 16 16"
-                          fill="none"
-                          xmlns="http://www.w3.org/2000/svg"
-                          aria-hidden="true"
-                        >
-                          <path d="M5 6.5L8 9.5L11 6.5" stroke="currentColor" />
-                        </svg>
+                        <Icon name="chevron-down" />
                       </div>
                     </FileTreeNodeV2>
                   </Collapsible.Trigger>
@@ -451,13 +392,10 @@ export default function FileTreeV2(props: {
                           allowed={props.allowed}
                           modified={props.modified}
                           kinds={props.kinds}
-                          query={props.query}
-                          showModifiedLabel={props.showModifiedLabel}
                           showFolderChangeIndicator={props.showFolderChangeIndicator}
                           active={props.active}
                           draggable={props.draggable}
                           onFileClick={props.onFileClick}
-                          onFileDoubleClick={props.onFileDoubleClick}
                           _filter={filter()}
                           _marks={marks()}
                           _deeps={deeps()}
@@ -478,12 +416,10 @@ export default function FileTreeV2(props: {
                   draggable={draggable()}
                   kinds={kinds()}
                   marks={marks()}
-                  showModifiedLabel={props.showModifiedLabel}
                   showFolderChangeIndicator={props.showFolderChangeIndicator}
                   as="button"
                   type="button"
                   onClick={() => props.onFileClick?.(node)}
-                  onDblClick={() => props.onFileDoubleClick?.(node)}
                 >
                   <Show when={level > 0}>
                     <div class="w-4 shrink-0" />

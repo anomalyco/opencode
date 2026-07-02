@@ -52,6 +52,7 @@ export const dict: Record<string, string> = {
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "Add comment",
   "ui.lineComment.submit": "Comment",
+  "ui.lineComment.cancel": "Cancel",
 
   "ui.sessionTurn.steps.show": "Show steps",
   "ui.sessionTurn.steps.hide": "Hide steps",

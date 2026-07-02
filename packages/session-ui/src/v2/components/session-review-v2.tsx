@@ -1,15 +1,16 @@
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { useI18n } from "@opencode-ai/ui/context/i18n"
-import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
 import { SegmentedControlItemV2, SegmentedControlV2 } from "@opencode-ai/ui/v2/segmented-control-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
-import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
+import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
+import { Icon } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import type { SessionReviewDiffStyle } from "../../components/session-review"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
-import { Show, createEffect, createSignal, onCleanup, type JSX } from "solid-js"
+import { makeEventListener } from "@solid-primitives/event-listener"
+import { Show, createEffect, createMemo, createSignal, type JSX } from "solid-js"
 import "./session-review-v2.css"
 
 export const SESSION_REVIEW_V2_SIDEBAR_WIDTH_DEFAULT = 240
@@ -60,8 +61,8 @@ export function SessionReviewV2Sidebar(props: SessionReviewV2SidebarProps) {
   createEffect(() => {
     if (!resizing()) return
     const stop = () => setResizing(false)
-    document.addEventListener("mouseup", stop)
-    onCleanup(() => document.removeEventListener("mouseup", stop))
+    makeEventListener(document, "pointerup", stop)
+    makeEventListener(document, "pointercancel", stop)
   })
 
   return (
@@ -76,7 +77,7 @@ export function SessionReviewV2Sidebar(props: SessionReviewV2SidebarProps) {
         <Show when={props.open}>
           <div data-slot="session-review-v2-sidebar-header">
             <div data-slot="session-review-v2-sidebar-title">{props.title}</div>
-            <Show when={props.stats}>{props.stats}</Show>
+            {props.stats}
           </div>
           <div data-slot="session-review-v2-sidebar-filter">
             <TextInputV2
@@ -154,6 +155,26 @@ export function SessionReviewV2(props: SessionReviewV2Props) {
 
   const canCycle = () => props.files.length > 0
   const showCollapsedMeta = () => props.sidebarOpen === false
+  // Memoize slot getters so Show conditions do not instantiate throwaway elements.
+  const title = createMemo(() => props.title)
+  const stats = createMemo(() => props.stats)
+
+  const cycle = (file: string | undefined) => {
+    if (!file) return
+    props.onSelectFile(file)
+  }
+
+  // The prev/next tooltips advertise < and >; keep the keys working while the
+  // pane is mounted, but never while typing in an input or comment editor.
+  makeEventListener(document, "keydown", (event) => {
+    if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return
+    if (event.key !== "<" && event.key !== ">") return
+    const target = event.target
+    if (target instanceof HTMLElement && (target.isContentEditable || target.closest("input, textarea, select"))) return
+    if (!props.hasDiffs || !canCycle()) return
+    event.preventDefault()
+    cycle(event.key === "<" ? prev() : next())
+  })
 
   return (
     <div data-component="session-review-v2">
@@ -167,10 +188,10 @@ export function SessionReviewV2(props: SessionReviewV2Props) {
                 {props.sidebarToggle}
                 <Show when={showCollapsedMeta()}>
                   <div data-slot="session-review-v2-toolbar-collapsed-meta">
-                    <Show when={props.title}>
-                      <div data-slot="session-review-v2-toolbar-title">{props.title}</div>
+                    <Show when={title()}>
+                      <div data-slot="session-review-v2-toolbar-title">{title()}</div>
                     </Show>
-                    <Show when={props.stats}>{props.stats}</Show>
+                    {stats()}
                     <Show when={canCycle()}>
                       <span data-slot="session-review-v2-file-position">
                         {fileIndex() + 1}/{props.files.length}
@@ -178,7 +199,7 @@ export function SessionReviewV2(props: SessionReviewV2Props) {
                     </Show>
                   </div>
                 </Show>
-                <div data-slot="session-review-v2-toolbar-group" class="session-review-v2-toolbar-group--file-nav">
+                <div data-slot="session-review-v2-toolbar-group">
                   <TooltipV2
                     openDelay={2000}
                     value={
@@ -239,12 +260,12 @@ export function SessionReviewV2(props: SessionReviewV2Props) {
                 >
                   <TooltipV2 openDelay={2000} value={i18n.t("ui.sessionReviewV2.showAllLines")}>
                     <SegmentedControlItemV2 value="expand" aria-label={i18n.t("ui.sessionReviewV2.showAllLines")}>
-                      <IconV2 name="expand" />
+                      <Icon name="expand" />
                     </SegmentedControlItemV2>
                   </TooltipV2>
                   <TooltipV2 openDelay={2000} value={i18n.t("ui.sessionReviewV2.hideNonDiffLines")}>
                     <SegmentedControlItemV2 value="collapse" aria-label={i18n.t("ui.sessionReviewV2.hideNonDiffLines")}>
-                      <IconV2 name="collapse" />
+                      <Icon name="collapse" />
                     </SegmentedControlItemV2>
                   </TooltipV2>
                 </SegmentedControlV2>
@@ -260,19 +281,19 @@ export function SessionReviewV2(props: SessionReviewV2Props) {
                   >
                     <TooltipV2 openDelay={2000} value={i18n.t("ui.sessionReviewV2.unifiedDiff")}>
                       <SegmentedControlItemV2 value="unified" aria-label={i18n.t("ui.sessionReviewV2.unifiedDiff")}>
-                        <IconV2 name="split" />
+                        <Icon name="unified" />
                       </SegmentedControlItemV2>
                     </TooltipV2>
                     <TooltipV2 openDelay={2000} value={i18n.t("ui.sessionReviewV2.splitDiff")}>
                       <SegmentedControlItemV2 value="split" aria-label={i18n.t("ui.sessionReviewV2.splitDiff")}>
-                        <IconV2 name="unified" />
+                        <Icon name="split" />
                       </SegmentedControlItemV2>
                     </TooltipV2>
                   </SegmentedControlV2>
                 </Show>
               </div>
             </div>
-            <Show when={props.preview} fallback={<div data-slot="session-review-v2-empty">{props.empty}</div>}>
+            <Show when={props.activeFile} fallback={<div data-slot="session-review-v2-empty">{props.empty}</div>}>
               {props.preview}
             </Show>
           </Show>
@@ -294,7 +315,7 @@ export function SessionReviewV2SidebarToggle(props: { opened: boolean; onToggle:
         aria-label={i18n.t("ui.sessionReviewV2.toggleSidebar")}
         aria-expanded={props.opened}
         onClick={props.onToggle}
-        icon={<IconV2 name="filetree" />}
+        icon={<Icon name="filetree" />}
       />
     </TooltipV2>
   )

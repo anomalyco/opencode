@@ -1,5 +1,5 @@
 import type { FileContent } from "@opencode-ai/sdk/v2"
-import { createEffect, createMemo, Match, on, onCleanup, Show, Switch, type JSX } from "solid-js"
+import { createEffect, createMemo, Match, on, onCleanup, Show, Switch, untrack, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useI18n } from "@opencode-ai/ui/context/i18n"
 import {
@@ -97,7 +97,10 @@ export function FileMedia(props: { media?: FileMediaOptions; fallback: () => JSX
     }
 
     let active = true
-    setRemote({ key: input.key, loading: true, error: false, src: undefined, mime: undefined })
+    // Keep the previous media visible while re-reading the same file (e.g. a vcs
+    // diff refresh); only a key change resets to the loading placeholder.
+    if (untrack(() => remote.key) === input.key) setRemote({ loading: true, error: false })
+    else setRemote({ key: input.key, loading: true, error: false, src: undefined, mime: undefined })
     void input.readFile(input.path).then(
       (result) => {
         if (!active) return

@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, Show, type JSX } from "solid-js"
+import { createMemo, createSignal, Show, type JSX } from "solid-js"
 import type { SnapshotFileDiff, VcsFileDiff } from "@opencode-ai/sdk/v2"
 import {
   SESSION_REVIEW_V2_SIDEBAR_WIDTH_MAX,
@@ -22,13 +22,13 @@ import FileTreeV2 from "@/components/file-tree-v2"
 import { useLanguage } from "@/context/language"
 import { useSDK } from "@/context/sdk"
 import {
-  applyFileListKeyDown,
   filterRenderableDiff,
   filterReviewFiles,
   reviewDiffKinds,
+  type RenderDiff,
 } from "@/pages/session/v2/review-diff-kinds"
 import type { ReviewPanelV2State } from "@/pages/session/v2/review-panel-v2-state"
-import { SessionFileListV2 } from "@/pages/session/v2/session-file-list-v2"
+import { applyFileListKeyDown, SessionFileListV2 } from "@/pages/session/v2/session-file-list-v2"
 
 type ReviewDiff = SnapshotFileDiff | VcsFileDiff
 
@@ -64,6 +64,10 @@ export function ReviewPanelV2(props: ReviewPanelV2Props) {
   const searching = createMemo(() => props.state.filter().trim().length > 0)
   const kinds = createMemo(() => reviewDiffKinds(diffs()))
   const activeDiff = createMemo(() => {
+    // A focused comment takes over the preview until the preview applies it and
+    // clears the focus; the owner then persists the file as the active selection.
+    const focus = props.focusedComment
+    if (focus && diffs().some((diff) => diff.file === focus.file)) return focus.file
     const active = props.activeFile
     if (searching()) return active
     const files = filteredFiles()
@@ -81,16 +85,6 @@ export function ReviewPanelV2(props: ReviewPanelV2Props) {
         return undefined
       })
 
-  // Keep the selected file valid as diffs stream in or the filter changes.
-  createEffect(() => {
-    if (searching()) return
-    const files = filteredFiles()
-    const active = props.activeFile
-    if (files.length === 0) return
-    if (active && files.includes(active)) return
-    props.onSelectFile(files[0]!)
-  })
-
   return (
     <SessionReviewV2
       title={props.title}
@@ -103,7 +97,10 @@ export function ReviewPanelV2(props: ReviewPanelV2Props) {
       sidebar={
         <Show when={diffs().length > 0}>
           <ReviewPanelV2Sidebar
-            {...props}
+            title={props.title}
+            state={props.state}
+            diffsReady={props.diffsReady}
+            onSelectFile={props.onSelectFile}
             diffs={diffs}
             filteredFiles={filteredFiles}
             searching={searching}
@@ -150,27 +147,26 @@ export function ReviewPanelV2(props: ReviewPanelV2Props) {
   )
 }
 
-function ReviewPanelV2Sidebar(
-  props: ReviewPanelV2Props & {
-    diffs: () => (ReviewDiff & { file: string })[]
-    filteredFiles: () => string[]
-    searching: () => boolean
-    kinds: () => ReturnType<typeof reviewDiffKinds>
-    activeDiff: () => string | undefined
-  },
-) {
+function ReviewPanelV2Sidebar(props: {
+  title?: JSX.Element
+  state: ReviewPanelV2State
+  diffsReady: () => boolean
+  onSelectFile: (path: string) => void
+  diffs: () => RenderDiff[]
+  filteredFiles: () => string[]
+  searching: () => boolean
+  kinds: () => ReturnType<typeof reviewDiffKinds>
+  activeDiff: () => string | undefined
+}) {
   const language = useLanguage()
-  const [highlightedPath, setHighlightedPath] = createSignal<string | undefined>()
-
-  createEffect(() => {
+  const [explicitHighlight, setHighlightedPath] = createSignal<string | undefined>()
+  const highlightedPath = createMemo(() => {
+    if (!props.searching()) return undefined
     const files = props.filteredFiles()
-    if (!props.searching() || files.length === 0) {
-      if (highlightedPath()) setHighlightedPath(undefined)
-      return
-    }
-    const highlighted = highlightedPath()
-    if (highlighted && files.includes(highlighted)) return
-    setHighlightedPath(files[0]!)
+    if (files.length === 0) return undefined
+    const explicit = explicitHighlight()
+    if (explicit && files.includes(explicit)) return explicit
+    return files[0]
   })
 
   const onFilterKeyDown = (event: KeyboardEvent & { currentTarget: HTMLInputElement }) => {

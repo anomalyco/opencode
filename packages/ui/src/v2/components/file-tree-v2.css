@@ -107,13 +107,8 @@
     "lnum" on;
 }
 
-[data-component="file-tree-v2"]:not([data-show-modified-label])
-  [data-slot="file-tree-v2-change"][data-change="modified"] {
+[data-component="file-tree-v2"] [data-slot="file-tree-v2-change"][data-change="modified"] {
   opacity: 0;
-}
-
-[data-component="file-tree-v2"][data-show-modified-label] [data-slot="file-tree-v2-change"][data-change="modified"] {
-  color: var(--v2-state-fg-info);
 }
 
 [data-component="file-tree-v2"] [data-slot="file-tree-v2-change"][data-change="added"] {
@@ -122,14 +117,6 @@
 
 [data-component="file-tree-v2"] [data-slot="file-tree-v2-change"][data-change="deleted"] {
   color: var(--v2-state-fg-danger);
-}
-
-[data-component="file-tree-v2"] [data-slot="file-tree-v2-change"][data-change="renamed"] {
-  color: var(--v2-state-fg-warning);
-}
-
-[data-component="file-tree-v2"] [data-slot="file-tree-v2-change"][data-change="untracked"] {
-  color: var(--v2-text-text-muted);
 }
 
 [data-component="file-tree-v2"] [data-slot="file-tree-v2-descendant-change"] {
