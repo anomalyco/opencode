@@ -2,8 +2,10 @@ export * as TodoWriteTool from "./todowrite"
 
 import { ToolFailure } from "@opencode-ai/llm"
 import { Effect, Layer, Schema } from "effect"
+import { makeLocationNode } from "../effect/app-node"
 import { PermissionV2 } from "../permission"
 import { SessionTodo } from "../session/todo"
+import { ToolRegistry } from "./registry"
 import { Tool } from "./tool"
 import { Tools } from "./tools"
 
@@ -20,7 +22,7 @@ export type Output = typeof Output.Type
 
 export const toModelOutput = (output: Output) => JSON.stringify(output.todos, null, 2)
 
-export const layer = Layer.effectDiscard(
+const layer = Layer.effectDiscard(
   Effect.gen(function* () {
     const tools = yield* Tools.Service
     const todos = yield* SessionTodo.Service
@@ -52,3 +54,9 @@ export const layer = Layer.effectDiscard(
       .pipe(Effect.orDie)
   }),
 )
+
+export const node = makeLocationNode({
+  name: "tool/todowrite",
+  layer,
+  deps: [ToolRegistry.node, PermissionV2.node, SessionTodo.node],
+})

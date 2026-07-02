@@ -3,13 +3,17 @@ export * as WebSearchTool from "./websearch"
 import { ToolFailure } from "@opencode-ai/llm"
 import { Context, Duration, Effect, Layer, Schema } from "effect"
 import { HttpClient, HttpClientRequest } from "effect/unstable/http"
+import { makeLocationNode } from "../effect/app-node"
+import { LayerNodePlatform } from "../effect/app-node-platform"
 import { truthy } from "../flag/flag"
 import { InstallationVersion } from "../installation/version"
 import { PositiveInt } from "../schema"
 import { PermissionV2 } from "../permission"
 import { Tool } from "./tool"
 import { Tools } from "./tools"
+import { collectBoundedResponseBody } from "./http-body"
 import { checksum } from "../util/encode"
+import { ToolRegistry } from "./registry"
 
 export const name = "websearch"
 export const NO_RESULTS = "No search results found. Please try a different query."
@@ -78,6 +82,8 @@ export const defaultConfigLayer = Layer.sync(ConfigService, () =>
     parallelApiKey: process.env.PARALLEL_API_KEY,
   }),
 )
+
+export const configNode = makeLocationNode({ service: ConfigService, layer: defaultConfigLayer, deps: [] })
 
 export function selectProvider(
   sessionID: string,
@@ -164,10 +170,12 @@ const callMcp = <F extends Schema.Struct.Fields>(
     )
     return yield* Effect.gen(function* () {
       const response = yield* HttpClient.filterStatusOk(http).execute(request)
-      const body = yield* response.text
-      if (Buffer.byteLength(body, "utf8") > MAX_RESPONSE_BYTES)
-        return yield* Effect.fail(new Error(`${tool} response exceeded ${MAX_RESPONSE_BYTES} bytes`))
-      return yield* parseResponse(body)
+      const body = yield* collectBoundedResponseBody(
+        response,
+        MAX_RESPONSE_BYTES,
+        () => new Error(`${tool} response exceeded ${MAX_RESPONSE_BYTES} bytes`),
+      )
+      return yield* parseResponse(body.toString("utf8"))
     }).pipe(
       Effect.timeoutOrElse({
         duration: Duration.seconds(25),
@@ -181,7 +189,7 @@ const Output = Schema.Struct({
   text: Schema.String,
 })
 
-export const layer = Layer.effectDiscard(
+const layer = Layer.effectDiscard(
   Effect.gen(function* () {
     const tools = yield* Tools.Service
     const http = yield* HttpClient.HttpClient
@@ -244,3 +252,9 @@ export const layer = Layer.effectDiscard(
       .pipe(Effect.orDie)
   }),
 )
+
+export const node = makeLocationNode({
+  name: "tool/websearch",
+  layer,
+  deps: [ToolRegistry.node, PermissionV2.node, LayerNodePlatform.httpClient, configNode],
+})

@@ -1,7 +1,7 @@
 export * as ReferenceGuidance from "./guidance"
 
+import { makeLocationNode } from "../effect/app-node"
 import { Context, Effect, Layer, Schema } from "effect"
-import { PluginBoot } from "../plugin/boot"
 import { Reference } from "../reference"
 import { SystemContext } from "../system-context/index"
 
@@ -31,15 +31,13 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/ReferenceGuidance") {}
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const boot = yield* PluginBoot.Service
     const references = yield* Reference.Service
 
     return Service.of({
       load: Effect.fn("ReferenceGuidance.load")(function* () {
-        yield* boot.wait()
         const available = (yield* references.list())
           .filter((reference) => reference.description !== undefined)
           .map((reference) => ({
@@ -67,3 +65,5 @@ export const layer = Layer.effect(
 )
 
 export const locationLayer = layer
+
+export const node = makeLocationNode({ service: Service, layer, deps: [Reference.node] })

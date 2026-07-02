@@ -238,7 +238,6 @@ function shellAssistantMessage(id: string, parentID: string): SessionMessages[nu
           title: "",
           metadata: {
             output: "account.ts\n",
-            description: "",
           },
           time: {
             start: 200,

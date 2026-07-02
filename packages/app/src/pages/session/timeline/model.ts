@@ -1,37 +1,29 @@
 import type { Message, UserMessage } from "@opencode-ai/sdk/v2"
 import { createMemo, createResource, onCleanup, untrack, type Accessor } from "solid-js"
-import { getSessionPrefetch, SESSION_PREFETCH_TTL } from "@/context/global-sync/session-prefetch"
-import { useSDK } from "@/context/sdk"
-import { useServerSDK } from "@/context/server-sdk"
+import { useServerSync } from "@/context/server-sync"
 import { useSync } from "@/context/sync"
 import { same } from "@/utils/same"
 
 const emptyUserMessages: UserMessage[] = []
+const sessionFreshness = 15_000
 
 export function createTimelineModel(input: {
   sessionID: Accessor<string | undefined>
   revertMessageID: Accessor<string | undefined>
 }) {
-  const sdk = useSDK()
-  const serverSDK = useServerSDK()
+  const serverSync = useServerSync()
   const sync = useSync()
   let refreshFrame: number | undefined
   let refreshTimer: number | undefined
 
   const [resource] = createResource(
-    () => [sdk().directory, input.sessionID()] as const,
-    ([directory, id]) => {
+    () => input.sessionID(),
+    (id) => {
       clearRefresh()
       if (!id) return
 
       const cached = untrack(() => sync().data.message[id] !== undefined)
-      const stale = cached
-        ? (() => {
-            const info = getSessionPrefetch(serverSDK().scope, directory, id)
-            if (!info) return true
-            return Date.now() - info.at > SESSION_PREFETCH_TTL
-          })()
-        : false
+      const stale = cached && !serverSync().session.fresh(id, sessionFreshness)
 
       refreshFrame = requestAnimationFrame(() => {
         refreshFrame = undefined
@@ -74,8 +66,6 @@ export function createTimelineModel(input: {
   const loadOlder = async (options?: { before?: () => void; after?: (done: boolean) => void }) => {
     return loadOlderTimeline({
       sessionID: input.sessionID,
-      loaded: () => messages().length,
-      visible: () => visibleUserMessages().length,
       more,
       loading,
       loadMore: (sessionID) => sync().session.history.loadMore(sessionID),
@@ -115,8 +105,6 @@ export function selectVisibleUserMessages(messages: UserMessage[], revertMessage
 
 export async function loadOlderTimeline(input: {
   sessionID: Accessor<string | undefined>
-  loaded: Accessor<number>
-  visible: Accessor<number>
   more: Accessor<boolean>
   loading: Accessor<boolean>
   loadMore: (sessionID: string) => Promise<void>
@@ -126,23 +114,11 @@ export async function loadOlderTimeline(input: {
   const id = input.sessionID()
   if (!id || !input.more() || input.loading()) return
 
-  // A history page may contain only assistant messages or user turns hidden by a revert boundary.
-  const beforeVisible = input.visible()
-  let loaded = input.loaded()
   input.before?.()
-  while (true) {
-    await input.loadMore(id).catch((error) => {
-      if (input.sessionID() === id) input.after?.(true)
-      throw error
-    })
-    if (input.sessionID() !== id) return
-
-    const nextLoaded = input.loaded()
-    const growth = input.visible() - beforeVisible
-    const raw = nextLoaded - loaded
-    loaded = nextLoaded
-    const done = growth > 0 || raw <= 0 || !input.more()
-    input.after?.(done)
-    if (done) return
-  }
+  await input.loadMore(id).catch((error) => {
+    if (input.sessionID() === id) input.after?.(true)
+    throw error
+  })
+  if (input.sessionID() !== id) return
+  input.after?.(true)
 }

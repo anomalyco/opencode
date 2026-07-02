@@ -1,4 +1,5 @@
 import { afterEach, describe, expect } from "bun:test"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Effect, Layer } from "effect"
 import path from "path"
 import fs from "fs/promises"
@@ -31,14 +32,16 @@ afterEach(async () => {
 })
 
 const it = testEffect(
-  Layer.mergeAll(
-    LSP.defaultLayer,
-    FSUtil.defaultLayer,
-    EventV2Bridge.defaultLayer,
-    Format.defaultLayer,
-    CrossSpawnSpawner.defaultLayer,
-    Truncate.defaultLayer,
-    Agent.defaultLayer,
+  LayerNode.compile(
+    LayerNode.group([
+      LSP.node,
+      FSUtil.node,
+      EventV2Bridge.node,
+      Format.node,
+      CrossSpawnSpawner.node,
+      Truncate.node,
+      Agent.node,
+    ]),
   ),
 )
 
