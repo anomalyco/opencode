@@ -165,6 +165,13 @@ function selectBedrockMantleLanguageModel(sdk: BundledSDK, modelID: string) {
   return sdk.responses?.(modelID) ?? sdk.languageModel(modelID)
 }
 
+function copilotEndpoint(model?: Model) {
+  if (!model || !("endpoint" in model.api)) return undefined
+  if (model.api.endpoint === "responses") return "responses"
+  if (model.api.endpoint === "chat") return "chat"
+  return undefined
+}
+
 function custom(dep: CustomDep): Record<string, CustomLoader> {
   return {
     anthropic: () =>
@@ -218,8 +225,11 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
     "github-copilot": () =>
       Effect.succeed({
         autoload: false,
-        async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
+        async getModel(sdk: any, modelID: string, _options?: Record<string, any>, model?: Model) {
           if (sdk.responses === undefined && sdk.chat === undefined) return sdk.languageModel(modelID)
+          const endpoint = copilotEndpoint(model)
+          if (endpoint === "responses" && sdk.responses) return sdk.responses(modelID)
+          if (endpoint === "chat" && sdk.chat) return sdk.chat(modelID)
           const match = /^gpt-(\d+)/.exec(modelID)
           if (match && Number(match[1]) >= 5 && !modelID.startsWith("gpt-5-mini")) return sdk.responses(modelID)
           return sdk.chat(modelID)
