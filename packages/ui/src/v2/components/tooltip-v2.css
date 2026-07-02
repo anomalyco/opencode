@@ -1,3 +1,7 @@
+[data-component="tooltip-v2-trigger"] {
+  display: flex;
+}
+
 [data-component="tooltip-v2"] {
   box-sizing: border-box;
   display: inline-flex;
@@ -49,5 +53,12 @@
   to {
     opacity: 0;
     transform: scale(0.96);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-component="tooltip-v2"],
+  [data-component="tooltip-v2"][data-closed] {
+    animation: none;
   }
 }

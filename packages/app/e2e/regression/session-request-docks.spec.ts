@@ -38,6 +38,29 @@ test("shows a pending question dock", async ({ page }) => {
   await expect(question.getByRole("radio", { name: /Extended/ })).toBeVisible()
   await expect(page.locator('[data-component="session-composer"]')).toHaveCount(0)
 
+  const rejectRequests: string[] = []
+  page.on("request", (request) => {
+    if (request.method() !== "POST") return
+    if (new URL(request.url()).pathname === "/question/question-request/reject") rejectRequests.push(request.url())
+  })
+
+  await question.locator('[data-component="icon-button"][data-icon="chevron-down"]').click()
+  await expect(question).toBeVisible()
+  await expect(question.getByText("Which implementation should be used?")).toBeVisible()
+  await expect(question.getByText("Select one answer")).toBeHidden()
+  await expect(question.getByRole("radio", { name: /Minimal/ })).toBeHidden()
+  await expect(question.getByRole("radio", { name: /Extended/ })).toBeHidden()
+  await expect(question.getByRole("button", { name: "Dismiss" })).toBeVisible()
+  await expect(question.getByRole("button", { name: "Submit" })).toBeVisible()
+  await expect(page.locator('[data-component="question-minimized-dock"]')).toHaveCount(0)
+  expect(rejectRequests).toEqual([])
+
+  await question.locator('[data-component="icon-button"][data-icon="chevron-down"]').click()
+  await expect(question).toBeVisible()
+  await expect(question.getByText("Which implementation should be used?")).toBeVisible()
+  await expect(question.getByRole("radio", { name: /Minimal/ })).toBeVisible()
+  expect(rejectRequests).toEqual([])
+
   await question.getByRole("radio", { name: /Minimal/ }).click()
   const reply = page.waitForRequest(
     (request) => request.method() === "POST" && new URL(request.url()).pathname === "/question/question-request/reply",

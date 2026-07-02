@@ -1,13 +1,14 @@
 import { test, expect, describe, afterEach, beforeEach, spyOn } from "bun:test"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { httpClient } from "@opencode-ai/core/effect/app-node-platform"
 import { Cause, Effect, Exit, Layer, Option } from "effect"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/unstable/http"
-import { NodeFileSystem, NodePath } from "@effect/platform-node"
 import { Config } from "@/config/config"
 import { ConfigManaged } from "@/config/managed"
 import { ConfigParse } from "../../src/config/parse"
-import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
+import { Npm } from "@opencode-ai/core/npm"
 
 import { InstanceRef } from "../../src/effect/instance-ref"
 import type { InstanceContext } from "../../src/project/instance-context"
@@ -40,13 +41,6 @@ import { ConfigPluginV1 } from "@opencode-ai/core/v1/config/plugin"
 import { AccountTest } from "../fake/account"
 import { AuthTest } from "../fake/auth"
 import { NpmTest } from "../fake/npm"
-
-/** Infra layer that provides FileSystem, Path, ChildProcessSpawner for test fixtures */
-const infra = CrossSpawnSpawner.defaultLayer.pipe(
-  Layer.provideMerge(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),
-)
-
-const testFlock = EffectFlock.defaultLayer
 
 const unexpectedHttp = HttpClient.make((request) =>
   Effect.die(`unexpected http request: ${request.method} ${request.url}`),
@@ -104,16 +98,12 @@ const configLayer = (
     client?: HttpClient.HttpClient
   } = {},
 ) =>
-  Config.layer.pipe(
-    Layer.provide(testFlock),
-    Layer.provide(Env.defaultLayer),
-    Layer.provide(options.auth ?? AuthTest.empty),
-    Layer.provide(options.account ?? AccountTest.empty),
-    Layer.provideMerge(infra),
-    Layer.provide(NpmTest.noop),
-    Layer.provide(Layer.succeed(HttpClient.HttpClient, options.client ?? unexpectedHttp)),
-    Layer.provideMerge(FSUtil.defaultLayer),
-  )
+  LayerNode.compile(LayerNode.group([Config.node, FSUtil.node, Env.node, CrossSpawnSpawner.node]), [
+    [Auth.node, options.auth ?? AuthTest.empty],
+    [Account.node, options.account ?? AccountTest.empty],
+    [Npm.node, NpmTest.noop],
+    [httpClient, Layer.succeed(HttpClient.HttpClient, options.client ?? unexpectedHttp)],
+  ])
 
 const layer = configLayer()
 
@@ -171,7 +161,7 @@ const withInstanceDir = <A, E, R>(dir: string, effect: Effect.Effect<A, E, R>) =
     Effect.provideService(TestInstance, { directory: dir }),
     provideInstanceEffect(dir),
     Effect.provide(testInstanceStoreLayer),
-    Effect.provide(CrossSpawnSpawner.defaultLayer),
+    Effect.provide(LayerNode.compile(CrossSpawnSpawner.node)),
   )
 
 const withGlobalConfigDir = <A, E, R>(dir: string, effect: Effect.Effect<A, E, R>) =>
@@ -325,7 +315,7 @@ it.effect("creates global jsonc config with schema when no global configs exist"
 
       const content = yield* FSUtil.use.readFileString(path.join(dir, "opencode.jsonc"))
       expect(content).toContain('"$schema": "https://opencode.ai/config.json"')
-    }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(CrossSpawnSpawner.defaultLayer)),
+    }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(LayerNode.compile(CrossSpawnSpawner.node))),
   ),
 )
 
@@ -340,7 +330,7 @@ it.effect("does not create global config when OPENCODE_CONFIG_DIR is set", () =>
           yield* Config.use.get().pipe(provideInstanceEffect(dir))
 
           expect(yield* FSUtil.use.existsSafe(path.join(dir, "opencode.jsonc"))).toBe(false)
-        }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(CrossSpawnSpawner.defaultLayer)),
+        }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(LayerNode.compile(CrossSpawnSpawner.node))),
       ),
     )
   }),
@@ -930,7 +920,7 @@ it.effect("does not try to install dependencies in read-only OPENCODE_CONFIG_DIR
     yield* Effect.addFinalizer(() => FSUtil.use.chmod(readonly, 0o755).pipe(Effect.ignore))
 
     yield* withProcessEnv("OPENCODE_CONFIG_DIR", readonly, Config.use.get().pipe(provideInstanceEffect(dir)))
-  }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(CrossSpawnSpawner.defaultLayer)),
+  }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(LayerNode.compile(CrossSpawnSpawner.node))),
 )
 
 it.effect("installs dependencies in writable OPENCODE_CONFIG_DIR", () =>
@@ -948,7 +938,7 @@ it.effect("installs dependencies in writable OPENCODE_CONFIG_DIR", () =>
     )
 
     expect(yield* FSUtil.use.readFileString(path.join(configDir, ".gitignore"))).toContain("package-lock.json")
-  }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(CrossSpawnSpawner.defaultLayer)),
+  }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(LayerNode.compile(CrossSpawnSpawner.node))),
 )
 
 // Note: deduplication and serialization of npm installs is now handled by the
@@ -1533,16 +1523,12 @@ test("remote well-known config can use FetchHttpClient layer", async () => {
       Effect.scoped,
       Effect.provide(
         Layer.mergeAll(
-          Config.layer.pipe(
-            Layer.provide(testFlock),
-            Layer.provide(FSUtil.defaultLayer),
-            Layer.provide(Env.defaultLayer),
-            Layer.provide(wellKnownAuth(server.url.origin)),
-            Layer.provide(AccountTest.empty),
-            Layer.provideMerge(infra),
-            Layer.provide(NpmTest.noop),
-            Layer.provide(FetchHttpClient.layer),
-          ),
+          LayerNode.compile(LayerNode.group([Config.node, FSUtil.node, Env.node, CrossSpawnSpawner.node]), [
+            [Auth.node, wellKnownAuth(server.url.origin)],
+            [Account.node, AccountTest.empty],
+            [Npm.node, NpmTest.noop],
+            [httpClient, FetchHttpClient.layer],
+          ]),
           testInstanceStoreLayer,
         ),
       ),

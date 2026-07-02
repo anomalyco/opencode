@@ -251,7 +251,6 @@ export const dict = {
   "zen.privacy.exceptionsLink": "такими винятками",
 
   "go.title": "OpenCode Go | Недорогі моделі кодування для всіх",
-  "go.banner.text": "MiniMax M3 отримує 3x ліміти використання протягом обмеженого часу",
   "go.meta.description":
     "Go починається від $5 за перший місяць, потім $10/місяць, з generous 5-годинними лімітами запитів для GLM-5.2, GLM-5.1, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro та DeepSeek V4 Flash.",
   "go.hero.title": "Недорогі моделі кодування для всіх",
@@ -374,6 +373,8 @@ export const dict = {
   "zen.api.error.userMonthlyLimitReached":
     "Ви досягли місячного ліміту витрат ${{amount}}. Керуйте лімітами: {{membersUrl}}",
   "zen.api.error.modelDisabled": "Модель вимкнено",
+  "zen.api.error.regionNotAllowed":
+    "Ця модель розміщена в Китаї. Якщо ви хочете використовувати цю модель, увімкніть її в налаштуваннях: {{consoleGoUrl}}",
   "zen.api.error.trialEnded":
     "Безкоштовна акція для {{model}} закінчилася. Ви можете продовжити використання, підписавшись на OpenCode Go — {{link}}",
 
@@ -652,6 +653,9 @@ export const dict = {
   "workspace.lite.subscription.resetsIn": "Скидається через",
   "workspace.lite.subscription.useBalance": "Використовуйте доступний баланс після досягнення лімітів",
   "workspace.lite.subscription.selectProvider": 'Виберіть "OpenCode Go" як провайдера в конфігурації opencode.',
+  "workspace.lite.providers.title": "Провайдери",
+  "workspace.lite.providers.description": "Керуйте провайдерами, які використовуються для маршрутизації.",
+  "workspace.lite.providers.useChina": "Увімкнути моделі, розміщені в Китаї",
   "workspace.lite.black.message":
     "Ви вже підписані на OpenCode Black або в списку очікування. Спочатку скасуйте підписку, якщо хочете перейти на Go.",
   "workspace.lite.other.message": "Інший учасник цього робочого простору вже підписаний на OpenCode Go.",
