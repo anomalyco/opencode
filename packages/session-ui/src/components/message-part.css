@@ -378,15 +378,6 @@
     pointer-events: auto;
   }
 
-  [data-slot="bash-copy"] [data-component="icon-button"][data-variant="secondary"] {
-    box-shadow: none;
-    border: 0.5px solid var(--v2-border-border-base);
-  }
-
-  [data-slot="bash-copy"] [data-component="icon-button"][data-variant="secondary"] [data-slot="icon-svg"] {
-    color: var(--icon-base);
-  }
-
   [data-slot="bash-scroll"] {
     width: 100%;
     overflow-y: auto;
@@ -860,6 +851,13 @@
     min-width: 0;
   }
 
+  [data-slot="question-header-actions"] {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
   [data-slot="question-progress"] {
     display: flex;
     align-items: center;
@@ -918,6 +916,7 @@
     line-height: var(--line-height-large);
     color: var(--v2-text-text-base);
     padding: 0 10px;
+    flex-shrink: 0;
     -webkit-user-select: text;
     user-select: text;
   }
@@ -929,6 +928,7 @@
     line-height: var(--line-height-large);
     color: var(--v2-text-text-muted);
     padding: 0 10px;
+    flex-shrink: 0;
   }
 
   [data-slot="question-options"] {
@@ -936,8 +936,8 @@
     flex-direction: column;
     gap: 6px;
     margin-top: 12px;
-    padding: 1px 1px 8px;
-    flex-shrink: 0;
+    padding: 1px 1px 16px;
+    flex: 1 1 auto;
     min-height: 0;
     overflow-y: auto;
     scrollbar-width: none;
@@ -1123,6 +1123,42 @@
     display: flex;
     align-items: center;
     gap: 8px;
+  }
+}
+
+[data-component="question-minimized-dock"] {
+  margin-bottom: 8px;
+
+  [data-slot="question-minimized-trigger"] {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 10px 12px;
+    border: 0;
+    background: transparent;
+    color: var(--v2-text-text-base);
+    text-align: left;
+    cursor: pointer;
+    touch-action: manipulation;
+
+    &:disabled {
+      cursor: not-allowed;
+      opacity: 0.6;
+    }
+
+    [data-component="icon"] {
+      transform: rotate(180deg);
+    }
+  }
+
+  [data-slot="question-minimized-summary"] {
+    flex: 1;
+    font-family: var(--font-family-sans);
+    font-size: 14px;
+    font-weight: var(--font-weight-medium);
+    line-height: var(--line-height-large);
+    color: var(--v2-text-text-base);
   }
 }
 
@@ -1319,10 +1355,6 @@ body:not([data-new-layout]) {
 
   [data-component="bash-output"] {
     border: 1px solid var(--border-weak-base);
-
-    [data-slot="bash-copy"] [data-component="icon-button"][data-variant="secondary"] {
-      border: 1px solid var(--border-weak-base);
-    }
   }
 
   [data-component="edit-trigger"],

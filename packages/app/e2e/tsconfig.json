@@ -5,5 +5,12 @@
     "rootDir": "..",
     "types": ["node", "bun"]
   },
-  "include": ["./**/*.ts"]
+  "include": [
+    "./performance/timeline-stability/**/*.spec.ts",
+    "./performance/timeline-stability/fixture.test.ts",
+    "./performance/timeline-stability/fixture.ts",
+    "./performance/unit/visual-stability.test.ts",
+    "./regression/session-timeline-context-resize.spec.ts",
+    "./utils/**/*.ts"
+  ]
 }

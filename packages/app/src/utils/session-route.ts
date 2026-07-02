@@ -27,15 +27,6 @@ export function legacySessionServer(
 
 type SessionParent = { id: string; parentID?: string }
 
-export function selectSessionLineage<T extends { session: { id: string } }>(
-  sessionID: string,
-  cached: T | undefined,
-  resolved: T | undefined,
-) {
-  if (cached?.session.id === sessionID) return cached
-  if (resolved?.session.id === sessionID) return resolved
-}
-
 export async function rootSession<T extends SessionParent>(session: T, get: (sessionID: string) => Promise<T>) {
   const seen = new Set([session.id])
   let current = session
