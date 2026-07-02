@@ -196,9 +196,7 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
         : {
             "x-session-affinity": input.sessionID,
             "X-Session-Id": input.sessionID,
-            // xAI routes requests with the same conversation ID to the same
-            // server so prompt cache hits survive load balancing.
-            // https://docs.x.ai/developers/advanced-api-usage/prompt-caching/maximizing-cache-hits
+            // xAI prompt cache routing: https://docs.x.ai/developers/advanced-api-usage/prompt-caching/maximizing-cache-hits
             ...(input.model.api.npm === "@ai-sdk/xai" ? { "x-grok-conv-id": input.sessionID } : {}),
             ...(input.parentSessionID ? { "x-parent-session-id": input.parentSessionID } : {}),
             "User-Agent": USER_AGENT,

@@ -1,10 +1,7 @@
 export * as XaiCache from "./xai-cache"
 
-// xAI's Responses API takes the cache routing key as a `prompt_cache_key`
-// body field, but @ai-sdk/xai exposes no provider option for it, so the
-// session identity only reaches the wire as the per-request x-grok-conv-id
-// header set by LLMRequestPrep. Mirror that header into the body at the
-// fetch boundary so /responses requests carry the documented field.
+// @ai-sdk/xai has no provider option for the Responses API's prompt_cache_key,
+// so mirror the x-grok-conv-id header set by LLMRequestPrep into the body here.
 // https://docs.x.ai/developers/advanced-api-usage/prompt-caching/maximizing-cache-hits
 export function withPromptCacheKey(baseFetch?: typeof fetch): typeof fetch {
   const inner = baseFetch ?? fetch

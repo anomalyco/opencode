@@ -1217,9 +1217,8 @@ export function options(input: {
     result["promptCacheKey"] = input.sessionID
   }
 
-  // Forward-compatible with @ai-sdk/xai gaining promptCacheKey support; until
-  // then the SDK strips it and Provider.resolveSDK injects prompt_cache_key at
-  // the fetch boundary instead.
+  // No-op until @ai-sdk/xai supports promptCacheKey; Provider.resolveSDK
+  // injects prompt_cache_key at the fetch boundary meanwhile.
   if (input.model.api.npm === "@ai-sdk/xai") {
     result["promptCacheKey"] = input.sessionID
   }
