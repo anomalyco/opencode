@@ -102,8 +102,8 @@ export function spawn(cmd: string[], opts: Options = {}): Child {
   void exited.catch(() => undefined)
 
   if (opts.abort) {
-    opts.abort.addEventListener("abort", abort, { once: true })
     if (opts.abort.aborted) abort()
+    else opts.abort.addEventListener("abort", abort, { once: true })
   }
 
   const child = proc as Child
