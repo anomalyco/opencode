@@ -6,7 +6,7 @@ import { SessionContextEntry } from "@opencode-ai/schema/session-context-entry"
 import { Project } from "@opencode-ai/schema/project"
 import { AbsolutePath, NonNegativeInt, PositiveInt, RelativePath, statics } from "@opencode-ai/schema/schema"
 import { Workspace } from "@opencode-ai/schema/workspace"
-import { Context, Effect, Encoding, Result, Schema, Struct } from "effect"
+import { Context, Effect, Encoding, Result, Schema, SchemaGetter, Struct } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
 import {
   ConflictError,
@@ -34,6 +34,19 @@ const SessionsQueryFields = {
     description: "Session order for the first page. Use desc for newest first or asc for oldest first.",
   }),
   search: Schema.optional(Schema.String),
+  parentID: Schema.Union([
+    Session.ID,
+    Schema.Literal("null").pipe(
+      Schema.decodeTo(Schema.Null, {
+        decode: SchemaGetter.transform(() => null),
+        encode: SchemaGetter.transform(() => "null"),
+      }),
+    ),
+  ])
+    .pipe(Schema.optional)
+    .annotate({
+      description: "Filter by parent session. Use null to return only root sessions.",
+    }),
 }
 
 const SessionsDirectoryQuery = Schema.Struct({
