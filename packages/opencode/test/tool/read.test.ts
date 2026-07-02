@@ -1,5 +1,6 @@
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { afterEach, describe, expect } from "bun:test"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Cause, Effect, Exit, Layer, Stream } from "effect"
 import path from "path"
 import { Agent } from "../../src/agent/agent"
@@ -8,7 +9,7 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Global } from "@opencode-ai/core/global"
 import { Config } from "@/config/config"
 import { RuntimeFlags } from "@/effect/runtime-flags"
-import { Search } from "@opencode-ai/core/filesystem/search"
+import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { LSP } from "@/lsp/lsp"
 import { Permission } from "../../src/permission"
 import { SessionID, MessageID } from "../../src/session/schema"
@@ -44,14 +45,16 @@ const ctx = {
 }
 
 const readLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
-  Layer.mergeAll(
-    Agent.defaultLayer,
-    FSUtil.defaultLayer,
-    CrossSpawnSpawner.defaultLayer,
-    Instruction.defaultLayer,
-    LSP.defaultLayer,
-    Search.defaultLayer,
-    Truncate.defaultLayer,
+  LayerNode.compile(
+    LayerNode.group([
+      Agent.node,
+      FSUtil.node,
+      CrossSpawnSpawner.node,
+      Instruction.node,
+      LSP.node,
+      Ripgrep.node,
+      Truncate.node,
+    ]),
   )
 
 const it = testEffect(Layer.mergeAll(readLayer(), testInstanceStoreLayer))

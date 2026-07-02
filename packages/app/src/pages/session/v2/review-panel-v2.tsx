@@ -1,7 +1,7 @@
 import { createEffect, createMemo, createSignal, Show, type JSX } from "solid-js"
 import type { SnapshotFileDiff, VcsFileDiff } from "@opencode-ai/sdk/v2"
-import { SessionReviewV2, SessionReviewV2Sidebar } from "@opencode-ai/ui/v2/session-review-v2"
-import { SessionReviewFilePreviewV2 } from "@opencode-ai/ui/v2/session-review-file-preview-v2"
+import { SessionReviewV2, SessionReviewV2Sidebar } from "@opencode-ai/session-ui/v2/session-review-v2"
+import { SessionReviewFilePreviewV2 } from "@opencode-ai/session-ui/v2/session-review-file-preview-v2"
 import { DiffChanges } from "@opencode-ai/ui/v2/diff-changes-v2"
 import type {
   SessionReviewComment,
@@ -11,7 +11,7 @@ import type {
   SessionReviewDiffStyle,
   SessionReviewFocus,
   SessionReviewLineComment,
-} from "@opencode-ai/ui/session-review"
+} from "@opencode-ai/session-ui/session-review"
 import FileTreeV2 from "@/components/file-tree-v2"
 import { useLanguage } from "@/context/language"
 import { useSDK } from "@/context/sdk"
@@ -30,7 +30,8 @@ import { SessionFileListV2 } from "@/pages/session/v2/session-file-list-v2"
 
 export function makeReadFile(sdk: ReturnType<typeof useSDK>) {
   return async (path: string) =>
-    sdk.client.file
+    sdk()
+      .client.file
       .read({ path })
       .then((x) => x.data)
       .catch((error) => {

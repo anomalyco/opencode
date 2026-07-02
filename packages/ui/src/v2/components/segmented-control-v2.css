@@ -11,10 +11,10 @@
   width: 232px;
   max-width: 100%;
   height: 28px;
-  background: var(--v2-background-bg-layer-02);
+  background: var(--v2-background-bg-layer-01);
   border: none;
   border-radius: 6px;
-  box-shadow: inset 0 0 0 0.5px var(--v2-border-border-base);
+  box-shadow: 0 0 0 0.5px var(--v2-border-border-base);
   flex: none;
 }
 
@@ -33,6 +33,7 @@
   border-radius: 6px;
   background: transparent;
   box-shadow: none;
+  cursor: pointer;
   font-style: normal;
   font-weight: 440;
   font-size: 13px;
@@ -61,7 +62,7 @@
 [data-slot="segmented-control-v2-item"]:where([data-pressed]) {
   background: var(--v2-background-bg-base);
   color: var(--v2-text-text-base);
-  box-shadow: inset 0 0 0 0.5px var(--v2-border-border-strong);
+  box-shadow: 0 0 0 0.5px var(--v2-border-border-strong);
   z-index: 1;
 }
 

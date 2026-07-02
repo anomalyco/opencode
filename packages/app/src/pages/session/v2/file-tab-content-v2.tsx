@@ -1,5 +1,5 @@
 import { createMemo, Show } from "solid-js"
-import { SessionReviewFilePreviewV2 } from "@opencode-ai/ui/v2/session-review-file-preview-v2"
+import { SessionReviewFilePreviewV2 } from "@opencode-ai/session-ui/v2/session-review-file-preview-v2"
 import { useFile } from "@/context/file"
 import { useSDK } from "@/context/sdk"
 import { FileTabContent } from "@/pages/session/file-tabs"

@@ -18,7 +18,7 @@ Pair with \`Diff\`/\`DiffSSR\` to contextualize a change set.
 - Ensure surrounding context conveys meaning of the counts/bars.
 
 ### Theming/tokens
-- Uses \`data-component="diff-changes-v2"\` and v2 diff color tokens.
+- Uses \`data-component="diff-changes"\` and diff color tokens.
 
 `
 

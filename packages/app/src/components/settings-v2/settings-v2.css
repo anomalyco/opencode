@@ -167,6 +167,15 @@
   background-color: var(--v2-background-bg-layer-01);
 }
 
+@media (max-width: 639px) {
+  .settings-v2[data-component="tabs-v2"][data-variant="settings"][data-orientation="vertical"]
+    [data-slot="tabs-v2-list"] {
+    width: 144px;
+    min-width: 144px;
+    padding-inline: 8px;
+  }
+}
+
 .settings-v2-nav-footer {
   display: flex;
   flex-direction: column;
@@ -624,7 +633,7 @@
 
 [data-component="dialog-v2"].settings-v2-server-dialog [data-slot="dialog-header"] {
   align-items: center;
-  padding: 24px 24px 0;
+  padding: 24px 24px 16px;
 }
 
 [data-component="dialog-v2"].settings-v2-server-dialog [data-slot="dialog-body"] {

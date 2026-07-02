@@ -1,7 +1,7 @@
 import { createEffect, createMemo, onCleanup, Show, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { SnapshotFileDiff, VcsFileDiff } from "@opencode-ai/sdk/v2"
-import { SessionReviewV2Sidebar } from "@opencode-ai/ui/v2/session-review-v2"
+import { SessionReviewV2Sidebar } from "@opencode-ai/session-ui/v2/session-review-v2"
 import FileTreeV2 from "@/components/file-tree-v2"
 import { useFile } from "@/context/file"
 import { useLanguage } from "@/context/language"
@@ -54,7 +54,7 @@ export function FilesPanelV2Sidebar(props: FilesPanelV2SidebarProps) {
 
   createEffect(() => {
     const value = query()
-    const directory = sdk.directory
+    const directory = sdk().directory
     if (!directory || !value) {
       setStore({
         files: [],
@@ -69,7 +69,8 @@ export function FilesPanelV2Sidebar(props: FilesPanelV2SidebarProps) {
     const timeout = setTimeout(() => {
       setStore("loading", true)
 
-      void sdk.client.find
+      void sdk()
+        .client.find
         .files({
           query: value,
           dirs: "false",

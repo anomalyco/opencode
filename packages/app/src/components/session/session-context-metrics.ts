@@ -1,4 +1,4 @@
-import type { AssistantMessage, Message } from "@opencode-ai/sdk/v2/client"
+import type { AssistantMessage, Message, Session } from "@opencode-ai/sdk/v2/client"
 
 type Provider = {
   id: string
@@ -21,17 +21,7 @@ type Context = {
   modelLabel: string
   limit: number | undefined
   input: number
-  output: number
-  reasoning: number
-  cacheRead: number
-  cacheWrite: number
-  total: number
   usage: number | null
-}
-
-type Metrics = {
-  totalCost: number
-  context: Context | undefined
 }
 
 const tokenTotal = (msg: AssistantMessage) => {
@@ -47,10 +37,9 @@ const lastAssistantWithTokens = (messages: Message[]) => {
   }
 }
 
-const build = (messages: Message[] = [], providers: Provider[] = []): Metrics => {
-  const totalCost = messages.reduce((sum, msg) => sum + (msg.role === "assistant" ? msg.cost : 0), 0)
+const build = (messages: Message[] = [], providers: Provider[] = []): Context | undefined => {
   const message = lastAssistantWithTokens(messages)
-  if (!message) return { totalCost, context: undefined }
+  if (!message) return undefined
 
   const provider = providers.find((item) => item.id === message.providerID)
   const model = provider?.models[message.modelID]
@@ -58,25 +47,22 @@ const build = (messages: Message[] = [], providers: Provider[] = []): Metrics =>
   const total = tokenTotal(message)
 
   return {
-    totalCost,
-    context: {
-      message,
-      provider,
-      model,
-      providerLabel: provider?.name ?? message.providerID,
-      modelLabel: model?.name ?? message.modelID,
-      limit,
-      input: message.tokens.input,
-      output: message.tokens.output,
-      reasoning: message.tokens.reasoning,
-      cacheRead: message.tokens.cache.read,
-      cacheWrite: message.tokens.cache.write,
-      total,
-      usage: limit ? Math.round((total / limit) * 100) : null,
-    },
+    message,
+    provider,
+    model,
+    providerLabel: provider?.name ?? message.providerID,
+    modelLabel: model?.name ?? message.modelID,
+    limit,
+    input: message.tokens.input,
+    usage: limit ? Math.round((total / limit) * 100) : null,
   }
 }
 
-export function getSessionContextMetrics(messages: Message[] = [], providers: Provider[] = []) {
+export function getSessionContext(messages: Message[] = [], providers: Provider[] = []) {
   return build(messages, providers)
+}
+
+export function getSessionTokenTotal(tokens: Session["tokens"] | undefined) {
+  if (!tokens) return undefined
+  return tokens.input + tokens.output + tokens.reasoning + tokens.cache.read + tokens.cache.write
 }

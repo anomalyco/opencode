@@ -1,7 +1,8 @@
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Tag } from "@opencode-ai/ui/v2/badge-v2"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
-import { Dialog } from "@opencode-ai/ui/v2/dialog-v2"
+import { Dialog, DialogBody, DialogHeader, DialogTitle } from "@opencode-ai/ui/v2/dialog-v2"
+import { DividerV2 } from "@opencode-ai/ui/v2/divider-v2"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
@@ -24,22 +25,43 @@ export function isWslServer(server: ServerConnection.Any) {
   return server.type === "sidecar" && server.variant === "wsl"
 }
 
-export function WslAddServerButton() {
+export function AddServerMenu(props: { onAddServer: () => void }) {
   const platform = usePlatform()
   const dialog = useDialog()
   const language = useLanguage()
-  const openAdd = () => {
+  const openAddWsl = () => {
     dialog.push(() => (
-      <Dialog title={language.t("wsl.server.add")} size="large" fit class="settings-v2-wsl-dialog">
-        <DialogAddWslServer />
+      <Dialog size="large" fit class="settings-v2-wsl-dialog">
+        <DialogHeader hideClose={true}>
+          <DialogTitle>{language.t("wsl.server.add")}</DialogTitle>
+        </DialogHeader>
+        <DividerV2 />
+        <DialogBody>
+          <DialogAddWslServer />
+        </DialogBody>
       </Dialog>
     ))
   }
   return (
-    <Show when={platform.wslServers}>
-      <ButtonV2 variant="ghost-muted" icon="plus" onClick={openAdd}>
-        {language.t("wsl.server.addShort")}
-      </ButtonV2>
+    <Show
+      when={platform.wslServers}
+      fallback={
+        <ButtonV2 variant="ghost-muted" icon="plus" onClick={props.onAddServer}>
+          {language.t("dialog.server.add.button")}
+        </ButtonV2>
+      }
+    >
+      <MenuV2 gutter={4} modal={false} placement="bottom-end">
+        <MenuV2.Trigger as={ButtonV2} variant="ghost-muted" icon="plus">
+          {language.t("dialog.server.add.button")}
+        </MenuV2.Trigger>
+        <MenuV2.Portal>
+          <MenuV2.Content>
+            <MenuV2.Item onSelect={props.onAddServer}>{language.t("dialog.server.add.button")}</MenuV2.Item>
+            <MenuV2.Item onSelect={openAddWsl}>{language.t("wsl.server.add")}</MenuV2.Item>
+          </MenuV2.Content>
+        </MenuV2.Portal>
+      </MenuV2>
     </Show>
   )
 }

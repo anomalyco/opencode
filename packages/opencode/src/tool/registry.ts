@@ -1,6 +1,6 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { httpClient } from "@opencode-ai/core/effect/layer-node-platform"
-import { Ripgrep } from "@opencode-ai/core/filesystem/ripgrep"
+import { httpClient } from "@opencode-ai/core/effect/app-node-platform"
+import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { PlanExitTool } from "./plan"
 import { Session } from "@/session/session"
 import { QuestionTool } from "./question"
@@ -33,10 +33,8 @@ import { Glob } from "@opencode-ai/core/util/glob"
 import path from "path"
 import { pathToFileURL } from "url"
 import { Effect, Layer, Context } from "effect"
-import { FetchHttpClient, HttpClient } from "effect/unstable/http"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { Search } from "@opencode-ai/core/filesystem/search"
 import { Format } from "../format"
 import { InstanceState } from "@/effect/instance-state"
 import { EffectBridge } from "@/effect/bridge"
@@ -81,30 +79,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ToolRegistry") {}
 
-export const layer: Layer.Layer<
-  Service,
-  never,
-  | Config.Service
-  | Plugin.Service
-  | Question.Service
-  | Todo.Service
-  | Agent.Service
-  | Skill.Service
-  | Session.Service
-  | BackgroundJob.Service
-  | Provider.Service
-  | LSP.Service
-  | Instruction.Service
-  | FSUtil.Service
-  | EventV2Bridge.Service
-  | HttpClient.HttpClient
-  | ChildProcessSpawner
-  | Search.Service
-  | Format.Service
-  | Truncate.Service
-  | RuntimeFlags.Service
-  | Database.Service
-> = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const config = yield* Config.Service
@@ -339,31 +314,6 @@ export const layer: Layer.Layer<
   }),
 )
 
-export const defaultLayer = Layer.suspend(() =>
-  layer
-    .pipe(
-      Layer.provide(Config.defaultLayer),
-      Layer.provide(Plugin.defaultLayer),
-      Layer.provide(Question.defaultLayer),
-      Layer.provide(Todo.defaultLayer),
-      Layer.provide(Skill.defaultLayer),
-      Layer.provide(Agent.defaultLayer),
-      Layer.provide(Session.defaultLayer),
-      Layer.provide(BackgroundJob.defaultLayer),
-      Layer.provide(Provider.defaultLayer),
-      Layer.provide(LSP.defaultLayer),
-      Layer.provide(Instruction.defaultLayer),
-      Layer.provide(FSUtil.defaultLayer),
-      Layer.provide(EventV2Bridge.defaultLayer),
-      Layer.provide(FetchHttpClient.layer),
-      Layer.provide(Format.defaultLayer),
-      Layer.provide(CrossSpawnSpawner.defaultLayer),
-      Layer.provide(Search.defaultLayer),
-      Layer.provide(Truncate.defaultLayer),
-    )
-    .pipe(Layer.provide(Database.defaultLayer), Layer.provide(RuntimeFlags.defaultLayer)),
-)
-
 function isZodType(value: unknown): value is z.ZodType {
   return typeof value === "object" && value !== null && "_zod" in value
 }
@@ -440,28 +390,31 @@ function isJsonSchemaObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
 }
 
-export const node = LayerNode.make(layer, [
-  Config.node,
-  Plugin.node,
-  Question.node,
-  Todo.node,
-  Agent.node,
-  Skill.node,
-  Session.node,
-  BackgroundJob.node,
-  Provider.node,
-  LSP.node,
-  Instruction.node,
-  FSUtil.node,
-  EventV2Bridge.node,
-  httpClient,
-  CrossSpawnSpawner.node,
-  Ripgrep.node,
-  Search.node,
-  Format.node,
-  Truncate.node,
-  RuntimeFlags.node,
-  Database.node,
-])
+export const node = LayerNode.make({
+  service: Service,
+  layer,
+  deps: [
+    Config.node,
+    Plugin.node,
+    Question.node,
+    Todo.node,
+    Agent.node,
+    Skill.node,
+    Session.node,
+    BackgroundJob.node,
+    Provider.node,
+    LSP.node,
+    Instruction.node,
+    FSUtil.node,
+    EventV2Bridge.node,
+    httpClient,
+    CrossSpawnSpawner.node,
+    Format.node,
+    Truncate.node,
+    RuntimeFlags.node,
+    Database.node,
+    Ripgrep.node,
+  ],
+})
 
 export * as ToolRegistry from "./registry"

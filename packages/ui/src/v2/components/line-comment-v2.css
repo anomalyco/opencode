@@ -153,7 +153,8 @@
   resize: vertical;
   border: 1px solid var(--v2-border-border-base);
   border-radius: 6px;
-  background: linear-gradient(180deg, var(--v2-alpha-light-2) 0%, var(--v2-alpha-light-0) 100%), var(--v2-background-bg-base);
+  background:
+    linear-gradient(180deg, var(--v2-alpha-light-2) 0%, var(--v2-alpha-light-0) 100%), var(--v2-background-bg-base);
   font-size: 13px;
   font-style: normal;
   font-weight: 440;

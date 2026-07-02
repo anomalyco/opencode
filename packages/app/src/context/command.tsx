@@ -217,17 +217,19 @@ function displayKeybindParts(kb: Keybind, t?: (key: KeyLabel) => string) {
 
 export function formatKeybindParts(config: string, t?: (key: KeyLabel) => string): string[] {
   if (!config || config === "none") return []
-
-  const keybinds = parseKeybind(config)
-  if (keybinds.length === 0) return []
-
-  return displayKeybindParts(keybinds[0], t)
+  const keybind = parseKeybind(config)[0]
+  return keybind ? displayKeybindParts(keybind, t) : []
 }
 
 export function formatKeybind(config: string, t?: (key: KeyLabel) => string): string {
   const parts = formatKeybindParts(config, t)
   if (parts.length === 0) return ""
   return IS_MAC ? parts.join("") : parts.join("+")
+}
+
+// KeybindV2 takes an array instead of a string
+export function formatKeybindKeys(config: string, t?: (key: KeyLabel) => string): string[] {
+  return formatKeybindParts(config, t)
 }
 
 function isEditableTarget(target: EventTarget | null) {
@@ -413,13 +415,8 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
 
     const keybindConfig = (id: string) => {
       if (id === PALETTE_ID) return settings.keybinds.get(PALETTE_ID) ?? DEFAULT_PALETTE_KEYBIND
-
       const base = actionId(id)
-      const option = options().find((x) => actionId(x.id) === base)
-      if (option?.keybind) return option.keybind
-
-      const meta = catalog[base]
-      return bind(base, meta?.keybind)
+      return options().find((x) => actionId(x.id) === base)?.keybind ?? bind(base, catalog[base]?.keybind)
     }
 
     return {
@@ -434,8 +431,7 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
       },
       keybindParts(id: string) {
         const config = keybindConfig(id)
-        if (!config) return []
-        return formatKeybindParts(config, language.t)
+        return config ? formatKeybindParts(config, language.t) : []
       },
       show: showPalette,
       keybinds(enabled: boolean) {

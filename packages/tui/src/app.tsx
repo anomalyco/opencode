@@ -8,7 +8,7 @@ import { ClipboardProvider, useClipboard } from "./context/clipboard"
 import { ExitProvider, useExit } from "./context/exit"
 import { EpilogueProvider } from "./context/epilogue"
 import * as Selection from "./util/selection"
-import { createCliRenderer, MouseButton, type CliRenderer } from "@opentui/core"
+import { createCliRenderer, MouseButton } from "@opentui/core"
 import { RouteProvider, useRoute } from "./context/route"
 import {
   Switch,
@@ -34,8 +34,10 @@ import { useEvent } from "./context/event"
 import { SDKProvider, useSDK } from "./context/sdk"
 import { StartupLoading } from "./component/startup-loading"
 import { SyncProvider, useSync } from "./context/sync"
-import { SyncProviderV2 } from "./context/sync-v2"
+import { DataProvider } from "./context/data"
+import { LocationProvider } from "./context/location"
 import { LocalProvider, useLocal } from "./context/local"
+import { PermissionProvider } from "./context/permission"
 import { DialogModel } from "./component/dialog-model"
 import { useConnected } from "./component/use-connected"
 import { DialogMcp } from "./component/dialog-mcp"
@@ -118,6 +120,7 @@ const appBindingCommands = [
   "theme.mode.lock",
   "help.show",
   "docs.open",
+  "diff.open",
   "workspace.list",
   "app.debug",
   "app.console",
@@ -178,24 +181,26 @@ function isVersionGreater(left: string, right: string) {
 export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
   const global = yield* Global.Service
   const exit = { epilogue: undefined as string | undefined, reason: undefined as unknown }
-  yield* Effect.scoped(
+  const result = yield* Effect.scoped(
     Effect.gen(function* () {
       const renderer = yield* Effect.acquireRelease(
-        Effect.tryPromise(() =>
-          createCliRenderer({
-            externalOutputMode: "passthrough",
-            targetFps: 60,
-            gatherStats: false,
-            exitOnCtrlC: false,
-            useKittyKeyboard: {},
-            autoFocus: false,
-            openConsoleOnError: false,
-            useMouse: !Flag.OPENCODE_DISABLE_MOUSE && input.config.mouse,
-            consoleOptions: {
-              keyBindings: [{ name: "y", ctrl: true, action: "copy-selection" }],
-            },
-          }),
-        ),
+        Effect.tryPromise({
+          try: () =>
+            createCliRenderer({
+              externalOutputMode: "passthrough",
+              targetFps: 60,
+              gatherStats: false,
+              exitOnCtrlC: false,
+              useKittyKeyboard: {},
+              autoFocus: false,
+              openConsoleOnError: false,
+              useMouse: !Flag.OPENCODE_DISABLE_MOUSE && input.config.mouse,
+              consoleOptions: {
+                keyBindings: [{ name: "y", ctrl: true, action: "copy-selection" }],
+              },
+            }),
+          catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+        }),
         (renderer) =>
           Effect.sync(() => {
             destroyRenderer(renderer)
@@ -292,32 +297,36 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                           headers={input.headers}
                                           events={input.events}
                                         >
-                                          <ProjectProvider>
-                                            <SyncProvider>
-                                              <SyncProviderV2>
-                                                <ThemeProvider mode={mode}>
-                                                  <LocalProvider>
-                                                    <PromptStashProvider>
-                                                      <DialogProvider>
-                                                        <FrecencyProvider>
-                                                          <PromptHistoryProvider>
-                                                            <PromptRefProvider>
-                                                              <EditorContextProvider>
-                                                                <App
-                                                                  onSnapshot={input.onSnapshot}
-                                                                  pluginHost={input.pluginHost}
-                                                                />
-                                                              </EditorContextProvider>
-                                                            </PromptRefProvider>
-                                                          </PromptHistoryProvider>
-                                                        </FrecencyProvider>
-                                                      </DialogProvider>
-                                                    </PromptStashProvider>
-                                                  </LocalProvider>
-                                                </ThemeProvider>
-                                              </SyncProviderV2>
-                                            </SyncProvider>
-                                          </ProjectProvider>
+                                          <PermissionProvider>
+                                            <ProjectProvider>
+                                              <SyncProvider>
+                                                <DataProvider>
+                                                  <ThemeProvider mode={mode}>
+                                                    <LocalProvider>
+                                                      <PromptStashProvider>
+                                                        <DialogProvider>
+                                                          <FrecencyProvider>
+                                                            <PromptHistoryProvider>
+                                                              <PromptRefProvider>
+                                                                <EditorContextProvider>
+                                                                  <LocationProvider>
+                                                                    <App
+                                                                      onSnapshot={input.onSnapshot}
+                                                                      pluginHost={input.pluginHost}
+                                                                    />
+                                                                  </LocationProvider>
+                                                                </EditorContextProvider>
+                                                              </PromptRefProvider>
+                                                            </PromptHistoryProvider>
+                                                          </FrecencyProvider>
+                                                        </DialogProvider>
+                                                      </PromptStashProvider>
+                                                    </LocalProvider>
+                                                  </ThemeProvider>
+                                                </DataProvider>
+                                              </SyncProvider>
+                                            </ProjectProvider>
+                                          </PermissionProvider>
                                         </SDKProvider>
                                       </PluginRuntimeProvider>
                                     </TuiConfigProvider>
@@ -337,13 +346,14 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
         }, renderer)
       })
       yield* Deferred.await(shutdown)
+      return { epilogue: exit.epilogue, reason: exit.reason }
     }),
   )
   yield* Effect.sync(() => {
     win32FlushInputBuffer()
-    if (exit.reason !== undefined)
-      process.stderr.write((cliErrorMessage(exit.reason) ?? errorFormat(exit.reason)) + "\n")
-    if (exit.epilogue) process.stdout.write(exit.epilogue + "\n")
+    if (result.reason !== undefined)
+      process.stderr.write((cliErrorMessage(result.reason) ?? errorFormat(result.reason)) + "\n")
+    if (result.epilogue) process.stdout.write(result.epilogue + "\n")
   })
 })
 
@@ -916,6 +926,16 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         run: async () => {
           kv.set("session_directory_filter_enabled", !kv.get("session_directory_filter_enabled", true))
           await sync.session.refresh()
+          dialog.clear()
+        },
+      },
+      {
+        name: "permission.mode",
+        title:
+          local.permission.mode === "auto" ? "Disable auto-approve permissions" : "Enable auto-approve permissions",
+        category: "System",
+        run: () => {
+          local.permission.toggle()
           dialog.clear()
         },
       },

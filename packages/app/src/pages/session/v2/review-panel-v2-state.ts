@@ -1,4 +1,4 @@
-import type { SessionReviewExpandMode } from "@opencode-ai/ui/v2/session-review-v2"
+import type { SessionReviewExpandMode } from "@opencode-ai/session-ui/v2/session-review-v2"
 import { createStore } from "solid-js/store"
 import { Persist, persisted } from "@/utils/persist"
 
