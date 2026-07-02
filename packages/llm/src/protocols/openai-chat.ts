@@ -168,8 +168,6 @@ interface ParserState {
   readonly lifecycle: Lifecycle.State
 }
 
-const invalid = ProviderShared.invalidRequest
-
 // =============================================================================
 // Request Lowering
 // =============================================================================
@@ -333,8 +331,6 @@ const lowerMessages = Effect.fn("OpenAIChat.lowerMessages")(function* (request: 
 const lowerOptions = Effect.fn("OpenAIChat.lowerOptions")(function* (request: LLMRequest) {
   const store = OpenAIOptions.store(request)
   const reasoningEffort = OpenAIOptions.reasoningEffort(request)
-  if (reasoningEffort && !OpenAIOptions.isReasoningEffort(reasoningEffort))
-    return yield* invalid(`OpenAI Chat does not support reasoning effort ${reasoningEffort}`)
   return {
     ...(store !== undefined ? { store } : {}),
     ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),

@@ -1,5 +1,19 @@
 # V2 Schema Changelog
 
+## 2026-07-02: Add Default Model Endpoint
+
+- Add `GET /api/model/default` (`v2.model.default`) returning the Location's resolved default model, or `undefined` when no model is available.
+- Expose the existing core `Catalog.model.default()` resolution (configured default first, then availability heuristics) over HTTP with regenerated Promise, Effect, and legacy JavaScript client surfaces.
+
+Change:
+
+- Clients that need to pin a full model reference before prompt admission (for example `run --variant` without `--model` on a session with no model) previously had no current API for the default model and fell back to the legacy `/config` read or the first entry of `v2.model.list`, which can diverge from the runner's own default resolution.
+
+Compatibility:
+
+- Purely additive HTTP surface; no durable-event, projection, or database change.
+- `v2.model.list` ordering and semantics are unchanged.
+
 ## 2026-07-01: Synthetic Message Metadata And Model-Visible Leak Fix
 
 - Add optional `metadata: Record<string, unknown>` to the durable `session.next.synthetic.1` event data so synthetic messages can carry a durable ledger (e.g. lazy-instruction dedup paths).

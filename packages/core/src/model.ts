@@ -26,8 +26,13 @@ export type Api = Model.Api
 export const Info = Model.Info
 export type Info = Model.Info
 
-export type MutableInfo = Omit<Types.DeepMutable<Info>, "api"> & {
+export type MutableRequest = ProviderV2.MutableRequest & { variant?: string }
+export type MutableVariant = ProviderV2.MutableRequest & { id: VariantID }
+
+export type MutableInfo = Omit<Types.DeepMutable<Info>, "api" | "request" | "variants"> & {
   api: ProviderV2.MutableApi<Api>
+  request: MutableRequest
+  variants: MutableVariant[]
 }
 
 export function parse(input: string): { providerID: ProviderV2.ID; modelID: ID } {

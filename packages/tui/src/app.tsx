@@ -1116,6 +1116,34 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
     return render({ params: route.data.data })
   })
 
+  // Suppress the full-screen reconnecting overlay for transient disconnects (initial startup, host
+  // reload, sub-second event-stream blips). After the first successful connect, show it only once the
+  // connection has been lost for a full second; before the first connect give a longer grace period so
+  // startup never flashes it, but a server that dies before ever connecting still surfaces instead of
+  // leaving a silent empty app. Hide it immediately the moment status leaves "connecting".
+  const [showReconnecting, setShowReconnecting] = createSignal(false)
+  let reconnectTimer: ReturnType<typeof setTimeout> | undefined
+  createEffect(() => {
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer)
+      reconnectTimer = undefined
+    }
+    if (sdk.connection.status() !== "connecting") {
+      setShowReconnecting(false)
+      return
+    }
+    reconnectTimer = setTimeout(
+      () => {
+        reconnectTimer = undefined
+        setShowReconnecting(true)
+      },
+      sdk.connection.connectedOnce() ? 1000 : 5000,
+    ).unref()
+  })
+  onCleanup(() => {
+    if (reconnectTimer) clearTimeout(reconnectTimer)
+  })
+
   return (
     <box
       width={dimensions().width}
@@ -1161,7 +1189,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       <Show when={!startup.skipInitialLoading}>
         <StartupLoading ready={ready} />
       </Show>
-      <Show when={sdk.connection.status() === "connecting"}>
+      <Show when={showReconnecting()}>
         <Reconnecting attempt={sdk.connection.attempt()} error={sdk.connection.error()} />
       </Show>
     </box>

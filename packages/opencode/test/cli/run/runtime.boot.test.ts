@@ -1,58 +1,71 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
-import { OpencodeClient, type Provider } from "@opencode-ai/sdk/v2"
+import { OpencodeClient } from "@opencode-ai/sdk/v2"
 import type { Resolved } from "@opencode-ai/tui/config"
 import { TuiConfig } from "@/config/tui"
 import { resolveDiffStyle, resolveModelInfo, resolveRunTuiConfig } from "@/cli/cmd/run/runtime.boot"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 
-function model(id: string, providerID: string, context: number, variants?: Record<string, Record<string, never>>) {
+function ok<T>(data: T) {
+  return Promise.resolve({
+    data,
+    error: undefined,
+    request: new Request("https://opencode.test"),
+    response: new Response(),
+  })
+}
+
+function provider(id: string, name: string) {
+  return {
+    id,
+    name,
+    api: { type: "native" as const, settings: {} },
+    request: { headers: {}, body: {} },
+  }
+}
+
+function model(id: string, providerID: string, context: number, variants: string[] = []) {
   return {
     id,
     providerID,
     api: {
       id: providerID,
-      url: `https://${providerID}.test`,
-      npm: `@ai-sdk/${providerID}`,
+      type: "native" as const,
+      settings: {},
     },
     name: id,
     capabilities: {
-      temperature: true,
-      reasoning: true,
-      attachment: true,
-      toolcall: true,
-      input: {
-        text: true,
-        audio: false,
-        image: false,
-        video: false,
-        pdf: false,
-      },
-      output: {
-        text: true,
-        audio: false,
-        image: false,
-        video: false,
-        pdf: false,
-      },
-      interleaved: false,
+      tools: true,
+      input: ["text"],
+      output: ["text"],
     },
-    cost: {
-      input: 0,
-      output: 0,
-      cache: {
-        read: 0,
-        write: 0,
-      },
+    request: {
+      headers: {},
+      body: {},
     },
+    variants: variants.map((variant) => ({
+      id: variant,
+      headers: {},
+      body: {},
+    })),
+    time: {
+      released: 1,
+    },
+    cost: [
+      {
+        input: 0,
+        output: 0,
+        cache: {
+          read: 0,
+          write: 0,
+        },
+      },
+    ],
     limit: {
       context,
       output: 8192,
     },
     status: "active" as const,
-    options: {},
-    headers: {},
-    release_date: "2026-01-01",
-    variants,
+    enabled: true,
   }
 }
 
@@ -160,119 +173,101 @@ describe("run runtime boot", () => {
     await expect(resolveDiffStyle()).resolves.toBe("auto")
   })
 
-  test("prefers configured providers for model selector data", async () => {
+  test("loads v2 providers and models for model selector data", async () => {
     const sdk = new OpencodeClient()
-    const data: {
-      all: Provider[]
-      default: Record<string, string>
-      connected: string[]
-    } = {
-      all: [
+    const providers = [provider("openai", "OpenAI")]
+    const models = [model("gpt-5", "openai", 128000, ["high", "minimal"])]
+    // The generated methods have conditional return types for throwOnError; these mocks represent the successful branch.
+    // @ts-expect-error successful SDK response is valid for both modes at runtime
+    const providerList = spyOn(sdk.v2.provider, "list").mockImplementation(() => ok({ data: providers }))
+    // @ts-expect-error successful SDK response is valid for both modes at runtime
+    spyOn(sdk.v2.model, "list").mockImplementation(() => ok({ data: models }))
+
+    await expect(resolveModelInfo(sdk, "/workspace", { providerID: "openai", modelID: "gpt-5" })).resolves.toEqual({
+      providers: [
         {
           id: "openai",
           name: "OpenAI",
-          source: "api",
-          env: [],
-          options: {},
           models: {
-            "gpt-5": model("gpt-5", "openai", 128000, {
-              high: {},
-              minimal: {},
-            }),
-          },
-        },
-        {
-          id: "anthropic",
-          name: "Anthropic",
-          source: "api",
-          env: [],
-          options: {},
-          models: {
-            sonnet: model("sonnet", "anthropic", 200000),
+            "gpt-5": {
+              id: "gpt-5",
+              providerID: "openai",
+              name: "gpt-5",
+              capabilities: {
+                tools: true,
+                input: ["text"],
+                output: ["text"],
+              },
+              cost: {
+                input: 0,
+                output: 0,
+                cache: {
+                  read: 0,
+                  write: 0,
+                },
+              },
+              limit: {
+                context: 128000,
+                output: 8192,
+              },
+              status: "active",
+              variants: {
+                high: {},
+                minimal: {},
+              },
+            },
           },
         },
       ],
-      default: {},
-      connected: [],
-    }
-    const configured = {
-      providers: [data.all[0]!],
-      default: {},
-    }
-    const list = spyOn(sdk.provider, "list").mockImplementation(() =>
-      Promise.resolve({
-        data,
-        error: undefined,
-        request: new Request("https://opencode.test"),
-        response: new Response(),
-      }),
-    )
-    spyOn(sdk.config, "providers").mockImplementation(() =>
-      Promise.resolve({
-        data: configured,
-        error: undefined,
-        request: new Request("https://opencode.test"),
-        response: new Response(),
-      }),
-    )
-
-    await expect(resolveModelInfo(sdk, "/workspace", { providerID: "openai", modelID: "gpt-5" })).resolves.toEqual({
-      providers: configured.providers,
       variants: ["high", "minimal"],
       limits: {
         "openai/gpt-5": 128000,
       },
     })
-    expect(list).not.toHaveBeenCalled()
+    expect(providerList).toHaveBeenCalledWith(
+      {
+        location: {
+          directory: "/workspace",
+        },
+      },
+      { throwOnError: true },
+    )
   })
 
-  test("falls back to provider list when configured providers are unavailable", async () => {
+  test("loads context limits across v2 providers", async () => {
     const sdk = new OpencodeClient()
-    const data: {
-      all: Provider[]
-      default: Record<string, string>
-      connected: string[]
-    } = {
-      all: [
-        {
-          id: "openai",
-          name: "OpenAI",
-          source: "api",
-          env: [],
-          options: {},
-          models: {
-            "gpt-5": model("gpt-5", "openai", 128000, {
-              high: {},
-              minimal: {},
-            }),
-          },
-        },
-        {
-          id: "anthropic",
-          name: "Anthropic",
-          source: "api",
-          env: [],
-          options: {},
-          models: {
-            sonnet: model("sonnet", "anthropic", 200000),
-          },
-        },
-      ],
-      default: {},
-      connected: [],
-    }
-    spyOn(sdk.config, "providers").mockRejectedValue(new Error("boom"))
-    spyOn(sdk.provider, "list").mockImplementation(() =>
-      Promise.resolve({
-        data,
-        error: undefined,
-        request: new Request("https://opencode.test"),
-        response: new Response(),
-      }),
-    )
+    const providers = [provider("openai", "OpenAI"), provider("anthropic", "Anthropic")]
+    const models = [model("gpt-5", "openai", 128000, ["high", "minimal"]), model("sonnet", "anthropic", 200000)]
+    // The generated methods have conditional return types for throwOnError; these mocks represent the successful branch.
+    // @ts-expect-error successful SDK response is valid for both modes at runtime
+    spyOn(sdk.v2.provider, "list").mockImplementation(() => ok({ data: providers }))
+    // @ts-expect-error successful SDK response is valid for both modes at runtime
+    spyOn(sdk.v2.model, "list").mockImplementation(() => ok({ data: models }))
 
     await expect(resolveModelInfo(sdk, "/workspace", { providerID: "openai", modelID: "gpt-5" })).resolves.toEqual({
-      providers: data.all,
+      providers: [
+        expect.objectContaining({
+          id: "openai",
+          name: "OpenAI",
+          models: expect.objectContaining({
+            "gpt-5": expect.objectContaining({
+              variants: {
+                high: {},
+                minimal: {},
+              },
+            }),
+          }),
+        }),
+        expect.objectContaining({
+          id: "anthropic",
+          name: "Anthropic",
+          models: expect.objectContaining({
+            sonnet: expect.objectContaining({
+              variants: {},
+            }),
+          }),
+        }),
+      ],
       variants: ["high", "minimal"],
       limits: {
         "openai/gpt-5": 128000,

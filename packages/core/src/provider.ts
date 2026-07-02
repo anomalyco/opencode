@@ -19,7 +19,15 @@ export type MutableApi<T extends Api = Api> = T extends Api
 export const Request = Provider.Request
 export type Request = Provider.Request
 
+export const Settings = Provider.Settings
+export type Settings = Provider.Settings
+
 export const Info = Provider.Info
 export type Info = Provider.Info
 
-export type MutableInfo = Omit<Types.DeepMutable<Info>, "api"> & { api: MutableApi }
+export type MutableRequest = Types.DeepMutable<Request>
+
+export type MutableInfo = Omit<Types.DeepMutable<Info>, "api" | "request"> & {
+  api: MutableApi
+  request: MutableRequest
+}

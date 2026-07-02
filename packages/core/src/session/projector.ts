@@ -12,8 +12,15 @@ import { SessionMessage } from "./message"
 import { SessionMessageUpdater } from "./message-updater"
 import { SessionInput } from "./input"
 import { WorkspaceV2 } from "../workspace"
-import { SessionContextEpoch } from "./context-epoch"
-import { MessageTable, PartTable, SessionInputTable, SessionMessageTable, SessionTable } from "./sql"
+import { SessionContextCheckpoint } from "./context-checkpoint"
+import {
+  MessageTable,
+  PartTable,
+  SessionContextCheckpointTable,
+  SessionInputTable,
+  SessionMessageTable,
+  SessionTable,
+} from "./sql"
 import type { DeepMutable } from "../schema"
 import { Slug } from "../util/slug"
 
@@ -156,12 +163,16 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
         .select({ seq: SessionMessageTable.seq })
         .from(SessionMessageTable)
         .where(
-          and(eq(SessionMessageTable.session_id, event.data.parentID), eq(SessionMessageTable.id, event.data.messageID)),
+          and(
+            eq(SessionMessageTable.session_id, event.data.parentID),
+            eq(SessionMessageTable.id, event.data.messageID),
+          ),
         )
         .get()
         .pipe(Effect.orDie)
     : undefined
-  if (event.data.messageID && !boundary) return yield* Effect.die(`Fork boundary message not found: ${event.data.messageID}`)
+  if (event.data.messageID && !boundary)
+    return yield* Effect.die(`Fork boundary message not found: ${event.data.messageID}`)
   const copied = yield* db
     .select({ seq: SessionMessageTable.seq })
     .from(SessionMessageTable)
@@ -205,6 +216,23 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
     .get()
     .pipe(Effect.orDie)
   if (!stored) return yield* Effect.die(new SessionAlreadyProjected())
+
+  // The fork inherits the parent's transcript, so it inherits the context
+  // checkpoint that transcript was built against: copied message seqs keep
+  // folding at the same baseline horizon.
+  const checkpoint = yield* db
+    .select()
+    .from(SessionContextCheckpointTable)
+    .where(eq(SessionContextCheckpointTable.session_id, event.data.parentID))
+    .get()
+    .pipe(Effect.orDie)
+  if (checkpoint) {
+    yield* db
+      .insert(SessionContextCheckpointTable)
+      .values({ ...checkpoint, session_id: event.data.sessionID })
+      .run()
+      .pipe(Effect.orDie)
+  }
 
   const usage = emptyUsage()
   let cursor = -1
@@ -452,7 +480,7 @@ const layer = Layer.effectDiscard(
           .where(eq(SessionTable.id, event.data.sessionID))
           .run()
           .pipe(Effect.orDie)
-        yield* SessionContextEpoch.reset(db, event.data.sessionID)
+        yield* SessionContextCheckpoint.reset(db, event.data.sessionID)
       }),
     )
     yield* events.project(SessionV1.Event.Deleted, (event) =>
@@ -666,7 +694,7 @@ const layer = Layer.effectDiscard(
           .where(eq(SessionTable.id, event.data.sessionID))
           .run()
           .pipe(Effect.orDie)
-        yield* SessionContextEpoch.reset(db, event.data.sessionID)
+        yield* SessionContextCheckpoint.reset(db, event.data.sessionID)
       }),
     )
   }),

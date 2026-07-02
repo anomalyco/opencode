@@ -187,7 +187,7 @@ async function renderFooter(
           directory="/tmp"
           findFiles={async () => []}
           agents={() => []}
-          resources={() => []}
+          references={() => []}
           commands={() => input.commands ?? []}
           providers={() => input.providers}
           currentModel={() => input.currentModel}
@@ -934,7 +934,7 @@ test("direct footer shows editable prompts and additional queued work while runn
           directory="/tmp"
           findFiles={async () => []}
           agents={() => []}
-          resources={() => []}
+          references={() => []}
           commands={() => []}
           providers={() => undefined}
           currentModel={() => ({

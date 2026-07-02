@@ -30,6 +30,7 @@ const model = (api: Api, variants: ModelV2.Info["variants"] = []) =>
     api: { id: ModelV2.ID.make("api-test-model"), ...api },
     capabilities: { tools: true, input: ["text"], output: ["text"] },
     request: {
+      settings: {},
       headers: { "x-test": "header" },
       body: { apiKey: "secret", custom_extension: { enabled: true } },
     },
@@ -83,7 +84,7 @@ describe("SessionRunnerModel", () => {
             url: "https://compatible.example/v1",
             settings: { apiKey: "settings-secret", compatibility: "strict" },
           }),
-          request: { headers: {}, body: {} },
+          request: { settings: {}, headers: {}, body: {} },
         }),
       )
       const request = LLM.request({ model: resolved, prompt: "Hello" })
@@ -100,17 +101,17 @@ describe("SessionRunnerModel", () => {
     }),
   )
 
-  it.effect("overlays selected OpenAI Session variant bodies", () =>
+  it.effect("overlays selected OpenAI Session variant settings and bodies", () =>
     Effect.gen(function* () {
       const catalog = model({ type: "aisdk", package: "@ai-sdk/openai", url: "https://openai.example/v1" }, [
         {
           id: ModelV2.VariantID.make("high"),
+          settings: { reasoningEffort: "high" },
           headers: { "x-variant": "high" },
           body: {
             store: false,
             service_tier: "priority",
             temperature: 0.2,
-            reasoning: { effort: "high" },
           },
         },
       ])
@@ -137,7 +138,9 @@ describe("SessionRunnerModel", () => {
         store: false,
         service_tier: "priority",
         temperature: 0.2,
-        reasoning: { effort: "high" },
+      })
+      expect(resolved.route.defaults.providerOptions).toEqual({
+        openai: { store: false, reasoningEffort: "high" },
       })
     }),
   )
@@ -149,6 +152,7 @@ describe("SessionRunnerModel", () => {
         [
           {
             id: ModelV2.VariantID.make("high"),
+            settings: {},
             headers: {},
             body: { store: false, reasoning_effort: "high" },
           },
@@ -205,13 +209,14 @@ describe("SessionRunnerModel", () => {
     }),
   )
 
-  it.effect("overlays selected Anthropic Session variant bodies", () =>
+  it.effect("overlays selected Anthropic Session variant settings", () =>
     Effect.gen(function* () {
       const catalog = model({ type: "aisdk", package: "@ai-sdk/anthropic", url: "https://anthropic.example/v1" }, [
         {
           id: ModelV2.VariantID.make("high"),
+          settings: { thinking: { type: "enabled", budgetTokens: 12000 } },
           headers: {},
-          body: { thinking: { type: "enabled", budget_tokens: 12000 } },
+          body: {},
         },
       ])
       const session = SessionV2.Info.make({
@@ -229,7 +234,9 @@ describe("SessionRunnerModel", () => {
 
       expect(resolved.route.defaults.http?.body).toEqual({
         custom_extension: { enabled: true },
-        thinking: { type: "enabled", budget_tokens: 12000 },
+      })
+      expect(resolved.route.defaults.providerOptions).toEqual({
+        anthropic: { thinking: { type: "enabled", budgetTokens: 12000 } },
       })
     }),
   )
@@ -252,7 +259,7 @@ describe("SessionRunnerModel", () => {
       const resolved = yield* SessionRunnerModel.fromCatalogModel(
         ModelV2.Info.make({
           ...model({ type: "aisdk", package: "@ai-sdk/openai", url: "https://openai.example/v1" }),
-          request: { headers: {}, body: {} },
+          request: { settings: {}, headers: {}, body: {} },
         }),
         Credential.Key.make({ type: "key", key: "secret" }),
       )
@@ -275,7 +282,7 @@ describe("SessionRunnerModel", () => {
       const resolved = yield* SessionRunnerModel.fromCatalogModel(
         ModelV2.Info.make({
           ...model({ type: "aisdk", package: "@ai-sdk/openai", url: "https://openai.example/v1" }),
-          request: { headers: {}, body: { apiKey: "configured-secret" } },
+          request: { settings: {}, headers: {}, body: { apiKey: "configured-secret" } },
         }),
         credential,
       )
@@ -297,7 +304,7 @@ describe("SessionRunnerModel", () => {
       const resolved = yield* SessionRunnerModel.fromCatalogModel(
         ModelV2.Info.make({
           ...model({ type: "aisdk", package: "@ai-sdk/openai", url: "https://openai.example/v1" }),
-          request: { headers: {}, body: {} },
+          request: { settings: {}, headers: {}, body: {} },
         }),
         Credential.OAuth.make({
           type: "oauth",

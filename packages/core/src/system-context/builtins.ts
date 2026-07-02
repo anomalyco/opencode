@@ -1,18 +1,20 @@
 export * as SystemContextBuiltIns from "./builtins"
 
 import { makeLocationNode } from "../effect/app-node"
-import { DateTime, Effect, Layer, Schema } from "effect"
+import { Context, DateTime, Effect, Layer, Schema } from "effect"
 import { Location } from "../location"
 import { SystemContext } from "./index"
-import { InstructionContext } from "../instruction-context"
-import { SystemContextRegistry } from "./registry"
-import { FSUtil } from "../fs-util"
-import { Global } from "../global"
 
-const builtIns = Layer.effectDiscard(
+export interface Interface {
+  readonly load: () => Effect.Effect<SystemContext.SystemContext>
+}
+
+export class Service extends Context.Service<Service, Interface>()("@opencode/v2/SystemContextBuiltIns") {}
+
+const layer = Layer.effect(
+  Service,
   Effect.gen(function* () {
     const location = yield* Location.Service
-    const registry = yield* SystemContextRegistry.Service
     const environment = [
       "<env>",
       `  Working directory: ${location.directory}`,
@@ -39,12 +41,8 @@ const builtIns = Layer.effectDiscard(
       }),
     ])
 
-    yield* registry.register({ key: SystemContext.Key.make("core/builtins"), load: Effect.succeed(context) })
+    return Service.of({ load: () => Effect.succeed(context) })
   }),
 )
 
-export const node = makeLocationNode({
-  name: "system-context-builtins",
-  layer: builtIns,
-  deps: [Location.node, SystemContextRegistry.node, InstructionContext.node, FSUtil.node, Global.node],
-})
+export const node = makeLocationNode({ service: Service, layer, deps: [Location.node] })

@@ -24,9 +24,7 @@ import { EventV2 } from "../src/event"
 import { Reference } from "../src/reference"
 import { ToolRegistry } from "../src/tool/registry"
 
-const it = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Database.node, EventV2.node, LocationServiceMap.node])),
-)
+const it = testEffect(AppNodeBuilder.build(LayerNode.group([Database.node, EventV2.node, LocationServiceMap.node])))
 
 describe("LocationServiceMap", () => {
   it.live("reuses cached services for constructed and decoded location refs", () =>
@@ -75,6 +73,7 @@ describe("LocationServiceMap", () => {
               const catalog = yield* Catalog.Service
               yield* catalog.transform((editor) => editor.provider.update(ProviderV2.ID.make("test"), () => {}))
               const registry = yield* ToolRegistry.Service
+              yield* waitForTool(registry, "glob")
               yield* waitForTool(registry, "shell")
               yield* waitForTool(registry, "subagent")
               return {

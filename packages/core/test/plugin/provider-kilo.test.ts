@@ -32,7 +32,7 @@ describe("KiloPlugin", () => {
             package: "@ai-sdk/openai-compatible",
             url: "https://api.kilo.ai/api/gateway",
           }
-          provider.request = { headers: { Existing: "value" }, body: {} }
+          provider.request = { settings: {}, headers: { Existing: "value" }, body: {} }
         })
         catalog.provider.update(ProviderV2.ID.openrouter, () => {})
       })

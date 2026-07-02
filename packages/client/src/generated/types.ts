@@ -163,6 +163,7 @@ export type AgentListOutput = {
     readonly id: string
     readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
     readonly request: {
+      readonly settings: { readonly [x: string]: JsonValue }
       readonly headers: { readonly [x: string]: string }
       readonly body: { readonly [x: string]: JsonValue }
     }
@@ -819,6 +820,27 @@ export type SessionContextOutput = {
       }
   >
 }["data"]
+
+export type SessionListContextEntriesInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
+
+export type SessionListContextEntriesOutput = {
+  readonly data: ReadonlyArray<{ readonly key: string; readonly value: JsonValue }>
+}["data"]
+
+export type SessionPutContextEntryInput = {
+  readonly sessionID: { readonly sessionID: string; readonly key: string }["sessionID"]
+  readonly key: { readonly sessionID: string; readonly key: string }["key"]
+  readonly value: { readonly value: JsonValue }["value"]
+}
+
+export type SessionPutContextEntryOutput = void
+
+export type SessionRemoveContextEntryInput = {
+  readonly sessionID: { readonly sessionID: string; readonly key: string }["sessionID"]
+  readonly key: { readonly sessionID: string; readonly key: string }["key"]
+}
+
+export type SessionRemoveContextEntryOutput = void
 
 export type SessionHistoryInput = {
   readonly sessionID: { readonly sessionID: string }["sessionID"]
@@ -2204,12 +2226,14 @@ export type ModelListOutput = {
       readonly output: ReadonlyArray<string>
     }
     readonly request: {
+      readonly settings: { readonly [x: string]: JsonValue }
       readonly headers: { readonly [x: string]: string }
       readonly body: { readonly [x: string]: JsonValue }
       readonly variant?: string
     }
     readonly variants: ReadonlyArray<{
       readonly id: string
+      readonly settings: { readonly [x: string]: JsonValue }
       readonly headers: { readonly [x: string]: string }
       readonly body: { readonly [x: string]: JsonValue }
     }>
@@ -2224,6 +2248,67 @@ export type ModelListOutput = {
     readonly enabled: boolean
     readonly limit: { readonly context: number; readonly input?: number; readonly output: number }
   }>
+}
+
+export type ModelDefaultInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
+
+export type ModelDefaultOutput = {
+  readonly location: {
+    readonly directory: string
+    readonly workspaceID?: string
+    readonly project: { readonly id: string; readonly directory: string }
+  }
+  readonly data: {
+    readonly id: string
+    readonly providerID: string
+    readonly family?: string
+    readonly name: string
+    readonly api:
+      | {
+          readonly id: string
+          readonly type: "aisdk"
+          readonly package: string
+          readonly url?: string
+          readonly settings?: { readonly [x: string]: JsonValue }
+        }
+      | {
+          readonly id: string
+          readonly type: "native"
+          readonly url?: string
+          readonly settings: { readonly [x: string]: JsonValue }
+        }
+    readonly capabilities: {
+      readonly tools: boolean
+      readonly input: ReadonlyArray<string>
+      readonly output: ReadonlyArray<string>
+    }
+    readonly request: {
+      readonly settings: { readonly [x: string]: JsonValue }
+      readonly headers: { readonly [x: string]: string }
+      readonly body: { readonly [x: string]: JsonValue }
+      readonly variant?: string
+    }
+    readonly variants: ReadonlyArray<{
+      readonly id: string
+      readonly settings: { readonly [x: string]: JsonValue }
+      readonly headers: { readonly [x: string]: string }
+      readonly body: { readonly [x: string]: JsonValue }
+    }>
+    readonly time: { readonly released: number }
+    readonly cost: ReadonlyArray<{
+      readonly tier?: { readonly type: "context"; readonly size: number }
+      readonly input: number
+      readonly output: number
+      readonly cache: { readonly read: number; readonly write: number }
+    }>
+    readonly status: "alpha" | "beta" | "deprecated" | "active"
+    readonly enabled: boolean
+    readonly limit: { readonly context: number; readonly input?: number; readonly output: number }
+  } | null
 }
 
 export type GenerateTextInput = {
@@ -2268,6 +2353,7 @@ export type ProviderListOutput = {
         }
       | { readonly type: "native"; readonly url?: string; readonly settings: { readonly [x: string]: JsonValue } }
     readonly request: {
+      readonly settings: { readonly [x: string]: JsonValue }
       readonly headers: { readonly [x: string]: string }
       readonly body: { readonly [x: string]: JsonValue }
     }
@@ -2301,6 +2387,7 @@ export type ProviderGetOutput = {
         }
       | { readonly type: "native"; readonly url?: string; readonly settings: { readonly [x: string]: JsonValue } }
     readonly request: {
+      readonly settings: { readonly [x: string]: JsonValue }
       readonly headers: { readonly [x: string]: string }
       readonly body: { readonly [x: string]: JsonValue }
     }
@@ -4454,6 +4541,19 @@ export type EventSubscribeOutput =
           }>
         }
         readonly delivery: "steer" | "queue"
+      }
+    }
+  | {
+      readonly id: string
+      readonly metadata?: { readonly [x: string]: unknown }
+      readonly type: "session.next.execution.settled"
+      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
+      readonly location?: { readonly directory: string; readonly workspaceID?: string }
+      readonly data: {
+        readonly timestamp: number
+        readonly sessionID: string
+        readonly outcome: "success" | "failure" | "interrupted"
+        readonly error?: { readonly type: "unknown"; readonly message: string }
       }
     }
   | {

@@ -93,7 +93,7 @@ describe("AmazonBedrockPlugin", () => {
         })
         catalog.provider.update(bedrock.id, (item) => {
           item.api = bedrock.api
-          item.request = bedrock.request
+          item.request = { settings: {}, headers: {}, body: { endpoint: "https://bedrock.example" } }
         })
       })
       yield* addPlugin()

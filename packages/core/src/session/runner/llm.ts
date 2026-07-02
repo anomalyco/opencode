@@ -8,7 +8,7 @@ import {
   isContextOverflowFailure,
   type ProviderErrorEvent,
 } from "@opencode-ai/llm"
-import { Cause, DateTime, Effect, FiberSet, Layer, Option, Semaphore, Stream } from "effect"
+import { Cause, DateTime, Effect, Exit, FiberSet, Layer, Option, Semaphore, Stream } from "effect"
 import { AgentV2 } from "../../agent"
 import { Config } from "../../config"
 import { Database } from "../../database/database"
@@ -18,13 +18,15 @@ import { ModelV2 } from "../../model"
 import { ProviderV2 } from "../../provider"
 import { QuestionTool } from "../../tool/question"
 import { SystemContext } from "../../system-context/index"
-import { SystemContextRegistry } from "../../system-context/registry"
+import { SystemContextBuiltIns } from "../../system-context/builtins"
+import { InstructionContext } from "../../instruction-context"
 import { SkillGuidance } from "../../skill/guidance"
 import { ReferenceGuidance } from "../../reference/guidance"
 import { McpGuidance } from "../../mcp/guidance"
+import { SessionContextEntry } from "../context-entry"
 import { ToolRegistry } from "../../tool/registry"
 import { ToolOutputStore } from "../../tool-output-store"
-import { SessionContextEpoch } from "../context-epoch"
+import { SessionContextCheckpoint } from "../context-checkpoint"
 import { SessionCompaction } from "../compaction"
 import { SessionEvent } from "../event"
 import { SessionHistory } from "../history"
@@ -102,10 +104,12 @@ const layer = Layer.effect(
     const models = yield* SessionRunnerModel.Service
     const store = yield* SessionStore.Service
     const location = yield* Location.Service
-    const systemContext = yield* SystemContextRegistry.Service
+    const builtins = yield* SystemContextBuiltIns.Service
+    const instructions = yield* InstructionContext.Service
     const skillGuidance = yield* SkillGuidance.Service
     const referenceGuidance = yield* ReferenceGuidance.Service
     const mcpGuidance = yield* McpGuidance.Service
+    const contextEntries = yield* SessionContextEntry.Service
     const snapshots = yield* Snapshot.Service
     const db = (yield* Database.Service).db
     const compaction = yield* SessionCompaction.Service
@@ -169,10 +173,18 @@ const layer = Layer.effect(
     const continueAfterOverflowCompaction = (step: number) =>
       new TurnTransitionError({ _tag: "ContinueAfterOverflowCompaction", step })
 
-    const loadSystemContext = (agent: AgentV2.Selection) =>
-      Effect.all([systemContext.load(), skillGuidance.load(agent), referenceGuidance.load(), mcpGuidance.load(agent)], {
-        concurrency: "unbounded",
-      }).pipe(Effect.map(SystemContext.combine))
+    const loadSystemContext = (agent: AgentV2.Selection, sessionID: SessionSchema.ID) =>
+      Effect.all(
+        [
+          builtins.load(),
+          instructions.load(),
+          skillGuidance.load(agent),
+          referenceGuidance.load(),
+          mcpGuidance.load(agent),
+          contextEntries.load(sessionID),
+        ],
+        { concurrency: "unbounded" },
+      ).pipe(Effect.map(SystemContext.combine))
 
     const runTurnAttempt = Effect.fn("SessionRunner.runTurn")(function* (
       sessionID: SessionSchema.ID,
@@ -184,7 +196,14 @@ const layer = Layer.effect(
       if (session.location.directory !== location.directory || session.location.workspaceID !== location.workspaceID)
         return yield* Effect.interrupt
       const agent = yield* agents.select(session.agent)
-      const initialized = yield* SessionContextEpoch.initialize(db, loadSystemContext(agent), session.id)
+      // Establish what the model knows before admitting what the user said, so
+      // a blocked first turn leaves pending inputs untouched.
+      const checkpoint = yield* SessionContextCheckpoint.prepare(
+        db,
+        events,
+        loadSystemContext(agent, session.id),
+        session.id,
+      )
       const toolFibers = yield* FiberSet.make<void, ToolOutputStore.Error>()
       let needsContinuation = false
       let currentStep = step
@@ -198,10 +217,8 @@ const layer = Layer.effect(
         }
         if (promoted > 0) currentStep = 1
       }
-      const system =
-        initialized ?? (yield* SessionContextEpoch.prepare(db, events, loadSystemContext(agent), session.id))
       const model = yield* models.resolve(session)
-      const entries = yield* SessionHistory.entriesForRunner(db, session.id, system.baselineSeq)
+      const entries = yield* SessionHistory.entriesForRunner(db, session.id, checkpoint.baselineSeq)
       const context = entries.map((entry) => entry.message)
       const isLastStep = agent.info?.steps !== undefined && currentStep >= agent.info.steps
       const toolMaterialization = isLastStep
@@ -211,7 +228,10 @@ const layer = Layer.effect(
       const request = LLM.request({
         model,
         providerOptions: { openai: { promptCacheKey } },
-        system: [agent.info?.system ? agent.info.system : SessionRunnerSystemPrompt.provider(model), system.baseline]
+        system: [
+          agent.info?.system ? agent.info.system : SessionRunnerSystemPrompt.provider(model),
+          checkpoint.baseline,
+        ]
           .filter((part): part is string => part !== undefined && part.length > 0)
           .map(SystemPart.make),
         messages: [...toLLMMessages(context, model), ...(isLastStep ? [Message.assistant(MAX_STEPS_PROMPT)] : [])],
@@ -387,7 +407,7 @@ const layer = Layer.effect(
       )
     })
 
-    const run = Effect.fn("SessionRunner.run")(function* (input: {
+    const drain = Effect.fnUntraced(function* (input: {
       readonly sessionID: SessionSchema.ID
       readonly force: boolean
     }) {
@@ -418,6 +438,30 @@ const layer = Layer.effect(
       }
     })
 
+    const run = Effect.fn("SessionRunner.run")(
+      (input: { readonly sessionID: SessionSchema.ID; readonly force: boolean }) =>
+        drain(input).pipe(
+          Effect.onExit((exit) =>
+            Effect.gen(function* () {
+              const failure =
+                Exit.isFailure(exit) && !Cause.hasInterrupts(exit.cause) ? Cause.squash(exit.cause) : undefined
+              yield* events.publish(SessionEvent.ExecutionSettled, {
+                sessionID: input.sessionID,
+                timestamp: yield* DateTime.now,
+                outcome: Exit.isSuccess(exit) ? "success" : Cause.hasInterrupts(exit.cause) ? "interrupted" : "failure",
+                error:
+                  failure !== undefined
+                    ? { type: "unknown", message: failure instanceof Error ? failure.message : String(failure) }
+                    : undefined,
+              })
+            }).pipe(
+              Effect.catchCause(() => Effect.void),
+              Effect.asVoid,
+            ),
+          ),
+        ),
+    )
+
     return Service.of({
       run,
     })
@@ -435,10 +479,12 @@ export const node = makeLocationNode({
     SessionRunnerModel.node,
     SessionStore.node,
     Location.node,
-    SystemContextRegistry.node,
+    SystemContextBuiltIns.node,
+    InstructionContext.node,
     SkillGuidance.node,
     ReferenceGuidance.node,
     McpGuidance.node,
+    SessionContextEntry.node,
     SessionCompaction.node,
     SessionTitle.node,
     Config.node,

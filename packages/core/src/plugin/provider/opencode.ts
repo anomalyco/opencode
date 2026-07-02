@@ -146,7 +146,7 @@ export const OpencodePlugin = define<HttpClient.HttpClient | EventV2.Service | S
                 const variantID = ModelV2.VariantID.make(id)
                 let existing = model.variants.find((item) => item.id === variantID)
                 if (!existing) {
-                  existing = { id: variantID, headers: {}, body: {} }
+                  existing = { id: variantID, settings: {}, headers: {}, body: {} }
                   model.variants.push(existing)
                 }
                 Object.assign(existing.headers, options.headers)

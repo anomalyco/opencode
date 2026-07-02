@@ -5,6 +5,7 @@ import { ProviderV2 } from "../provider"
 import { ModelV2 } from "../model"
 
 export class Request extends Schema.Class<Request>("ConfigV2.Provider.Request")({
+  settings: ProviderV2.Settings.pipe(Schema.optional),
   headers: Schema.Record(Schema.String, Schema.String).pipe(Schema.optional),
   body: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
 }) {}

@@ -97,9 +97,20 @@ const withDefaults = (model: ModelV2.Info, route: AnyRoute) => {
     provider: model.providerID,
     endpoint: model.api.url === undefined ? undefined : { baseURL: model.api.url },
     headers: model.request.headers,
+    providerOptions: providerOptions(model),
     http: { body: httpBody },
     limits: { context: model.limit.context, output: model.limit.output },
   })
+}
+
+const providerOptions = (
+  model: ModelV2.Info,
+): { readonly [key: string]: { readonly [key: string]: unknown } } | undefined => {
+  if (Object.keys(model.request.settings).length === 0) return undefined
+  if (model.api.type !== "aisdk") return undefined
+  if (model.api.package === "@ai-sdk/openai") return { openai: model.request.settings }
+  if (model.api.package === "@ai-sdk/anthropic") return { anthropic: model.request.settings }
+  if (model.api.package === "@ai-sdk/openai-compatible") return { openai: model.request.settings }
 }
 
 export const withVariant = (
@@ -119,6 +130,7 @@ export const withVariant = (
   return Effect.succeed(
     variant
       ? produce(model, (draft) => {
+          Object.assign(draft.request.settings, variant.settings)
           Object.assign(draft.request.headers, variant.headers)
           Object.assign(draft.request.body, variant.body)
         })

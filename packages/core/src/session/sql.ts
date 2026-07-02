@@ -14,6 +14,7 @@ import { Timestamps } from "../database/schema.sql"
 import type { SystemContext } from "../system-context/index"
 import { AgentV2 } from "../agent"
 import type { Revert } from "@opencode-ai/schema/revert"
+import type { Schema } from "effect"
 
 type SessionMessageData = Omit<(typeof SessionMessage.Message)["Encoded"], "type" | "id">
 type V1MessageData = Omit<SessionV1.Info, "id" | "sessionID">
@@ -165,12 +166,26 @@ export const SessionInputTable = sqliteTable(
   ],
 )
 
-export const SessionContextEpochTable = sqliteTable("session_context_epoch", {
+export const SessionContextEntryTable = sqliteTable(
+  "session_context_entry",
+  {
+    session_id: text()
+      .$type<SessionSchema.ID>()
+      .notNull()
+      .references(() => SessionTable.id, { onDelete: "cascade" }),
+    key: text().notNull(),
+    value: text({ mode: "json" }).notNull().$type<Schema.Json>(),
+    ...Timestamps,
+  },
+  (table) => [primaryKey({ columns: [table.session_id, table.key] })],
+)
+
+export const SessionContextCheckpointTable = sqliteTable("session_context_epoch", {
   session_id: text()
     .$type<SessionSchema.ID>()
     .primaryKey()
     .references(() => SessionTable.id, { onDelete: "cascade" }),
   baseline: text().notNull(),
-  snapshot: text({ mode: "json" }).notNull().$type<SystemContext.Snapshot>(),
+  snapshot: text({ mode: "json" }).notNull().$type<SystemContext.Applied>(),
   baseline_seq: integer().notNull(),
 })

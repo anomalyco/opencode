@@ -55,7 +55,7 @@ import type {
   RunInput,
   RunPrompt,
   RunProvider,
-  RunResource,
+  RunReference,
   RunTuiConfig,
   StreamCommit,
 } from "./types"
@@ -71,7 +71,7 @@ type RunFooterOptions = {
   directory: string
   findFiles: (query: string) => Promise<string[]>
   agents: RunAgent[]
-  resources: RunResource[]
+  references: RunReference[]
   commands?: RunCommand[]
   wrote?: boolean
   sessionID: () => string | undefined
@@ -97,6 +97,7 @@ type RunFooterOptions = {
   onEditorOpen: (input: { value: string }) => Promise<string | undefined>
   onExit?: () => void
   onSubagentSelect?: (sessionID: string | undefined) => void
+  onSubagentInterrupt?: (sessionID: string) => void
   treeSitterClient?: TreeSitterClient
 }
 
@@ -180,8 +181,8 @@ export class RunFooter implements FooterApi {
   private rows = TEXTAREA_MIN_ROWS
   private agents: Accessor<RunAgent[]>
   private setAgents: Setter<RunAgent[]>
-  private resources: Accessor<RunResource[]>
-  private setResources: Setter<RunResource[]>
+  private references: Accessor<RunReference[]>
+  private setReferences: Setter<RunReference[]>
   private commands: Accessor<RunCommand[] | undefined>
   private setCommands: Setter<RunCommand[] | undefined>
   private providers: Accessor<RunProvider[] | undefined>
@@ -255,9 +256,9 @@ export class RunFooter implements FooterApi {
     const [agents, setAgents] = createSignal(options.agents)
     this.agents = agents
     this.setAgents = setAgents
-    const [resources, setResources] = createSignal(options.resources)
-    this.resources = resources
-    this.setResources = setResources
+    const [references, setReferences] = createSignal(options.references)
+    this.references = references
+    this.setReferences = setReferences
     const [commands, setCommands] = createSignal<RunCommand[] | undefined>(options.commands)
     this.commands = commands
     this.setCommands = setCommands
@@ -311,7 +312,7 @@ export class RunFooter implements FooterApi {
               queuedPrompts: footer.queuedPrompts,
               findFiles: options.findFiles,
               agents: footer.agents,
-              resources: footer.resources,
+              references: footer.references,
               commands: footer.commands,
               providers: footer.providers,
               currentModel: footer.currentModel,
@@ -341,6 +342,7 @@ export class RunFooter implements FooterApi {
               onLayout: footer.syncLayout,
               onStatus: footer.setStatus,
               onSubagentSelect: options.onSubagentSelect,
+              onSubagentInterrupt: options.onSubagentInterrupt,
               onQueuedRemove: footer.handleQueuedRemove,
             })
           },
@@ -411,7 +413,7 @@ export class RunFooter implements FooterApi {
       }
 
       this.setAgents(next.agents)
-      this.setResources(next.resources)
+      this.setReferences(next.references)
       if (next.commands !== undefined) {
         this.setCommands(next.commands)
       }

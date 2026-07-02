@@ -7,13 +7,18 @@ import { Effect, Option, Schema } from "effect"
  *
  * `Source<A>` describes how to observe, compare, and render one value. `make`
  * closes over `A`, producing an opaque `SystemContext` that composes uniformly
- * with contexts built from other value types. Interpreters observe the composed
- * context once, then produce a durable structured
- * `Snapshot` alongside the exact model-visible baseline or update text.
+ * with contexts built from other value types.
+ *
+ * The durable `Applied` record tracks what the model was last told, per source:
+ * it is the model's current belief. Interpreters uphold one invariant —
+ * `reconcile` never rewrites the baseline; it only narrates drift as update
+ * text. Only `rebaseline` (compaction) and `initialize` (first turn) produce
+ * baseline text.
  *
  * Returning `unavailable` means observation failed temporarily. It differs from
- * removing a source from the context: refresh preserves the admitted snapshot,
- * and replacement waits rather than silently constructing an incomplete baseline.
+ * removing a source from the context: the model's prior belief stands.
+ * `reconcile` retains the applied value silently, and `rebaseline` restates the
+ * belief by rendering the last-applied value instead of a live observation.
  *
  * @module
  */
@@ -45,39 +50,30 @@ export interface SystemContext {
   readonly [ContextTypeId]: ReadonlyArray<PackedSource>
 }
 
-/** Durable comparison state for one admitted source. */
-export const SourceSnapshot = Schema.Struct({
+/** The value last applied to the model for one admitted source. */
+export const AppliedSource = Schema.Struct({
   value: Schema.Json,
   removed: Schema.optional(Schema.NonEmptyString),
 })
-export type SourceSnapshot = typeof SourceSnapshot.Type
+export type AppliedSource = typeof AppliedSource.Type
 
-/** Durable structured comparison state for one active context generation. */
-export const Snapshot = Schema.Record(Key, SourceSnapshot)
-export type Snapshot = Readonly<Record<string, SourceSnapshot>>
+/** Durable record of what the model currently believes, per source. */
+export const Applied = Schema.Record(Key, AppliedSource)
+export type Applied = Readonly<Record<string, AppliedSource>>
 
-export interface Generation {
-  readonly baseline: string
-  readonly snapshot: Snapshot
+/** A rendered baseline together with the applied values it was rendered from. */
+export interface Baseline {
+  readonly text: string
+  readonly applied: Applied
 }
 
 export interface Updated {
   readonly _tag: "Updated"
   readonly text: string
-  readonly snapshot: Snapshot
+  readonly applied: Applied
 }
 
-export interface ReplacementReady {
-  readonly _tag: "ReplacementReady"
-  readonly generation: Generation
-}
-
-export interface ReplacementBlocked {
-  readonly _tag: "ReplacementBlocked"
-}
-
-export type ReplacementResult = ReplacementReady | ReplacementBlocked
-export type ReconcileResult = { readonly _tag: "Unchanged" } | Updated | ReplacementResult
+export type ReconcileResult = { readonly _tag: "Unchanged" } | Updated
 
 export class InitializationBlocked extends Schema.TaggedErrorClass<InitializationBlocked>()(
   "SystemContext.InitializationBlocked",
@@ -98,35 +94,23 @@ export class DuplicateKeyError extends Schema.TaggedErrorClass<DuplicateKeyError
 
 interface PackedSource {
   readonly key: Key
-  readonly load: Effect.Effect<Loaded | Unavailable>
+  readonly load: Effect.Effect<Observed | Unavailable>
+  /** Restates the model's belief from a last-applied value when the source cannot be observed. */
+  readonly recall: (stored: AppliedSource) => string | undefined
 }
 
-interface Loaded {
-  readonly baseline: () => Rendered
-  readonly compare: (previous: Schema.Json) => Compared
+interface Observed {
+  readonly applied: AppliedSource
+  readonly baseline: () => string
+  /** `undefined` means unchanged. An undecodable previous value re-renders the baseline (treat-as-new). */
+  readonly update: (previous: AppliedSource) => string | undefined
 }
 
-interface Rendered {
-  readonly text: string
-  readonly snapshot: SourceSnapshot
-}
-
-type Compared =
-  | { readonly _tag: "Incompatible" }
-  | { readonly _tag: "Unchanged" }
-  | { readonly _tag: "Updated"; readonly render: () => Rendered }
-
-interface AvailableEntry extends Loaded {
-  readonly _tag: "Available"
+interface Entry {
   readonly key: Key
+  readonly recall: PackedSource["recall"]
+  readonly observed: Observed | Unavailable
 }
-
-interface UnavailableEntry {
-  readonly _tag: "Unavailable"
-  readonly key: Key
-}
-
-type Entry = AvailableEntry | UnavailableEntry
 
 /** The identity context. */
 export const empty = context([])
@@ -136,40 +120,63 @@ export function make<A>(source: Source<A>): SystemContext {
   const decode = Schema.decodeUnknownOption(source.codec)
   const encode = Schema.encodeSync(source.codec)
   const equivalent = Schema.toEquivalence(source.codec)
+  const baseline = (value: A) => requireText(source.key, "baseline", source.baseline(value))
   return context([
     {
       key: source.key,
+      recall: (stored) =>
+        Option.match(decode(stored.value), {
+          onNone: () => undefined,
+          onSome: baseline,
+        }),
       load: source.load.pipe(
         Effect.map((value) => {
           if (isUnavailable(value)) return value
-          const snapshot = (): SourceSnapshot => ({
-            value: encode(value),
-            ...(source.removed ? { removed: requireText(source.key, "removal", source.removed(value)) } : {}),
-          })
           return {
-            baseline: (): Rendered => ({
-              text: requireText(source.key, "baseline", source.baseline(value)),
-              snapshot: snapshot(),
-            }),
-            compare: (previous): Compared =>
-              Option.match(decode(previous), {
-                onNone: (): Compared => ({ _tag: "Incompatible" }),
-                onSome: (decoded): Compared =>
+            applied: {
+              value: encode(value),
+              ...(source.removed ? { removed: requireText(source.key, "removal", source.removed(value)) } : {}),
+            },
+            baseline: () => baseline(value),
+            update: (previous) =>
+              Option.match(decode(previous.value), {
+                onNone: () => baseline(value),
+                onSome: (decoded) =>
                   equivalent(decoded, value)
-                    ? { _tag: "Unchanged" }
-                    : {
-                        _tag: "Updated",
-                        render: () => ({
-                          text: requireText(source.key, "update", source.update(decoded, value)),
-                          snapshot: snapshot(),
-                        }),
-                      },
+                    ? undefined
+                    : requireText(source.key, "update", source.update(decoded, value)),
               }),
-          }
+          } satisfies Observed
         }),
       ),
     },
   ])
+}
+
+/**
+ * Keyed three-way diff for list-shaped sources rendering delta updates.
+ * `changed` compares two values sharing a key; entries equal under it are dropped.
+ */
+export function diffByKey<A>(
+  previous: ReadonlyArray<A>,
+  current: ReadonlyArray<A>,
+  key: (value: A) => string,
+  changed: (previous: A, current: A) => boolean,
+): {
+  readonly added: ReadonlyArray<A>
+  readonly removed: ReadonlyArray<A>
+  readonly changed: ReadonlyArray<{ readonly previous: A; readonly current: A }>
+} {
+  const currentKeys = new Set(current.map(key))
+  const previousByKey = new Map(previous.map((value) => [key(value), value] as const))
+  return {
+    added: current.filter((value) => !previousByKey.has(key(value))),
+    removed: previous.filter((value) => !currentKeys.has(key(value))),
+    changed: current.flatMap((value) => {
+      const before = previousByKey.get(key(value))
+      return before === undefined || !changed(before, value) ? [] : [{ previous: before, current: value }]
+    }),
+  }
 }
 
 /** Combines contexts in order and rejects duplicate source keys immediately. */
@@ -183,111 +190,91 @@ const observe = (value: SystemContext) =>
   Effect.forEach(
     value[ContextTypeId],
     (source) =>
-      source.load.pipe(
-        Effect.map(
-          (result): Entry =>
-            result === unavailable
-              ? { _tag: "Unavailable", key: source.key }
-              : { _tag: "Available", key: source.key, ...result },
-        ),
-      ),
+      source.load.pipe(Effect.map((observed): Entry => ({ key: source.key, recall: source.recall, observed }))),
     { concurrency: "unbounded" },
   )
 
-/** Creates the immutable baseline and durable snapshot for a new generation. */
-export function initialize(value: SystemContext): Effect.Effect<Generation, InitializationBlocked> {
+/** Creates the first baseline. Blocks rather than admit a baseline missing an unobservable source. */
+export function initialize(value: SystemContext): Effect.Effect<Baseline, InitializationBlocked> {
   return observe(value).pipe(
     Effect.flatMap((entries) => {
-      const unavailable = entries.flatMap((entry) => (entry._tag === "Unavailable" ? [entry.key] : []))
-      if (unavailable.length > 0) return new InitializationBlocked({ keys: unavailable })
-      return Effect.succeed(initializeObservation(entries))
+      const blocked = entries.flatMap((entry) => (entry.observed === unavailable ? [entry.key] : []))
+      if (blocked.length > 0) return new InitializationBlocked({ keys: blocked })
+      const parts: string[] = []
+      const applied: Record<string, AppliedSource> = {}
+      for (const entry of entries) {
+        if (entry.observed === unavailable) continue
+        parts.push(entry.observed.baseline())
+        applied[entry.key] = entry.observed.applied
+      }
+      return Effect.succeed({ text: render(parts), applied })
     }),
   )
 }
 
-function initializeObservation(entries: ReadonlyArray<Entry>): Generation {
-  const available = entries.filter((entry): entry is AvailableEntry => entry._tag === "Available")
-  const rendered = available.map((entry) => [entry.key, entry.baseline()] as const)
-  return {
-    baseline: render(rendered.map(([, result]) => result.text)),
-    snapshot: Object.fromEntries(rendered.map(([key, result]) => [key, result.snapshot])),
-  }
-}
-
-/** Reconciles current source values with one active generation. */
-export function reconcile(value: SystemContext, previous: Snapshot): Effect.Effect<ReconcileResult> {
+/** Narrates drift between current source values and the model's beliefs. Never rewrites the baseline. */
+export function reconcile(value: SystemContext, previous: Applied): Effect.Effect<ReconcileResult> {
   return observe(value).pipe(
     Effect.map((entries): ReconcileResult => {
-      const result = reconcileObservation(entries, previous)
-      if (result._tag === "Unchanged" || result._tag === "Updated") return result
-      return replaceObservation(entries, previous)
+      const updates: string[] = []
+      const applied: Record<string, AppliedSource> = {}
+      for (const entry of entries) {
+        const stored = get(previous, entry.key)
+        if (entry.observed === unavailable) {
+          // The prior belief stands while the source cannot be observed.
+          if (stored) applied[entry.key] = stored
+          continue
+        }
+        if (!stored) {
+          updates.push(entry.observed.baseline())
+          applied[entry.key] = entry.observed.applied
+          continue
+        }
+        const text = entry.observed.update(stored)
+        if (text === undefined) {
+          applied[entry.key] = stored
+          continue
+        }
+        updates.push(text)
+        applied[entry.key] = entry.observed.applied
+      }
+      const keys = new Set<string>(entries.map((entry) => entry.key))
+      for (const key of Object.keys(previous).sort()) {
+        if (keys.has(key)) continue
+        const removed = previous[key].removed
+        // An unannounced removal retains the belief; it clears at the next rebaseline.
+        if (removed === undefined) applied[key] = previous[key]
+        else updates.push(removed)
+      }
+      if (updates.length === 0) return { _tag: "Unchanged" }
+      return { _tag: "Updated", text: render(updates), applied }
     }),
   )
 }
 
-function reconcileObservation(
-  entries: ReadonlyArray<Entry>,
-  previous: Snapshot,
-): { readonly _tag: "Unchanged" } | Updated | { readonly _tag: "Replace" } {
-  const keys = new Set(entries.map((entry) => entry.key))
-  const comparisons = new Map<Key, Compared>()
-  for (const entry of entries) {
-    if (entry._tag === "Unavailable") continue
-    const stored = getSnapshot(previous, entry.key)
-    if (!stored) continue
-    const compared = entry.compare(stored.value)
-    if (compared._tag === "Incompatible") return { _tag: "Replace" }
-    comparisons.set(entry.key, compared)
-  }
-  for (const key of Object.keys(previous).sort()) {
-    if (keys.has(Key.make(key))) continue
-    if (previous[key].removed === undefined) return { _tag: "Replace" }
-  }
-
-  const snapshot: Record<string, SourceSnapshot> = {}
-  const updates: string[] = []
-  for (const entry of entries) {
-    const stored = getSnapshot(previous, entry.key)
-    if (entry._tag === "Unavailable") {
-      if (stored) snapshot[entry.key] = stored
-      continue
-    }
-    if (!stored) {
-      const rendered = entry.baseline()
-      updates.push(rendered.text)
-      snapshot[entry.key] = rendered.snapshot
-      continue
-    }
-    const compared = comparisons.get(entry.key)
-    if (!compared || compared._tag === "Incompatible")
-      throw new Error(`Missing comparison for system context source ${entry.key}`)
-    if (compared._tag === "Unchanged") {
-      snapshot[entry.key] = stored
-      continue
-    }
-    const rendered = compared.render()
-    updates.push(rendered.text)
-    snapshot[entry.key] = rendered.snapshot
-  }
-  for (const key of Object.keys(previous).sort()) {
-    if (keys.has(Key.make(key))) continue
-    const removed = previous[key].removed
-    if (removed === undefined) throw new Error(`Missing removal rendering for system context source ${key}`)
-    updates.push(removed)
-  }
-  if (updates.length === 0) return { _tag: "Unchanged" }
-  return { _tag: "Updated", text: render(updates), snapshot }
-}
-
-/** Creates a complete replacement generation or blocks while admitted context is unavailable. */
-export function replace(value: SystemContext, previous: Snapshot): Effect.Effect<ReplacementResult> {
-  return observe(value).pipe(Effect.map((entries) => replaceObservation(entries, previous)))
-}
-
-function replaceObservation(entries: ReadonlyArray<Entry>, previous: Snapshot): ReplacementResult {
-  if (entries.some((entry) => entry._tag === "Unavailable" && getSnapshot(previous, entry.key) !== undefined))
-    return { _tag: "ReplacementBlocked" }
-  return { _tag: "ReplacementReady", generation: initializeObservation(entries) }
+/** Rebuilds the baseline, restating unobservable sources from the model's last-applied beliefs. */
+export function rebaseline(value: SystemContext, previous: Applied): Effect.Effect<Baseline> {
+  return observe(value).pipe(
+    Effect.map((entries): Baseline => {
+      const parts: string[] = []
+      const applied: Record<string, AppliedSource> = {}
+      for (const entry of entries) {
+        if (entry.observed !== unavailable) {
+          parts.push(entry.observed.baseline())
+          applied[entry.key] = entry.observed.applied
+          continue
+        }
+        const stored = get(previous, entry.key)
+        if (!stored) continue
+        const text = entry.recall(stored)
+        // An undecodable belief cannot be restated; the source re-announces when observable again.
+        if (text === undefined) continue
+        parts.push(text)
+        applied[entry.key] = stored
+      }
+      return { text: render(parts), applied }
+    }),
+  )
 }
 
 function context(sources: ReadonlyArray<PackedSource>): SystemContext {
@@ -298,8 +285,8 @@ function render(parts: ReadonlyArray<string>) {
   return parts.join("\n\n")
 }
 
-function getSnapshot(snapshot: Snapshot, key: Key) {
-  return Object.hasOwn(snapshot, key) ? snapshot[key] : undefined
+function get(applied: Applied, key: Key) {
+  return Object.hasOwn(applied, key) ? applied[key] : undefined
 }
 
 function isUnavailable(value: unknown): value is Unavailable {

@@ -1,6 +1,8 @@
-import { describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
+import { OpencodeClient } from "@opencode-ai/sdk/v2"
 import {
   createSession,
+  resolveCurrentSession,
   sessionHistory,
   sessionVariant,
   type RunSession,
@@ -17,6 +19,10 @@ const model = {
   providerID: "openai",
   modelID: "gpt-5",
 }
+
+afterEach(() => {
+  mock.restore()
+})
 
 function userMessage(id: string, parts: Message["parts"], variant = "high"): Message {
   return {
@@ -243,5 +249,75 @@ describe("run session shared", () => {
     })
 
     expect(sessionVariant(session, model)).toBe("minimal")
+  })
+
+  test("restores current prompt history from stored text and file references", async () => {
+    const client = new OpencodeClient()
+    spyOn(client.v2.session, "messages").mockImplementation(() =>
+      Promise.resolve({
+        data: {
+          data: [
+            {
+              id: "msg_prompt",
+              type: "user",
+              text: "Review @note.ts",
+              files: [
+                {
+                  uri: "file:///tmp/note.ts",
+                  mime: "text/plain",
+                  name: "note.ts",
+                  source: { start: 7, end: 15, text: "@note.ts" },
+                },
+              ],
+              agents: [],
+              time: { created: 1 },
+            },
+          ],
+          cursor: {},
+        },
+        error: undefined,
+        request: new Request("https://opencode.test"),
+        response: new Response(),
+      }),
+    )
+    spyOn(client.v2.session, "get").mockImplementation(() =>
+      Promise.resolve({
+        data: {
+          data: {
+            id: "ses_1",
+            title: "Session",
+            version: "dev",
+            projectID: "proj_1",
+            location: { directory: "/tmp", project: { id: "proj_1", directory: "/tmp" } },
+            time: { created: 1, updated: 1 },
+            cost: 0,
+            tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+            model: { providerID: "openai", id: "gpt-5", variant: "high" },
+          },
+        },
+        error: undefined,
+        request: new Request("https://opencode.test"),
+        response: new Response(),
+      }),
+    )
+
+    const out = await resolveCurrentSession(client, "ses_1")
+
+    expect(out.turns[0]?.prompt).toEqual({
+      text: "Review @note.ts",
+      parts: [
+        {
+          type: "file",
+          url: "file:///tmp/note.ts",
+          mime: "text/plain",
+          filename: "note.ts",
+          source: {
+            type: "file",
+            path: "note.ts",
+            text: { start: 7, end: 15, value: "@note.ts" },
+          },
+        },
+      ],
+    })
   })
 })

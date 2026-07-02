@@ -169,6 +169,66 @@ test("reconnects the event stream and bootstraps fresh data", async () => {
   }
 })
 
+test("connectedOnce is false until first connect and persists across disconnect", async () => {
+  const encoder = new TextEncoder()
+  let stream: ReadableStreamDefaultController<Uint8Array> | undefined
+  const eventResponse = () =>
+    new Response(
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          stream = controller
+        },
+      }),
+      { headers: { "content-type": "text/event-stream" } },
+    )
+  const connect = () =>
+    stream?.enqueue(
+      encoder.encode(`data: ${JSON.stringify({ id: "evt_connected", type: "server.connected", data: {} })}\n\n`),
+    )
+  const disconnect = () => {
+    stream?.close()
+    stream = undefined
+  }
+
+  const calls = createFetch((url) => {
+    if (url.pathname === "/api/event") return eventResponse()
+  })
+  let data!: ReturnType<typeof useData>
+
+  function Probe() {
+    data = useData()
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <TestTuiContexts>
+      <SDKProvider client={createClient(calls.fetch)} api={createApi(calls.fetch)}>
+        <ProjectProvider>
+          <DataProvider>
+            <Probe />
+          </DataProvider>
+        </ProjectProvider>
+      </SDKProvider>
+    </TestTuiContexts>
+  ))
+
+  try {
+    await wait(() => stream !== undefined)
+    expect(data.connection.status()).toBe("connecting")
+    expect(data.connection.connectedOnce()).toBe(false)
+
+    connect()
+    await wait(() => data.connection.status() === "connected")
+    expect(data.connection.connectedOnce()).toBe(true)
+
+    disconnect()
+    await wait(() => data.connection.status() === "connecting")
+    expect(data.connection.connectedOnce()).toBe(true)
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
 test("tracks session status from active sessions and execution events", async () => {
   const events = createEventStream()
   const calls = createFetch((url) => {

@@ -53,7 +53,7 @@ describe("SkillGuidance", () => {
         .load({ id: agent.id, info: agent })
         .pipe(Effect.flatMap(SystemContext.initialize))
 
-      expect(initialized.baseline).toBe(
+      expect(initialized.text).toBe(
         [
           "Skills provide specialized instructions and workflows for specific tasks.",
           "Use the skill tool to load a skill when a task matches its description.",
@@ -65,16 +65,82 @@ describe("SkillGuidance", () => {
           "</available_skills>",
         ].join("\n"),
       )
-      expect(initialized.baseline).not.toContain("manual")
+      expect(initialized.text).not.toContain("manual")
 
       skills = []
       expect(
         yield* guidance
           .load({ id: agent.id, info: agent })
-          .pipe(Effect.flatMap((context) => SystemContext.reconcile(context, initialized.snapshot))),
+          .pipe(Effect.flatMap((context) => SystemContext.reconcile(context, initialized.applied))),
       ).toMatchObject({
         _tag: "Updated",
-        text: expect.stringContaining("No skills are currently available."),
+        text: "The following skills are no longer available and must not be used: effect.",
+      })
+    }).pipe(Effect.provide(layer(() => skills)))
+  })
+
+  it.effect("announces added and removed skills as deltas without restating the list", () => {
+    const agent = AgentV2.Info.make(AgentV2.Info.empty(build))
+    const debugging = SkillV2.Info.make({
+      name: "debugging",
+      description: "Diagnose hard bugs",
+      location: AbsolutePath.make(path.resolve("/skills/debugging/SKILL.md")),
+      content: "Debugging guidance",
+    })
+    let skills = [effect]
+    return Effect.gen(function* () {
+      const guidance = yield* SkillGuidance.Service
+      const initialized = yield* guidance
+        .load({ id: agent.id, info: agent })
+        .pipe(Effect.flatMap(SystemContext.initialize))
+
+      skills = [effect, debugging]
+      const added = yield* guidance
+        .load({ id: agent.id, info: agent })
+        .pipe(Effect.flatMap((context) => SystemContext.reconcile(context, initialized.applied)))
+      expect(added).toMatchObject({
+        _tag: "Updated",
+        text: [
+          "New skills are available in addition to those previously listed:",
+          "  <skill>",
+          "    <name>debugging</name>",
+          "    <description>Diagnose hard bugs</description>",
+          "  </skill>",
+        ].join("\n"),
+      })
+
+      skills = [debugging]
+      const removed = yield* guidance
+        .load({ id: agent.id, info: agent })
+        .pipe(
+          Effect.flatMap((context) => SystemContext.reconcile(context, added._tag === "Updated" ? added.applied : {})),
+        )
+      expect(removed).toMatchObject({
+        _tag: "Updated",
+        text: "The following skills are no longer available and must not be used: effect.",
+      })
+    }).pipe(Effect.provide(layer(() => skills)))
+  })
+
+  it.effect("restates the full skill list when a description changes", () => {
+    const agent = AgentV2.Info.make(AgentV2.Info.empty(build))
+    let skills = [effect]
+    return Effect.gen(function* () {
+      const guidance = yield* SkillGuidance.Service
+      const initialized = yield* guidance
+        .load({ id: agent.id, info: agent })
+        .pipe(Effect.flatMap(SystemContext.initialize))
+
+      skills = [SkillV2.Info.make({ ...effect, description: "Build applications with Effect v4" })]
+      expect(
+        yield* guidance
+          .load({ id: agent.id, info: agent })
+          .pipe(Effect.flatMap((context) => SystemContext.reconcile(context, initialized.applied))),
+      ).toMatchObject({
+        _tag: "Updated",
+        text: expect.stringContaining(
+          "The available skills have changed. This list supersedes the previous available skills list.",
+        ),
       })
     }).pipe(Effect.provide(layer(() => skills)))
   })
@@ -89,8 +155,8 @@ describe("SkillGuidance", () => {
       expect(
         yield* guidance.load({ id: agent.id, info: agent }).pipe(Effect.flatMap(SystemContext.initialize)),
       ).toEqual({
-        baseline: "",
-        snapshot: {},
+        text: "",
+        applied: {},
       })
     }).pipe(Effect.provide(layer(() => [effect])))
   })
@@ -108,8 +174,8 @@ describe("SkillGuidance", () => {
       expect(
         yield* guidance.load({ id: agent.id, info: agent }).pipe(Effect.flatMap(SystemContext.initialize)),
       ).toEqual({
-        baseline: "",
-        snapshot: {},
+        text: "",
+        applied: {},
       })
     }).pipe(Effect.provide(layer(() => [effect])))
   })
@@ -125,7 +191,7 @@ describe("SkillGuidance", () => {
     return Effect.gen(function* () {
       const guidance = yield* SkillGuidance.Service
       expect(
-        (yield* guidance.load({ id: agent.id, info: agent }).pipe(Effect.flatMap(SystemContext.initialize))).baseline,
+        (yield* guidance.load({ id: agent.id, info: agent }).pipe(Effect.flatMap(SystemContext.initialize))).text,
       ).toContain("<name>effect</name>")
     }).pipe(Effect.provide(layer(() => [effect])))
   })
@@ -144,8 +210,8 @@ describe("SkillGuidance", () => {
       expect(
         yield* guidance.load({ id: agent.id, info: agent }).pipe(Effect.flatMap(SystemContext.initialize)),
       ).toEqual({
-        baseline: "",
-        snapshot: {},
+        text: "",
+        applied: {},
       })
     }).pipe(Effect.provide(layer(() => [effect])))
   })

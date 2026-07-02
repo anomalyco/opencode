@@ -1,11 +1,9 @@
 import { Schema } from "effect"
-import type { LLMRequest, ReasoningEffort, TextVerbosity as TextVerbosityValue } from "../../schema"
+import type { LLMRequest, TextVerbosity as TextVerbosityValue } from "../../schema"
 import { ReasoningEfforts, TextVerbosity } from "../../schema"
 
-export const OpenAIReasoningEfforts = ReasoningEfforts.filter(
-  (effort): effort is Exclude<ReasoningEffort, "max"> => effort !== "max",
-)
-export type OpenAIReasoningEffort = (typeof OpenAIReasoningEfforts)[number]
+export const OpenAIReasoningEfforts = ReasoningEfforts
+export type OpenAIReasoningEffort = string
 
 // Mirrors OpenAI's `ResponseIncludable` union from the official SDK. Keep this
 // in lockstep with `openai-node/src/resources/responses/responses.ts`.
@@ -23,22 +21,16 @@ export type OpenAIResponseIncludable = (typeof OpenAIResponseIncludables)[number
 export const OpenAIServiceTiers = ["auto", "default", "flex", "priority"] as const
 export type OpenAIServiceTier = (typeof OpenAIServiceTiers)[number]
 
-const REASONING_EFFORTS = new Set<string>(ReasoningEfforts)
-const OPENAI_REASONING_EFFORTS = new Set<string>(OpenAIReasoningEfforts)
 const TEXT_VERBOSITY = new Set<string>(["low", "medium", "high"])
 const INCLUDABLES = new Set<string>(OpenAIResponseIncludables)
 const SERVICE_TIERS = new Set<string>(OpenAIServiceTiers)
 
-export const OpenAIReasoningEffort = Schema.Literals(OpenAIReasoningEfforts)
+export const OpenAIReasoningEffort = Schema.String
 export const OpenAITextVerbosity = TextVerbosity
 export const OpenAIResponseIncludable = Schema.Literals(OpenAIResponseIncludables)
 export const OpenAIServiceTier = Schema.Literals(OpenAIServiceTiers)
 
-const isAnyReasoningEffort = (effort: unknown): effort is ReasoningEffort =>
-  typeof effort === "string" && REASONING_EFFORTS.has(effort)
-
-export const isReasoningEffort = (effort: unknown): effort is OpenAIReasoningEffort =>
-  typeof effort === "string" && OPENAI_REASONING_EFFORTS.has(effort)
+export const isReasoningEffort = (effort: unknown): effort is OpenAIReasoningEffort => typeof effort === "string"
 
 const isTextVerbosity = (value: unknown): value is TextVerbosityValue =>
   typeof value === "string" && TEXT_VERBOSITY.has(value)
@@ -50,9 +42,9 @@ export const store = (request: LLMRequest): boolean | undefined => {
   return typeof value === "boolean" ? value : undefined
 }
 
-export const reasoningEffort = (request: LLMRequest): ReasoningEffort | undefined => {
+export const reasoningEffort = (request: LLMRequest): string | undefined => {
   const value = options(request)?.reasoningEffort
-  return isAnyReasoningEffort(value) ? value : undefined
+  return typeof value === "string" ? value : undefined
 }
 
 export const reasoningSummary = (request: LLMRequest): "auto" | undefined =>
