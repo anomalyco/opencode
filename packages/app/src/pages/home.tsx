@@ -1,5 +1,6 @@
 import type { Session } from "@opencode-ai/sdk/v2/client"
 import {
+  type ComponentProps,
   createEffect,
   createMemo,
   createResource,
@@ -68,6 +69,9 @@ import { archiveHomeSession } from "./home-session-archive"
 import { showToast } from "@/utils/toast"
 
 const HOME_SESSION_LIMIT = 64
+const HOME_SESSION_HEADER_STICKY_TOP = 12
+const HOME_SESSION_HEADER_TEXT_HEIGHT = 16
+const HOME_SESSION_HEADER_FADE_DISTANCE = 16
 const SHOW_HOME_SESSION_ARCHIVE = false
 const HOME_ROW_LAYOUT =
   "flex min-w-0 w-full shrink-0 cursor-default items-center rounded-[6px] bg-transparent text-left transition-[background-color,color,box-shadow] duration-[120ms] ease-in-out focus-visible:outline-none"
@@ -131,6 +135,107 @@ function matchesHomeSessionSearch(record: HomeSessionRecord, query: string) {
 
 function homeSessionSearchKey(record: HomeSessionRecord) {
   return `${pathKey(record.session.directory)}:${record.session.id}`
+}
+
+function useHomeSessionHeaderOpacity(groups: () => HomeSessionGroup[]) {
+  let viewport: HTMLDivElement | undefined
+  let content: HTMLDivElement | undefined
+  let positionFrame: number | undefined
+  let resizeObserver: ResizeObserver | undefined
+  const headerRefs = new Map<HomeSessionGroup["id"], HTMLDivElement>()
+  const headerOffsets = new Map<HomeSessionGroup["id"], number>()
+  const [state, setState] = createStore({
+    titleOpacity: {} as Partial<Record<HomeSessionGroup["id"], number>>,
+  })
+
+  createEffect(() => {
+    const items = groups()
+    const ids = new Set(items.map((group) => group.id))
+    headerRefs.forEach((_, id) => {
+      if (!ids.has(id)) headerRefs.delete(id)
+    })
+    headerOffsets.forEach((_, id) => {
+      if (!ids.has(id)) headerOffsets.delete(id)
+    })
+    if (items.length === 0) {
+      content = undefined
+      bindResizeObserver()
+    }
+    queuePositionUpdate()
+  })
+
+  onCleanup(() => {
+    if (positionFrame !== undefined) cancelAnimationFrame(positionFrame)
+    resizeObserver?.disconnect()
+  })
+
+  function setViewport(el: HTMLDivElement) {
+    viewport = el
+    bindResizeObserver()
+    queuePositionUpdate()
+  }
+
+  function setContentRef(el: HTMLDivElement) {
+    content = el
+    bindResizeObserver()
+    queuePositionUpdate()
+  }
+
+  function setHeaderRef(id: HomeSessionGroup["id"], el: HTMLDivElement) {
+    headerRefs.set(id, el)
+    queuePositionUpdate()
+  }
+
+  function queuePositionUpdate() {
+    if (typeof requestAnimationFrame === "undefined") {
+      updatePositionCache()
+      return
+    }
+    if (positionFrame !== undefined) return
+    positionFrame = requestAnimationFrame(() => {
+      positionFrame = undefined
+      updatePositionCache()
+    })
+  }
+
+  function updatePositionCache() {
+    if (!viewport) return
+    groups().forEach((group) => {
+      const el = headerRefs.get(group.id)
+      if (!el) return
+      headerOffsets.set(group.id, el.offsetTop)
+    })
+    update(viewport.scrollTop)
+  }
+
+  function update(scrollTop: number) {
+    const items = groups()
+    items.forEach((group, index) => {
+      const nextOffset = items
+        .slice(index + 1)
+        .map((item) => headerOffsets.get(item.id))
+        .find((offset) => offset !== undefined)
+      const fadeEnd = HOME_SESSION_HEADER_STICKY_TOP + HOME_SESSION_HEADER_TEXT_HEIGHT
+      const nextTop = nextOffset === undefined ? undefined : nextOffset - scrollTop
+      const opacity =
+        nextTop === undefined ? 1 : Math.max(0, Math.min(1, (nextTop - fadeEnd) / HOME_SESSION_HEADER_FADE_DISTANCE))
+      setState("titleOpacity", group.id, Math.round(opacity * 1000) / 1000)
+    })
+  }
+
+  function titleOpacity(id: HomeSessionGroup["id"]) {
+    return state.titleOpacity[id] ?? 1
+  }
+
+  function bindResizeObserver() {
+    resizeObserver?.disconnect()
+    if (typeof ResizeObserver === "undefined") return
+    resizeObserver = new ResizeObserver(() => queuePositionUpdate())
+    if (viewport) resizeObserver.observe(viewport)
+    if (content) resizeObserver.observe(content)
+  }
+
+  return { setViewport, setContentRef, setHeaderRef, update, titleOpacity }
 }
 
 export function NewHome() {
@@ -223,6 +328,7 @@ export function NewHome() {
   })
   const searchOpen = createMemo(() => state.searchFocused && search().length > 0)
   const groups = createMemo(() => groupSessions(records(), language))
+  const sessionHeaderOpacity = useHomeSessionHeaderOpacity(groups)
   const prefetched = new Set<string>()
 
   createEffect(() => {
@@ -435,7 +541,7 @@ export function NewHome() {
         />
 
         <section
-          class="min-h-0 min-w-0 flex-1 flex flex-col pt-6 lg:pt-12"
+          class="min-h-0 min-w-0 flex-1 flex flex-col pt-6 lg:pt-12 relative"
           aria-label={language.t("sidebar.project.recentSessions")}
         >
           <HomeSessionSearch
@@ -456,7 +562,25 @@ export function NewHome() {
             onClose={closeSearch}
             onSelect={selectSearchSession}
           />
-          <ScrollView class="mt-3 -mr-3 min-h-0 flex-1">
+          <ScrollView
+            class="mt-3 -mr-3 min-h-0 flex-1 relative"
+            viewportRef={sessionHeaderOpacity.setViewport}
+            onScroll={(event) => sessionHeaderOpacity.update(event.currentTarget.scrollTop)}
+          >
+            <Show when={groups().length > 0 && newSessionProject()}>
+              <div class="pointer-events-none absolute top-3 right-3 z-20 flex">
+                <ButtonV2
+                  data-action="home-new-session"
+                  variant="ghost-muted"
+                  size="normal"
+                  icon="edit"
+                  class="pointer-events-auto h-7 px-2 [font-weight:530]"
+                  onClick={openNewSession}
+                >
+                  {language.t("command.session.new")}
+                </ButtonV2>
+              </div>
+            </Show>
             <Show
               when={!sessionLoad.isLoading}
               fallback={
@@ -469,15 +593,19 @@ export function NewHome() {
                 when={groups().length > 0}
                 fallback={<HomeSessionsEmpty onNewSession={newSessionProject() ? openNewSession : undefined} />}
               >
-                <div class="flex flex-col gap-6 pt-3 pr-3 pb-16">
+                <div ref={sessionHeaderOpacity.setContentRef} class="flex flex-col pt-3 pr-3 pb-16">
                   <For each={groups()}>
                     {(group, index) => (
-                      <div class="flex min-w-0 flex-col gap-4">
+                      <>
                         <HomeSessionGroupHeader
                           title={group.title}
-                          onNewSession={index() === 0 && newSessionProject() ? openNewSession : undefined}
+                          titleOpacity={sessionHeaderOpacity.titleOpacity(group.id)}
+                          ref={(el) => sessionHeaderOpacity.setHeaderRef(group.id, el)}
+                          elevated={index() === 0}
                         />
-                        <div class="flex min-w-0 flex-col gap-px">
+                        <div
+                          class={`flex min-w-0 flex-col gap-px pt-4 ${index() === groups().length - 1 ? "" : "mb-6"}`}
+                        >
                           <For each={group.sessions}>
                             {(record) => (
                               <HomeSessionRow
@@ -491,7 +619,7 @@ export function NewHome() {
                             )}
                           </For>
                         </div>
-                      </div>
+                      </>
                     )}
                   </For>
                 </div>
@@ -540,10 +668,10 @@ function HomeProjectColumn(props: {
 
   return (
     <aside
-      class="mt-6 flex min-w-0 flex-col gap-4 lg:mt-14 lg:pt-[52px]"
+      class="mt-6 flex min-h-0 min-w-0 flex-col gap-4 overflow-hidden lg:mt-14 lg:pt-[52px]"
       aria-label={props.language.t("home.projects")}
     >
-      <div class="flex h-7 min-w-0 items-center justify-between pl-1.5">
+      <div class="flex h-7 min-w-0 shrink-0 items-center justify-between pl-1.5 pr-3">
         <div class={HOME_SECTION_LABEL}>{props.language.t("home.projects")}</div>
         <Show when={global.servers.list().length === 1}>
           <TooltipV2 placement="bottom" value={props.language.t("home.project.add")}>
@@ -560,42 +688,51 @@ function HomeProjectColumn(props: {
           </TooltipV2>
         </Show>
       </div>
-      <Show
-        when={global.servers.list().length > 1}
-        fallback={<HomeProjectList {...props} server={global.servers.list()[0]!} />}
-      >
-        <For each={global.servers.list()}>
-          {(item) => {
-            const key = ServerConnection.key(item)
-            const healthy = () => !!global.servers.health[key]?.healthy
-            const serverCtx = global.ensureServerCtx(item)
-            const collapsed = () => !!state().collapsed[key]
-            return (
-              <div class="flex max-h-[min(572px,calc(100vh_-_300px))] min-w-0 flex-col gap-1 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                <HomeServerRow
-                  server={item}
-                  selected={props.selected.server === key && !props.selected.directory}
-                  healthy={healthy()}
-                  collapsed={collapsed()}
-                  health={global.servers.health[key]}
-                  controller={controller}
-                  focusServer={props.focusServer}
-                  chooseProject={props.chooseProject}
-                  openEdit={(server) => dialog.show(() => <DialogServerV2 mode="edit" server={server} />)}
-                  toggleCollapsed={() => setState("collapsed", key, !state().collapsed[key])}
-                  language={props.language}
-                />
-                <Show when={healthy() && !collapsed()}>
-                  <div class="mx-3 h-px bg-v2-border-border-base" />
-                  <HomeProjectList {...props} server={item} projects={serverCtx.projects.list()} />
-                </Show>
-              </div>
-            )
-          }}
-        </For>
-      </Show>
+      <ScrollView data-slot="home-projects-scroll" class="min-h-0 min-w-0 shrink">
+        <Show
+          when={global.servers.list().length > 1}
+          fallback={
+            <div class="pr-3">
+              <HomeProjectList {...props} server={global.servers.list()[0]!} />
+            </div>
+          }
+        >
+          <div class="flex min-w-0 flex-col gap-4 pr-3">
+            <For each={global.servers.list()}>
+              {(item) => {
+                const key = ServerConnection.key(item)
+                const healthy = () => !!global.servers.health[key]?.healthy
+                const serverCtx = global.ensureServerCtx(item)
+                const projects = () => serverCtx.projects.list()
+                const hasProjects = () => projects().length > 0
+                const collapsed = () => !!state().collapsed[key]
+                return (
+                  <div class="flex min-w-0 flex-col gap-1">
+                    <HomeServerRow
+                      server={item}
+                      selected={props.selected.server === key && !props.selected.directory}
+                      collapsed={collapsed()}
+                      health={global.servers.health[key]}
+                      controller={controller}
+                      focusServer={props.focusServer}
+                      chooseProject={props.chooseProject}
+                      openEdit={(server) => dialog.show(() => <DialogServerV2 mode="edit" server={server} />)}
+                      toggleCollapsed={() => setState("collapsed", key, !state().collapsed[key])}
+                      language={props.language}
+                    />
+                    <Show when={healthy() && hasProjects() && !collapsed()}>
+                      <div class="mx-3 h-px bg-v2-border-border-base" />
+                      <HomeProjectList {...props} server={item} projects={projects()} />
+                    </Show>
+                  </div>
+                )
+              }}
+            </For>
+          </div>
+        </Show>
+      </ScrollView>
       <HomeUtilityNav
-        class="mt-4 hidden lg:flex"
+        class="mb-8 mt-4 hidden shrink-0 lg:flex"
         openSettings={props.openSettings}
         openHelp={props.openHelp}
         language={props.language}
@@ -635,7 +772,6 @@ function HomeUtilityNav(props: {
 function HomeServerRow(props: {
   server: ServerConnection.Any
   selected: boolean
-  healthy: boolean
   collapsed: boolean
   health: ServerHealth | undefined
   controller: ReturnType<typeof useServerManagementController>
@@ -645,39 +781,46 @@ function HomeServerRow(props: {
   toggleCollapsed: () => void
   language: ReturnType<typeof useLanguage>
 }) {
+  const global = useGlobal()
   const [state, setState] = createStore({ menuOpen: false })
+  const healthy = () => !!props.health?.healthy
+  const canToggle = () => healthy() && global.ensureServerCtx(props.server).projects.list().length > 0
   return (
     <div class="group/server relative flex h-7 min-w-0 items-center rounded-[6px]">
       <button
         type="button"
         class={`${HOME_PROJECT_NAV_ROW} pr-16 disabled:opacity-60`}
         data-selected={props.selected ? "" : undefined}
-        disabled={!props.healthy}
+        disabled={!healthy()}
         onClick={() => props.focusServer(props.server)}
       >
-        <Show when={props.healthy}>
-          <span
-            data-action="home-server-collapse"
-            class="inline-flex -ml-0.5 -mr-1.5 size-5 shrink-0 items-center justify-center rounded-[4px] text-v2-icon-icon-muted hover:bg-v2-overlay-simple-overlay-hover"
-            aria-label={
-              props.collapsed ? props.language.t("home.server.expand") : props.language.t("home.server.collapse")
-            }
-            aria-expanded={!props.collapsed}
-            onClick={(event) => {
-              event.preventDefault()
-              event.stopPropagation()
-              props.toggleCollapsed()
-            }}
-            onPointerDown={(event) => event.preventDefault()}
-          >
-            <IconV2
-              name="chevron-down"
-              size="small"
-              class="transition-transform duration-150 ease-in-out"
-              style={{ transform: `rotate(${props.collapsed ? -90 : 0}deg)` }}
-            />
-          </span>
-        </Show>
+        <span
+          data-action="home-server-collapse"
+          class="inline-flex -ml-0.5 -mr-1.5 size-5 shrink-0 items-center justify-center rounded-[4px] text-v2-icon-icon-muted"
+          classList={{
+            "hover:bg-v2-overlay-simple-overlay-hover": canToggle(),
+            "cursor-default opacity-40": !canToggle(),
+          }}
+          aria-label={
+            props.collapsed ? props.language.t("home.server.expand") : props.language.t("home.server.collapse")
+          }
+          aria-disabled={!canToggle()}
+          aria-expanded={canToggle() ? !props.collapsed : undefined}
+          onClick={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            if (!canToggle()) return
+            props.toggleCollapsed()
+          }}
+          onPointerDown={(event) => event.preventDefault()}
+        >
+          <IconV2
+            name="chevron-down"
+            size="small"
+            class="transition-transform duration-150 ease-in-out"
+            style={{ transform: `rotate(${props.collapsed ? -90 : 0}deg)` }}
+          />
+        </span>
         <div class="flex size-4 shrink-0 items-center justify-center -mr-0.5">
           <ServerHealthIndicator health={props.health} />
         </div>
@@ -854,6 +997,7 @@ function HomeSessionLeading(props: {
   session: Session
   server: ServerConnection.Key
   activeServer: boolean
+  revealProjectOnHover: boolean
 }) {
   const tabs = useTabs()
   const hasOpenTab = createMemo(() => sessionHasOpenTab(tabs.store, props.server, props.session))
@@ -862,8 +1006,8 @@ function HomeSessionLeading(props: {
       <Show when={hasOpenTab()}>
         <span
           aria-hidden="true"
-          class="pointer-events-none absolute top-1/2 h-[7px] w-[3px] -translate-y-1/2 rounded-[2px] bg-v2-background-bg-layer-04"
-          style={{ right: "calc(100% + 5px)" }}
+          class="pointer-events-none absolute top-1/2 h-3 w-0.5 -translate-y-1/2 rounded-[2px] bg-v2-background-bg-layer-04"
+          style={{ right: "calc(100% + 4px)" }}
         />
       </Show>
       <SessionTabAvatar
@@ -871,6 +1015,7 @@ function HomeSessionLeading(props: {
         directory={props.session.directory}
         sessionId={props.session.id}
         activeServer={props.activeServer}
+        revealProjectOnHover={props.revealProjectOnHover}
       />
     </div>
   )
@@ -961,7 +1106,7 @@ function HomeSessionSearch(props: {
 
   return (
     <div class="w-full">
-      <div ref={root} data-component="home-session-search" class="relative z-10 w-full">
+      <div ref={root} data-component="home-session-search" class="relative z-30 w-full">
         <Show when={props.open}>
           <div
             data-component="home-session-search-panel"
@@ -1018,13 +1163,7 @@ function HomeSessionSearch(props: {
             </div>
           </div>
         </Show>
-        <label
-          class="relative z-20 flex h-9 w-full items-center gap-2 rounded-[6px] bg-v2-background-bg-layer-02 py-1 pl-3 pr-2 text-v2-icon-icon-muted transition-[background-color,box-shadow] duration-[120ms] ease-in-out"
-          classList={{
-            "focus-within:shadow-[0_0_0_0.5px_var(--v2-border-border-focus),var(--v2-elevation-raised)]": !props.open,
-            "shadow-[0_0_0_0.5px_var(--v2-border-border-focus)]": props.open,
-          }}
-        >
+        <label class="relative z-20 flex h-9 w-full items-center gap-2 rounded-[6px] bg-v2-background-bg-layer-02/60 py-1 pl-3 pr-2 text-v2-icon-icon-muted transition-[background-color,box-shadow] duration-[120ms] ease-in-out hover:bg-v2-background-bg-layer-02">
           <IconV2 name="magnifying-glass" />
           <input
             ref={input}
@@ -1110,6 +1249,7 @@ function HomeSessionSearchResultRow(props: {
       classList={{
         [HOME_SEARCH_RESULT_ROW]: true,
         "bg-v2-overlay-simple-overlay-hover": props.selected,
+        group: !!showProjectName(),
       }}
       onMouseEnter={() => props.onHighlight()}
       onClick={() => props.onSelect(props.record.session)}
@@ -1119,6 +1259,7 @@ function HomeSessionSearchResultRow(props: {
         session={props.record.session}
         server={props.server}
         activeServer={props.activeServer}
+        revealProjectOnHover={!!showProjectName()}
       />
       <div class="flex min-w-0 flex-1 items-center gap-1.5">
         <span
@@ -1134,25 +1275,20 @@ function HomeSessionSearchResultRow(props: {
   )
 }
 
-function HomeSessionGroupHeader(props: { title: string; onNewSession?: () => void }) {
-  const language = useLanguage()
+function HomeSessionGroupHeader(props: {
+  title: string
+  titleOpacity: number
+  ref: ComponentProps<"div">["ref"]
+  elevated?: boolean
+}) {
   return (
-    <div class="flex h-7 min-w-0 items-center justify-between pl-3">
-      <div class={HOME_SECTION_LABEL}>{props.title}</div>
-      <Show when={props.onNewSession}>
-        {(onNewSession) => (
-          <ButtonV2
-            data-action="home-new-session"
-            variant="ghost-muted"
-            size="normal"
-            icon="edit"
-            class="h-7 px-2 [font-weight:530]"
-            onClick={onNewSession()}
-          >
-            {language.t("command.session.new")}
-          </ButtonV2>
-        )}
-      </Show>
+    <div
+      ref={props.ref}
+      class={`pointer-events-none sticky top-3 flex h-7 min-w-0 items-center justify-between pl-3 bg-v2-background-bg-base ${props.elevated ? "home-session-group-header z-[5]" : "z-10"}`}
+    >
+      <div class={HOME_SECTION_LABEL} style={{ opacity: props.titleOpacity }}>
+        {props.title}
+      </div>
     </div>
   )
 }
@@ -1170,7 +1306,10 @@ function HomeSessionRow(props: {
   const showProjectName = () => props.showProjectName && props.record.projectName
 
   return (
-    <div class="group/session relative flex h-10 min-w-0 items-center rounded-[6px]">
+    <div
+      class="group/session relative flex h-10 min-w-0 items-center rounded-[6px]"
+      classList={{ group: !!showProjectName() }}
+    >
       <button
         type="button"
         data-component="home-session-row"
@@ -1182,6 +1321,7 @@ function HomeSessionRow(props: {
           session={props.record.session}
           server={props.server}
           activeServer={props.activeServer}
+          revealProjectOnHover={!!showProjectName()}
         />
         <span
           class={`min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-v2-text-text-base [font-weight:530] ${showProjectName() ? "max-w-[min(70%,480px)] flex-[0_1_auto]" : "flex-[1_1_auto]"}`}

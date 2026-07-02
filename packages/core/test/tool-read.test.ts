@@ -3,6 +3,8 @@ import path from "path"
 import { Effect, Exit, Layer, PlatformError } from "effect"
 import { Config } from "@opencode-ai/core/config"
 import { ConfigAttachments } from "@opencode-ai/core/config/attachments"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { FileSystem } from "@opencode-ai/core/filesystem"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Location } from "@opencode-ai/core/location"
@@ -14,6 +16,7 @@ import { Global } from "@opencode-ai/core/global"
 import { LocationMutation } from "@opencode-ai/core/location-mutation"
 import { location } from "./fixture/location"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
+import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
 import { ReadTool } from "@opencode-ai/core/tool/read"
 import { ReadToolFileSystem } from "@opencode-ai/core/tool/read-filesystem"
 import { testEffect } from "./lib/effect"
@@ -69,9 +72,8 @@ const permission = Layer.succeed(
     list: () => Effect.die("unused"),
   }),
 )
-const registry = ToolRegistry.defaultLayer.pipe(Layer.provide(permission))
 const config = Layer.succeed(Config.Service, Config.Service.of({ entries: () => Effect.succeed(configEntries) }))
-const image = Image.layer.pipe(Layer.provide(config))
+const imageLayer = AppNodeBuilder.build(Image.node, [[Config.node, config]])
 const testFileSystem = Layer.effect(
   FSUtil.Service,
   FSUtil.Service.use((fs) =>
@@ -92,11 +94,10 @@ const testFileSystem = Layer.effect(
       }),
     ),
   ),
-).pipe(Layer.provide(FSUtil.defaultLayer))
-const infrastructure = Layer.mergeAll(
-  testFileSystem,
-  Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(process.cwd()) }))),
-  Global.layerWith({ data: Global.Path.data }),
+).pipe(Layer.provide(LayerNode.compile(FSUtil.node)))
+const locationLayer = Layer.succeed(
+  Location.Service,
+  Location.Service.of(location({ directory: AbsolutePath.make(process.cwd()) })),
 )
 const mutation = Layer.succeed(
   LocationMutation.Service,
@@ -128,28 +129,20 @@ const unavailableImage = Layer.succeed(
   Image.Service,
   Image.Service.of({ normalize: () => Effect.fail(new Image.ResizerUnavailableError()) }),
 )
-const read = ReadTool.layer.pipe(
-  Layer.provide(registry),
-  Layer.provide(reader),
-  Layer.provide(permission),
-  Layer.provide(config),
-  Layer.provide(image),
-  Layer.provide(mutation),
-  Layer.provide(infrastructure),
-)
-const it = testEffect(Layer.mergeAll(registry, reader, permission, config, image, mutation, infrastructure, read))
-const unavailableRead = ReadTool.layer.pipe(
-  Layer.provide(registry),
-  Layer.provide(reader),
-  Layer.provide(permission),
-  Layer.provide(config),
-  Layer.provide(unavailableImage),
-  Layer.provide(mutation),
-  Layer.provide(infrastructure),
-)
-const itWithoutResizer = testEffect(
-  Layer.mergeAll(registry, reader, permission, config, unavailableImage, mutation, infrastructure, unavailableRead),
-)
+const readLayer = (imageLayer: Layer.Layer<Image.Service>) =>
+  AppNodeBuilder.build(LayerNode.group([ToolRegistry.node, ToolRegistry.toolsNode, ReadTool.node]), [
+    [ReadToolFileSystem.node, reader],
+    [PermissionV2.node, permission],
+    [Config.node, config],
+    [Image.node, imageLayer],
+    [LocationMutation.node, mutation],
+    [FSUtil.node, testFileSystem],
+    [Location.node, locationLayer],
+    [Global.node, Global.layerWith({ data: Global.Path.data })],
+    [ToolOutputStore.node, ToolOutputStore.nodeWithoutConfig],
+  ])
+const it = testEffect(readLayer(imageLayer))
+const itWithoutResizer = testEffect(readLayer(unavailableImage))
 const sessionID = SessionV2.ID.make("ses_read_tool_test")
 
 describe("ReadTool", () => {

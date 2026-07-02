@@ -2,13 +2,15 @@ import fs from "fs/promises"
 import path from "path"
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
-import { FSUtil } from "@opencode-ai/core/fs-util"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { PermissionV2 } from "@opencode-ai/core/permission"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { SkillV2 } from "@opencode-ai/core/skill"
 import { SkillTool } from "@opencode-ai/core/tool/skill"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
+import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
 import { tmpdir } from "./fixture/tmpdir"
 import { it } from "./lib/effect"
 import { toolIdentity, executeTool, settleTool, toolDefinitions } from "./lib/tool"
@@ -63,14 +65,14 @@ describe("SkillTool", () => {
               list: () => Effect.succeed(current),
             }),
           )
-          const registry = ToolRegistry.defaultLayer.pipe(Layer.provide(permission))
-          const tool = SkillTool.layer.pipe(
-            Layer.provide(registry),
-            Layer.provide(permission),
-            Layer.provide(FSUtil.defaultLayer),
-            Layer.provide(skills),
+          const skillToolLayer = AppNodeBuilder.build(
+            LayerNode.group([ToolRegistry.node, ToolRegistry.toolsNode, SkillTool.node]),
+            [
+              [PermissionV2.node, permission],
+              [SkillV2.node, skills],
+              [ToolOutputStore.node, ToolOutputStore.nodeWithoutConfig],
+            ],
           )
-          const layer = Layer.mergeAll(permission, skills, registry, tool)
 
           return yield* Effect.gen(function* () {
             const registry = yield* ToolRegistry.Service
@@ -139,7 +141,7 @@ describe("SkillTool", () => {
                 call: { type: "tool-call", id: "call-flat-skill", name: "skill", input: { name: "public" } },
               }),
             ).toEqual({ type: "text", value: SkillTool.toModelOutput(flat, []) })
-          }).pipe(Effect.provide(layer))
+          }).pipe(Effect.provide(skillToolLayer))
         }),
       ),
     ),

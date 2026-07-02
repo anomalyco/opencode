@@ -16,7 +16,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Lo
 
 export const node = LayerNode.unbound(Service, tags.values.location)
 
-export const layer = (ref: Ref) =>
+const layer = (ref: Ref) =>
   Layer.effect(
     Service,
     Effect.gen(function* () {

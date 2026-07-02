@@ -59,24 +59,21 @@ export function ToolStatusTitle(props: {
 
   const animate = () => {
     const first = contentWidth(widthRef)
+    const next = props.active
     finish()
+    setState("active", next)
+    if (!first) return
+
     setState("animating", true)
-    setState("active", props.active)
-    const last = contentWidth(props.active ? activeRef : doneRef)
-    if (!first || !last) {
-      finish()
-      return
-    }
-
     setState("width", first)
-    if (first === last) {
-      finishTimer = setTimeout(finish, 600)
-      return
-    }
-
     frame = requestAnimationFrame(() => {
       frame = undefined
-      setState("width", last)
+      const last = contentWidth(next ? activeRef : doneRef)
+      if (!last) {
+        finish()
+        return
+      }
+      if (first !== last) setState("width", last)
       finishTimer = setTimeout(finish, 600)
     })
   }
