@@ -869,7 +869,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             setStore(
               "session",
               "status",
-              Object.fromEntries(Object.keys(active).map((sessionID) => [sessionID, "running" as const])),
+              Object.fromEntries(Object.keys(active.data).map((sessionID) => [sessionID, "running" as const])),
             ),
           ),
         result.location.refresh(),
