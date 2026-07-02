@@ -1,5 +1,7 @@
 import { afterEach, describe, expect } from "bun:test"
-import { Effect, Layer } from "effect"
+import { Effect } from "effect"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Database } from "@opencode-ai/core/database/database"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { Session as SessionNs } from "@/session/session"
@@ -9,24 +11,12 @@ import path from "path"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { eq } from "drizzle-orm"
 import { testEffect } from "../lib/effect"
-import { EventV2Bridge } from "@/event-v2-bridge"
-import { Storage } from "@/storage/storage"
 import { RuntimeFlags } from "@/effect/runtime-flags"
-import { BackgroundJob } from "@/background/job"
 
 const layer = (experimentalWorkspaces: boolean) =>
-  Layer.mergeAll(
-    Database.defaultLayer,
-    SessionNs.layer.pipe(
-      Layer.provide(EventV2Bridge.defaultLayer),
-      Layer.provide(Storage.defaultLayer),
-      Layer.provide(Database.defaultLayer),
-      Layer.provide(EventV2Bridge.defaultLayer),
-      Layer.provide(SessionProjector.defaultLayer),
-      Layer.provide(RuntimeFlags.layer({ experimentalWorkspaces })),
-      Layer.provide(BackgroundJob.defaultLayer),
-    ),
-  )
+  AppNodeBuilder.build(LayerNode.group([Database.node, SessionNs.node, SessionProjector.node]), [
+    [RuntimeFlags.node, RuntimeFlags.layer({ experimentalWorkspaces })],
+  ])
 const it = testEffect(layer(false))
 const itWorkspaces = testEffect(layer(true))
 

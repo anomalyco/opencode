@@ -48,6 +48,24 @@ describe("HttpApiCodegen.generate", () => {
     )
   })
 
+  test("allows Promise outputs to use an authoritative imported wire type", () => {
+    const contract = compileContract(
+      api(HttpApiEndpoint.get("events", "/event", { success: HttpApiSchema.StreamSse({ data: Schema.Unknown }) })),
+    )
+    const output = emitPromise(contract, {
+      outputTypes: {
+        "session.events": {
+          name: "EventWire",
+          import: 'import type { EventWire } from "./event-wire"',
+        },
+      },
+    })
+    const types = output.files.find((file) => file.path === "types.ts")?.content
+
+    expect(types).toContain('import type { EventWire } from "./event-wire"')
+    expect(types).toContain("export type SessionEventsOutput = EventWire")
+  })
+
   test("emits an Effect client against an imported authoritative API", () => {
     const output = emitEffectImported(
       compileContract(
@@ -120,6 +138,48 @@ describe("HttpApiCodegen.generate", () => {
     expect(contract.groups[0]?.endpoints[0]?.operation).toMatchObject({ group: "sessions", name: "get" })
   })
 
+  test("supports explicit public endpoint names", () => {
+    const source = HttpApi.make("test").add(
+      HttpApiGroup.make("server.permission")
+        .add(HttpApiEndpoint.get("permission.request.list", "/request", { success: Schema.String }))
+        .add(HttpApiEndpoint.get("session.permission.list", "/session", { success: Schema.String })),
+    )
+    const contract = compileContract(source, {
+      endpointNames: { "permission.request.list": "listRequests" },
+    })
+
+    expect(contract.groups[0]?.endpoints.map((endpoint) => endpoint.operation.name)).toEqual(["listRequests", "list"])
+  })
+
+  test("omits custom transport endpoints", () => {
+    const source = HttpApi.make("test").add(
+      HttpApiGroup.make("server.pty")
+        .add(HttpApiEndpoint.get("pty.get", "/pty", { success: Schema.String }))
+        .add(HttpApiEndpoint.get("pty.connect", "/pty/connect", { success: Schema.Boolean })),
+    )
+    const contract = compileContract(source, { omitEndpoints: new Set(["pty.connect"]) })
+
+    expect(contract.groups[0]?.endpoints.map((endpoint) => endpoint.endpoint.name)).toEqual(["pty.get"])
+  })
+
+  test("uses bracket access for input field names", () => {
+    const source = api(
+      HttpApiEndpoint.post("token", "/token", {
+        headers: { "x-example-token": Schema.Literal("1") },
+        success: Schema.String,
+      }),
+    )
+    const contract = compileContract(source)
+    const promise = emitPromise(contract).files.find((file) => file.path === "client.ts")?.content
+    const effect = emitEffectImported(contract, {
+      module: "@example/api",
+      endpoints: { "session.token": "Token" },
+    }).files.find((file) => file.path === "client.ts")?.content
+
+    expect(promise).toContain('"x-example-token": input["x-example-token"]')
+    expect(effect).toContain('"x-example-token": input["x-example-token"]')
+  })
+
   test("rejects consumer group name collisions", () => {
     const source = HttpApi.make("test")
       .add(HttpApiGroup.make("first").add(HttpApiEndpoint.get("one", "/one", { success: Schema.String })))
@@ -166,6 +226,33 @@ describe("HttpApiCodegen.generate", () => {
     )
   })
 
+  test("supports name-discriminated Promise errors", () => {
+    class NamedError extends Schema.ErrorClass<NamedError>("NamedError")(
+      { name: Schema.Literal("NamedError"), message: Schema.String },
+      { httpApiStatus: 400 },
+    ) {}
+    const output = emitPromise(
+      compileContract(
+        api(HttpApiEndpoint.get("get", "/session", { success: Schema.NumberFromString, error: NamedError })),
+      ),
+    )
+    const types = output.files.find((file) => file.path === "types.ts")?.content
+
+    expect(types).toContain('readonly "name": "NamedError"')
+    expect(types).toContain('"name" in value && value["name"] === "NamedError"')
+  })
+
+  test("preserves reflected default error statuses", () => {
+    class MissingStatus extends Schema.TaggedErrorClass<MissingStatus>()("MissingStatus", {
+      message: Schema.String,
+    }) {}
+    const output = emitPromise(
+      compileContract(api(HttpApiEndpoint.get("get", "/session", { success: Schema.String, error: MissingStatus }))),
+    )
+
+    expect(output.files.find((file) => file.path === "client.ts")?.content).toContain("declaredStatuses: [500]")
+  })
+
   test("erases brands from Promise wire types", () => {
     const output = emitPromise(
       compileContract(
@@ -197,6 +284,26 @@ describe("HttpApiCodegen.generate", () => {
 
     expect(output.files.find((file) => file.path === "types.ts")?.content).toContain(
       'export type SessionGetOutput = ({ readonly "data": ({ readonly "value": string }) })["data"]',
+    )
+  })
+
+  test("expands Promise references only at identifier boundaries", () => {
+    const Session = Schema.Struct({ name: Schema.Literal("Session"), id: Schema.String }).annotate({
+      identifier: "Session",
+    })
+    const SessionID = Schema.String.annotate({ identifier: "SessionID" })
+    const output = emitPromise(
+      compileContract(
+        api(
+          HttpApiEndpoint.get("get", "/session", {
+            success: Schema.Struct({ session: Session, sessionID: SessionID }),
+          }),
+        ),
+      ),
+    )
+
+    expect(output.files.find((file) => file.path === "types.ts")?.content).toContain(
+      'readonly "session": ({ readonly "name": "Session", readonly "id": string })',
     )
   })
 
@@ -246,6 +353,22 @@ describe("HttpApiCodegen.generate", () => {
         ),
       ),
     ).toThrow("Unsupported Promise success encoding: session.text")
+
+    expect(() =>
+      emitPromise(
+        compileContract(
+          api(
+            HttpApiEndpoint.get("binary", "/binary", {
+              success: Schema.Uint8Array.pipe(HttpApiSchema.asUint8Array()),
+            }),
+          ),
+        ),
+      ),
+    ).toThrow("Unsupported Promise success encoding: session.binary")
+
+    expect(() =>
+      emitPromise(compileContract(api(HttpApiEndpoint.get("read", "/file/*", { success: Schema.String })))),
+    ).toThrow("Unsupported Promise path wildcard: /file/*")
 
     expect(() =>
       emitPromise(

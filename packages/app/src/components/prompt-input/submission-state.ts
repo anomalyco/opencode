@@ -7,6 +7,7 @@ export function createPromptSubmissionState(input: {
   prompt: Prompt
   context: (ContextItem & { key: string })[]
 }) {
+  const initial = input.target
   let target = input.target
   let cleared: Prompt | undefined
 
@@ -15,6 +16,7 @@ export function createPromptSubmissionState(input: {
     context: input.context,
     target: () => target,
     clear() {
+      if (initial !== target) initial.reset()
       target.reset()
       cleared = target.current()
     },

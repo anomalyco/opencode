@@ -92,11 +92,17 @@ export function PromptWorkspaceSelector(props: {
           </MenuV2.Content>
         </MenuV2.Portal>
       </MenuV2>
-      <span class="hidden select-none opacity-50 sm:inline mx-1">/</span>
-      <div class="flex h-7 min-w-0 max-w-[220px] items-center gap-1.5 px-2 text-[13px] font-[440] leading-5 tracking-[-0.04px]">
-        <Icon name="branch" size="small" class="shrink-0 text-v2-icon-icon-muted" />
-        <span class="min-w-0 truncate">{props.branch || "main"}</span>
-      </div>
+      <Show when={props.branch}>
+        {(branch) => (
+          <>
+            <span class="hidden select-none opacity-50 sm:inline mx-1">/</span>
+            <div class="flex h-7 min-w-0 max-w-[220px] items-center gap-1.5 px-2 text-[13px] font-[440] leading-5 tracking-[-0.04px]">
+              <Icon name="branch" size="small" class="shrink-0 text-v2-icon-icon-muted" />
+              <span class="min-w-0 truncate">{branch()}</span>
+            </div>
+          </>
+        )}
+      </Show>
     </>
   )
 }

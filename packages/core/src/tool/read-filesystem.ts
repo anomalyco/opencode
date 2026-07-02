@@ -5,6 +5,7 @@ import { pathToFileURL } from "url"
 import { Context, Effect, Layer, Option, Schema } from "effect"
 import { FileSystem } from "../filesystem"
 import { FSUtil } from "../fs-util"
+import { makeLocationNode } from "../effect/app-node"
 import { AbsolutePath, PositiveInt, RelativePath } from "../schema"
 
 export const MAX_READ_LINES = 2_000
@@ -350,7 +351,7 @@ export const list = Effect.fn("ReadTool.list")(function* (fs: FSUtil.Interface, 
   return new ListPage({ entries: selected, truncated, ...(truncated ? { next: offset + selected.length } : {}) })
 })
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
@@ -361,3 +362,5 @@ export const layer = Layer.effect(
     })
   }),
 )
+
+export const node = makeLocationNode({ service: Service, layer, deps: [FSUtil.node] })

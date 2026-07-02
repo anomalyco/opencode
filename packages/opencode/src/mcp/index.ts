@@ -28,7 +28,7 @@ import { McpAuth } from "./auth"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { TuiEvent } from "@/server/tui-event"
 import open from "open"
-import { Cause, Effect, Exit, Layer, Option, Context, Schema, Stream } from "effect"
+import { Cause, Effect, Exit, Layer, Context, Schema, Stream } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { InstanceState } from "@/effect/instance-state"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
@@ -194,7 +194,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/MC
 
 export const use = serviceUse(Service)
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
@@ -928,16 +928,17 @@ export const layer = Layer.effect(
       const pending = pendingOAuthTransports.get(mcpName)
       if (!pending) throw new Error(`No pending OAuth flow for MCP server: ${mcpName}`)
 
-      const result = yield* Effect.tryPromise({
-        try: () => pending.transport.finishAuth(authorizationCode).then(() => true as const),
-        catch: (error) => {
-          return error
-        },
-      }).pipe(Effect.option)
+      const error = yield* Effect.tryPromise({
+        try: () => pending.transport.finishAuth(authorizationCode),
+        catch: (error) => error,
+      }).pipe(
+        Effect.match({
+          onFailure: (error) => (error instanceof Error ? error.message : String(error)),
+          onSuccess: () => undefined,
+        }),
+      )
 
-      if (Option.isNone(result)) {
-        return { status: "failed", error: "OAuth completion failed" } satisfies Status
-      }
+      if (error) return { status: "failed", error: `OAuth completion failed: ${error}` } satisfies Status
 
       yield* Effect.promise(() => pending.provider?.commit() ?? Promise.resolve())
       yield* auth.clearCodeVerifier(mcpName)
@@ -945,7 +946,7 @@ export const layer = Layer.effect(
 
       const mcpConfig = yield* requireMcpConfig(mcpName)
 
-      return yield* createAndStore(mcpName, mcpConfig)
+      return yield* createAndStore(mcpName, { ...mcpConfig, enabled: true })
     })
 
     const removeAuth = Effect.fn("MCP.removeAuth")(function* (mcpName: string) {
@@ -1001,16 +1002,6 @@ export const layer = Layer.effect(
 )
 
 export type AuthStatus = "authenticated" | "expired" | "not_authenticated"
-
-// --- Per-service runtime ---
-
-export const defaultLayer = layer.pipe(
-  Layer.provide(McpAuth.defaultLayer),
-  Layer.provide(EventV2Bridge.defaultLayer),
-  Layer.provide(Config.defaultLayer),
-  Layer.provide(CrossSpawnSpawner.defaultLayer),
-  Layer.provide(FSUtil.defaultLayer),
-)
 
 export const node = LayerNode.make({
   service: Service,

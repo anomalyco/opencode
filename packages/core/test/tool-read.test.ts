@@ -3,6 +3,8 @@ import path from "path"
 import { Effect, Exit, Layer, PlatformError } from "effect"
 import { Config } from "@opencode-ai/core/config"
 import { ConfigAttachments } from "@opencode-ai/core/config/attachments"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { FileSystem } from "@opencode-ai/core/filesystem"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Location } from "@opencode-ai/core/location"
@@ -11,8 +13,10 @@ import { PermissionV2 } from "@opencode-ai/core/permission"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Global } from "@opencode-ai/core/global"
+import { LocationMutation } from "@opencode-ai/core/location-mutation"
 import { location } from "./fixture/location"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
+import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
 import { ReadTool } from "@opencode-ai/core/tool/read"
 import { ReadToolFileSystem } from "@opencode-ai/core/tool/read-filesystem"
 import { testEffect } from "./lib/effect"
@@ -68,9 +72,8 @@ const permission = Layer.succeed(
     list: () => Effect.die("unused"),
   }),
 )
-const registry = ToolRegistry.defaultLayer.pipe(Layer.provide(permission))
 const config = Layer.succeed(Config.Service, Config.Service.of({ entries: () => Effect.succeed(configEntries) }))
-const image = Image.layer.pipe(Layer.provide(config))
+const imageLayer = AppNodeBuilder.build(Image.node, [[Config.node, config]])
 const testFileSystem = Layer.effect(
   FSUtil.Service,
   FSUtil.Service.use((fs) =>
@@ -91,36 +94,55 @@ const testFileSystem = Layer.effect(
       }),
     ),
   ),
-).pipe(Layer.provide(FSUtil.defaultLayer))
-const infrastructure = Layer.mergeAll(
-  testFileSystem,
-  Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(process.cwd()) }))),
-  Global.layerWith({ data: Global.Path.data }),
+).pipe(Layer.provide(LayerNode.compile(FSUtil.node)))
+const locationLayer = Layer.succeed(
+  Location.Service,
+  Location.Service.of(location({ directory: AbsolutePath.make(process.cwd()) })),
+)
+const mutation = Layer.succeed(
+  LocationMutation.Service,
+  LocationMutation.Service.of({
+    resolve: (input) => {
+      if (input.path === missingPath)
+        return Effect.fail(new LocationMutation.PathError({ path: input.path, reason: "non_directory_ancestor" }))
+      const canonical = path.resolve(process.cwd(), input.path)
+      const external = path.isAbsolute(input.path) && !FSUtil.contains(process.cwd(), canonical)
+      const resource = external ? canonical.replaceAll("\\", "/") : path.relative(process.cwd(), canonical) || "."
+      const directory = path.dirname(canonical)
+      const externalResource = path.join(directory, "*").replaceAll("\\", "/")
+      return Effect.succeed({
+        canonical,
+        resource,
+        externalDirectory: external
+          ? {
+              action: "external_directory" as const,
+              directory,
+              resource: externalResource,
+              save: externalResource,
+            }
+          : undefined,
+      })
+    },
+  }),
 )
 const unavailableImage = Layer.succeed(
   Image.Service,
   Image.Service.of({ normalize: () => Effect.fail(new Image.ResizerUnavailableError()) }),
 )
-const read = ReadTool.layer.pipe(
-  Layer.provide(registry),
-  Layer.provide(reader),
-  Layer.provide(permission),
-  Layer.provide(config),
-  Layer.provide(image),
-  Layer.provide(infrastructure),
-)
-const it = testEffect(Layer.mergeAll(registry, reader, permission, config, image, infrastructure, read))
-const unavailableRead = ReadTool.layer.pipe(
-  Layer.provide(registry),
-  Layer.provide(reader),
-  Layer.provide(permission),
-  Layer.provide(config),
-  Layer.provide(unavailableImage),
-  Layer.provide(infrastructure),
-)
-const itWithoutResizer = testEffect(
-  Layer.mergeAll(registry, reader, permission, config, unavailableImage, infrastructure, unavailableRead),
-)
+const readLayer = (imageLayer: Layer.Layer<Image.Service>) =>
+  AppNodeBuilder.build(LayerNode.group([ToolRegistry.node, ToolRegistry.toolsNode, ReadTool.node]), [
+    [ReadToolFileSystem.node, reader],
+    [PermissionV2.node, permission],
+    [Config.node, config],
+    [Image.node, imageLayer],
+    [LocationMutation.node, mutation],
+    [FSUtil.node, testFileSystem],
+    [Location.node, locationLayer],
+    [Global.node, Global.layerWith({ data: Global.Path.data })],
+    [ToolOutputStore.node, ToolOutputStore.nodeWithoutConfig],
+  ])
+const it = testEffect(readLayer(imageLayer))
+const itWithoutResizer = testEffect(readLayer(unavailableImage))
 const sessionID = SessionV2.ID.make("ses_read_tool_test")
 
 describe("ReadTool", () => {
@@ -171,6 +193,30 @@ describe("ReadTool", () => {
           page: { offset: undefined, limit: undefined },
         },
       ])
+    }),
+  )
+
+  it.effect("asks for external_directory approval before reading an external absolute path", () =>
+    Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+      const external = path.join(path.parse(process.cwd()).root, "external-read", "notes.txt")
+
+      expect(
+        yield* executeTool(registry, {
+          sessionID,
+          ...toolIdentity,
+          call: { type: "tool-call", id: "call-external-read", name: "read", input: { path: external } },
+        }),
+      ).toMatchObject({ type: "json" })
+      expect(assertions).toMatchObject([
+        {
+          sessionID,
+          action: "external_directory",
+          resources: [path.join(path.dirname(external), "*").replaceAll("\\", "/")],
+        },
+        { sessionID, action: "read", resources: [external.replaceAll("\\", "/")], save: ["*"] },
+      ])
+      expect(readCalls).toEqual([{ input: AbsolutePath.make(external), page: { offset: undefined, limit: undefined } }])
     }),
   )
 
