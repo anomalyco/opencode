@@ -1,21 +1,17 @@
 import { afterEach, expect, test } from "bun:test"
-import { Cause, Effect, Exit, Fiber, Layer, Option } from "effect"
+import { Cause, Effect, Exit, Fiber, Option } from "effect"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Messaging } from "../../src/messaging"
 import { BackgroundJob } from "../../src/background/job"
-import { disposeAllInstances, testInstanceStoreLayer } from "../fixture/fixture"
+import { disposeAllInstances } from "../fixture/fixture"
 import { SessionID } from "../../src/session/schema"
 import { testEffect } from "../lib/effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { EventV2Bridge } from "../../src/event-v2-bridge"
 import { escapeBody } from "../../src/tool/message"
 
-const it = testEffect(
-  Layer.mergeAll(
-    Messaging.layer.pipe(Layer.provideMerge(EventV2Bridge.defaultLayer)),
-    BackgroundJob.defaultLayer,
-    CrossSpawnSpawner.defaultLayer,
-  ),
-)
+const root = LayerNode.group([Messaging.node, BackgroundJob.node, CrossSpawnSpawner.node])
+const it = testEffect(LayerNode.compile(root))
 
 const CHILD = SessionID.make("ses_child")
 const PARENT = SessionID.make("ses_parent")
