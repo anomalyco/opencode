@@ -4427,6 +4427,13 @@ export type SessionMessage =
   | SessionMessageAssistant
   | SessionMessageCompaction
 
+export type SessionContextEntryKey = string
+
+export type SessionContextEntryInfo = {
+  key: SessionContextEntryKey
+  value: unknown
+}
+
 export type SessionNextAgentSwitched = {
   id: string
   metadata?: {
@@ -11972,6 +11979,10 @@ export type V2SessionListData = {
     limit?: number
     order?: "asc" | "desc"
     search?: string
+    /**
+     * Filter by parent session. Use null to return only root sessions.
+     */
+    parentID?: string | null
     directory?: string
     project?: string
     subpath?: string
@@ -12643,6 +12654,121 @@ export type V2SessionContextResponses = {
 }
 
 export type V2SessionContextResponse = V2SessionContextResponses[keyof V2SessionContextResponses]
+
+export type V2SessionContextEntryListData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: never
+  url: "/api/session/{sessionID}/context-entry"
+}
+
+export type V2SessionContextEntryListErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * SessionNotFoundError
+   */
+  404: SessionNotFoundError
+}
+
+export type V2SessionContextEntryListError = V2SessionContextEntryListErrors[keyof V2SessionContextEntryListErrors]
+
+export type V2SessionContextEntryListResponses = {
+  /**
+   * Success
+   */
+  200: {
+    data: Array<SessionContextEntryInfo>
+  }
+}
+
+export type V2SessionContextEntryListResponse =
+  V2SessionContextEntryListResponses[keyof V2SessionContextEntryListResponses]
+
+export type V2SessionContextEntryRemoveData = {
+  body?: never
+  path: {
+    sessionID: string
+    key: SessionContextEntryKey
+  }
+  query?: never
+  url: "/api/session/{sessionID}/context-entry/{key}"
+}
+
+export type V2SessionContextEntryRemoveErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * SessionNotFoundError
+   */
+  404: SessionNotFoundError
+}
+
+export type V2SessionContextEntryRemoveError =
+  V2SessionContextEntryRemoveErrors[keyof V2SessionContextEntryRemoveErrors]
+
+export type V2SessionContextEntryRemoveResponses = {
+  /**
+   * <No Content>
+   */
+  204: void
+}
+
+export type V2SessionContextEntryRemoveResponse =
+  V2SessionContextEntryRemoveResponses[keyof V2SessionContextEntryRemoveResponses]
+
+export type V2SessionContextEntryPutData = {
+  body: {
+    value: unknown
+  }
+  path: {
+    sessionID: string
+    key: SessionContextEntryKey
+  }
+  query?: never
+  url: "/api/session/{sessionID}/context-entry/{key}"
+}
+
+export type V2SessionContextEntryPutErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * SessionNotFoundError
+   */
+  404: SessionNotFoundError
+}
+
+export type V2SessionContextEntryPutError = V2SessionContextEntryPutErrors[keyof V2SessionContextEntryPutErrors]
+
+export type V2SessionContextEntryPutResponses = {
+  /**
+   * <No Content>
+   */
+  204: void
+}
+
+export type V2SessionContextEntryPutResponse =
+  V2SessionContextEntryPutResponses[keyof V2SessionContextEntryPutResponses]
 
 export type V2SessionHistoryData = {
   body?: never

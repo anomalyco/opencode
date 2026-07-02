@@ -82,7 +82,14 @@ const historyTypesPatched = generatedTypes.replace(
 if (historyTypesPatched === generatedTypes) {
   throw new Error("Session history numeric query patch did not apply")
 }
-await Bun.write("./src/v2/gen/types.gen.ts", historyTypesPatched)
+const sessionListParentTypesPatched = historyTypesPatched.replace(
+  /(export type V2SessionListData = \{[\s\S]*?parentID\?: )string \| ["']null["']/,
+  "$1string | null",
+)
+if (sessionListParentTypesPatched === historyTypesPatched) {
+  throw new Error("Session list parentID type patch did not apply")
+}
+await Bun.write("./src/v2/gen/types.gen.ts", sessionListParentTypesPatched)
 
 const generatedSdk = await Bun.file("./src/v2/gen/sdk.gen.ts").text()
 const historySdkPatched = generatedSdk.replace(
@@ -92,7 +99,28 @@ const historySdkPatched = generatedSdk.replace(
 if (historySdkPatched === generatedSdk) {
   throw new Error("Session history numeric SDK patch did not apply")
 }
-await Bun.write("./src/v2/gen/sdk.gen.ts", historySdkPatched)
+const sessionListParentSdkTypePatched = historySdkPatched.replace(
+  /(Retrieve sessions in the requested order[\s\S]*?parentID\?: )string \| ["']null["']/,
+  "$1string | null",
+)
+if (sessionListParentSdkTypePatched === historySdkPatched) {
+  throw new Error("Session list parentID SDK type patch did not apply")
+}
+const sessionListStart = sessionListParentSdkTypePatched.indexOf("Retrieve sessions in the requested order")
+const sessionListParamsStart = sessionListParentSdkTypePatched.indexOf(
+  "const params = buildClientParams([parameters], [{ args: [",
+  sessionListStart,
+)
+if (sessionListStart === -1 || sessionListParamsStart === -1) {
+  throw new Error("Session list parentID SDK encoding patch did not apply")
+}
+const sessionListParentSdkPatched =
+  sessionListParentSdkTypePatched.slice(0, sessionListParamsStart) +
+  'const params = buildClientParams([{ ...parameters, parentID: parameters?.parentID === null ? "null" : parameters?.parentID }], [{ args: [' +
+  sessionListParentSdkTypePatched.slice(
+    sessionListParamsStart + "const params = buildClientParams([parameters], [{ args: [".length,
+  )
+await Bun.write("./src/v2/gen/sdk.gen.ts", sessionListParentSdkPatched)
 
 // Patch a @hey-api/openapi-ts codegen bug: SseFn incorrectly passes the
 // endpoint's TError into the second generic of ServerSentEventsResult, which

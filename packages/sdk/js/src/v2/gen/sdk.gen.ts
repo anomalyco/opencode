@@ -181,6 +181,7 @@ import type {
   SessionChildrenResponses,
   SessionCommandErrors,
   SessionCommandResponses,
+  SessionContextEntryKey,
   SessionCreateErrors,
   SessionCreateResponses,
   SessionDeleteErrors,
@@ -351,6 +352,12 @@ import type {
   V2SessionBackgroundResponses,
   V2SessionCompactErrors,
   V2SessionCompactResponses,
+  V2SessionContextEntryListErrors,
+  V2SessionContextEntryListResponses,
+  V2SessionContextEntryPutErrors,
+  V2SessionContextEntryPutResponses,
+  V2SessionContextEntryRemoveErrors,
+  V2SessionContextEntryRemoveResponses,
   V2SessionContextErrors,
   V2SessionContextResponses,
   V2SessionCreateErrors,
@@ -5224,6 +5231,113 @@ export class Revert extends HeyApiClient {
   }
 }
 
+export class Entry extends HeyApiClient {
+  /**
+   * List context entries
+   *
+   * List API-managed context entries attached to the session's system context.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "sessionID" }] }])
+    return (options?.client ?? this.client).get<
+      V2SessionContextEntryListResponses,
+      V2SessionContextEntryListErrors,
+      ThrowOnError
+    >({
+      url: "/api/session/{sessionID}/context-entry",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Remove context entry
+   *
+   * Remove one context entry; the removal is announced to the model at the next turn boundary.
+   */
+  public remove<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      key: SessionContextEntryKey
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "path", key: "key" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<
+      V2SessionContextEntryRemoveResponses,
+      V2SessionContextEntryRemoveErrors,
+      ThrowOnError
+    >({
+      url: "/api/session/{sessionID}/context-entry/{key}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Put context entry
+   *
+   * Attach or replace one durable context entry. The value is rendered into the session's system context; changes announce as updates at the next turn boundary.
+   */
+  public put<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      key: SessionContextEntryKey
+      value?: unknown
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "path", key: "key" },
+            { in: "body", key: "value" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<
+      V2SessionContextEntryPutResponses,
+      V2SessionContextEntryPutErrors,
+      ThrowOnError
+    >({
+      url: "/api/session/{sessionID}/context-entry/{key}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
+export class Context extends HeyApiClient {
+  private _entry?: Entry
+  get entry(): Entry {
+    return (this._entry ??= new Entry({ client: this.client }))
+  }
+}
+
 export class Permission2 extends HeyApiClient {
   /**
    * List session permission requests
@@ -5491,6 +5605,7 @@ export class Session3 extends HeyApiClient {
       limit?: number
       order?: "asc" | "desc"
       search?: string
+      parentID?: string | null
       directory?: string
       project?: string
       subpath?: string
@@ -5499,7 +5614,7 @@ export class Session3 extends HeyApiClient {
     options?: Options<never, ThrowOnError>,
   ) {
     const params = buildClientParams(
-      [parameters],
+      [{ ...parameters, parentID: parameters?.parentID === null ? "null" : parameters?.parentID }],
       [
         {
           args: [
@@ -5507,6 +5622,7 @@ export class Session3 extends HeyApiClient {
             { in: "query", key: "limit" },
             { in: "query", key: "order" },
             { in: "query", key: "search" },
+            { in: "query", key: "parentID" },
             { in: "query", key: "directory" },
             { in: "query", key: "project" },
             { in: "query", key: "subpath" },
@@ -6087,6 +6203,11 @@ export class Session3 extends HeyApiClient {
   private _revert?: Revert
   get revert(): Revert {
     return (this._revert ??= new Revert({ client: this.client }))
+  }
+
+  private _context?: Context
+  get context2(): Context {
+    return (this._context ??= new Context({ client: this.client }))
   }
 
   private _permission?: Permission2
