@@ -11,7 +11,7 @@ import {
   createMemo,
   createEffect,
   createComputed,
-  createResource,
+  createSignal,
   on,
   onMount,
   type ParentProps,
@@ -26,6 +26,7 @@ import { FileProvider, selectionFromLines, useFile, type FileSelection, type Sel
 import { createStore } from "solid-js/store"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Select } from "@opencode-ai/ui/select"
+import { isScrollKeyTarget, scrollKey, scrollKeyOwner } from "@opencode-ai/ui/scroll-view"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { createAutoScroll } from "@opencode-ai/ui/hooks"
@@ -85,7 +86,7 @@ import { diffs as list } from "@/utils/diffs"
 import { Persist, persisted } from "@/utils/persist"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { formatServerError, isSessionNotFoundError } from "@/utils/server-errors"
-import { legacySessionHref, requireServerKey, selectSessionLineage, sessionHref } from "@/utils/session-route"
+import { legacySessionHref, requireServerKey, sessionHref } from "@/utils/session-route"
 import { useUsageExceededDialogs } from "./session/usage-exceeded-dialogs"
 import { createSessionOwnership } from "./session/session-ownership"
 
@@ -223,17 +224,8 @@ function ResolvedTargetSessionRoute() {
   const params = useParams<{ serverKey: string; id: string }>()
   const settings = useSettings()
   const tabs = useTabs()
-  const sync = useServerSync()
   const serverKey = createMemo(() => requireServerKey(params.serverKey))
-  const cached = createMemo(() => sync().session.lineage.peek(params.id))
-  const [resolved] = createResource(
-    () => {
-      if (cached()) return
-      return { id: params.id, sync: sync() }
-    },
-    ({ id, sync }) => sync.session.lineage.resolve(id),
-  )
-  const current = createMemo(() => selectSessionLineage(params.id, cached(), resolved()))
+  const current = createSessionLineage(() => params.id)
   const directory = createMemo(() => current()?.session.directory)
   const targetDirectory = () => directory()!
 
@@ -262,6 +254,42 @@ function ResolvedTargetSessionRoute() {
       </Show>
     </TargetServerScopedProviders>
   )
+}
+
+// Reactive session lineage for the target session route, read from the sync store.
+// The route keys its consumer to the session ID, so resolution runs once per target.
+// Resolution is imperative rather than a resource on purpose: a resource created here
+// would be created inside the router's navigation transition, and suspending that
+// transition deadlocks the URL commit and double-mounts the session header portals
+// from the transition's shadow render. `lineage.resolve` fills the sync store, which
+// the returned accessor observes; resolve failures rethrow on read so the enclosing
+// SessionRouteErrorBoundary renders the scoped session error.
+function createSessionLineage(sessionID: () => string) {
+  const sync = useServerSync()
+  const cached = createMemo(() => sync().session.lineage.peek(sessionID()))
+  const [failure, setFailure] = createSignal<unknown>()
+  const [settled, setSettled] = createSignal(false)
+  onMount(() => {
+    if (cached()) {
+      setSettled(true)
+      return
+    }
+    sync()
+      .session.lineage.resolve(sessionID())
+      .then(() => setSettled(true))
+      .catch((error) => setFailure(() => error))
+  })
+  return createMemo(() => {
+    const error = failure()
+    if (error) throw error
+    const lineage = cached()
+    // The viewed session is pinned and pinned lineages are exempt from cache pruning,
+    // so a lineage missing after settlement means the session (or an ancestor) was
+    // deleted, possibly by another client. Match the resolve error so the boundary
+    // shows the session not found fallback.
+    if (!lineage && settled()) throw new Error(`Session not found: ${sessionID()}`)
+    return lineage
+  })
 }
 
 function TargetSessionPage() {
@@ -940,9 +968,11 @@ export default function Page() {
       if (id && shouldFocusTerminalOnKeyDown(event) && focusTerminalById(id)) return
     }
 
-    // Only treat explicit scroll keys as potential "user scroll" gestures.
-    if (event.key === "PageUp" || event.key === "PageDown" || event.key === "Home" || event.key === "End") {
-      markScrollGesture()
+    const key = scrollKey(event)
+    if (key) {
+      if (!scroller || !isScrollKeyTarget(target ?? null, key)) return
+      if (scrollKeyOwner(scroller, target ?? null, key) !== scroller) return
+      markScrollGesture(scroller)
       return
     }
 

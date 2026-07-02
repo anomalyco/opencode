@@ -37,7 +37,9 @@ export interface BasicToolProps {
   animated?: boolean
   onSubtitleClick?: () => void
   onTriggerClick?: JSX.EventHandlerUnion<HTMLElement, MouseEvent>
+  onTriggerKeyDown?: JSX.EventHandlerUnion<HTMLElement, KeyboardEvent>
   triggerHref?: string
+  triggerAsLink?: boolean
   clickable?: boolean
 }
 
@@ -254,7 +256,7 @@ export function BasicTool(props: BasicToolProps) {
   return (
     <Collapsible open={open()} onOpenChange={handleOpenChange} class="tool-collapsible">
       <Show
-        when={props.triggerHref}
+        when={props.triggerAsLink || props.triggerHref}
         fallback={
           <Collapsible.Trigger
             data-hide-details={props.hideDetails ? "true" : undefined}
@@ -264,16 +266,17 @@ export function BasicTool(props: BasicToolProps) {
           </Collapsible.Trigger>
         }
       >
-        {(href) => (
-          <Collapsible.Trigger
-            as="a"
-            href={href()}
-            data-hide-details={props.hideDetails ? "true" : undefined}
-            onClick={props.onTriggerClick}
-          >
-            {trigger()}
-          </Collapsible.Trigger>
-        )}
+        <Collapsible.Trigger
+          as="a"
+          href={props.triggerHref}
+          role={!props.triggerHref && props.clickable ? "button" : undefined}
+          tabIndex={!props.triggerHref && props.clickable ? 0 : undefined}
+          data-hide-details={props.hideDetails ? "true" : undefined}
+          onClick={props.onTriggerClick}
+          onKeyDown={props.onTriggerKeyDown}
+        >
+          {trigger()}
+        </Collapsible.Trigger>
       </Show>
       <Show when={props.animated && hasChildren() && !props.hideDetails}>
         <div
