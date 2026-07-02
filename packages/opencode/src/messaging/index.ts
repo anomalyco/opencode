@@ -3,33 +3,14 @@ import { Deferred, Duration, Effect, Layer, Schema, Context, Option } from "effe
 import { InstanceState } from "@/effect/instance-state"
 import { SessionID } from "@/session/schema"
 import { EventV2Bridge } from "@/event-v2-bridge"
-import { EventV2 } from "@opencode-ai/core/event"
+import { MessagingEvent } from "@opencode-ai/schema/messaging-event"
+
+export const Sent = MessagingEvent.Sent
+export const Replied = MessagingEvent.Replied
+export const Rejected = MessagingEvent.Rejected
 
 const ROUND_TRIP_CAP = 8
 const DEFAULT_TIMEOUT = Duration.seconds(300)
-
-export const Sent = Schema.Struct({
-  childSessionID: SessionID,
-  parentSessionID: SessionID,
-  body: Schema.String,
-  expectReply: Schema.Boolean,
-}).annotate({ identifier: "MessagingSent" })
-
-export const Replied = Schema.Struct({
-  childSessionID: SessionID,
-  parentSessionID: SessionID,
-  body: Schema.String,
-}).annotate({ identifier: "MessagingReplied" })
-
-export const Rejected = Schema.Struct({
-  childSessionID: SessionID,
-}).annotate({ identifier: "MessagingRejected" })
-
-export const Event = {
-  Sent: EventV2.define({ type: "messaging.sent", schema: Sent.fields }),
-  Replied: EventV2.define({ type: "messaging.replied", schema: Replied.fields }),
-  Rejected: EventV2.define({ type: "messaging.rejected", schema: Rejected.fields }),
-}
 
 export class RejectedError extends Schema.TaggedErrorClass<RejectedError>()("Messaging.RejectedError", {}) {
   override get message() {
@@ -134,7 +115,7 @@ export const layer = Layer.effect(
       if (!input.expectReply) {
         // Fire-and-forget path: no inFlight reserved above, so an interrupt here
         // can only leak the roundTrips +1 (acceptable as anti-abuse).
-        yield* events.publish(Event.Sent, {
+        yield* events.publish(Sent, {
           childSessionID: input.childSessionID,
           parentSessionID: input.parentSessionID,
           body: input.body,
@@ -156,7 +137,7 @@ export const layer = Layer.effect(
       // an interrupt during publish still triggers release and doesn't leak inFlight.
       return yield* Effect.ensuring(
         Effect.gen(function* () {
-          yield* events.publish(Event.Sent, {
+          yield* events.publish(Sent, {
             childSessionID: input.childSessionID,
             parentSessionID: input.parentSessionID,
             body: input.body,
@@ -190,7 +171,7 @@ export const layer = Layer.effect(
         return yield* new NotFoundError({ childSessionID: input.childSessionID })
       }
       value.pending.delete(input.childSessionID)
-      yield* events.publish(Event.Replied, {
+      yield* events.publish(Replied, {
         childSessionID: existing.childSessionID,
         parentSessionID: existing.parentSessionID,
         body: input.body,
@@ -203,7 +184,7 @@ export const layer = Layer.effect(
       const existing = value.pending.get(childSessionID)
       if (!existing) return yield* new NotFoundError({ childSessionID })
       value.pending.delete(childSessionID)
-      yield* events.publish(Event.Rejected, { childSessionID })
+      yield* events.publish(Rejected, { childSessionID })
       yield* Deferred.fail(existing.deferred, new RejectedError())
     })
 
