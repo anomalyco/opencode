@@ -103,10 +103,10 @@ export interface PublishOptions {
   readonly commit?: (seq: number) => Effect.Effect<void>
 }
 
-/** Marker/event union emitted by `log`. Markers carry no event `id`. */
+/** Marker/event union emitted by `log`. */
 export type LogItem = Payload | EventLog.Synced
 
-export const isSynced = (item: LogItem): item is EventLog.Synced => !("id" in item)
+export const isSynced = (item: LogItem): item is EventLog.Synced => item.type === "log.synced"
 
 export interface Interface {
   readonly publish: <D extends Definition>(
@@ -680,6 +680,7 @@ export const layerWith = (options?: LayerOptions) =>
             if (!wakes) return replay
             const live: Stream.Stream<LogItem> = Stream.fromSubscription(wakes).pipe(
               Stream.mapEffect(() => latestSequence(db, input.aggregateID)),
+              Stream.filter((target) => target > sequence),
               Stream.flatMap((target) => readThrough(target)),
               Stream.map((event): LogItem => event),
             )
