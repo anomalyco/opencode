@@ -42,17 +42,17 @@ const make = (dependencies: Dependencies) => {
     if (!firstUser) return
     const agent = yield* dependencies.agents.get(AgentV2.ID.make("title"))
     if (!agent) return
-    const model = yield* (agent.model
+    const resolved = yield* (agent.model
       ? dependencies.models.resolve({ ...session, model: agent.model })
       : dependencies.models.resolve(session)
     ).pipe(Effect.catch(() => Effect.succeed(undefined)))
-    if (!model) return
+    if (!resolved) return
     const chunks: string[] = []
     let failed = false
     const streamed = yield* dependencies.llm
       .stream(
         LLM.request({
-          model,
+          model: resolved.model,
           system: agent.system,
           messages: [Message.user(firstUser.text)],
           tools: [],

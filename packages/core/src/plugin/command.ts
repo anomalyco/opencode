@@ -18,7 +18,6 @@ export const Plugin = define({
       draft.update("review", (command) => {
         command.template = PROMPT_REVIEW.replace("${path}", location.project.directory)
         command.description = "review changes [commit|branch|pr], defaults to uncommitted"
-        command.subtask = true
       })
     })
   }),

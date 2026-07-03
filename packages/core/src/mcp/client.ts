@@ -9,8 +9,18 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { UnauthorizedError, type OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js"
 import {
   CallToolResultSchema,
+  ElicitationCompleteNotificationSchema,
+  ElicitRequestSchema,
+  GetPromptResultSchema,
+  type ElicitRequestFormParams,
+  type ElicitRequestParams,
+  type ElicitRequestURLParams,
+  type ElicitResult,
+  ListPromptsResultSchema,
   ListRootsRequestSchema,
   ListToolsResultSchema,
+  PromptListChangedNotificationSchema,
+  PromptSchema,
   type LoggingMessageNotification,
   LoggingMessageNotificationSchema,
   ToolListChangedNotificationSchema,
@@ -30,6 +40,9 @@ type Transport = StdioClientTransport | StreamableHTTPClientTransport
 const TolerantListToolsResult = ListToolsResultSchema.extend({
   tools: ToolSchema.omit({ outputSchema: true }).array(),
 })
+const TolerantListPromptsResult = ListPromptsResultSchema.extend({
+  prompts: PromptSchema.array(),
+})
 
 export class NeedsAuthError extends Schema.TaggedErrorClass<NeedsAuthError>()("MCP.NeedsAuthError", {
   server: Schema.String,
@@ -46,6 +59,25 @@ export interface ToolDefinition {
   readonly inputSchema: unknown
 }
 
+export interface PromptDefinition {
+  readonly name: string
+  readonly description: string | undefined
+  readonly arguments: ReadonlyArray<{
+    readonly name: string
+    readonly description: string | undefined
+    readonly required: boolean | undefined
+  }> | undefined
+}
+
+export interface PromptMessage {
+  readonly role: string
+  readonly content: unknown
+}
+
+export interface PromptResult {
+  readonly messages: ReadonlyArray<PromptMessage>
+}
+
 export type CallToolContent =
   | { readonly type: "text"; readonly text: string }
   | { readonly type: "media"; readonly data: string; readonly mimeType: string }
@@ -54,6 +86,22 @@ export interface CallToolResult {
   readonly isError: boolean
   readonly structured: unknown
   readonly content: ReadonlyArray<CallToolContent>
+}
+
+export type ElicitationFormParams = ElicitRequestFormParams
+export type ElicitationParams = ElicitRequestParams
+export type ElicitationResult = ElicitResult
+
+export interface ElicitationHandler {
+  readonly create: (input: {
+    readonly server: string
+    readonly params: ElicitationParams
+    readonly signal: AbortSignal
+  }) => Effect.Effect<ElicitationResult, Error>
+  readonly complete: (input: {
+    readonly server: string
+    readonly elicitationID: ElicitRequestURLParams["elicitationId"]
+  }) => Effect.Effect<void>
 }
 
 export interface LogMessage {
@@ -68,6 +116,13 @@ export interface Connection {
   readonly instructions: string | undefined
   /** Lists the server's tools; returns [] when the server doesn't advertise tool support, fails on a transport error. */
   readonly tools: () => Effect.Effect<ToolDefinition[], Error>
+  /** Lists the server's prompts; returns [] when the server doesn't advertise prompt support, fails on a transport error. */
+  readonly prompts: () => Effect.Effect<PromptDefinition[], Error>
+  /** Invokes a prompt on the server. Interruption aborts the in-flight request. */
+  readonly prompt: (input: {
+    readonly name: string
+    readonly args?: Record<string, string>
+  }) => Effect.Effect<PromptResult, Error>
   /** Invokes a tool on the server. Interruption aborts the in-flight request. */
   readonly callTool: (input: {
     readonly name: string
@@ -78,6 +133,8 @@ export interface Connection {
   readonly onLog: (callback: (message: LogMessage) => void) => void
   /** Registers a callback fired when the server announces its tool list changed; no-op if unsupported. */
   readonly onToolsChanged: (callback: () => void) => void
+  /** Registers a callback fired when the server announces its prompt list changed; no-op if unsupported. */
+  readonly onPromptsChanged: (callback: () => void) => void
 }
 
 /** Connects an MCP server; closing the calling scope tears down the transport and any spawned process. */
@@ -88,6 +145,7 @@ export const connect = Effect.fnUntraced(function* (
   // Only consumed by the remote transport; stdio servers have no auth concept. A provider with no
   // stored token (and a no-op redirect) surfaces an UnauthorizedError, which we map to needs_auth.
   authProvider?: OAuthClientProvider,
+  elicitation?: ElicitationHandler,
 ) {
   const transport: Transport = yield* Effect.gen(function* () {
     if (config.type === "local") {
@@ -114,6 +172,7 @@ export const connect = Effect.fnUntraced(function* (
     { name: "opencode", version: InstallationVersion },
     {
       capabilities: {
+        ...(elicitation ? { elicitation: { form: { applyDefaults: true }, url: {} } } : {}),
         // https://github.com/anomalyco/opencode/issues/2308
         roots: {},
       },
@@ -122,6 +181,14 @@ export const connect = Effect.fnUntraced(function* (
   client.setRequestHandler(ListRootsRequestSchema, () =>
     Promise.resolve({ roots: [{ uri: pathToFileURL(directory).href }] }),
   )
+  if (elicitation) {
+    client.setRequestHandler(ElicitRequestSchema, (request, extra) =>
+      Effect.runPromise(elicitation.create({ server, params: request.params, signal: extra.signal })),
+    )
+    client.setNotificationHandler(ElicitationCompleteNotificationSchema, (notification) =>
+      Effect.runPromise(elicitation.complete({ server, elicitationID: notification.params.elicitationId })),
+    )
+  }
 
   const exit = yield* Effect.tryPromise({
     try: (signal) => client.connect(transport, { timeout: config.timeout?.startup ?? DEFAULT_STARTUP_TIMEOUT, signal }),
@@ -166,14 +233,56 @@ export const connect = Effect.fnUntraced(function* (
             inputSchema: tool.inputSchema,
           }))
         }),
+      prompts: () =>
+        Effect.gen(function* () {
+          if (!client.getServerCapabilities()?.prompts) return []
+          const prompts = yield* Effect.tryPromise({
+            try: () =>
+              paginate(
+                async (cursor) => {
+                  const params = cursor === undefined ? undefined : { cursor }
+                  return client.request({ method: "prompts/list", params }, TolerantListPromptsResult, {
+                    timeout: requestTimeout,
+                  })
+                },
+                (result) => result.prompts,
+              ),
+            catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+          }).pipe(
+            Effect.tapError((error) => Effect.logWarning("failed to list MCP prompts", { server, error: error.message })),
+          )
+          return prompts.map((prompt) => ({
+            name: prompt.name,
+            description: prompt.description,
+            arguments: prompt.arguments?.map((argument) => ({
+              name: argument.name,
+              description: argument.description,
+              required: argument.required,
+            })),
+          }))
+        }),
+      prompt: (input) =>
+        Effect.tryPromise({
+          try: (signal) =>
+            client.request(
+              { method: "prompts/get", params: { name: input.name, arguments: input.args ?? {} } },
+              GetPromptResultSchema,
+              { signal },
+            ),
+          catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+        }).pipe(
+          Effect.map((result) => ({
+            messages: result.messages.map((message) => ({ role: message.role, content: message.content })),
+          })),
+        ),
       callTool: (input) =>
         Effect.tryPromise({
           try: (signal) =>
             client.callTool(
               { name: input.name, arguments: input.args ?? {} },
               CallToolResultSchema,
-              // The SDK only sends a progress token when onprogress is present, which enables timeout resets.
-              { signal, timeout: requestTimeout, resetTimeoutOnProgress: true, onprogress: () => {} },
+              // Keep progress tokens available without imposing a client timeout on tool execution.
+              { signal, resetTimeoutOnProgress: true, onprogress: () => {} },
             ),
           catch: (error) => (error instanceof Error ? error : new Error(String(error))),
         }).pipe(
@@ -206,6 +315,10 @@ export const connect = Effect.fnUntraced(function* (
       onToolsChanged: (callback) => {
         if (!client.getServerCapabilities()?.tools?.listChanged) return
         client.setNotificationHandler(ToolListChangedNotificationSchema, async () => callback())
+      },
+      onPromptsChanged: (callback) => {
+        if (!client.getServerCapabilities()?.prompts?.listChanged) return
+        client.setNotificationHandler(PromptListChangedNotificationSchema, async () => callback())
       },
     } satisfies Connection
   }

@@ -4,7 +4,7 @@ import { Database } from "../database/database"
 import { MessageDecodeError } from "./error"
 import { SessionMessage } from "./message"
 import { SessionSchema } from "./schema"
-import { SessionContextEpochTable, SessionMessageTable } from "./sql"
+import { SessionContextCheckpointTable, SessionMessageTable } from "./sql"
 
 type DatabaseService = Database.Interface["db"]
 
@@ -33,6 +33,9 @@ const messageRows = Effect.fnUntraced(function* (
     .where(
       and(
         eq(SessionMessageTable.session_id, sessionID),
+        // Keep system updates visible in the gap between a completed compaction
+        // and the next prepared turn's rebaseline, when their content is not yet
+        // folded into a new baseline.
         compaction
           ? or(
               gte(SessionMessageTable.seq, compaction.seq),
@@ -67,9 +70,9 @@ export const load = Effect.fn("SessionHistory.load")(function* (db: DatabaseServ
   const [epoch, compaction] = yield* Effect.all(
     [
       db
-        .select({ baselineSeq: SessionContextEpochTable.baseline_seq })
-        .from(SessionContextEpochTable)
-        .where(eq(SessionContextEpochTable.session_id, sessionID))
+        .select({ baselineSeq: SessionContextCheckpointTable.baseline_seq })
+        .from(SessionContextCheckpointTable)
+        .where(eq(SessionContextCheckpointTable.session_id, sessionID))
         .get()
         .pipe(Effect.orDie),
       latestCompaction(db, sessionID),
@@ -77,14 +80,6 @@ export const load = Effect.fn("SessionHistory.load")(function* (db: DatabaseServ
     { concurrency: "unbounded" },
   )
   return yield* Effect.forEach(yield* messageRows(db, sessionID, compaction, epoch?.baselineSeq), decodeMessageRow)
-})
-
-export const loadForRunner = Effect.fn("SessionHistory.loadForRunner")(function* (
-  db: DatabaseService,
-  sessionID: SessionSchema.ID,
-  baselineSeq: number,
-) {
-  return (yield* entriesForRunner(db, sessionID, baselineSeq)).map((entry) => entry.message)
 })
 
 export const entriesForRunner = Effect.fn("SessionHistory.entriesForRunner")(function* (

@@ -3,7 +3,7 @@ import { UI } from "@/cli/ui"
 import { errorMessage } from "@opencode-ai/tui/util/error"
 import { validateSession } from "../tui/validate-session"
 import { ServerAuth } from "@/server/auth"
-import { OpenCode } from "@opencode-ai/client"
+import { OpenCode } from "@opencode-ai/client/promise"
 import { createOpencodeClient } from "@opencode-ai/sdk/v2"
 
 export const AttachCommand = cmd({

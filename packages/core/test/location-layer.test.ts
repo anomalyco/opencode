@@ -24,9 +24,7 @@ import { EventV2 } from "../src/event"
 import { Reference } from "../src/reference"
 import { ToolRegistry } from "../src/tool/registry"
 
-const it = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Database.node, EventV2.node, LocationServiceMap.node])),
-)
+const it = testEffect(AppNodeBuilder.build(LayerNode.group([Database.node, EventV2.node, LocationServiceMap.node])))
 
 describe("LocationServiceMap", () => {
   it.live("reuses cached services for constructed and decoded location refs", () =>
@@ -75,6 +73,7 @@ describe("LocationServiceMap", () => {
               const catalog = yield* Catalog.Service
               yield* catalog.transform((editor) => editor.provider.update(ProviderV2.ID.make("test"), () => {}))
               const registry = yield* ToolRegistry.Service
+              yield* waitForTool(registry, "glob")
               yield* waitForTool(registry, "shell")
               yield* waitForTool(registry, "subagent")
               return {
@@ -170,6 +169,58 @@ describe("LocationServiceMap", () => {
             providerID: "unavailable",
             modelID: "chat",
           })
+        }),
+      ),
+    ),
+  )
+
+  it.live("preserves the selected catalog identity when the api model id differs", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
+          const resolved = yield* Effect.gen(function* () {
+            const catalog = yield* Catalog.Service
+            yield* catalog.transform((editor) => {
+              editor.provider.update(ProviderV2.ID.make("aliased"), (provider) => {
+                provider.api = { type: "aisdk", package: "@ai-sdk/openai", settings: {} }
+              })
+              editor.model.update(ProviderV2.ID.make("aliased"), ModelV2.ID.make("fast"), (model) => {
+                // Catalog id and provider API id intentionally differ, like gpt-5.5-fast -> gpt-5.5.
+                model.api = { ...model.api, id: ModelV2.ID.make("base") }
+                model.variants.push({ id: ModelV2.VariantID.make("high"), settings: {}, headers: {}, body: {} })
+              })
+            })
+            const models = yield* SessionRunnerModel.Service
+            return yield* models.resolve(
+              SessionV2.Info.make({
+                id: SessionV2.ID.make("ses_aliased_model"),
+                projectID: ProjectV2.ID.global,
+                title: "test",
+                model: {
+                  id: ModelV2.ID.make("fast"),
+                  providerID: ProviderV2.ID.make("aliased"),
+                  variant: ModelV2.VariantID.make("high"),
+                },
+                cost: 0,
+                tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+                time: { created: DateTime.makeUnsafe(0), updated: DateTime.makeUnsafe(0) },
+                location,
+              }),
+            )
+          }).pipe(Effect.provide(LocationServiceMap.Service.get(location)))
+
+          expect(resolved.ref).toEqual(
+            ModelV2.Ref.make({
+              id: ModelV2.ID.make("fast"),
+              providerID: ProviderV2.ID.make("aliased"),
+              variant: ModelV2.VariantID.make("high"),
+            }),
+          )
+          expect(String(resolved.model.id)).toBe("base")
         }),
       ),
     ),

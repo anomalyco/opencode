@@ -1,4 +1,4 @@
-import { OpenCode } from "@opencode-ai/client"
+import { OpenCode } from "@opencode-ai/client/promise"
 import { createOpencodeClient } from "@opencode-ai/sdk/v2"
 import type { V2Event } from "@opencode-ai/sdk/v2"
 
@@ -98,7 +98,7 @@ export function createFetch(override?: FetchHandler, events?: ReturnType<typeof 
     if (url.pathname === "/api/shell") return json({ location: { directory, project: { id: "proj_test", directory: worktree } }, data: [] })
     if (url.pathname === "/api/mcp") return json({ location: { directory, project: { id: "proj_test", directory: worktree } }, data: [] })
     if (url.pathname === "/api/session") return json({ data: [], cursor: {} })
-    if (url.pathname === "/api/session/active") return json({ data: {} })
+    if (url.pathname === "/api/session/active") return json({ data: {}, watermarks: {} })
     if (
       ["/api/agent", "/api/model", "/api/provider", "/api/integration", "/api/command", "/api/skill"].includes(
         url.pathname,

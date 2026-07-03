@@ -36,6 +36,7 @@ export function DialogSessionList() {
       search: query,
       limit: 50,
       order: "desc",
+      parentID: null,
       directory: location.directory,
       workspace: location.workspaceID,
     })

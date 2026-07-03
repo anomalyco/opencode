@@ -1,6 +1,8 @@
-import { Cause, Effect, Layer } from "effect"
+import { Cause, DateTime, Effect, Exit, Layer } from "effect"
+import { EventV2 } from "../../event"
 import { LocationServiceMap } from "../../location-service-map"
 import { makeGlobalNode } from "../../effect/app-node"
+import { SessionEvent } from "../event"
 import { SessionRunCoordinator } from "../run-coordinator"
 import { SessionRunner } from "../runner"
 import { SessionSchema } from "../schema"
@@ -13,6 +15,7 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const store = yield* SessionStore.Service
     const locations = yield* LocationServiceMap.Service
+    const events = yield* EventV2.Service
     const coordinator = yield* SessionRunCoordinator.make<SessionSchema.ID, SessionRunner.RunError>({
       drain: Effect.fnUntraced(function* (sessionID: SessionSchema.ID, force) {
         const session = yield* store.get(sessionID)
@@ -26,6 +29,24 @@ const layer = Layer.effect(
           ),
         )
       }),
+      // One ExecutionSettled per execution (busy period), covering every coalesced drain.
+      settled: (sessionID, exit) =>
+        Effect.gen(function* () {
+          const failure =
+            Exit.isFailure(exit) && !Cause.hasInterrupts(exit.cause) ? Cause.squash(exit.cause) : undefined
+          yield* events.publish(SessionEvent.ExecutionSettled, {
+            sessionID,
+            timestamp: yield* DateTime.now,
+            outcome: Exit.isSuccess(exit) ? "success" : Cause.hasInterrupts(exit.cause) ? "interrupted" : "failure",
+            error:
+              failure !== undefined
+                ? { type: "unknown", message: failure instanceof Error ? failure.message : String(failure) }
+                : undefined,
+          })
+        }).pipe(
+          Effect.catchCause(() => Effect.void),
+          Effect.asVoid,
+        ),
     })
 
     return SessionExecution.Service.of({
@@ -41,7 +62,7 @@ const layer = Layer.effect(
 export const node = makeGlobalNode({
   service: SessionExecution.Service,
   layer,
-  deps: [SessionStore.node, LocationServiceMap.node],
+  deps: [SessionStore.node, LocationServiceMap.node, EventV2.node],
 })
 
 export * as SessionExecutionLocal from "./local"

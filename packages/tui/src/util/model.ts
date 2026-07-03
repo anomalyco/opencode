@@ -31,6 +31,14 @@ export function formatRef(model: { providerID: string; id: string; variant?: str
   return [model.providerID, model.id, model.variant].filter((value) => value !== undefined).join("/")
 }
 
-export function switchLabel(model: { providerID: string; id: string; variant?: string }) {
-  return `Switched model to ${formatRef(model)}`
+export function switchLabel(
+  model: { providerID: string; id: string; variant?: string },
+  models?: readonly { providerID: string; id: string; name: string }[],
+) {
+  const display = models?.find((item) => item.providerID === model.providerID && item.id === model.id)?.name
+  if (display === undefined) return `Switched model to ${formatRef(model)}`
+  // Variant-only switches publish the same model id; without the variant the
+  // notice would look like a redundant model switch.
+  const variant = model.variant && model.variant !== "default" ? ` (${model.variant})` : ""
+  return `Switched model to ${display}${variant}`
 }

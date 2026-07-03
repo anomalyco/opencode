@@ -48,7 +48,7 @@ const client = Layer.mock(LLMClient.Service)({
   generate: () => Effect.die("unused"),
 })
 const config = Layer.mock(Config.Service)({ entries: () => Effect.succeed([]) })
-const models = SessionRunnerModel.layerWith(() => Effect.succeed(model))
+const models = SessionRunnerModel.layerWith(() => Effect.succeed(SessionRunnerModel.resolved(model)))
 const locations = Layer.effect(
   LocationServiceMap.Service,
   LayerMap.make(
@@ -81,11 +81,20 @@ describe("SessionV2.compact", () => {
       const events = yield* EventV2.Service
       const created = yield* session.create({ location })
 
+      const messageID = SessionMessage.ID.create()
+      const prompt = Prompt.make({ text: "Please compact this session history." })
+      yield* events.publish(SessionEvent.PromptAdmitted, {
+        sessionID: created.id,
+        messageID,
+        timestamp: DateTime.makeUnsafe(0),
+        prompt,
+        delivery: "steer",
+      })
       yield* events.publish(SessionEvent.Prompted, {
         sessionID: created.id,
-        messageID: SessionMessage.ID.create(),
+        messageID,
         timestamp: DateTime.makeUnsafe(0),
-        prompt: Prompt.make({ text: "Please compact this session history." }),
+        prompt,
         delivery: "steer",
       })
 

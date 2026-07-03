@@ -3,7 +3,7 @@ export * as PluginInternal from "./internal"
 import { makeLocationNode } from "../effect/app-node"
 import { httpClient } from "../effect/app-node-platform"
 import type { PluginContext } from "@opencode-ai/plugin/v2/effect"
-import { Effect, Layer, Scope } from "effect"
+import { Context, Effect, Layer, Scope } from "effect"
 import { AgentV2 } from "../agent"
 import { Catalog } from "../catalog"
 import { CommandV2 } from "../command"
@@ -27,6 +27,7 @@ import { PluginV2 } from "../plugin"
 import { PluginRuntime } from "../plugin/runtime"
 import { PermissionV2 } from "../permission"
 import { Reference } from "../reference"
+import { Ripgrep } from "../ripgrep"
 import { Shell } from "../shell"
 import { SkillV2 } from "../skill"
 import { State } from "../state"
@@ -40,6 +41,7 @@ import { ProviderPlugins } from "./provider"
 import { SdkPlugins } from "./sdk"
 import { SkillPlugin } from "./skill"
 import { VariantPlugin } from "./variant"
+import { GlobTool } from "../tool/glob"
 import { ShellTool } from "../tool/shell"
 import { SubagentTool } from "../tool/subagent"
 
@@ -61,6 +63,7 @@ export type Requirements =
   | PermissionV2.Service
   | PluginRuntime.Service
   | Reference.Service
+  | Ripgrep.Service
   | Shell.Service
   | SkillV2.Service
   | Tools.Service
@@ -76,59 +79,35 @@ export function define<R>(plugin: Plugin<R>) {
 
 const layer = Layer.effectDiscard(
   Effect.gen(function* () {
-    const catalog = yield* Catalog.Service
-    const commands = yield* CommandV2.Service
     const plugin = yield* PluginV2.Service
     const sdkPlugins = yield* SdkPlugins.Service
-    const integration = yield* Integration.Service
-    const agents = yield* AgentV2.Service
-    const config = yield* Config.Service
-    const location = yield* Location.Service
-    const modelsDev = yield* ModelsDev.Service
-    const npm = yield* Npm.Service
-    const events = yield* EventV2.Service
-    const fs = yield* FSUtil.Service
-    const filesystem = yield* FileSystem.Service
-    const global = yield* Global.Service
-    const http = yield* HttpClient.HttpClient
-    const mutation = yield* LocationMutation.Service
-    const permission = yield* PermissionV2.Service
-    const skill = yield* SkillV2.Service
-    const reference = yield* Reference.Service
-    const shell = yield* Shell.Service
-    const tools = yield* Tools.Service
-    const runtime = yield* PluginRuntime.Service
-    const add = <R>(input: Plugin<R>) => {
-      const loaded = {
-        id: input.id,
-        effect: (context: PluginContext) =>
-          input
-            .effect(context)
-            .pipe(
-              Effect.provideService(Catalog.Service, catalog),
-              Effect.provideService(CommandV2.Service, commands),
-              Effect.provideService(Integration.Service, integration),
-              Effect.provideService(AgentV2.Service, agents),
-              Effect.provideService(Config.Service, config),
-              Effect.provideService(Location.Service, location),
-              Effect.provideService(ModelsDev.Service, modelsDev),
-              Effect.provideService(Npm.Service, npm),
-              Effect.provideService(EventV2.Service, events),
-              Effect.provideService(FSUtil.Service, fs),
-              Effect.provideService(FileSystem.Service, filesystem),
-              Effect.provideService(Global.Service, global),
-              Effect.provideService(HttpClient.HttpClient, http),
-              Effect.provideService(LocationMutation.Service, mutation),
-              Effect.provideService(PermissionV2.Service, permission),
-              Effect.provideService(SkillV2.Service, skill),
-              Effect.provideService(Reference.Service, reference),
-              Effect.provideService(Shell.Service, shell),
-              Effect.provideService(Tools.Service, tools),
-              Effect.provideService(PluginRuntime.Service, runtime),
-            ),
-      }
-      return plugin.add(PluginV2.ID.make(loaded.id), loaded.effect)
-    }
+    const services = Context.mergeAll(
+      Context.make(Catalog.Service, yield* Catalog.Service),
+      Context.make(CommandV2.Service, yield* CommandV2.Service),
+      Context.make(Integration.Service, yield* Integration.Service),
+      Context.make(AgentV2.Service, yield* AgentV2.Service),
+      Context.make(Config.Service, yield* Config.Service),
+      Context.make(Location.Service, yield* Location.Service),
+      Context.make(ModelsDev.Service, yield* ModelsDev.Service),
+      Context.make(Npm.Service, yield* Npm.Service),
+      Context.make(EventV2.Service, yield* EventV2.Service),
+      Context.make(FSUtil.Service, yield* FSUtil.Service),
+      Context.make(FileSystem.Service, yield* FileSystem.Service),
+      Context.make(Global.Service, yield* Global.Service),
+      Context.make(HttpClient.HttpClient, yield* HttpClient.HttpClient),
+      Context.make(LocationMutation.Service, yield* LocationMutation.Service),
+      Context.make(PermissionV2.Service, yield* PermissionV2.Service),
+      Context.make(SkillV2.Service, yield* SkillV2.Service),
+      Context.make(Reference.Service, yield* Reference.Service),
+      Context.make(Ripgrep.Service, yield* Ripgrep.Service),
+      Context.make(Shell.Service, yield* Shell.Service),
+      Context.make(Tools.Service, yield* Tools.Service),
+      Context.make(PluginRuntime.Service, yield* PluginRuntime.Service),
+    )
+    const add = (input: Plugin<Requirements | Scope.Scope>) =>
+      plugin.add(PluginV2.ID.make(input.id), (context: PluginContext) =>
+        input.effect(context).pipe(Effect.provide(services)),
+      )
 
     yield* State.batch(
       Effect.gen(function* () {
@@ -138,6 +117,7 @@ const layer = Layer.effectDiscard(
         yield* add(SkillPlugin.Plugin)
         yield* add(ModelsDevPlugin)
         yield* add(ConfigExternalPlugin.Plugin)
+        yield* add(GlobTool.Plugin)
         yield* add(ShellTool.Plugin)
         yield* add(SubagentTool.Plugin)
         yield* add(ConfigAgentPlugin.Plugin)
@@ -175,6 +155,7 @@ export const node = makeLocationNode({
     PermissionV2.node,
     SkillV2.node,
     Reference.node,
+    Ripgrep.node,
     Shell.node,
     ToolRegistry.toolsNode,
     PluginRuntime.node,

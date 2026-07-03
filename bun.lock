@@ -126,7 +126,6 @@
         "@opencode-ai/schema": "workspace:*",
       },
       "devDependencies": {
-        "@effect/platform-node": "catalog:",
         "@opencode-ai/core": "workspace:*",
         "@opencode-ai/httpapi-codegen": "workspace:*",
         "@opencode-ai/server": "workspace:*",

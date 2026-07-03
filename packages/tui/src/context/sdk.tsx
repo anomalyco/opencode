@@ -1,4 +1,4 @@
-import type { OpenCodeClient } from "@opencode-ai/client"
+import type { OpenCodeClient } from "@opencode-ai/client/promise"
 import type { OpencodeClient, V2Event } from "@opencode-ai/sdk/v2"
 import { createGlobalEmitter } from "@solid-primitives/event-bus"
 import { onCleanup, onMount } from "solid-js"
@@ -15,7 +15,7 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
   init: (props: {
     client: OpencodeClient
     api: OpenCodeClient
-    reload?: () => Promise<{ client: OpencodeClient; api: OpenCodeClient }>
+    discover?: () => Promise<{ client: OpencodeClient; api: OpenCodeClient }>
   }) => {
     const abort = new AbortController()
     let client = props.client
@@ -32,12 +32,10 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
       connectedOnce: false,
     })
     let stream: AbortController | undefined
-    let pending: Promise<void> | undefined
 
     function start() {
       stream?.abort()
       const controller = new AbortController()
-      const current = client
       let connected!: () => void
       const ready = new Promise<void>((resolve) => {
         connected = resolve
@@ -54,7 +52,7 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
           )
           controller.signal.addEventListener("abort", cancel, { once: true })
           const error = await (async () => {
-            const response = await current.v2.event.subscribe({
+            const response = await client.v2.event.subscribe({
               signal: connection.signal,
               sseMaxRetryAttempts: 0,
               throwOnError: true,
@@ -86,6 +84,17 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
             })
           if (abort.signal.aborted || controller.signal.aborted) return
           attempt += 1
+          // Re-resolve the transport before retrying: the server may have
+          // moved (service restarted on a new port) or need starting. Static
+          // transports (--server, standalone) resolve to the same address.
+          if (props.discover) {
+            const next = await props.discover().catch(() => undefined)
+            if (abort.signal.aborted || controller.signal.aborted) return
+            if (next) {
+              client = next.client
+              api = next.api
+            }
+          }
           setConnection({
             status: "connecting",
             attempt,
@@ -96,23 +105,6 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
       })()
       return ready
     }
-
-    const reload = props.reload
-      ? () => {
-          if (pending) return pending
-          pending = Promise.resolve()
-            .then(props.reload)
-            .then(async (next) => {
-              client = next.client
-              api = next.api
-              if (!abort.signal.aborted) await start()
-            })
-            .finally(() => {
-              pending = undefined
-            })
-          return pending
-        }
-      : undefined
 
     onMount(() => void start())
     onCleanup(() => {
@@ -146,7 +138,6 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
           return connection.connectedOnce
         },
       },
-      reload,
     }
   },
 })

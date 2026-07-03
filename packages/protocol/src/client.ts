@@ -19,11 +19,16 @@ type ClientApiShape = Api<
   Context.Service.Shape<typeof LocationMiddleware>,
   Context.Service.Identifier<typeof SessionLocationMiddleware>,
   Context.Service.Shape<typeof SessionLocationMiddleware>,
+  Context.Service.Identifier<typeof SessionLocationMiddleware>,
+  Context.Service.Shape<typeof SessionLocationMiddleware>,
   typeof EventGroup
 >
 
 export const ClientApi: ClientApiShape = makeDefaultApi({
   locationMiddleware: LocationMiddleware,
+  // The real server uses a form-specific middleware with an undocumented `global` sentinel branch.
+  // The generated client only needs a middleware identity for API typing.
+  formLocationMiddleware: SessionLocationMiddleware,
   sessionLocationMiddleware: SessionLocationMiddleware,
 })
 
@@ -39,6 +44,7 @@ export const groupNames = {
   "server.provider": "provider",
   "server.integration": "integration",
   "server.credential": "credential",
+  "server.form": "form",
   "server.permission": "permission",
   "server.fs": "file",
   "server.command": "command",
@@ -60,12 +66,16 @@ export const endpointNames = {
   "integration.attempt.status": "attemptStatus",
   "integration.attempt.complete": "attemptComplete",
   "integration.attempt.cancel": "attemptCancel",
+  "session.context.entry.list": "listContextEntries",
+  "session.context.entry.put": "putContextEntry",
+  "session.context.entry.remove": "removeContextEntry",
   "session.revert.stage": "revertStage",
   "session.revert.clear": "revertClear",
   "session.revert.commit": "revertCommit",
   "permission.request.list": "listRequests",
   "permission.saved.list": "listSaved",
   "permission.saved.remove": "removeSaved",
+  "form.request.list": "listRequests",
   "question.request.list": "listRequests",
 } as const
 

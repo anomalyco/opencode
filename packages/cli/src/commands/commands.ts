@@ -14,6 +14,10 @@ export const Commands = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCO
       Flag.withDescription("Run with a private server instead of the background service"),
       Flag.withDefault(false),
     ),
+    server: Flag.string("server").pipe(
+      Flag.withDescription("Connect to a server URL instead of the background service"),
+      Flag.optional,
+    ),
     continue: Flag.boolean("continue").pipe(
       Flag.withAlias("c"),
       Flag.withDescription("Continue the last session"),

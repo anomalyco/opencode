@@ -89,6 +89,24 @@ export class SkillNotFoundError extends Schema.TaggedErrorClass<SkillNotFoundErr
   { httpApiStatus: 404 },
 ) {}
 
+export class CommandNotFoundError extends Schema.TaggedErrorClass<CommandNotFoundError>()(
+  "CommandNotFoundError",
+  {
+    command: Schema.String,
+    message: Schema.String,
+  },
+  { httpApiStatus: 404 },
+) {}
+
+export class CommandEvaluationError extends Schema.TaggedErrorClass<CommandEvaluationError>()(
+  "CommandEvaluationError",
+  {
+    command: Schema.String,
+    message: Schema.String,
+  },
+  { httpApiStatus: 500 },
+) {}
+
 export class InvalidCursorError extends Schema.TaggedErrorClass<InvalidCursorError>()(
   "InvalidCursorError",
   { message: Schema.String },
@@ -111,6 +129,33 @@ export class QuestionNotFoundError extends Schema.TaggedErrorClass<QuestionNotFo
     message: Schema.String,
   },
   { httpApiStatus: 404 },
+) {}
+
+export class FormNotFoundError extends Schema.TaggedErrorClass<FormNotFoundError>()(
+  "FormNotFoundError",
+  {
+    id: Schema.String,
+    message: Schema.String,
+  },
+  { httpApiStatus: 404 },
+) {}
+
+export class FormAlreadySettledError extends Schema.TaggedErrorClass<FormAlreadySettledError>()(
+  "FormAlreadySettledError",
+  {
+    id: Schema.String,
+    message: Schema.String,
+  },
+  { httpApiStatus: 409 },
+) {}
+
+export class FormInvalidAnswerError extends Schema.TaggedErrorClass<FormInvalidAnswerError>()(
+  "FormInvalidAnswerError",
+  {
+    id: Schema.String,
+    message: Schema.String,
+  },
+  { httpApiStatus: 400 },
 ) {}
 
 export class ForbiddenError extends Schema.TaggedErrorClass<ForbiddenError>()(

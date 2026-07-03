@@ -5,12 +5,12 @@
   "type": "module",
   "license": "MIT",
   "exports": {
-    ".": "./src/index.ts",
-    "./effect": "./src/effect.ts"
+    "./promise": "./src/promise/index.ts",
+    "./effect": "./src/effect/index.ts"
   },
   "scripts": {
     "generate": "bun run script/build.ts",
-    "check:generated": "bun run generate && git diff --exit-code -- src/generated src/generated-effect",
+    "check:generated": "bun run generate && git diff --exit-code -- src/promise/generated src/effect/generated",
     "test": "bun test --timeout 5000",
     "typecheck": "tsgo --noEmit"
   },

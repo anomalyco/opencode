@@ -127,5 +127,6 @@ This package is built on Effect. Public methods return `Effect` or `Stream`; pro
 ## See also
 
 - `AGENTS.md` — architecture, route construction, contributor guide
+- `STATUS.md` — native provider parity status and AI SDK migration gaps
 - `example/tutorial.ts` — runnable end-to-end walkthrough
 - `test/provider/*.test.ts` — fixture-first protocol tests; `*.recorded.test.ts` files cover live cassettes

@@ -1,6 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Effect, Fiber, Layer, Random, Ref } from "effect"
-import * as TestClock from "effect/testing/TestClock"
+import { Effect, Layer, Ref } from "effect"
 import { Headers, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { LLM, LLMError } from "../src"
 import { LLMClient, RequestExecutor } from "../src/route"
@@ -59,11 +58,6 @@ const countedResponsesLayer = (attempts: Ref.Ref<number>, responses: ReadonlyArr
     ),
   )
 
-const randomMidpoint = {
-  nextDoubleUnsafe: () => 0.5,
-  nextIntUnsafe: () => 0,
-}
-
 const expectLLMError = (error: unknown) => {
   expect(error).toBeInstanceOf(LLMError)
   if (!(error instanceof LLMError)) throw new Error("expected LLMError")
@@ -113,17 +107,16 @@ describe("RequestExecutor", () => {
     }).pipe(Effect.provide(responsesLayer([new Response("invalid parameter", { status: 400 })]))),
   )
 
-  it.effect("returns redacted diagnostics for retryable rate limits", () =>
+  it.effect("returns redacted diagnostics for rate limits", () =>
     Effect.gen(function* () {
       const executor = yield* RequestExecutor.Service
       const error = yield* executor.execute(request).pipe(Effect.flip)
 
       expectLLMError(error)
       expect(error).toMatchObject({
-        retryable: true,
-        retryAfterMs: 0,
         reason: {
           _tag: "RateLimit",
+          retryAfterMs: 0,
           rateLimit: { retryAfterMs: 0 },
           http: {
             requestId: "req_123",
@@ -146,16 +139,12 @@ describe("RequestExecutor", () => {
       expect(errorHttp(error)?.body).toBe("rate limited")
     }).pipe(
       Effect.provide(
-        responsesLayer(
-          Array.from(
-            { length: 3 },
-            () =>
-              new Response("rate limited", {
-                status: 429,
-                headers: { "retry-after-ms": "0", "x-request-id": "req_123", "x-api-key": "secret" },
-              }),
-          ),
-        ),
+        responsesLayer([
+          new Response("rate limited", {
+            status: 429,
+            headers: { "retry-after-ms": "0", "x-request-id": "req_123", "x-api-key": "secret" },
+          }),
+        ]),
       ),
     ),
   )
@@ -189,24 +178,20 @@ describe("RequestExecutor", () => {
       })
     }).pipe(
       Effect.provide(
-        responsesLayer(
-          Array.from(
-            { length: 3 },
-            () =>
-              new Response("rate limited", {
-                status: 429,
-                headers: {
-                  "retry-after-ms": "0",
-                  "x-ratelimit-limit-requests": "500",
-                  "x-ratelimit-limit-tokens": "30000",
-                  "x-ratelimit-remaining-requests": "499",
-                  "x-ratelimit-remaining-tokens": "29900",
-                  "x-ratelimit-reset-requests": "1s",
-                  "x-ratelimit-reset-tokens": "10s",
-                },
-              }),
-          ),
-        ),
+        responsesLayer([
+          new Response("rate limited", {
+            status: 429,
+            headers: {
+              "retry-after-ms": "0",
+              "x-ratelimit-limit-requests": "500",
+              "x-ratelimit-limit-tokens": "30000",
+              "x-ratelimit-remaining-requests": "499",
+              "x-ratelimit-remaining-tokens": "29900",
+              "x-ratelimit-reset-requests": "1s",
+              "x-ratelimit-reset-tokens": "10s",
+            },
+          }),
+        ]),
       ),
     ),
   )
@@ -226,46 +211,46 @@ describe("RequestExecutor", () => {
       })
     }).pipe(
       Effect.provide(
-        responsesLayer(
-          Array.from(
-            { length: 3 },
-            () =>
-              new Response("overloaded", {
-                status: 529,
-                headers: {
-                  "retry-after-ms": "0",
-                  "anthropic-ratelimit-requests-limit": "100",
-                  "anthropic-ratelimit-requests-remaining": "12",
-                  "anthropic-ratelimit-requests-reset": "2026-05-06T12:00:00Z",
-                  "anthropic-ratelimit-input-tokens-limit": "10000",
-                  "anthropic-ratelimit-input-tokens-remaining": "9000",
-                  "anthropic-ratelimit-input-tokens-reset": "2026-05-06T12:00:10Z",
-                },
-              }),
-          ),
-        ),
-      ),
-    ),
-  )
-
-  it.effect("retries retryable status responses before returning the stream", () =>
-    Effect.gen(function* () {
-      const executor = yield* RequestExecutor.Service
-      const response = yield* executor.execute(request)
-
-      expect(response.status).toBe(200)
-      expect(yield* response.text).toBe("ok")
-    }).pipe(
-      Effect.provide(
         responsesLayer([
-          new Response("busy", { status: 503, headers: { "retry-after-ms": "0" } }),
-          new Response("ok", { status: 200 }),
+          new Response("overloaded", {
+            status: 529,
+            headers: {
+              "retry-after-ms": "0",
+              "anthropic-ratelimit-requests-limit": "100",
+              "anthropic-ratelimit-requests-remaining": "12",
+              "anthropic-ratelimit-requests-reset": "2026-05-06T12:00:00Z",
+              "anthropic-ratelimit-input-tokens-limit": "10000",
+              "anthropic-ratelimit-input-tokens-remaining": "9000",
+              "anthropic-ratelimit-input-tokens-reset": "2026-05-06T12:00:10Z",
+            },
+          }),
         ]),
       ),
     ),
   )
 
-  it.effect("marks 504 and 529 status responses retryable", () =>
+  it.effect("returns provider status failures without retrying", () =>
+    Effect.gen(function* () {
+      const attempts = yield* Ref.make(0)
+      const error = yield* Effect.gen(function* () {
+        const executor = yield* RequestExecutor.Service
+        return yield* executor.execute(request).pipe(Effect.flip)
+      }).pipe(
+        Effect.provide(
+          countedResponsesLayer(attempts, [
+            new Response("busy", { status: 503, headers: { "retry-after-ms": "0" } }),
+            new Response("ok", { status: 200 }),
+          ]),
+        ),
+      )
+
+      expectLLMError(error)
+      expect(error.reason).toMatchObject({ _tag: "ProviderInternal", status: 503 })
+      expect(yield* Ref.get(attempts)).toBe(1)
+    }),
+  )
+
+  it.effect("marks 504 and 529 status responses as provider-internal", () =>
     Effect.gen(function* () {
       const failWith = (status: number) =>
         Effect.gen(function* () {
@@ -274,19 +259,14 @@ describe("RequestExecutor", () => {
 
           expectLLMError(error)
           expect(error.reason).toMatchObject({ _tag: "ProviderInternal", status })
-          expect(error.retryable).toBe(true)
         }).pipe(
           Effect.provide(
-            responsesLayer(
-              Array.from(
-                { length: 3 },
-                () =>
-                  new Response("retry", {
-                    status,
-                    headers: { "retry-after-ms": "0" },
-                  }),
-              ),
-            ),
+            responsesLayer([
+              new Response("provider failure", {
+                status,
+                headers: { "retry-after-ms": "0" },
+              }),
+            ]),
           ),
         )
 
@@ -295,14 +275,13 @@ describe("RequestExecutor", () => {
     }),
   )
 
-  it.effect("does not retry non-retryable status responses and truncates large bodies", () =>
+  it.effect("truncates large authentication error bodies", () =>
     Effect.gen(function* () {
       const executor = yield* RequestExecutor.Service
       const error = yield* executor.execute(request).pipe(Effect.flip)
 
       expectLLMError(error)
       expect(error.reason).toMatchObject({ _tag: "Authentication" })
-      expect(error.retryable).toBe(false)
       expect(errorHttp(error)?.bodyTruncated).toBe(true)
       expect(errorHttp(error)?.body).toHaveLength(16_384)
     }).pipe(
@@ -355,77 +334,7 @@ describe("RequestExecutor", () => {
     ),
   )
 
-  it.effect("honors Retry-After delta seconds before retrying", () =>
-    Effect.gen(function* () {
-      const attempts = yield* Ref.make(0)
-      return yield* Effect.gen(function* () {
-        const executor = yield* RequestExecutor.Service
-        const fiber = yield* executor.execute(request).pipe(Effect.forkChild)
-
-        yield* Effect.yieldNow
-        expect(yield* Ref.get(attempts)).toBe(1)
-
-        yield* TestClock.adjust(1_999)
-        yield* Effect.yieldNow
-        expect(yield* Ref.get(attempts)).toBe(1)
-
-        yield* TestClock.adjust(1)
-        const response = yield* Fiber.join(fiber)
-
-        expect(response.status).toBe(200)
-        expect(yield* Ref.get(attempts)).toBe(2)
-      }).pipe(
-        Effect.provide(
-          countedResponsesLayer(attempts, [
-            new Response("busy", { status: 503, headers: { "retry-after": "2" } }),
-            new Response("ok", { status: 200 }),
-          ]),
-        ),
-      )
-    }),
-  )
-
-  it.effect("uses exponential jittered delay when retry-after is absent", () =>
-    Effect.gen(function* () {
-      const attempts = yield* Ref.make(0)
-      return yield* Effect.gen(function* () {
-        const executor = yield* RequestExecutor.Service
-        const fiber = yield* executor.execute(request).pipe(Effect.flip, Effect.forkChild)
-
-        yield* Effect.yieldNow
-        expect(yield* Ref.get(attempts)).toBe(1)
-
-        yield* TestClock.adjust(499)
-        yield* Effect.yieldNow
-        expect(yield* Ref.get(attempts)).toBe(1)
-
-        yield* TestClock.adjust(1)
-        yield* Effect.yieldNow
-        expect(yield* Ref.get(attempts)).toBe(2)
-
-        yield* TestClock.adjust(999)
-        yield* Effect.yieldNow
-        expect(yield* Ref.get(attempts)).toBe(2)
-
-        yield* TestClock.adjust(1)
-        const error = yield* Fiber.join(fiber)
-
-        expectLLMError(error)
-        expect(error.reason).toMatchObject({ _tag: "ProviderInternal" })
-        expect(yield* Ref.get(attempts)).toBe(3)
-      }).pipe(
-        Effect.provide(
-          countedResponsesLayer(attempts, [
-            new Response("busy", { status: 503 }),
-            new Response("still busy", { status: 503 }),
-            new Response("done retrying", { status: 503 }),
-          ]),
-        ),
-      )
-    }).pipe(Effect.provideService(Random.Random, randomMidpoint)),
-  )
-
-  it.effect("does not retry after a successful response reaches stream parsing", () =>
+  it.effect("does not re-execute after a successful response reaches stream parsing", () =>
     Effect.gen(function* () {
       const attempts = yield* Ref.make(0)
       const model = OpenAIChat.route

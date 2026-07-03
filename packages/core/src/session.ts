@@ -3,7 +3,7 @@ export * from "./session/schema"
 
 import { DateTime, Effect, Layer, Schema, Context, Stream, Scope } from "effect"
 import { ListAnchor } from "@opencode-ai/schema/session"
-import { and, asc, desc, eq, gt, like, lt, or, type SQL } from "drizzle-orm"
+import { and, asc, desc, eq, gt, isNull, like, lt, or, type SQL } from "drizzle-orm"
 import { ProjectV2 } from "./project"
 import { WorkspaceV2 } from "./workspace"
 import { ModelV2 } from "./model"
@@ -37,9 +37,10 @@ import { SessionCompaction } from "./session/compaction"
 import { SessionRevert } from "./session/revert"
 import { Revert } from "@opencode-ai/schema/revert"
 import { FSUtil } from "./fs-util"
-import { SessionDurable } from "@opencode-ai/schema/durable-event-manifest"
+import type { EventLog } from "@opencode-ai/schema/event-log"
 import { SkillV2 } from "./skill"
 import { Job } from "./job"
+import { CommandV2 } from "./command"
 
 export const RevertState = Revert.State
 export type RevertState = Revert.State
@@ -60,6 +61,7 @@ const ListInputBase = {
   search: Schema.String.pipe(Schema.optional),
   limit: PositiveInt.pipe(Schema.optional),
   order: Schema.Literals(["asc", "desc"]).pipe(Schema.optional),
+  parentID: Schema.NullOr(SessionSchema.ID).pipe(Schema.optional),
   anchor: ListAnchor.pipe(Schema.optional),
 }
 
@@ -108,7 +110,7 @@ export class OperationUnavailableError extends Schema.TaggedErrorClass<Operation
   },
 ) {}
 
-export { ContextSnapshotDecodeError, MessageDecodeError } from "./session/error"
+export { MessageDecodeError } from "./session/error"
 
 export class PromptConflictError extends Schema.TaggedErrorClass<PromptConflictError>()("Session.PromptConflictError", {
   sessionID: SessionSchema.ID,
@@ -130,10 +132,16 @@ export type Error =
   | PromptConflictError
   | BusyError
   | SkillNotFoundError
+  | CommandV2.NotFoundError
+  | CommandV2.EvaluationError
   | MessageNotFoundError
 
 export interface Interface {
-  readonly list: (input?: ListInput) => Effect.Effect<SessionSchema.Info[]>
+  readonly list: (input?: ListInput) => Effect.Effect<{
+    readonly data: SessionSchema.Info[]
+    /** Per-session durable log watermark, read in the same transaction as the snapshot. Sessions without events are absent. */
+    readonly watermarks: ReadonlyMap<string, EventV2.Seq>
+  }>
   readonly create: (input: CreateInput) => Effect.Effect<SessionSchema.Info, NotFoundError>
   readonly fork: (input: ForkInput) => Effect.Effect<SessionSchema.Info, NotFoundError | MessageNotFoundError>
   readonly get: (sessionID: SessionSchema.ID) => Effect.Effect<SessionSchema.Info, NotFoundError>
@@ -153,15 +161,21 @@ export interface Interface {
   readonly context: (
     sessionID: SessionSchema.ID,
   ) => Effect.Effect<SessionMessage.Message[], NotFoundError | MessageDecodeError>
-  readonly events: (input: {
+  /**
+   * Durable, ordered, gap-free session log read. Replays public durable
+   * session events after the exclusive `after` cursor, emits a `Synced`
+   * marker at the captured replay watermark, then continues live when `follow`
+   * is set.
+   * The marker's seq may exceed the last emitted event because non-public
+   * durable events share the aggregate's sequence space.
+   */
+  readonly log: (input: {
     sessionID: SessionSchema.ID
     after?: number
-  }) => Stream.Stream<SessionEvent.DurableEvent, NotFoundError>
-  readonly history: (input: {
-    sessionID: SessionSchema.ID
-    after?: number
-    limit: number
-  }) => Effect.Effect<{ events: ReadonlyArray<SessionEvent.DurableEvent>; hasMore: boolean }, NotFoundError>
+    follow?: boolean
+  }) => Stream.Stream<SessionEvent.DurableEvent | EventLog.Synced, NotFoundError>
+  /** Latest durable log seq per session. Sessions without events are absent. */
+  readonly watermarks: (sessionIDs: ReadonlyArray<SessionSchema.ID>) => Effect.Effect<ReadonlyMap<string, EventV2.Seq>>
   readonly switchAgent: (input: { sessionID: SessionSchema.ID; agent: string }) => Effect.Effect<void, NotFoundError>
   readonly switchModel: (input: {
     sessionID: SessionSchema.ID
@@ -175,6 +189,21 @@ export interface Interface {
     delivery?: SessionInput.Delivery
     resume?: boolean
   }) => Effect.Effect<SessionInput.Admitted, NotFoundError | PromptConflictError>
+  readonly command: (input: {
+    id?: SessionMessage.ID
+    sessionID: SessionSchema.ID
+    command: string
+    arguments?: string
+    agent?: string
+    model?: ModelV2.Ref
+    files?: PromptInput.Prompt["files"]
+    agents?: PromptInput.Prompt["agents"]
+    delivery?: SessionInput.Delivery
+    resume?: boolean
+  }) => Effect.Effect<
+    SessionInput.Admitted,
+    NotFoundError | PromptConflictError | CommandV2.NotFoundError | CommandV2.EvaluationError
+  >
   readonly shell: (input: {
     id?: EventV2.ID
     sessionID: SessionSchema.ID
@@ -331,12 +360,16 @@ const layer = Layer.effect(
         const direction = input.anchor?.direction ?? "next"
         const requestedOrder = input.order ?? "desc"
         const order = direction === "previous" ? (requestedOrder === "asc" ? "desc" : "asc") : requestedOrder
-        const sortColumn = SessionTable.time_created
+        const sortColumn = SessionTable.time_updated
         const conditions: SQL[] = []
         if ("directory" in input) conditions.push(eq(SessionTable.directory, input.directory))
         if (input.workspaceID) conditions.push(eq(SessionTable.workspace_id, input.workspaceID))
         if ("project" in input) conditions.push(eq(SessionTable.project_id, input.project))
         if (input.search) conditions.push(like(SessionTable.title, `%${input.search}%`))
+        if (input.parentID !== undefined)
+          conditions.push(
+            input.parentID === null ? isNull(SessionTable.parent_id) : eq(SessionTable.parent_id, input.parentID),
+          )
         if (input.anchor) {
           conditions.push(
             order === "asc"
@@ -358,10 +391,21 @@ const layer = Layer.effect(
             order === "asc" ? asc(sortColumn) : desc(sortColumn),
             order === "asc" ? asc(SessionTable.id) : desc(SessionTable.id),
           )
-        const rows = yield* (input.limit === undefined ? query.all() : query.limit(input.limit).all()).pipe(
-          Effect.orDie,
-        )
-        return (direction === "previous" ? rows.toReversed() : rows).map((row) => fromRow(row))
+        // Watermarks must pair with the snapshot exactly, so both reads share a transaction:
+        // a higher watermark would let an attached tail skip events missing from the snapshot.
+        const snapshot = yield* db
+          .transaction(() =>
+            Effect.gen(function* () {
+              const rows = yield* (input.limit === undefined ? query.all() : query.limit(input.limit).all()).pipe(
+                Effect.orDie,
+              )
+              const watermarks = yield* events.sequences(rows.map((row) => row.id))
+              return { rows, watermarks }
+            }),
+          )
+          .pipe(Effect.orDie)
+        const rows = direction === "previous" ? snapshot.rows.toReversed() : snapshot.rows
+        return { data: rows.map((row) => fromRow(row)), watermarks: snapshot.watermarks }
       }),
       messages: Effect.fn("V2Session.messages")(function* (input) {
         yield* result.get(input.sessionID)
@@ -405,19 +449,19 @@ const layer = Layer.effect(
         yield* result.get(sessionID)
         return yield* store.context(sessionID)
       }),
-      events: (input) =>
+      log: (input) =>
         Stream.unwrap(
           result
             .get(input.sessionID)
-            .pipe(Effect.as(events.durable({ aggregateID: input.sessionID, after: input.after }))),
-        ).pipe(Stream.filter((event): event is SessionEvent.DurableEvent => isDurableSessionEvent(event))),
-      history: Effect.fn("V2Session.history")(function* (input) {
-        yield* result.get(input.sessionID)
-        return yield* EventV2.readAggregate(db, {
-          ...input,
-          aggregateID: input.sessionID,
-          manifest: SessionDurable,
-        })
+            .pipe(Effect.as(events.log({ aggregateID: input.sessionID, after: input.after, follow: input.follow }))),
+        ).pipe(
+          Stream.filter(
+            (item): item is SessionEvent.DurableEvent | EventLog.Synced =>
+              EventV2.isSynced(item) || isDurableSessionEvent(item),
+          ),
+        ),
+      watermarks: Effect.fn("V2Session.watermarks")(function* (sessionIDs) {
+        return yield* events.sequences(sessionIDs)
       }),
       prompt: Effect.fn("V2Session.prompt")((input) =>
         Effect.uninterruptible(
@@ -450,6 +494,37 @@ const layer = Layer.effect(
           }),
         ),
       ),
+      command: Effect.fn("V2Session.command")(function* (input) {
+        const session = yield* result.get(input.sessionID)
+        const commands = yield* CommandV2.Service.pipe(Effect.provide(locations.get(session.location)))
+        const command = yield* commands.get(input.command)
+        if (!command)
+          return yield* new CommandV2.NotFoundError({
+            command: input.command,
+            message: `Command not found: ${input.command}`,
+          })
+        const evaluated = yield* commands.evaluate({ name: input.command, arguments: input.arguments })
+
+        // TODO(v2 commands): decide whether command-level subtask/background execution belongs in v2 commands.
+        const agent = command.agent ?? input.agent
+        const commandAgent = yield* Effect.gen(function* () {
+          if (!command.agent) return undefined
+          const agents = yield* AgentV2.Service.pipe(Effect.provide(locations.get(session.location)))
+          return yield* agents.get(AgentV2.ID.make(command.agent))
+        })
+        const model = command.model ?? commandAgent?.model ?? input.model
+        if (agent !== undefined && session.agent !== AgentV2.ID.make(agent))
+          yield* result.switchAgent({ sessionID: input.sessionID, agent })
+        if (model !== undefined) yield* result.switchModel({ sessionID: input.sessionID, model })
+
+        return yield* result.prompt({
+          id: input.id,
+          sessionID: input.sessionID,
+          prompt: { text: evaluated.text, files: input.files, agents: input.agents },
+          delivery: input.delivery,
+          resume: input.resume,
+        })
+      }),
       shell: Effect.fn("V2Session.shell")(function* () {
         return yield* new OperationUnavailableError({ operation: "shell" })
       }),
@@ -466,7 +541,9 @@ const layer = Layer.effect(
           text: skill.content,
         })
         if (input.resume !== false)
-          yield* execution.resume(input.sessionID).pipe(Effect.ignore, Effect.forkIn(scope, { startImmediately: true }), Effect.asVoid)
+          yield* execution
+            .resume(input.sessionID)
+            .pipe(Effect.ignore, Effect.forkIn(scope, { startImmediately: true }), Effect.asVoid)
       }),
       switchAgent: Effect.fn("V2Session.switchAgent")(function* (input) {
         yield* result.get(input.sessionID)
@@ -550,7 +627,9 @@ const layer = Layer.effect(
           description: input.description,
           metadata: input.metadata,
         })
-        yield* execution.resume(input.sessionID).pipe(Effect.ignore, Effect.forkIn(scope, { startImmediately: true }), Effect.asVoid)
+        yield* execution
+          .resume(input.sessionID)
+          .pipe(Effect.ignore, Effect.forkIn(scope, { startImmediately: true }), Effect.asVoid)
       }),
       interrupt: Effect.fn("V2Session.interrupt")((sessionID) =>
         Effect.uninterruptible(execution.interrupt(sessionID)),

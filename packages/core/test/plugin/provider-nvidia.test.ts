@@ -32,7 +32,7 @@ describe("NvidiaPlugin", () => {
             package: "@ai-sdk/openai-compatible",
             url: "https://integrate.api.nvidia.com/v1",
           }
-          provider.request = { headers: { Existing: "value" }, body: {} }
+          provider.request = { settings: {}, headers: { Existing: "value" }, body: {} }
         })
         catalog.provider.update(ProviderV2.ID.openrouter, () => {})
       })
@@ -80,6 +80,7 @@ describe("NvidiaPlugin", () => {
             url: "https://integrate.api.nvidia.com/v1",
           }
           provider.request = {
+            settings: {},
             headers: { "X-BILLING-INVOKE-ORIGIN": "CustomOrigin" },
             body: { baseURL: "https://integrate.api.nvidia.com/v1" },
           }

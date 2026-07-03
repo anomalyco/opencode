@@ -1,17 +1,15 @@
 export * as GlobTool from "./glob"
 
 import { ToolFailure } from "@opencode-ai/llm"
-import { Effect, Layer, Schema } from "effect"
+import type { PluginContext } from "@opencode-ai/plugin/v2/effect"
+import { Effect, Schema } from "effect"
 import path from "path"
-import { makeLocationNode } from "../effect/app-node"
 import { FileSystem } from "../filesystem"
 import { Location } from "../location"
 import { Ripgrep } from "../ripgrep"
 import { RelativePath } from "../schema"
 import { PermissionV2 } from "../permission"
-import { ToolRegistry } from "./registry"
 import { Tool } from "./tool"
-import { Tools } from "./tools"
 
 export const name = "glob"
 
@@ -35,14 +33,14 @@ export const toModelOutput = (output: ModelOutput) => {
 }
 
 /** Glob leaf that defaults its filesystem root to the active Location. */
-const layer = Layer.effectDiscard(
-  Effect.gen(function* () {
-    const tools = yield* Tools.Service
+export const Plugin = {
+  id: "core-glob-tool",
+  effect: Effect.fn("GlobTool.Plugin")(function* (ctx: PluginContext) {
     const ripgrep = yield* Ripgrep.Service
     const location = yield* Location.Service
     const permission = yield* PermissionV2.Service
 
-    yield* tools
+    yield* ctx.tool
       .register({
         [name]: Tool.make({
           description:
@@ -96,10 +94,4 @@ const layer = Layer.effectDiscard(
       })
       .pipe(Effect.orDie)
   }),
-)
-
-export const node = makeLocationNode({
-  name: "tool/glob",
-  layer,
-  deps: [ToolRegistry.node, Ripgrep.node, Location.node, PermissionV2.node],
-})
+}

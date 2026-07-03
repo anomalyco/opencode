@@ -8,7 +8,7 @@ import { ClipboardProvider, useClipboard } from "./context/clipboard"
 import { ExitProvider, useExit } from "./context/exit"
 import { EpilogueProvider } from "./context/epilogue"
 import * as Selection from "./util/selection"
-import { createCliRenderer, MouseButton } from "@opentui/core"
+import { createCliRenderer, MouseButton, type CliRendererConfig } from "@opentui/core"
 import { RouteProvider, useRoute } from "./context/route"
 import {
   Switch,
@@ -77,7 +77,7 @@ import {
   useOpencodeKeymap,
 } from "./keymap"
 
-import type { OpenCodeClient } from "@opencode-ai/client"
+import type { OpenCodeClient } from "@opencode-ai/client/promise"
 import type { OpencodeClient } from "@opencode-ai/sdk/v2"
 import { DialogVariant } from "./component/dialog-variant"
 import { createTuiAttention } from "./attention"
@@ -138,7 +138,7 @@ const appBindingCommands = [
 export type TuiInput = {
   client: OpencodeClient
   api: OpenCodeClient
-  reload?: () => Promise<{ client: OpencodeClient; api: OpenCodeClient }>
+  discover?: () => Promise<{ client: OpencodeClient; api: OpenCodeClient }>
   args: Args
   config: TuiConfig.Resolved
   onSnapshot?: () => Promise<string[]>
@@ -184,8 +184,8 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
     Effect.gen(function* () {
       const renderer = yield* Effect.acquireRelease(
         Effect.tryPromise({
-          try: () =>
-            createCliRenderer({
+          try: async () => {
+            const options = {
               externalOutputMode: "passthrough",
               targetFps: 60,
               gatherStats: false,
@@ -197,7 +197,15 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
               consoleOptions: {
                 keyBindings: [{ name: "y", ctrl: true, action: "copy-selection" }],
               },
-            }),
+            } satisfies CliRendererConfig
+
+            if (process.env.OPENCODE_SIMULATION === "1" || process.env.OPENCODE_SIMULATION === "true") {
+              const { Simulation } = await import("./simulation/simulation")
+              return Simulation.createSimulation(options)
+            }
+
+            return createCliRenderer(options)
+          },
           catch: (error) => (error instanceof Error ? error : new Error(String(error))),
         }),
         (renderer) =>
@@ -293,7 +301,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                   >
                                     <TuiConfigProvider config={input.config}>
                                       <PluginRuntimeProvider value={pluginRuntime}>
-                                        <SDKProvider client={input.client} api={input.api} reload={input.reload}>
+                                        <SDKProvider client={input.client} api={input.api} discover={input.discover}>
                                           <PermissionProvider>
                                             <ProjectProvider>
                                               <SyncProvider>
@@ -366,7 +374,6 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
   const keymap = useOpencodeKeymap()
   const event = useEvent()
   const sdk = useSDK()
-  const reload = sdk.reload
   const toast = useToast()
   const themeState = useTheme()
   const { theme, mode, setMode, locked, lock, unlock } = themeState
@@ -523,23 +530,33 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
 
   let continued = false
   createEffect(() => {
-    // When using -c, session list is loaded in blocking phase, so we can navigate at "partial"
     if (continued || sync.status === "loading" || !args.continue) return
-    const match = data.session.list().find((session) => !session.parentID)?.id
-    if (match) {
-      continued = true
-      if (args.fork) {
+    continued = true
+    const location = data.location.default()
+    void sdk.api.session
+      .list({
+        limit: 1,
+        order: "desc",
+        parentID: null,
+        directory: location.directory,
+        workspace: location.workspaceID,
+      })
+      .then((response) => {
+        const match = response.data[0]?.id
+        if (!match) return
+        if (!args.fork) {
+          route.navigate({ type: "session", sessionID: match })
+          return
+        }
         void sdk.client.session.fork({ sessionID: match }).then((result) => {
           if (result.data?.id) {
             route.navigate({ type: "session", sessionID: result.data.id })
-          } else {
-            toast.show({ message: "Failed to fork session", variant: "error" })
+            return
           }
+          toast.show({ message: "Failed to fork session", variant: "error" })
         })
-      } else {
-        route.navigate({ type: "session", sessionID: match })
-      }
-    }
+      })
+      .catch(toast.error)
   })
 
   // Handle --session with --fork: wait for sync to be fully complete before forking
@@ -783,33 +800,6 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         },
         category: "System",
       },
-      ...(reload
-        ? [
-            {
-              name: "server.reload",
-              title: "Reload server",
-              slashName: "reload",
-              slashAliases: ["restart"],
-              run: async () => {
-                dialog.clear()
-                toast.show({
-                  variant: "info",
-                  message: "Reloading server...",
-                  duration: 30000,
-                })
-                await reload()
-                  .then(() =>
-                    toast.show({
-                      variant: "success",
-                      message: "Server reloaded",
-                    }),
-                  )
-                  .catch(toast.error)
-              },
-              category: "System",
-            },
-          ]
-        : []),
       {
         name: "theme.switch",
         title: "Switch theme",

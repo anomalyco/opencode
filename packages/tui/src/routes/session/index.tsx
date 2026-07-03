@@ -1229,10 +1229,11 @@ function AssistantFooter(props: { message: SessionMessageAssistant }) {
 }
 
 function SessionSwitchMessageV2(props: { message: SessionMessage }) {
+  const ctx = use()
   const { theme } = useTheme()
   const text = () => {
     if (props.message.type === "agent-switched") return `Switched agent to ${props.message.agent}`
-    if (props.message.type === "model-switched") return switchLabel(props.message.model)
+    if (props.message.type === "model-switched") return switchLabel(props.message.model, ctx.models())
     return ""
   }
   return <text fg={theme.textMuted}>{text()}</text>

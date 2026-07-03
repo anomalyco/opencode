@@ -1,6 +1,6 @@
 export * as SessionInput from "./input"
 
-import { and, asc, eq, isNull, lte } from "drizzle-orm"
+import { and, asc, eq, isNull } from "drizzle-orm"
 import { DateTime, Effect, Schema } from "effect"
 import { Admitted, Delivery } from "@opencode-ai/schema/session-input"
 import type { Database } from "../database/database"
@@ -145,26 +145,11 @@ export const projectPrompted = Effect.fn("SessionInput.projectPrompted")(functio
     return
   }
 
+  // Every Prompted event is published from an admitted inbox row, so a missing or
+  // divergent row on replay is an invariant violation.
   const stored = yield* find(db, input.id)
-  if (stored) {
-    if (!matchesProjection(stored, input) || stored.promotedSeq !== input.promotedSeq)
-      return yield* Effect.die(new LifecycleConflict({ id: input.id }))
-    return
-  }
-
-  yield* db
-    .insert(SessionInputTable)
-    .values({
-      id: input.id,
-      session_id: input.sessionID,
-      prompt: encodePrompt(input.prompt),
-      delivery: input.delivery,
-      admitted_seq: input.promotedSeq,
-      promoted_seq: input.promotedSeq,
-      time_created: DateTime.toEpochMillis(input.timeCreated),
-    })
-    .run()
-    .pipe(Effect.orDie)
+  if (!stored || !matchesProjection(stored, input) || stored.promotedSeq !== input.promotedSeq)
+    return yield* Effect.die(new LifecycleConflict({ id: input.id }))
 })
 
 export const hasPending = Effect.fn("SessionInput.hasPending")(function* (
@@ -195,9 +180,8 @@ export const equivalent = (
     readonly prompt: Prompt
     readonly delivery: Delivery
   },
-) => input.delivery === expected.delivery && matchesPrompt(input, expected)
-
-const matchesPrompt = (input: Admitted, expected: { readonly sessionID: SessionSchema.ID; readonly prompt: Prompt }) =>
+) =>
+  input.delivery === expected.delivery &&
   input.sessionID === expected.sessionID &&
   JSON.stringify(encodePrompt(input.prompt)) === JSON.stringify(encodePrompt(expected.prompt))
 
@@ -246,7 +230,6 @@ export const promoteSteers = Effect.fn("SessionInput.promoteSteers")(function* (
   db: DatabaseService,
   events: EventV2.Interface,
   sessionID: SessionSchema.ID,
-  cutoff: number,
 ) {
   const rows = yield* db
     .select()
@@ -256,7 +239,6 @@ export const promoteSteers = Effect.fn("SessionInput.promoteSteers")(function* (
         eq(SessionInputTable.session_id, sessionID),
         isNull(SessionInputTable.promoted_seq),
         eq(SessionInputTable.delivery, "steer"),
-        lte(SessionInputTable.admitted_seq, cutoff),
       ),
     )
     .orderBy(asc(SessionInputTable.admitted_seq))

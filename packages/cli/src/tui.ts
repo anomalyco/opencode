@@ -4,13 +4,12 @@ import { Effect } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Global } from "@opencode-ai/core/global"
 import { loadBuiltinPlugins } from "@opencode-ai/tui/builtins"
-import { OpenCode } from "@opencode-ai/client"
+import { OpenCode } from "@opencode-ai/client/promise"
+import type { Transport } from "@opencode-ai/client/effect"
 import { createOpencodeClient } from "@opencode-ai/sdk/v2/client"
 import type { Args } from "@opencode-ai/tui/context/args"
 
-type Transport = { url: string; headers: RequestInit["headers"] }
-
-export function runTui(transport: Transport, args: Args, reload?: () => Promise<Transport>) {
+export function runTui(transport: Transport, args: Args, discover?: () => Promise<Transport>) {
   const config = TuiConfig.resolve({}, { terminalSuspend: false })
   let disposeSlots: (() => void) | undefined
   return Effect.gen(function* () {
@@ -25,9 +24,9 @@ export function runTui(transport: Transport, args: Args, reload?: () => Promise<
     return yield* run({
       client: createOpencodeClient({ ...options, directory }),
       api,
-      reload: reload
+      discover: discover
         ? async () => {
-            const next = await reload()
+            const next = await discover()
             return {
               client: createOpencodeClient({ baseUrl: next.url, headers: next.headers, directory }),
               api: OpenCode.make({ baseUrl: next.url, headers: next.headers }),

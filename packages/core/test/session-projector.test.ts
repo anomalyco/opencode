@@ -19,7 +19,12 @@ import { SessionMessageUpdater } from "@opencode-ai/core/session/message-updater
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionInput } from "@opencode-ai/core/session/input"
-import { SessionInputTable, SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql"
+import {
+  SessionContextCheckpointTable,
+  SessionInputTable,
+  SessionMessageTable,
+  SessionTable,
+} from "@opencode-ai/core/session/sql"
 import { testEffect } from "./lib/effect"
 import { Snapshot } from "@opencode-ai/core/snapshot"
 
@@ -67,6 +72,10 @@ describe("SessionProjector", () => {
         .insert(SessionMessageTable)
         .values([assistantRow(boundary, 1), assistantRow(SessionMessage.ID.make("msg_later"), 2)])
         .run()
+      yield* db
+        .insert(SessionContextCheckpointTable)
+        .values({ session_id: sessionID, baseline: "baseline", snapshot: {}, baseline_seq: 0 })
+        .run()
       const events = yield* EventV2.Service
       yield* events.publish(SessionEvent.RevertEvent.Staged, {
         sessionID,
@@ -93,6 +102,8 @@ describe("SessionProjector", () => {
       expect(
         (yield* db.select({ id: SessionMessageTable.id }).from(SessionMessageTable).all()).map((row) => row.id),
       ).toEqual([boundary])
+      // A committed revert resets the context checkpoint so the next turn re-initializes.
+      expect(yield* db.select().from(SessionContextCheckpointTable).get().pipe(Effect.orDie)).toBeUndefined()
     }),
   )
 
@@ -118,6 +129,13 @@ describe("SessionProjector", () => {
         .pipe(Effect.orDie)
       const events = yield* EventV2.Service
 
+      yield* events.publish(SessionEvent.PromptAdmitted, {
+        sessionID,
+        messageID: SessionMessage.ID.make("msg_first"),
+        timestamp: created,
+        prompt: Prompt.make({ text: "first" }),
+        delivery: "steer",
+      })
       yield* events.publish(
         SessionEvent.Prompted,
         {
@@ -129,6 +147,13 @@ describe("SessionProjector", () => {
         },
         { id: EventV2.ID.make("evt_z") },
       )
+      yield* events.publish(SessionEvent.PromptAdmitted, {
+        sessionID,
+        messageID: SessionMessage.ID.make("msg_second"),
+        timestamp: created,
+        prompt: Prompt.make({ text: "second" }),
+        delivery: "steer",
+      })
       yield* events.publish(
         SessionEvent.Prompted,
         {

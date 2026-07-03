@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 import { describe, expect, test } from "bun:test"
-import type { OpenCodeClient } from "@opencode-ai/client"
+import type { OpenCodeClient } from "@opencode-ai/client/promise"
 import { testRender } from "@opentui/solid"
 import type { OpencodeClient, V2Event } from "@opencode-ai/sdk/v2"
 import { onMount } from "solid-js"
@@ -47,7 +47,7 @@ function update(version: string): V2Event {
   }
 }
 
-async function mount(reload?: () => Promise<{ client: OpencodeClient; api: OpenCodeClient }>) {
+async function mount(discover?: () => Promise<{ client: OpencodeClient; api: OpenCodeClient }>) {
   const events = createEventStream()
   const calls = createFetch(undefined, events)
   const seen: V2Event[] = []
@@ -61,7 +61,7 @@ async function mount(reload?: () => Promise<{ client: OpencodeClient; api: OpenC
 
   const app = await testRender(() => (
     <TestTuiContexts>
-      <SDKProvider client={createClient(calls.fetch)} api={createApi(calls.fetch)} reload={reload}>
+      <SDKProvider client={createClient(calls.fetch)} api={createApi(calls.fetch)} discover={discover}>
         <ProjectProvider>
           <Probe
             onReady={async (ctx) => {
@@ -79,7 +79,7 @@ async function mount(reload?: () => Promise<{ client: OpencodeClient; api: OpenC
   ))
 
   await ready
-  return { app, emit: events.emit, project, sdk, seen, workspaces }
+  return { app, events, emit: events.emit, project, sdk, seen, workspaces }
 }
 
 function Probe(props: {
@@ -148,24 +148,25 @@ describe("useEvent", () => {
     }
   })
 
-  test("reloads the host and reconnects the event stream", async () => {
+  test("rediscovers the server after the event stream drops", async () => {
     let calls = 0
-    const events = createEventStream()
-    const replacementCalls = createFetch(undefined, events)
+    const replacementEvents = createEventStream()
+    const replacementCalls = createFetch(undefined, replacementEvents)
     const replacement = { client: createClient(replacementCalls.fetch), api: createApi(replacementCalls.fetch) }
-    const { app, sdk, seen } = await mount(async () => {
+    const { app, events, sdk, seen } = await mount(async () => {
       calls += 1
       return replacement
     })
 
     try {
       await wait(() => sdk.connection.status() === "connected")
-      await sdk.reload?.()
-      await wait(() => sdk.connection.status() === "connected")
-      events.emit(event(vcs("reloaded"), { directory: "/tmp/reloaded" }))
-      await wait(() => seen.some((item) => item.type === "vcs.branch.updated" && item.data.branch === "reloaded"))
+      // Discovery only runs when the stream is down, never while connected.
+      expect(calls).toBe(0)
+      events.disconnect()
+      await wait(() => sdk.connection.status() === "connected" && calls > 0)
+      replacementEvents.emit(event(vcs("rediscovered"), { directory: "/tmp/rediscovered" }))
+      await wait(() => seen.some((item) => item.type === "vcs.branch.updated" && item.data.branch === "rediscovered"))
 
-      expect(calls).toBe(1)
       expect(sdk.client).toBe(replacement.client)
       expect(sdk.api).toBe(replacement.api)
     } finally {
@@ -173,27 +174,24 @@ describe("useEvent", () => {
     }
   })
 
-  test("keeps the current event stream alive while the host reload is pending", async () => {
-    let complete!: (client: { client: OpencodeClient; api: OpenCodeClient }) => void
-    const pending = new Promise<{ client: OpencodeClient; api: OpenCodeClient }>((resolve) => {
-      complete = resolve
+  test("keeps the current client when discovery fails", async () => {
+    let calls = 0
+    const { app, events, sdk, seen } = await mount(async () => {
+      calls += 1
+      throw new Error("no server")
     })
-    const replacementEvents = createEventStream()
-    const replacementCalls = createFetch(undefined, replacementEvents)
-    const replacement = { client: createClient(replacementCalls.fetch), api: createApi(replacementCalls.fetch) }
-    const { app, emit, sdk, seen } = await mount(() => pending)
 
     try {
       await wait(() => sdk.connection.status() === "connected")
-      const reload = sdk.reload?.()
-      emit(event(vcs("during-reload"), { directory: "/tmp/reload" }))
-      await wait(() => seen.some((item) => item.type === "vcs.branch.updated" && item.data.branch === "during-reload"))
+      const original = sdk.client
+      events.disconnect()
+      // Discovery rejects; the loop retries against the last known transport,
+      // which succeeds once the fixture accepts the reconnect.
+      await wait(() => calls > 0 && sdk.connection.status() === "connected")
+      events.emit(event(vcs("recovered"), { directory: "/tmp/recovered" }))
+      await wait(() => seen.some((item) => item.type === "vcs.branch.updated" && item.data.branch === "recovered"))
 
-      expect(sdk.connection.status()).toBe("connected")
-      complete(replacement)
-      await reload
-      expect(sdk.client).toBe(replacement.client)
-      expect(sdk.api).toBe(replacement.api)
+      expect(sdk.client).toBe(original)
     } finally {
       app.renderer.destroy()
     }

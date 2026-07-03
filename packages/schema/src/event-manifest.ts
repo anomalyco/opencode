@@ -2,10 +2,12 @@ export * as EventManifest from "./event-manifest.js"
 
 import { Agent } from "./agent.js"
 import { Catalog } from "./catalog.js"
+import { Command } from "./command.js"
 import { Durable } from "./durable-event-manifest.js"
 import { Event } from "./event.js"
 import { FileSystem } from "./filesystem.js"
 import { FileSystemWatcher } from "./filesystem-watcher.js"
+import { Form } from "./form.js"
 import { InstallationEvent } from "./installation-event.js"
 import { Integration } from "./integration.js"
 import { LegacyEvent } from "./legacy-event.js"
@@ -53,17 +55,31 @@ const featureDefinitions = Event.inventory(
   ...Permission.Event.Definitions,
   ...Plugin.Event.Definitions,
   ...ProjectDirectories.Event.Definitions,
+  ...Command.Event.Definitions,
   ...Skill.Event.Definitions,
   ...FileSystemWatcher.Event.Definitions,
   ...Pty.Event.Definitions,
   ...Shell.Event.Definitions,
   ...Question.Event.Definitions,
+  ...Form.Event.Definitions,
 )
 
 export const ServerDefinitions = Event.inventory(
   ...foundationDefinitions,
   ...featureDefinitions,
   ...SessionTodo.Event.Definitions,
+  // Current events the TUI consumes from the public stream.
+  ...SessionStatusEvent.Definitions,
+  ...TuiEvent.Definitions,
+  ...InstallationEvent.Definitions,
+  ...VcsEvent.Definitions,
+  McpEvent.StatusChanged,
+  // Shared transitional: V1 contracts the current TUI still consumes during
+  // the migration (permission.asked/replied, question.asked, session.error).
+  // Remove when the TUI moves to the current permission/question surfaces.
+  ...PermissionV1.Event.Definitions,
+  ...QuestionV1.Event.Definitions,
+  SessionV1.Error,
 )
 
 export const Definitions = Event.inventory(

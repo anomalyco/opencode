@@ -4,18 +4,20 @@ import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { PermissionSaved } from "@opencode-ai/core/permission/saved"
 import { Global } from "@opencode-ai/core/global"
-import { Context, Layer, Option, Schedule } from "effect"
+import { Context, FileSystem, Layer, Option, Schedule, Schema } from "effect"
 import * as Effect from "effect/Effect"
 import { HttpRouter, HttpServer } from "effect/unstable/http"
 import { createServer } from "node:http"
 import { createRoutes } from "@opencode-ai/server/routes"
 import { ServerAuth } from "@opencode-ai/server/auth"
+import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { createOpencodeClient } from "@opencode-ai/sdk/v2/client"
 import { Commands } from "../commands"
 import { Runtime } from "../../framework/runtime"
-import { Daemon } from "../../services/daemon"
+import { ServiceConfig } from "../../services/service-config"
 import { Updater } from "../../services/updater"
-import { randomBytes } from "crypto"
+import { randomBytes, randomUUID } from "crypto"
+import path from "path"
 
 export default Runtime.handler(
   Commands.commands.serve,
@@ -23,12 +25,11 @@ export default Runtime.handler(
     if (input.service) yield* Effect.sync(() => process.chdir(Global.Path.home))
     return yield* Effect.scoped(
       Effect.gen(function* () {
-        const daemon = yield* Daemon.Service
         const standalonePassword = process.env.OPENCODE_SERVER_PASSWORD
         if (input.stdio) delete process.env.OPENCODE_SERVER_PASSWORD
-        const config = input.service ? yield* daemon.config() : {}
+        const config = input.service ? yield* ServiceConfig.read() : {}
         const password = input.service
-          ? yield* daemon.password()
+          ? yield* ServiceConfig.password()
           : standalonePassword || randomBytes(32).toString("base64url")
         if (!password) return yield* Effect.fail(new Error("Missing server password"))
         const hostname = Option.getOrUndefined(input.hostname) ?? config.hostname ?? "127.0.0.1"
@@ -44,7 +45,7 @@ export default Runtime.handler(
             headers: ServerAuth.headers({ password }),
           }).v2.health.get({}),
         )
-        if (input.service) yield* daemon.register(address)
+        if (input.service) yield* register(address)
         const url = HttpServer.formatAddress(address)
         console.log(input.stdio ? JSON.stringify({ url }) : `server listening on ${url}`)
         if (!input.service && !input.stdio && !standalonePassword) console.log(`server password ${password}`)
@@ -55,6 +56,56 @@ export default Runtime.handler(
     )
   }),
 )
+
+// Server-side half of the registration protocol. The registration embeds the
+// password so the file alone is enough for any client to discover and
+// authenticate. The file arbitrates ownership after concurrent starts; it is
+// not a startup lock: the atomic rename elects the latest writer, the watcher
+// self-evicts losers, and the finalizer id-guard keeps an exiting server from
+// deleting its successor's registration.
+const RegistrationId = Schema.Struct({ id: Schema.optional(Schema.String) })
+const decodeRegistrationId = Schema.decodeUnknownEffect(Schema.fromJsonString(RegistrationId))
+
+const register = Effect.fnUntraced(function* (address: HttpServer.Address) {
+  const fs = yield* FileSystem.FileSystem
+  const { file } = yield* ServiceConfig.options()
+  const id = randomUUID()
+  const secret = yield* ServiceConfig.password()
+  const temp = file + "." + id + ".tmp"
+  yield* fs.makeDirectory(path.dirname(file), { recursive: true })
+  yield* fs.writeFileString(
+    temp,
+    JSON.stringify({
+      id,
+      version: InstallationVersion,
+      url: HttpServer.formatAddress(address),
+      pid: process.pid,
+      password: secret,
+    }),
+    { mode: 0o600 },
+  )
+  yield* fs.rename(temp, file)
+  const currentID = fs.readFileString(file).pipe(
+    Effect.flatMap(decodeRegistrationId),
+    Effect.map((info) => info.id),
+    Effect.orElseSucceed(() => undefined),
+  )
+  yield* currentID.pipe(
+    Effect.flatMap((current) =>
+      current === id
+        ? Effect.void
+        : Effect.try({ try: () => process.kill(process.pid, "SIGTERM"), catch: (cause) => cause }).pipe(Effect.ignore),
+    ),
+    Effect.repeat(Schedule.spaced("10 seconds")),
+    Effect.forkScoped,
+  )
+  yield* Effect.addFinalizer(() =>
+    currentID.pipe(
+      Effect.flatMap((current) => (current === id ? fs.remove(file) : Effect.void)),
+      Effect.ignore,
+    ),
+  )
+})
 
 function waitForStdinClose() {
   return Effect.callback<void>((resume) => {

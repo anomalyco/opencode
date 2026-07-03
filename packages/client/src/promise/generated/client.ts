@@ -23,6 +23,8 @@ import type {
   SessionRenameOutput,
   SessionPromptInput,
   SessionPromptOutput,
+  SessionCommandInput,
+  SessionCommandOutput,
   SessionSkillInput,
   SessionSkillOutput,
   SessionSyntheticInput,
@@ -39,10 +41,14 @@ import type {
   SessionRevertCommitOutput,
   SessionContextInput,
   SessionContextOutput,
-  SessionHistoryInput,
-  SessionHistoryOutput,
-  SessionEventsInput,
-  SessionEventsOutput,
+  SessionListContextEntriesInput,
+  SessionListContextEntriesOutput,
+  SessionPutContextEntryInput,
+  SessionPutContextEntryOutput,
+  SessionRemoveContextEntryInput,
+  SessionRemoveContextEntryOutput,
+  SessionLogInput,
+  SessionLogOutput,
   SessionInterruptInput,
   SessionInterruptOutput,
   SessionBackgroundInput,
@@ -85,6 +91,20 @@ import type {
   ProjectCurrentOutput,
   ProjectDirectoriesInput,
   ProjectDirectoriesOutput,
+  FormListRequestsInput,
+  FormListRequestsOutput,
+  FormListInput,
+  FormListOutput,
+  FormCreateInput,
+  FormCreateOutput,
+  FormGetInput,
+  FormGetOutput,
+  FormStateInput,
+  FormStateOutput,
+  FormReplyInput,
+  FormReplyOutput,
+  FormCancelInput,
+  FormCancelOutput,
   PermissionListRequestsInput,
   PermissionListRequestsOutput,
   PermissionListSavedInput,
@@ -110,6 +130,7 @@ import type {
   SkillListInput,
   SkillListOutput,
   EventSubscribeOutput,
+  EventChangesOutput,
   PtyListInput,
   PtyListOutput,
   PtyCreateInput,
@@ -347,6 +368,7 @@ export function make(options: ClientOptions) {
               limit: input?.["limit"],
               order: input?.["order"],
               search: input?.["search"],
+              parentID: input?.["parentID"],
               directory: input?.["directory"],
               project: input?.["project"],
               subpath: input?.["subpath"],
@@ -376,7 +398,7 @@ export function make(options: ClientOptions) {
           requestOptions,
         ).then((value) => value.data),
       active: (requestOptions?: RequestOptions) =>
-        request<{ readonly data: SessionActiveOutput }>(
+        request<SessionActiveOutput>(
           {
             method: "GET",
             path: `/api/session/active`,
@@ -385,7 +407,7 @@ export function make(options: ClientOptions) {
             empty: false,
           },
           requestOptions,
-        ).then((value) => value.data),
+        ),
       get: (input: SessionGetInput, requestOptions?: RequestOptions) =>
         request<{ readonly data: SessionGetOutput }>(
           {
@@ -453,6 +475,28 @@ export function make(options: ClientOptions) {
             body: { id: input["id"], prompt: input["prompt"], delivery: input["delivery"], resume: input["resume"] },
             successStatus: 200,
             declaredStatuses: [409, 404, 400, 401],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      command: (input: SessionCommandInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: SessionCommandOutput }>(
+          {
+            method: "POST",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/command`,
+            body: {
+              id: input["id"],
+              command: input["command"],
+              arguments: input["arguments"],
+              agent: input["agent"],
+              model: input["model"],
+              files: input["files"],
+              agents: input["agents"],
+              delivery: input["delivery"],
+              resume: input["resume"],
+            },
+            successStatus: 200,
+            declaredStatuses: [409, 404, 500, 400, 401],
             empty: false,
           },
           requestOptions,
@@ -548,24 +592,46 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ).then((value) => value.data),
-      history: (input: SessionHistoryInput, requestOptions?: RequestOptions) =>
-        request<SessionHistoryOutput>(
+      listContextEntries: (input: SessionListContextEntriesInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: SessionListContextEntriesOutput }>(
           {
             method: "GET",
-            path: `/api/session/${encodeURIComponent(input.sessionID)}/history`,
-            query: { limit: input["limit"], after: input["after"] },
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/context-entry`,
             successStatus: 200,
             declaredStatuses: [404, 400, 401],
             empty: false,
           },
           requestOptions,
+        ).then((value) => value.data),
+      putContextEntry: (input: SessionPutContextEntryInput, requestOptions?: RequestOptions) =>
+        request<SessionPutContextEntryOutput>(
+          {
+            method: "PUT",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/context-entry/${encodeURIComponent(input.key)}`,
+            body: { value: input["value"] },
+            successStatus: 204,
+            declaredStatuses: [404, 400, 401],
+            empty: true,
+          },
+          requestOptions,
         ),
-      events: (input: SessionEventsInput, requestOptions?: RequestOptions): AsyncIterable<SessionEventsOutput> =>
-        sse<SessionEventsOutput>(
+      removeContextEntry: (input: SessionRemoveContextEntryInput, requestOptions?: RequestOptions) =>
+        request<SessionRemoveContextEntryOutput>(
+          {
+            method: "DELETE",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/context-entry/${encodeURIComponent(input.key)}`,
+            successStatus: 204,
+            declaredStatuses: [404, 400, 401],
+            empty: true,
+          },
+          requestOptions,
+        ),
+      log: (input: SessionLogInput, requestOptions?: RequestOptions): AsyncIterable<SessionLogOutput> =>
+        sse<SessionLogOutput>(
           {
             method: "GET",
-            path: `/api/session/${encodeURIComponent(input.sessionID)}/event`,
-            query: { after: input["after"] },
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/log`,
+            query: { after: input["after"], follow: input["follow"] },
             successStatus: 200,
             declaredStatuses: [404, 400, 401],
             empty: false,
@@ -843,6 +909,95 @@ export function make(options: ClientOptions) {
           requestOptions,
         ),
     },
+    form: {
+      listRequests: (input?: FormListRequestsInput, requestOptions?: RequestOptions) =>
+        request<FormListRequestsOutput>(
+          {
+            method: "GET",
+            path: `/api/form/request`,
+            query: { location: input?.["location"] },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      list: (input: FormListInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: FormListOutput }>(
+          {
+            method: "GET",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/form`,
+            successStatus: 200,
+            declaredStatuses: [404, 400, 401],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      create: (input: FormCreateInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: FormCreateOutput }>(
+          {
+            method: "POST",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/form`,
+            body: {
+              id: input["id"],
+              title: input["title"],
+              metadata: input["metadata"],
+              mode: input["mode"],
+              fields: input["fields"],
+              url: input["url"],
+            },
+            successStatus: 200,
+            declaredStatuses: [404, 409, 400, 401],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      get: (input: FormGetInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: FormGetOutput }>(
+          {
+            method: "GET",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/form/${encodeURIComponent(input.formID)}`,
+            successStatus: 200,
+            declaredStatuses: [404, 400, 401],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      state: (input: FormStateInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: FormStateOutput }>(
+          {
+            method: "GET",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/form/${encodeURIComponent(input.formID)}/state`,
+            successStatus: 200,
+            declaredStatuses: [404, 400, 401],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      reply: (input: FormReplyInput, requestOptions?: RequestOptions) =>
+        request<FormReplyOutput>(
+          {
+            method: "POST",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/form/${encodeURIComponent(input.formID)}/reply`,
+            body: { answer: input["answer"] },
+            successStatus: 204,
+            declaredStatuses: [404, 409, 400, 401],
+            empty: true,
+          },
+          requestOptions,
+        ),
+      cancel: (input: FormCancelInput, requestOptions?: RequestOptions) =>
+        request<FormCancelOutput>(
+          {
+            method: "POST",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/form/${encodeURIComponent(input.formID)}/cancel`,
+            successStatus: 204,
+            declaredStatuses: [404, 409, 400, 401],
+            empty: true,
+          },
+          requestOptions,
+        ),
+    },
     permission: {
       listRequests: (input?: PermissionListRequestsInput, requestOptions?: RequestOptions) =>
         request<PermissionListRequestsOutput>(
@@ -1005,6 +1160,11 @@ export function make(options: ClientOptions) {
       subscribe: (requestOptions?: RequestOptions): AsyncIterable<EventSubscribeOutput> =>
         sse<EventSubscribeOutput>(
           { method: "GET", path: `/api/event`, successStatus: 200, declaredStatuses: [401, 400], empty: false },
+          requestOptions,
+        ),
+      changes: (requestOptions?: RequestOptions): AsyncIterable<EventChangesOutput> =>
+        sse<EventChangesOutput>(
+          { method: "GET", path: `/api/event/changes`, successStatus: 200, declaredStatuses: [401, 400], empty: false },
           requestOptions,
         ),
     },
@@ -1282,7 +1442,11 @@ function encodePath(value: string): string {
 }
 
 function appendQuery(params: URLSearchParams, key: string, value: unknown): void {
-  if (value === undefined || value === null) return
+  if (value === undefined) return
+  if (value === null) {
+    params.append(key, "null")
+    return
+  }
   if (Array.isArray(value)) {
     for (const item of value) appendQuery(params, key, item)
     return

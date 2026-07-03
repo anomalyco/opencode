@@ -521,6 +521,39 @@ describe("HttpApiCodegen.generate", () => {
     }
   })
 
+  test("serializes explicit null query values", async () => {
+    const output = emitPromise(
+      compileContract(
+        api(
+          HttpApiEndpoint.get("list", "/session", {
+            query: { parentID: Schema.optional(Schema.NullOr(Schema.String)) },
+            success: Schema.Struct({ data: Schema.Array(Schema.String) }),
+          }),
+        ),
+      ),
+    )
+    const directory = await mkdtemp(join(tmpdir(), "opencode-httpapi-codegen-"))
+
+    try {
+      await Promise.all(output.files.map((file) => Bun.write(join(directory, file.path), file.content)))
+      const generated = await import(`${join(directory, "index.ts")}?t=${crypto.randomUUID()}`)
+      let request: Request | undefined
+      const client = generated.OpenCode.make({
+        baseUrl: "https://example.com",
+        fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
+          request = input instanceof Request ? input : new Request(input, init)
+          return Response.json({ data: [] })
+        },
+      })
+
+      await client.session.list({ parentID: null })
+
+      expect(request?.url).toBe("https://example.com/session?parentID=null")
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
   test("rejects with declared tagged errors and exports a type guard", async () => {
     const output = emitPromise(
       compileContract(

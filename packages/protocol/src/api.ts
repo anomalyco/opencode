@@ -8,6 +8,7 @@ import { ProviderGroup } from "./groups/provider.js"
 import { makeSessionGroup } from "./groups/session.js"
 import { makePermissionGroup } from "./groups/permission.js"
 import { FileSystemGroup } from "./groups/fs.js"
+import { makeFormGroup } from "./groups/form.js"
 import { CommandGroup } from "./groups/command.js"
 import { SkillGroup } from "./groups/skill.js"
 import { EventGroup, makeEventGroup } from "./groups/event.js"
@@ -52,6 +53,13 @@ type SessionGroups<SessionLocationId extends HttpApiMiddleware.AnyId, SessionLoc
   | ReturnType<typeof makeSessionGroup<SessionLocationId, SessionLocationService>>
   | HttpApiGroup.AddMiddleware<typeof MessageGroup, SessionLocationId>
 
+type FormGroups<
+  LocationId extends HttpApiMiddleware.AnyId,
+  LocationService,
+  FormLocationId extends HttpApiMiddleware.AnyId,
+  FormLocationService,
+> = ReturnType<typeof makeFormGroup<LocationId, LocationService, FormLocationId, FormLocationService>>
+
 type MixedMiddlewareGroups<
   LocationId extends HttpApiMiddleware.AnyId,
   LocationService,
@@ -66,12 +74,15 @@ type MixedMiddlewareGroups<
 type ApiGroups<
   LocationId extends HttpApiMiddleware.AnyId,
   LocationService,
+  FormLocationId extends HttpApiMiddleware.AnyId,
+  FormLocationService,
   SessionLocationId extends HttpApiMiddleware.AnyId,
   SessionLocationService,
   Event extends HttpApiGroup.Any,
 > =
   | typeof HealthGroup
   | LocationGroups<LocationId>
+  | FormGroups<LocationId, LocationService, FormLocationId, FormLocationService>
   | SessionGroups<SessionLocationId, SessionLocationService>
   | MixedMiddlewareGroups<LocationId, LocationService, SessionLocationId, SessionLocationService>
   | Event
@@ -81,6 +92,8 @@ type EventGroupFor<Definitions extends ReadonlyArray<Definition>> = ReturnType<t
 export type Api<
   LocationId extends HttpApiMiddleware.AnyId,
   LocationService,
+  FormLocationId extends HttpApiMiddleware.AnyId,
+  FormLocationService,
   SessionLocationId extends HttpApiMiddleware.AnyId,
   SessionLocationService,
   Event extends HttpApiGroup.Any,
@@ -88,7 +101,15 @@ export type Api<
   "server",
   HttpApiGroup.AddMiddleware<
     HttpApiGroup.AddMiddleware<
-      ApiGroups<LocationId, LocationService, SessionLocationId, SessionLocationService, Event>,
+      ApiGroups<
+        LocationId,
+        LocationService,
+        FormLocationId,
+        FormLocationService,
+        SessionLocationId,
+        SessionLocationService,
+        Event
+      >,
       Authorization
     >,
     SchemaErrorMiddleware
@@ -100,13 +121,24 @@ const makeApiFromGroup = <
   const Group extends HttpApiGroup.Any,
   LocationId extends HttpApiMiddleware.AnyId,
   LocationService,
+  FormLocationId extends HttpApiMiddleware.AnyId,
+  FormLocationService,
   SessionLocationId extends HttpApiMiddleware.AnyId,
   SessionLocationService,
 >(
   eventGroup: Group,
   locationMiddleware: Context.Key<LocationId, LocationService>,
+  formLocationMiddleware: Context.Key<FormLocationId, FormLocationService>,
   sessionLocationMiddleware: Context.Key<SessionLocationId, SessionLocationService>,
-): Api<LocationId, LocationService, SessionLocationId, SessionLocationService, Group> =>
+): Api<
+  LocationId,
+  LocationService,
+  FormLocationId,
+  FormLocationService,
+  SessionLocationId,
+  SessionLocationService,
+  Group
+> =>
   HttpApi.make("server")
     .add(HealthGroup)
     .add(LocationGroup.middleware(locationMiddleware))
@@ -121,6 +153,7 @@ const makeApiFromGroup = <
     .add(McpGroup.middleware(locationMiddleware))
     .add(CredentialGroup.middleware(locationMiddleware))
     .add(ProjectGroup.middleware(locationMiddleware))
+    .add(makeFormGroup(locationMiddleware, formLocationMiddleware))
     .add(makePermissionGroup(locationMiddleware, sessionLocationMiddleware))
     .add(FileSystemGroup.middleware(locationMiddleware))
     .add(CommandGroup.middleware(locationMiddleware))
@@ -146,22 +179,54 @@ export const makeApi = <
   const Definitions extends ReadonlyArray<Definition>,
   LocationId extends HttpApiMiddleware.AnyId,
   LocationService,
+  FormLocationId extends HttpApiMiddleware.AnyId,
+  FormLocationService,
   SessionLocationId extends HttpApiMiddleware.AnyId,
   SessionLocationService,
 >(options: {
   readonly definitions: Definitions
   readonly locationMiddleware: Context.Key<LocationId, LocationService>
+  readonly formLocationMiddleware: Context.Key<FormLocationId, FormLocationService>
   readonly sessionLocationMiddleware: Context.Key<SessionLocationId, SessionLocationService>
-}): Api<LocationId, LocationService, SessionLocationId, SessionLocationService, EventGroupFor<Definitions>> =>
-  makeApiFromGroup(makeEventGroup(options.definitions), options.locationMiddleware, options.sessionLocationMiddleware)
+}): Api<
+  LocationId,
+  LocationService,
+  FormLocationId,
+  FormLocationService,
+  SessionLocationId,
+  SessionLocationService,
+  EventGroupFor<Definitions>
+> =>
+  makeApiFromGroup(
+    makeEventGroup(options.definitions),
+    options.locationMiddleware,
+    options.formLocationMiddleware,
+    options.sessionLocationMiddleware,
+  )
 
 export const makeDefaultApi = <
   LocationId extends HttpApiMiddleware.AnyId,
   LocationService,
+  FormLocationId extends HttpApiMiddleware.AnyId,
+  FormLocationService,
   SessionLocationId extends HttpApiMiddleware.AnyId,
   SessionLocationService,
 >(options: {
   readonly locationMiddleware: Context.Key<LocationId, LocationService>
+  readonly formLocationMiddleware: Context.Key<FormLocationId, FormLocationService>
   readonly sessionLocationMiddleware: Context.Key<SessionLocationId, SessionLocationService>
-}): Api<LocationId, LocationService, SessionLocationId, SessionLocationService, typeof EventGroup> =>
-  makeApiFromGroup(EventGroup, options.locationMiddleware, options.sessionLocationMiddleware)
+}): Api<
+  LocationId,
+  LocationService,
+  FormLocationId,
+  FormLocationService,
+  SessionLocationId,
+  SessionLocationService,
+  typeof EventGroup
+> =>
+  makeApiFromGroup(
+    EventGroup,
+    options.locationMiddleware,
+    options.formLocationMiddleware,
+    options.sessionLocationMiddleware,
+  )

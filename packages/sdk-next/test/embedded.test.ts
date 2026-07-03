@@ -68,20 +68,28 @@ it.live(
           resume: false,
         })
         const context = yield* opencode.sessions.context({ sessionID: id })
+        yield* opencode.sessions.putContextEntry({ sessionID: id, key: "deploy-target", value: "production" })
+        yield* opencode.sessions.putContextEntry({ sessionID: id, key: "flags", value: { beta: true } })
+        const contextEntries = yield* opencode.sessions.listContextEntries({ sessionID: id })
+        yield* opencode.sessions.removeContextEntry({ sessionID: id, key: "flags" })
+        const remainingContextEntries = yield* opencode.sessions.listContextEntries({ sessionID: id })
         const wake = yield* opencode.sessions.prompt({
           sessionID: id,
           prompt: fixture.sdk.Prompt.make({ text: "Promote this input" }),
         })
-        const prompted = yield* opencode.sessions.events({ sessionID: id }).pipe(
+        const prompted = yield* opencode.sessions.log({ sessionID: id, follow: true }).pipe(
           Stream.filter((event) => event.type === "session.next.prompted" && event.data.messageID === wake.id),
           Stream.runHead,
           Effect.timeout("10 seconds"),
           Effect.map(Option.getOrThrow),
         )
         const wakeContext = yield* opencode.sessions.context({ sessionID: id })
-        const event = yield* opencode.sessions
-          .events({ sessionID: id })
-          .pipe(Stream.take(1), Stream.runHead, Effect.map(Option.getOrUndefined))
+        const event = yield* opencode.sessions.log({ sessionID: id }).pipe(
+          Stream.filter((item) => item.type !== "log.synced"),
+          Stream.take(1),
+          Stream.runHead,
+          Effect.map(Option.getOrUndefined),
+        )
         const modelMessage = Option.fromNullishOr(context.find((message) => message.type === "model-switched")).pipe(
           Option.getOrThrow,
         )
@@ -91,9 +99,10 @@ it.live(
         const missingSessionID = fixture.sdk.Session.ID.create()
         const missing = yield* Effect.all(
           [
-            opencode.sessions.events({ sessionID: missingSessionID }).pipe(Stream.runHead, Effect.flip),
+            opencode.sessions.log({ sessionID: missingSessionID }).pipe(Stream.runHead, Effect.flip),
             opencode.sessions.interrupt({ sessionID: missingSessionID }).pipe(Effect.flip),
             opencode.sessions.message({ sessionID: missingSessionID, messageID: modelMessage.id }).pipe(Effect.flip),
+            opencode.sessions.listContextEntries({ sessionID: missingSessionID }).pipe(Effect.flip),
           ],
           { concurrency: "unbounded" },
         )
@@ -108,14 +117,20 @@ it.live(
         expect(selected.model?.id).toBe(model.id)
         expect(selected.model?.providerID).toBe(model.providerID)
         expect(page.data.some((session) => session.id === id)).toBe(true)
-        expect(active).toEqual({})
+        expect(active).toEqual({ data: {}, watermarks: {} })
         expect(admitted.sessionID).toBe(id)
         expect(prompted.type).toBe("session.next.prompted")
         expect(wakeContext).toContainEqual(expect.objectContaining({ id: wake.id, type: "user" }))
+        expect(contextEntries).toEqual([
+          { key: "deploy-target", value: "production" },
+          { key: "flags", value: { beta: true } },
+        ])
+        expect(remainingContextEntries).toEqual([{ key: "deploy-target", value: "production" }])
         expect(context.some((message) => message.type === "model-switched")).toBe(true)
         expect(event).toMatchObject({ type: "session.next.model.switched", durable: { seq: 1 } })
         expect(message).toEqual(modelMessage)
         expect(missing.map((error) => error._tag)).toEqual([
+          "SessionNotFoundError",
           "SessionNotFoundError",
           "SessionNotFoundError",
           "SessionNotFoundError",

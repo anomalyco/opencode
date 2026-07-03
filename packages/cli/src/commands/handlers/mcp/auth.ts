@@ -1,9 +1,15 @@
 import { EOL } from "node:os"
 import { Effect } from "effect"
-import type { IntegrationAttemptStatus, IntegrationOAuthMethod, OpencodeClient } from "@opencode-ai/sdk/v2/client"
+import {
+  createOpencodeClient,
+  type IntegrationAttemptStatus,
+  type IntegrationOAuthMethod,
+  type OpencodeClient,
+} from "@opencode-ai/sdk/v2/client"
 import { Commands } from "../../commands"
 import { Runtime } from "../../../framework/runtime"
-import { Daemon } from "../../../services/daemon"
+import { Service } from "@opencode-ai/client/effect"
+import { ServiceConfig } from "../../../services/service-config"
 import { resolveIntegration } from "./resolve"
 
 const location = { directory: process.cwd() }
@@ -11,8 +17,10 @@ const location = { directory: process.cwd() }
 export default Runtime.handler(
   Commands.commands.mcp.commands.auth,
   Effect.fn("cli.mcp.auth")(function* (input) {
-    const daemon = yield* Daemon.Service
-    const client = yield* daemon.client()
+    const options = yield* ServiceConfig.options()
+    const found = yield* Service.discover(options)
+    const transport = found ?? (yield* Service.start(options))
+    const client = createOpencodeClient({ baseUrl: transport.url, headers: transport.headers })
 
     const integration = yield* resolveIntegration(client, input.name, location)
     if (!integration)

@@ -1,10 +1,15 @@
 // TODO: Keep additional network capabilities inside Schema and Protocol as the client grows; /effect must never import
 // Core or Server. Preserve these datatype exports so internal model reorganizations do not require caller migrations.
-export * from "./generated-effect/index"
+export * from "./generated/index"
+export { Service } from "./service.js"
+export type { Transport, ServiceOptions } from "./service.js"
 export { Agent } from "@opencode-ai/schema/agent"
 export { Command } from "@opencode-ai/schema/command"
 export { Credential } from "@opencode-ai/schema/credential"
+export { Event } from "@opencode-ai/schema/event"
+export { EventLog } from "@opencode-ai/schema/event-log"
 export { FileSystem } from "@opencode-ai/schema/filesystem"
+export { Form } from "@opencode-ai/schema/form"
 export { Integration } from "@opencode-ai/schema/integration"
 export { Location } from "@opencode-ai/schema/location"
 export { Model } from "@opencode-ai/schema/model"

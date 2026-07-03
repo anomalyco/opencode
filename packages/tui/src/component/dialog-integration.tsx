@@ -1,5 +1,5 @@
 import { TextAttributes } from "@opentui/core"
-import type { IntegrationConnectOauthOutput } from "@opencode-ai/client"
+import type { IntegrationConnectOauthOutput } from "@opencode-ai/client/promise"
 import type { ConnectionInfo, IntegrationInfo, IntegrationOAuthMethod } from "@opencode-ai/sdk/v2"
 import { createMemo, createSignal, onCleanup, onMount, Show } from "solid-js"
 import { useClipboard } from "../context/clipboard"

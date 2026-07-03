@@ -2,6 +2,7 @@ export * as MCP from "./index"
 
 import { Mcp } from "@opencode-ai/schema/mcp"
 import { McpEvent } from "@opencode-ai/schema/mcp-event"
+import { Command } from "@opencode-ai/schema/command"
 import { createHash } from "node:crypto"
 import { Cause, Context, Deferred, Effect, Exit, FiberSet, Layer, Schema, Scope, Stream } from "effect"
 import { makeLocationNode } from "../effect/app-node"
@@ -9,9 +10,11 @@ import { Config } from "../config"
 import { ConfigMCP } from "../config/mcp"
 import { Credential } from "../credential"
 import { EventV2 } from "../event"
+import { Form } from "../form"
 import { Integration } from "../integration"
 import { IntegrationConnection } from "../integration/connection"
 import { Location } from "../location"
+import { waitForAbort } from "../process"
 import { MCPClient } from "./client"
 import { MCPOAuth } from "./oauth"
 
@@ -139,9 +142,14 @@ type ServerEntry = {
   scope?: Scope.Closeable
   client?: MCPClient.Connection
   tools?: ReadonlyArray<Tool>
+  prompts?: ReadonlyArray<Prompt>
   // Set when a remote server is registered as an OAuth integration; the credential lives in the global store.
   integrationID?: Integration.ID
 }
+
+// MCP elicitations are Location-scoped, not Session-scoped: the server cannot attribute them to a
+// persisted session row, so their forms are owned by this opaque sentinel session identifier.
+const GLOBAL_ELICITATION_SESSION_ID = "global"
 
 export interface Interface {
   readonly servers: () => Effect.Effect<ServerInfo[]>
@@ -173,6 +181,7 @@ export const layer = Layer.effect(
     const config = yield* Config.Service
     const location = yield* Location.Service
     const events = yield* EventV2.Service
+    const forms = yield* Form.Service
     const integration = yield* Integration.Service
     const credentials = yield* Credential.Service
     const root = yield* Scope.make()
@@ -187,6 +196,7 @@ export const layer = Layer.effect(
     )
     // Later config files win for duplicate server names; per-server timeout overrides globals.
     const runtime = new Map<ServerName, ServerEntry>()
+    const urlElicitations = new Map<string, Form.ID>()
     for (const entry of documents) {
       for (const [name, server] of Object.entries(entry.info.mcp?.servers ?? {})) {
         runtime.set(ServerName.make(name), {
@@ -306,14 +316,110 @@ export const layer = Layer.effect(
       })
     })
 
+    const elicitation = {
+      create: (input: {
+        readonly server: string
+        readonly params: MCPClient.ElicitationParams
+        readonly signal: AbortSignal
+      }) =>
+        Effect.gen(function* () {
+          if (input.params.mode === "url") {
+            const formID = Form.ID.create()
+            const key = input.server + "\u0000" + input.params.elicitationId
+            urlElicitations.set(key, formID)
+            return yield* forms
+              .ask({
+                id: formID,
+                sessionID: GLOBAL_ELICITATION_SESSION_ID,
+                title: `${input.server} is requesting input`,
+                metadata: {
+                  kind: "mcp-elicitation",
+                  server: input.server,
+                  elicitationID: input.params.elicitationId,
+                  message: input.params.message,
+                },
+                mode: "url",
+                url: input.params.url,
+              })
+              .pipe(
+                Effect.raceFirst(waitForAbort(input.signal)),
+                Effect.ensuring(Effect.sync(() => urlElicitations.delete(key))),
+                Effect.map(
+                  (state): MCPClient.ElicitationResult => ({
+                    action: state.status === "answered" ? "accept" : "cancel",
+                  }),
+                ),
+              )
+          }
+          const params = input.params
+          return yield* forms
+            .ask({
+              sessionID: GLOBAL_ELICITATION_SESSION_ID,
+              title: `${input.server} is requesting input`,
+              metadata: { kind: "mcp-elicitation", server: input.server, message: params.message },
+              mode: "form",
+              fields: Object.entries(params.requestedSchema.properties).map(([key, property]) =>
+                toElicitationField(key, property, params.requestedSchema.required?.includes(key) === true),
+              ),
+            })
+            .pipe(
+              Effect.raceFirst(waitForAbort(input.signal)),
+              Effect.map((state): MCPClient.ElicitationResult => {
+                if (state.status !== "answered") return { action: "cancel" }
+                return {
+                  action: "accept",
+                  content: Object.fromEntries(
+                    Object.entries(state.answer).map(
+                      ([key, value]): [string, NonNullable<MCPClient.ElicitationResult["content"]>[string]] =>
+                        typeof value === "object" ? [key, Array.from(value)] : [key, value],
+                    ),
+                  ),
+                }
+              }),
+            )
+        }),
+      complete: (input: { readonly server: string; readonly elicitationID: string }) =>
+        Effect.gen(function* () {
+          const formID = urlElicitations.get(input.server + "\u0000" + input.elicitationID)
+          if (!formID) return
+          yield* forms.reply({ id: formID, answer: {} }).pipe(Effect.ignore)
+        }),
+    } satisfies MCPClient.ElicitationHandler
+
     const toTool = (server: ServerName, def: MCPClient.ToolDefinition) =>
       new Tool({ server, name: def.name, description: def.description, inputSchema: def.inputSchema })
+
+    const toPrompt = (server: ServerName, def: MCPClient.PromptDefinition) =>
+      new Prompt({
+        server,
+        name: def.name,
+        description: def.description,
+        arguments: def.arguments?.map(
+          (argument) =>
+            new PromptArgument({
+              name: argument.name,
+              description: argument.description,
+              required: argument.required,
+            }),
+        ),
+      })
 
     const refreshTools = (name: ServerName, entry: ServerEntry, connection: MCPClient.Connection) =>
       connection.tools().pipe(
         Effect.map((defs) => {
           entry.tools = defs.map((def) => toTool(name, def))
         }),
+      )
+
+    const refreshPrompts = (name: ServerName, entry: ServerEntry, connection: MCPClient.Connection) =>
+      connection.prompts().pipe(
+        Effect.map((defs) => {
+          entry.prompts = defs.map((def) => toPrompt(name, def))
+        }),
+        Effect.andThen(events.publish(Command.Event.Updated, {})),
+        Effect.catch(() =>
+          Effect.sync(() => (entry.prompts = [])).pipe(Effect.andThen(events.publish(Command.Event.Updated, {}))),
+        ),
       )
 
     const watch = (name: ServerName, entry: ServerEntry, connection: MCPClient.Connection) => {
@@ -323,8 +429,10 @@ export const layer = Layer.effect(
         if (entry.client !== connection) return
         entry.client = undefined
         entry.tools = undefined
+        entry.prompts = undefined
         entry.status = { status: "failed", error: "Connection closed" }
         fork(events.publish(McpEvent.ToolsChanged, { server: name }).pipe(Effect.ignore))
+        fork(events.publish(Command.Event.Updated, {}).pipe(Effect.ignore))
         fork(events.publish(McpEvent.StatusChanged, { server: name }).pipe(Effect.ignore))
       })
       connection.onLog((message) => fork(serverLog(name, message).pipe(Effect.ignore)))
@@ -335,6 +443,9 @@ export const layer = Layer.effect(
             Effect.ignore,
           ),
         )
+      })
+      connection.onPromptsChanged(() => {
+        fork(refreshPrompts(name, entry, connection).pipe(Effect.ignore))
       })
     }
 
@@ -363,14 +474,15 @@ export const layer = Layer.effect(
         const authProvider = yield* connectProvider(entry)
         // List tools as part of connect so a failure here marks the server failed rather than
         // leaving it connected with a silently empty tool list and no path to recover.
-        const result = yield* MCPClient.connect(name, entry.config, location.directory, authProvider).pipe(
-          Effect.flatMap((connection) => connection.tools().pipe(Effect.map((defs) => ({ connection, defs })))),
+        const result = yield* MCPClient.connect(name, entry.config, location.directory, authProvider, elicitation).pipe(
+          Effect.flatMap((connection) => connection.tools().pipe(Effect.map((tools) => ({ connection, tools })))),
           Scope.provide(scope),
           Effect.exit,
         )
         if (Exit.isSuccess(result)) {
           entry.client = result.value.connection
-          entry.tools = result.value.defs.map((def) => toTool(name, def))
+          entry.tools = result.value.tools.map((def) => toTool(name, def))
+          entry.prompts = []
           entry.status = { status: "connected" }
           watch(name, entry, result.value.connection)
           yield* Effect.logInfo("mcp connected", { server: name, tools: entry.tools.length })
@@ -379,6 +491,7 @@ export const layer = Layer.effect(
           // stay invisible to the model.
           yield* events.publish(McpEvent.ToolsChanged, { server: name }).pipe(Effect.ignore)
           yield* events.publish(McpEvent.StatusChanged, { server: name }).pipe(Effect.ignore)
+          fork(refreshPrompts(name, entry, result.value.connection).pipe(Effect.ignore))
           return
         }
         yield* Scope.close(scope, Exit.void)
@@ -416,6 +529,8 @@ export const layer = Layer.effect(
           entry.scope = undefined
           entry.client = undefined
           entry.tools = undefined
+          entry.prompts = undefined
+          yield* events.publish(Command.Event.Updated, {}).pipe(Effect.ignore)
         }
         yield* startServer(name, entry)
       })
@@ -489,12 +604,25 @@ export const layer = Layer.effect(
           .toSorted((a, b) => a.server.localeCompare(b.server))
       }),
       prompts: Effect.fn("MCP.prompts")(function* () {
-        yield* whenAllReady
-        return []
+        return Array.from(runtime.values())
+          .flatMap((entry) => entry.prompts ?? [])
+          .toSorted((a, b) => a.server.localeCompare(b.server) || a.name.localeCompare(b.name))
       }),
       prompt: Effect.fn("MCP.prompt")(function* (input) {
-        yield* gate(input.server)
-        return undefined
+        const target = yield* requireServer(input.server)
+        yield* Deferred.await(target.entry.startup)
+        if (!target.entry.client) return undefined
+        const result = yield* target.entry.client
+          .prompt({ name: input.name, args: input.args })
+          .pipe(Effect.catch(() => Effect.succeed(undefined)))
+        if (!result) return undefined
+        return new PromptResult({
+          server: target.name,
+          name: input.name,
+          messages: result.messages.map(
+            (message) => new PromptMessage({ role: message.role, content: message.content }),
+          ),
+        })
       }),
       resourceCatalog: Effect.fn("MCP.resourceCatalog")(function* () {
         yield* whenAllReady
@@ -511,5 +639,69 @@ export const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Config.node, Location.node, EventV2.node, Integration.node, Credential.node],
+  deps: [Config.node, Location.node, EventV2.node, Form.node, Integration.node, Credential.node],
 })
+
+// Schema `optional` strips undefined-valued properties on encode, so fields can assign
+// optional properties directly instead of conditionally spreading them.
+function toElicitationField(key: string, property: ElicitationProperty, required: boolean): Form.Field {
+  // Some servers emit machine titles like "string with format email"; prefer description/key over those.
+  const machineTitle = /^(boolean|string|number|integer|array|object)(\s+with\b.*|\s+in\b.*)?$/i
+  const title =
+    property.title && !machineTitle.test(property.title.trim()) ? property.title : (property.description ?? key)
+  const base = {
+    key,
+    title,
+    description: property.description === title ? undefined : property.description,
+    required: required || undefined,
+  }
+  switch (property.type) {
+    case "boolean":
+      return { ...base, type: "boolean", default: property.default }
+    case "number":
+    case "integer":
+      return {
+        ...base,
+        type: property.type,
+        minimum: property.minimum,
+        maximum: property.maximum,
+        default: property.default,
+      }
+    case "array":
+      return {
+        ...base,
+        type: "multiselect",
+        options:
+          "anyOf" in property.items
+            ? property.items.anyOf.map((option) => ({ value: option.const, label: option.title }))
+            : property.items.enum.map((value) => ({ value, label: value })),
+        custom: false,
+        minItems: property.minItems,
+        maxItems: property.maxItems,
+        default: property.default,
+      }
+    case "string": {
+      const options =
+        "oneOf" in property
+          ? property.oneOf.map((option) => ({ value: option.const, label: option.title }))
+          : "enum" in property
+            ? property.enum.map((value, index) => ({
+                value,
+                label: ("enumNames" in property ? property.enumNames?.[index] : undefined) ?? value,
+              }))
+            : undefined
+      return {
+        ...base,
+        type: "string",
+        format: "format" in property ? property.format : undefined,
+        minLength: "minLength" in property ? property.minLength : undefined,
+        maxLength: "maxLength" in property ? property.maxLength : undefined,
+        default: property.default,
+        options,
+        custom: options ? false : undefined,
+      }
+    }
+  }
+}
+
+type ElicitationProperty = MCPClient.ElicitationFormParams["requestedSchema"]["properties"][string]

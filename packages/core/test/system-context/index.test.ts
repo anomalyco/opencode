@@ -32,11 +32,11 @@ describe("SystemContext", () => {
         removed: () => "Date removed",
       })
 
-      expect((yield* SystemContext.initialize(context)).snapshot["core/date"].value).toBe("2026-06-03T12:00:00.000Z")
+      expect((yield* SystemContext.initialize(context)).applied["core/date"].value).toBe("2026-06-03T12:00:00.000Z")
     }),
   )
 
-  it.effect("loads once and initializes a baseline with a structured snapshot", () =>
+  it.effect("loads once and initializes a baseline with the applied values", () =>
     Effect.gen(function* () {
       let loads = 0
       const context = SystemContext.combine([
@@ -55,8 +55,8 @@ describe("SystemContext", () => {
       ])
 
       expect(yield* SystemContext.initialize(context)).toEqual({
-        baseline: "Today's date is 2026-06-03.\n\nDirectory: /repo",
-        snapshot: {
+        text: "Today's date is 2026-06-03.\n\nDirectory: /repo",
+        applied: {
           "core/date": { value: "2026-06-03", removed: "The date was removed." },
           "core/location": { value: "/repo" },
         },
@@ -84,7 +84,7 @@ describe("SystemContext", () => {
       expect(yield* SystemContext.reconcile(changed, previous)).toEqual({
         _tag: "Updated",
         text: "The date changed from 2026-06-03 to 2026-06-04.",
-        snapshot: {
+        applied: {
           "core/date": { value: "2026-06-04", removed: "The date was removed." },
           "core/location": { value: "/repo", removed: "Removed: /repo" },
         },
@@ -113,19 +113,17 @@ describe("SystemContext", () => {
       expect(yield* SystemContext.reconcile(context, {})).toEqual({
         _tag: "Updated",
         text: "Available skill: effect",
-        snapshot: { "core/skills": { value: "effect" } },
+        applied: { "core/skills": { value: "effect" } },
       })
     }),
   )
 
-  it.effect("retains admitted snapshots while a source is temporarily unavailable", () =>
+  it.effect("retains the belief while a source is temporarily unavailable", () =>
     Effect.gen(function* () {
       const previous = { "core/remote": { value: "instructions", removed: "Instructions removed" } }
       const context = stringContext({ key: "core/remote", value: SystemContext.unavailable })
 
       expect(yield* SystemContext.reconcile(context, previous)).toEqual({ _tag: "Unchanged" })
-      expect(yield* SystemContext.replace(context, previous)).toEqual({ _tag: "ReplacementBlocked" })
-      expect(yield* SystemContext.replace(context, {})).toMatchObject({ _tag: "ReplacementReady" })
     }),
   )
 
@@ -152,17 +150,29 @@ describe("SystemContext", () => {
       ).toEqual({
         _tag: "Updated",
         text: "Instructions removed; stop applying them.",
-        snapshot: {},
+        applied: {},
       })
     }),
   )
 
-  it.effect("requests replacement when a source without removal text disappears", () =>
+  it.effect("retains an unannounced removal silently", () =>
     Effect.gen(function* () {
+      expect(yield* SystemContext.reconcile(SystemContext.empty, { "core/date": { value: "2026-06-04" } })).toEqual({
+        _tag: "Unchanged",
+      })
+
+      // The retained belief survives alongside other updates.
       expect(
-        yield* SystemContext.reconcile(SystemContext.empty, { "core/date": { value: "2026-06-04" } }),
-      ).toMatchObject({
-        _tag: "ReplacementReady",
+        yield* SystemContext.reconcile(stringContext({ key: "core/skills", value: "effect" }), {
+          "core/date": { value: "2026-06-04" },
+        }),
+      ).toEqual({
+        _tag: "Updated",
+        text: "effect",
+        applied: {
+          "core/skills": { value: "effect" },
+          "core/date": { value: "2026-06-04" },
+        },
       })
     }),
   )
@@ -189,17 +199,48 @@ describe("SystemContext", () => {
     }),
   )
 
-  it.effect("requests replacement when a stored value no longer decodes", () =>
+  it.effect("re-announces the baseline when a stored value no longer decodes", () =>
     Effect.gen(function* () {
       expect(
         yield* SystemContext.reconcile(stringContext({ key: "core/date", value: "2026-06-04" }), {
           "core/date": { value: 42, removed: "Date removed" },
         }),
-      ).toMatchObject({ _tag: "ReplacementReady" })
+      ).toEqual({
+        _tag: "Updated",
+        text: "2026-06-04",
+        applied: { "core/date": { value: "2026-06-04" } },
+      })
     }),
   )
 
-  it.effect("replaces from one coherent source observation", () =>
+  it.effect("renders undecodable re-announcements alongside other updates", () =>
+    Effect.gen(function* () {
+      const context = SystemContext.combine([
+        stringContext({
+          key: "core/date",
+          value: "2026-06-04",
+          update: (before, current) => `${before} -> ${current}`,
+        }),
+        stringContext({ key: "core/location", value: "/repo" }),
+      ])
+
+      expect(
+        yield* SystemContext.reconcile(context, {
+          "core/date": { value: "2026-06-03" },
+          "core/location": { value: 42 },
+        }),
+      ).toEqual({
+        _tag: "Updated",
+        text: "2026-06-03 -> 2026-06-04\n\n/repo",
+        applied: {
+          "core/date": { value: "2026-06-04" },
+          "core/location": { value: "/repo" },
+        },
+      })
+    }),
+  )
+
+  it.effect("rebaselines from one coherent source observation", () =>
     Effect.gen(function* () {
       let loads = 0
       const context = SystemContext.make({
@@ -213,52 +254,83 @@ describe("SystemContext", () => {
         update: (_previous, current) => current,
       })
 
-      expect(yield* SystemContext.reconcile(context, { "core/date": { value: 42 } })).toMatchObject({
-        _tag: "ReplacementReady",
-        generation: { baseline: "2026-06-04" },
+      expect(yield* SystemContext.rebaseline(context, { "core/date": { value: "2026-06-03" } })).toEqual({
+        text: "2026-06-04",
+        applied: { "core/date": { value: "2026-06-04" } },
       })
       expect(loads).toBe(1)
     }),
   )
 
-  it.effect("does not render discarded updates while replacing", () =>
+  it.effect("rebaselines an unavailable source from the last-applied belief", () =>
     Effect.gen(function* () {
-      let updates = 0
       const context = SystemContext.combine([
+        stringContext({ key: "core/date", value: "2026-06-04" }),
         stringContext({
-          key: "core/date",
-          value: "2026-06-04",
-          update: () => {
-            updates++
-            return "updated"
-          },
+          key: "core/remote",
+          value: SystemContext.unavailable,
+          baseline: (value) => `Instructions: ${value}`,
         }),
-        stringContext({ key: "core/location", value: "/repo" }),
       ])
 
       expect(
-        yield* SystemContext.reconcile(context, {
-          "core/date": { value: "2026-06-03" },
-          "core/location": { value: 42 },
+        yield* SystemContext.rebaseline(context, {
+          "core/remote": { value: "contents", removed: "Instructions removed" },
         }),
-      ).toMatchObject({ _tag: "ReplacementReady" })
-      expect(updates).toBe(0)
+      ).toEqual({
+        text: "2026-06-04\n\nInstructions: contents",
+        applied: {
+          "core/date": { value: "2026-06-04" },
+          "core/remote": { value: "contents", removed: "Instructions removed" },
+        },
+      })
     }),
   )
 
-  it.effect("blocks an incompatible replacement while another admitted source is unavailable", () =>
+  it.effect("drops undecodable beliefs and removed sources at rebaseline", () =>
     Effect.gen(function* () {
-      const previous = {
-        "core/date": { value: 42, removed: "Date removed" },
-        "core/remote": { value: "instructions", removed: "Instructions removed" },
-      }
-      const context = SystemContext.combine([
-        stringContext({ key: "core/date", value: "2026-06-04" }),
-        stringContext({ key: "core/remote", value: SystemContext.unavailable }),
-      ])
+      const context = stringContext({ key: "core/remote", value: SystemContext.unavailable })
 
-      expect(yield* SystemContext.reconcile(context, previous)).toEqual({ _tag: "ReplacementBlocked" })
-      expect(yield* SystemContext.replace(context, previous)).toEqual({ _tag: "ReplacementBlocked" })
+      // Undecodable belief cannot be restated; removed source entries self-clean.
+      expect(
+        yield* SystemContext.rebaseline(context, {
+          "core/remote": { value: 42 },
+          "core/gone": { value: "gone" },
+        }),
+      ).toEqual({ text: "", applied: {} })
+    }),
+  )
+
+  it.effect("diffs list values by key with a changed comparator", () =>
+    Effect.sync(() => {
+      const previous = [
+        { name: "effect", description: "Build with Effect" },
+        { name: "debugging", description: "Diagnose bugs" },
+        { name: "retired", description: "Old" },
+      ]
+      const current = [
+        { name: "effect", description: "Build with Effect v4" },
+        { name: "debugging", description: "Diagnose bugs" },
+        { name: "writing", description: "Write prose" },
+      ]
+
+      expect(
+        SystemContext.diffByKey(
+          previous,
+          current,
+          (value) => value.name,
+          (before, after) => before.description !== after.description,
+        ),
+      ).toEqual({
+        added: [{ name: "writing", description: "Write prose" }],
+        removed: [{ name: "retired", description: "Old" }],
+        changed: [
+          {
+            previous: { name: "effect", description: "Build with Effect" },
+            current: { name: "effect", description: "Build with Effect v4" },
+          },
+        ],
+      })
     }),
   )
 
@@ -281,7 +353,7 @@ describe("SystemContext", () => {
             stringContext({ key: "core/date", value: "date" }),
             stringContext({ key: "core/location", value: "location" }),
           ]),
-        )).baseline,
+        )).text,
       ).toBe("date\n\nlocation")
     }),
   )
@@ -295,13 +367,13 @@ describe("SystemContext", () => {
     }),
   )
 
-  it.effect("requires namespaced durable snapshot keys", () =>
+  it.effect("requires namespaced applied keys", () =>
     Effect.sync(() => {
-      const decodeSnapshot = Schema.decodeUnknownSync(SystemContext.Snapshot)
+      const decodeApplied = Schema.decodeUnknownSync(SystemContext.Applied)
 
-      expect(Object.keys(decodeSnapshot({ "core/date": { value: "date" } }))).toEqual(["core/date"])
-      expect(() => decodeSnapshot({ date: { value: "date" } })).toThrow()
-      expect(() => decodeSnapshot({ "core/date": { value: "date", removed: "" } })).toThrow()
+      expect(Object.keys(decodeApplied({ "core/date": { value: "date" } }))).toEqual(["core/date"])
+      expect(() => decodeApplied({ date: { value: "date" } })).toThrow()
+      expect(() => decodeApplied({ "core/date": { value: "date", removed: "" } })).toThrow()
     }),
   )
 })

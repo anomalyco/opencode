@@ -25,11 +25,11 @@ await Effect.runPromise(
             },
           },
         }),
-        fileURLToPath(new URL("../src/generated", import.meta.url)),
+        fileURLToPath(new URL("../src/promise/generated", import.meta.url)),
       ),
       write(
-        emitEffectImported(effectContract, { module: "../contract", api: "ClientApi" }),
-        fileURLToPath(new URL("../src/generated-effect", import.meta.url)),
+        emitEffectImported(effectContract, { module: "../../contract", api: "ClientApi" }),
+        fileURLToPath(new URL("../src/effect/generated", import.meta.url)),
       ),
       write(
         emitEffectShape(effectContract, { module: "@opencode-ai/protocol/client", api: "ClientApi" }),
