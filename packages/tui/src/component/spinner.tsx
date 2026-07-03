@@ -15,8 +15,9 @@ export function Spinner(props: { children?: JSX.Element; color?: RGBA; verbs?: s
   const [index, setIndex] = createSignal(0)
 
   createEffect(() => {
+    if (!kv.get("animations_enabled", true)) return
     if (!props.verbs?.length) return
-    const id = setInterval(() => setIndex((i) => (i + 1) % props.verbs!.length), 3000)
+    const id = setInterval(() => setIndex((i) => (i + 1) % props.verbs.length), 3000)
     onCleanup(() => clearInterval(id))
   })
 
