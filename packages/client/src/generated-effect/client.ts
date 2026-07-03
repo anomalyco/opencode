@@ -855,6 +855,24 @@ const adaptGroup22 = (raw: RawClient["server.projectCopy"]) => ({
   refresh: Endpoint22_2(raw),
 })
 
+type Endpoint23_0Request = Parameters<RawClient["server.vcs"]["vcs.status"]>[0]
+type Endpoint23_0Input = { readonly location?: Endpoint23_0Request["query"]["location"] }
+const Endpoint23_0 = (raw: RawClient["server.vcs"]) => (input?: Endpoint23_0Input) =>
+  raw["vcs.status"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError))
+
+type Endpoint23_1Request = Parameters<RawClient["server.vcs"]["vcs.diff"]>[0]
+type Endpoint23_1Input = {
+  readonly location?: Endpoint23_1Request["query"]["location"]
+  readonly mode: Endpoint23_1Request["query"]["mode"]
+  readonly context?: Endpoint23_1Request["query"]["context"]
+}
+const Endpoint23_1 = (raw: RawClient["server.vcs"]) => (input: Endpoint23_1Input) =>
+  raw["vcs.diff"]({ query: { location: input["location"], mode: input["mode"], context: input["context"] } }).pipe(
+    Effect.mapError(mapClientError),
+  )
+
+const adaptGroup23 = (raw: RawClient["server.vcs"]) => ({ status: Endpoint23_0(raw), diff: Endpoint23_1(raw) })
+
 const adaptClient = (raw: RawClient) => ({
   health: adaptGroup0(raw["server.health"]),
   location: adaptGroup1(raw["server.location"]),
@@ -879,6 +897,7 @@ const adaptClient = (raw: RawClient) => ({
   question: adaptGroup20(raw["server.question"]),
   reference: adaptGroup21(raw["server.reference"]),
   projectCopy: adaptGroup22(raw["server.projectCopy"]),
+  vcs: adaptGroup23(raw["server.vcs"]),
 })
 
 export const make = (options?: { readonly baseUrl?: URL | string }) =>

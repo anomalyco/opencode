@@ -4682,3 +4682,56 @@ export type ProjectCopyRefreshInput = {
 }
 
 export type ProjectCopyRefreshOutput = void
+
+export type VcsStatusInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
+
+export type VcsStatusOutput = {
+  readonly location: {
+    readonly directory: string
+    readonly workspaceID?: string
+    readonly project: { readonly id: string; readonly directory: string }
+  }
+  readonly data: ReadonlyArray<{
+    readonly file: string
+    readonly additions: number
+    readonly deletions: number
+    readonly status: "added" | "deleted" | "modified"
+  }>
+}
+
+export type VcsDiffInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+    readonly mode: "working" | "branch"
+    readonly context?: number | undefined
+  }["location"]
+  readonly mode: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+    readonly mode: "working" | "branch"
+    readonly context?: number | undefined
+  }["mode"]
+  readonly context?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+    readonly mode: "working" | "branch"
+    readonly context?: number | undefined
+  }["context"]
+}
+
+export type VcsDiffOutput = {
+  readonly location: {
+    readonly directory: string
+    readonly workspaceID?: string
+    readonly project: { readonly id: string; readonly directory: string }
+  }
+  readonly data: ReadonlyArray<{
+    readonly file?: string
+    readonly patch?: string
+    readonly additions: number
+    readonly deletions: number
+    readonly status?: "added" | "deleted" | "modified"
+  }>
+}

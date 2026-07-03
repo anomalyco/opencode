@@ -26,6 +26,7 @@ test("exposes every standard HTTP API group", () => {
     "question",
     "reference",
     "projectCopy",
+    "vcs",
   ])
   expect(Object.keys(client.message)).toEqual(["list"])
   expect(Object.keys(client.integration)).toEqual([
@@ -38,6 +39,7 @@ test("exposes every standard HTTP API group", () => {
     "attemptCancel",
   ])
   expect(Object.keys(client.file)).toEqual(["read", "list", "find"])
+  expect(Object.keys(client.vcs)).toEqual(["status", "diff"])
   expect(Object.keys(client.pty)).toEqual(["list", "create", "get", "update", "remove"])
   expect(Object.keys(client.shell)).toEqual(["list", "create", "get", "output", "remove"])
   expect(Object.keys(client.project)).toEqual(["current", "directories"])

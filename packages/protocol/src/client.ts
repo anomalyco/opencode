@@ -50,6 +50,7 @@ export const groupNames = {
   "server.reference": "reference",
   "server.project": "project",
   "server.projectCopy": "projectCopy",
+  "server.vcs": "vcs",
 } as const
 
 export const endpointNames = {
