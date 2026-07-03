@@ -1,6 +1,5 @@
 import { EOL } from "os"
-import { Option } from "effect"
-import * as Effect from "effect/Effect"
+import { Effect, Option } from "effect"
 import { Commands } from "../../commands"
 import { Runtime } from "../../../framework/runtime"
 import { ServiceConfig } from "../../../services/service-config"

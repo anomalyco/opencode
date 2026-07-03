@@ -1,5 +1,5 @@
 import { EOL } from "os"
-import * as Effect from "effect/Effect"
+import { Effect } from "effect"
 import { createOpencodeClient } from "@opencode-ai/sdk/v2/client"
 import { Commands } from "../../commands"
 import { Runtime } from "../../../framework/runtime"

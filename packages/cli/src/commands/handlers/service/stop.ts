@@ -1,4 +1,4 @@
-import * as Effect from "effect/Effect"
+import { Effect } from "effect"
 import { Service } from "@opencode-ai/client/effect"
 import { Commands } from "../../commands"
 import { Runtime } from "../../../framework/runtime"

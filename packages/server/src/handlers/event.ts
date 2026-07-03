@@ -1,9 +1,9 @@
 import { EventV2 } from "@opencode-ai/core/event"
 import { OpenCodeEvent } from "@opencode-ai/protocol/groups/event"
 import { Effect, Schema, Stream } from "effect"
+import { Sse } from "effect/unstable/encoding"
 import { HttpServerResponse } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
-import * as Sse from "effect/unstable/encoding/Sse"
 import { Api } from "../api"
 
 const subscriberCapacity = 256

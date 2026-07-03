@@ -1,5 +1,5 @@
 import { EOL } from "node:os"
-import * as Effect from "effect/Effect"
+import { Effect } from "effect"
 import { createOpencodeClient, type McpServer } from "@opencode-ai/sdk/v2/client"
 import { Commands } from "../../commands"
 import { Runtime } from "../../../framework/runtime"
