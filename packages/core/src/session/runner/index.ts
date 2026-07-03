@@ -13,7 +13,7 @@ export type RunError =
 
 /** Runs one local continuation from already-recorded Session history. */
 export interface Interface {
-  /** Drains eligible durable work. Explicit runs perform one provider attempt even when no work is eligible. */
+  /** Drains eligible durable work. Explicit runs perform one physical attempt even when no work is eligible. */
   readonly drain: (input: {
     readonly sessionID: SessionSchema.ID
     readonly force: boolean

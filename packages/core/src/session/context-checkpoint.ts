@@ -18,7 +18,7 @@ const decodeApplied = Schema.decodeUnknownOption(SystemContext.Applied)
  * Loads or creates the session's durable context checkpoint, narrating any
  * drift since the model was last told as a chronological update. Completed
  * compaction rebaselines; nothing else rewrites the baseline. Runs before
- * input promotion so a blocked first turn leaves pending inputs untouched.
+ * input promotion so a blocked first step leaves pending inputs untouched.
  */
 export const prepare = Effect.fn("SessionContextCheckpoint.prepare")(function* (
   db: DatabaseService,

@@ -34,7 +34,7 @@ const messageRows = Effect.fnUntraced(function* (
       and(
         eq(SessionMessageTable.session_id, sessionID),
         // Keep system updates visible in the gap between a completed compaction
-        // and the next prepared turn's rebaseline, when their content is not yet
+        // and the next prepared step's rebaseline, when their content is not yet
         // folded into a new baseline.
         compaction
           ? or(

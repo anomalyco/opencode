@@ -12,7 +12,7 @@ import { Effect, Option, Schema } from "effect"
  * The durable `Applied` record tracks what the model was last told, per source:
  * it is the model's current belief. Interpreters uphold one invariant —
  * `reconcile` never rewrites the baseline; it only narrates drift as update
- * text. Only `rebaseline` (compaction) and `initialize` (first turn) produce
+ * text. Only `rebaseline` (compaction) and `initialize` (first step) produce
  * baseline text.
  *
  * Returning `unavailable` means observation failed temporarily. It differs from

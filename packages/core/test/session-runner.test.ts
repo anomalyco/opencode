@@ -583,7 +583,7 @@ const verifyPartialFlushOnInterruption = (kind: FragmentKind) =>
       {
         type: "assistant",
         finish: "error",
-        error: { type: "unknown", message: "Provider turn interrupted" },
+        error: { type: "unknown", message: "Step interrupted" },
         content: [
           kind === "tool input"
             ? { type: "tool", id: fragmentID(kind, "interrupted"), state: { status: "error" } }
@@ -2983,7 +2983,7 @@ describe("SessionRunnerLLM", () => {
       expect(requests).toHaveLength(1)
       expect(yield* session.context(sessionID)).toMatchObject([
         { type: "user", text: "Interrupt provider" },
-        { type: "assistant", finish: "error", error: { type: "unknown", message: "Provider turn interrupted" } },
+        { type: "assistant", finish: "error", error: { type: "unknown", message: "Step interrupted" } },
       ])
       expect(yield* recordedEventTypes(sessionID)).toContain("step.failed.1")
       yield* session.interrupt(sessionID)
@@ -3018,7 +3018,7 @@ describe("SessionRunnerLLM", () => {
         {
           type: "assistant",
           finish: "error",
-          error: { type: "unknown", message: "Provider turn interrupted" },
+          error: { type: "unknown", message: "Step interrupted" },
           content: [
             {
               type: "tool",

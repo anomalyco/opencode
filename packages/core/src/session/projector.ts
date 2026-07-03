@@ -168,7 +168,8 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
         .get()
         .pipe(Effect.orDie)
     : undefined
-  if (event.data.from && !boundary) return yield* Effect.die(new Error(`Fork boundary message not found: ${event.data.from}`))
+  if (event.data.from && !boundary)
+    return yield* Effect.die(new Error(`Fork boundary message not found: ${event.data.from}`))
   const copied = yield* db
     .select({ seq: SessionMessageTable.seq })
     .from(SessionMessageTable)
@@ -357,7 +358,7 @@ function run(db: DatabaseService, event: MessageEvent) {
     const adapter: SessionMessageUpdater.Adapter = {
       getCurrentAssistant() {
         return Effect.gen(function* () {
-          // A newer turn supersedes stale incomplete rows; never resume an older assistant projection.
+          // A newer step supersedes stale incomplete rows; never resume an older assistant projection.
           const row = yield* db
             .select()
             .from(SessionMessageTable)

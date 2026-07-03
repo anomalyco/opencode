@@ -354,7 +354,7 @@ Recent work
               state: SessionMessage.ToolStateError.make({
                 status: "error",
                 input: { query: "Effect" },
-                error: { type: "unknown", message: "Provider turn interrupted" },
+                error: { type: "unknown", message: "Step interrupted" },
                 content: [],
                 structured: {},
               }),
@@ -362,7 +362,7 @@ Recent work
             }),
           ],
           finish: "error",
-          error: { type: "unknown", message: "Provider turn interrupted" },
+          error: { type: "unknown", message: "Step interrupted" },
           time: { created, completed: created },
         }),
       ],
@@ -386,7 +386,7 @@ Recent work
         result: {
           type: "error",
           value: {
-            error: { type: "unknown", message: "Provider turn interrupted" },
+            error: { type: "unknown", message: "Step interrupted" },
             content: [],
             structured: {},
           },

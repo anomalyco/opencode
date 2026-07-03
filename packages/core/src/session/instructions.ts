@@ -36,9 +36,9 @@ const layer = Layer.effect(
     // absolute paths, but the human-facing description shows paths relative to the project
     // root so opening a subdirectory still describes paths from the project root.
     const root = yield* fs.resolve(location.project.directory)
-    // Same-turn parallel reads settle concurrently, so an in-memory claim guards each
+    // Same-step parallel reads settle concurrently, so an in-memory claim guards each
     // Session/path pair before any filesystem work. The durable history check below covers
-    // paths injected in earlier turns after this Location layer was reopened.
+    // paths injected in earlier steps after this Location layer was reopened.
     const injected = yield* Ref.make<Map<SessionSchema.ID, Set<string>>>(new Map())
 
     const load = Effect.fn("SessionInstructions.load")(function* (input: {

@@ -61,11 +61,11 @@ import { llmClient } from "../../effect/app-node-platform"
  * - Runtime context assembly
  *   - Track V1 runtime-context parity canonically in `specs/v2/session.md`.
  *
- * - One provider turn
+ * - One step
  *   - [x] Translate every projected V2 Session message variant into canonical
  *     `@opencode-ai/llm` messages.
  *   - [ ] Resolve policy-filtered built-in, MCP, plugin, and structured-output tool definitions.
- *   - [x] Stream exactly one `llm.stream(request)` provider turn.
+ *   - [x] Stream exactly one `llm.stream(request)` physical attempt.
  *   - [x] Persist assistant text and usage events incrementally as they arrive.
  *   - [ ] Persist snapshots, patches, and retry notices incrementally as they arrive.
  *   - [x] Persist reasoning, provider errors, and tool-call events incrementally as they arrive.
@@ -77,8 +77,8 @@ import { llmClient } from "../../effect/app-node-platform"
  *   - [x] Start each recorded local call eagerly and await all settlements before continuation.
  *   - [ ] Add scoped runtime context, progress updates, attachment normalization,
  *     plugins, and cancellation settlement.
- *   - [x] Reload projected history and start the next explicit provider turn after local tool results.
- *   - [x] Continue for durable user steering accepted during an active provider turn.
+ *   - [x] Reload projected history and start the next explicit step after local tool results.
+ *   - [x] Continue for durable user steering accepted during an active step.
  *   - [ ] Continue for compaction or another continuation condition when required.
  *
  * - Post-run maintenance
@@ -86,12 +86,12 @@ import { llmClient } from "../../effect/app-node-platform"
  *   - [ ] Coalesce streamed deltas and add covering projected-history indexes.
  *   - [ ] Update title, summaries, compaction state, and cleanup in bounded background work.
  *
- * Use `llm.stream(request)` for each provider turn. Keep tool execution and continuation here.
+ * Use `llm.stream(request)` for each physical attempt. Keep tool execution and continuation here.
  * Durable continuation recovery remains a separate future slice with an explicit retry policy.
  *
  * The current slice loads V2 history, translates it, resolves a model through a core service, and persists one
- * provider turn. Registry definitions are advertised, local tool calls are settled durably, and an
- * explicit loop starts the next provider turn after local settlement. Configured agent step limits bound the loop.
+ * step. Registry definitions are advertised, local tool calls are settled durably, and an
+ * explicit loop starts the next step after local settlement. Configured agent step limits bound the loop.
  */
 
 const layer = Layer.effect(
@@ -114,7 +114,7 @@ const layer = Layer.effect(
     const db = (yield* Database.Service).db
     const compaction = yield* SessionCompaction.Service
     const title = yield* SessionTitle.Service
-    // Title generation is a side effect of the first turn; it must not delay turn continuation.
+    // Title generation is a side effect of the first step; it must not delay step continuation.
     // Tracked per process so repeated wakes before the second user message arrives don't
     // re-fire a redundant LLM call; `SessionTitle` itself is idempotent based on durable history.
     const titleAttempted = new Set<SessionSchema.ID>()
@@ -177,7 +177,7 @@ const layer = Layer.effect(
         return yield* Effect.interrupt
       const agent = yield* agents.select(session.agent)
       // Establish what the model knows before admitting what the user said, so
-      // a blocked first turn leaves pending inputs untouched.
+      // a blocked first step leaves pending inputs untouched.
       const checkpoint = yield* SessionContextCheckpoint.prepare(
         db,
         events,
@@ -231,7 +231,7 @@ const layer = Layer.effect(
         snapshot: startSnapshot,
       })
       const publication = Semaphore.makeUnsafe(1)
-      // Durable publishes are serialized so tool fibers and turn settlement never interleave
+      // Durable publishes are serialized so tool fibers and step settlement never interleave
       // mid-event.
       const serialized = <A, E, R>(effect: Effect.Effect<A, E, R>) => publication.withPermit(effect)
       const publish = (event: LLMEvent, outputPaths: ReadonlyArray<string> = []) =>
@@ -282,7 +282,7 @@ const layer = Layer.effect(
         Effect.ensuring(serialized(publisher.flush())),
       )
 
-      // Captures the end snapshot, diffs it against the turn's start, and durably ends the
+      // Captures the end snapshot, diffs it against the step's start, and durably ends the
       // assistant step.
       const publishStepEnd = (settlement: NonNullable<ReturnType<typeof publisher.stepSettlement>>) =>
         Effect.gen(function* () {
@@ -316,7 +316,7 @@ const layer = Layer.effect(
           const streamInterrupted = stream._tag === "Failure" && Cause.hasInterrupts(stream.cause)
 
           // A context overflow before any assistant output is recoverable: compact and
-          // restart the turn instead of surfacing the provider error.
+          // restart the step instead of surfacing the provider error.
           if (
             recoverOverflow &&
             !publisher.hasAssistantStarted() &&
@@ -325,7 +325,7 @@ const layer = Layer.effect(
           )
             return { _tag: "RestartAfterOverflowCompaction", step: currentStep } as const
 
-          // An unrecovered held-back overflow becomes the turn's durable provider error. A
+          // An unrecovered held-back overflow becomes the step's durable provider error. A
           // thrown LLM failure fails hosted tool calls and the assistant unless a provider
           // error was already recorded from the stream.
           if (overflowFailure) yield* publish(overflowFailure)
@@ -346,12 +346,12 @@ const layer = Layer.effect(
           if (questionDismissed || streamInterrupted || toolsInterrupted) {
             yield* FiberSet.clear(toolFibers)
             yield* serialized(publisher.failUnsettledTools("Tool execution interrupted"))
-            yield* serialized(publisher.failAssistant("Provider turn interrupted"))
+            yield* serialized(publisher.failAssistant("Step interrupted"))
             // Match V1: dismissing a question halts the loop like an interruption.
             if (questionDismissed) return yield* Effect.interrupt
           }
           // A settled tool fiber failure is one of two things. A defect from a tool
-          // implementation becomes a failed tool call the model can read, and the turn still
+          // implementation becomes a failed tool call the model can read, and the step still
           // settles so the model may recover. A typed infrastructure failure (tool output
           // could not be persisted) also fails the assistant and then fails the drain.
           const settledFailure = settled._tag === "Failure" && !toolsInterrupted ? settled.cause : undefined

@@ -50,7 +50,7 @@ const settledOutput = (value: ToolOutput | undefined, result: ToolResultValue): 
   return { structured: record(settled.structured), content: settled.content }
 }
 
-/** Persist one provider turn without executing tools or starting a continuation turn. */
+/** Persist one step without executing tools or starting a continuation step. */
 export const createLLMEventPublisher = (events: EventV2.Interface, input: Input) => {
   const tools = new Map<
     string,
