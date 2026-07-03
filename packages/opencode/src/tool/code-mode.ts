@@ -304,16 +304,12 @@ export const CodeModeTool = Tool.define(
           return yield* Effect.fail(new Error(withLogs([result.error.message, ...hints].join("\n"))))
         }
 
-        let output: string
-        if (typeof result.value === "string") output = result.value
-        else if (result.value === undefined) output = "undefined"
-        else {
-          try {
-            output = JSON.stringify(result.value, null, 2) ?? String(result.value)
-          } catch {
-            output = String(result.value)
-          }
-        }
+        // The interpreter validates returned values as plain JSON, so stringify cannot throw;
+        // it yields undefined only for a program that returns undefined.
+        const output =
+          typeof result.value === "string"
+            ? result.value
+            : (JSON.stringify(result.value, null, 2) ?? String(result.value))
 
         return {
           title: CODE_MODE_TOOL,
