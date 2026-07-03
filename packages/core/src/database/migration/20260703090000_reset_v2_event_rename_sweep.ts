@@ -9,7 +9,9 @@ export default {
       yield* tx.run(`DELETE FROM \`session_message\`;`)
       yield* tx.run(`DELETE FROM \`event\`;`)
       yield* tx.run(`DELETE FROM \`event_sequence\`;`)
-      yield* tx.run(`ALTER TABLE \`event\` ADD COLUMN \`created\` integer NOT NULL DEFAULT 0;`)
+      // `created` column is added by the generated 20260703181610_event_created_column
+      // migration, which runs after this wipe (NOT NULL without default is safe on the
+      // emptied table).
     })
   },
 } satisfies DatabaseMigration.Migration

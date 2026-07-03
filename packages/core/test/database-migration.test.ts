@@ -255,7 +255,7 @@ describe("DatabaseMigration", () => {
         )
         yield* db.run(sql`INSERT INTO event_sequence (aggregate_id, seq) VALUES ('session', 9)`)
         yield* db.run(
-          sql`INSERT INTO event (id, aggregate_id, seq, type, data) VALUES ('event', 'session', 9, 'session.updated.1', '{}')`,
+          sql`INSERT INTO event (id, aggregate_id, seq, type, data, created) VALUES ('event', 'session', 9, 'session.updated.1', '{}', 1)`,
         )
         yield* db.run(
           sql`INSERT INTO session_input (id, session_id, prompt, delivery, admitted_seq, time_created) VALUES ('input', 'session', '{}', 'steer', 9, 1)`,

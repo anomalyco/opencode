@@ -1,9 +1,9 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "22e57fed-b9b8-4e94-a3b4-f94bece680a8",
+  "id": "96e9fe64-d810-4102-8f79-3317a88bb6d2",
   "prevIds": [
-    "f14a9b18-8207-487e-a3d3-227e629ba9ad"
+    "22e57fed-b9b8-4e94-a3b4-f94bece680a8"
   ],
   "ddl": [
     {
@@ -523,6 +523,16 @@
       "default": null,
       "generated": null,
       "name": "seq",
+      "entityType": "columns",
+      "table": "event"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "created",
       "entityType": "columns",
       "table": "event"
     },
