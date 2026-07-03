@@ -958,6 +958,7 @@ export const RunCommand = effectCmd({
                 thinking,
                 format: args.format === "json" ? "json" : "default",
                 dangerouslySkipPermissions: args["dangerously-skip-permissions"],
+                attached: Boolean(args.attach),
                 renderTool: tool,
                 renderToolError: toolError,
               })

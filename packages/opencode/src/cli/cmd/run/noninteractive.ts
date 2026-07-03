@@ -33,6 +33,8 @@ type Input = {
   thinking: boolean
   format: "default" | "json"
   dangerouslySkipPermissions: boolean
+  /** True when the client is attached to a shared server rather than an exclusive in-process one. */
+  attached: boolean
   renderTool: (part: ToolPart) => Promise<void>
   renderToolError: (part: ToolPart) => Promise<void>
 }
@@ -49,6 +51,13 @@ type ToolState = StartedPart & {
   raw?: string
   provider?: unknown
 }
+
+type FormRequest = Extract<V2Event, { type: "form.created" }>["data"]["form"]
+
+// MCP elicitations are temporarily owned by the "global" sentinel instead of a real
+// session. An exclusive local process may treat them as this run's blockers; an
+// attached client must not cancel input that may belong to another session.
+const GLOBAL_FORM_SESSION_ID = "global"
 
 export async function runNonInteractivePrompt(input: Input) {
   const controller = new AbortController()
@@ -69,6 +78,7 @@ export async function runNonInteractivePrompt(input: Input) {
   let emittedError = false
   let questionRejected = false
   let permissionRejected = false
+  let formCancelled = false
   let interrupted = false
   let admission: AbortController | undefined
 
@@ -117,6 +127,11 @@ export async function runNonInteractivePrompt(input: Input) {
     await input.client.v2.session.question.reject({ sessionID: input.sessionID, requestID: request.id }).catch(() => {})
   }
 
+  const cancelForm = async (request: Pick<FormRequest, "id" | "sessionID">) => {
+    formCancelled = true
+    await input.client.v2.session.form.cancel({ sessionID: request.sessionID, formID: request.id }).catch(() => {})
+  }
+
   const consume = async () => {
     while (!controller.signal.aborted) {
       const next = await stream.next()
@@ -129,6 +144,15 @@ export async function runNonInteractivePrompt(input: Input) {
       }
       if (event.type === "question.v2.asked" && submitted && event.data.sessionID === input.sessionID) {
         await rejectQuestion(event.data)
+        continue
+      }
+      if (
+        event.type === "form.created" &&
+        submitted &&
+        (event.data.form.sessionID === input.sessionID ||
+          (!input.attached && event.data.form.sessionID === GLOBAL_FORM_SESSION_ID))
+      ) {
+        await cancelForm(event.data.form)
         continue
       }
       if (!("sessionID" in event.data) || event.data.sessionID !== input.sessionID) continue
@@ -144,7 +168,7 @@ export async function runNonInteractivePrompt(input: Input) {
       if (
         event.type === "session.next.execution.settled" &&
         event.data.outcome === "interrupted" &&
-        (interrupted || permissionRejected || questionRejected)
+        (interrupted || permissionRejected || questionRejected || formCancelled)
       ) {
         return
       }
@@ -320,14 +344,14 @@ export async function runNonInteractivePrompt(input: Input) {
         continue
       }
       if (event.type === "session.next.step.failed") {
-        if (interrupted || permissionRejected || questionRejected) continue
+        if (interrupted || permissionRejected || questionRejected || formCancelled) continue
         emittedError = true
         process.exitCode = 1
         if (!emit("error", time, { error: event.data.error })) UI.error(event.data.error.message)
         continue
       }
       if (event.type === "session.next.execution.settled") {
-        if (event.data.outcome === "failure" && !emittedError && !questionRejected) {
+        if (event.data.outcome === "failure" && !emittedError && !questionRejected && !formCancelled) {
           emittedError = true
           process.exitCode = 1
           const error = event.data.error ?? { type: "unknown", message: "Session execution failed" }
@@ -406,13 +430,19 @@ export async function runNonInteractivePrompt(input: Input) {
     if (!response.data.data) throw new Error("Prompt was not admitted")
     if (interrupted) await input.client.v2.session.interrupt({ sessionID: input.sessionID }).catch(() => {})
 
-    const [permissions, questions] = await Promise.all([
+    const [permissions, questions, forms] = await Promise.all([
       input.client.v2.session.permission.list({ sessionID: input.sessionID }).catch(() => undefined),
       input.client.v2.session.question.list({ sessionID: input.sessionID }).catch(() => undefined),
+      Promise.all(
+        (input.attached ? [input.sessionID] : [input.sessionID, GLOBAL_FORM_SESSION_ID]).map((sessionID) =>
+          input.client.v2.session.form.list({ sessionID }).catch(() => undefined),
+        ),
+      ),
     ])
     await Promise.all([
       ...(permissions?.data?.data ?? []).map(replyPermission),
       ...(questions?.data?.data ?? []).map(rejectQuestion),
+      ...forms.flatMap((response) => response?.data?.data ?? []).map(cancelForm),
     ])
     await completed
   } finally {
