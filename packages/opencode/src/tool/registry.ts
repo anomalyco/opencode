@@ -300,11 +300,12 @@ const layer = Layer.effect(
         return true
       })
 
-      const described = yield* Effect.forEach(
-        filtered,
+      const codeModeDescription = filtered.some((tool) => tool.id === "execute") ? yield* describeCodeMode(input) : undefined
+      const visible = filtered.filter((tool) => tool.id !== "execute" || codeModeDescription)
+
+      return yield* Effect.forEach(
+        visible,
         Effect.fnUntraced(function* (tool: Tool.Def) {
-          const codeModeDescription = tool.id === "execute" ? yield* describeCodeMode(input) : undefined
-          if (tool.id === "execute" && !codeModeDescription) return
           const output = {
             description: tool.description,
             parameters: tool.parameters,
@@ -320,20 +321,19 @@ const layer = Layer.effect(
             description: [
               output.description,
               tool.id === TaskTool.id ? yield* describeTask(input.agent) : undefined,
-              codeModeDescription,
+              tool.id === "execute" ? codeModeDescription : undefined,
             ]
               .filter(Boolean)
               .join("\n"),
             parameters: output.parameters,
             execute: tool.execute,
-            ...(jsonSchema === undefined ? {} : { jsonSchema }),
-            ...(tool.formatValidationError === undefined ? {} : { formatValidationError: tool.formatValidationError }),
           }
+          if (jsonSchema !== undefined) result.jsonSchema = jsonSchema
+          if (tool.formatValidationError !== undefined) result.formatValidationError = tool.formatValidationError
           return result
         }),
         { concurrency: "unbounded" },
       )
-      return described.filter((tool): tool is Tool.Def => tool !== undefined)
     })
 
     const named: Interface["named"] = Effect.fn("ToolRegistry.named")(function* () {
