@@ -1,0 +1,45 @@
+$ bun run script/build.ts
+opencode script {
+  "channel": "feat/mimo-tools-port",
+  "version": "0.0.0-feat/mimo-tools-port-202606292353",
+  "preview": true,
+  "release": false,
+  "team": [
+    "adamdotdevin",
+    "Brendonovich",
+    "fwang",
+    "Hona",
+    "iamdavidhill",
+    "jayair",
+    "jlongster",
+    "kitlangton",
+    "kommander",
+    "MrMushrooooom",
+    "nexxeln",
+    "R44VC0RP",
+    "rekram1-node",
+    "thdxr",
+    "simonklee",
+    "vimtor",
+    "starptech",
+    "actions-user",
+    "opencode",
+    "opencode-agent[bot]"
+  ]
+}
+Loaded models.dev snapshot
+Wrote 9 default config assets to C:\Users\Administrator\Documents\New folder (3)\opencode\packages\opencode\src\config\default-assets.json
+  - agent/autonomous.md
+  - instructions/context7.md
+  - instructions/memory.md
+  - instructions/verify.md
+  - opencode.json
+  - plugins/autoverify.ts
+  - plugins/context7-enforcer.ts
+  - plugins/watchdog.ts
+  - skill/frontend-design/SKILL.md
+Building Web UI to embed in the binary
+$ vite build
+[36mvite v7.1.4 [32mbuilding for production...[36m[39m
+transforming...
+[32m✓[39m 2327 modules transformed.

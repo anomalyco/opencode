@@ -50,6 +50,9 @@ import { DepsAddTool, DepsOutdatedTool } from "./deps"
 import { RenameSymbolTool } from "./rename-symbol"
 import { CodeActionsTool } from "./code-actions"
 import { ProcessStartTool, ProcessLogsTool, ProcessStopTool } from "./process"
+import { DatetimeTool } from "./datetime"
+import { Context7Tool } from "./context7"
+import { ScaffoldDesignTool } from "./scaffold-design"
 import { Git } from "@/git"
 import { AppProcess } from "@opencode-ai/core/process"
 import { Glob } from "@opencode-ai/core/util/glob"
@@ -153,6 +156,9 @@ export const layer = Layer.effect(
     const processstarttool = yield* ProcessStartTool
     const processlogstool = yield* ProcessLogsTool
     const processstoptool = yield* ProcessStopTool
+    const datetimetool = yield* DatetimeTool
+    const context7tool = yield* Context7Tool
+    const scaffolddesigntool = yield* ScaffoldDesignTool
     const skilltool = yield* SkillTool
     const agent = yield* Agent.Service
 
@@ -282,6 +288,9 @@ export const layer = Layer.effect(
           processstart: Tool.init(processstarttool),
           processlogs: Tool.init(processlogstool),
           processstop: Tool.init(processstoptool),
+          datetime: Tool.init(datetimetool),
+          context7: Tool.init(context7tool),
+          scaffolddesign: Tool.init(scaffolddesigntool),
           question: Tool.init(question),
           lsp: Tool.init(lsptool),
           plan: Tool.init(plan),
@@ -328,6 +337,9 @@ export const layer = Layer.effect(
             tool.processstart,
             tool.processlogs,
             tool.processstop,
+            tool.datetime,
+            tool.context7,
+            tool.scaffolddesign,
             ...(flags.experimentalLspTool ? [tool.lsp] : []),
             ...(flags.experimentalPlanMode && flags.client === "cli" ? [tool.plan] : []),
           ],

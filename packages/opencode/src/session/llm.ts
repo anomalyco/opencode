@@ -301,11 +301,26 @@ const live: Layer.Layer<
                 toolName: lower,
               }
             }
+            // When a tool call's JSON arguments are truncated or malformed
+            // (most often because a large `write`/`edit` content exceeded the
+            // model's output token budget and got cut off mid-string), return
+            // an actionable error so the model recovers by splitting the work
+            // instead of seeing a cryptic parse failure. We deliberately do not
+            // silently salvage partial content (that would write a half-written
+            // file without the model knowing).
+            const errorMessage = failed.error?.message ?? String(failed.error)
+            const looksTruncated =
+              /JSON parsing failed|Unterminated string|Unexpected end of (JSON|input)|JSON Parse error|Invalid input for tool/i.test(
+                errorMessage,
+              )
+            const guidance = looksTruncated
+              ? `The "${failed.toolCall.toolName}" call was rejected because its JSON arguments were truncated or malformed. This almost always means the content was too large to fit in a single response and got cut off. Do NOT resend the same large call. Instead, split the work: create the file with an initial "write" containing only the first portion, then add the remaining parts with separate "edit" (or "multiedit") calls. Keep each call comfortably small.`
+              : `Invalid arguments for "${failed.toolCall.toolName}": ${errorMessage}`
             return {
               ...failed.toolCall,
               input: JSON.stringify({
                 tool: failed.toolCall.toolName,
-                error: failed.error.message,
+                error: guidance,
               }),
               toolName: "invalid",
             }

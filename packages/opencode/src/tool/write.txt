@@ -6,3 +6,4 @@ Usage:
 - ALWAYS prefer editing existing files in the codebase. NEVER write new files unless explicitly required.
 - NEVER proactively create documentation files (*.md) or README files. Only create documentation files if explicitly requested by the User.
 - Only use emojis if the user explicitly requests it. Avoid writing emojis to files unless asked.
+- For very large files, do not put the entire content in one write call: it can exceed the model output limit and get truncated, which fails the call. Instead create the file with an initial write of the first portion, then add the rest with separate edit (or multiedit) calls.

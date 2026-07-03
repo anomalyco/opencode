@@ -1,4 +1,4 @@
-﻿/**
+/**
  * autoverify: autonomous, multi-language project verification after code edits.
  *
  * After any edit-class tool it runs (non-blocking, background, debounced,
@@ -21,7 +21,7 @@ const EDIT_TOOLS = new Set([
   "edit", "write", "multiedit", "patch_apply", "bulk_edit", "notebook_edit", "apply_patch",
 ])
 
-const DEBOUNCE_MS = 8000
+const DEBOUNCE_MS = 3000
 const MAX_AGE_S = 240
 const MAX_CONCURRENT = 3
 
@@ -383,7 +383,7 @@ function summarize(label: string, code: number, out: string): string {
   const lines = out
     .split("\n")
     .map((l) => l.replace(/\s+$/, ""))
-    .filter((l) => /error|fail|✗|✘|cannot find|is not defined|unexpected|warning:/i.test(l))
+    .filter((l) => /error|fail|âœ—|âœ˜|cannot find|is not defined|unexpected|warning:/i.test(l))
     .slice(0, 20)
   const body = lines.join("\n") || out.split("\n").filter(Boolean).slice(-20).join("\n")
   return label + ": FAIL (exit " + code + ")\n" + body
@@ -405,6 +405,8 @@ export default (async ({ directory }) => {
     }
   }
 
+  const isFast = (key: string) => /:typecheck$|:lint$|^css:/.test(key)
+
   return {
     "tool.execute.after": async (
       input: { tool: string; sessionID: string; callID: string; args: any },
@@ -412,25 +414,57 @@ export default (async ({ directory }) => {
     ) => {
       if (!EDIT_TOOLS.has(input.tool)) return
       const jobs = buildJobs(directory)
-      if (jobs.length === 0) return
+      if (jobs.length === 0) {
+        output.output =
+          output.output +
+          "\n\n<verification>\nNo project checks configured for this directory (no typecheck/lint/test detected). Verify manually if needed.\n</verification>"
+        return
+      }
 
-      const blocks: string[] = []
+      const fast = jobs.filter((j) => isFast(j.key))
+      const slow = jobs.filter((j) => !isFast(j.key))
+
+      // Run a couple of fast checks INLINE (awaited) so results are visible in
+      // this same response and the model must act on them before continuing.
+      let inlineCount = 0
+      for (const job of fast) {
+        const st = getSt(job.key)
+        if (!st.running && Date.now() - st.runAt > DEBOUNCE_MS && inlineCount < 2) {
+          inlineCount++
+          await run(job)
+        }
+      }
+
+      // Kick slow checks (tests/build) in the background, concurrency-capped.
       let runningCount = 0
       for (const job of jobs) if (getSt(job.key).running) runningCount++
-
-      for (const job of jobs) {
+      for (const job of slow) {
         const st = getSt(job.key)
-        const ageS = Math.round((Date.now() - st.runAt) / 1000)
-        if (st.result && ageS <= MAX_AGE_S) blocks.push("[" + ageS + "s] " + st.result)
         if (!st.running && Date.now() - st.runAt > DEBOUNCE_MS && runningCount < MAX_CONCURRENT) {
           runningCount++
           void run(job)
         }
       }
 
-      if (blocks.length > 0) {
-        output.output = output.output + "\n\n<project_checks>\n" + blocks.join("\n\n") + "\n</project_checks>"
+      // Collect fresh + running results.
+      const blocks: string[] = []
+      let anyFail = false
+      for (const job of jobs) {
+        const st = getSt(job.key)
+        const ageS = Math.round((Date.now() - st.runAt) / 1000)
+        if (st.result && ageS <= MAX_AGE_S) {
+          if (/: FAIL|: TIMED OUT/.test(st.result)) anyFail = true
+          blocks.push("[" + ageS + "s] " + st.result)
+        } else if (st.running) {
+          blocks.push(job.label + ": running in background...")
+        }
       }
+
+      const header = anyFail
+        ? "Automatic verification FOUND PROBLEMS after your edit. FIX every FAIL below before continuing; do not declare the task done with failing checks."
+        : "Automatic verification ran after your edit."
+      const body = blocks.length ? blocks.join("\n\n") : "Checks started; results will appear after the next step."
+      output.output = output.output + "\n\n<verification>\n" + header + "\n\n" + body + "\n</verification>"
     },
   }
 }) satisfies Plugin

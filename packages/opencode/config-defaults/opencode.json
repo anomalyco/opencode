@@ -8,7 +8,8 @@
   "plugin": [
     "./plugins/watchdog.ts",
     "./plugins/autoverify.ts",
-    "./plugins/context7-enforcer.ts"
+    "./plugins/context7-enforcer.ts",
+    "./plugins/memory-loader.ts"
   ],
   "permission": {
     "edit": "allow",
