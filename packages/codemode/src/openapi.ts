@@ -54,7 +54,10 @@ export type AuthResolver = (context: {
 export type Options = {
   /** Parsed OpenAPI document or JSON text. YAML must be parsed by the host. */
   readonly spec: Document | string
-  /** Overrides the spec's `servers`. Required when the spec declares none. */
+  /**
+   * Overrides the spec's `servers` (of which only the first entry is used).
+   * Required when the spec declares no absolute server URL.
+   */
   readonly baseUrl?: string | undefined
   /** Values for templated server URL variables; spec defaults apply when omitted. */
   readonly serverVariables?: Readonly<Record<string, string>> | undefined
@@ -111,9 +114,9 @@ const nonEmptyString = (value: unknown): string | undefined =>
  * `HttpClient.HttpClient` from the Effect environment; the host provides the
  * transport layer (e.g. `FetchHttpClient.layer`).
  *
- * Throws on structurally invalid specs. Operations that cannot be represented
- * (non-JSON request bodies, unresolved server templates) are reported in
- * `skipped` instead of producing broken tools.
+ * Throws when `spec` is JSON text that does not parse to an object. Operations
+ * that cannot be represented (non-JSON request bodies, unresolved server
+ * templates) are reported in `skipped` instead of producing broken tools.
  */
 export const fromSpec = (options: Options): Result => {
   const document = parseDocument(options.spec)
@@ -124,7 +127,7 @@ export const fromSpec = (options: Options): Result => {
   const base = options.baseUrl ?? specServerUrl(document, options.serverVariables ?? {})
   const used = new Set<string>()
   const skipped: Array<Skipped> = []
-  const tools: { -readonly [K in keyof Tools]: Tools[K] } = {}
+  const tools: Record<string, Definition<HttpClient.HttpClient>> = {}
 
   for (const [path, pathValue] of Object.entries(paths)) {
     if (!isRecord(pathValue)) continue
@@ -180,9 +183,11 @@ export const OpenAPI = { fromSpec }
 // Spec parsing
 // ---------------------------------------------------------------------------
 
+const decodeJson = Schema.decodeUnknownOption(Schema.UnknownFromJsonString)
+
 const parseDocument = (spec: Document | string): Document => {
   if (typeof spec !== "string") return spec
-  const parsed = Schema.decodeUnknownOption(Schema.UnknownFromJsonString)(spec)
+  const parsed = decodeJson(spec)
   if (Option.isNone(parsed) || !isRecord(parsed.value)) throw new Error("OpenAPI spec must be a JSON object.")
   return parsed.value
 }
@@ -305,7 +310,12 @@ const operationParameters = (
       name,
       location: location as ParameterLocation,
       required: resolved.required === true || location === "path",
-      schema: { ...base, ...(base.description === undefined ? { description: nonEmptyString(resolved.description) } : {}) },
+      schema: {
+        ...base,
+        ...(base.description === undefined && nonEmptyString(resolved.description) !== undefined
+          ? { description: nonEmptyString(resolved.description) }
+          : {}),
+      },
     })
   }
   return [...merged.values()]
@@ -607,14 +617,8 @@ const invoke = (plan: Plan, input: unknown): Effect.Effect<unknown, unknown, Htt
     return parsed
   })
 
-const parseBody = (text: string): unknown => {
-  if (text === "") return null
-  try {
-    return JSON.parse(text) as unknown
-  } catch {
-    return text
-  }
-}
+const parseBody = (text: string): unknown =>
+  text === "" ? null : Option.getOrElse(decodeJson(text), () => text)
 
 const summarizeBody = (body: unknown): string => {
   const rendered = typeof body === "string" ? body : (JSON.stringify(body) ?? "")
@@ -657,35 +661,11 @@ const resolveAuth = (plan: Plan): Effect.Effect<AppliedAuth, unknown> =>
 
     const unavailable: Array<string> = []
     for (const requirement of plan.security) {
-      const names = Object.keys(requirement)
-      if (names.length === 0) return none
-
-      const credentials: Array<readonly [SecurityScheme, Credential]> = []
-      let satisfiable = true
-      for (const name of names) {
-        const scheme = plan.schemes[name]
-        if (scheme === undefined || plan.auth === undefined) {
-          unavailable.push(name)
-          satisfiable = false
-          break
-        }
-        const credential = yield* plan.auth.resolve({
-          schemeName: name,
-          scheme,
-          scopes: requirement[name] ?? [],
-          operation: plan.operation,
-        })
-        if (credential === undefined) {
-          unavailable.push(name)
-          satisfiable = false
-          break
-        }
-        credentials.push([scheme, credential])
-      }
-      if (satisfiable) {
-        const applied = applyCredentials(plan.operation, credentials)
-        return applied instanceof ToolError ? yield* Effect.fail(applied) : applied
-      }
+      if (Object.keys(requirement).length === 0) return none
+      const credentials = yield* collectCredentials(plan, requirement, unavailable)
+      if (credentials === undefined) continue
+      const applied = applyCredentials(plan.operation, credentials)
+      return applied instanceof ToolError ? yield* Effect.fail(applied) : applied
     }
 
     return yield* Effect.fail(
@@ -693,6 +673,35 @@ const resolveAuth = (plan: Plan): Effect.Effect<AppliedAuth, unknown> =>
         `${plan.operation.method} ${plan.operation.path} requires authentication; no credential available for: ${[...new Set(unavailable)].join(", ")}.`,
       ),
     )
+  })
+
+/**
+ * Resolves every scheme in one AND requirement. Returns `undefined` when a
+ * scheme is unknown or its credential is unavailable (recording the name in
+ * `unavailable`), so the caller can try the next OR alternative.
+ */
+const collectCredentials = (plan: Plan, requirement: SecurityRequirement, unavailable: Array<string>) =>
+  Effect.gen(function* () {
+    const credentials: Array<readonly [SecurityScheme, Credential]> = []
+    for (const name of Object.keys(requirement)) {
+      const scheme = plan.schemes[name]
+      if (scheme === undefined || plan.auth === undefined) {
+        unavailable.push(name)
+        return undefined
+      }
+      const credential = yield* plan.auth.resolve({
+        schemeName: name,
+        scheme,
+        scopes: requirement[name] ?? [],
+        operation: plan.operation,
+      })
+      if (credential === undefined) {
+        unavailable.push(name)
+        return undefined
+      }
+      credentials.push([scheme, credential])
+    }
+    return credentials
   })
 
 const applyCredentials = (
