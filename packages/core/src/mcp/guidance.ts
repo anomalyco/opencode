@@ -75,7 +75,8 @@ export const layer = Layer.effect(
               owned.length === 0 ||
               owned.some(
                 (tool) =>
-                  PermissionV2.evaluate(McpTool.name(tool.server, tool.name), "*", agent.permissions).effect !== "deny",
+                  PermissionV2.evaluate(McpTool.permissionAction(tool.server, tool.name), "*", agent.permissions)
+                    .effect !== "deny",
               )
             )
           })

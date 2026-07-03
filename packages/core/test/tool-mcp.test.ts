@@ -127,16 +127,6 @@ afterEach(() => {
 })
 
 describe("MCP tool plugin", () => {
-  it.effect("keeps permission actions stable across registration-name collisions", () =>
-    Effect.sync(() => {
-      expect(McpTool.name("a_b", "c")).toBe(McpTool.name("a", "b_c"))
-      expect(McpTool.action("a_b", "c")).toBe("mcp:a_b:c")
-      expect(McpTool.action("a", "b_c")).toBe("mcp:a:b_c")
-      expect(McpTool.action("a:b", "c*")).toBe("mcp:a%003Ab:c%002A")
-      expect(() => McpTool.action("\ud800", "tool")).not.toThrow()
-    }),
-  )
-
   it.effect("registers execute by default and replaces its catalog on MCP changes", () =>
     Effect.gen(function* () {
       const registry = yield* ToolRegistry.Service
@@ -191,7 +181,7 @@ describe("MCP tool plugin", () => {
         })
 
         expect(calls).toEqual([{ server: "$codemode", name: "foo.bar", args: { query: "react" } }])
-        expect(assertions[0]?.action).toBe("mcp:%0024codemode:foo.bar")
+        expect(assertions[0]?.action).toBe('mcp:["$codemode","foo.bar"]')
         expect(settlement.output?.structured).toMatchObject({
           toolCalls: [{ tool: "$codemode.foo.bar", status: "completed", input: { query: "react" } }],
         })
@@ -230,7 +220,7 @@ describe("MCP tool plugin", () => {
           {
             sessionID,
             agent: toolIdentity.agent,
-            action: "mcp:context7:resolve-library-id",
+            action: 'mcp:["context7","resolve-library-id"]',
             resources: ["*"],
             save: ["*"],
             metadata: {

@@ -16,35 +16,16 @@ const MAX_NAME_LENGTH = 64
 const HASH_LENGTH = 8
 
 const sanitize = (value: string) => value.replace(/[^A-Za-z0-9_-]/g, "_")
-
-// Deterministic short suffix used to keep overlong or colliding names unique and stable across restarts.
 const hashSuffix = (raw: string) => "_" + createHash("sha1").update(raw).digest("hex").slice(0, HASH_LENGTH)
-
 const fit = (base: string, raw: string) => base.slice(0, MAX_NAME_LENGTH - HASH_LENGTH - 1) + hashSuffix(raw)
 
-/**
- * Base V1-compatible `<server>_<tool>` name for an MCP tool. Invalid characters are replaced,
- * names are prefixed when needed, and overlong values receive a deterministic hash suffix.
- */
-export const name = (server: string, tool: string) => {
+const registrationName = (server: string, tool: string) => {
   const joined = sanitize(server) + "_" + sanitize(tool)
   const base = /^[A-Za-z]/.test(joined) ? joined : "mcp_" + joined
   return base.length > MAX_NAME_LENGTH ? fit(base, `${server}\u0000${tool}`) : base
 }
 
-const encodeActionPart = (value: string) =>
-  value
-    .split("")
-    .map((character) =>
-      /^[A-Za-z0-9_.~-]$/.test(character)
-        ? character
-        : `%${character.charCodeAt(0).toString(16).padStart(4, "0").toUpperCase()}`,
-    )
-    .join("")
-
-/** Stable permission identity independent of registration collisions and catalog ordering. */
-export const action = (server: string, tool: string) =>
-  `mcp:${encodeActionPart(server)}:${encodeActionPart(tool)}`
+export const permissionAction = (server: string, tool: string) => `mcp:${JSON.stringify([server, tool])}`
 
 const toContent = (part: MCP.ToolResultContent): Tool.Content =>
   part.type === "text" ? { type: "text", text: part.text } : { type: "file", data: part.data, mime: part.mimeType }
@@ -143,9 +124,9 @@ function entries(tools: ReadonlyArray<MCP.Tool>): Item[] {
     ]),
   )
   return tools.map((tool) => {
-    const initial = name(tool.server, tool.name)
+    const initial = registrationName(tool.server, tool.name)
     const item = {
-      action: action(tool.server, tool.name),
+      action: permissionAction(tool.server, tool.name),
       namespace: namespaces.get(tool.server)!,
       member: members.get(tool.server)!.get(tool.name)!,
       tool,
