@@ -6,11 +6,11 @@ import { Deferred, Effect, Exit, Fiber, FiberSet, Scope } from "effect"
 export interface Coordinator<Key, E> {
   /** Snapshots keys with an execution owned by this coordinator. */
   readonly active: Effect.Effect<ReadonlySet<Key>>
-  /** Starts an execution while idle or joins the active execution. */
+  /** Starts an execution while idle, or joins the active execution and returns its exit. */
   readonly run: (key: Key) => Effect.Effect<void, E>
-  /** Registers one coalesced follow-up after newly recorded work. */
+  /** Rings the doorbell: an idle key starts an execution; an active one drains again before settling. */
   readonly wake: (key: Key) => Effect.Effect<void>
-  /** Stops the active execution and waits for its cleanup. */
+  /** Stops the active execution, clears its doorbell, and waits for cleanup. No-op when idle. */
   readonly interrupt: (key: Key) => Effect.Effect<void>
   /** Resolves once no execution is active for the key. Returns immediately when already idle and never starts work. */
   readonly awaitIdle: (key: Key) => Effect.Effect<void>
@@ -30,6 +30,17 @@ type Execution<E> = {
   stopping: boolean
 }
 
+/**
+ * ```text
+ *              wake | run
+ *      idle ──────────────▶ execution (one fiber)
+ *                             drain ⟲ doorbell rung mid-drain
+ *                             │ exit (settled hook runs)
+ *      doorbell quiet ◀───────┴───────▶ doorbell rung
+ *      idle, waiters get exit          successor execution,
+ *                                      waiters get this exit
+ * ```
+ */
 export const make = <Key, E>(options: {
   readonly drain: (key: Key, force: boolean) => Effect.Effect<void, E>
   /**
@@ -84,6 +95,7 @@ export const make = <Key, E>(options: {
       Effect.uninterruptibleMask((restore) => {
         const execution = executions.get(key)
         if (execution !== undefined) {
+          // A stopping execution refuses joiners: wait out its cleanup, then run fresh.
           if (execution.stopping) return restore(Deferred.await(execution.done).pipe(Effect.andThen(run(key))))
           return restore(Deferred.await(execution.done))
         }

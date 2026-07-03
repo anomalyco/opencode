@@ -125,13 +125,10 @@ const layer = Layer.effect(
       return session
     })
 
-    const getContext = Effect.fn("SessionRunner.getContext")(function* (sessionID: SessionSchema.ID) {
-      return yield* store.context(sessionID)
-    })
     const failInterruptedTools = Effect.fn("SessionRunner.failInterruptedTools")(function* (
       sessionID: SessionSchema.ID,
     ) {
-      for (const message of yield* getContext(sessionID)) {
+      for (const message of yield* store.context(sessionID)) {
         if (message.type !== "assistant") continue
         for (const tool of message.content) {
           if (tool.type !== "tool" || (tool.state.status !== "pending" && tool.state.status !== "running")) continue
@@ -235,8 +232,11 @@ const layer = Layer.effect(
         snapshot: startSnapshot,
       })
       const publication = Semaphore.makeUnsafe(1)
+      // Durable publishes are serialized so tool fibers and turn settlement never interleave
+      // mid-event.
+      const serialized = <A, E, R>(effect: Effect.Effect<A, E, R>) => publication.withPermit(effect)
       const publish = (event: LLMEvent, outputPaths: ReadonlyArray<string> = []) =>
-        publication.withPermit(publisher.publish(event, outputPaths))
+        serialized(publisher.publish(event, outputPaths))
       let overflowFailure: ProviderErrorEvent | undefined
       const providerStream = llm.stream(request).pipe(
         Stream.runForEach((event) =>
@@ -251,9 +251,7 @@ const layer = Layer.effect(
             yield* publish(event)
             if (event.type !== "tool-call" || event.providerExecuted) return
             if (!toolMaterialization) {
-              yield* publication.withPermit(
-                publisher.failUnsettledTools("Tools are disabled after the maximum agent steps"),
-              )
+              yield* serialized(publisher.failUnsettledTools("Tools are disabled after the maximum agent steps"))
               return
             }
             needsContinuation = true
@@ -282,8 +280,33 @@ const layer = Layer.effect(
             ).pipe(FiberSet.run(toolFibers))
           }),
         ),
-        Effect.ensuring(publication.withPermit(publisher.flush())),
+        Effect.ensuring(serialized(publisher.flush())),
       )
+
+      // Captures the end snapshot, diffs it against the turn's start, and durably ends the
+      // assistant step.
+      const publishStepEnd = (settlement: NonNullable<ReturnType<typeof publisher.stepSettlement>>) =>
+        Effect.gen(function* () {
+          const endSnapshot = yield* snapshots.capture()
+          const files =
+            startSnapshot && endSnapshot
+              ? yield* snapshots
+                  .files({ from: startSnapshot, to: endSnapshot })
+                  .pipe(Effect.catch(() => Effect.succeed(undefined)))
+              : undefined
+          yield* serialized(
+            events.publish(SessionEvent.Step.Ended, {
+              sessionID: session.id,
+              timestamp: yield* DateTime.now,
+              assistantMessageID: yield* publisher.startAssistant(),
+              finish: settlement.finish,
+              cost: 0,
+              tokens: settlement.tokens,
+              snapshot: endSnapshot,
+              files,
+            }),
+          )
+        })
 
       return yield* Effect.uninterruptibleMask((restore) =>
         Effect.gen(function* () {
@@ -310,8 +333,8 @@ const layer = Layer.effect(
           if (overflowFailure) yield* publish(overflowFailure)
           const llmFailure = streamFailure instanceof LLMError ? streamFailure : undefined
           if (llmFailure && !publisher.hasProviderError()) {
-            yield* publication.withPermit(publisher.failUnsettledTools("Provider did not return a tool result", true))
-            yield* publication.withPermit(publisher.failAssistant(llmFailure.reason.message))
+            yield* serialized(publisher.failUnsettledTools("Provider did not return a tool result", true))
+            yield* serialized(publisher.failAssistant(llmFailure.reason.message))
           }
           // Provider error events only arrive from the stream, so the flag is final here.
           const providerFailed = publisher.hasProviderError()
@@ -324,8 +347,8 @@ const layer = Layer.effect(
 
           if (questionDismissed || streamInterrupted || toolsInterrupted) {
             yield* FiberSet.clear(toolFibers)
-            yield* publication.withPermit(publisher.failUnsettledTools("Tool execution interrupted"))
-            yield* publication.withPermit(publisher.failAssistant("Provider turn interrupted"))
+            yield* serialized(publisher.failUnsettledTools("Tool execution interrupted"))
+            yield* serialized(publisher.failAssistant("Provider turn interrupted"))
             // Match V1: dismissing a question halts the loop like an interruption.
             if (questionDismissed) return yield* Effect.interrupt
           }
@@ -339,44 +362,20 @@ const layer = Layer.effect(
           if (settledFailure !== undefined) {
             const failure = infraError ?? Cause.squash(settledFailure)
             const message = failure instanceof Error ? failure.message : String(failure)
-            yield* publication.withPermit(publisher.failUnsettledTools(`Tool execution failed: ${message}`))
+            yield* serialized(publisher.failUnsettledTools(`Tool execution failed: ${message}`))
             if (infraError !== undefined)
-              yield* publication.withPermit(publisher.failAssistant(`Tool execution failed: ${message}`))
+              yield* serialized(publisher.failAssistant(`Tool execution failed: ${message}`))
           }
 
           const stepSettlement = publisher.stepSettlement()
-          if (
-            stepSettlement &&
-            !streamInterrupted &&
-            !toolsInterrupted &&
-            infraError === undefined &&
-            !providerFailed
-          ) {
-            const endSnapshot = yield* snapshots.capture()
-            const files =
-              startSnapshot && endSnapshot
-                ? yield* snapshots
-                    .files({ from: startSnapshot, to: endSnapshot })
-                    .pipe(Effect.catch(() => Effect.succeed(undefined)))
-                : undefined
-            yield* publication.withPermit(
-              events.publish(SessionEvent.Step.Ended, {
-                sessionID: session.id,
-                timestamp: yield* DateTime.now,
-                assistantMessageID: yield* publisher.startAssistant(),
-                finish: stepSettlement.finish,
-                cost: 0,
-                tokens: stepSettlement.tokens,
-                snapshot: endSnapshot,
-                files,
-              }),
-            )
-          }
+          const stepEndedCleanly =
+            !streamInterrupted && !toolsInterrupted && infraError === undefined && !providerFailed
+          if (stepSettlement && stepEndedCleanly) yield* publishStepEnd(stepSettlement)
           // A provider error orphans recorded local calls; a clean stream can still leave
           // hosted calls without results.
-          if (providerFailed) yield* publication.withPermit(publisher.failUnsettledTools("Tool execution interrupted"))
+          if (providerFailed) yield* serialized(publisher.failUnsettledTools("Tool execution interrupted"))
           if (stream._tag === "Success" && !providerFailed)
-            yield* publication.withPermit(publisher.failUnsettledTools("Provider did not return a tool result", true))
+            yield* serialized(publisher.failUnsettledTools("Provider did not return a tool result", true))
 
           if (stream._tag === "Failure") return yield* Effect.failCause(stream.cause)
           if (settled._tag === "Failure" && (toolsInterrupted || infraError !== undefined))
@@ -411,7 +410,9 @@ const layer = Layer.effect(
       }
     })
 
-    const drain = Effect.fnUntraced(function* (input: {
+    // ExecutionSettled is published per execution (busy period) by SessionExecution, not per
+    // drain here.
+    const run = Effect.fn("SessionRunner.run")(function* (input: {
       readonly sessionID: SessionSchema.ID
       readonly force: boolean
     }) {
@@ -442,11 +443,7 @@ const layer = Layer.effect(
       }
     })
 
-    return Service.of({
-      // ExecutionSettled is published per execution (busy period) by SessionExecution,
-      // not per drain here.
-      run: Effect.fn("SessionRunner.run")(drain),
-    })
+    return Service.of({ run })
   }),
 )
 

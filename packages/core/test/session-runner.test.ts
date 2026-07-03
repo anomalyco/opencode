@@ -2863,14 +2863,12 @@ describe("SessionRunnerLLM", () => {
           input: Schema.Struct({}),
           output: Schema.Struct({}),
           execute: (_, context) =>
-            forms
-              .ask({ sessionID: context.sessionID, mode: "form", fields: [] })
-              .pipe(
-                Effect.orDie,
-                Effect.flatMap((state) =>
-                  state.status === "answered" ? Effect.succeed({}) : Effect.die(new QuestionTool.RejectedError()),
-                ),
+            forms.ask({ sessionID: context.sessionID, mode: "form", fields: [] }).pipe(
+              Effect.orDie,
+              Effect.flatMap((state) =>
+                state.status === "answered" ? Effect.succeed({}) : Effect.die(new QuestionTool.RejectedError()),
               ),
+            ),
         }),
       })
       yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Ask then stop" }), resume: false })
@@ -3033,6 +3031,8 @@ describe("SessionRunnerLLM", () => {
       yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Interrupt tool settlement" }), resume: false })
       executions.length = 0
       toolExecutionGate = yield* Deferred.make<void>()
+      toolExecutionsStarted = yield* Deferred.make<void>()
+      toolExecutionsReady = 1
       response = [
         LLMEvent.stepStart({ index: 0 }),
         LLMEvent.toolCall({ id: "call-await-interrupt", name: "echo", input: { text: "blocked" } }),
@@ -3042,7 +3042,7 @@ describe("SessionRunnerLLM", () => {
 
       const runner = yield* SessionRunner.Service
       const run = yield* runner.run({ sessionID, force: true }).pipe(Effect.forkChild)
-      while (executions.length === 0) yield* Effect.yieldNow
+      yield* Deferred.await(toolExecutionsStarted)
       yield* Fiber.interrupt(run)
       toolExecutionGate = undefined
 
