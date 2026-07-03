@@ -166,7 +166,7 @@ const layer = Layer.effect(
         { concurrency: "unbounded" },
       ).pipe(Effect.map(SystemContext.combine))
 
-    const runTurnAttempt = Effect.fn("SessionRunner.runTurn")(function* (
+    const runTurnAttempt = Effect.fn("SessionRunner.runTurnAttempt")(function* (
       sessionID: SessionSchema.ID,
       promotion: SessionInput.Delivery | undefined,
       step: number,
