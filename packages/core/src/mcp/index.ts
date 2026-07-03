@@ -205,7 +205,7 @@ export const layer = Layer.effect(
       for (const [name, server] of Object.entries(entry.info.mcp?.servers ?? {})) {
         runtime.set(ServerName.make(name), {
           config: { ...server, timeout: { ...timeout, ...server.timeout } },
-          status: { status: "disconnected" },
+          status: { status: "pending" },
           startup: Deferred.makeUnsafe<void>(),
         })
       }

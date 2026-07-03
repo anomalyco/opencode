@@ -9,7 +9,7 @@ import { TextAttributes } from "@opentui/core"
 import type { McpServer } from "@opencode-ai/sdk/v2"
 
 // Sort by how much attention a server needs: auth prompts first, then failures,
-// then healthy servers, and intentionally-off servers last.
+// then healthy servers, in-flight connections, and intentionally-off servers last.
 function statusMeta(status: McpServer["status"], theme: Theme) {
   switch (status.status) {
     case "needs_auth":
@@ -20,10 +20,10 @@ function statusMeta(status: McpServer["status"], theme: Theme) {
       return { rank: 2, icon: "✗", label: "Failed", color: theme.error, error: status.error, bold: false }
     case "connected":
       return { rank: 3, icon: "✓", label: "Connected", color: theme.success, error: undefined, bold: true }
-    case "disabled":
-      return { rank: 5, icon: "○", label: "Disabled", color: theme.textMuted, error: undefined, bold: false }
+    case "pending":
+      return { rank: 4, icon: "◌", label: "Pending", color: theme.textMuted, error: undefined, bold: false }
     default:
-      return { rank: 4, icon: "○", label: "Disconnected", color: theme.textMuted, error: undefined, bold: false }
+      return { rank: 5, icon: "○", label: "Disabled", color: theme.textMuted, error: undefined, bold: false }
   }
 }
 
