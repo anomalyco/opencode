@@ -279,6 +279,6 @@ const layer = Layer.effect(
 )
 
 const targetsHiddenPath = (pattern: string) =>
-  pattern.split(/[\\/]/u).some((part) => part.startsWith(".") || part.includes("{."))
+  pattern.split(/[\\/]/u).some((part) => part.startsWith(".") || part.startsWith("{."))
 
 export const node = makeGlobalNode({ service: Service, layer: layer, deps: [RipgrepBinary.node, AppProcess.node] })
