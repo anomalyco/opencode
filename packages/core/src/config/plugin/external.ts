@@ -1,5 +1,7 @@
 export * as ConfigExternalPlugin from "./external"
 
+import type { Plugin as EffectPlugin } from "@opencode-ai/plugin/v2/effect"
+import type { Plugin as PromisePlugin } from "@opencode-ai/plugin/v2/promise"
 import { Effect, Schema } from "effect"
 import path from "path"
 import { fileURLToPath, pathToFileURL } from "url"
@@ -14,14 +16,14 @@ const PluginModule = Schema.Struct({
   default: Schema.Union([
     Schema.Struct({
       id: Schema.String,
-      effect: Schema.declare<import("@opencode-ai/plugin/v2/effect").Plugin["effect"]>(
-        (input): input is import("@opencode-ai/plugin/v2/effect").Plugin["effect"] => typeof input === "function",
+      effect: Schema.declare<EffectPlugin["effect"]>(
+        (input): input is EffectPlugin["effect"] => typeof input === "function",
       ),
     }),
     Schema.Struct({
       id: Schema.String,
-      setup: Schema.declare<import("@opencode-ai/plugin/v2/promise").Plugin["setup"]>(
-        (input): input is import("@opencode-ai/plugin/v2/promise").Plugin["setup"] => typeof input === "function",
+      setup: Schema.declare<PromisePlugin["setup"]>(
+        (input): input is PromisePlugin["setup"] => typeof input === "function",
       ),
     }),
   ]),
