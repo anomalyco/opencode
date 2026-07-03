@@ -54,6 +54,7 @@ import { BackgroundJob } from "@/background/job"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
+import type { PermissionV1 } from "@opencode-ai/core/v1/permission"
 
 export function webSearchEnabled(providerID: ProviderV2.ID, flags = { exa: false, parallel: false }) {
   return providerID === ProviderV2.ID.opencode || flags.exa || flags.parallel
@@ -77,6 +78,7 @@ export interface Interface {
     providerID: ProviderV2.ID
     modelID: ModelV2.ID
     agent: Agent.Info
+    permission?: PermissionV1.Ruleset
   }) => Effect.Effect<Tool.Def[]>
 }
 
@@ -274,8 +276,8 @@ const layer = Layer.effect(
     // fresh per turn so it tracks live tool-list changes. Hard-denied tools (the shared
     // Permission.visibleTools predicate over the agent's ruleset) never enter the
     // catalog, its inlined signatures, or the in-program search index.
-    const describeCodeMode = Effect.fn("ToolRegistry.describeCodeMode")(function* (agent: Agent.Info) {
-      const visible = Permission.visibleTools(yield* mcp.tools(), agent.permission)
+    const describeCodeMode = Effect.fn("ToolRegistry.describeCodeMode")(function* (agent: Agent.Info, permission?: PermissionV1.Ruleset) {
+      const visible = Permission.visibleTools(yield* mcp.tools(), Permission.merge(agent.permission, permission ?? []))
       const servers = Object.keys(yield* mcp.clients()).map(McpCatalog.sanitize)
       return catalogInstructions(visible, yield* mcp.defs(), servers)
     })
@@ -316,7 +318,7 @@ const layer = Layer.effect(
             description: [
               output.description,
               tool.id === TaskTool.id ? yield* describeTask(input.agent) : undefined,
-              tool.id === CodeModeTool.id ? yield* describeCodeMode(input.agent) : undefined,
+              tool.id === CodeModeTool.id ? yield* describeCodeMode(input.agent, input.permission) : undefined,
             ]
               .filter(Boolean)
               .join("\n"),

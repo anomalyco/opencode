@@ -859,10 +859,11 @@ restructure; fixes the §4 permission-advertising bug):
     (a record filter over `Permission.disabled` — only a hard `deny` with pattern `"*"`
     hides a tool; ask-level rules stay fully visible and prompt at call time) and
     `resolveTools` now uses it, so the two paths cannot drift. `describeCodeMode` filters
-    with the agent's ruleset before building the catalog/search index; `execute` rebuilds
-    the runtime per execution from a fresh, filtered `mcp.tools()` snapshot using the merged
-    agent+session ruleset (`Agent.get(ctx.agent)` + `Session.get(ctx.sessionID)`, the same
-    merge `SessionTools.context` wires into `ctx.ask`) — a denied tool is not dispatchable
+    with the merged agent+session ruleset that `SessionTools.resolve` passes into the
+    registry before building the catalog/search index; `execute` rebuilds the runtime per
+    execution from a fresh, filtered `mcp.tools()` snapshot using the same merged ruleset
+    (`Agent.get(ctx.agent)` + `Session.get(ctx.sessionID)`, matching the merge
+    `SessionTools.context` wires into `ctx.ask`) — a denied tool is not dispatchable
     even if the model guesses its name and yields the normal unknown-tool diagnostic.
     Documented gap (out of scope by design): per-message `user.tools[key] === false` arrives
     at request-prep after descriptions are built and has no child-call equivalent.
@@ -935,6 +936,12 @@ verified real with failing tests before fixing):
     bracket-notation `toolExpression` imports it: one source of truth for "is this a bare
     identifier" across object keys and tool paths. Tests: `signature.test.ts` +4 (compact,
     pretty with JSDoc on a quoted key, JSON Schema input+output, Effect Schema struct).
+  - **Numeric schema unions keep their real alternatives** (`src/tool.ts`): the old
+    `anyOf`/`oneOf` renderer collapsed any union containing `{ type: "number" }` to just
+    `number`, dropping real JSON Schema alternatives (`string | number`, `number | null`,
+    etc.). The collapse is now restricted to Effect's number-schema artifact
+    (`number | "NaN" | "Infinity" | "-Infinity"`, emitted as single-value string enums),
+    while raw JSON Schema unions render every branch. Tests: `signature.test.ts` +3.
   - **Compound assignment now matches binary-operator semantics** (`src/codemode.ts`):
     `applyCompoundAssignment` did raw JS ops on interpreter wrapper objects, so `x += y`
     diverged from `x = x + y` (sandbox Date `d += 1` produced `"[object Object]1"`;

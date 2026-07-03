@@ -590,4 +590,24 @@ describe("tool.registry code mode", () => {
       expect(execute.description).toContain("- github (1 tool)")
     }),
   )
+
+  withCodeMode.instance("session-level hard-denied MCP tools are dropped from the code-mode catalog", () =>
+    Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+      const agents = yield* Agent.Service
+      const tools = yield* registry.tools({
+        ...model,
+        agent: yield* agents.defaultInfo(),
+        permission: [
+          { permission: "github_create_issue", pattern: "*" as const, action: "deny" as const },
+          { permission: "github_list_issues", pattern: "*" as const, action: "ask" as const },
+        ],
+      })
+      const execute = tools.find((tool) => tool.id === "execute")
+      if (!execute) throw new Error("code-mode execute tool was not registered")
+      expect(execute.description).not.toContain("create_issue")
+      expect(execute.description).toContain("tools.github.list_issues(")
+      expect(execute.description).toContain("- github (1 tool)")
+    }),
+  )
 })

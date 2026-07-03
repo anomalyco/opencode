@@ -99,6 +99,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
     modelID: ModelV2.ID.make(input.model.api.id),
     providerID: input.model.providerID,
     agent: input.agent,
+    permission: input.session.permission,
   })
 
   for (const item of registryTools) {

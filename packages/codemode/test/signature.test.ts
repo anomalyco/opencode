@@ -231,6 +231,40 @@ describe("non-identifier property names render as quoted keys", () => {
   })
 })
 
+describe("union schemas render every alternative", () => {
+  test("anyOf with a number branch keeps sibling alternatives", () => {
+    const schema = {
+      anyOf: [{ type: "string" }, { type: "number" }],
+    } as const
+    expect(jsonSchemaToTypeScript(schema)).toBe("string | number")
+    expect(jsonSchemaToTypeScript(schema, true)).toBe("string | number")
+  })
+
+  test("nullable numeric unions keep null", () => {
+    const schema = {
+      oneOf: [{ type: "number" }, { type: "null" }],
+    } as const
+    expect(jsonSchemaToTypeScript(schema)).toBe("number | null")
+    expect(jsonSchemaToTypeScript(schema, true)).toBe("number | null")
+  })
+
+  test("tool input and output signatures preserve numeric unions", () => {
+    const tool = Tool.make({
+      description: "Tool with numeric unions",
+      input: {
+        type: "object",
+        properties: {
+          value: { anyOf: [{ type: "string" }, { type: "number" }] },
+        },
+      } as const,
+      output: { anyOf: [{ type: "number" }, { type: "boolean" }] } as const,
+      run: () => Effect.succeed(1),
+    })
+    expect(inputTypeScript(tool)).toBe("{ value?: string | number }")
+    expect(outputTypeScript(tool)).toBe("number | boolean")
+  })
+})
+
 describe("pretty signatures in search results", () => {
   const runtime = CodeMode.make({ tools: { github: { list_issues: listIssues }, orders: { lookup: lookupOrder } } })
 

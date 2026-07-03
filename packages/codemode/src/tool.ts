@@ -71,6 +71,10 @@ export const identifierSegment = /^[A-Za-z_$][A-Za-z0-9_$]*$/
 /** Renders a property name as a valid TS object key: bare when an identifier, quoted otherwise. */
 const renderKey = (name: string): string => identifierSegment.test(name) ? name : JSON.stringify(name)
 
+const effectNumberSentinel = (schema: JsonSchema) =>
+  schema.type === "string" && Array.isArray(schema.enum) && schema.enum.length === 1 &&
+  (schema.enum[0] === "NaN" || schema.enum[0] === "Infinity" || schema.enum[0] === "-Infinity")
+
 /**
  * Recursion ceiling for schema rendering. Object, array, and union recursion all increment
  * depth, so this bounds every recursion path — pathological or structurally cyclic schemas
@@ -135,7 +139,14 @@ const renderSchema = (schema: JsonSchema, ctx: RenderContext, depth = 0, seen: R
   if (schema.enum) return schema.enum.map(renderLiteral).join(" | ")
   const alternatives = schema.anyOf ?? schema.oneOf
   if (alternatives) {
-    if (alternatives.some((item) => item.type === "number")) return "number"
+    // Effect's number schema emits `anyOf: [{ type: "number" }, { const: "NaN" },
+    // { const: "Infinity" }, { const: "-Infinity" }]`. Collapse only that artifact;
+    // real JSON Schema unions such as `string | number` or `number | null` must keep
+    // every branch.
+    if (
+      alternatives.some((item) => item.type === "number") &&
+      alternatives.every((item) => item.type === "number" || effectNumberSentinel(item))
+    ) return "number"
     // An empty Schema.Struct({}) emits `anyOf: [{ type: "object" }, { type: "array" }]`
     // (no properties/items); render the bare shape as {} instead of `{} | Array<unknown>`.
     if (
