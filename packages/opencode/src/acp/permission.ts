@@ -137,7 +137,7 @@ async function permissionToolCall(input: {
 }
 
 function permissionTitle(toolName: string, input: ToolInput) {
-  const tool = toolName.toLocaleLowerCase()
+  const tool = toolName.toLowerCase()
   switch (tool) {
     case "external_directory":
       return stringValue(input.description) ?? stringValue(input.command) ?? stringValue(input.parentDir)
@@ -181,7 +181,7 @@ function permissionLocations(toolName: string, input: ToolInput): ToolCallLocati
 }
 
 async function permissionContent(toolName: string, input: ToolInput): Promise<ToolCallContent[]> {
-  if (toolName.toLocaleLowerCase() !== "edit") return []
+  if (toolName.toLowerCase() !== "edit") return []
 
   const files = fileMetadata(input)
   if (files.length) return diffContentForFiles(files)

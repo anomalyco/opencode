@@ -36,7 +36,7 @@ export type ImageAttachment = {
 }
 
 export function toToolKind(toolName: string): ToolKind {
-  const tool = toolName.toLocaleLowerCase()
+  const tool = toolName.toLowerCase()
 
   switch (tool) {
     case "bash":
@@ -71,7 +71,7 @@ export function toToolKind(toolName: string): ToolKind {
 }
 
 export function toLocations(toolName: string, input: ToolInput, cwd?: string): ToolCallLocation[] {
-  const tool = toolName.toLocaleLowerCase()
+  const tool = toolName.toLowerCase()
 
   switch (tool) {
     case "bash":
@@ -102,7 +102,7 @@ export function toLocations(toolName: string, input: ToolInput, cwd?: string): T
 
 export function completedToolContent(toolName: string, state: CompletedToolState): ToolCallContent[] {
   const text =
-    toolName.toLocaleLowerCase() === "read" ? (readDisplayText(state.metadata) ?? state.output) : state.output
+    toolName.toLowerCase() === "read" ? (readDisplayText(state.metadata) ?? state.output) : state.output
   const content: ToolCallContent[] = [
     {
       type: "content",
@@ -292,7 +292,7 @@ function shellCommand(input: ToolInput) {
 }
 
 function isShell(toolName: string) {
-  const tool = toolName.toLocaleLowerCase()
+  const tool = toolName.toLowerCase()
   return tool === "bash" || tool === "shell"
 }
 
