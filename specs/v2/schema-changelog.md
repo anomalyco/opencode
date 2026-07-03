@@ -918,3 +918,13 @@ Compatibility:
 - V2 durable events and projections are experimental and are reset by `20260703090000_reset_v2_event_rename_sweep`; existing V2 event rows, event sequences, projected session messages, and admitted inputs are wiped.
 - All renamed durable event types restart at version 1 under their normalized names.
 - Generated Promise, Effect, and legacy JavaScript SDK surfaces were regenerated from the normalized schemas.
+
+## 2026-07-03: Align Session Shell Payloads With Shell Service
+
+- Change durable `shell.started` to carry `shell: Shell.Info` alongside `callID`.
+- Change durable `shell.ended` to carry the final `shell: Shell.Info` snapshot and structured `output: Shell.Output` alongside `callID`.
+- Project `SessionMessage.Shell` with the same nested Shell service objects so consumers can render command, exit status, truncation, and paged output consistently.
+
+Compatibility:
+
+- V2 durable events and projections are experimental and are reset by `20260703190000_reset_v2_shell_event_payloads`; existing V2 event rows, event sequences, projected session messages, and admitted inputs are wiped.
