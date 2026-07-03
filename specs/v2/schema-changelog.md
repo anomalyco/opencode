@@ -921,8 +921,8 @@ Compatibility:
 
 ## 2026-07-03: Align Session Shell Payloads With Shell Service
 
-- Change durable `shell.started` to carry `shell: Shell.Info` alongside `callID`.
-- Change durable `shell.ended` to carry the final `shell: Shell.Info` snapshot and structured `output: Shell.Output` alongside `callID`.
+- Change durable `shell.started` to carry `shell: Shell.Info`.
+- Change durable `shell.ended` to carry the final `shell: Shell.Info` snapshot and structured `output: Shell.Output`.
 - Project `SessionMessage.Shell` with the same nested Shell service objects so consumers can render command, exit status, truncation, and paged output consistently.
 - Remove the transitional `callID` correlation field from shell events and projected shell messages; shell records now key by `shell.id`.
 - Publish `shell.started` after the shell process is created so `Shell.Info` reflects the real process. A failed spawn publishes no shell events; the failure surfaces as an error on the shell request itself, so the durable ledger never records a `shell.started` without a process that existed.
