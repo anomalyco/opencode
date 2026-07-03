@@ -12,6 +12,7 @@ import { SessionID } from "./session-id.js"
 import { Location } from "./location.js"
 import { SessionMessage } from "./session-message.js"
 import { Revert } from "./revert.js"
+import { Shell as ShellSchema } from "./shell.js"
 
 export { FileAttachment }
 
@@ -171,7 +172,7 @@ export namespace Shell {
     schema: {
       ...Base,
       callID: Schema.String,
-      command: Schema.String,
+      shell: ShellSchema.Info,
     },
   })
   export type Started = typeof Started.Type
@@ -182,7 +183,8 @@ export namespace Shell {
     schema: {
       ...Base,
       callID: Schema.String,
-      output: Schema.String,
+      shell: ShellSchema.Info,
+      output: ShellSchema.Output,
     },
   })
   export type Ended = typeof Ended.Type

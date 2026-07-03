@@ -9,6 +9,7 @@ import { DateTimeUtcFromMillis, RelativePath, statics } from "./schema.js"
 import { SessionID } from "./session-id.js"
 import { ascending } from "./identifier.js"
 import { Event } from "./event.js"
+import { Shell as ShellSchema } from "./shell.js"
 
 export const ID = Schema.String.check(Schema.isStartsWith("msg_")).pipe(
   Schema.brand("Session.Message.ID"),
@@ -83,8 +84,8 @@ export const Shell = Schema.Struct({
   ...Base,
   type: Schema.Literal("shell"),
   callID: Schema.String,
-  command: Schema.String,
-  output: Schema.String,
+  shell: ShellSchema.Info,
+  output: ShellSchema.Output.pipe(optional),
   time: Schema.Struct({
     created: DateTimeUtcFromMillis,
     completed: DateTimeUtcFromMillis.pipe(optional),
