@@ -283,6 +283,38 @@ export const read = Effect.fn("ReadTool.read")(function* (
       }
       const consumeChunk = Effect.fnUntraced(function* (chunk: Uint8Array) {
         let start = 0
+        // Fast-forward through the lines preceding `offset` by counting newline
+        // bytes directly, instead of decoding and running the binary heuristic
+        // on every skipped line. For a multi-million-line file read at a high
+        // offset this replaces millions of per-line UTF-8 decodes with a single
+        // byte scan. Counting 0x0A at the byte level is safe because UTF-8
+        // continuation bytes are always 0x80–0xBF, so 0x0A never appears inside
+        // a multi-byte sequence and the byte right after a `\n` is always a
+        // character boundary — the decoder can start fresh there. Null bytes in
+        // the skipped region (the definitive binary marker) are still rejected;
+        // the per-line non-printable heuristic is skipped for discarded lines.
+        if (line < offset) {
+          const need = offset - line
+          let counted = 0
+          let pos = 0
+          while (counted < need) {
+            const newline = chunk.indexOf(10, pos)
+            if (newline === -1) {
+              pos = chunk.length
+              break
+            }
+            counted++
+            pos = newline + 1
+          }
+          if (chunk.subarray(0, pos).includes(0))
+            return yield* Effect.fail(new BinaryFileError({ resource }))
+          if (counted < need) {
+            line += counted
+            return true
+          }
+          line = offset
+          start = pos
+        }
         while (start < chunk.length) {
           if (lines.length >= limit || bytes >= MAX_READ_BYTES) {
             next = line
