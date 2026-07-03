@@ -84,6 +84,27 @@ export function runProviders(providers: CurrentProvider[], models: CurrentModel[
   return [...grouped.values()]
 }
 
+// A location boots its plugins in a deferred background batch after the layer
+// is built, so first-turn model resolution can observe empty catalog state.
+// For explicit --model flows, wait for that exact ref to appear before prompt
+// admission. On timeout, return and let the real execution error surface.
+export async function waitForCatalogReady(input: {
+  sdk: OpencodeClient
+  directory: string
+  model: { providerID: string; modelID: string }
+  timeoutMs?: number
+}) {
+  const deadline = Date.now() + (input.timeoutMs ?? 5_000)
+  while (Date.now() < deadline) {
+    const models = await input.sdk.v2.model
+      .list(location(input.directory), { throwOnError: true })
+      .then((result) => result.data?.data ?? [])
+      .catch(() => undefined)
+    if (models?.some((model) => model.providerID === input.model.providerID && model.id === input.model.modelID)) return
+    await new Promise((resolve) => setTimeout(resolve, 25))
+  }
+}
+
 export async function loadRunAgents(sdk: OpencodeClient, directory: string): Promise<RunAgent[]> {
   const result = await sdk.v2.agent.list(location(directory), { throwOnError: true })
   return (result.data?.data ?? []).map(runAgent)

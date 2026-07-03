@@ -26,7 +26,7 @@ import { createOpencodeClient, type OpencodeClient, type ToolPart } from "@openc
 import { FormatError, FormatUnknownError } from "../error"
 import { INTERACTIVE_INPUT_ERROR, resolveInteractiveStdin } from "./run/runtime.stdin"
 import { isImageAttachment, isPdfAttachment } from "@/util/media"
-import { loadRunAgents } from "./run/catalog.shared"
+import { loadRunAgents, waitForCatalogReady } from "./run/catalog.shared"
 
 type ModelInput = Parameters<OpencodeClient["session"]["prompt"]>[0]["model"]
 
@@ -400,22 +400,22 @@ export const RunCommand = effectCmd({
       const rules: PermissionV1.Ruleset = interactive
         ? []
         : [
-            {
-              permission: "question",
-              action: "deny",
-              pattern: "*",
-            },
-            {
-              permission: "plan_enter",
-              action: "deny",
-              pattern: "*",
-            },
-            {
-              permission: "plan_exit",
-              action: "deny",
-              pattern: "*",
-            },
-          ]
+          {
+            permission: "question",
+            action: "deny",
+            pattern: "*",
+          },
+          {
+            permission: "plan_enter",
+            action: "deny",
+            pattern: "*",
+          },
+          {
+            permission: "plan_exit",
+            action: "deny",
+            pattern: "*",
+          },
+        ]
       const currentPrompt = !interactive && !args.command && fileInputs.every((file) => !file.isDirectory)
 
       const inlineFiles = interactive || currentPrompt
@@ -669,10 +669,10 @@ export const RunCommand = effectCmd({
           agent: input.agent,
           model: input.model
             ? {
-                providerID: input.model.providerID,
-                id: input.model.modelID,
-                variant: input.variant,
-              }
+              providerID: input.model.providerID,
+              id: input.model.modelID,
+              variant: input.variant,
+            }
             : undefined,
           location: { directory: await current(sdk) },
         })
@@ -917,7 +917,7 @@ export const RunCommand = effectCmd({
                 UI.println(
                   UI.Style.TEXT_WARNING_BOLD + "!",
                   UI.Style.TEXT_NORMAL +
-                    `permission requested: ${permission.permission} (${permission.patterns.join(", ")}); auto-rejecting`,
+                  `permission requested: ${permission.permission} (${permission.patterns.join(", ")}); auto-rejecting`,
                 )
                 await client.permission.reply({
                   requestID: permission.id,
@@ -931,12 +931,20 @@ export const RunCommand = effectCmd({
         const cwd = args.attach ? (directory ?? sess.directory ?? (await current(sdk))) : (directory ?? root)
         const client = args.attach ? attachSDK(cwd) : sdk
 
+        // Current-session flows resolve explicit --model refs from a location
+        // catalog that populates asynchronously after boot. Wait only when the
+        // user supplied a model; default-model races.
+        const selectedModel = pick(args.model)
+        if (selectedModel && (interactive || (currentPrompt && sess.current !== false))) {
+          await waitForCatalogReady({ sdk: client, directory: cwd, model: selectedModel })
+        }
+
         // Validate agent if specified
         const agent = await pickAgent(client)
 
         if (!interactive) {
           if (currentPrompt && sess.current !== false) {
-            const model = pick(args.model)
+            const model = selectedModel
             const { runNonInteractivePrompt } = await import("./run/noninteractive")
             try {
               await runNonInteractivePrompt({
