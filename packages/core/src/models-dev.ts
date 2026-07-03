@@ -199,7 +199,9 @@ const layer = Layer.effect(
       Effect.flatMap((snapshot) =>
         snapshot === undefined ? Effect.succeed(undefined) : decodeProvidersUnknown(snapshot),
       ),
-      Effect.catch(() => Effect.succeed(undefined)),
+      Effect.catch((cause) =>
+        Effect.logWarning("bundled models snapshot failed schema decode", { cause }).pipe(Effect.as(undefined)),
+      ),
     )
 
     const fetchAndWrite = Effect.fn("ModelsDev.fetchAndWrite")(function* () {

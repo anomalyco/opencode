@@ -317,8 +317,7 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
       const value = messageUsage(row)
       if (value) addUsage(usage, value)
     }
-    const last = rows.at(-1)
-    if (last) cursor = last.seq
+    cursor = rows.at(-1)!.seq
   }
 
   yield* db
@@ -439,8 +438,7 @@ function insertMessage(db: DatabaseService, event: SessionEvent.Event, message: 
 const layer = Layer.effectDiscard(
   Effect.gen(function* () {
     const events = yield* EventV2.Service
-    const database = yield* Database.Service
-    const db = database.db
+    const db = (yield* Database.Service).db
     yield* events.project(SessionV1.Event.Created, (event) =>
       Effect.gen(function* () {
         const stored = yield* db

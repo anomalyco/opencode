@@ -1,7 +1,7 @@
 id: no-nested-effect-service-yield
 language: TypeScript
 message: Bind Effect services before calling methods instead of nesting service yields.
-severity: warning
+severity: error
 rule:
   any:
     - pattern: (yield* $SERVICE).$METHOD($$$ARGS)

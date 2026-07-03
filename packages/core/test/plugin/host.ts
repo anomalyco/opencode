@@ -292,10 +292,7 @@ function agentInfo(value: AgentV2.Info) {
 function providerInfo(value: ProviderV2.MutableInfo) {
   return {
     ...value,
-    api:
-      value.api.type === "native"
-        ? { ...value.api, settings: { ...value.api.settings } }
-        : { ...value.api, settings: value.api.settings && { ...value.api.settings } },
+    api: { ...value.api, settings: value.api.settings && { ...value.api.settings } },
     request: {
       settings: { ...value.request.settings },
       headers: { ...value.request.headers },
@@ -307,10 +304,7 @@ function providerInfo(value: ProviderV2.MutableInfo) {
 function modelInfo(value: ModelV2.Info | ModelV2.MutableInfo) {
   return {
     ...value,
-    api:
-      value.api.type === "native"
-        ? { ...value.api, settings: { ...value.api.settings } }
-        : { ...value.api, settings: value.api.settings && { ...value.api.settings } },
+    api: { ...value.api, settings: value.api.settings && { ...value.api.settings } },
     capabilities: {
       ...value.capabilities,
       input: [...value.capabilities.input],

@@ -131,8 +131,7 @@ const layer = Layer.effect(
     const fs = yield* FSUtil.Service
     const git = yield* Git.Service
     const directories = yield* ProjectDirectories.Service
-    const database = yield* Database.Service
-    const db = database.db
+    const db = (yield* Database.Service).db
     const events = yield* EventV2.Service
 
     const changed = Effect.fnUntraced(function* (projectID: Project.ID, update: boolean) {

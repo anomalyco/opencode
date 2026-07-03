@@ -32,7 +32,16 @@ type TokenResponse = {
   expires_in?: number
 }
 
-const decodeClaimPayload = Schema.decodeUnknownOption(Schema.UnknownFromJsonString)
+const Claims = Schema.fromJsonString(
+  Schema.Struct({
+    chatgpt_account_id: Schema.optional(Schema.String),
+    organizations: Schema.optional(Schema.Array(Schema.Struct({ id: Schema.String }))),
+    "https://api.openai.com/auth": Schema.optional(
+      Schema.Struct({ chatgpt_account_id: Schema.optional(Schema.String) }),
+    ),
+  }),
+)
+const decodeClaims = Schema.decodeUnknownOption(Claims)
 
 const browser = {
   integrationID: Integration.ID.make("openai"),
@@ -311,20 +320,11 @@ function extractAccountID(tokens: TokenResponse) {
 function claim(token: string) {
   const part = token.split(".")[1]
   if (!part) return
-  const claims = Option.getOrUndefined(decodeClaimPayload(Buffer.from(part, "base64url").toString()))
-  if (typeof claims !== "object" || claims === null) return
-  const auth = Reflect.get(claims, "https://api.openai.com/auth")
-  const organizations = Reflect.get(claims, "organizations")
+  const claims = Option.getOrUndefined(decodeClaims(Buffer.from(part, "base64url").toString()))
+  if (!claims) return
   return (
-    stringProperty(claims, "chatgpt_account_id") ??
-    (typeof auth === "object" && auth !== null ? stringProperty(auth, "chatgpt_account_id") : undefined) ??
-    (Array.isArray(organizations) && typeof organizations[0] === "object" && organizations[0] !== null
-      ? stringProperty(organizations[0], "id")
-      : undefined)
+    claims.chatgpt_account_id ??
+    claims["https://api.openai.com/auth"]?.chatgpt_account_id ??
+    claims.organizations?.[0]?.id
   )
-}
-
-function stringProperty(value: object, key: string) {
-  const result = Reflect.get(value, key)
-  return typeof result === "string" ? result : undefined
 }
