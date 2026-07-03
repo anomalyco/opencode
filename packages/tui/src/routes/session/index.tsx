@@ -1068,9 +1068,7 @@ function SessionMessageView(props: { message: SessionMessage }) {
         <UserMessage message={props.message as SessionMessageUser} />
       </Match>
       <Match when={props.message.type === "shell"}>
-        <box paddingLeft={3}>
-          <text>{props.message.type === "shell" ? `$ ${props.message.command}\n${props.message.output}` : ""}</text>
-        </box>
+        <ShellMessage message={props.message as Extract<SessionMessage, { type: "shell" }>} />
       </Match>
       <Match when={props.message.type === "agent-switched" || props.message.type === "model-switched"}>
         <SessionSwitchMessageV2 message={props.message} />
@@ -1342,6 +1340,29 @@ function RevertMessage(props: {
           <span style={{ fg: theme.text }}>{redoKey()}</span> or /redo to restore
         </text>
       </box>
+    </box>
+  )
+}
+
+function ShellMessage(props: { message: Extract<SessionMessage, { type: "shell" }> }) {
+  const { theme } = useTheme()
+  const output = createMemo(() => stripAnsi(props.message.output.trim()))
+
+  return (
+    <box
+      border={["left"]}
+      paddingTop={1}
+      paddingBottom={1}
+      paddingLeft={2}
+      gap={1}
+      backgroundColor={theme.backgroundPanel}
+      customBorderChars={SplitBorder.customBorderChars}
+      borderColor={theme.background}
+    >
+      <text fg={theme.text}>$ {props.message.command}</text>
+      <Show when={output()}>
+        <text fg={theme.textMuted}>{output()}</text>
+      </Show>
     </box>
   )
 }

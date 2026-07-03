@@ -29,6 +29,8 @@ import type {
   SessionSkillOutput,
   SessionSyntheticInput,
   SessionSyntheticOutput,
+  SessionShellInput,
+  SessionShellOutput,
   SessionCompactInput,
   SessionCompactOutput,
   SessionWaitInput,
@@ -519,6 +521,18 @@ export function make(options: ClientOptions) {
             method: "POST",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/synthetic`,
             body: { text: input["text"], description: input["description"], metadata: input["metadata"] },
+            successStatus: 204,
+            declaredStatuses: [404, 400, 401],
+            empty: true,
+          },
+          requestOptions,
+        ),
+      shell: (input: SessionShellInput, requestOptions?: RequestOptions) =>
+        request<SessionShellOutput>(
+          {
+            method: "POST",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/shell`,
+            body: { id: input["id"], command: input["command"] },
             successStatus: 204,
             declaredStatuses: [404, 400, 401],
             empty: true,

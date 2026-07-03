@@ -1101,13 +1101,8 @@ export function Prompt(props: PromptProps) {
 
     if (store.mode === "shell") {
       move.startSubmit()
-      void sdk.client.session.shell({
+      void sdk.client.v2.session.shell({
         sessionID,
-        agent: agent.id,
-        model: {
-          providerID: selectedModel.providerID,
-          modelID: selectedModel.modelID,
-        },
         command: inputText,
       })
       setStore("mode", "normal")

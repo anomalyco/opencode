@@ -17,11 +17,11 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Prompt } from "@opencode-ai/core/session/prompt"
+import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionInput } from "@opencode-ai/core/session/input"
 import { SessionEvent } from "@opencode-ai/core/session/event"
-import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { WorkspaceV2 } from "@opencode-ai/core/workspace"
@@ -61,6 +61,13 @@ const assertCreateInputTypes = (session: SessionV2.Interface) => {
   session.create({ parentID: SessionV2.ID.create(), location })
 }
 void assertCreateInputTypes
+
+function withTmp<A, E, R>(f: (directory: string) => Effect.Effect<A, E, R>) {
+  return Effect.acquireRelease(
+    Effect.promise(() => tmpdir()),
+    (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+  ).pipe(Effect.flatMap((tmp) => f(tmp.path)))
+}
 
 describe("SessionV2.create", () => {
   it.effect("creates a fresh projected session when the ID is omitted", () =>
@@ -476,20 +483,41 @@ describe("SessionV2.create", () => {
     }),
   )
 
-  it.effect("reports unfinished Session operations as unavailable", () =>
-    Effect.gen(function* () {
-      const session = yield* SessionV2.Service
-      const created = yield* session.create({ location })
-      const unavailable = (
-        effect: Effect.Effect<void, SessionV2.NotFoundError | SessionV2.OperationUnavailableError>,
-      ) =>
-        effect.pipe(
-          Effect.flip,
-          Effect.map((error) => (error instanceof SessionV2.OperationUnavailableError ? error.operation : "not-found")),
-        )
+  it.live("runs a shell command and projects the started/ended shell message", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const session = yield* SessionV2.Service
+        const created = yield* session.create({
+          location: Location.Ref.make({ directory: AbsolutePath.make(directory) }),
+        })
 
-      expect(yield* unavailable(session.shell({ sessionID: created.id, command: "pwd" }))).toBe("shell")
-    }),
+        yield* session.shell({ sessionID: created.id, command: "echo hello" })
+
+        const messages = yield* session.messages({ sessionID: created.id, order: "asc" })
+        const shell = messages.find((message): message is SessionMessage.Shell => message.type === "shell")
+        expect(shell).toMatchObject({ type: "shell", command: "echo hello" })
+        expect(shell?.output).toContain("hello")
+        expect(shell?.time.completed).toBeDefined()
+      }),
+    ),
+  )
+
+  it.live("still emits shell ended for a failing command", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const session = yield* SessionV2.Service
+        const created = yield* session.create({
+          location: Location.Ref.make({ directory: AbsolutePath.make(directory) }),
+        })
+
+        yield* session.shell({ sessionID: created.id, command: "false" })
+
+        const messages = yield* session.messages({ sessionID: created.id, order: "asc" })
+        const shell = messages.find((message): message is SessionMessage.Shell => message.type === "shell")
+        expect(shell).toMatchObject({ type: "shell", command: "false" })
+        expect(shell?.time.completed).toBeDefined()
+      }),
+    ),
   )
 
   it.effect("switches the selected agent through the durable Session event", () =>

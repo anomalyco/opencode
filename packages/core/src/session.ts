@@ -41,6 +41,9 @@ import type { EventLog } from "@opencode-ai/schema/event-log"
 import { SkillV2 } from "./skill"
 import { Job } from "./job"
 import { CommandV2 } from "./command"
+import { Identifier } from "./util/identifier"
+import { Shell } from "./shell"
+import { KeyedMutex } from "./effect/keyed-mutex"
 
 export const RevertState = Revert.State
 export type RevertState = Revert.State
@@ -106,7 +109,7 @@ export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("Ses
 export class OperationUnavailableError extends Schema.TaggedErrorClass<OperationUnavailableError>()(
   "Session.OperationUnavailableError",
   {
-    operation: Schema.Literals(["move", "shell", "skill", "switchAgent", "compact"]),
+    operation: Schema.Literals(["move", "skill", "switchAgent", "compact"]),
   },
 ) {}
 
@@ -208,8 +211,7 @@ export interface Interface {
     id?: EventV2.ID
     sessionID: SessionSchema.ID
     command: string
-    resume?: boolean
-  }) => Effect.Effect<void, OperationUnavailableError>
+  }) => Effect.Effect<void, NotFoundError>
   readonly skill: (input: {
     id?: SessionMessage.ID
     sessionID: SessionSchema.ID
@@ -255,6 +257,8 @@ const layer = Layer.effect(
     const locations = yield* LocationServiceMap.Service
     const jobs = yield* Job.Service
     const scope = yield* Scope.Scope
+    const activeShells = new Set<SessionSchema.ID>()
+    const shellLocks = KeyedMutex.makeUnsafe<SessionSchema.ID>()
     const decodeMessage = Schema.decodeUnknownEffect(SessionMessage.Message)
     const isDurableSessionEvent = Schema.is(SessionEvent.Durable)
     const decode = (row: typeof SessionMessageTable.$inferSelect) =>
@@ -266,6 +270,19 @@ const layer = Layer.effect(
               messageID: SessionMessage.ID.make(row.id),
             }),
         ),
+      )
+
+    // Session shell is user-initiated and synchronous at the API boundary, while
+    // the Location shell service owns process lifecycle and file-backed output.
+    const runShellCommand = (command: string, cwd: string) =>
+      Effect.gen(function* () {
+        const shell = yield* Shell.Service
+        const info = yield* shell.create({ command, cwd })
+        yield* shell.wait(info.id)
+        const output = yield* shell.output(info.id, { limit: SHELL_MAX_CAPTURE_BYTES })
+        return output.output || "(no output)"
+      }).pipe(
+        Effect.catchTag("Shell.NotFoundError", () => Effect.succeed("Shell command output is no longer available.")),
       )
 
     const result = Service.of({
@@ -489,7 +506,10 @@ const layer = Layer.effect(
             )
             if (!SessionInput.equivalent(admitted, expected))
               return yield* new PromptConflictError({ sessionID: input.sessionID, messageID })
-            if (input.resume !== false) yield* execution.wake(admitted.sessionID)
+            if (input.resume !== false) {
+              if (activeShells.has(admitted.sessionID)) return admitted
+              yield* execution.wake(admitted.sessionID)
+            }
             return admitted
           }),
         ),
@@ -525,8 +545,43 @@ const layer = Layer.effect(
           resume: input.resume,
         })
       }),
-      shell: Effect.fn("V2Session.shell")(function* () {
-        return yield* new OperationUnavailableError({ operation: "shell" })
+      shell: Effect.fn("V2Session.shell")(function* (input) {
+        const session = yield* result.get(input.sessionID)
+        yield* shellLocks.withLock(input.sessionID)(
+          Effect.gen(function* () {
+            activeShells.add(input.sessionID)
+            if ((yield* execution.active).has(input.sessionID)) yield* execution.awaitIdle(input.sessionID)
+            const messageID = SessionMessage.ID.create()
+            const callID = Identifier.ascending()
+            yield* events.publish(
+              SessionEvent.Shell.Started,
+              {
+                sessionID: input.sessionID,
+                messageID,
+                callID,
+                command: input.command,
+                timestamp: yield* DateTime.now,
+              },
+              { id: input.id },
+            )
+            const output = yield* runShellCommand(input.command, session.location.directory).pipe(
+              Effect.provide(locations.get(session.location)),
+            )
+            yield* events.publish(SessionEvent.Shell.Ended, {
+              sessionID: input.sessionID,
+              callID,
+              output,
+              timestamp: yield* DateTime.now,
+            })
+          }).pipe(
+            Effect.ensuring(
+              Effect.gen(function* () {
+                activeShells.delete(input.sessionID)
+                yield* execution.wake(input.sessionID)
+              }),
+            ),
+          ),
+        )
       }),
       skill: Effect.fn("V2Session.skill")(function* (input) {
         const session = yield* result.get(input.sessionID)
@@ -678,6 +733,9 @@ const resolvePrompt = (input: PromptInput.Prompt) =>
       }
     }),
   })
+
+// Mirrors the shell tool's in-memory preview safety limit.
+const SHELL_MAX_CAPTURE_BYTES = 1024 * 1024
 
 export const node = makeGlobalNode({
   service: Service,
