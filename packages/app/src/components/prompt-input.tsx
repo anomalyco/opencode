@@ -1682,7 +1682,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                             class="max-w-[160px] justify-start capitalize"
                             style={control()}
                           >
-                            <span class="truncate">
+                            <span class="truncate leading-5">
                               {props.controls.model.selection.variant.current() ?? language.t("common.default")}
                             </span>
                             <span class="-ml-0.5 -mr-1 flex shrink-0">
