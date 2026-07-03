@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { Effect, Layer, Option } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { CodeMode, toolError } from "../src/index.js"
-import { OpenAPI } from "../src/openapi.js"
+import { OpenAPI } from "../src/adapters/openapi.js"
 
 // The example spec exercises: global apiKey default, an operation-level OAuth2
 // override with scopes, path/query parameters, a JSON request body, component

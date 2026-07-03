@@ -8,8 +8,7 @@
   "license": "MIT",
   "exports": {
     ".": "./src/index.ts",
-    "./adapters/openapi": "./src/adapters/openapi.ts",
-    "./openapi": "./src/openapi.ts"
+    "./adapters/openapi": "./src/adapters/openapi.ts"
   },
   "scripts": {
     "typecheck": "tsgo --noEmit",
