@@ -149,7 +149,7 @@ it.live(
         const opencode = yield* fixture.sdk.OpenCode.create()
         const id = sessionID(fixture)
         const connected = yield* Latch.make(false)
-        const prompted = yield* Deferred.make<OpenCodeEvent>()
+        const prompted = yield* Deferred.make<Extract<OpenCodeEvent, { type: "session.next.prompted" }>>()
 
         yield* opencode.events.subscribe().pipe(
           Stream.runForEach((event) =>

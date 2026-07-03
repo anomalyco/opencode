@@ -9,6 +9,10 @@ import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionMessageUpdater } from "@opencode-ai/core/session/message-updater"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 
+function durable(sessionID: SessionID, seq = 0, version = 1) {
+  return { aggregateID: sessionID, seq: EventV2.Seq.make(seq), version: EventV2.Version.make(version) }
+}
+
 test.skip("step snapshots carry over to assistant messages", () => {
   const state: SessionMessageUpdater.MemoryState = { messages: [] }
   const sessionID = SessionID.make("session")
@@ -18,6 +22,7 @@ test.skip("step snapshots carry over to assistant messages", () => {
     SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
       id: EventV2.ID.create(),
       type: "session.next.step.started",
+      durable: durable(sessionID),
       data: {
         sessionID,
         assistantMessageID,
@@ -39,6 +44,7 @@ test.skip("step snapshots carry over to assistant messages", () => {
     SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
       id: EventV2.ID.create(),
       type: "session.next.step.ended",
+      durable: durable(sessionID, 1, 2),
       data: {
         sessionID,
         assistantMessageID,
@@ -71,6 +77,7 @@ test.skip("text ended populates assistant text content", () => {
     SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
       id: EventV2.ID.create(),
       type: "session.next.step.started",
+      durable: durable(sessionID),
       data: {
         sessionID,
         assistantMessageID,
@@ -89,6 +96,7 @@ test.skip("text ended populates assistant text content", () => {
     SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
       id: EventV2.ID.create(),
       type: "session.next.text.started",
+      durable: durable(sessionID, 1),
       data: {
         sessionID,
         assistantMessageID,
@@ -102,6 +110,7 @@ test.skip("text ended populates assistant text content", () => {
     SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
       id: EventV2.ID.create(),
       type: "session.next.text.ended",
+      durable: durable(sessionID, 2),
       data: {
         sessionID,
         assistantMessageID,
@@ -127,6 +136,7 @@ test.skip("tool completion stores completed timestamp", () => {
     SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
       id: EventV2.ID.create(),
       type: "session.next.step.started",
+      durable: durable(sessionID),
       data: {
         sessionID,
         assistantMessageID,
@@ -145,6 +155,7 @@ test.skip("tool completion stores completed timestamp", () => {
     SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
       id: EventV2.ID.create(),
       type: "session.next.tool.input.started",
+      durable: durable(sessionID, 1),
       data: {
         sessionID,
         assistantMessageID,
@@ -159,6 +170,7 @@ test.skip("tool completion stores completed timestamp", () => {
     SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
       id: EventV2.ID.create(),
       type: "session.next.tool.called",
+      durable: durable(sessionID, 2),
       data: {
         sessionID,
         assistantMessageID,
@@ -175,6 +187,7 @@ test.skip("tool completion stores completed timestamp", () => {
     SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
       id: EventV2.ID.create(),
       type: "session.next.tool.success",
+      durable: durable(sessionID, 3),
       data: {
         sessionID,
         assistantMessageID,
@@ -205,6 +218,7 @@ test("compaction events reduce to compaction message only when completed", () =>
     SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
       id,
       type: "session.next.compaction.started",
+      durable: durable(sessionID),
       data: {
         sessionID,
         messageID: compactionID,
@@ -246,6 +260,7 @@ test("compaction events reduce to compaction message only when completed", () =>
     SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
       id: EventV2.ID.create(),
       type: "session.next.compaction.ended",
+      durable: durable(sessionID, 1),
       data: {
         sessionID,
         messageID: compactionID,
