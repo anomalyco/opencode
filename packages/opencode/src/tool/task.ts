@@ -30,6 +30,8 @@ export const Event = {
   Completed: TaskEvent.Completed,
 }
 
+
+
 const id = "task"
 const BACKGROUND_DESCRIPTION = [
   "Background mode: background=true launches the subagent asynchronously and returns immediately.",
@@ -121,6 +123,49 @@ export const TaskTool = Tool.define(
     const interrupt = yield* Interrupt.Service
     const messaging = yield* Messaging.Service
     const events = yield* EventV2Bridge.Service
+
+    const completedPayload = Effect.fn("TaskTool.completedPayload")(function* (
+      sessionID: SessionID,
+      parentSessionID: SessionID,
+      status: "ok" | "error" | "aborted",
+      startedAt: number,
+    ) {
+      const session = yield* sessions.get(sessionID).pipe(Effect.option)
+      const s = Option.getOrUndefined(session)
+      const messages = yield* sessions.messages({ sessionID }).pipe(Effect.option)
+      const msgs = Option.getOrElse(messages, () => [] as SessionV1.WithParts[])
+
+      const elapsedMs = Date.now() - startedAt
+
+      let input = 0
+      let output = 0
+      let reasoning = 0
+      let cacheRead = 0
+      let cacheWrite = 0
+      let totalCost = 0
+      for (const msg of msgs) {
+        if (msg.info.role !== "assistant") continue
+        input += msg.info.tokens.input
+        output += msg.info.tokens.output
+        reasoning += msg.info.tokens.reasoning
+        cacheRead += msg.info.tokens.cache.read
+        cacheWrite += msg.info.tokens.cache.write
+        totalCost += msg.info.cost
+      }
+
+      return {
+        sessionID,
+        parentSessionID,
+        status,
+        slug: s?.slug,
+        agent: s?.agent,
+        model: s?.model ? `${s.model.providerID}/${s.model.id}` : undefined,
+        variant: s?.model?.variant,
+        elapsedMs,
+        tokens: { input, output, reasoning, cacheRead, cacheWrite },
+        cost: totalCost,
+      }
+    })
 
     const run = Effect.fn("TaskTool.execute")(function* (
       params: Schema.Schema.Type<typeof Parameters>,
@@ -302,35 +347,19 @@ export const TaskTool = Tool.define(
               // record; a hard abort settles "cancelled". Both must render as aborted.
               const aborted = yield* interrupt.terminal(jobID)
               if (Option.isSome(aborted)) {
-                yield* events.publish(Event.Completed, {
-                  sessionID: jobID,
-                  parentSessionID: ctx.sessionID,
-                  status: "aborted",
-                })
+                yield* events.publish(Event.Completed, yield* completedPayload(jobID, ctx.sessionID, "aborted", startedAt))
                 return yield* inject("aborted", result.info?.output ?? "", aborted.value.reason)
               }
               if (result.info?.status === "completed") {
-                yield* events.publish(Event.Completed, {
-                  sessionID: jobID,
-                  parentSessionID: ctx.sessionID,
-                  status: "ok",
-                })
+                yield* events.publish(Event.Completed, yield* completedPayload(jobID, ctx.sessionID, "ok", startedAt))
                 return yield* inject("completed", result.info.output ?? "")
               }
               if (result.info?.status === "error") {
-                yield* events.publish(Event.Completed, {
-                  sessionID: jobID,
-                  parentSessionID: ctx.sessionID,
-                  status: "error",
-                })
+                yield* events.publish(Event.Completed, yield* completedPayload(jobID, ctx.sessionID, "error", startedAt))
                 return yield* inject("error", result.info.error ?? "")
               }
               if (result.info?.status === "cancelled") {
-                yield* events.publish(Event.Completed, {
-                  sessionID: jobID,
-                  parentSessionID: ctx.sessionID,
-                  status: "aborted",
-                })
+                yield* events.publish(Event.Completed, yield* completedPayload(jobID, ctx.sessionID, "aborted", startedAt))
                 return yield* inject("aborted", result.info.output ?? "", "Aborted")
               }
               return
@@ -368,6 +397,7 @@ export const TaskTool = Tool.define(
         }
       }
 
+      const startedAt = Date.now()
       const info = yield* background.start({
         id: nextSession.id,
         type: id,
@@ -452,20 +482,12 @@ export const TaskTool = Tool.define(
             const result = outcome.info
             if (result?.metadata?.background === true) return backgroundResult()
             if (result?.status === "error") {
-              yield* events.publish(Event.Completed, {
-                sessionID: nextSession.id,
-                parentSessionID: ctx.sessionID,
-                status: "error",
-              })
+              yield* events.publish(Event.Completed, yield* completedPayload(nextSession.id, ctx.sessionID, "error", startedAt))
               return yield* Effect.fail(new Error(result.error ?? "Task failed"))
             }
           if (result?.status === "cancelled") {
             const aborted = yield* interrupt.terminal(nextSession.id)
-            yield* events.publish(Event.Completed, {
-              sessionID: nextSession.id,
-              parentSessionID: ctx.sessionID,
-              status: "aborted",
-            })
+            yield* events.publish(Event.Completed, yield* completedPayload(nextSession.id, ctx.sessionID, "aborted", startedAt))
             return {
               title: params.description,
               metadata,
@@ -479,11 +501,7 @@ export const TaskTool = Tool.define(
           }
           const aborted = yield* interrupt.terminal(nextSession.id)
           if (Option.isSome(aborted)) {
-            yield* events.publish(Event.Completed, {
-              sessionID: nextSession.id,
-              parentSessionID: ctx.sessionID,
-              status: "aborted",
-            })
+            yield* events.publish(Event.Completed, yield* completedPayload(nextSession.id, ctx.sessionID, "aborted", startedAt))
             return {
               title: params.description,
               metadata,
@@ -495,11 +513,7 @@ export const TaskTool = Tool.define(
               }),
             }
           }
-          yield* events.publish(Event.Completed, {
-            sessionID: nextSession.id,
-            parentSessionID: ctx.sessionID,
-            status: "ok",
-          })
+          yield* events.publish(Event.Completed, yield* completedPayload(nextSession.id, ctx.sessionID, "ok", startedAt))
           return {
             title: params.description,
             metadata,
@@ -515,11 +529,7 @@ export const TaskTool = Tool.define(
               // The promoted/message/background paths set notified=true and own
               // their own completion, so skip to avoid double-fire.
               if (!notified)
-                yield* events.publish(Event.Completed, {
-                  sessionID: nextSession.id,
-                  parentSessionID: ctx.sessionID,
-                  status: "aborted",
-                })
+                yield* events.publish(Event.Completed, yield* completedPayload(nextSession.id, ctx.sessionID, "aborted", startedAt))
               yield* Effect.all([cancel, background.cancel(nextSession.id)], { discard: true })
             }
           }).pipe(

@@ -10,6 +10,21 @@ export const Completed = Event.define({
     sessionID: SessionID,
     parentSessionID: SessionID,
     status: Schema.Literals(["ok", "error", "aborted"]),
+    slug: Schema.optional(Schema.String),
+    agent: Schema.optional(Schema.String),
+    model: Schema.optional(Schema.String),
+    variant: Schema.optional(Schema.String),
+    elapsedMs: Schema.optional(Schema.Finite),
+    tokens: Schema.optional(
+      Schema.Struct({
+        input: Schema.optional(Schema.Finite),
+        output: Schema.optional(Schema.Finite),
+        reasoning: Schema.optional(Schema.Finite),
+        cacheRead: Schema.optional(Schema.Finite),
+        cacheWrite: Schema.optional(Schema.Finite),
+      }),
+    ),
+    cost: Schema.optional(Schema.Finite),
   },
 })
 

@@ -1120,4 +1120,91 @@ describe("tool.task", () => {
         })
       }),
   )
+
+  it.instance("completed task publishes enriched message tokens and cost", () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+
+      const promptOps: TaskPromptOps = {
+        cancel: () => Effect.void,
+        resolvePromptParts: (template) => Effect.succeed([{ type: "text" as const, text: template }]),
+        prompt: (input) =>
+          Effect.sync(() => {
+            const id = MessageID.ascending()
+            const info: SessionV1.Assistant = {
+              id,
+              role: "assistant",
+              parentID: input.messageID ?? MessageID.ascending(),
+              sessionID: input.sessionID,
+              mode: input.agent ?? "general",
+              agent: input.agent ?? "general",
+              cost: 0.005,
+              path: { cwd: "/tmp", root: "/tmp" },
+              tokens: { input: 100, output: 50, reasoning: 20, cache: { read: 10, write: 5 } },
+              modelID: input.model?.modelID ?? ref.modelID,
+              providerID: input.model?.providerID ?? ref.providerID,
+              time: { created: Date.now() },
+              finish: "stop",
+            }
+            const part = {
+              id: PartID.ascending(),
+              messageID: id,
+              sessionID: input.sessionID,
+              type: "text" as const,
+              text: "done",
+            }
+            // Persist message and part so completedPayload can sum them
+            return { info: info as SessionV1.Info, parts: [part] }
+          }).pipe(
+            Effect.tap((result) =>
+              Effect.all([
+                sessions.updateMessage(result.info),
+                sessions.updatePart(result.parts[0]!),
+              ], { discard: true }),
+            ),
+          ),
+      }
+
+      const result = yield* def.execute(
+        {
+          description: "inspect bug",
+          prompt: "look into the cache key path",
+          subagent_type: "general",
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      const childId = result.metadata.sessionId
+
+      // Verify the child session has the expected agent
+      const child = yield* sessions.get(childId)
+      expect(child.agent).toBe("general")
+
+      // Read child session messages and verify tokens/cost
+      const msgs = yield* sessions.messages({ sessionID: childId })
+      const assistantMsgs = msgs.filter((m): m is SessionV1.WithParts & { info: SessionV1.Assistant } => m.info.role === "assistant")
+      expect(assistantMsgs.length).toBeGreaterThan(0)
+
+      const first = assistantMsgs[0]!
+      expect(first.info.tokens.input).toBe(100)
+      expect(first.info.tokens.output).toBe(50)
+      expect(first.info.tokens.reasoning).toBe(20)
+      expect(first.info.tokens.cache.read).toBe(10)
+      expect(first.info.tokens.cache.write).toBe(5)
+      expect(first.info.cost).toBe(0.005)
+    }),
+  )
+
 })
