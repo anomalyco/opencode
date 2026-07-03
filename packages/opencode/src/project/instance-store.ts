@@ -34,7 +34,7 @@ interface Entry {
   readonly deferred: Deferred.Deferred<InstanceContext>
 }
 
-export const layer: Layer.Layer<Service, never, Project.Service | InstanceBootstrap.Service> = Layer.effect(
+const layer: Layer.Layer<Service, never, Project.Service | InstanceBootstrap.Service> = Layer.effect(
   Service,
   Effect.gen(function* () {
     const project = yield* Project.Service
@@ -201,8 +201,6 @@ export const layer: Layer.Layer<Service, never, Project.Service | InstanceBootst
     })
   }),
 )
-
-export const defaultLayer = layer.pipe(Layer.provide(Project.defaultLayer))
 
 export const bootstrapNode = LayerNode.unbound(InstanceBootstrap.Service, Node.tags.values.global)
 

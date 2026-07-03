@@ -141,7 +141,7 @@ export const loaderLayer = Layer.effect(
   }),
 )
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const loader = yield* Loader
@@ -199,14 +199,6 @@ export const layer = Layer.effect(
       variants,
     })
   }),
-)
-
-export const defaultLayer = layer.pipe(
-  Layer.provide(loaderLayer),
-  Layer.provide(Provider.defaultLayer),
-  Layer.provide(Agent.defaultLayer),
-  Layer.provide(Command.defaultLayer),
-  Layer.provide(LayerNode.compile(InstanceStore.node, [[InstanceStore.bootstrapNode, InstanceBootstrap.node]])),
 )
 
 export const loaderNode = LayerNode.make({

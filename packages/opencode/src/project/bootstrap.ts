@@ -14,7 +14,7 @@ import { Service } from "./bootstrap-service"
 export { Service } from "./bootstrap-service"
 export type { Interface } from "./bootstrap-service"
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     // Yield each bootstrap dep at layer init so `run` itself has R = never.
@@ -47,19 +47,6 @@ export const layer = Layer.effect(
 
     return Service.of({ run })
   }),
-)
-
-export const defaultLayer: Layer.Layer<Service> = layer.pipe(
-  Layer.provide([
-    Config.defaultLayer,
-    Format.defaultLayer,
-    LSP.defaultLayer,
-    Plugin.defaultLayer,
-    Project.defaultLayer,
-    ShareNext.defaultLayer,
-    Snapshot.defaultLayer,
-    Vcs.defaultLayer,
-  ]),
 )
 
 export const node = makeGlobalNode({

@@ -135,7 +135,7 @@ export const contextLimitLoaderLayer = Layer.effect(
   }),
 )
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const messageLoader = yield* MessageLoader
@@ -224,12 +224,6 @@ export const layer = Layer.effect(
       sendUpdate,
     })
   }),
-)
-
-export const defaultLayer = layer.pipe(
-  Layer.provide(contextLimitLoaderLayer),
-  Layer.provide(Provider.defaultLayer),
-  Layer.provide(LayerNode.compile(InstanceStore.node, [[InstanceStore.bootstrapNode, InstanceBootstrap.node]])),
 )
 
 export const messageLoaderNode = LayerNode.unbound(MessageLoader, Node.tags.values.global)

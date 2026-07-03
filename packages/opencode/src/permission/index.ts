@@ -39,7 +39,7 @@ export function evaluate(permission: string, pattern: string, ...rulesets: Permi
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Permission") {}
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const events = yield* EventV2Bridge.Service
@@ -224,8 +224,6 @@ export function visibleTools<T>(tools: Record<string, T>, ruleset: PermissionV1.
   const hidden = disabled(Object.keys(tools), ruleset)
   return Object.fromEntries(Object.entries(tools).filter(([name]) => !hidden.has(name)))
 }
-
-export const defaultLayer = layer.pipe(Layer.provide(EventV2Bridge.defaultLayer))
 
 export const node = LayerNode.make({ service: Service, layer: layer, deps: [EventV2Bridge.node] })
 

@@ -14,6 +14,7 @@ import type {
 import { batch } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { diffs as cleanDiffs, message as cleanMessage } from "@/utils/diffs"
+import { sessionNotFoundError } from "@/utils/server-errors"
 import { rootSession } from "@/utils/session-route"
 import { dropSessionCaches, pickSessionCacheEvictions, SESSION_CACHE_LIMIT } from "./global-sync/session-cache"
 
@@ -235,7 +236,7 @@ export function createServerSession(client: OpencodeClient, options?: { retry?: 
     if (pending) return pending
     const active = generation(sessionID)
     const request = client.session.get({ sessionID }).then((result) => {
-      if (!result.data) throw new Error(`Session not found: ${sessionID}`)
+      if (!result.data) throw sessionNotFoundError(sessionID)
       if (generations.get(sessionID) !== active) return result.data
       return remember(result.data)
     })

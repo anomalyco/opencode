@@ -1,7 +1,6 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { path } from "@opencode-ai/core/effect/app-node-platform"
 import { Global } from "@opencode-ai/core/global"
-import { InstanceBootstrap } from "@/project/bootstrap"
 import { InstanceStore } from "@/project/instance-store"
 import { Project } from "@/project/project"
 import { Database } from "@opencode-ai/core/database/database"
@@ -14,7 +13,6 @@ import { GlobalBus } from "@/bus/global"
 import { Git } from "@/git"
 import { Effect, Layer, Path, Schema, Scope, Context } from "effect"
 import { ChildProcess } from "effect/unstable/process"
-import { NodePath } from "@effect/platform-node"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { AppProcess } from "@opencode-ai/core/process"
 import { InstanceState } from "@/effect/instance-state"
@@ -131,7 +129,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Wo
 
 type GitResult = { code: number; text: string; stderr: string }
 
-export const layer: Layer.Layer<
+const layer: Layer.Layer<
   Service,
   never,
   | FSUtil.Service
@@ -614,19 +612,6 @@ export const layer: Layer.Layer<
 
     return Service.of({ makeWorktreeInfo, createFromInfo, create, list, remove, reset })
   }),
-)
-
-export const appLayer = layer.pipe(
-  Layer.provide(Git.defaultLayer),
-  Layer.provide(AppProcess.defaultLayer),
-  Layer.provide(Project.defaultLayer),
-  Layer.provide(Database.defaultLayer),
-  Layer.provide(FSUtil.defaultLayer),
-  Layer.provide(NodePath.layer),
-)
-
-export const defaultLayer = appLayer.pipe(
-  Layer.provide(LayerNode.compile(InstanceStore.node, [[InstanceStore.bootstrapNode, InstanceBootstrap.node]])),
 )
 
 export const node = LayerNode.make({

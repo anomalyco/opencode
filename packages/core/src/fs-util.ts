@@ -49,7 +49,7 @@ export namespace FSUtil {
 
   export const use = serviceUse(Service)
 
-  export const layer = Layer.effect(
+  const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem
@@ -200,7 +200,6 @@ export namespace FSUtil {
     }),
   )
 
-  export const defaultLayer = layer.pipe(Layer.provide(NodeFileSystem.layer))
   export const node = makeGlobalNode({ service: Service, layer: layer, deps: [filesystem] })
 
   // Pure helpers that don't need Effect (path manipulation, sync operations)
