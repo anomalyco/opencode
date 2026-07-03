@@ -25,6 +25,7 @@ function prompted(messageID: string): V2Event {
   return {
     id: "evt_prompted",
     type: "session.next.prompted",
+    durable: { aggregateID: "ses_1", seq: 0, version: 1 },
     data: { timestamp: 1, sessionID: "ses_1", messageID, prompt: { text: "hello" }, delivery: "steer" },
   }
 }
@@ -39,11 +40,7 @@ function settled(outcome: "success" | "interrupted" = "success"): V2Event {
 
 // Runs one non-interactive prompt against a mocked SDK. `turn` produces the
 // live events the prompt admission triggers, keyed by the generated message ID.
-async function run(input: {
-  turn: (messageID: string) => V2Event[]
-  pendingForms?: FormInfo[]
-  attached?: boolean
-}) {
+async function run(input: { turn: (messageID: string) => V2Event[]; pendingForms?: FormInfo[]; attached?: boolean }) {
   const sdk = new OpencodeClient()
   const values: V2Event[] = [{ id: "evt_connected", type: "server.connected", data: {} }]
   let wake: (() => void) | undefined
@@ -64,8 +61,9 @@ async function run(input: {
   )
   spyOn(sdk.v2.session.permission, "list").mockImplementation(() => ok({ data: [] }) as never)
   spyOn(sdk.v2.session.question, "list").mockImplementation(() => ok({ data: [] }) as never)
-  spyOn(sdk.v2.session.form, "list").mockImplementation((request) =>
-    ok({ data: input.pendingForms?.filter((item) => item.sessionID === request.sessionID) ?? [] }) as never,
+  spyOn(sdk.v2.session.form, "list").mockImplementation(
+    (request) =>
+      ok({ data: input.pendingForms?.filter((item) => item.sessionID === request.sessionID) ?? [] }) as never,
   )
   spyOn(sdk.v2.session.form, "cancel").mockImplementation(() => ok(undefined) as never)
   spyOn(sdk.v2.session, "prompt").mockImplementation((request) => {
