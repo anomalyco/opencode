@@ -32,6 +32,11 @@ type Execution<E> = {
 
 export const make = <Key, E>(options: {
   readonly drain: (key: Key, force: boolean) => Effect.Effect<void, E>
+  /**
+   * Runs in the execution fiber for every exit, including interruption, after the final
+   * drain and before the execution settles (waiters resolve after it completes).
+   */
+  readonly settled?: (key: Key, exit: Exit.Exit<void, E>) => Effect.Effect<void>
 }): Effect.Effect<Coordinator<Key, E>, never, Scope.Scope> =>
   Effect.gen(function* () {
     const executions = new Map<Key, Execution<E>>()
@@ -58,6 +63,7 @@ export const make = <Key, E>(options: {
       execution.owner = fork(
         Effect.yieldNow.pipe(
           Effect.andThen(loop(key, execution, force)),
+          Effect.onExit((exit) => options.settled?.(key, exit) ?? Effect.void),
           Effect.onExit((exit) => Effect.sync(() => settle(key, execution, exit))),
           Effect.exit,
           Effect.asVoid,

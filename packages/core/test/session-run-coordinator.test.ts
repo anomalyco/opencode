@@ -392,6 +392,68 @@ describe("SessionRunCoordinator", () => {
     ),
   )
 
+  it.effect("settles once per execution across coalesced drains", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const started = yield* Deferred.make<void>()
+        const gate = yield* Deferred.make<void>()
+        const idle = yield* Deferred.make<void>()
+        let drains = 0
+        const settled: Exit.Exit<void, never>[] = []
+        const coordinator = yield* SessionRunCoordinator.make<string, never>({
+          drain: () =>
+            Effect.sync(() => ++drains).pipe(
+              Effect.flatMap((run) =>
+                run === 1
+                  ? Deferred.succeed(started, undefined).pipe(Effect.andThen(Deferred.await(gate)))
+                  : Effect.void,
+              ),
+              Effect.asVoid,
+            ),
+          settled: (_key, exit) =>
+            Effect.sync(() => void settled.push(exit)).pipe(
+              Effect.andThen(Deferred.succeed(idle, undefined)),
+              Effect.asVoid,
+            ),
+        })
+
+        yield* coordinator.wake("session")
+        yield* Deferred.await(started)
+        yield* coordinator.wake("session")
+        yield* Deferred.succeed(gate, undefined)
+        yield* Deferred.await(idle)
+
+        expect(drains).toBe(2)
+        expect(settled).toHaveLength(1)
+        expect(Exit.isSuccess(settled[0]!)).toBe(true)
+      }),
+    ),
+  )
+
+  it.effect("settles interrupted executions before waiters resolve", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const started = yield* Deferred.make<void>()
+        const gate = yield* Deferred.make<void>()
+        const settled: Exit.Exit<void, never>[] = []
+        const coordinator = yield* SessionRunCoordinator.make<string, never>({
+          drain: () => Deferred.succeed(started, undefined).pipe(Effect.andThen(Deferred.await(gate))),
+          settled: (_key, exit) => Effect.sync(() => void settled.push(exit)),
+        })
+
+        yield* coordinator.wake("session")
+        yield* Deferred.await(started)
+        yield* coordinator.interrupt("session")
+
+        expect(settled).toHaveLength(1)
+        expect(settled[0] !== undefined && Exit.isFailure(settled[0]) && Cause.hasInterrupts(settled[0].cause)).toBe(
+          true,
+        )
+        expect(yield* coordinator.active).toEqual(new Set())
+      }),
+    ),
+  )
+
   it.effect("trampolines synchronous self-waking execution", () =>
     Effect.scoped(
       Effect.gen(function* () {

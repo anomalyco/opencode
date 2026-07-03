@@ -442,32 +442,10 @@ const layer = Layer.effect(
       }
     })
 
-    const run = Effect.fn("SessionRunner.run")(
-      (input: { readonly sessionID: SessionSchema.ID; readonly force: boolean }) =>
-        drain(input).pipe(
-          Effect.onExit((exit) =>
-            Effect.gen(function* () {
-              const failure =
-                Exit.isFailure(exit) && !Cause.hasInterrupts(exit.cause) ? Cause.squash(exit.cause) : undefined
-              yield* events.publish(SessionEvent.ExecutionSettled, {
-                sessionID: input.sessionID,
-                timestamp: yield* DateTime.now,
-                outcome: Exit.isSuccess(exit) ? "success" : Cause.hasInterrupts(exit.cause) ? "interrupted" : "failure",
-                error:
-                  failure !== undefined
-                    ? { type: "unknown", message: failure instanceof Error ? failure.message : String(failure) }
-                    : undefined,
-              })
-            }).pipe(
-              Effect.catchCause(() => Effect.void),
-              Effect.asVoid,
-            ),
-          ),
-        ),
-    )
-
     return Service.of({
-      run,
+      // ExecutionSettled is published per execution (busy period) by SessionExecution,
+      // not per drain here.
+      run: Effect.fn("SessionRunner.run")(drain),
     })
   }),
 )
