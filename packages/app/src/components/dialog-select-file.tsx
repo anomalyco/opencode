@@ -24,6 +24,9 @@ import { getRelativeTime } from "@/utils/time"
 const DialogSelectFileV2 = lazy(() =>
   import("./dialog-select-directory-v2").then((module) => ({ default: module.DialogSelectDirectoryV2 })),
 )
+const DialogCommandPaletteV2 = lazy(() =>
+  import("./dialog-command-palette-v2").then((module) => ({ default: module.DialogCommandPaletteV2 })),
+)
 
 type EntryType = "command" | "file" | "session"
 
@@ -390,6 +393,10 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
     if (state.committed) return
     state.cleanup?.()
   })
+
+  if (!filesOnly() && settings.general.newLayoutDesigns()) {
+    return <DialogCommandPaletteV2 onOpenFile={props.onOpenFile} />
+  }
 
   if (filesOnly() && platform.platform === "desktop" && settings.general.newLayoutDesigns()) {
     return (
