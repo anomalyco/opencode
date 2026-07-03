@@ -2348,7 +2348,6 @@ function Execute(props: ToolProps) {
   const hasRuntimeError = createMemo(() => props.metadata.error === true)
   const outputPreview = createMemo(() => collapseToolOutput(output(), 4, 4 * Math.max(20, ctx.width - 6)).output)
   const showOutput = createMemo(() => output() && hasRuntimeError())
-  const detailPadding = 3 + INLINE_TOOL_ICON_WIDTH
 
   return (
     <>
@@ -2366,8 +2365,8 @@ function Execute(props: ToolProps) {
         {(call) => {
           const args = input(call.input ?? {})
           return (
-            <box paddingLeft={detailPadding}>
-              <text fg={call.status === "error" ? theme.error : theme.textMuted}>
+            <box paddingLeft={3}>
+              <text paddingLeft={3} fg={call.status === "error" ? theme.error : theme.textMuted}>
                 ↳ {call.tool}
                 {args ? ` ${args}` : ""}
                 {call.status === "error" ? " (failed)" : ""}
@@ -2377,10 +2376,10 @@ function Execute(props: ToolProps) {
         }}
       </For>
       <Show when={showOutput()}>
-        <box paddingLeft={detailPadding}>
+        <box paddingLeft={3}>
           <For each={outputPreview().split("\n")}>
             {(line, index) => (
-              <text fg={theme.error}>
+              <text paddingLeft={3} fg={theme.error}>
                 {index() === 0 ? "↳ " : "  "}
                 {line}
               </text>
