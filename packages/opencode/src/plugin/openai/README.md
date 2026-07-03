@@ -2,6 +2,10 @@
 
 Enabled by default on `local`, `dev`, and `beta`. On `latest` and `prod`, set `OPENCODE_EXPERIMENTAL_WEBSOCKETS=true`.
 
+## Codex Subscription Cost
+
+ChatGPT Plus/Pro Codex auth shows `$0.00` by default because subscription usage is not billed per token like the OpenAI API. Set `OPENCODE_CODEX_SHOW_ESTIMATED_COST=true` to show an API-equivalent estimate from model pricing.
+
 ## Flow
 
 1. A streamed `POST /responses` request arrives.

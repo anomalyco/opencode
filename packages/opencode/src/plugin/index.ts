@@ -68,6 +68,7 @@ function internalPlugins(flags: RuntimeFlags.Info): PluginInstance[] {
     (input) =>
       CodexAuthPlugin(input, {
         experimentalWebSockets: experimentalWebSocketsEnabled({ enabled: flags.experimentalWebSockets }),
+        showEstimatedCost: flags.codexShowEstimatedCost,
       }),
     CopilotAuthPlugin,
     GitlabAuthPlugin,

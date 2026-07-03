@@ -149,6 +149,44 @@ describe("plugin.codex", () => {
     await enabled.dispose?.()
   })
 
+  test("zeros model pricing for OAuth by default", async () => {
+    const hooks = await CodexAuthPlugin({} as never)
+    const models = await hooks.provider!.models!(
+      {
+        models: {
+          "gpt-5.4": {
+            id: "gpt-5.4",
+            api: { id: "gpt-5.4" },
+            cost: { input: 2, output: 8, cache: { read: 0.5, write: 1 } },
+            limit: { context: 128_000, output: 16_000 },
+          },
+        },
+      } as never,
+      { auth: { type: "oauth" } } as never,
+    )
+
+    expect(models["gpt-5.4"].cost).toEqual({ input: 0, output: 0, cache: { read: 0, write: 0 } })
+  })
+
+  test("keeps model pricing for opted-in OAuth usage estimates", async () => {
+    const hooks = await CodexAuthPlugin({} as never, { showEstimatedCost: true })
+    const models = await hooks.provider!.models!(
+      {
+        models: {
+          "gpt-5.4": {
+            id: "gpt-5.4",
+            api: { id: "gpt-5.4" },
+            cost: { input: 2, output: 8, cache: { read: 0.5, write: 1 } },
+            limit: { context: 128_000, output: 16_000 },
+          },
+        },
+      } as never,
+      { auth: { type: "oauth" } } as never,
+    )
+
+    expect(models["gpt-5.4"].cost).toEqual({ input: 2, output: 8, cache: { read: 0.5, write: 1 } })
+  })
+
   test("deduplicates concurrent Codex token refreshes", async () => {
     let auth = {
       type: "oauth" as const,

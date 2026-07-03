@@ -102,6 +102,7 @@ interface CodexAuthPluginOptions {
   issuer?: string
   codexApiEndpoint?: string
   experimentalWebSockets?: boolean
+  showEstimatedCost?: boolean
 }
 
 async function exchangeCodeForTokens(code: string, redirectUri: string, pkce: PkceCodes): Promise<TokenResponse> {
@@ -292,11 +293,16 @@ export async function CodexAuthPlugin(input: PluginInput, options: CodexAuthPlug
               modelID,
               {
                 ...model,
-                cost: {
-                  input: 0,
-                  output: 0,
-                  cache: { read: 0, write: 0 },
-                },
+                // Subscription usage is not billed like API usage, so default to
+                // actual marginal cost. Opt-in keeps models.dev pricing as an
+                // API-equivalent estimate for users who want spend visibility.
+                cost: options.showEstimatedCost
+                  ? model.cost
+                  : {
+                      input: 0,
+                      output: 0,
+                      cache: { read: 0, write: 0 },
+                    },
                 limit: model.id.includes("gpt-5.5")
                   ? {
                       context: 400_000,

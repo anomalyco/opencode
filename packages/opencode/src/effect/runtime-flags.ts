@@ -53,6 +53,9 @@ export class Service extends ConfigService.Service<Service>()("@opencode/Runtime
   bashDefaultTimeoutMs: positiveInteger("OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS"),
   experimentalNativeLlm: bool("OPENCODE_EXPERIMENTAL_NATIVE_LLM"),
   experimentalWebSockets: bool("OPENCODE_EXPERIMENTAL_WEBSOCKETS"),
+  // ChatGPT/Codex subscription auth has no per-token API charge. Keep the default
+  // at actual marginal cost ($0) unless the user explicitly wants an estimate.
+  codexShowEstimatedCost: bool("OPENCODE_CODEX_SHOW_ESTIMATED_COST"),
   client: Config.string("OPENCODE_CLIENT").pipe(Config.withDefault("cli")),
 }) {}
 
