@@ -1,6 +1,6 @@
 import { Effect } from "effect"
 import { HttpClient, HttpClientRequest, type HttpMethod } from "effect/unstable/http"
-import { toolError } from "./tool-error.js"
+import { ToolError, toolError } from "./tool-error.js"
 import { Tool, type Definition, type JsonSchema } from "./tool.js"
 
 /** A parsed OpenAPI 3.x document. */
@@ -316,20 +316,25 @@ const requestBody = (document: Document, operation: Record<string, unknown>): Bo
   const resolved = resolve(document, operation.requestBody)
   if (!isRecord(resolved)) return undefined
   const content = isRecord(resolved.content) ? resolved.content : {}
-  const json = Object.entries(content).find(([mediaType]) => isJsonMediaType(mediaType))
-  if (json === undefined) {
+  if (!Object.keys(content).some(isJsonMediaType)) {
     const declared = Object.keys(content).join(", ") || "none"
     return { reason: `request body has no JSON content (declared: ${declared})` }
   }
   return {
     required: resolved.required === true,
-    schema: isRecord(json[1]) ? projectSchema(json[1].schema) : {},
+    schema: projectSchema(jsonContentSchema(content)),
   }
 }
 
 const isJsonMediaType = (mediaType: string): boolean => {
   const normalized = mediaType.split(";")[0]?.trim().toLowerCase() ?? ""
   return normalized === "application/json" || normalized.endsWith("+json")
+}
+
+/** The schema of the JSON media-type entry in an OpenAPI `content` record, if declared. */
+const jsonContentSchema = (content: Record<string, unknown>): unknown => {
+  const entry = Object.entries(content).find(([mediaType]) => isJsonMediaType(mediaType))
+  return entry !== undefined && isRecord(entry[1]) ? entry[1].schema : undefined
 }
 
 const inputSchema = (
@@ -386,10 +391,8 @@ const outputSchema = (
     const response = resolve(document, ref)
     if (!isRecord(response)) continue
     const content = isRecord(response.content) ? response.content : {}
-    const json = Object.entries(content).find(([mediaType]) => isJsonMediaType(mediaType))
-    if (json !== undefined && isRecord(json[1]) && json[1].schema !== undefined) {
-      return withDefinitions(projectSchema(json[1].schema), definitions)
-    }
+    const schema = jsonContentSchema(content)
+    if (schema !== undefined) return withDefinitions(projectSchema(schema), definitions)
     // Declared content without a usable JSON schema (e.g. text/plain): the tool
     // returns the raw body, so advertise unknown rather than a wrong null.
     if (Object.keys(content).length > 0) return undefined
@@ -434,6 +437,12 @@ const specServerUrl = (document: Document, variables: Readonly<Record<string, st
   })
   if (/\{[^{}]+\}/.test(substituted)) {
     return { reason: `server URL has unresolved variables: ${url}; pass baseUrl or serverVariables` }
+  }
+  // OpenAPI allows relative server URLs (resolved against the document's own
+  // location), which the adapter cannot resolve; skip instead of generating
+  // tools whose every call fails with a transport error.
+  if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(substituted)) {
+    return { reason: `spec declares a relative server URL '${substituted}'; pass baseUrl` }
   }
   return substituted
 }
@@ -513,8 +522,23 @@ const invoke = (plan: Plan, input: unknown): Effect.Effect<unknown, unknown, Htt
     const headers = isRecord(value.headers) ? value.headers : {}
     const cookies = isRecord(value.cookies) ? value.cookies : {}
 
+    // Cheap local validation runs before auth resolution so an unsendable call
+    // never triggers credential work (e.g. a token refresh).
+    const url = buildUrl(plan, path)
+    if (url instanceof ToolError) return yield* Effect.fail(url)
+    for (const parameter of plan.parameters) {
+      if (parameter.location === "path" || !parameter.required) continue
+      const group = parameter.location === "query" ? query : parameter.location === "header" ? headers : cookies
+      const item = group[parameter.name]
+      if (item === undefined || item === null) {
+        return yield* Effect.fail(toolError(`Missing required ${parameter.location} parameter '${parameter.name}'.`))
+      }
+    }
+    if (plan.body?.required === true && value.body === undefined) {
+      return yield* Effect.fail(toolError("Missing required request body."))
+    }
+
     const auth = yield* resolveAuth(plan)
-    const url = yield* buildUrl(plan, path)
 
     let request = HttpClientRequest.make(plan.operation.method as HttpMethod.HttpMethod)(url)
     for (const parameter of plan.parameters) {
@@ -553,9 +577,6 @@ const invoke = (plan: Plan, input: unknown): Effect.Effect<unknown, unknown, Htt
     ]
     if (cookiePairs.length > 0) request = HttpClientRequest.setHeader(request, "cookie", cookiePairs.join("; "))
     request = HttpClientRequest.setHeaders(request, auth.headers)
-    if (plan.body?.required === true && value.body === undefined) {
-      return yield* Effect.fail(toolError("Missing required request body."))
-    }
     if (plan.body !== undefined && value.body !== undefined) {
       request = HttpClientRequest.bodyJsonUnsafe(request, value.body)
     }
@@ -601,23 +622,20 @@ const renderPrimitive = (value: unknown): string =>
 const queryValues = (value: unknown): ReadonlyArray<string> =>
   Array.isArray(value) ? value.map(renderPrimitive) : [renderPrimitive(value)]
 
-const buildUrl = (plan: Plan, path: Readonly<Record<string, unknown>>) =>
-  Effect.gen(function* () {
-    let url = plan.url
-    for (const parameter of plan.parameters) {
-      if (parameter.location !== "path") continue
-      const item = path[parameter.name]
-      if (item === undefined || item === null) {
-        return yield* Effect.fail(toolError(`Missing required path parameter '${parameter.name}'.`))
-      }
-      url = url.replaceAll(`{${parameter.name}}`, encodeURIComponent(renderPrimitive(item)))
+const buildUrl = (plan: Plan, path: Readonly<Record<string, unknown>>): string | ToolError => {
+  let url = plan.url
+  for (const parameter of plan.parameters) {
+    if (parameter.location !== "path") continue
+    const item = path[parameter.name]
+    if (item === undefined || item === null) {
+      return toolError(`Missing required path parameter '${parameter.name}'.`)
     }
-    const unresolved = url.match(/\{[^{}]+\}/)
-    if (unresolved !== null) {
-      return yield* Effect.fail(toolError(`Unresolved path parameter ${unresolved[0]}.`))
-    }
-    return url
-  })
+    url = url.replaceAll(`{${parameter.name}}`, encodeURIComponent(renderPrimitive(item)))
+  }
+  const unresolved = url.match(/\{[^{}]+\}/)
+  if (unresolved !== null) return toolError(`Unresolved path parameter ${unresolved[0]}.`)
+  return url
+}
 
 /**
  * Applies the operation's effective security. The requirement list is OR (first
@@ -658,7 +676,10 @@ const resolveAuth = (plan: Plan): Effect.Effect<AppliedAuth, unknown> =>
         }
         credentials.push([scheme, credential])
       }
-      if (satisfiable) return yield* applyCredentials(plan.operation, credentials)
+      if (satisfiable) {
+        const applied = applyCredentials(plan.operation, credentials)
+        return applied instanceof ToolError ? yield* Effect.fail(applied) : applied
+      }
     }
 
     return yield* Effect.fail(
@@ -671,52 +692,44 @@ const resolveAuth = (plan: Plan): Effect.Effect<AppliedAuth, unknown> =>
 const applyCredentials = (
   operation: Operation,
   credentials: ReadonlyArray<readonly [SecurityScheme, Credential]>,
-): Effect.Effect<AppliedAuth, unknown> =>
-  Effect.gen(function* () {
-    const headers: Record<string, string> = {}
-    const query: Record<string, string> = {}
-    const cookies: Record<string, string> = {}
-    // Two credentials landing on the same carrier cannot both be sent.
-    const write = (target: Record<string, string>, name: string, value: string, carrier: string) => {
-      if (target[name] !== undefined) {
-        return Effect.fail(
-          toolError(
-            `${operation.method} ${operation.path} security requires two credentials on the '${name}' ${carrier}; this cannot be satisfied.`,
-          ),
-        )
-      }
-      target[name] = value
-      return Effect.void
+): AppliedAuth | ToolError => {
+  const headers: Record<string, string> = {}
+  const query: Record<string, string> = {}
+  const cookies: Record<string, string> = {}
+  // Two credentials landing on the same carrier cannot both be sent.
+  const write = (target: Record<string, string>, name: string, value: string, carrier: string) => {
+    if (target[name] !== undefined) {
+      return toolError(
+        `${operation.method} ${operation.path} security requires two credentials on the '${name}' ${carrier}; this cannot be satisfied.`,
+      )
     }
-    const setHeader = (name: string, value: string) => write(headers, name.toLowerCase(), value, "header")
+    target[name] = value
+    return undefined
+  }
+  const setHeader = (name: string, value: string) => write(headers, name.toLowerCase(), value, "header")
+  const writeCredential = (scheme: SecurityScheme, credential: Credential): ToolError | undefined => {
+    if (credential.type === "bearer") return setHeader("Authorization", `Bearer ${credential.token}`)
+    if (credential.type === "basic") {
+      // Buffer instead of btoa: btoa throws on non-Latin-1 credentials.
+      const encoded = Buffer.from(`${credential.username}:${credential.password}`, "utf8").toString("base64")
+      return setHeader("Authorization", `Basic ${encoded}`)
+    }
+    if (credential.type === "header") return setHeader(credential.name, credential.value)
+    // apiKey: the carrier comes from the scheme declaration.
+    const name = scheme.parameterName
+    if (scheme.type !== "apiKey" || name === undefined || scheme.in === undefined) {
+      return toolError(
+        `Security scheme '${scheme.name}' is not an apiKey scheme; resolve a bearer, basic, or header credential for it.`,
+      )
+    }
+    if (scheme.in === "header") return setHeader(name, credential.value)
+    if (scheme.in === "query") return write(query, name, credential.value, "query parameter")
+    return write(cookies, name, credential.value, "cookie")
+  }
 
-    for (const [scheme, credential] of credentials) {
-      if (credential.type === "bearer") {
-        yield* setHeader("Authorization", `Bearer ${credential.token}`)
-        continue
-      }
-      if (credential.type === "basic") {
-        // Buffer instead of btoa: btoa throws on non-Latin-1 credentials.
-        const encoded = Buffer.from(`${credential.username}:${credential.password}`, "utf8").toString("base64")
-        yield* setHeader("Authorization", `Basic ${encoded}`)
-        continue
-      }
-      if (credential.type === "header") {
-        yield* setHeader(credential.name, credential.value)
-        continue
-      }
-      // apiKey: the carrier comes from the scheme declaration.
-      const name = scheme.parameterName
-      if (scheme.type !== "apiKey" || name === undefined || scheme.in === undefined) {
-        return yield* Effect.fail(
-          toolError(
-            `Security scheme '${scheme.name}' is not an apiKey scheme; resolve a bearer, basic, or header credential for it.`,
-          ),
-        )
-      }
-      if (scheme.in === "header") yield* setHeader(name, credential.value)
-      if (scheme.in === "query") yield* write(query, name, credential.value, "query parameter")
-      if (scheme.in === "cookie") yield* write(cookies, name, credential.value, "cookie")
-    }
-    return { headers, query, cookies }
-  })
+  for (const [scheme, credential] of credentials) {
+    const failure = writeCredential(scheme, credential)
+    if (failure !== undefined) return failure
+  }
+  return { headers, query, cookies }
+}

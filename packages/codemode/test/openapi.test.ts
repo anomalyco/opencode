@@ -511,6 +511,62 @@ describe("OpenAPI.fromSpec", () => {
     expect(requests[0]!.headers["cookie"]).toBe("session=real; theme=dark%3B%20session%3Dforged")
   })
 
+  test("missing required non-path parameters fail locally before auth or network", async () => {
+    const strict = {
+      openapi: "3.1.0",
+      info: { title: "Strict", version: "1.0.0" },
+      servers: [{ url: "https://strict.example" }],
+      security: [{ Key: [] }],
+      paths: {
+        "/s": {
+          get: {
+            operationId: "s",
+            parameters: [{ name: "tenant", in: "query", required: true, schema: { type: "string" } }],
+            responses: { "200": { description: "ok" } },
+          },
+        },
+      },
+      components: { securitySchemes: { Key: { type: "apiKey", in: "header", name: "X-Key" } } },
+    }
+    const { requests, layer } = recordingClient(() => json({}))
+    const resolved: Array<string> = []
+    const runtime = CodeMode.make({
+      tools: {
+        api: OpenAPI.fromSpec({
+          spec: strict,
+          auth: {
+            resolve: ({ schemeName }) => {
+              resolved.push(schemeName)
+              return Effect.succeed({ type: "apiKey", value: "k" } as const)
+            },
+          },
+        }).tools,
+      },
+    })
+
+    const result = await Effect.runPromise(runtime.execute("return await tools.api.s({})").pipe(Effect.provide(layer)))
+
+    expect(result).toMatchObject({ ok: false })
+    expect(JSON.stringify(result)).toContain("Missing required query parameter 'tenant'")
+    expect(resolved).toHaveLength(0)
+    expect(requests).toHaveLength(0)
+  })
+
+  test("relative server URLs are skipped with a clear reason", () => {
+    const relative = {
+      openapi: "3.1.0",
+      info: { title: "Relative", version: "1.0.0" },
+      servers: [{ url: "/v2" }],
+      paths: { "/ping": { get: { operationId: "ping", responses: { "200": { description: "ok" } } } } },
+    }
+    const result = OpenAPI.fromSpec({ spec: relative })
+    expect(Object.keys(result.tools)).toStrictEqual([])
+    expect(result.skipped[0]!.reason).toContain("relative server URL")
+
+    const overridden = OpenAPI.fromSpec({ spec: relative, baseUrl: "https://real.example" })
+    expect(Object.keys(overridden.tools)).toStrictEqual(["ping"])
+  })
+
   test("spec server variables substitute defaults and explicit values", () => {
     const templated = {
       openapi: "3.1.0",
