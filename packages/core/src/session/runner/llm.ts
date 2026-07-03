@@ -166,7 +166,7 @@ const layer = Layer.effect(
         { concurrency: "unbounded" },
       ).pipe(Effect.map(SystemContext.combine))
 
-    const runTurnAttempt = Effect.fn("SessionRunner.runTurnAttempt")(function* (
+    const attemptStep = Effect.fn("SessionRunner.attemptStep")(function* (
       sessionID: SessionSchema.ID,
       promotion: SessionInput.Delivery | undefined,
       step: number,
@@ -387,7 +387,7 @@ const layer = Layer.effect(
       )
     }, Effect.scoped)
 
-    const runTurn = Effect.fnUntraced(function* (
+    const runStep = Effect.fnUntraced(function* (
       sessionID: SessionSchema.ID,
       promotion: SessionInput.Delivery | undefined,
       step: number,
@@ -399,7 +399,7 @@ const layer = Layer.effect(
       let currentPromotion = promotion
       let currentStep = step
       while (true) {
-        const attempt = yield* runTurnAttempt(sessionID, currentPromotion, currentStep, recoverOverflow)
+        const attempt = yield* attemptStep(sessionID, currentPromotion, currentStep, recoverOverflow)
         if (attempt._tag === "Completed") return { needsContinuation: attempt.needsContinuation, step: attempt.step }
         if (attempt._tag === "RestartAfterOverflowCompaction") recoverOverflow = undefined
         yield* Effect.yieldNow
@@ -410,7 +410,7 @@ const layer = Layer.effect(
 
     // ExecutionSettled is published per execution (busy period) by SessionExecution, not per
     // drain here.
-    const run = Effect.fn("SessionRunner.run")(function* (input: {
+    const drain = Effect.fn("SessionRunner.drain")(function* (input: {
       readonly sessionID: SessionSchema.ID
       readonly force: boolean
     }) {
@@ -428,8 +428,8 @@ const layer = Layer.effect(
         // a provider error suppresses it. Pending steers also continue the loop so
         // interjections are answered before the session goes idle.
         while (needsContinuation) {
-          const result = yield* runTurn(input.sessionID, promotion, step)
-          // Steer/queue promotion inside runTurn has already made the pending input a visible
+          const result = yield* runStep(input.sessionID, promotion, step)
+          // Steer/queue promotion inside runStep has already made the pending input a visible
           // user message by this point, so the first-user-message check below is reliable.
           if (!titleAttempted.has(input.sessionID)) {
             titleAttempted.add(input.sessionID)
@@ -445,7 +445,7 @@ const layer = Layer.effect(
       }
     })
 
-    return Service.of({ run })
+    return Service.of({ drain })
   }),
 )
 

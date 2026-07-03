@@ -9,16 +9,12 @@ import type { SystemContext } from "../../system-context/index"
 import type { ToolOutputStore } from "../../tool-output-store"
 
 export type RunError =
-  | LLMError
-  | SessionRunnerModel.Error
-  | MessageDecodeError
-  | SystemContext.InitializationBlocked
-  | ToolOutputStore.Error
+  LLMError | SessionRunnerModel.Error | MessageDecodeError | SystemContext.InitializationBlocked | ToolOutputStore.Error
 
 /** Runs one local continuation from already-recorded Session history. */
 export interface Interface {
   /** Drains eligible durable work. Explicit runs perform one provider attempt even when no work is eligible. */
-  readonly run: (input: {
+  readonly drain: (input: {
     readonly sessionID: SessionSchema.ID
     readonly force: boolean
   }) => Effect.Effect<void, RunError>

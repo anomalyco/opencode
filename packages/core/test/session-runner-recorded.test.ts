@@ -98,7 +98,7 @@ const execution = Layer.effect(
   Effect.gen(function* () {
     const sessionRunner = yield* SessionRunner.Service
     const coordinator = yield* SessionRunCoordinator.make<SessionV2.ID, SessionRunner.RunError>({
-      drain: (sessionID, force) => sessionRunner.run({ sessionID, force }),
+      drain: (sessionID, force) => sessionRunner.drain({ sessionID, force }),
     })
     return SessionExecution.Service.of({
       active: coordinator.active,

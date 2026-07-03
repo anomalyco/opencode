@@ -42,7 +42,7 @@ Execution routing starts from only the Session ID:
 SessionExecution.resume(sessionID)
 -> SessionStore.get(sessionID)
 -> LocationServiceMap.get(session.location)
--> SessionRunner.run({ sessionID, force? })
+-> SessionRunner.drain({ sessionID, force? })
 ```
 
 `SessionExecution` and the read-side `SessionStore` are process-global. `SessionRunner`, catalog, model resolver, tool registry, permission state, and filesystem are cached per Location. No layer takes a Session ID. An omitted `Location.workspaceID` means implicit-local placement; explicit workspace identity remains reserved for future placement semantics.

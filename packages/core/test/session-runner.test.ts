@@ -260,7 +260,7 @@ const execution = Layer.effect(
   Effect.gen(function* () {
     const sessionRunner = yield* SessionRunner.Service
     const coordinator = yield* SessionRunCoordinator.make<SessionV2.ID, SessionRunner.RunError>({
-      drain: (sessionID, force) => sessionRunner.run({ sessionID, force }),
+      drain: (sessionID, force) => sessionRunner.drain({ sessionID, force }),
     })
     return SessionExecution.Service.of({
       active: coordinator.active,
@@ -575,7 +575,7 @@ const verifyPartialFlushOnInterruption = (kind: FragmentKind) =>
     )
 
     const runner = yield* SessionRunner.Service
-    const fiber = yield* runner.run({ sessionID, force: true }).pipe(Effect.forkChild)
+    const fiber = yield* runner.drain({ sessionID, force: true }).pipe(Effect.forkChild)
     yield* Deferred.await(streamed)
     yield* Fiber.interrupt(fiber)
     expect(yield* session.context(sessionID)).toMatchObject([
@@ -3007,7 +3007,7 @@ describe("SessionRunnerLLM", () => {
       ]
 
       const runner = yield* SessionRunner.Service
-      const run = yield* runner.run({ sessionID, force: true }).pipe(Effect.forkChild)
+      const run = yield* runner.drain({ sessionID, force: true }).pipe(Effect.forkChild)
       yield* Deferred.await(toolExecutionsStarted)
       yield* Fiber.interrupt(run)
       toolExecutionGate = undefined
